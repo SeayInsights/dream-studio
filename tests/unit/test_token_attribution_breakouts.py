@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import sqlite3
-from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from core.config.database import DB_PATH_ENV, DatabaseRuntime
 from core.config.sqlite_bootstrap import bootstrap_database
+
+_PROJECT_ID = "29ff0914-b15a-4a84-8bc7-5619cc5240f6"
 
 
 def test_shows_name_and_entity_breakouts(tmp_path, monkeypatch) -> None:
@@ -19,48 +20,13 @@ def test_shows_name_and_entity_breakouts(tmp_path, monkeypatch) -> None:
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     try:
-        # Seed two token_usage_records rows for the same project/milestone/agent
-        conn.execute(
-            "INSERT INTO token_usage_records"
-            " (token_usage_id, project_id, milestone_id, task_id, skill_id, agent_id,"
-            "  input_tokens, output_tokens, total_tokens)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                "tu-1",
-                "29ff0914-b15a-4a84-8bc7-5619cc5240f6",
-                "ms-1",
-                "task-1",
-                "ds-project",
-                "agent-1",
-                1000,
-                500,
-                1500,
-            ),
-        )
-        conn.execute(
-            "INSERT INTO token_usage_records"
-            " (token_usage_id, project_id, milestone_id, task_id, skill_id, agent_id,"
-            "  input_tokens, output_tokens, total_tokens)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                "tu-2",
-                "29ff0914-b15a-4a84-8bc7-5619cc5240f6",
-                "ms-1",
-                "task-2",
-                "ds-core",
-                "agent-1",
-                200,
-                100,
-                300,
-            ),
-        )
         # Seed the business_projects row so project_name can be resolved
         conn.execute(
             "INSERT OR IGNORE INTO business_projects"
             " (project_id, name, status, created_at, updated_at)"
             " VALUES (?, ?, ?, datetime('now'), datetime('now'))",
             (
-                "29ff0914-b15a-4a84-8bc7-5619cc5240f6",
+                _PROJECT_ID,
                 "Dream Studio",
                 "active",
             ),
@@ -68,6 +34,52 @@ def test_shows_name_and_entity_breakouts(tmp_path, monkeypatch) -> None:
         conn.commit()
     finally:
         conn.close()
+
+    # WO-DBA-DROP (migration 137): token_usage_records is no longer a SQLite
+    # table — seed two canonical token.consumed events into the DuckDB
+    # events_fact that the token_usage_records view derives from, for the
+    # same project/milestone/agent, and different skills/tasks.
+    from core.analytics import duckdb_store
+
+    analytics_db = tmp_path / "aggregate_metrics.db"
+    monkeypatch.setattr(duckdb_store, "analytics_db_path", lambda: analytics_db)
+    duck_conn = duckdb_store.connect_analytics(analytics_db, read_only=False)
+    try:
+        duckdb_store.ensure_analytics_schema(duck_conn)
+        duck_conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp, project_id,"
+            " milestone_id, task_id, skill_id, agent_id, input_tokens, output_tokens)"
+            " VALUES (?, 'token.consumed', ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                "tu-1",
+                "2026-07-03T00:00:00Z",
+                _PROJECT_ID,
+                "ms-1",
+                "task-1",
+                "ds-project",
+                "agent-1",
+                1000,
+                500,
+            ],
+        )
+        duck_conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp, project_id,"
+            " milestone_id, task_id, skill_id, agent_id, input_tokens, output_tokens)"
+            " VALUES (?, 'token.consumed', ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                "tu-2",
+                "2026-07-03T00:00:00Z",
+                _PROJECT_ID,
+                "ms-1",
+                "task-2",
+                "ds-core",
+                "agent-1",
+                200,
+                100,
+            ],
+        )
+    finally:
+        duck_conn.close()
 
     DatabaseRuntime.reset_instance()
     monkeypatch.setenv(DB_PATH_ENV, str(db_path))

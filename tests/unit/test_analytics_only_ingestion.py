@@ -63,17 +63,26 @@ def test_analytics_only_ingestion_writes_current_authority_without_orchestration
         )  # reg_projects → business_projects (migration 084)
         assert _count(conn, "validation_results") == 1
         assert _count(conn, "security_events") == 1  # findings → security_events (migration 112)
-        assert _count(conn, "token_usage_records") == 1
         assert _count(conn, "ai_usage_operational_records") == 1
         # pi_components/pi_dependencies dropped migration 084; production_readiness_* dropped 112
         assert _count(conn, "readiness_events") >= 1  # assessment + control events
 
-        token = conn.execute("SELECT * FROM token_usage_records").fetchone()
+        # token_usage_records dropped migration 137 (WO-DBA-DROP) — the
+        # ingestion contract's existing "missing target table → honest skip"
+        # mechanism (not a new code path) now applies to the token_usage
+        # section on every run; no row is written and nothing crashes.
+        assert (
+            conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='token_usage_records'"
+            ).fetchone()
+            is None
+        )
+        skipped_sections = {item["section"]: item for item in result["skipped"]}
+        assert skipped_sections["token_usage"]["reason"] == "target_tables_missing"
+        assert "token_usage_records" in skipped_sections["token_usage"]["missing_tables"]
+        assert "token_usage" not in result["records_written"]
+
         usage = conn.execute("SELECT * FROM ai_usage_operational_records").fetchone()
-        assert token["total_tokens"] == 30
-        assert token["cost_visibility"] == "unavailable"
-        assert token["cost_source"] == "unavailable"
-        assert token["estimated_cost"] == 0
         assert usage["cost_visibility"] == "unknown"
         assert usage["cost_amount"] is None
 

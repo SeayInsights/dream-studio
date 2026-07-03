@@ -95,24 +95,39 @@ def test_all_consumers_get_current_rates():
     ), f"efficiency_analytics must price opus-4-8 via the shared table ($30), got {result['total_cost_usd']}"
 
 
-def test_end_to_end(tmp_path):
-    """End-to-end: a token_usage_records row on claude-opus-4-8 yields non-zero
-    API-equivalent cost and is counted as priced (no longer 'unknown model')."""
+def test_end_to_end(tmp_path, monkeypatch):
+    """End-to-end: a token.consumed event on claude-opus-4-8 yields non-zero
+    API-equivalent cost and is counted as priced (no longer 'unknown model').
+
+    WO-DBA-DROP (migration 137): token_usage_records is no longer a SQLite
+    table — api_equivalent_cost() reads the DuckDB aggregate_metrics.db view
+    (derived from canonical token.consumed events) instead.
+    """
+    from core.analytics import duckdb_store
     from core.config.sqlite_bootstrap import bootstrap_database
     from projections.core.cost_analysis import api_equivalent_cost
 
     db = tmp_path / "state" / "studio.db"
     db.parent.mkdir(parents=True)
     bootstrap_database(db)
+
+    analytics_db = tmp_path / "aggregate_metrics.db"
+    monkeypatch.setattr(duckdb_store, "analytics_db_path", lambda: analytics_db)
+    duck_conn = duckdb_store.connect_analytics(analytics_db, read_only=False)
+    try:
+        duckdb_store.ensure_analytics_schema(duck_conn)
+        duck_conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp, model_id,"
+            " input_tokens, output_tokens)"
+            " VALUES ('t-opus', 'token.consumed', '2026-07-03T00:00:00Z', 'claude-opus-4-8',"
+            " 1000000, 1000000)"
+        )
+    finally:
+        duck_conn.close()
+
     conn = sqlite3.connect(str(db))
     conn.row_factory = sqlite3.Row
     try:
-        conn.execute(
-            "INSERT INTO token_usage_records"
-            " (token_usage_id, model_id, input_tokens, output_tokens, total_tokens, created_at)"
-            " VALUES ('t-opus', 'claude-opus-4-8', 1000000, 1000000, 2000000, datetime('now'))"
-        )
-        conn.commit()
         result = api_equivalent_cost(conn)
     finally:
         conn.close()

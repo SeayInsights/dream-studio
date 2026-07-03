@@ -97,15 +97,19 @@ def test_skill_and_token_paths_dual_write_without_losing_legacy_outputs(
             ).fetchone()[0]
             == 1
         )
+        # record_token_usage/token_usage_records removed (WO-DBA-DROP, migration
+        # 137) — emit_token_usage_record's token_usage_records write is gone;
+        # its execution_events "token.usage_recorded" dual-write is unchanged
+        # (unrelated telemetry — not token accounting).
         row = conn.execute(
-            "SELECT project_id, process_run_id, input_tokens, output_tokens, total_tokens FROM token_usage_records"
+            "SELECT project_id, process_run_id, model_id, event_type"
+            " FROM execution_events WHERE event_type = 'token.usage_recorded'"
         ).fetchone()
         assert dict(row) == {
             "project_id": "dream-studio",
             "process_run_id": "session-test",
-            "input_tokens": 10,
-            "output_tokens": 20,
-            "total_tokens": 30,
+            "model_id": "gpt-test",
+            "event_type": "token.usage_recorded",
         }
     finally:
         conn.close()

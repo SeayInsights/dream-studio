@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+
+import pytest
 
 from core.event_store.studio_db import _connect
 from core.telemetry.execution_spine import (
@@ -8,7 +11,6 @@ from core.telemetry.execution_spine import (
     record_execution_event,
     record_invocation,
     record_security_finding,
-    record_token_usage,
 )
 
 # record_process_run + record_route_decision retired migration 131 (process_runs and
@@ -37,7 +39,66 @@ def _db(tmp_path: Path) -> Path:
     return path
 
 
-def _seed(db_path: Path) -> None:
+def _isolate_analytics(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """Point the DuckDB analytics store at an isolated tmp path (WO-DBA-DROP:
+    record_token_usage/token_usage_records were removed migration 137 — token
+    facts are seeded as canonical token.consumed events into events_fact, the
+    same source the DuckDB token_usage_records view derives from)."""
+    from core.analytics import duckdb_store
+
+    analytics_db = tmp_path / "aggregate_metrics.db"
+    monkeypatch.setattr(duckdb_store, "analytics_db_path", lambda: analytics_db)
+    return analytics_db
+
+
+def _seed_token_consumed_event(
+    analytics_db: Path,
+    *,
+    event_id: str,
+    project_id: str | None = None,
+    milestone_id: str | None = None,
+    task_id: str | None = None,
+    agent_id: str | None = None,
+    skill_id: str | None = None,
+    workflow_id: str | None = None,
+    hook_id: str | None = None,
+    model_id: str | None = None,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    cache_creation_input_tokens: int = 0,
+    event_timestamp: str = "2026-07-03T00:00:00Z",
+) -> None:
+    from core.analytics import duckdb_store
+
+    conn = duckdb_store.connect_analytics(analytics_db, read_only=False)
+    try:
+        duckdb_store.ensure_analytics_schema(conn)
+        conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp, project_id,"
+            " milestone_id, task_id, agent_id, skill_id, workflow_id, hook_id, model_id,"
+            " input_tokens, output_tokens, payload)"
+            " VALUES (?, 'token.consumed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                event_id,
+                event_timestamp,
+                project_id,
+                milestone_id,
+                task_id,
+                agent_id,
+                skill_id,
+                workflow_id,
+                hook_id,
+                model_id,
+                input_tokens,
+                output_tokens,
+                json.dumps({"cache_creation_input_tokens": cache_creation_input_tokens}),
+            ],
+        )
+    finally:
+        conn.close()
+
+
+def _seed(db_path: Path, analytics_db: Path) -> None:
     scope = {
         "project_id": "dream-studio",
         "milestone_id": "dashboard_read_models_for_telemetry_spine",
@@ -114,22 +175,6 @@ def _seed(db_path: Path) -> None:
                 purpose="read model validation",
                 prevented_risky_action=(invocation_type == "hook"),
             )
-        record_token_usage(
-            conn,
-            **scope,
-            token_usage_id="token-read-model-test",
-            agent_id="codex",
-            skill_id="ds-core",
-            workflow_id="route-first",
-            hook_id="preflight",
-            model_id="gpt",
-            provider="openai",
-            input_tokens=120,
-            output_tokens=80,
-            cached_tokens=25,
-            estimated_cost=0.02,
-            purpose="read model validation",
-        )
         record_security_finding(
             conn,
             **scope,
@@ -255,6 +300,30 @@ def _seed(db_path: Path) -> None:
         )
         conn.commit()
 
+    # record_token_usage/token_usage_records removed (WO-DBA-DROP, migration
+    # 137) — seed the equivalent canonical token.consumed event into the
+    # DuckDB events_fact that the token_usage_records view derives from.
+    # input_tokens + output_tokens = 225 to match the retired call's total
+    # (120 input + 80 output + 25 cached — the new view's total_tokens is
+    # input+output only, so the split changes but the total is preserved).
+    # model is a real Claude model (not "gpt") so the DuckDB view's
+    # token_model_pricing join produces a non-NULL, non-zero estimated_cost.
+    _seed_token_consumed_event(
+        analytics_db,
+        event_id="token-read-model-test",
+        project_id=scope["project_id"],
+        milestone_id=scope["milestone_id"],
+        task_id=scope["task_id"],
+        agent_id="codex",
+        skill_id="ds-core",
+        workflow_id="route-first",
+        hook_id="preflight",
+        model_id="claude-sonnet-4-6",
+        input_tokens=150,
+        output_tokens=75,
+        cache_creation_input_tokens=25,
+    )
+
 
 def test_dashboard_module_read_models_are_derived_views() -> None:
     modules = dashboard_module_read_models()
@@ -292,9 +361,11 @@ def test_dashboard_module_segments_support_independent_views() -> None:
     assert security["primary_authority"] is False
 
 
-def test_global_summary_reads_telemetry_spine_and_marks_derived(tmp_path: Path) -> None:
+def test_global_summary_reads_telemetry_spine_and_marks_derived(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     db_path = _db(tmp_path)
-    _seed(db_path)
+    _seed(db_path, _isolate_analytics(monkeypatch, tmp_path))
 
     summary = global_telemetry_summary(db_path)
 
@@ -308,8 +379,12 @@ def test_global_summary_reads_telemetry_spine_and_marks_derived(tmp_path: Path) 
     assert summary["component_usage"]["hook"][0]["component_id"] == "preflight"
     assert summary["component_usage"]["tool"][0]["component_id"] == "pytest"
     assert summary["token_usage"][0]["total_tokens"] == 225
+    # WO-DBA-DROP: canonical token.consumed events carry no provider field
+    # (the DuckDB view's provider column is always NULL); the honest default
+    # replaces the old write-time _provider_from_model("gpt") inference.
     assert (
-        summary["token_cost_intelligence"]["by_model_provider_component"][0]["provider"] == "openai"
+        summary["token_cost_intelligence"]["by_model_provider_component"][0]["provider"]
+        == "unknown"
     )
     assert (
         summary["token_cost_intelligence"]["by_model_provider_component"][0][
@@ -364,9 +439,11 @@ def test_global_summary_reads_telemetry_spine_and_marks_derived(tmp_path: Path) 
     )
 
 
-def test_project_milestone_task_and_process_drilldowns(tmp_path: Path) -> None:
+def test_project_milestone_task_and_process_drilldowns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     db_path = _db(tmp_path)
-    _seed(db_path)
+    _seed(db_path, _isolate_analytics(monkeypatch, tmp_path))
 
     project = project_telemetry_summary("dream-studio", db_path)
     milestone = milestone_telemetry_summary(
@@ -384,7 +461,7 @@ def test_project_milestone_task_and_process_drilldowns(tmp_path: Path) -> None:
 
     assert project["entity_counts"]["events"] == 1
     assert milestone["component_usage"]["tool"][0]["component_id"] == "pytest"
-    assert task["tokens"][0]["model_id"] == "gpt"
+    assert task["tokens"][0]["model_id"] == "claude-sonnet-4-6"
     assert timeline["process_run"]["process_run_id"] == "process-run-read-model-test"
     assert timeline["events"][0]["event_id"] == "event-read-model-test"
     assert timeline["invocations"]["agent"][0]["agent_id"] == "codex"
@@ -398,9 +475,10 @@ def test_project_milestone_task_and_process_drilldowns(tmp_path: Path) -> None:
 
 def test_workflow_execution_graph_links_process_events_validations_and_outcomes(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     db_path = _db(tmp_path)
-    _seed(db_path)
+    _seed(db_path, _isolate_analytics(monkeypatch, tmp_path))
 
     graph = workflow_execution_graph("route-first", db_path)
 
@@ -422,9 +500,11 @@ def test_workflow_execution_graph_links_process_events_validations_and_outcomes(
     assert graph["node_metadata_gap"]["workflow_node_table_available"] is False
 
 
-def test_component_usage_and_attention_rollups(tmp_path: Path) -> None:
+def test_component_usage_and_attention_rollups(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     db_path = _db(tmp_path)
-    _seed(db_path)
+    _seed(db_path, _isolate_analytics(monkeypatch, tmp_path))
     with _connect(db_path) as conn:
         record_dashboard_attention(
             conn,
@@ -467,8 +547,13 @@ def test_component_usage_and_attention_rollups(tmp_path: Path) -> None:
     assert attention["primary_authority"] is False
 
 
-def test_empty_state_for_missing_or_disabled_module_data(tmp_path: Path) -> None:
+def test_empty_state_for_missing_or_disabled_module_data(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     db_path = _db(tmp_path)
+    # Isolate the DuckDB analytics store so this "empty" assertion doesn't
+    # accidentally read a real local/CI aggregate_metrics.db.
+    _isolate_analytics(monkeypatch, tmp_path)
 
     summary = global_telemetry_summary(db_path)
     project = project_telemetry_summary("missing-project", db_path)
@@ -490,9 +575,10 @@ def test_empty_state_for_missing_or_disabled_module_data(tmp_path: Path) -> None
 
 def test_security_remediation_intelligence_keeps_execution_approval_separate(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     db_path = _db(tmp_path)
-    _seed(db_path)
+    _seed(db_path, _isolate_analytics(monkeypatch, tmp_path))
     scope = {
         "project_id": "dream-studio",
         "milestone_id": "security_analytics_and_remediation_maturation",
@@ -562,9 +648,10 @@ def test_security_remediation_intelligence_keeps_execution_approval_separate(
 
 def test_validation_outcome_intelligence_correlates_failures_without_authorizing_fixes(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     db_path = _db(tmp_path)
-    _seed(db_path)
+    _seed(db_path, _isolate_analytics(monkeypatch, tmp_path))
     with _connect(db_path) as conn:
         conn.execute(
             """
@@ -631,33 +718,41 @@ def test_validation_outcome_intelligence_correlates_failures_without_authorizing
 
 def test_token_cost_intelligence_correlates_cost_with_outcomes_without_provider_authority(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     db_path = _db(tmp_path)
-    _seed(db_path)
+    analytics_db = _isolate_analytics(monkeypatch, tmp_path)
+    _seed(db_path, analytics_db)
     scope = {
         "project_id": "dream-studio",
         "milestone_id": "token_cost_intelligence",
         "task_id": "token-cost-test",
         "process_run_id": "process-run-token-cost-test",
     }
+    # record_token_usage/token_usage_records removed (WO-DBA-DROP, migration
+    # 137) — seed the equivalent canonical token.consumed event. The DuckDB
+    # view has no process_run_id dimension (canonical token.consumed events
+    # carry no process_run_id), so outcome correlation falls back to matching
+    # on project/milestone/task, which the seeded outcome_records row below
+    # still satisfies. input_tokens + output_tokens = 1600 to match the
+    # retired call's total (1000 + 500 + 100 cached — the new view's
+    # total_tokens is input+output only).
+    _seed_token_consumed_event(
+        analytics_db,
+        event_id="token-cost-intelligence-test",
+        project_id=scope["project_id"],
+        milestone_id=scope["milestone_id"],
+        task_id=scope["task_id"],
+        agent_id="codex",
+        skill_id="ds-core",
+        workflow_id="route-first",
+        hook_id="preflight",
+        model_id="gpt-5",
+        input_tokens=1100,
+        output_tokens=500,
+        cache_creation_input_tokens=100,
+    )
     with _connect(db_path) as conn:
-        # process_runs dropped migration 131 — scope's process_run_id flows via the events below.
-        record_token_usage(
-            conn,
-            **scope,
-            token_usage_id="token-cost-intelligence-test",
-            agent_id="codex",
-            skill_id="ds-core",
-            workflow_id="route-first",
-            hook_id="preflight",
-            model_id="gpt-5",
-            provider="openai",
-            input_tokens=1000,
-            output_tokens=500,
-            cached_tokens=100,
-            estimated_cost=0.25,
-            purpose="cost intelligence validation",
-        )
         conn.execute(
             """
             INSERT INTO outcome_records (

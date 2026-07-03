@@ -95,13 +95,25 @@ def test_model_null_when_no_source(tmp_path, monkeypatch):
 
 
 def test_end_to_end(tmp_path, monkeypatch):
-    """Capture (transcript model recovery) → projection → token_usage_records.model_id.
+    """Capture (transcript model recovery) → canonical event → DuckDB events_fact
+    → token_usage_records view .model_id.
 
     A main-loop token event with no payload model produces a row whose model_id is
     the real model from the transcript — closing the cost-by-model gap going forward.
+
+    WO-DBA-DROP (migration 137): core/projections/token_projection.py and the
+    SQLite token_usage_records table it materialized into are both retired.
+    The read side is now the DuckDB aggregate_metrics.db token_usage_records
+    view over events_fact (core/analytics/duckdb_store.py), fed by the real
+    derive_events_fact() projector — exercised directly here rather than via
+    the retired SQLite-to-SQLite projection.
     """
+    from core.analytics.duckdb_store import (
+        connect_analytics,
+        derive_events_fact,
+        ensure_analytics_schema,
+    )
     from core.config.sqlite_bootstrap import bootstrap_database
-    from core.projections.token_projection import TokenConsumptionProjection
 
     db_path = tmp_path / "state" / "studio.db"
     bootstrap_database(db_path)
@@ -110,25 +122,43 @@ def test_end_to_end(tmp_path, monkeypatch):
     _write_transcript(transcript, "claude-opus-4-8")
     env = _capture_envelope(_base_payload(transcript_path=transcript), monkeypatch)
 
-    # Materialize the spooled envelope through the real projection.
+    # Land the spooled envelope in the canonical events table (the step the
+    # real spool ingestor performs), then run the real DuckDB projector.
     event = env.to_dict()
     conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
     try:
-        proj = TokenConsumptionProjection()
-        proj.setup_tables(conn)
-        rows_written = proj.handle(event, conn)
+        conn.execute(
+            "INSERT INTO ai_canonical_events"
+            " (event_id, event_type, event_timestamp, session_id, trace, payload)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                event["event_id"],
+                event["event_type"],
+                event["timestamp"],
+                event["session_id"],
+                json.dumps(event["trace"]),
+                json.dumps(event["payload"]),
+            ),
+        )
         conn.commit()
-        assert rows_written == 1, "projection must materialize exactly one token row"
-        row = conn.execute(
-            "SELECT model_id, input_tokens, output_tokens FROM token_usage_records"
-            " WHERE token_usage_id = ?",
-            (event["event_id"],),
-        ).fetchone()
     finally:
         conn.close()
 
-    assert row is not None, "token_usage_records must carry the captured event"
-    assert row["model_id"] == "claude-opus-4-8", "model_id must be the transcript-recovered model"
-    assert row["input_tokens"] == 1200
-    assert row["output_tokens"] == 340
+    analytics_db = tmp_path / "aggregate_metrics.db"
+    duck_conn = connect_analytics(analytics_db, read_only=False)
+    try:
+        ensure_analytics_schema(duck_conn)
+        written = derive_events_fact(duck_conn, str(db_path), full_rebuild=True)
+        assert written == 1, "derive_events_fact must materialize exactly one row"
+        row = duck_conn.execute(
+            "SELECT model_id, input_tokens, output_tokens FROM token_usage_records"
+            " WHERE token_usage_id = ?",
+            [event["event_id"]],
+        ).fetchone()
+    finally:
+        duck_conn.close()
+
+    assert row is not None, "token_usage_records view must carry the captured event"
+    assert row[0] == "claude-opus-4-8", "model_id must be the transcript-recovered model"
+    assert row[1] == 1200
+    assert row[2] == 340

@@ -153,12 +153,17 @@ CLASSIFICATION: dict[str, str] = {
     "sum_skill_summary": "KEEP",
     "task_attribution_records": "DROP",  # Dropped migration 131: dead writer record_task_attribution(), test-only callers
     "team_rollup_records": "DROP",
-    "token_usage_records": "KEEP",  # Not droppable: DuckDB token view derives from token events
-    #                                 whose payloads carry NO model_id (0/1792) and NO cost, so
-    #                                 estimated_cost/cost_visibility can't be derived; SQLite holds
-    #                                 the only model_id (32) + cost data. dashboard_truth gate
-    #                                 (priceable_cost_present, wired into work_orders/close.py) reads
-    #                                 it; usage_accounting forbids converting plan usage to API $.
+    "token_usage_records": "DROP",  # Dropped migration 137 (WO-DBA-DROP): all 113 live rows had
+    #                                 billing_mode='unknown', cost_visibility='unknown',
+    #                                 estimated_cost=0.0 — degenerate accounting columns, no
+    #                                 information beyond the canonical token.consumed event stream.
+    #                                 PR #450/#451 widened the DuckDB aggregate_metrics.db
+    #                                 token_usage_records VIEW to derive model_id, cached_tokens,
+    #                                 cache_read_tokens, and estimated_cost (LEFT JOIN
+    #                                 token_model_pricing) from events_fact — the gap that made
+    #                                 this table "KEEP" at migration 136 no longer exists. Readers
+    #                                 (dashboard_truth gate, token_collector, cost_analysis,
+    #                                 read_models rollups, usage_accounting) repointed to the view.
     "tool_embeddings_cache": "DROP",  # Dropped migration 131: dead writer build_embedding_index(), never called from live path
     "tool_registry": "DROP",  # Dropped migration 131: no production INSERT exists, only test fixtures
     "validation_failures": "DROP",  # Dropped mig 129: DuckDB validation_failures VIEW replaces it

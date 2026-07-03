@@ -124,18 +124,36 @@ def _add_task(
     return task_id
 
 
-def _seed_violating_tokens(db_path: Path) -> None:
-    """Insert token_usage_records rows ALL with model_id=NULL → violates invariant #1."""
-    conn = sqlite3.connect(str(db_path))
-    for _ in range(3):
-        conn.execute(
-            "INSERT INTO token_usage_records"
-            " (token_usage_id, model_id, input_tokens, output_tokens, created_at)"
-            " VALUES (?, NULL, 100, 50, ?)",
-            (str(uuid.uuid4()), NOW),
-        )
-    conn.commit()
-    conn.close()
+def _isolate_analytics_store(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """Point the DuckDB analytics store at an isolated tmp path (WO-DBA-DROP:
+    the three token invariants read the DuckDB token_usage_records view, not
+    the retired SQLite table — every test that exercises them needs its own
+    isolated store so it never reads a real local/CI analytics store)."""
+    from core.analytics import duckdb_store
+
+    analytics_db = tmp_path / "aggregate_metrics.db"
+    monkeypatch.setattr(duckdb_store, "analytics_db_path", lambda: analytics_db)
+    return analytics_db
+
+
+def _seed_violating_tokens(analytics_db: Path) -> None:
+    """Seed token.consumed events ALL with model_id=NULL into DuckDB events_fact
+    → violates invariant #1 (token_model_null_fraction) on the
+    token_usage_records view."""
+    from core.analytics import duckdb_store
+
+    conn = duckdb_store.connect_analytics(analytics_db, read_only=False)
+    try:
+        duckdb_store.ensure_analytics_schema(conn)
+        for i in range(3):
+            conn.execute(
+                "INSERT INTO events_fact (event_id, event_type, event_timestamp,"
+                " input_tokens, output_tokens, payload)"
+                " VALUES (?, 'token.consumed', ?, 100, 50, '{}')",
+                [str(uuid.uuid4()), NOW],
+            )
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -143,13 +161,16 @@ def _seed_violating_tokens(db_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_live_invariants_fail_when_authority_wrong(tmp_path: Path) -> None:
+def test_live_invariants_fail_when_authority_wrong(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Invariant #1 fires when all token rows have NULL model_id.
     A freshly bootstrapped empty DB vacuously passes all invariants.
     """
     # ── 1. Violating DB: all token rows have NULL model_id ─────────────────
     db_violating = _make_db(tmp_path / "violating")
-    _seed_violating_tokens(db_violating)
+    analytics_violating = _isolate_analytics_store(monkeypatch, tmp_path / "violating")
+    _seed_violating_tokens(analytics_violating)
 
     result_violating = run_dashboard_truth(db_violating)
 
@@ -164,6 +185,7 @@ def test_live_invariants_fail_when_authority_wrong(tmp_path: Path) -> None:
 
     # ── 2. Fresh empty DB → all vacuous passes ─────────────────────────────
     db_empty = _make_db(tmp_path / "empty")
+    _isolate_analytics_store(monkeypatch, tmp_path / "empty")
     result_empty = run_dashboard_truth(db_empty)
 
     assert result_empty["ok"] is True, (
@@ -178,14 +200,15 @@ def test_live_invariants_fail_when_authority_wrong(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_gate_blocks_close_and_merge(tmp_path: Path) -> None:
+def test_gate_blocks_close_and_merge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A data_pipeline-type WO is blocked at close when dashboard truth fails.
     A cleanup-type WO with the same violating DB is NOT blocked by this gate.
     """
     from core.work_orders.close import close_work_order
 
     db_path = _make_db(tmp_path)
-    _seed_violating_tokens(db_path)
+    analytics_db = _isolate_analytics_store(monkeypatch, tmp_path)
+    _seed_violating_tokens(analytics_db)
 
     project_id = str(uuid.uuid4())
     milestone_id = str(uuid.uuid4())
@@ -268,7 +291,7 @@ def test_gate_blocks_close_and_merge(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_end_to_end(tmp_path: Path) -> None:
+def test_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Broad: invariants run, empty passes, violating fails, doctor exits nonzero.
 
     Also verifies the CLI entry point behaviour for the dashboard-truth mode
@@ -276,6 +299,7 @@ def test_end_to_end(tmp_path: Path) -> None:
     """
     # ── 1. Empty DB → ok=True ──────────────────────────────────────────────
     db_empty = _make_db(tmp_path / "empty")
+    _isolate_analytics_store(monkeypatch, tmp_path / "empty")
     result_empty = run_dashboard_truth(db_empty)
     assert result_empty["ok"] is True, f"Empty DB should pass; got {result_empty}"
     assert len(result_empty["results"]) == 5, "Should have exactly 5 invariant results"
@@ -284,7 +308,8 @@ def test_end_to_end(tmp_path: Path) -> None:
 
     # ── 2. Violating DB → ok=False ─────────────────────────────────────────
     db_violating = _make_db(tmp_path / "violating")
-    _seed_violating_tokens(db_violating)
+    analytics_violating = _isolate_analytics_store(monkeypatch, tmp_path / "violating")
+    _seed_violating_tokens(analytics_violating)
     result_violating = run_dashboard_truth(db_violating)
     assert result_violating["ok"] is False, f"Violating DB should fail; got {result_violating}"
     failed = [r for r in result_violating["results"] if not r["passed"]]
@@ -293,18 +318,21 @@ def test_end_to_end(tmp_path: Path) -> None:
     # ── 3. CLI doctor dashboard-truth exit code via main() ─────────────────
     from interfaces.cli.ds import main as ds_main
 
-    # Violating DB → exit code 1.
+    # Violating DB → exit code 1. (analytics store still pointed at violating.)
     with _patch_db(db_violating):
         exit_code_fail = ds_main(["doctor", "dashboard-truth"])
     assert exit_code_fail == 1, f"Expected exit code 1 on violating DB; got {exit_code_fail}"
 
-    # Empty DB → exit code 0.
+    # Empty DB → exit code 0. Re-point the analytics store back to empty.
+    _isolate_analytics_store(monkeypatch, tmp_path / "empty")
     with _patch_db(db_empty):
         exit_code_ok = ds_main(["doctor", "dashboard-truth"])
     assert exit_code_ok == 0, f"Expected exit code 0 on empty DB; got {exit_code_ok}"
 
 
-def test_missing_authority_file_vacuously_passes(tmp_path: Path) -> None:
+def test_missing_authority_file_vacuously_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A nonexistent authority DB (fresh CI checkout — no ~/.dream-studio) must
     vacuously pass every invariant, NOT fail on 'unable to open database file'.
 
@@ -313,6 +341,8 @@ def test_missing_authority_file_vacuously_passes(tmp_path: Path) -> None:
     """
     missing = tmp_path / "nope" / "state" / "studio.db"
     assert not missing.exists()
+    # No analytics store either — a fresh CI checkout has neither authority.
+    _isolate_analytics_store(monkeypatch, tmp_path / "nope-analytics")
     result = run_dashboard_truth(missing)
     assert result["ok"] is True, f"Missing DB must pass; got {result}"
     assert len(result["results"]) == 5
