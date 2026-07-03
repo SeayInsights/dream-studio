@@ -111,6 +111,11 @@ class EventType(str, Enum):
     FINDING_RECORDED = "finding.recorded"
     FINDING_STATUS_CHANGED = "finding.status_changed"
 
+    # Eval + decision event family (WO-DBA-EVAL-DECISION)
+    WORK_ORDER_VERIFIED = "work_order.verified"
+    EVAL_RUN_COMPLETED = "eval.run.completed"
+    DECISION_RECORDED = "decision.recorded"
+
     # Token attribution events (TA3)
     TOKEN_CONSUMED = "token.consumed"
 
@@ -786,6 +791,28 @@ EVENT_TYPE_REGISTRY: tuple[EventTypeMeta, ...] = (
         EventType.FINDING_STATUS_CHANGED,
         "security",
         "Finding status changed (open → mitigated/false_positive/accepted/resolved)",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    # Eval + decision event family (WO-DBA-EVAL-DECISION)
+    EventTypeMeta(
+        EventType.WORK_ORDER_VERIFIED,
+        "sdlc",
+        "Independent review verdict recorded for a work order (status, scores, reasons)",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.EVAL_RUN_COMPLETED,
+        "telemetry",
+        "Behavioral/outcome/guardrail eval run completed (scores, passed, failure reasons)",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.DECISION_RECORDED,
+        "sdlc",
+        "Governance decision recorded with context, outcome, reasoning, and policy",
         True,
         EventCategory.PRODUCTION_EMITTED,
     ),

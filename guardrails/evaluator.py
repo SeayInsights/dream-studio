@@ -225,7 +225,7 @@ def evaluate_rule_trigger(rule, event_id: str | None, conn) -> bool:
 
 
 def _write_hook_eval_run(hook_id: str, passed: bool, failure_reasons: list[str], conn) -> None:
-    """Write one row to hook_eval_runs after a guardrail evaluation."""
+    """Record a guardrail evaluation: hook_eval_runs row + eval.run.completed event."""
     run_id = str(uuid.uuid4())
     score = 1.0 if passed else max(0.0, 1.0 - len(failure_reasons) * 0.25)
     try:
@@ -240,6 +240,23 @@ def _write_hook_eval_run(hook_id: str, passed: bool, failure_reasons: list[str],
         conn.commit()
     except Exception:
         pass  # hook_eval_runs may not exist on older DBs; never block the main path
+
+    try:
+        from core.eval.events import emit_eval_run_event
+
+        emit_eval_run_event(
+            {
+                "run_id": run_id,
+                "eval_id": f"hook:{hook_id}",
+                "eval_type": "guardrail",
+                "score": score,
+                "passed": passed,
+                "failure_reasons": failure_reasons,
+            },
+            hook_id=hook_id,
+        )
+    except Exception:
+        pass
 
 
 def evaluate(

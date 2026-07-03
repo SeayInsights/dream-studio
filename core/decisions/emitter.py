@@ -88,8 +88,51 @@ def emit_decision(
             f"Failed to emit decision {decision_id} (type={decision_type}). " f"Error: {e}"
         ) from e
 
+    _emit_decision_event(decision, event_id)
     _emit_decision_telemetry(decision, event_id)
     return decision
+
+
+def _emit_decision_event(decision: Decision, event_id: Optional[str]) -> None:
+    """Emit the decision.recorded canonical event via the spool → ingestor path.
+
+    The canonical event is the durable record (WO-DBA-EVAL-DECISION); the
+    decision_log row above becomes redundant once T4 drops the table.
+    Best-effort: spool failures never fail the decision write.
+    """
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        context = decision.context if isinstance(decision.context, dict) else {}
+        envelope = CanonicalEventEnvelope(
+            event_type="decision.recorded",
+            session_id=None,
+            payload={
+                "decision_id": decision.decision_id,
+                "decision_type": decision.decision_type,
+                "context": decision.context,
+                "outcome": decision.outcome,
+                "reasoning": decision.reasoning,
+                "confidence": decision.confidence,
+                "policy_applied": decision.policy_applied,
+                "source_subsystem": decision.source_subsystem,
+                "triggered_event_id": event_id,
+            },
+            timestamp=decision.timestamp,
+            severity="info",
+            trace={
+                "domain": "sdlc",
+                "source_subsystem": decision.source_subsystem,
+                "project_id": context.get("project_id"),
+                "work_order_id": context.get("work_order_id"),
+                "attribution_status": "fully_attributed",
+            },
+        )
+        _spool_writer.write_event(envelope.to_dict())
+    except Exception:
+        return
 
 
 def _emit_decision_telemetry(decision: Decision, event_id: Optional[str]) -> None:

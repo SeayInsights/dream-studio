@@ -512,6 +512,26 @@ _ENTRIES: tuple[RegistryEntry, ...] = (
         "meaningful-unit",
         "Finding status changed — AI resolution produces business status update",
     ),
+    # Eval + decision family (WO-DBA-EVAL-DECISION): eval/decision facts are events
+    # attached to business entities; replaces ds_eval_runs/hook_eval_runs/decision_log rows.
+    RegistryEntry(
+        "work_order.verified",
+        _BUSINESS,
+        "meaningful-unit",
+        "Independent review verdict recorded for a work order",
+    ),
+    RegistryEntry(
+        "eval.run.completed",
+        _BUSINESS,
+        "meaningful-unit",
+        "Behavioral/outcome/guardrail eval run completed",
+    ),
+    RegistryEntry(
+        "decision.recorded",
+        _BUSINESS,
+        "meaningful-unit",
+        "Governance decision recorded with context, outcome, and policy",
+    ),
     # Audit findings: AI audit (→ ai) discovers business violations/improvements (→ business)
     RegistryEntry(
         "audit.violation_found",
