@@ -404,7 +404,6 @@ def sync_tick() -> None:
         from core.projections.milestone_projection import MilestoneProjection
         from core.projections.project_projection import ProjectProjection
         from core.projections.task_projection import TaskProjection
-        from core.projections.token_projection import TokenConsumptionProjection
         from core.projections.work_order_projection import WorkOrderProjection
 
         runner = ProjectionRunner()
@@ -412,10 +411,10 @@ def sync_tick() -> None:
         runner.register(TaskProjection())
         runner.register(MilestoneProjection())
         runner.register(ProjectProjection())
-        # token.consumed (AI-source) must project on the live emit-then-tick path,
-        # not only the dormant projection daemon — otherwise token_usage_records
-        # never grows after the one-time backfill (WO-TOKEN-BACKFILL T2).
-        runner.register(TokenConsumptionProjection())
+        # TokenConsumptionProjection (token.consumed -> token_usage_records) was
+        # removed WO-DBA-DROP (migration 137 drops token_usage_records); the
+        # DuckDB aggregate_metrics.db token_usage_records view over events_fact
+        # is now the sole read side for token analytics.
         runner.tick()
     except Exception:
         logger.debug("sync_tick: projection cycle failed (non-fatal)", exc_info=True)
@@ -486,12 +485,8 @@ def main() -> None:
     except ImportError:
         logger.warning("FindingsProjection not found — skipping spine registration.")
 
-    try:
-        from core.projections.token_projection import TokenConsumptionProjection
-
-        runner.register(TokenConsumptionProjection())
-    except ImportError:
-        logger.warning("TokenConsumptionProjection not found — skipping registration.")
+    # TokenConsumptionProjection removed WO-DBA-DROP (migration 137 drops
+    # token_usage_records); the DuckDB events_fact pipeline is the read side now.
 
     runner.run()
 
