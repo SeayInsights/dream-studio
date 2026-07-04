@@ -757,6 +757,82 @@ def _collect_git_commits(
         return f"(error collecting git commits: {exc})"
 
 
+def _collect_working_diff(source_root: Path, base_ref: str = "origin/main") -> str | None:
+    """Return the branch's changes vs base_ref (merge-base..HEAD + uncommitted).
+
+    Authority-based fallback for _collect_git_commits (WO-FIX-VERIFY-GATE): a
+    squash merge never carries the WO id into the merged commit, so grep-by-id
+    finds nothing. When verify runs on the feature branch (the right time —
+    pre-merge), the diff of the branch against origin/main is the WO's actual
+    changes regardless of commit messages. Returns None on a clean tree (e.g.
+    already merged, running on main) or any git error — the caller then falls
+    back to authority evidence.
+    """
+    try:
+        merge_base = subprocess.run(
+            ["git", "merge-base", base_ref, "HEAD"],
+            cwd=str(source_root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+        )
+        base = merge_base.stdout.strip() if merge_base.returncode == 0 else base_ref
+        parts: list[str] = []
+        for label, args in (
+            (
+                "committed on branch",
+                ["git", "diff", "--stat", "--patch", "--no-color", f"{base}..HEAD"],
+            ),
+            ("uncommitted", ["git", "diff", "--stat", "--patch", "--no-color", "HEAD"]),
+        ):
+            res = subprocess.run(
+                args,
+                cwd=str(source_root),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=30,
+            )
+            if res.stdout.strip():
+                parts.append(f"=== {label} (vs {base_ref}) ===\n{res.stdout[:16000]}")
+        return "\n\n".join(parts) if parts else None
+    except Exception:
+        return None
+
+
+def _authority_evidence(
+    work_order_id: str,
+    tasks: list[dict[str, Any]],
+    ac_results: dict[str, list[dict[str, Any]]],
+) -> tuple[str, bool]:
+    """Summarize the WO's authority-side evidence for grading without a git diff.
+
+    Returns (evidence_text, has_passing_executable_check). The executable AC
+    results (SQL-CHECK/TEST-CHECK/API-CHECK) are objective, authority-recorded
+    proof the work is done — the certification basis when git evidence is absent
+    (WO-FIX-VERIFY-GATE). has_passing_executable_check gates certification: with
+    NO executable check at all there is nothing objective to certify, so the
+    caller keeps the unreviewable path (no false-done).
+    """
+    has_passing = False
+    lines = [
+        f"AUTHORITY EVIDENCE for work order {work_order_id[:8]} (no git-diff context available):",
+        "",
+    ]
+    for t in tasks:
+        checks = ac_results.get(t["title"], [])
+        lines.append(f"- [{t['status']}] {t['title']}")
+        for c in checks:
+            verdict = "PASS" if c.get("passed") else "FAIL"
+            if c.get("passed"):
+                has_passing = True
+            lines.append(f"    {c.get('kind', 'CHECK')} {verdict}: {c.get('expr', '')}")
+    return "\n".join(lines), has_passing
+
+
 def _find_migration_files(source_root: Path, git_diff: str) -> list[Path]:
     """Return migration SQL files referenced in the git diff.
 
@@ -1419,11 +1495,26 @@ def verify_work_order(
         )
         git_diff = _collect_git_commits(source_root, work_order_id, title=wo["title"])
 
-        # Unreviewable: no commit evidence by UUID or title token. Do NOT grade —
-        # graders given an empty diff return score-0 "N/A: empty diff" violations
-        # that spawn unactionable remediation WOs (WO-GRADER-LOOKUP). Record an
-        # unreviewable verdict with a warning instead. Mock mode skips this so CI
-        # fixtures (seeded WOs with no commits) keep exercising the grader path.
+        # WO-FIX-VERIFY-GATE: commit-grep by WO id/title fails for every
+        # squash-merged WO (the id never survives the squash). Before declaring
+        # unreviewable, fall back to authority+diff evidence:
+        #   1. the branch's working diff vs origin/main (works pre-merge, the
+        #      right time to verify — no WO id needed in any commit);
+        #   2. the executable AC results (SQL/TEST/API-CHECK) — objective,
+        #      authority-recorded proof, the certification basis post-merge.
+        # Only when NONE of these exist is the work genuinely unreviewable, so
+        # the no-false-done invariant holds (a WO with no commits, no branch
+        # diff, and no executable check still cannot auto-certify).
+        authority_certified = False
+        if git_diff is None:
+            git_diff = _collect_working_diff(source_root)
+        if git_diff is None:
+            ac_results = run_executable_checks(tasks, db_path)
+            evidence_text, has_passing = _authority_evidence(work_order_id, tasks, ac_results)
+            if has_passing:
+                git_diff = evidence_text
+                authority_certified = True
+
         if git_diff is None and not os.environ.get(_MOCK_ENV):
             token = wo["title"].split(" - ")[0].strip()
             warning = (
@@ -1695,6 +1786,7 @@ def verify_work_order(
             "quality": quality,
             "gaps": all_gaps,
             "spawned_work_orders": spawned,
+            "certification_basis": "authority_evidence" if authority_certified else "git_diff",
             "verified_at": completed_at,
         }
         if migration is not None:
@@ -1714,5 +1806,6 @@ def verify_work_order(
         "auto_continue_warning": auto_continue_warning,
         "gaps": all_gaps,
         "spawned_work_orders": spawned,
+        "certification_basis": "authority_evidence" if authority_certified else "git_diff",
         "verdict_path": str(verdict_path),
     }
