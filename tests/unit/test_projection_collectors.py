@@ -1,5 +1,6 @@
 """Unit tests for analytics collectors"""
 
+import json
 import pytest
 import sqlite3
 from datetime import datetime, timedelta
@@ -912,40 +913,72 @@ def test_lesson_source_quality(test_lesson_db):
 # WorkflowCollector tests
 
 
+def _workflow_completed_payload(
+    run_key: str,
+    workflow: str,
+    yaml_path: str,
+    status: str,
+    started,
+    finished,
+    node_count,
+    nodes_done,
+) -> dict:
+    duration_ms = int((finished - started).total_seconds() * 1000)
+    return {
+        "run_key": run_key,
+        "workflow": workflow,
+        "yaml_path": yaml_path,
+        "status": status,
+        "started_at": started.isoformat(),
+        "finished_at": finished.isoformat(),
+        "duration_ms": duration_ms,
+        "node_count": node_count,
+        "nodes_done": nodes_done,
+    }
+
+
+def _workflow_node_completed_payload(
+    run_key: str, workflow: str, node_id: str, status: str, started, finished, output: str
+) -> dict:
+    duration_ms = int((finished - started).total_seconds() * 1000) if finished and started else None
+    return {
+        "run_key": run_key,
+        "node_id": node_id,
+        "workflow": workflow,
+        "status": status,
+        "output": output,
+        "duration_ms": duration_ms,
+    }
+
+
+def _insert_ai_canonical_event(
+    cursor, event_id: str, event_type: str, event_timestamp: str, payload: dict, workflow_id: str
+) -> None:
+    cursor.execute(
+        """
+        INSERT INTO ai_canonical_events
+        (event_id, event_type, event_timestamp, trace, payload, workflow_id)
+        VALUES (?, ?, ?, '{}', ?, ?)
+        """,
+        (event_id, event_type, event_timestamp, json.dumps(payload), workflow_id),
+    )
+
+
 @pytest.fixture
 def test_workflow_db(tmp_path):
-    """Create a temporary test database with workflow data"""
+    """Create a temporary test database seeded with workflow.completed /
+    workflow.node.completed canonical events (ai_canonical_events).
+
+    WO 9f47a1a0: raw_workflow_runs/raw_workflow_nodes (dropped migration 141)
+    replaced as WorkflowCollector's data source by these canonical events —
+    see core/event_store/migrations/141_drop_orphaned_workflow_raw_tables.sql.
+    """
+    from core.config.sqlite_bootstrap import run_migrations
+
     db_path = tmp_path / "test_studio_workflows.db"
-
     conn = sqlite3.connect(str(db_path))
+    run_migrations(conn, apply_unreleased=True)
     cursor = conn.cursor()
-
-    cursor.execute("""
-        CREATE TABLE raw_workflow_runs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_key TEXT NOT NULL UNIQUE,
-            workflow TEXT NOT NULL,
-            yaml_path TEXT NOT NULL,
-            status TEXT NOT NULL,
-            started_at TEXT NOT NULL,
-            finished_at TEXT,
-            node_count INTEGER,
-            nodes_done INTEGER
-        )
-    """)
-
-    cursor.execute("""
-        CREATE TABLE raw_workflow_nodes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_key TEXT NOT NULL REFERENCES raw_workflow_runs(run_key),
-            node_id TEXT NOT NULL,
-            status TEXT NOT NULL,
-            started_at TEXT,
-            finished_at TEXT,
-            duration_s REAL,
-            output TEXT
-        )
-    """)
 
     now = datetime.now()
     workflow_data = [
@@ -954,8 +987,8 @@ def test_workflow_db(tmp_path):
             "build-pipeline",
             "/workflows/build.yml",
             "completed",
-            (now - timedelta(days=1)).isoformat(),
-            (now - timedelta(days=1, hours=-1)).isoformat(),
+            now - timedelta(days=1),
+            now - timedelta(days=1, hours=-1),
             3,
             3,
         ),
@@ -964,8 +997,8 @@ def test_workflow_db(tmp_path):
             "test-suite",
             "/workflows/test.yml",
             "completed",
-            (now - timedelta(days=2)).isoformat(),
-            (now - timedelta(days=2, hours=-0.5)).isoformat(),
+            now - timedelta(days=2),
+            now - timedelta(days=2, hours=-0.5),
             2,
             2,
         ),
@@ -974,8 +1007,8 @@ def test_workflow_db(tmp_path):
             "build-pipeline",
             "/workflows/build.yml",
             "failed",
-            (now - timedelta(days=3)).isoformat(),
-            (now - timedelta(days=3, hours=-0.8)).isoformat(),
+            now - timedelta(days=3),
+            now - timedelta(days=3, hours=-0.8),
             3,
             2,
         ),
@@ -984,8 +1017,8 @@ def test_workflow_db(tmp_path):
             "deploy",
             "/workflows/deploy.yml",
             "completed",
-            (now - timedelta(days=5)).isoformat(),
-            (now - timedelta(days=5, hours=-2)).isoformat(),
+            now - timedelta(days=5),
+            now - timedelta(days=5, hours=-2),
             4,
             4,
         ),
@@ -994,79 +1027,96 @@ def test_workflow_db(tmp_path):
             "test-suite",
             "/workflows/test.yml",
             "completed",
-            (now - timedelta(days=100)).isoformat(),
-            (now - timedelta(days=100, hours=-0.5)).isoformat(),
+            now - timedelta(days=100),
+            now - timedelta(days=100, hours=-0.5),
             2,
             2,
         ),  # Too old
     ]
 
-    cursor.executemany(
-        """
-        INSERT INTO raw_workflow_runs
-        (run_key, workflow, yaml_path, status, started_at, finished_at, node_count, nodes_done)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """,
-        workflow_data,
-    )
+    for i, (
+        run_key,
+        workflow,
+        yaml_path,
+        status,
+        started,
+        finished,
+        node_count,
+        nodes_done,
+    ) in enumerate(workflow_data):
+        payload = _workflow_completed_payload(
+            run_key, workflow, yaml_path, status, started, finished, node_count, nodes_done
+        )
+        _insert_ai_canonical_event(
+            cursor,
+            f"evt-run-{i}",
+            "workflow.completed",
+            finished.isoformat(),
+            payload,
+            workflow,
+        )
 
     # Add some nodes
     node_data = [
         (
             "run-1",
+            "build-pipeline",
             "compile",
             "completed",
-            (now - timedelta(days=1)).isoformat(),
-            (now - timedelta(days=1, hours=-0.3)).isoformat(),
-            18.5,
+            now - timedelta(days=1),
+            now - timedelta(days=1, hours=-0.3),
             "output1",
         ),
         (
             "run-1",
+            "build-pipeline",
             "test",
             "completed",
-            (now - timedelta(days=1)).isoformat(),
-            (now - timedelta(days=1, hours=-0.5)).isoformat(),
-            30.0,
+            now - timedelta(days=1),
+            now - timedelta(days=1, hours=-0.5),
             "output2",
         ),
         (
             "run-2",
+            "test-suite",
             "test",
             "completed",
-            (now - timedelta(days=2)).isoformat(),
-            (now - timedelta(days=2, hours=-0.5)).isoformat(),
-            28.0,
+            now - timedelta(days=2),
+            now - timedelta(days=2, hours=-0.5),
             "output3",
         ),
         (
             "run-3",
+            "build-pipeline",
             "compile",
             "completed",
-            (now - timedelta(days=3)).isoformat(),
-            (now - timedelta(days=3, hours=-0.3)).isoformat(),
-            20.0,
+            now - timedelta(days=3),
+            now - timedelta(days=3, hours=-0.3),
             "output4",
         ),
         (
             "run-3",
+            "build-pipeline",
             "test",
             "failed",
-            (now - timedelta(days=3)).isoformat(),
-            (now - timedelta(days=3, hours=-0.5)).isoformat(),
-            15.0,
+            now - timedelta(days=3),
+            now - timedelta(days=3, hours=-0.5),
             "output5",
         ),
     ]
 
-    cursor.executemany(
-        """
-        INSERT INTO raw_workflow_nodes
-        (run_key, node_id, status, started_at, finished_at, duration_s, output)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """,
-        node_data,
-    )
+    for i, (run_key, workflow, node_id, status, started, finished, output) in enumerate(node_data):
+        payload = _workflow_node_completed_payload(
+            run_key, workflow, node_id, status, started, finished, output
+        )
+        _insert_ai_canonical_event(
+            cursor,
+            f"evt-node-{i}",
+            "workflow.node.completed",
+            finished.isoformat(),
+            payload,
+            workflow,
+        )
 
     conn.commit()
     conn.close()

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from core.decisions.emitter import emit_decision
-from core.event_store.studio_db import _connect, archive_workflow
+from core.event_store.studio_db import _connect
 from core.research.store import save_research
 from core.telemetry.emitters import (
     MODE_STRICT,
@@ -68,38 +68,61 @@ def test_workflow_invocation_emitter_is_idempotent_and_writes_attention(tmp_path
         conn.close()
 
 
-def test_archive_workflow_preserves_raw_tables_and_dual_writes(tmp_path: Path) -> None:
-    db_path = _db(tmp_path)
+def test_workflow_completion_emits_canonical_event_and_dual_writes_execution_events(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """WO 9f47a1a0: archive_workflow() (+ raw_workflow_runs/raw_workflow_nodes,
+    write-orphaned since 2026-05-18, dropped migration 141) replaced by
+    control/execution/workflow/state.py's direct spool emission of
+    workflow.completed canonical events. This proves the execution_events
+    dual-write survives the replacement — previously reached via
+    archive_workflow() -> _emit_workflow_telemetry() ->
+    emit_workflow_invocation(), now via state.py's
+    _emit_execution_events_telemetry() helper, decoupled from any raw-table
+    write succeeding."""
+    from core.config import paths
+    from spool.ingestor import ingest
+
+    spool_root = tmp_path / "spool"
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
+    monkeypatch.setattr(paths, "state_dir", lambda: tmp_path)
+    db_path = tmp_path / "studio.db"
+    _connect(db_path).close()  # pre-migrate the full schema
+
+    from control.execution.workflow.state import _emit_workflow_completion
+
     workflow = {
         "workflow": "daily-standup",
         "yaml_path": "workflows/daily-standup.yaml",
-        "status": "success",
+        "status": "completed",
         "started": "2026-05-13T00:00:00+00:00",
         "finished": "2026-05-13T00:00:02+00:00",
         "nodes": {"summary": {"status": "completed", "output": "ok"}},
     }
 
-    assert archive_workflow("run-archive-workflow-test", workflow, db_path=db_path) is True
+    assert _emit_workflow_completion("run-archive-workflow-test", workflow) is True
 
     conn = _connect(db_path)
     try:
-        assert (
-            conn.execute(
-                "SELECT COUNT(*) FROM raw_workflow_runs WHERE run_key = 'run-archive-workflow-test'"
-            ).fetchone()[0]
-            == 1
-        )
-        assert (
-            conn.execute(
-                "SELECT COUNT(*) FROM raw_workflow_nodes WHERE run_key = 'run-archive-workflow-test'"
-            ).fetchone()[0]
-            == 1
-        )
         row = conn.execute(
             "SELECT workflow_id, outcome_status AS status FROM execution_events WHERE event_type = 'workflow.invocation_recorded'"
         ).fetchone()
         assert row["workflow_id"] == "daily-standup"
         assert row["status"] == "completed"
+    finally:
+        conn.close()
+
+    ingest(root=spool_root, db_path=db_path)
+    conn = _connect(db_path)
+    try:
+        row = conn.execute(
+            "SELECT payload FROM ai_canonical_events WHERE event_type = 'workflow.completed'"
+        ).fetchone()
+        assert row is not None
+        payload = json.loads(row["payload"])
+        assert payload["run_key"] == "run-archive-workflow-test"
+        assert payload["workflow"] == "daily-standup"
+        assert payload["status"] == "completed"
     finally:
         conn.close()
 
