@@ -33,6 +33,16 @@ or repo source is forbidden without a new approval boundary.
 `raw_sessions` remains current session-continuity authority until a future
 session authority migration supersedes it. `raw_skill_telemetry` still has
 correction lineage attached and requires manual review before row purge.
-`raw_token_usage` can be purged only when current dashboard/API routes read
-`token_usage_records` and migration/reference evidence proves the old rows are
-duplicates.
+
+<!-- 2026-07-03: `raw_token_usage` dropped in migration 138 (WO 468ce225) —
+this closes the condition above. `token_usage_records` (the table the old
+guidance pointed to) was itself dropped in migration 137; dashboard/API token
+reads now go through the DuckDB aggregate_metrics.db token_usage_records VIEW,
+which is strictly more informative than either dropped SQLite table.
+Reference-evidence proof: no FK, no view, and (post-migration) no production
+writer/reader references raw_token_usage; the 3 stale rows carried no
+accounting fields the canonical token.consumed event stream doesn't already
+carry. Dropping the table (not just purging rows) was in scope here because
+every writer was already vestigial (one-time migration/backfill tooling only)
+— see migration 138's header comment for the full writer/reader inventory. -->
+
