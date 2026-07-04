@@ -35,7 +35,7 @@ def state_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(paths, "state_dir", lambda: tmp_path)
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool"))
     # Pre-migrate so the ai_canonical_events schema (+ indexes) exists before
-    # ingest() does its own ad-hoc CREATE TABLE IF NOT EXISTS.
+    # ingest() creates its target table lazily on first write.
     _connect(tmp_path / "studio.db").close()
     return tmp_path
 
