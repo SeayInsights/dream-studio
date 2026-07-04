@@ -70,6 +70,7 @@ gates:
       tests/unit/test_schema_tombstones.py,
       tests/unit/test_module_registry_contract.py,
       tests/unit/test_contract_atlas.py,
+      tests/unit/test_state_contract_boundaries.py,
       -q]
     fail_hint: >
       A schema/contract pin drifted — update the pin's expected set in the SAME

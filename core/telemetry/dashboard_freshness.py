@@ -42,7 +42,7 @@ def dashboard_data_freshness_status(db_path: Path | str | None = None) -> dict[s
                 "raw_skill_telemetry",
                 # raw_workflow_runs: dropped migration 141 (WO 9f47a1a0) — write-orphaned
                 # since 2026-05-18; workflow freshness now follows workflow.completed
-                # canonical events (ai_canonical_events), not counted in this legacy set.
+                # the canonical AI event stream, not counted in this legacy set.
                 "hook_executions",
                 "reg_projects",
                 "vw_security_summary",
