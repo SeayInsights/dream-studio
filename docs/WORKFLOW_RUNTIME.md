@@ -7,6 +7,8 @@ Phase 5.5A — Workflow Runtime Reliability audit and classification.
 
 **2026-06-14 (WO-LESSONS-DB-UNIFY):** `canonical/workflows/daily-close.yaml` node `daily-learn` updated: step 5 now uses `INSERT OR IGNORE` via `insert_lesson()` for dedup (was: file dedup against draft-lessons directory); step 6 now says "Record ≤5 new lessons via insert_lesson()" (was: "Write ≤5 new drafts to meta/draft-lessons/"). `canonical/workflows/self-audit.yaml` node `collect-signal` step 3 updated: draft lesson count now comes from `raw_lessons WHERE status='draft'` DB query (was: glob of draft-lessons/*.md). No workflow structural change (node dependencies, trigger_rule, model, timeout unchanged).
 
+**2026-07-04 (WO 9f47a1a0, emission fix):** `control/execution/workflow/state.py`'s terminal-run archival path (`_try_archive_and_prune`) no longer calls `archive_workflow()` — that function wrote to `raw_workflow_runs`/`raw_workflow_nodes`, which had been write-orphaned since 2026-05-18 (every INSERT silently failed inside a shared best-effort try/except, and the exception was swallowed). Both tables were dropped in migration 141 (`core/event_store/migrations/141_drop_orphaned_workflow_raw_tables.sql`). Workflow runs now emit canonical events again: on every terminal state (`completed`, `completed_with_failures`, `aborted`), state.py writes `workflow.completed` (+ one `workflow.node.completed` per node) canonical event envelopes directly to the spool (`emitters/shared/spool_writer.py`), decoupled from any SQLite write — a future schema failure in a legacy table can no longer silently swallow event emission. `archive_workflow()` and its `_emit_workflow_telemetry()` helper are deleted from `core/event_store/studio_db.py`; the `execution_events` dual-write (`emit_workflow_invocation`) moved into state.py's new `_emit_execution_events_telemetry()` helper. Readers repointed off the dropped tables: `projections/core/collectors/workflow_collector.py`, `projections/core/sla/tracker.py` (`workflows_success_rate`), and `studio_db.py::last_run`/`run_count` (used by `control/execution/workflow/registry.py::list_workflows()`) now read `ai_canonical_events` filtered by `event_type IN ('workflow.completed', 'workflow.node.completed')`.
+
 ## Workflow Authority Model
 
 ### Canonical
@@ -132,7 +134,7 @@ Three workflows reference external services:
 | Force-unlock | After timeout, deletes stale lock and retries |
 | PID tracking | Lock file contains PID of holder |
 | Corruption risk | Low — atomic write pattern, single-user |
-| Archive | Completed workflows archived to `studio.db` via `archive_workflow()` |
+| Archive | Terminal workflows emit `workflow.completed`/`workflow.node.completed` canonical events to the spool (WO 9f47a1a0, 2026-07-04 — `archive_workflow()`/`raw_workflow_runs`/`raw_workflow_nodes` removed, migration 141) |
 | Schema version | v1 |
 
 ## AI/Model Portability Notes (Phase 7 Scope)
