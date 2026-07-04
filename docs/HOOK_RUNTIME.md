@@ -269,3 +269,5 @@ These exist in runtime/hooks/ but are not reachable via any registered hook:
 <!-- Last reviewed 2026-07-03 — WO-TOMBSTONE-GUARD (e5b24ab1): no hook dispatch/registration/fail-open change. The pre-push pin-tests gate adds tests/unit/test_schema_tombstones.py (dropped-table resurrection guard); see WORKFLOW_RUNTIME.md and DATABASE.md for the policy. -->
 
 <!-- Last reviewed 2026-07-03 — WO 468ce225-795d-402f-af91-acf69ec78099: no hook dispatch/registration/fail-open change. canonical/workflows/studio-analytics.yaml's healthcheck/harvest command prompts updated to drop raw_token_usage row-count/backfill references — migration 138 dropped the table; backfill_token_sessions.py's --sessions flag was removed (raw_sessions backfill is now unconditional). See DATABASE.md and aspirational-schema-debt.md for the schema change. -->
+
+<!-- Last reviewed 2026-07-04 — WO-CI-457-FOLLOWUP (667d04e9): no hook change; pin-tests gate extended (see WORKFLOW_RUNTIME.md). -->

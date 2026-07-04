@@ -41,10 +41,11 @@ DASHBOARD_MODULES: tuple[dict[str, Any], ...] = (
         "module_name": "Token Analytics",
         "module_type": "dashboard_projection",
         "docker_profile": None,
-        "owns_tables": ["token_usage_records"],
+        # token_usage_records: dropped migration 138 — token analytics derive
+        # from token.consumed canonical events via the spine/DuckDB view.
+        "owns_tables": ["execution_events"],
         "source_tables": [
             "execution_events",
-            "token_usage_records",
             "ai_adapter_accounting_profiles",
             # ai_usage_operational_records: dropped migration 131
         ],
@@ -153,8 +154,9 @@ DASHBOARD_MODULES: tuple[dict[str, Any], ...] = (
         "docker_profile": None,
         # route_decision_records: dropped migration 131
         # dashboard_attention_items: dropped migration 139 (WO-AI-SPINE, AD-5) —
-        # attention is derived from execution_events, not a dedicated owned table.
-        "owns_tables": [],
+        # attention derives from execution_events; shared spine ownership per
+        # the sibling derive-from-spine modules.
+        "owns_tables": ["execution_events"],
         "source_tables": [
             "execution_events",
             # route_decision_records: dropped migration 131
