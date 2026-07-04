@@ -70,9 +70,19 @@ class ProjectionRunner:
 
     @staticmethod
     def _open_analytics_conn() -> object | None:
-        """Open the DuckDB analytics store (read-write). Fail-open: returns None on error."""
+        """Open the DuckDB analytics store (read-write).
+
+        Resilient on the SDLC write path (returns None so a missing/unavailable
+        analytics store never blocks the SQLite projection), but fail-LOUD on a
+        wrong-format store: a non-DuckDB file is a real misconfiguration that
+        must not be silently ignored (WO-DUCKDB-REAL T2), so it is logged at
+        WARNING with the actionable AnalyticsStoreFormatError message. It still
+        returns None rather than crashing work-order creation — the store is
+        rebuildable and the operator resolves it by deleting the file.
+        """
         try:
             from core.analytics.duckdb_store import (
+                AnalyticsStoreFormatError,
                 connect_analytics,
                 ensure_analytics_schema,
             )
@@ -80,6 +90,9 @@ class ProjectionRunner:
             conn = connect_analytics(read_only=False)
             ensure_analytics_schema(conn)
             return conn
+        except AnalyticsStoreFormatError as exc:
+            logger.warning("ProjectionRunner: analytics store rejected — %s", exc)
+            return None
         except Exception:
             logger.debug(
                 "ProjectionRunner: DuckDB analytics conn unavailable (non-fatal)",
