@@ -74,8 +74,14 @@ def test_temp_stale_version_stamp_upgrades_to_latest_and_preserves_existing_rows
     conn = sqlite3.connect(str(db_path))
     try:
         # Roll the version stamp back to simulate a DB that predates the
-        # baseline (e.g. a live authority DB paused mid-upgrade).
-        conn.execute("UPDATE _schema_version SET version = 1 WHERE version = ?", (142,))
+        # baseline (e.g. a live authority DB paused mid-upgrade). Reset ALL
+        # stamps to 1 (version-agnostic — the baseline is 142 and forward
+        # migrations like 143 add further rows; targeting only 142 would leave
+        # later stamps behind).
+        conn.execute("DELETE FROM _schema_version")
+        conn.execute(
+            "INSERT INTO _schema_version(version, applied_at) VALUES(1, '2026-05-13T00:00:00+00:00')"
+        )
         conn.execute(
             "INSERT INTO raw_sessions(session_id, started_at) VALUES(?, ?)",
             ("session-before-baseline", "2026-05-13T00:00:00+00:00"),

@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from core.config.sqlite_bootstrap import run_migrations
+from core.config.sqlite_bootstrap import latest_migration_version, run_migrations
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BASELINE_PATH = REPO_ROOT / "core" / "event_store" / "migrations" / "142_lean_baseline.sql"
@@ -119,18 +119,19 @@ def test_baseline_reapply_does_not_change_schema_object_count(
     ), f"schema object count changed on re-apply: before={before} after={after}"
 
 
-def test_run_migrations_against_a_db_already_at_142_is_a_true_no_op(
+def test_run_migrations_against_a_db_already_at_head_is_a_true_no_op(
     baseline_db: sqlite3.Connection,
 ) -> None:
-    """run_migrations() against a DB already at schema version 142 must not
-    re-execute the baseline file at all (the version-gate short-circuit) --
-    the actual code path a live authority DB takes on every future `ds`
-    invocation once it has migrated to 142."""
+    """run_migrations() against a DB already at the latest schema version must
+    not re-execute anything (the version-gate short-circuit) -- the actual code
+    path a live authority DB takes on every future `ds` invocation once it has
+    migrated to head. Version-agnostic: the baseline is 142, forward migrations
+    (143, ...) advance head, and re-running at head stays a no-op."""
     conn = baseline_db
     _seed(conn)
     before_counts = _row_counts(conn)
 
     version = run_migrations(conn, apply_unreleased=True)
 
-    assert version == 142
+    assert version == latest_migration_version()
     assert _row_counts(conn) == before_counts
