@@ -20,10 +20,13 @@ Current implementation:
   scorecard row, and confirmed dependency edges to the existing skill/workflow
   owners.
 - Workflow outputs should persist through existing authority tables such as
-  `workflow_invocations`, `skill_invocations`, `decision_records`,
+  `workflow_invocations`, `skill_invocations`,
   `research_evidence_records`, `validation_results`, `artifact_records`,
-  `dashboard_attention_items`, and Work Order records when an executing runtime
-  is explicitly authorized to write.
+  and Work Order records when an executing runtime
+  is explicitly authorized to write. (`decision_records` and
+  `dashboard_attention_items` were dropped in migration 139, WO-AI-SPINE — pure
+  duplication of the execution_events dual-write already performed by these
+  writers.)
 
 The catalog is a read model. It does not authorize database writes, browser
 automation, external project mutation, publishing, push, deploy, Docker, or

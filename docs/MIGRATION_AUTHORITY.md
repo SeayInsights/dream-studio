@@ -62,6 +62,7 @@ The `_schema_version` table tracks which migrations have been applied. It is man
 
 | Migration | Tables dropped | Reason |
 |---|---|---|
+| 139 | `decision_records`, `outcome_records`, `dashboard_attention_items` | Per-type telemetry fact tables (0/2/0 production rows). Writers in `core/telemetry/emitters.py` already dual-wrote `execution_events`; the per-type tables were pure duplication. Dashboard/read-model consumers now derive decisions/outcomes/attention from `execution_events` filtered by `event_type`. (WO-AI-SPINE, AD-5) |
 | 130 | `artifact_records`, `authority_projection_records`, `blocker_resolution_records`, `hook_findings`, `canonical_events_legacy_backup` | Aspirational telemetry tables (0 rows, no production writers). Backup table data already migrated to dual-canonical in migration 102. |
 | 129 | `hook_executions`, `validation_failures` | Repointed to DuckDB views; SQLite tables no longer needed. |
 

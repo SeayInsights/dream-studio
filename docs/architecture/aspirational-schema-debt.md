@@ -1,4 +1,5 @@
 <!-- Last reviewed 2026-06-28 — removed action_feedback (core/repo_actions deleted, test-only) and real_action_feedback (core/execution adapters deleted, test-only) from _PYTHON_OWNED_TABLES registry in schema_coherence.py. No schema debt introduced; both tables were already Python-owned with no migration references. -->
+<!-- Last reviewed 2026-07-04 — migration 139 (WO-AI-SPINE, AD-5): decision_records, outcome_records, and dashboard_attention_items dropped; their writers in core/telemetry/emitters.py already dual-wrote execution_events, so the per-type tables were pure duplication (0/2/0 production rows). Dashboard/read-model consumers now derive decisions/outcomes/attention from execution_events filtered by event_type ('decision.recorded', 'validation.result_recorded', 'workflow.invocation_recorded', 'security.finding_recorded'). No schema debt introduced. -->
 # Aspirational Schema Debt
 
 > **HISTORICAL DEBT LOG — NOT THE LIVE SCHEMA**

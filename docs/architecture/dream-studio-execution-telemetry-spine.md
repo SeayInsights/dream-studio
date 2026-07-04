@@ -1,5 +1,7 @@
 # Dream Studio Execution Telemetry Traceability Spine
 
+<!-- Last reviewed 2026-07-04 — migration 139 (WO-AI-SPINE, AD-5): decision_records, outcome_records, and dashboard_attention_items dropped; their writers in core/telemetry/emitters.py already dual-wrote execution_events, so the per-type tables were pure duplication. Dashboard/read-model consumers now derive decisions/outcomes/attention from execution_events filtered by event_type. -->
+
 > **ASPIRATIONAL** — This document describes the intended target state of the telemetry spine. Some referenced tables (`telemetry_entity_registry`, `blocker_resolution_records`, `authority_projection_records`) do not yet exist in the schema. Treat as design intent, not current implementation. (Flagged: WO-P 2026-06-07)
 
 Lifecycle status: draft_generated
@@ -46,14 +48,14 @@ The first additive telemetry spine defines:
 - `ai_adapter_accounting_profiles`
 - `ai_usage_operational_records`
 - `security_findings`
-- `decision_records`
+- `decision_records` (dropped migration 139, WO-AI-SPINE — pure duplication of execution_events dual-write)
 - `research_evidence_records`
 - `blocker_resolution_records`
 - `validation_results`
 - `artifact_records`
-- `outcome_records`
+- `outcome_records` (dropped migration 139, WO-AI-SPINE — pure duplication of execution_events dual-write)
 - `route_decision_records`
-- `dashboard_attention_items`
+- `dashboard_attention_items` (dropped migration 139, WO-AI-SPINE — pure duplication of execution_events dual-write)
 - `authority_projection_records`
 
 ## Dashboard Modules
