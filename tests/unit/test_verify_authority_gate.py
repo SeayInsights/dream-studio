@@ -4,10 +4,12 @@ commit-message grep.
 The verify gate greps git for the WO id/title. A squash merge never carries the
 id into the merged commit, so grep-by-id finds nothing and every squash-merged
 WO was forced to close with force=True (or a wo-<shortid> branch-pointer hack).
-The fix adds two fallbacks before declaring unreviewable:
-  1. the branch's working diff vs origin/main (pre-merge — no WO id needed);
-  2. the executable AC results (SQL/TEST/API-CHECK) as objective authority proof.
-Only genuinely-no-evidence stays unreviewable (no false-done).
+The fix: when _collect_git_commits finds nothing, fall back to the WO's own
+executable AC results (SQL/TEST/API-CHECK) as objective authority proof — a
+WO-scoped signal that does not depend on commit messages. Only genuinely-no-
+evidence (no commits AND no passing executable check) stays unreviewable
+(no false-done). When the `claude` grader CLI is absent, verify is unreviewable
+rather than crashing on a grader spawn.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from core.config.sqlite_bootstrap import bootstrap_database
-from core.work_orders.verify import _authority_evidence, _collect_working_diff
+from core.work_orders.verify import _authority_evidence
 
 NOW = "2026-01-01T00:00:00.000000Z"
 
@@ -104,27 +106,6 @@ class TestUnitHelpers:
         _, has_passing = _authority_evidence("wo", tasks, ac_results)
         assert has_passing is False
 
-    def test_working_diff_captures_branch_changes(self, tmp_path):
-        repo = _make_git_repo(tmp_path, ["base"])
-        # Simulate a base ref, branch off, add a change.
-        env = dict(cwd=str(repo), capture_output=True, text=True, check=True)
-        subprocess.run(["git", "branch", "base-ref"], **env)
-        (repo / "feature.py").write_text("print('new work')\n", encoding="utf-8")
-        subprocess.run(["git", "add", "-A"], **env)
-        subprocess.run(["git", "commit", "-q", "-m", "feat: work with no WO id"], **env)
-        diff = _collect_working_diff(repo, base_ref="base-ref")
-        assert diff is not None
-        assert "feature.py" in diff
-        assert "new work" in diff
-
-    def test_working_diff_none_on_clean_tree(self, tmp_path):
-        repo = _make_git_repo(tmp_path, ["only"])
-        # HEAD == base-ref, no uncommitted changes → no diff.
-        subprocess.run(
-            ["git", "branch", "base-ref"], cwd=str(repo), capture_output=True, text=True, check=True
-        )
-        assert _collect_working_diff(repo, base_ref="base-ref") is None
-
 
 class TestAuthorityCertification:
     def test_squash_merged_wo_with_passing_ac_certifies_from_authority(self, tmp_path, monkeypatch):
@@ -137,7 +118,6 @@ class TestAuthorityCertification:
         _seed_wo(db_path, work_order_id=wo_id, title="WO-SQUASHED - x", ac="SQL-CHECK: SELECT 1")
         # Force both git sources empty so only authority evidence remains.
         monkeypatch.setattr("core.work_orders.verify._collect_git_commits", lambda *a, **k: None)
-        monkeypatch.setattr("core.work_orders.verify._collect_working_diff", lambda *a, **k: None)
 
         with _patch_db(db_path):
             from core.work_orders.verify import verify_work_order
@@ -162,7 +142,6 @@ class TestAuthorityCertification:
         wo_id = str(uuid.uuid4())
         _seed_wo(db_path, work_order_id=wo_id, title="WO-NOPE - nothing", ac=None)
         monkeypatch.setattr("core.work_orders.verify._collect_git_commits", lambda *a, **k: None)
-        monkeypatch.setattr("core.work_orders.verify._collect_working_diff", lambda *a, **k: None)
 
         with _patch_db(db_path):
             from core.work_orders.verify import verify_work_order
@@ -177,3 +156,30 @@ class TestAuthorityCertification:
         assert result["ok"] is True
         assert result["unreviewable"] is True
         assert result["spawned_work_orders"] == []
+
+    def test_grader_cli_absent_is_unreviewable_not_crash(self, tmp_path, monkeypatch):
+        """When the `claude` grader CLI is missing (CI), verify degrades to
+        unreviewable instead of spawning a grader that raises FileNotFoundError
+        — the regression that turned main red on the WO-FIX-VERIFY-GATE merge.
+        A passing AC would otherwise route into grading; no grader = unreviewable."""
+        monkeypatch.delenv("DREAM_STUDIO_VERIFY_MOCK", raising=False)
+        monkeypatch.setattr("core.work_orders.verify.shutil.which", lambda _n: None)
+        repo = _make_git_repo(tmp_path, ["chore: unrelated"])
+        db_path = _make_db(tmp_path)
+        wo_id = str(uuid.uuid4())
+        _seed_wo(db_path, work_order_id=wo_id, title="WO-X - y", ac="SQL-CHECK: SELECT 1")
+        monkeypatch.setattr("core.work_orders.verify._collect_git_commits", lambda *a, **k: None)
+
+        with _patch_db(db_path):
+            from core.work_orders.verify import verify_work_order
+
+            result = verify_work_order(
+                work_order_id=wo_id,
+                source_root=repo,
+                dream_studio_home=tmp_path,
+                planning_root=tmp_path / "planning",
+            )
+
+        assert result["ok"] is True  # did not crash
+        assert result["unreviewable"] is True
+        assert "grader" in result["auto_continue_warning"].lower()

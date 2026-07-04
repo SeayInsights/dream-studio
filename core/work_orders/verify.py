@@ -38,6 +38,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import uuid
@@ -757,52 +758,6 @@ def _collect_git_commits(
         return f"(error collecting git commits: {exc})"
 
 
-def _collect_working_diff(source_root: Path, base_ref: str = "origin/main") -> str | None:
-    """Return the branch's changes vs base_ref (merge-base..HEAD + uncommitted).
-
-    Authority-based fallback for _collect_git_commits (WO-FIX-VERIFY-GATE): a
-    squash merge never carries the WO id into the merged commit, so grep-by-id
-    finds nothing. When verify runs on the feature branch (the right time —
-    pre-merge), the diff of the branch against origin/main is the WO's actual
-    changes regardless of commit messages. Returns None on a clean tree (e.g.
-    already merged, running on main) or any git error — the caller then falls
-    back to authority evidence.
-    """
-    try:
-        merge_base = subprocess.run(
-            ["git", "merge-base", base_ref, "HEAD"],
-            cwd=str(source_root),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=15,
-        )
-        base = merge_base.stdout.strip() if merge_base.returncode == 0 else base_ref
-        parts: list[str] = []
-        for label, args in (
-            (
-                "committed on branch",
-                ["git", "diff", "--stat", "--patch", "--no-color", f"{base}..HEAD"],
-            ),
-            ("uncommitted", ["git", "diff", "--stat", "--patch", "--no-color", "HEAD"]),
-        ):
-            res = subprocess.run(
-                args,
-                cwd=str(source_root),
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=30,
-            )
-            if res.stdout.strip():
-                parts.append(f"=== {label} (vs {base_ref}) ===\n{res.stdout[:16000]}")
-        return "\n\n".join(parts) if parts else None
-    except Exception:
-        return None
-
-
 def _authority_evidence(
     work_order_id: str,
     tasks: list[dict[str, Any]],
@@ -1496,31 +1451,51 @@ def verify_work_order(
         git_diff = _collect_git_commits(source_root, work_order_id, title=wo["title"])
 
         # WO-FIX-VERIFY-GATE: commit-grep by WO id/title fails for every
-        # squash-merged WO (the id never survives the squash). Before declaring
-        # unreviewable, fall back to authority+diff evidence:
-        #   1. the branch's working diff vs origin/main (works pre-merge, the
-        #      right time to verify — no WO id needed in any commit);
-        #   2. the executable AC results (SQL/TEST/API-CHECK) — objective,
-        #      authority-recorded proof, the certification basis post-merge.
-        # Only when NONE of these exist is the work genuinely unreviewable, so
-        # the no-false-done invariant holds (a WO with no commits, no branch
-        # diff, and no executable check still cannot auto-certify).
+        # squash-merged WO (the id never survives the squash), forcing force=True
+        # or a wo-<shortid> branch-pointer hack. When _collect_git_commits finds
+        # nothing, fall back to the WO's executable AC results (SQL/TEST/API-CHECK)
+        # as objective, authority-recorded proof — the certification basis that
+        # does not depend on commit messages. This is WO-scoped (the WO's own
+        # tasks' checks), unlike a whole-repo working diff which would pick up
+        # ambient changes. Only when there is NO commit evidence AND no passing
+        # executable check is the work genuinely unreviewable (no-false-done).
+        #
+        # The LLM graders require the `claude` CLI. When it is absent (CI, or any
+        # host without it) and not in mock mode, no independent review can run —
+        # go unreviewable rather than spawn a grader that would crash. Skip the
+        # (pytest-spawning) evidence fallback when graders cannot run anyway.
+        _graders_runnable = bool(os.environ.get(_MOCK_ENV)) or shutil.which("claude") is not None
+
+        # An escalated WO (its originating symptom regressed) must not certify from
+        # its own executable AC alone — that is the same check that may have passed
+        # before the regression. Escalated work demands a genuine re-review, so the
+        # authority-evidence fallback is suppressed and it stays unreviewable until a
+        # real (diff-backed or human) verdict clears it.
+        from core.work_orders.escalation import read_escalation
+
+        _is_escalated = read_escalation(work_order_id, db_path=db_path) is not None
+
         authority_certified = False
-        if git_diff is None:
-            git_diff = _collect_working_diff(source_root)
-        if git_diff is None:
+        if _graders_runnable and git_diff is None and not _is_escalated:
             ac_results = run_executable_checks(tasks, db_path)
             evidence_text, has_passing = _authority_evidence(work_order_id, tasks, ac_results)
             if has_passing:
                 git_diff = evidence_text
                 authority_certified = True
 
-        if git_diff is None and not os.environ.get(_MOCK_ENV):
+        if (git_diff is None or not _graders_runnable) and not os.environ.get(_MOCK_ENV):
             token = wo["title"].split(" - ")[0].strip()
-            warning = (
-                f"independent review unreviewable: no commits found referencing "
-                f"{work_order_id[:8]} or '{token}'. Work is NOT certified — review manually."
-            )
+            if not _graders_runnable:
+                warning = (
+                    "independent review unreviewable: the 'claude' grader CLI is not "
+                    "available on this host, so no LLM review can run. Work is NOT "
+                    "certified — review manually or run verify where the grader is present."
+                )
+            else:
+                warning = (
+                    f"independent review unreviewable: no commits found referencing "
+                    f"{work_order_id[:8]} or '{token}'. Work is NOT certified — review manually."
+                )
             scores = {
                 "completion_score": 0.0,
                 "correctness_score": 0.0,
