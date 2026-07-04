@@ -224,21 +224,14 @@ def harvest_existing_data() -> dict[str, int]:
     token_log = paths.meta_dir() / "token-log.md"
     if token_log.is_file():
         try:
-            from backfill_token_sessions import (
-                backfill_token_usage,
-                backfill_sessions,
-            )  # noqa: PLC0415
+            from backfill_token_sessions import backfill_sessions  # noqa: PLC0415
 
-            tok_result = backfill_token_usage()
-            results["token_rows"] = tok_result.get("inserted", 0)
             sess_result = backfill_sessions()
             results["session_rows"] = sess_result.get("inserted", 0)
         except Exception as e:
-            print(f"[dashboard] Token backfill skipped: {e}")
-            results["token_rows"] = 0
+            print(f"[dashboard] Session backfill skipped: {e}")
             results["session_rows"] = 0
     else:
-        results["token_rows"] = 0
         results["session_rows"] = 0
 
     try:

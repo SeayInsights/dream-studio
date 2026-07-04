@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """One-time migration: ingest existing metadata files into SQLite.
 
-Parses handoff JSON/MD, lessons, sentinels, token logs, skill usage,
-and specs/tasks from file-based storage into the operational tables.
-Idempotent — safe to re-run; duplicates are skipped.
+Parses handoff JSON/MD, lessons, sentinels, and skill usage from
+file-based storage into the operational tables. Idempotent — safe to
+re-run; duplicates are skipped.
+
+Token-log ingest (raw_token_usage) removed — the table was dropped in
+migration 138 (WO 468ce225); use backfill_token_sessions.py for
+raw_sessions backfill from token-log.md instead.
 
 Usage:
     py scripts/migrate_to_db.py [--verbose] [--dry-run]
@@ -28,8 +32,6 @@ from core.event_store.studio_db import (  # noqa: E402
     insert_handoff,
     insert_lesson,
     set_sentinel,
-    has_sentinel,
-    insert_token_usage,
 )
 
 _COUNTS: dict[str, int] = {}
@@ -195,47 +197,6 @@ def _ingest_sentinels(state_dir: Path) -> None:
             _log(f"sentinel: {f.name}")
 
 
-# ── Token log ─────────────────────────────────────────────────────────────
-
-
-def _ingest_token_log(f: Path) -> None:
-    if has_sentinel("migration-token-log", db_path=studio_db._db_path()):
-        _log("skip token log (already migrated)")
-        return
-    try:
-        lines = f.read_text(encoding="utf-8").splitlines()
-    except OSError as e:
-        _err(f"token log read failed: {e}")
-        return
-
-    for line in lines:
-        if not line.startswith("|") or line.startswith("| Timestamp") or line.startswith("|---"):
-            continue
-        parts = [p.strip() for p in line.split("|")]
-        parts = [p for p in parts if p]
-        if len(parts) < 5:
-            continue
-        try:
-            _ts = parts[0]  # noqa: F841 — parsed but not stored (recorded_at set by insert)
-            session_id = parts[1] if len(parts) > 1 else None
-            model = parts[2] if len(parts) > 2 else None
-            input_tokens = int(parts[3]) if len(parts) > 3 else 0
-            output_tokens = int(parts[4]) if len(parts) > 4 else 0
-            insert_token_usage(
-                session_id=session_id,
-                skill_name="session",
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                model=model,
-                db_path=studio_db._db_path(),
-            )
-            _count("raw_token_usage")
-        except (ValueError, IndexError):
-            _err(f"token log parse failed: {line[:80]}")
-
-    set_sentinel("migration-token-log", "migration", db_path=studio_db._db_path())
-
-
 # ── Main ──────────────────────────────────────────────────────────────────
 
 
@@ -278,10 +239,8 @@ def main() -> None:
     if state_dir.is_dir():
         _ingest_sentinels(state_dir)
 
-    # Token log
-    token_log = paths.meta_dir() / "token-log.md"
-    if token_log.is_file():
-        _ingest_token_log(token_log)
+    # Token log ingest (_ingest_token_log / raw_token_usage) removed:
+    # raw_token_usage dropped in migration 138 (WO 468ce225).
 
     # raw_specs / raw_tasks were dropped in migration 128; _ingest_specs removed.
 

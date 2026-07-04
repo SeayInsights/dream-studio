@@ -1905,73 +1905,6 @@ def log_skill_execution(
         return False
 
 
-# ── Token usage functions ─────────────────────────────────────────────────
-
-
-@_with_retry
-def insert_token_usage(
-    *,
-    session_id: str | None = None,
-    project_id: str | None = None,
-    skill_name: str | None = None,
-    input_tokens: int = 0,
-    output_tokens: int = 0,
-    model: str | None = None,
-    db_path: Path | None = None,
-) -> bool:
-    try:
-        with _db_transaction(db_path) as c:
-            c.execute(
-                """INSERT INTO raw_token_usage
-                   (session_id, project_id, skill_name, input_tokens,
-                    output_tokens, model, recorded_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (session_id, project_id, skill_name, input_tokens, output_tokens, model, _NOW()),
-            )
-        return True
-    except Exception as e:
-        _reraise_if_busy(e)
-        return False
-
-
-def get_token_summary(
-    project_id: str | None = None, days: int = 7, db_path: Path | None = None
-) -> list[dict]:
-    try:
-        c = _connect(db_path)
-        try:
-            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-            if project_id:
-                rows = c.execute(
-                    """SELECT skill_name,
-                          SUM(input_tokens) AS total_input,
-                          SUM(output_tokens) AS total_output,
-                          SUM(input_tokens + output_tokens) AS total_tokens,
-                          COUNT(*) AS call_count
-                   FROM raw_token_usage
-                   WHERE project_id=? AND recorded_at>=?
-                   GROUP BY skill_name ORDER BY total_tokens DESC""",
-                    (project_id, cutoff),
-                ).fetchall()
-            else:
-                rows = c.execute(
-                    """SELECT project_id,
-                          SUM(input_tokens) AS total_input,
-                          SUM(output_tokens) AS total_output,
-                          SUM(input_tokens + output_tokens) AS total_tokens,
-                          COUNT(*) AS call_count
-                   FROM raw_token_usage
-                   WHERE recorded_at>=?
-                   GROUP BY project_id ORDER BY total_tokens DESC""",
-                    (cutoff,),
-                ).fetchall()
-            return [dict(r) for r in rows]
-        finally:
-            c.close()
-    except Exception:
-        return []
-
-
 # ── Schema introspection ───────────────────────────────────────────────────
 
 
@@ -2022,7 +1955,7 @@ def main() -> None:
             "raw_handoffs",
             "raw_lessons",
             "raw_sentinels",
-            "raw_token_usage",
+            # raw_token_usage dropped migration 138
             "_schema_version",
         ]
         v = c.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] or 0

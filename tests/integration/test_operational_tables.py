@@ -30,8 +30,6 @@ from core.event_store.studio_db import (  # noqa: E402
     set_sentinel,
     has_sentinel,
     clear_expired_sentinels,
-    insert_token_usage,
-    get_token_summary,
 )
 
 
@@ -266,66 +264,10 @@ class TestSentinels:
         assert r["sentinel_type"] == "type-b"
 
 
-# ── raw_token_usage ────────────────────────────────────────────────────────
-
-
-class TestTokenUsage:
-    def _seed(self, db):
-        upsert_project("proj-1", "/path", db_path=db)
-        insert_session("s1", "proj-1", db_path=db)
-
-    def test_insert_and_summary_by_project(self, db):
-        self._seed(db)
-        insert_token_usage(
-            session_id="s1",
-            project_id="proj-1",
-            skill_name="core:build",
-            input_tokens=1000,
-            output_tokens=500,
-            model="sonnet",
-            db_path=db,
-        )
-        insert_token_usage(
-            session_id="s1",
-            project_id="proj-1",
-            skill_name="core:review",
-            input_tokens=800,
-            output_tokens=300,
-            model="haiku",
-            db_path=db,
-        )
-        summary = get_token_summary(db_path=db)
-        assert len(summary) == 1
-        assert summary[0]["total_tokens"] == 2600
-
-    def test_summary_by_skill(self, db):
-        self._seed(db)
-        insert_token_usage(
-            project_id="proj-1",
-            skill_name="core:build",
-            input_tokens=500,
-            output_tokens=200,
-            db_path=db,
-        )
-        insert_token_usage(
-            project_id="proj-1",
-            skill_name="core:build",
-            input_tokens=600,
-            output_tokens=300,
-            db_path=db,
-        )
-        insert_token_usage(
-            project_id="proj-1",
-            skill_name="quality:debug",
-            input_tokens=100,
-            output_tokens=50,
-            db_path=db,
-        )
-        summary = get_token_summary(project_id="proj-1", db_path=db)
-        assert len(summary) == 2
-        build_row = next(r for r in summary if r["skill_name"] == "core:build")
-        assert build_row["total_input"] == 1100
-        assert build_row["call_count"] == 2
+# raw_token_usage / insert_token_usage / get_token_summary removed: the table
+# was dropped in migration 138 (WO 468ce225) — superseded by canonical
+# token.consumed events and the DuckDB aggregate_metrics.db
+# token_usage_records view.
 
 
 # ── FK constraint enforcement ──────────────────────────────────────────────

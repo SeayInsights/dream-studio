@@ -285,12 +285,13 @@ def step_analytics_bootstrap() -> StepResult:
         except Exception:
             pass
 
-        # Harvest token log if present
+        # Harvest token log if present (raw_sessions backfill — raw_token_usage
+        # was dropped in migration 138)
         token_log = lib_paths.meta_dir() / "token-log.md"
         if token_log.is_file():
             try:
                 bts = importlib.import_module("backfill_token_sessions")
-                result = bts.backfill_token_usage()
+                result = bts.backfill_sessions()
                 harvested += result.get("inserted", 0)
             except Exception:
                 pass

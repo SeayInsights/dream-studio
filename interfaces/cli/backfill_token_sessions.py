@@ -1,14 +1,15 @@
-"""Backfill raw_token_usage with correct timestamps and attribution from token-log.md.
+"""Backfill raw_sessions with attribution and duration data from token-log.md.
 
-The bulk import (migrate_to_db.py) set recorded_at to the import timestamp instead of
-the original token-log timestamps, and left project_id NULL. This script re-imports
-from token-log.md (the SSOT) with full attribution.
+raw_token_usage (the table this script originally backfilled) was dropped in
+migration 138 (WO 468ce225) — superseded by canonical token.consumed events
+and the DuckDB aggregate_metrics.db token_usage_records view. Backfilling
+raw_sessions from token-log.md (the SSOT for historical per-call token
+records) is now this script's sole purpose.
 
 Usage:
-    py scripts/backfill_token_sessions.py                  # full re-import
+    py scripts/backfill_token_sessions.py                  # backfill raw_sessions
     py scripts/backfill_token_sessions.py --dry-run        # preview only
     py scripts/backfill_token_sessions.py --verbose        # detailed output
-    py scripts/backfill_token_sessions.py --sessions       # also backfill raw_sessions
 """
 
 from __future__ import annotations
@@ -57,69 +58,6 @@ def parse_token_log(log_path: Path | None = None) -> list[dict]:
             }
         )
     return records
-
-
-def backfill_token_usage(
-    db_path: Path | None = None,
-    *,
-    dry_run: bool = False,
-    verbose: bool = False,
-    project_id: str = "dream-studio",
-) -> dict:
-    if db_path is None:
-        db_path = paths.state_dir() / "studio.db"
-
-    records = parse_token_log()
-    if not records:
-        return {"error": "No token-log.md data found", "inserted": 0, "deleted": 0}
-
-    # Read-only query to check existing count
-    conn = studio_db._connect(db_path)
-    existing = conn.execute("SELECT COUNT(*) FROM raw_token_usage").fetchone()[0]
-    conn.close()
-
-    if dry_run:
-        print(f"DRY RUN: would delete {existing} rows, insert {len(records)} from token-log.md")
-        return {"deleted": existing, "inserted": len(records), "dry_run": True}
-
-    # Write operations in transaction
-    with studio_db._db_transaction(db_path) as conn:
-        conn.execute("DELETE FROM raw_token_usage")
-
-        for r in records:
-            conn.execute(
-                """INSERT INTO raw_token_usage
-                   (session_id, project_id, skill_name, input_tokens,
-                    output_tokens, model, recorded_at)
-                   VALUES (?, ?, 'session', ?, ?, ?, ?)""",
-                (
-                    r["session_id"],
-                    project_id,
-                    r["input_tokens"],
-                    r["output_tokens"],
-                    r["model"],
-                    r["timestamp"],
-                ),
-            )
-            if verbose:
-                print(
-                    f"  + {r['timestamp'][:19]} | {r['session_id'][:8]}... | {r['model']} | {r['input_tokens']:,}+{r['output_tokens']:,}"
-                )
-
-    # Read-only queries to verify results
-    conn = studio_db._connect(db_path)
-    new_count = conn.execute("SELECT COUNT(*) FROM raw_token_usage").fetchone()[0]
-    with_session = conn.execute(
-        "SELECT COUNT(*) FROM raw_token_usage WHERE session_id IS NOT NULL"
-    ).fetchone()[0]
-    conn.close()
-
-    return {
-        "deleted": existing,
-        "inserted": len(records),
-        "total": new_count,
-        "with_session_id": with_session,
-    }
 
 
 def backfill_sessions(
@@ -266,16 +204,15 @@ def backfill_sessions(
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Backfill token sessions from token-log.md")
+    ap = argparse.ArgumentParser(description="Backfill raw_sessions from token-log.md")
     ap.add_argument("--db", type=Path, default=None, help="override studio.db path")
     ap.add_argument("--dry-run", action="store_true", help="preview without modifying DB")
     ap.add_argument("--verbose", action="store_true", help="show per-record details")
-    ap.add_argument("--sessions", action="store_true", help="also backfill raw_sessions")
     ap.add_argument("--project-id", default="dream-studio", help="project_id for backfilled rows")
     args = ap.parse_args()
 
-    print("=== Backfill token_usage from token-log.md ===")
-    result = backfill_token_usage(
+    print("=== Backfill raw_sessions from token-log.md ===")
+    result = backfill_sessions(
         args.db,
         dry_run=args.dry_run,
         verbose=args.verbose,
@@ -283,17 +220,6 @@ def main() -> None:
     )
     for k, v in result.items():
         print(f"  {k}: {v}")
-
-    if args.sessions:
-        print("\n=== Backfill raw_sessions from token-log.md ===")
-        sess_result = backfill_sessions(
-            args.db,
-            dry_run=args.dry_run,
-            verbose=args.verbose,
-            project_id=args.project_id,
-        )
-        for k, v in sess_result.items():
-            print(f"  {k}: {v}")
 
 
 if __name__ == "__main__":

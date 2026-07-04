@@ -51,7 +51,7 @@ nodes:
       If it exists, report:
         - File size
         - Schema version (query: SELECT MAX(version) FROM _schema_version)
-        - Row counts for key tables: raw_sessions, raw_skill_telemetry, raw_token_usage, raw_operational_snapshots
+        - Row counts for key tables: raw_sessions, raw_skill_telemetry, raw_operational_snapshots
       If it does not exist: report "No database — will be created"
 
       ## Step 2 — Available data sources
@@ -105,14 +105,14 @@ nodes:
       1. Pulse backfill:
          py -3.12 -c "import sys; sys.path.insert(0,'hooks'); sys.path.insert(0,'scripts'); from ds_analytics.backfill_pulse import backfill; print(f'Pulse: {backfill()} snapshots')"
 
-      2. Token backfill (only if ~/.dream-studio/meta/token-log.md exists):
-         py -3.12 scripts/backfill_token_sessions.py --sessions
+      2. Session backfill (only if ~/.dream-studio/meta/token-log.md exists):
+         py -3.12 scripts/backfill_token_sessions.py
 
       3. Metadata migration (handoffs, lessons, sentinels, specs):
          py -3.12 scripts/migrate_to_db.py
 
       After all three, query the database for a summary:
-         py -3.12 -c "import sys, sqlite3; sys.path.insert(0,'hooks'); from lib import paths; conn = sqlite3.connect(str(paths.state_dir() / 'studio.db')); [print(f'  {r[0]}: {r[1]} rows') for r in conn.execute(\"SELECT 'raw_sessions', COUNT(*) FROM raw_sessions UNION ALL SELECT 'raw_skill_telemetry', COUNT(*) FROM raw_skill_telemetry UNION ALL SELECT 'raw_token_usage', COUNT(*) FROM raw_token_usage UNION ALL SELECT 'raw_operational_snapshots', COUNT(*) FROM raw_operational_snapshots\").fetchall()]; conn.close()"
+         py -3.12 -c "import sys, sqlite3; sys.path.insert(0,'hooks'); from lib import paths; conn = sqlite3.connect(str(paths.state_dir() / 'studio.db')); [print(f'  {r[0]}: {r[1]} rows') for r in conn.execute(\"SELECT 'raw_sessions', COUNT(*) FROM raw_sessions UNION ALL SELECT 'raw_skill_telemetry', COUNT(*) FROM raw_skill_telemetry UNION ALL SELECT 'raw_operational_snapshots', COUNT(*) FROM raw_operational_snapshots\").fetchall()]; conn.close()"
 
       Report the harvest results as a table.
 

@@ -153,6 +153,7 @@ TOMBSTONED_TABLES: frozenset[str] = frozenset(
         "raw_research_temp",
         "raw_specs",
         "raw_tasks",
+        "raw_token_usage",
         "raw_workflow_nodes_bak071",
         "raw_workflow_nodes_temp",
         "raw_workflow_runs_bak071",
