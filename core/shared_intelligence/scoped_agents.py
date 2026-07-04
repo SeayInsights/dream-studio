@@ -154,9 +154,9 @@ def scoped_context_packet(
         "forbidden_context_by_default": list(FORBIDDEN_CONTEXT_BY_DEFAULT),
         "result_normalization_targets": [
             "agent_invocations",
-            "decision_records",
             "validation_results",
             # artifact_records: dropped migration 130
+            # decision_records: dropped migration 139 (WO-AI-SPINE, AD-5)
         ],
     }
 
@@ -180,9 +180,9 @@ def normalize_agent_result(
         "agent_is_authority": False,
         "normalized_target_tables": [
             "agent_invocations",
-            "decision_records",
             "validation_results",
             # artifact_records: dropped migration 130
+            # decision_records: dropped migration 139 (WO-AI-SPINE, AD-5)
         ],
         "result_payload": payload or {},
         "requires_authority_write": True,

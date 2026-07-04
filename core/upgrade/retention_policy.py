@@ -12,7 +12,8 @@ from typing import Any
 DEFAULT_TABLE_GROUPS: tuple[dict[str, Any], ...] = (
     {
         "group": "canonical_authority",
-        "tables": ["canonical_events", "decision_records", "outcome_records"],
+        "tables": ["canonical_events"],
+        # decision_records + outcome_records: dropped migration 139 (WO-AI-SPINE, AD-5)
         "retention_class": "retain_indefinitely",
         "reason": "source authority and outcome lineage must remain available for audit.",
     },

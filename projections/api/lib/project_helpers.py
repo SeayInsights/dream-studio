@@ -731,7 +731,10 @@ def _decorate_project_for_dashboard(project: dict[str, Any]) -> dict[str, Any]:
     project["work_order_status"] = {
         "route_blockers": _as_int(project.get("route_blocker_count")),
         "attention_open": _as_int(project.get("attention_open_count")),
-        "source_tables": ["route_decision_records", "dashboard_attention_items"],
+        # dashboard_attention_items: dropped migration 139 (WO-AI-SPINE, AD-5) — attention_open
+        # above already reads 0 via object_exists() guards in project_list.py; this static
+        # label list should not claim a source table that no longer exists.
+        "source_tables": ["route_decision_records"],
         "derived_view": True,
         "primary_authority": False,
     }
