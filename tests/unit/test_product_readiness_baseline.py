@@ -172,7 +172,10 @@ def test_local_marketplace_declares_structured_source_for_codex_loader():
 def test_authority_invariants_are_part_of_readiness_baseline():
     assert not (REPO_ROOT / "hooks" / "lib").exists()
     assert (REPO_ROOT / "runtime" / "hooks").is_dir()
-    assert (REPO_ROOT / "core" / "event_store" / "migrations" / "034_execution_graph.sql").is_file()
+    # 034_execution_graph.sql was collapsed into 142_lean_baseline.sql by
+    # WO-SQUASH-BASELINE (5fd84891, 2026-07-04); check the current migration
+    # authority artifact instead.
+    assert (REPO_ROOT / "core" / "event_store" / "migrations" / "142_lean_baseline.sql").is_file()
 
     checks = [
         (

@@ -1,39 +1,43 @@
-"""Tests for Phase 19.1 — Unified Extensions Schema (migration 095).
+"""Tests for Phase 19.1 — Unified Extensions Schema (originally migration 095).
 
 Proving gate:
-- Migration applies cleanly on fresh DB
+- The baseline applies cleanly on a fresh DB
 - All 15 columns present with correct types
 - CHECK constraints enforced (invalid inserts rejected)
 - Decision 6 readiness query returns correct rows on planted fixtures
-- No Phase 18 tables modified (purely additive)
+
+WO-SQUASH-BASELINE (5fd84891, 2026-07-04): 095_unified_extensions_schema.sql
+was collapsed into 142_lean_baseline.sql. ds_user_extensions is still a live
+KEEP table with the same CHECK constraints, preserved verbatim by the
+baseline's CREATE TABLE IF NOT EXISTS re-emission, so the fixture below now
+applies the full baseline via run_migrations() instead of one specific
+deleted migration file. The "No Phase 18 tables modified (purely additive)"
+proving-gate item (TestAdditiveOnly, asserting the isolated migration-095
+diff contained no DROP/ALTER and no canonical/skill references) is removed:
+that property was about one distinguishable historical migration file's
+diff, which no longer exists as an isolable artifact once folded into a
+baseline that legitimately DROPs many unrelated tombstoned tables.
 """
 
 from __future__ import annotations
 
 import sqlite3
 import uuid
-from pathlib import Path
 
 import pytest
 
-MIGRATION_SQL = (
-    Path(__file__).parents[2]
-    / "core"
-    / "event_store"
-    / "migrations"
-    / "095_unified_extensions_schema.sql"
-).read_text(encoding="utf-8")
-
+from core.config.sqlite_bootstrap import run_migrations
 
 # ── DB fixture ────────────────────────────────────────────────────────────────
 
 
 @pytest.fixture
 def ext_conn():
-    """In-memory DB with migration 095 applied."""
+    """In-memory DB with the ds_user_extensions schema applied (full baseline)."""
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-    conn.executescript(MIGRATION_SQL)
+    run_migrations(conn, apply_unreleased=True)
+    conn.commit()
     yield conn
     conn.close()
 
@@ -72,7 +76,11 @@ class TestSchemaStructure:
         ).fetchone()
         assert row is not None
 
-    def test_all_15_columns_present(self, ext_conn):
+    def test_all_expected_columns_present(self, ext_conn):
+        """The original 15 columns from migration 095 plus validation_detail,
+        added later by migration 098 (Phase 19.5) -- invisible to this test
+        pre-squash because it applied only 095's isolated DDL text; now
+        visible because the fixture applies the full baseline."""
         cols = {r[1] for r in ext_conn.execute("PRAGMA table_info(ds_user_extensions)")}
         expected = {
             "extension_id",
@@ -90,6 +98,7 @@ class TestSchemaStructure:
             "user_confirmed_at",
             "user_confirmed_by",
             "suppressed_reason",
+            "validation_detail",
         }
         assert expected == cols, f"Missing: {expected - cols}, Extra: {cols - expected}"
 
@@ -334,25 +343,10 @@ class TestDecision6Query:
         assert "ext-below-boundary" not in [r["extension_id"] for r in rows]
 
 
-# ── Additive constraint ───────────────────────────────────────────────────────
-
-
-class TestAdditiveOnly:
-    def test_migration_does_not_touch_canonical_skills(self):
-        """Migration SQL must not contain any reference to canonical skill files."""
-        sql_lower = MIGRATION_SQL.lower()
-        forbidden = ["canonical/", "packs.yaml", "skill.md", "metadata.yml"]
-        for f in forbidden:
-            assert f not in sql_lower, (
-                f"Migration 095 must not reference {f!r} — "
-                "Phase 19 is additive only; canonical skills must not be modified"
-            )
-
-    def test_migration_only_creates_new_tables(self):
-        """Migration must only CREATE new objects, not DROP or ALTER existing ones."""
-        sql_upper = MIGRATION_SQL.upper()
-        # These would modify existing Phase 18 objects
-        assert "DROP TABLE" not in sql_upper
-        assert "ALTER TABLE" not in sql_upper
-        # CREATE TABLE IF NOT EXISTS is fine (idempotent)
-        assert "CREATE TABLE IF NOT EXISTS DS_USER_EXTENSIONS" in sql_upper
+# TestAdditiveOnly removed (WO-SQUASH-BASELINE, 5fd84891, 2026-07-04): it
+# asserted that the isolated migration-095 diff text contained no DROP/ALTER
+# and no canonical-skill references. That property was about one
+# distinguishable historical migration file's diff, which no longer exists
+# once folded into 142_lean_baseline.sql -- a baseline that legitimately
+# contains many DROP statements (for unrelated tombstoned tables) and cannot
+# be checked the same way.

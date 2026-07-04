@@ -27,27 +27,27 @@ import pytest
 
 pytestmark = pytest.mark.runtime_reliability
 
-MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "core" / "event_store" / "migrations"
-
-_SPINE_SQL: str | None = None
-
-
-def _spine_ddl() -> str:
-    global _SPINE_SQL
-    if _SPINE_SQL is None:
-        _SPINE_SQL = (MIGRATIONS_DIR / "111_security_events_spine.sql").read_text(encoding="utf-8")
-    return _SPINE_SQL
+# WO-SQUASH-BASELINE (5fd84891, 2026-07-04): migrations 111/112 were collapsed
+# into 142_lean_baseline.sql. security_events and readiness_events (the tables
+# this file's fixtures need) are still live KEEP tables in the baseline;
+# findings_current_status is not (dropped by migration 140, folded into the
+# squash). The fixtures below now apply the full baseline via run_migrations()
+# instead of hand-executing a specific deleted migration file's DDL text --
+# simpler and correct regardless of which migration originally created a table.
 
 
 def _make_spine_db(path: Path) -> None:
+    from core.config.sqlite_bootstrap import run_migrations
+
     conn = sqlite3.connect(str(path))
-    conn.executescript(_spine_ddl())
+    run_migrations(conn, apply_unreleased=True)
+    conn.commit()
     conn.close()
 
 
 @pytest.fixture()
 def spine_db(tmp_path):
-    """Temp SQLite file with migration-111 schema. Returns Path."""
+    """Temp SQLite file with the security-events spine schema. Returns Path."""
     db = tmp_path / "test_spine.db"
     _make_spine_db(db)
     return db
@@ -55,10 +55,12 @@ def spine_db(tmp_path):
 
 @pytest.fixture()
 def mem_conn():
-    """In-memory SQLite with migration-111 schema for projection-level tests."""
+    """In-memory SQLite with the security-events spine schema for projection-level tests."""
+    from core.config.sqlite_bootstrap import run_migrations
+
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-    conn.executescript(_spine_ddl())
+    run_migrations(conn, apply_unreleased=True)
     yield conn
     conn.close()
 
@@ -303,17 +305,29 @@ def test_end_to_end_record_derive_status(spine_db):
     conn.close()
 
 
-# ── Migration DDL assertions ───────────────────────────────────────────────────
+# ── Fresh-schema DDL assertions ─────────────────────────────────────────────────
+# WO-SQUASH-BASELINE (5fd84891, 2026-07-04): migrations 111 (created
+# security_events/readiness_events/findings_current_status) and 112 (retired
+# the sec_sarif_findings/sec_cve_matches/sec_manual_reviews cluster) were
+# collapsed into 142_lean_baseline.sql. findings_current_status was itself
+# later dropped (migration 140); its DDL-content assertion is removed rather
+# than adapted since the table has no live schema to check. The remaining
+# assertions are rewritten against the live fresh-chain schema (ground truth
+# that survives regardless of which now-deleted migration file originally
+# introduced or retired an object) instead of grepping specific migration
+# file text.
 
 
-def test_migration_111_creates_all_three_tables():
-    sql = (MIGRATIONS_DIR / "111_security_events_spine.sql").read_text(encoding="utf-8")
-    for table in ("security_events", "readiness_events", "findings_current_status"):
-        assert table in sql, f"migration 111 missing {table}"
+def test_fresh_schema_has_security_and_readiness_events_tables(mem_conn):
+    for table in ("security_events", "readiness_events"):
+        row = mem_conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name = ?", (table,)
+        ).fetchone()
+        assert row is not None, f"{table} missing from the fresh baseline schema"
 
 
-def test_migration_111_security_events_has_required_columns():
-    sql = (MIGRATIONS_DIR / "111_security_events_spine.sql").read_text(encoding="utf-8")
+def test_security_events_has_required_columns(mem_conn):
+    cols = {row["name"] for row in mem_conn.execute("PRAGMA table_info(security_events)")}
     for col in (
         "event_id",
         "parent_event_id",
@@ -322,17 +336,26 @@ def test_migration_111_security_events_has_required_columns():
         "vuln_class",
         "created_at",
     ):
-        assert col in sql, f"migration 111 security_events missing column {col}"
+        assert col in cols, f"security_events missing column {col}"
 
 
-def test_migration_111_findings_current_status_has_required_columns():
-    sql = (MIGRATIONS_DIR / "111_security_events_spine.sql").read_text(encoding="utf-8")
-    for col in ("finding_id", "current_status", "last_status_event_id", "created_at", "updated_at"):
-        assert col in sql, f"migration 111 findings_current_status missing column {col}"
+def test_findings_current_status_dropped_and_retired_cluster_absent(mem_conn):
+    """findings_current_status (migration 140) and the sec_sarif_findings/
+    sec_cve_matches/sec_manual_reviews cluster (migration 112) must not exist
+    in the fresh baseline schema; vw_security_summary must still exist,
+    rebuilt to read security_events directly (migration 140)."""
+    for table in (
+        "findings_current_status",
+        "sec_sarif_findings",
+        "sec_cve_matches",
+        "sec_manual_reviews",
+    ):
+        row = mem_conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name = ?", (table,)
+        ).fetchone()
+        assert row is None, f"{table} should not exist in the fresh baseline schema"
 
-
-def test_migration_112_covers_retired_cluster():
-    sql = (MIGRATIONS_DIR / "112_findings_cluster_retire.sql").read_text(encoding="utf-8")
-    for table in ("sec_sarif_findings", "sec_cve_matches", "sec_manual_reviews"):
-        assert table in sql, f"migration 112 should reference {table} for DROP"
-    assert "vw_security_summary" in sql, "migration 112 should rebuild vw_security_summary"
+    view_row = mem_conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='view' AND name = 'vw_security_summary'"
+    ).fetchone()
+    assert view_row is not None, "vw_security_summary should survive in the fresh baseline schema"

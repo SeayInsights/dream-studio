@@ -216,30 +216,38 @@ class TestRegistryAPI:
 
 
 # ---------------------------------------------------------------------------
-# 3. Migration 067 — schema
+# 3. business_canonical_events / ai_canonical_events — schema
 # ---------------------------------------------------------------------------
+# WO-SQUASH-BASELINE (5fd84891, 2026-07-04): 067_dual_canonical.sql was
+# collapsed into 142_lean_baseline.sql. Both tables are still live KEEP
+# tables, so these tests now apply the full baseline instead of one specific
+# deleted migration file.
+
+
+def _apply_baseline(db_path):
+    from core.config.sqlite_bootstrap import run_migrations
+
+    conn = sqlite3.connect(str(db_path))
+    run_migrations(conn, apply_unreleased=True)
+    conn.commit()
+    return conn
 
 
 class TestMigration067Schema:
-    def test_migration_file_exists(self):
-        migration = REPO_ROOT / "core" / "event_store" / "migrations" / "067_dual_canonical.sql"
-        assert migration.exists(), "Migration 067 SQL file not found"
+    def test_baseline_file_exists(self):
+        baseline = REPO_ROOT / "core" / "event_store" / "migrations" / "142_lean_baseline.sql"
+        assert baseline.exists(), "142_lean_baseline.sql not found"
 
     def test_migration_is_idempotent(self, tmp_path):
-        migration = REPO_ROOT / "core" / "event_store" / "migrations" / "067_dual_canonical.sql"
-        sql = migration.read_text(encoding="utf-8")
-        db_path = tmp_path / "idempotency.db"
-        conn = sqlite3.connect(str(db_path))
-        conn.executescript(sql)  # first apply
-        conn.executescript(sql)  # second apply — must not error
+        baseline_sql = (
+            REPO_ROOT / "core" / "event_store" / "migrations" / "142_lean_baseline.sql"
+        ).read_text(encoding="utf-8")
+        conn = _apply_baseline(tmp_path / "idempotency.db")
+        conn.executescript(baseline_sql)  # second apply — must not error
         conn.close()
 
     def test_business_canonical_columns(self, tmp_path):
-        migration = REPO_ROOT / "core" / "event_store" / "migrations" / "067_dual_canonical.sql"
-        sql = migration.read_text(encoding="utf-8")
-        db_path = tmp_path / "schema.db"
-        conn = sqlite3.connect(str(db_path))
-        conn.executescript(sql)
+        conn = _apply_baseline(tmp_path / "schema.db")
         cols = {
             row[1]
             for row in conn.execute("PRAGMA table_info(business_canonical_events)").fetchall()
@@ -264,11 +272,7 @@ class TestMigration067Schema:
         conn.close()
 
     def test_ai_canonical_columns(self, tmp_path):
-        migration = REPO_ROOT / "core" / "event_store" / "migrations" / "067_dual_canonical.sql"
-        sql = migration.read_text(encoding="utf-8")
-        db_path = tmp_path / "schema.db"
-        conn = sqlite3.connect(str(db_path))
-        conn.executescript(sql)
+        conn = _apply_baseline(tmp_path / "schema.db")
         cols = {row[1] for row in conn.execute("PRAGMA table_info(ai_canonical_events)").fetchall()}
         expected = {
             "event_id",
@@ -292,11 +296,7 @@ class TestMigration067Schema:
         conn.close()
 
     def test_business_canonical_indexes_exist(self, tmp_path):
-        migration = REPO_ROOT / "core" / "event_store" / "migrations" / "067_dual_canonical.sql"
-        sql = migration.read_text(encoding="utf-8")
-        db_path = tmp_path / "idx.db"
-        conn = sqlite3.connect(str(db_path))
-        conn.executescript(sql)
+        conn = _apply_baseline(tmp_path / "idx.db")
         indexes = {
             row[0]
             for row in conn.execute(
@@ -310,11 +310,7 @@ class TestMigration067Schema:
         conn.close()
 
     def test_ai_canonical_indexes_exist(self, tmp_path):
-        migration = REPO_ROOT / "core" / "event_store" / "migrations" / "067_dual_canonical.sql"
-        sql = migration.read_text(encoding="utf-8")
-        db_path = tmp_path / "idx.db"
-        conn = sqlite3.connect(str(db_path))
-        conn.executescript(sql)
+        conn = _apply_baseline(tmp_path / "idx.db")
         indexes = {
             row[0]
             for row in conn.execute(

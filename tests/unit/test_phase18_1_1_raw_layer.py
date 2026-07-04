@@ -315,26 +315,24 @@ class TestIngestorDualWrite:
 
 
 # ---------------------------------------------------------------------------
-# Tests: migration 066 schema validation
+# Tests: raw_claude_code_events schema validation
 # ---------------------------------------------------------------------------
+# WO-SQUASH-BASELINE (5fd84891, 2026-07-04): 066_raw_claude_code_events.sql
+# was collapsed into 142_lean_baseline.sql. raw_claude_code_events is still a
+# live KEEP table, so these tests now apply the full baseline instead of one
+# specific deleted migration file, then assert the same table/index/
+# idempotency properties against the resulting fresh-chain schema.
 
 
 class TestMigration066Schema:
 
     def test_migration_creates_raw_table(self, tmp_path):
-        """Migration 066 SQL creates raw_claude_code_events with correct columns."""
-        migration_path = (
-            Path(__file__).parent.parent.parent
-            / "core"
-            / "event_store"
-            / "migrations"
-            / "066_raw_claude_code_events.sql"
-        )
-        assert migration_path.exists(), "Migration 066 file not found"
+        """The baseline creates raw_claude_code_events with correct columns."""
+        from core.config.sqlite_bootstrap import run_migrations
 
         db = tmp_path / "test.db"
         conn = sqlite3.connect(str(db))
-        conn.executescript(migration_path.read_text(encoding="utf-8"))
+        run_migrations(conn, apply_unreleased=True)
         conn.commit()
 
         # Verify table exists
@@ -367,16 +365,11 @@ class TestMigration066Schema:
         conn.close()
 
     def test_migration_creates_indexes(self, tmp_path):
-        migration_path = (
-            Path(__file__).parent.parent.parent
-            / "core"
-            / "event_store"
-            / "migrations"
-            / "066_raw_claude_code_events.sql"
-        )
+        from core.config.sqlite_bootstrap import run_migrations
+
         db = tmp_path / "test.db"
         conn = sqlite3.connect(str(db))
-        conn.executescript(migration_path.read_text(encoding="utf-8"))
+        run_migrations(conn, apply_unreleased=True)
         conn.commit()
 
         idx_rows = conn.execute(
@@ -407,17 +400,19 @@ class TestMigration066Schema:
         conn.close()
 
     def test_migration_idempotent(self, tmp_path):
-        """Running migration twice doesn't error (IF NOT EXISTS throughout)."""
-        migration_path = (
-            Path(__file__).parent.parent.parent
+        """Applying the baseline twice doesn't error (IF NOT EXISTS throughout)."""
+        from core.config.sqlite_bootstrap import run_migrations
+
+        db = tmp_path / "test.db"
+        conn = sqlite3.connect(str(db))
+        run_migrations(conn, apply_unreleased=True)
+        conn.commit()
+        baseline_sql = (
+            Path(__file__).resolve().parents[2]
             / "core"
             / "event_store"
             / "migrations"
-            / "066_raw_claude_code_events.sql"
-        )
-        db = tmp_path / "test.db"
-        sql = migration_path.read_text(encoding="utf-8")
-        conn = sqlite3.connect(str(db))
-        conn.executescript(sql)
-        conn.executescript(sql)  # second run — must not raise
+            / "142_lean_baseline.sql"
+        ).read_text(encoding="utf-8")
+        conn.executescript(baseline_sql)  # second run — must not raise
         conn.close()

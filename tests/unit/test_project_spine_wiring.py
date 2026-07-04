@@ -10,8 +10,6 @@ from unittest.mock import patch
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MIGRATION_048 = REPO_ROOT / "core" / "event_store" / "migrations" / "048_project_spine.sql"
-MIGRATION_049 = REPO_ROOT / "core" / "event_store" / "migrations" / "049_work_order_type.sql"
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────

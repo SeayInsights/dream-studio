@@ -30,8 +30,13 @@ def test_dashboard_runtime_does_not_reintroduce_token_to_dollar_pricing() -> Non
 
 
 def test_ai_usage_accounting_migration_declares_visibility_categories() -> None:
+    """043_ai_usage_accounting.sql was collapsed into 142_lean_baseline.sql by
+    WO-SQUASH-BASELINE (5fd84891, 2026-07-04); ai_usage_operational_records
+    (and its CHECK-constrained visibility category columns) is still a live
+    KEEP table, preserved verbatim in the baseline's CREATE TABLE IF NOT
+    EXISTS re-emission."""
     migration = (
-        REPO_ROOT / "core" / "event_store" / "migrations" / "043_ai_usage_accounting.sql"
+        REPO_ROOT / "core" / "event_store" / "migrations" / "142_lean_baseline.sql"
     ).read_text(encoding="utf-8")
 
     for marker in (
