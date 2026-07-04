@@ -276,6 +276,21 @@ _ENTRIES: tuple[RegistryEntry, ...] = (
         "workflow.node.completed", _AI, "meaningful-unit", "Workflow DAG node completed execution"
     ),
     RegistryEntry("workflow.completed", _AI, "meaningful-unit", "Workflow run completed"),
+    # WO 9f47a1a0: control/execution/workflow/state.py now reliably reaches
+    # core/telemetry/emitters.py::emit_workflow_invocation on every terminal
+    # workflow run (previously gated behind the write-orphaned
+    # raw_workflow_runs INSERT — see migration 141). That function's
+    # execution_events write is auto-mirrored to the spool by
+    # record_execution_event(); this was previously unregistered, defaulting
+    # to a noisy dual-canonical write. Raw-only: workflow.completed above is
+    # already the canonical fact for this same event; this is a duplicate
+    # execution_events telemetry mirror with no canonical-table reader.
+    RegistryEntry(
+        "workflow.invocation_recorded",
+        _RAW_ONLY,
+        "mechanical-detail",
+        "execution_events telemetry mirror of a workflow invocation (see workflow.completed for the canonical fact)",
+    ),
     RegistryEntry(
         "workflow.progress.updated", _AI, "meaningful-unit", "Workflow milestone progress updated"
     ),
