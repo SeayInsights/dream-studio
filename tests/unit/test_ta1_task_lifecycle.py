@@ -1,9 +1,16 @@
 """TA1: Task lifecycle event tests.
 
-Covers task.created, task.completed (enriched trace), task.deleted, and the
-064 backfill migration.  task.started has no call site in this codebase (tasks
-go pending → complete with no in_progress state); that type is registered but
-unimplemented — noted in the TA1 PR.
+Covers task.created, task.completed (enriched trace), and task.deleted.
+task.started has no call site in this codebase (tasks go pending → complete
+with no in_progress state); that type is registered but unimplemented — noted
+in the TA1 PR.
+
+The migration-064 backfill test section (WO-SQUASH-BASELINE, 5fd84891,
+2026-07-04: 064_backfill_task_creation_events.sql was a one-time, data-only
+backfill migration with no persistent DDL, collapsed into
+142_lean_baseline.sql, which does not replay backfill INSERT...SELECT logic
+against historical rows) was removed -- there is no current file or schema
+object left for those tests to target.
 """
 
 from __future__ import annotations
@@ -206,175 +213,11 @@ def test_delete_project_also_emits_project_deleted(db_home, tmp_path, monkeypatc
 
 
 # ── backfill migration ────────────────────────────────────────────────────────
-
-# Migration 064 reads from ds_tasks/ds_work_orders, which are dropped by
-# migration 070.  These tests use a separate minimal "legacy" DB with the
-# pre-070 schema so migration 064 can be exercised correctly in isolation.
-
-_CANONICAL_EVENTS_DDL = """
-    CREATE TABLE IF NOT EXISTS canonical_events (
-        event_id TEXT PRIMARY KEY,
-        event_type TEXT NOT NULL,
-        timestamp TEXT NOT NULL,
-        trace JSON NOT NULL DEFAULT '{}',
-        severity TEXT NOT NULL DEFAULT 'info',
-        payload JSON NOT NULL DEFAULT '{}',
-        raw_prompt_retained INTEGER NOT NULL DEFAULT 0,
-        raw_tool_output_retained INTEGER NOT NULL DEFAULT 0,
-        schema_version INTEGER NOT NULL DEFAULT 1,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-"""
-
-
-@pytest.fixture
-def legacy_db_path(tmp_path):
-    """Minimal pre-070 DB for migration-064 backfill tests."""
-    db_path = tmp_path / "legacy.db"
-    conn = sqlite3.connect(str(db_path))
-    try:
-        conn.executescript(f"""
-            {_CANONICAL_EVENTS_DDL};
-            CREATE TABLE ds_work_orders (
-                work_order_id TEXT PRIMARY KEY,
-                project_id TEXT NOT NULL,
-                milestone_id TEXT,
-                title TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'open',
-                work_order_type TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-            CREATE TABLE ds_tasks (
-                task_id TEXT PRIMARY KEY,
-                work_order_id TEXT NOT NULL,
-                project_id TEXT NOT NULL,
-                title TEXT NOT NULL,
-                description TEXT,
-                status TEXT NOT NULL DEFAULT 'pending',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-        """)
-        conn.execute(
-            "INSERT INTO ds_work_orders"
-            " (work_order_id, project_id, milestone_id, title, status, created_at, updated_at)"
-            " VALUES (?, ?, ?, 'WO1', 'open', ?, ?)",
-            (WO_ID, PROJECT_ID, MILESTONE_ID, NOW, NOW),
-        )
-        conn.execute(
-            "INSERT INTO ds_tasks"
-            " (task_id, work_order_id, project_id, title, description, status, created_at, updated_at)"
-            " VALUES (?, ?, ?, 'Task A', 'desc A', 'pending', ?, ?)",
-            (TASK_A, WO_ID, PROJECT_ID, NOW, NOW),
-        )
-        conn.execute(
-            "INSERT INTO ds_tasks"
-            " (task_id, work_order_id, project_id, title, description, status, created_at, updated_at)"
-            " VALUES (?, ?, ?, 'Task B', 'desc B', 'pending', ?, ?)",
-            (TASK_B, WO_ID, PROJECT_ID, NOW, NOW),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-    return db_path
-
-
-def _run_migration_064(db_path: Path) -> None:
-    sql_path = (
-        Path(__file__).resolve().parents[2]
-        / "core"
-        / "event_store"
-        / "migrations"
-        / "064_backfill_task_creation_events.sql"
-    )
-    sql = sql_path.read_text(encoding="utf-8")
-    conn = sqlite3.connect(str(db_path))
-    try:
-        # canonical_events is created by the ingestor at runtime, not via migrations.
-        conn.execute(_CANONICAL_EVENTS_DDL)
-        conn.commit()
-        conn.executescript(sql)
-        conn.commit()
-    finally:
-        conn.close()
-
-
-def test_backfill_migration_produces_event_per_task(legacy_db_path):
-    _run_migration_064(legacy_db_path)
-    conn = sqlite3.connect(str(legacy_db_path))
-    try:
-        count = conn.execute(
-            "SELECT COUNT(*) FROM canonical_events WHERE event_type = 'task.created'",
-        ).fetchone()[0]
-    finally:
-        conn.close()
-    assert count == 2
-
-
-def test_backfill_migration_is_idempotent(legacy_db_path):
-    _run_migration_064(legacy_db_path)
-    _run_migration_064(legacy_db_path)
-    conn = sqlite3.connect(str(legacy_db_path))
-    try:
-        count = conn.execute(
-            "SELECT COUNT(*) FROM canonical_events WHERE event_type = 'task.created'",
-        ).fetchone()[0]
-    finally:
-        conn.close()
-    assert count == 2
-
-
-def test_backfill_migration_sets_attribution_status_backfill(legacy_db_path):
-    _run_migration_064(legacy_db_path)
-    conn = sqlite3.connect(str(legacy_db_path))
-    try:
-        rows = conn.execute(
-            "SELECT trace FROM canonical_events WHERE event_type = 'task.created'",
-        ).fetchall()
-    finally:
-        conn.close()
-    assert len(rows) == 2
-    for (trace_json,) in rows:
-        trace = json.loads(trace_json)
-        assert trace["attribution_status"] == "backfill"
-
-
-def test_backfill_migration_resolves_full_sdlc_trace(legacy_db_path):
-    _run_migration_064(legacy_db_path)
-    conn = sqlite3.connect(str(legacy_db_path))
-    try:
-        rows = conn.execute(
-            "SELECT event_id, trace FROM canonical_events WHERE event_type = 'task.created'"
-            " ORDER BY event_id",
-        ).fetchall()
-    finally:
-        conn.close()
-    traces = {event_id: json.loads(trace_json) for event_id, trace_json in rows}
-    for event_id, trace in traces.items():
-        assert trace["domain"] == "sdlc"
-        assert trace["project_id"] == PROJECT_ID
-        assert trace["milestone_id"] == MILESTONE_ID
-        assert trace["work_order_id"] == WO_ID
-        assert "task_id" in trace
-
-
-def test_backfill_event_ids_are_deterministic(legacy_db_path):
-    _run_migration_064(legacy_db_path)
-    conn = sqlite3.connect(str(legacy_db_path))
-    try:
-        event_ids = [
-            row[0]
-            for row in conn.execute(
-                "SELECT event_id FROM canonical_events WHERE event_type = 'task.created'"
-                " ORDER BY event_id",
-            ).fetchall()
-        ]
-    finally:
-        conn.close()
-    assert event_ids == sorted(
-        [f"backfill-task-created-{TASK_A}", f"backfill-task-created-{TASK_B}"]
-    )
+#
+# Section removed (WO-SQUASH-BASELINE, 5fd84891, 2026-07-04): see module
+# docstring. The removed tests exercised 064_backfill_task_creation_events.sql
+# against a hand-built pre-070 "legacy" DB (ds_tasks/ds_work_orders, both
+# tombstoned — see tests/unit/schema_tombstones_data.py).
 
 
 # ── integration: create_task → DB + spool ────────────────────────────────────

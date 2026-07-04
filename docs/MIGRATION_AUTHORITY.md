@@ -48,11 +48,74 @@ The `migration-risk` pre-push gate fires when `core/event_store/migrations/` cha
 
 ---
 
+## 2026-07-04 — Migration Authority Squash (WO-SQUASH-BASELINE, 5fd84891-a329-48b8-b537-f0d4fc94d1a7)
+
+**Operator-approved irreversible squash.** Migrations 001-141 — the entire
+migration-by-migration history documented in this file below — were collapsed
+into a single lean baseline, `core/event_store/migrations/142_lean_baseline.sql`.
+The 139 individual migration files (001-141, minus the two documented gaps at
+035/036) were deleted from the working tree in the same change set; they
+remain available in git history, but this file's per-migration entries below
+now describe schema history that predates the working tree's current shape,
+not files you can open.
+
+**The migration authority is now a single baseline plus forward migrations,
+not a 141-file incremental chain.** This is the headline structural change:
+previously, reconstructing the schema meant replaying 141 files in order;
+now a fresh install (or any historical DB) applies exactly one migration.
+
+**Regeneration method:** a fresh temp-file DB was migrated through the full,
+still-present 001-141 chain via `core.config.sqlite_bootstrap.run_migrations(
+conn, apply_unreleased=True)`. Every resulting `sqlite_master` object (tables,
+indexes, views, triggers — excluding `sqlite_sequence` and FTS5 shadow tables)
+was re-emitted in idempotent `CREATE ... IF NOT EXISTS` form, tables then
+indexes then views then triggers, preserving the original DDL text verbatim
+apart from the added `IF NOT EXISTS` guard. `DROP TABLE IF EXISTS` runs first
+for every name in `tests/unit/schema_tombstones_data.py` (`TOMBSTONED_TABLES`)
+so a historical DB at any prior schema version sheds dead tables on its way to
+142; `DROP VIEW IF EXISTS` similarly runs for the 11 legacy view names the
+chain's drop/recreate view-guard pattern permanently retired over its history
+(`v_active_execution`, `v_blocked_nodes`, `v_completion_rate`,
+`vw_activity_timeline`, `vw_component_stats`, `vw_graph_edges`,
+`vw_hook_performance`, `vw_prd_progress`, `vw_project_readiness_latest`,
+`vw_risk_hotspots`, `vw_task_details`).
+
+**Deviation from the literal design brief:** the brief specified re-emitting
+"table/index/view" objects. The fresh chain also produces 6 `CREATE TRIGGER`
+objects (3 `reg_gotchas` FTS sync triggers, 3 `memory_entries_fts` sync
+triggers originally restored by migration 082) that are live schema and the
+only thing keeping the `fts_gotchas`/`memory_fts` FTS5 shadow tables in sync
+with their base tables. Triggers were included in the baseline's CREATE
+section (ordered after views) — omitting them would have silently broken FTS
+sync on every fresh install.
+
+**Verification:** a fresh baseline-only DB and a fresh 001-141 chain DB
+(captured before file deletion) produce an identical `sqlite_master` object
+set — 208 named objects, byte-identical after whitespace/`IF NOT EXISTS`
+normalization. Three upgrade-path scenarios were verified directly against
+`run_migrations()`: (a) a fresh DB (`applied=0`) ends at schema version 142
+with the full baseline schema; (b) a DB already at 141 (the full pre-squash
+chain schema) applies 142 as a true no-op (identical table set, no data
+touched); (c) a DB with an arbitrary historical version stamp (e.g. 38)
+applies 142 without error. `core/config/sqlite_bootstrap.py` required no code
+changes for any of these — its version-comparison loop (`version <= current`,
+`version > latest_code`) never assumed a specific starting version or a
+contiguous chain. See `tests/unit/test_migration_142_baseline.py` for the
+data-preservation proof (seeded KEEP-table rows survive a baseline re-apply
+unchanged) and `docs/architecture/aspirational-schema-debt.md` for the dated
+review entry. `.released_version` set to 142; new migrations start at 143.
+
+---
+
 ## Canonical Migration Directory
 
 **`core/event_store/migrations/`** is the single source of truth for database schema migrations.
 
-All new migrations MUST be added here. The migration runner in `core/event_store/studio_db.py` reads from this directory exclusively.
+All new migrations MUST be added here. Migrations 001-141 were collapsed into
+`142_lean_baseline.sql` by the 2026-07-04 squash above; new migrations start
+at 143. The migration runner in `core/config/sqlite_bootstrap.py` (delegated
+to by the thin wrappers in `core/event_store/studio_db.py`) reads from this
+directory exclusively.
 
 ## Schema Version Authority
 

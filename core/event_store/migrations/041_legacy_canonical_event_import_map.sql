@@ -1,7 +1,0 @@
--- Migration 041: Legacy canonical event reconciliation import map
---
--- legacy_canonical_event_import_map and its indexes removed in migration 128.
--- The canonical_event_reconciliation upgrade script that wrote to this table
--- has also been removed (dead code).  The table is an import ledger with no
--- live consumer; it is dropped on upgrade by migration 128.
--- Fresh installs never create it.

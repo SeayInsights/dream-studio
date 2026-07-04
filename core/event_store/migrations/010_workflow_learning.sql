@@ -1,6 +1,0 @@
--- Migration 010: Workflow Learning System - Project Intelligence Wave 6
---
--- reg_workflows removed in migration 128 (dead table).
--- The ALTER TABLE and index operations on reg_workflows in this migration
--- are now no-ops for fresh installs.  On existing DBs, migration 128 drops
--- reg_workflows after these statements already ran (migrations are idempotent).

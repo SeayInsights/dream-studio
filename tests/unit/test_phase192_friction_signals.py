@@ -25,9 +25,62 @@ from typing import Any
 
 import pytest
 
-MIGRATION_SQL = (
-    Path(__file__).parents[2] / "core" / "event_store" / "migrations" / "096_friction_signals.sql"
-).read_text(encoding="utf-8")
+# WO-SQUASH-BASELINE (5fd84891, 2026-07-04): 096_friction_signals.sql was
+# collapsed into 142_lean_baseline.sql. ds_friction_signals is a live KEEP
+# table there, but this file's fixtures deliberately build a MINIMAL local
+# schema (findings/scan_runs/ds_workflow_pattern_signals are hand-rolled
+# above, independent of migrations -- the real `findings` table was itself
+# later dropped, migration 112) to test FrictionSignalHarvester in isolation.
+# The DDL below is preserved verbatim from the deleted migration file
+# (`git show 00465eb3:core/event_store/migrations/096_friction_signals.sql`,
+# the commit immediately before the squash) rather than read from the
+# baseline, since it must apply on top of this file's own synthetic
+# `findings` table, not the real schema.
+MIGRATION_SQL = """
+CREATE TABLE IF NOT EXISTS ds_friction_signals (
+    signal_id       TEXT PRIMARY KEY,
+    session_id      TEXT,
+    project_id      TEXT,
+    signal_type     TEXT NOT NULL CHECK(signal_type IN (
+                        'dismissed_finding',
+                        'partial_completion',
+                        'pattern_gap'
+                    )),
+    skill_id        TEXT,
+    rule_id         TEXT,
+    source_table    TEXT NOT NULL,
+    source_id       TEXT NOT NULL,
+    context         TEXT NOT NULL DEFAULT '{}',
+    bucket_key      TEXT NOT NULL UNIQUE,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+
+    -- 19.3 Gap Classifier writes these back after classification
+    classified_as   TEXT CHECK(classified_as IS NULL OR classified_as IN (
+                        'capability', 'personalization', 'onboarding'
+                    )),
+    classified_at   TEXT,
+
+    -- 19.4 Guided Expansion links extension after compilation
+    extension_id    TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_friction_signals_skill
+    ON ds_friction_signals(skill_id)
+    WHERE skill_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_friction_signals_unclassified
+    ON ds_friction_signals(created_at)
+    WHERE classified_as IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_friction_signals_type
+    ON ds_friction_signals(signal_type, created_at);
+
+-- Add dismissal tracking to the findings table.
+-- dismissed_at IS NOT NULL → finding was dismissed by operator.
+-- dismissed_reason is free text (e.g. "false positive — test file").
+ALTER TABLE findings ADD COLUMN dismissed_at TEXT;
+ALTER TABLE findings ADD COLUMN dismissed_reason TEXT;
+"""
 
 # Findings schema needs the base findings table for ALTER TABLE statements.
 FINDINGS_BASE_SQL = """

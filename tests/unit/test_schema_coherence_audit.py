@@ -18,8 +18,6 @@ from core.config.schema_coherence import (
     _PYTHON_OWNED_TABLES,
     _effective_swallow_classification,
     _build_migration_only_tables,
-    _migration_insert_columns,
-    _migration_references,
     _staleness_guard,
     check_schema_coherence,
 )
@@ -94,28 +92,14 @@ def test_fixture_a_audit_reports_zero_canonical_events_findings():
     )
 
 
-def test_fixture_a_migrations_still_reference_canonical_events_structurally():
-    """Migrations 052, 060, 061, 062, 064 still reference canonical_events in their SQL.
-    This is expected — they predate migration 083. The structural references remain
-    but no longer produce audit findings because canonical_events is now migration-owned.
-    """
-    source_root = _source_root()
-    migration_dir = source_root / "core" / "event_store" / "migrations"
-    refs = _migration_references(migration_dir, "canonical_events")
-    migration_names = {r["migration"] for r in refs}
-
-    expected_migrations = {
-        "052_invocation_mode.sql",
-        "060_ta0b_backfill_execution_events_from_canonical.sql",
-        "061_backfill_sdlc_creation_events.sql",
-        "062_nullify_activity_id_backfill_and_replace_views.sql",
-        "064_backfill_task_creation_events.sql",
-    }
-    missing = expected_migrations - migration_names
-    assert not missing, (
-        f"Expected migrations {missing} to still reference canonical_events in their SQL. "
-        "These references are expected (legacy migrations before 083)."
-    )
+# test_fixture_a_migrations_still_reference_canonical_events_structurally
+# removed (WO-SQUASH-BASELINE, 5fd84891, 2026-07-04): it asserted that five
+# specific pre-083 migration files (052, 060, 061, 062, 064) still
+# structurally referenced canonical_events. Those files were collapsed into
+# 142_lean_baseline.sql, which is the only migration file now; there is no
+# per-file structural remnant left to check. canonical_events itself
+# survives in the baseline as the migration-083-originated VIEW (covered by
+# test_fixture_a_canonical_events_present_in_migration_replay above).
 
 
 # ── Fixture B: Python-owned table with no migration references → low ──────────
@@ -148,25 +132,16 @@ def test_fixture_b_python_owned_no_migration_ref_is_low():
 # ── Fixture C: column mismatch → high finding ─────────────────────────────────
 
 
-def test_fixture_c_migration_inserts_use_columns_now_in_migration_083():
-    """The columns that were 'missing' from Python DDL (raw_prompt_retained etc.) are now
-    declared in migration 083 — they were always in the ingestor's DDL.
-    The INSERTs in migrations 061/062/064 still reference them; the mismatch is resolved.
-    """
-    source_root = _source_root()
-    migration_dir = source_root / "core" / "event_store" / "migrations"
-
-    inserts = _migration_insert_columns(migration_dir, "canonical_events")
-    assert inserts, "Expected at least one INSERT INTO canonical_events in migrations."
-
-    # The historically-missing columns must still appear in the INSERT statements
-    # (they were not removed — they're valid now that migration 083 declares them)
-    all_insert_cols = {c for entry in inserts for c in entry["columns"]}
-    expected_cols = {"raw_prompt_retained", "raw_tool_output_retained", "schema_version"}
-    assert expected_cols <= all_insert_cols, (
-        f"Expected migration INSERTs to still reference {expected_cols}; "
-        f"found: {all_insert_cols}"
-    )
+# test_fixture_c_migration_inserts_use_columns_now_in_migration_083 removed
+# (WO-SQUASH-BASELINE, 5fd84891, 2026-07-04): it asserted that migrations
+# 061/062/064's INSERT INTO canonical_events statements referenced
+# raw_prompt_retained/raw_tool_output_retained/schema_version. Those
+# migrations (data-only backfills against the pre-VIEW canonical_events
+# table) were collapsed into 142_lean_baseline.sql, which contains no INSERT
+# statements at all (schema-only re-emission) — canonical_events is now
+# purely the migration-083-originated VIEW, with no migration-file INSERT
+# left to inspect. The 14-column schema itself is covered by
+# test_fixture_a_canonical_events_has_14_columns_in_migration_replay above.
 
 
 def test_fixture_c_audit_reports_zero_column_mismatch_findings():
@@ -461,23 +436,15 @@ def test_live_drift_probe_status_ran_for_real_db(tmp_path):
 # ── Cross-reference enrichment ────────────────────────────────────────────────
 
 
-def test_no_medium_findings_for_migration_062_after_remediation():
-    """After migration 083, migration 062 no longer produces medium or high findings.
-    canonical_events is migration-owned, so old migration references are no longer reported.
-    """
-    result = check_schema_coherence(_source_root())
-
-    mediums_062 = [
-        f
-        for f in result["findings"]
-        if f.get("finding_type")
-        in ("python_owned_table_in_migration", "column_absent_from_python_ddl")
-        and f.get("migration") == "062_nullify_activity_id_backfill_and_replace_views.sql"
-    ]
-    assert not mediums_062, (
-        f"Expected zero medium/high findings for migration 062 after remediation, "
-        f"but found: {[f['finding_type'] for f in mediums_062]}"
-    )
+# test_no_medium_findings_for_migration_062_after_remediation removed
+# (WO-SQUASH-BASELINE, 5fd84891, 2026-07-04): it filtered findings by
+# migration == "062_nullify_activity_id_backfill_and_replace_views.sql".
+# That file was collapsed into 142_lean_baseline.sql; no finding can ever
+# carry that migration name again, making the assertion vacuously true
+# rather than meaningful. test_no_column_absent_findings_after_remediation
+# below already covers the same underlying property (zero
+# column_absent_from_python_ddl findings) non-vacuously against the current
+# migration file.
 
 
 def test_no_column_absent_findings_after_remediation():

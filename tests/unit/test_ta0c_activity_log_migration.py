@@ -279,43 +279,14 @@ class TestMigrationIntegrity:
         conn.close()
         assert not leftover, f"Leftover _new tables after migration: {[r[0] for r in leftover]}"
 
-    def test_migration_062_contains_canonical_events_insert(self):
-        """Migration 062 must INSERT INTO canonical_events (the backfill), not DROP it."""
-        sql_path = (
-            Path(__file__).resolve().parents[2]
-            / "core/event_store/migrations"
-            / "062_nullify_activity_id_backfill_and_replace_views.sql"
-        )
-        sql = sql_path.read_text(encoding="utf-8").upper()
-        assert (
-            "INSERT OR IGNORE INTO CANONICAL_EVENTS" in sql
-        ), "Migration 062 must contain the backfill INSERT into canonical_events"
-        assert (
-            "DROP TABLE IF EXISTS CANONICAL_EVENTS" not in sql
-        ), "Migration 062 must not drop canonical_events"
-        assert (
-            "DROP TABLE CANONICAL_EVENTS" not in sql
-        ), "Migration 062 must not drop canonical_events"
-
-    def test_migration_063_drops_activity_log_and_indexes(self):
-        """Migration 063 must drop activity_log and its four indexes."""
-        sql_path = (
-            Path(__file__).resolve().parents[2]
-            / "core/event_store/migrations"
-            / "063_drop_activity_log.sql"
-        )
-        sql = sql_path.read_text(encoding="utf-8").upper()
-        assert "DROP TABLE IF EXISTS ACTIVITY_LOG" in sql, "Migration 063 must drop activity_log"
-        for idx in [
-            "IDX_ACTIVITY_TYPE_TIME",
-            "IDX_ACTIVITY_STREAM",
-            "IDX_ACTIVITY_STATUS_SEVERITY",
-            "IDX_ACTIVITY_ANOMALY",
-        ]:
-            assert f"DROP INDEX IF EXISTS {idx}" in sql, f"Migration 063 must drop index {idx}"
-        assert (
-            "DROP TABLE IF EXISTS CANONICAL_EVENTS" not in sql
-        ), "Migration 063 must not drop canonical_events"
-        assert (
-            "DROP TABLE IF EXISTS HOOK_EXECUTIONS" not in sql
-        ), "Migration 063 must not touch hook_executions"
+    # test_migration_062_contains_canonical_events_insert and
+    # test_migration_063_drops_activity_log_and_indexes removed
+    # (WO-SQUASH-BASELINE, 5fd84891, 2026-07-04): both asserted on the literal
+    # DDL/backfill statement text of 062_nullify_activity_id_backfill_and_
+    # replace_views.sql and 063_drop_activity_log.sql, now collapsed into
+    # 142_lean_baseline.sql. The transient backfill INSERT and per-index DROP
+    # statements leave no persistent schema trace to adapt the assertion to;
+    # the persistent outcomes they guarded (activity_log and its four indexes
+    # absent, canonical_events/hook_executions untouched by the drop) are
+    # already covered by TestActivityLogDropped above and the fresh-schema
+    # checks elsewhere in this file.

@@ -23,26 +23,110 @@ from pathlib import Path
 import pytest
 
 # ── Migration SQL ──────────────────────────────────────────────────────────
+# WO-SQUASH-BASELINE (5fd84891, 2026-07-04): migrations 095/096/097 were
+# collapsed into 142_lean_baseline.sql. ds_user_extensions and
+# ds_friction_signals are live KEEP tables there, but this file's fixture
+# deliberately builds a MINIMAL local schema (findings/scan_runs/
+# ds_workflow_pattern_signals hand-rolled above, independent of migrations --
+# the real `findings` table was itself later dropped, migration 112) to test
+# GapClassifier in isolation. The DDL below is preserved verbatim from the
+# deleted migration files (`git show 00465eb3:core/event_store/migrations/
+# 09{5,6,7}_*.sql`, the commit immediately before the squash) rather than
+# read from the baseline, since 096 must apply on top of this file's own
+# synthetic `findings` table, not the real schema.
 
-MIGRATION_096 = (
-    Path(__file__).parents[2] / "core" / "event_store" / "migrations" / "096_friction_signals.sql"
-).read_text(encoding="utf-8")
+MIGRATION_096 = """
+CREATE TABLE IF NOT EXISTS ds_friction_signals (
+    signal_id       TEXT PRIMARY KEY,
+    session_id      TEXT,
+    project_id      TEXT,
+    signal_type     TEXT NOT NULL CHECK(signal_type IN (
+                        'dismissed_finding',
+                        'partial_completion',
+                        'pattern_gap'
+                    )),
+    skill_id        TEXT,
+    rule_id         TEXT,
+    source_table    TEXT NOT NULL,
+    source_id       TEXT NOT NULL,
+    context         TEXT NOT NULL DEFAULT '{}',
+    bucket_key      TEXT NOT NULL UNIQUE,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    classified_as   TEXT CHECK(classified_as IS NULL OR classified_as IN (
+                        'capability', 'personalization', 'onboarding'
+                    )),
+    classified_at   TEXT,
+    extension_id    TEXT
+);
 
-MIGRATION_097 = (
-    Path(__file__).parents[2]
-    / "core"
-    / "event_store"
-    / "migrations"
-    / "097_gap_classifier_columns.sql"
-).read_text(encoding="utf-8")
+CREATE INDEX IF NOT EXISTS idx_friction_signals_skill
+    ON ds_friction_signals(skill_id)
+    WHERE skill_id IS NOT NULL;
 
-MIGRATION_095 = (
-    Path(__file__).parents[2]
-    / "core"
-    / "event_store"
-    / "migrations"
-    / "095_unified_extensions_schema.sql"
-).read_text(encoding="utf-8")
+CREATE INDEX IF NOT EXISTS idx_friction_signals_unclassified
+    ON ds_friction_signals(created_at)
+    WHERE classified_as IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_friction_signals_type
+    ON ds_friction_signals(signal_type, created_at);
+
+ALTER TABLE findings ADD COLUMN dismissed_at TEXT;
+ALTER TABLE findings ADD COLUMN dismissed_reason TEXT;
+"""
+
+MIGRATION_097 = """
+ALTER TABLE ds_friction_signals ADD COLUMN classification_confidence REAL;
+ALTER TABLE ds_friction_signals ADD COLUMN classification_reason TEXT;
+ALTER TABLE ds_friction_signals ADD COLUMN classification_skipped INTEGER NOT NULL DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS idx_friction_classified_ready
+    ON ds_friction_signals(classified_as, classification_confidence)
+    WHERE classified_as IS NOT NULL AND classification_skipped = 0 AND extension_id IS NULL;
+"""
+
+MIGRATION_095 = """
+CREATE TABLE IF NOT EXISTS ds_user_extensions (
+    extension_id            TEXT PRIMARY KEY,
+    skill_id                TEXT NOT NULL,
+    extension_type          TEXT NOT NULL CHECK(extension_type IN (
+                                'example', 'gap_filler', 'threshold_override',
+                                'option_override', 'mode_addition', 'trigger_alias'
+                            )),
+    content                 TEXT NOT NULL,
+    source_signal           TEXT,
+    compiled_from           TEXT,
+    status                  TEXT NOT NULL DEFAULT 'proposed' CHECK(status IN (
+                                'proposed', 'experimental', 'active',
+                                'suppressed', 'rejected', 'deprecated'
+                            )),
+    created_at              TEXT NOT NULL DEFAULT (datetime('now')),
+    last_validated_at       TEXT,
+    baseline_eval_score     REAL CHECK(
+                                baseline_eval_score IS NULL OR
+                                (baseline_eval_score >= 0.0 AND baseline_eval_score <= 1.0)
+                            ),
+    current_eval_score      REAL CHECK(
+                                current_eval_score IS NULL OR
+                                (current_eval_score >= 0.0 AND current_eval_score <= 1.0)
+                            ),
+    past_wo_count           INTEGER NOT NULL DEFAULT 0
+                                CHECK(past_wo_count >= 0),
+    user_confirmed_at       TEXT,
+    user_confirmed_by       TEXT,
+    suppressed_reason       TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_extensions_skill_status
+    ON ds_user_extensions(skill_id, status);
+
+CREATE INDEX IF NOT EXISTS idx_extensions_decision6
+    ON ds_user_extensions(status, past_wo_count, current_eval_score)
+    WHERE status = 'experimental';
+
+CREATE INDEX IF NOT EXISTS idx_extensions_active
+    ON ds_user_extensions(skill_id)
+    WHERE status = 'active';
+"""
 
 FINDINGS_BASE = """
 CREATE TABLE IF NOT EXISTS findings (

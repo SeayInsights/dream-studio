@@ -19,110 +19,30 @@ from unittest.mock import patch
 
 
 def _make_db() -> tuple[sqlite3.Connection, Path]:
-    """Return an in-memory-like temp DB with minimal SDLC tables."""
+    """Return a temp DB with the full business_* SDLC schema.
+
+    WO-SQUASH-BASELINE (5fd84891, 2026-07-04): this used to hand-roll a
+    minimal subset of business_projects/business_milestones/
+    business_work_orders/business_tasks (plus the pre-migration-070 ds_*
+    source tables the now-removed TestBackfillMigration exercised). The
+    pre-squash migration chain incrementally added columns via ALTER TABLE,
+    which this fixture never tracked -- harmless while _connect()/
+    run_migrations() re-applied the chain's ALTER TABLE statements on every
+    call and silently backfilled the columns this fixture omitted (e.g.
+    business_projects.project_path). The squashed baseline's CREATE TABLE
+    IF NOT EXISTS is a no-op against an already-existing table, so it no
+    longer retrofits missing columns onto a hand-rolled partial schema --
+    exactly the documented limitation in 142_lean_baseline.sql's header.
+    Applying the full baseline here instead of a hand-rolled subset removes
+    the drift risk permanently.
+    """
+    from core.config.sqlite_bootstrap import run_migrations
+
     tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
     tmp.close()
     db_path = Path(tmp.name)
     conn = sqlite3.connect(str(db_path))
-    conn.executescript("""
-        CREATE TABLE IF NOT EXISTS canonical_events (
-            event_id TEXT PRIMARY KEY,
-            event_type TEXT NOT NULL,
-            timestamp TEXT NOT NULL,
-            trace JSON NOT NULL DEFAULT '{}',
-            severity TEXT NOT NULL DEFAULT 'info',
-            payload JSON NOT NULL DEFAULT '{}',
-            raw_prompt_retained INTEGER NOT NULL DEFAULT 0,
-            raw_tool_output_retained INTEGER NOT NULL DEFAULT 0,
-            schema_version INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE IF NOT EXISTS business_projects (
-            project_id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            description TEXT,
-            status TEXT NOT NULL DEFAULT 'active',
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS business_milestones (
-            milestone_id TEXT PRIMARY KEY,
-            project_id TEXT NOT NULL,
-            title TEXT NOT NULL,
-            description TEXT,
-            due_date TEXT,
-            status TEXT NOT NULL DEFAULT 'pending',
-            order_index INTEGER DEFAULT 0,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            stage_gate_json TEXT,
-            validation_expectations_json TEXT,
-            security_readiness_checks_json TEXT
-        );
-        CREATE TABLE IF NOT EXISTS business_work_orders (
-            work_order_id TEXT PRIMARY KEY,
-            project_id TEXT,
-            milestone_id TEXT,
-            title TEXT,
-            description TEXT,
-            status TEXT NOT NULL DEFAULT 'created',
-            work_order_type TEXT,
-            created_at TEXT,
-            started_at TEXT,
-            closed_at TEXT,
-            blocked_at TEXT,
-            unblocked_at TEXT,
-            block_reason TEXT,
-            source_event_id TEXT,
-            last_event_id TEXT,
-            last_updated_at TEXT NOT NULL DEFAULT (datetime('now', 'utc')),
-            updated_at TEXT
-        );
-        CREATE TABLE IF NOT EXISTS business_tasks (
-            task_id TEXT PRIMARY KEY,
-            work_order_id TEXT NOT NULL,
-            project_id TEXT NOT NULL,
-            title TEXT NOT NULL,
-            description TEXT,
-            status TEXT NOT NULL DEFAULT 'pending',
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
-        -- ds_* tables below are the pre-migration-070 source tables that migration 061
-        -- (backfill_sdlc_creation_events) reads from. They are intentionally recreated
-        -- here so that TestBackfillMigration can exercise the migration 061 SQL path.
-        CREATE TABLE IF NOT EXISTS ds_projects (
-            project_id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            description TEXT,
-            status TEXT NOT NULL DEFAULT 'active',
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS ds_milestones (
-            milestone_id TEXT PRIMARY KEY,
-            project_id TEXT NOT NULL,
-            title TEXT NOT NULL,
-            description TEXT,
-            due_date TEXT,
-            status TEXT NOT NULL DEFAULT 'pending',
-            order_index INTEGER DEFAULT 0,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS ds_work_orders (
-            work_order_id TEXT PRIMARY KEY,
-            project_id TEXT NOT NULL,
-            milestone_id TEXT,
-            title TEXT NOT NULL,
-            description TEXT,
-            status TEXT NOT NULL DEFAULT 'open',
-            work_order_type TEXT,
-            block_reason TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
-    """)
+    run_migrations(conn, apply_unreleased=True)
     conn.commit()
     return conn, db_path
 
@@ -134,12 +54,6 @@ def _seed_project(conn: sqlite3.Connection) -> str:
         " VALUES (?, 'Test Project', 'desc', 'active', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')",
         (pid,),
     )
-    # ds_projects is the pre-migration-070 source table read by migration 061 backfill.
-    conn.execute(
-        "INSERT INTO ds_projects (project_id, name, description, status, created_at, updated_at)"
-        " VALUES (?, 'Test Project', 'desc', 'active', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')",
-        (pid,),
-    )
     conn.commit()
     return pid
 
@@ -148,12 +62,6 @@ def _seed_milestone(conn: sqlite3.Connection, project_id: str) -> str:
     mid = str(uuid.uuid4())
     conn.execute(
         "INSERT INTO business_milestones (milestone_id, project_id, title, status, created_at, updated_at)"
-        " VALUES (?, ?, 'M1', 'pending', '2026-01-02T00:00:00+00:00', '2026-01-02T00:00:00+00:00')",
-        (mid, project_id),
-    )
-    # ds_milestones is the pre-migration-070 source table read by migration 061 backfill.
-    conn.execute(
-        "INSERT INTO ds_milestones (milestone_id, project_id, title, status, created_at, updated_at)"
         " VALUES (?, ?, 'M1', 'pending', '2026-01-02T00:00:00+00:00', '2026-01-02T00:00:00+00:00')",
         (mid, project_id),
     )
@@ -169,27 +77,8 @@ def _seed_work_order(conn: sqlite3.Connection, project_id: str, milestone_id: st
         " VALUES (?, ?, ?, 'WO1', 'created', 'feature', '2026-01-03T00:00:00+00:00', '2026-01-03T00:00:00+00:00')",
         (wid, project_id, milestone_id),
     )
-    # ds_work_orders is the pre-migration-070 source table read by migration 061 backfill.
-    conn.execute(
-        "INSERT INTO ds_work_orders"
-        " (work_order_id, project_id, milestone_id, title, status, work_order_type, created_at, updated_at)"
-        " VALUES (?, ?, ?, 'WO1', 'open', 'feature', '2026-01-03T00:00:00+00:00', '2026-01-03T00:00:00+00:00')",
-        (wid, project_id, milestone_id),
-    )
     conn.commit()
     return wid
-
-
-def _run_backfill_sql(conn: sqlite3.Connection) -> None:
-    sql_path = (
-        Path(__file__).parent.parent.parent
-        / "core"
-        / "event_store"
-        / "migrations"
-        / "061_backfill_sdlc_creation_events.sql"
-    )
-    conn.executescript(sql_path.read_text(encoding="utf-8"))
-    conn.commit()
 
 
 def _captured_events(spool_root: Path) -> list[dict]:
@@ -295,84 +184,15 @@ class TestProjectDeletedEnvelope:
 
 
 # ---------------------------------------------------------------------------
-# Unit tests — backfill migration
-# ---------------------------------------------------------------------------
-
-
-class TestBackfillMigration:
-    def test_produces_events_for_all_rows(self):
-        conn, _ = _make_db()
-        pid = _seed_project(conn)
-        mid = _seed_milestone(conn, pid)
-        _seed_work_order(conn, pid, mid)
-
-        _run_backfill_sql(conn)
-
-        rows = conn.execute(
-            "SELECT event_type FROM canonical_events ORDER BY event_type"
-        ).fetchall()
-        types = [r[0] for r in rows]
-        assert "project.created" in types
-        assert "milestone.created" in types
-        assert "work_order.created" in types
-
-    def test_backfill_events_have_backfill_attribution_status(self):
-        conn, _ = _make_db()
-        pid = _seed_project(conn)
-        _seed_milestone(conn, pid)
-
-        _run_backfill_sql(conn)
-
-        rows = conn.execute(
-            "SELECT trace FROM canonical_events WHERE event_type IN ('project.created','milestone.created')"
-        ).fetchall()
-        assert rows, "no rows found"
-        for (trace_json,) in rows:
-            trace = json.loads(trace_json)
-            assert trace["attribution_status"] == "backfill", f"expected backfill, got: {trace}"
-
-    def test_idempotent_run_twice(self):
-        conn, _ = _make_db()
-        pid = _seed_project(conn)
-        mid = _seed_milestone(conn, pid)
-        _seed_work_order(conn, pid, mid)
-
-        _run_backfill_sql(conn)
-        count_first = conn.execute("SELECT COUNT(*) FROM canonical_events").fetchone()[0]
-
-        _run_backfill_sql(conn)
-        count_second = conn.execute("SELECT COUNT(*) FROM canonical_events").fetchone()[0]
-
-        assert (
-            count_first == count_second
-        ), f"Idempotency violated: {count_first} → {count_second} after second run"
-
-    def test_backfill_count_matches_row_count(self):
-        conn, _ = _make_db()
-        pid = _seed_project(conn)
-        mid1 = _seed_milestone(conn, pid)
-        mid2 = _seed_milestone(conn, pid)
-        _seed_work_order(conn, pid, mid1)
-        _seed_work_order(conn, pid, mid2)
-        _seed_work_order(conn, pid, mid2)
-
-        _run_backfill_sql(conn)
-
-        proj_events = conn.execute(
-            "SELECT COUNT(*) FROM canonical_events WHERE event_type='project.created'"
-        ).fetchone()[0]
-        ms_events = conn.execute(
-            "SELECT COUNT(*) FROM canonical_events WHERE event_type='milestone.created'"
-        ).fetchone()[0]
-        wo_events = conn.execute(
-            "SELECT COUNT(*) FROM canonical_events WHERE event_type='work_order.created'"
-        ).fetchone()[0]
-
-        assert proj_events == 1
-        assert ms_events == 2
-        assert wo_events == 3
-
-
+# TestBackfillMigration removed (WO-SQUASH-BASELINE, 5fd84891, 2026-07-04):
+# it ran 061_backfill_sdlc_creation_events.sql (a one-time, data-only backfill
+# migration with no persistent DDL) directly against a hand-built legacy-
+# shaped DB. The migration file was collapsed into 142_lean_baseline.sql,
+# which is a schema-only re-emission (CREATE ... IF NOT EXISTS) and does not
+# replay one-time backfill INSERT...SELECT logic against historical rows --
+# there is no current file or schema object left for these tests to target.
+# The forward-emission path this backfill complemented is covered below by
+# TestForwardEmissionIntegration.
 # ---------------------------------------------------------------------------
 # Integration tests — forward emission via mutation call sites
 # ---------------------------------------------------------------------------

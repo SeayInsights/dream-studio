@@ -11,7 +11,6 @@ import pytest
 from core.config.sqlite_bootstrap import bootstrap_database
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MIGRATION = REPO_ROOT / "core" / "event_store" / "migrations" / "048_project_spine.sql"
 
 NOW = "2026-05-16T00:00:00+00:00"
 
