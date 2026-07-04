@@ -121,12 +121,10 @@ class TestMigrationNumbering:
         sql_files = sorted(CANONICAL_MIGRATIONS.glob("*.sql"))
         assert len(sql_files) > 0, "No canonical migration files found"
 
-    def test_migration_011_exists(self):
-        """Migration 011 gap was closed in phase 18.1.13 — file must exist."""
-        files_011 = list(CANONICAL_MIGRATIONS.glob("011_*"))
-        assert (
-            len(files_011) == 1
-        ), "Migration 011 should exist (gap was closed by 011_memory_entries.sql)"
+    # WO-SQUASH-TESTS: test_migration_011_exists deleted — it asserted a 011_*
+    # file exists (a historical numbering-gap closure). Migrations 001-141 are
+    # folded into the lean baseline (142_lean_baseline.sql); individual numbered
+    # files no longer exist, so the gap concern is moot.
 
     def test_migrations_are_numbered(self):
         for f in CANONICAL_MIGRATIONS.glob("*.sql"):

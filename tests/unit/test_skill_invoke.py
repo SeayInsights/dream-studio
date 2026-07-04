@@ -3,13 +3,8 @@
 from __future__ import annotations
 
 import json
-import sqlite3
-import tempfile
-from pathlib import Path
 
-import pytest
 
-from core.config.sqlite_bootstrap import bootstrap_database
 from interfaces.cli.ds import main
 
 NOW = "2026-05-16T00:00:00+00:00"
@@ -173,66 +168,11 @@ def test_skill_list_filter_by_pack(capsys):
     assert "core:build" not in specifiers
 
 
-# ── migration 052 ─────────────────────────────────────────────────────────────
-
-
-def test_migration_052_runs_cleanly():
-    """Migration 052 adds invocation_mode to a pre-existing canonical_events table."""
-    with tempfile.TemporaryDirectory() as tmp:
-        db_path = Path(tmp) / "state" / "studio.db"
-        db_path.parent.mkdir(parents=True)
-        bootstrap_database(db_path)
-        # Simulate a DB where ingestor already created canonical_events WITHOUT invocation_mode.
-        # After bootstrap, canonical_events is a VIEW (three-store architecture). Drop it first
-        # so the TABLE can be created to simulate the pre-052 ingestor state.
-        conn = sqlite3.connect(str(db_path))
-        try:
-            conn.execute("DROP VIEW IF EXISTS canonical_events")
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS canonical_events (
-                    event_id TEXT PRIMARY KEY,
-                    event_type TEXT NOT NULL,
-                    timestamp TEXT NOT NULL,
-                    trace JSON NOT NULL DEFAULT '{}',
-                    severity TEXT NOT NULL DEFAULT 'info',
-                    payload JSON NOT NULL DEFAULT '{}',
-                    actor JSON,
-                    confidence_score REAL,
-                    source_type TEXT,
-                    raw_prompt_retained INTEGER NOT NULL DEFAULT 0,
-                    raw_tool_output_retained INTEGER NOT NULL DEFAULT 0,
-                    schema_version INTEGER NOT NULL DEFAULT 1,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            conn.execute("DELETE FROM _schema_version WHERE version >= 52")
-            conn.commit()
-        finally:
-            conn.close()
-        # Now re-run migration 052: ALTER TABLE should add the column
-        from core.config.sqlite_bootstrap import run_migrations
-
-        conn2 = sqlite3.connect(str(db_path))
-        try:
-            run_migrations(conn2, target_version=52)
-            cols = [
-                row[1] for row in conn2.execute("PRAGMA table_info(canonical_events)").fetchall()
-            ]
-            assert "invocation_mode" in cols
-            conn2.execute(
-                "INSERT OR IGNORE INTO canonical_events"
-                " (event_id, event_type, timestamp, trace, severity, payload,"
-                " raw_prompt_retained, raw_tool_output_retained, schema_version, invocation_mode)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                ("test-052", "skill.invoked", NOW, "{}", "info", "{}", 0, 0, 1, "pipeline"),
-            )
-            conn2.commit()
-            row = conn2.execute(
-                "SELECT invocation_mode FROM canonical_events WHERE event_id = 'test-052'"
-            ).fetchone()
-            assert row[0] == "pipeline"
-        finally:
-            conn2.close()
+# WO-SQUASH-TESTS: test_migration_052_runs_cleanly deleted — it ran
+# run_migrations(target_version=52) to assert migration 052's ALTER added
+# invocation_mode. Migrations 001-141 are folded into the lean baseline (142),
+# so no target_version=52 exists; the column is present in the baseline schema,
+# validated by test_migration_142_baseline / the schema-identity proof.
 
 
 # ── ingestor skill_id normalization ──────────────────────────────────────────
@@ -252,7 +192,7 @@ def _make_skill_event(skill_id: str, event_id: str = "evt-skill-1") -> dict:
 
 def test_ingestor_rejects_skill_id_with_slash(tmp_path):
     from spool.ingestor import ingest
-    from spool.states import SpoolState, state_dir, ensure_dirs
+    from spool.states import ensure_dirs
     from spool.writer import write_event
 
     ensure_dirs(tmp_path)
@@ -272,7 +212,7 @@ def test_ingestor_rejects_skill_id_with_slash(tmp_path):
 
 def test_ingestor_rejects_skill_id_without_ds_prefix(tmp_path):
     from spool.ingestor import ingest
-    from spool.states import SpoolState, state_dir, ensure_dirs
+    from spool.states import ensure_dirs
     from spool.writer import write_event
 
     ensure_dirs(tmp_path)

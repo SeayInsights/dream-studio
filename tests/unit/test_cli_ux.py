@@ -41,56 +41,28 @@ def _make_db_with_project(tmp_path: Path) -> tuple[Path, str]:
     task_id = str(uuid.uuid4())
     now = datetime.now(UTC).isoformat()
 
-    with sqlite3.connect(str(db_path)) as conn:
-        conn.executescript(f"""
-            CREATE TABLE business_projects (
-                project_id TEXT PRIMARY KEY, name TEXT, description TEXT,
-                status TEXT, created_at TEXT, updated_at TEXT
-            );
-            CREATE TABLE business_milestones (
-                milestone_id TEXT PRIMARY KEY, project_id TEXT, title TEXT,
-                description TEXT, due_date TEXT, status TEXT, created_at TEXT, updated_at TEXT,
-                order_index INTEGER DEFAULT 0
-            );
-            CREATE TABLE business_work_orders (
-                work_order_id TEXT PRIMARY KEY, project_id TEXT, milestone_id TEXT,
-                title TEXT, description TEXT, status TEXT, work_order_type TEXT,
-                created_at TEXT, updated_at TEXT
-            );
-            CREATE TABLE business_work_order_types (
-                type_id TEXT PRIMARY KEY, label TEXT, pre_build_gate TEXT,
-                build_executor TEXT, post_build_gate TEXT, workflow_template TEXT,
-                precondition_skill TEXT, task_generator TEXT, resolution_instructions TEXT
-            );
-            CREATE TABLE business_tasks (
-                task_id TEXT PRIMARY KEY, work_order_id TEXT, project_id TEXT,
-                title TEXT, description TEXT, status TEXT, created_at TEXT, updated_at TEXT
-            );
-            CREATE TABLE business_design_briefs (
-                brief_id TEXT PRIMARY KEY, project_id TEXT, purpose TEXT,
-                audience TEXT, tone TEXT, design_system TEXT, font_pairing TEXT,
-                brand_tokens TEXT, status TEXT, created_at TEXT, updated_at TEXT
-            );
-            CREATE TABLE ds_spool (
-                event_id TEXT PRIMARY KEY, event_type TEXT, timestamp TEXT,
-                trace TEXT, severity TEXT, payload TEXT, source_type TEXT
-            );
+    # WO-SQUASH-TESTS: apply the real lean baseline (migration 142) for schema
+    # instead of a hand-built DDL mirror that had drifted (missing
+    # business_work_orders.sequence_order, added migration 108) and PK-collided
+    # with the baseline's seeded work-order types. Seeds are INSERT OR IGNORE so
+    # they coexist with the baseline's own type seed.
+    from core.config.sqlite_bootstrap import run_migrations
 
-            INSERT INTO business_projects (project_id, name, description, status, created_at, updated_at) VALUES (
+    with sqlite3.connect(str(db_path)) as conn:
+        run_migrations(conn, apply_unreleased=True)
+        conn.executescript(f"""
+            INSERT OR IGNORE INTO business_projects (project_id, name, description, status, created_at, updated_at) VALUES (
                 '{project_id}', 'Test Project', 'desc', 'active', '{now}', '{now}'
             );
-            INSERT INTO business_milestones (milestone_id, project_id, title, description, due_date, status, created_at, updated_at, order_index) VALUES (
+            INSERT OR IGNORE INTO business_milestones (milestone_id, project_id, title, description, due_date, status, created_at, updated_at, order_index) VALUES (
                 '{milestone_id}', '{project_id}', 'Foundation', 'First milestone',
                 NULL, 'pending', '{now}', '{now}', 0
             );
-            INSERT INTO business_work_order_types (type_id, label, pre_build_gate, build_executor, post_build_gate, workflow_template, precondition_skill, task_generator, resolution_instructions) VALUES (
-                'infrastructure', 'Infrastructure', NULL, NULL, NULL, NULL, NULL, NULL, NULL
-            );
-            INSERT INTO business_work_orders (work_order_id, project_id, milestone_id, title, description, status, work_order_type, created_at, updated_at) VALUES (
+            INSERT OR IGNORE INTO business_work_orders (work_order_id, project_id, milestone_id, title, description, status, work_order_type, created_at, updated_at) VALUES (
                 '{wo_id}', '{project_id}', '{milestone_id}',
                 'Wire Tauri shell', 'desc', 'created', 'infrastructure', '{now}', '{now}'
             );
-            INSERT INTO business_tasks (task_id, work_order_id, project_id, title, description, status, created_at, updated_at) VALUES (
+            INSERT OR IGNORE INTO business_tasks (task_id, work_order_id, project_id, title, description, status, created_at, updated_at) VALUES (
                 '{task_id}', '{wo_id}', '{project_id}',
                 'Create Tauri config', 'desc', 'pending', '{now}', '{now}'
             );
@@ -285,42 +257,14 @@ def test_project_start_no_open_wos_prints_helpful_message(tmp_path):
     project_id = str(uuid.uuid4())
     now = datetime.now(UTC).isoformat()
 
-    with sqlite3.connect(str(db_path)) as conn:
-        conn.executescript(f"""
-            CREATE TABLE business_projects (
-                project_id TEXT PRIMARY KEY, name TEXT, description TEXT,
-                status TEXT, created_at TEXT, updated_at TEXT
-            );
-            CREATE TABLE business_milestones (
-                milestone_id TEXT PRIMARY KEY, project_id TEXT, title TEXT,
-                description TEXT, due_date TEXT, status TEXT, created_at TEXT, updated_at TEXT,
-                order_index INTEGER DEFAULT 0
-            );
-            CREATE TABLE business_work_orders (
-                work_order_id TEXT PRIMARY KEY, project_id TEXT, milestone_id TEXT,
-                title TEXT, description TEXT, status TEXT, work_order_type TEXT,
-                created_at TEXT, updated_at TEXT
-            );
-            CREATE TABLE business_work_order_types (
-                type_id TEXT PRIMARY KEY, label TEXT, pre_build_gate TEXT,
-                build_executor TEXT, post_build_gate TEXT, workflow_template TEXT,
-                precondition_skill TEXT, task_generator TEXT, resolution_instructions TEXT
-            );
-            CREATE TABLE business_tasks (
-                task_id TEXT PRIMARY KEY, work_order_id TEXT, project_id TEXT,
-                title TEXT, description TEXT, status TEXT, created_at TEXT, updated_at TEXT
-            );
-            CREATE TABLE business_design_briefs (
-                brief_id TEXT PRIMARY KEY, project_id TEXT, purpose TEXT,
-                audience TEXT, tone TEXT, design_system TEXT, font_pairing TEXT,
-                brand_tokens TEXT, status TEXT, created_at TEXT, updated_at TEXT
-            );
-            CREATE TABLE ds_spool (
-                event_id TEXT PRIMARY KEY, event_type TEXT, timestamp TEXT,
-                trace TEXT, severity TEXT, payload TEXT, source_type TEXT
-            );
+    # WO-SQUASH-TESTS: real baseline schema (migration 142) instead of a drifted
+    # hand-built DDL mirror; seed the one active project with no open work orders.
+    from core.config.sqlite_bootstrap import run_migrations
 
-            INSERT INTO business_projects (project_id, name, description, status, created_at, updated_at) VALUES (
+    with sqlite3.connect(str(db_path)) as conn:
+        run_migrations(conn, apply_unreleased=True)
+        conn.executescript(f"""
+            INSERT OR IGNORE INTO business_projects (project_id, name, description, status, created_at, updated_at) VALUES (
                 '{project_id}', 'Empty Project', 'desc', 'active', '{now}', '{now}'
             );
         """)
