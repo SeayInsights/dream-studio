@@ -279,6 +279,89 @@ class TestMigration139DropTables:
         assert not violations, f"foreign_key_check violations after migration 139: {violations}"
 
 
+class TestMigration140DropDerivedState:
+    """WO dff23cb0-950f-4607-bb30-e1a353a6f8ba (operator-approved pre-squash
+    removal): findings_current_status and sum_skill_summary are pure derived
+    state duplicating security_events / raw_skill_telemetry — no independent
+    signal of their own."""
+
+    DERIVED_STATE_DROPPED_TABLES = (
+        "findings_current_status",
+        "sum_skill_summary",
+    )
+
+    def test_tables_absent_after_full_chain(self, migrated_db):
+        """After the full migration chain (through 140), both tables are gone
+        from a fresh install."""
+        conn, _db_path = migrated_db
+        for table in self.DERIVED_STATE_DROPPED_TABLES:
+            row = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
+                (table,),
+            ).fetchone()
+            assert row is None, f"{table} should be dropped by migration 140"
+
+    def test_no_foreign_key_referenced_the_dropped_tables(self, tmp_path):
+        """Migration 140 drops both tables outright (no table-reconstruction
+        rebuild) because nothing else has a FOREIGN KEY into them — verify
+        that invariant holds against the migration-139 schema (immediately
+        before 140 runs), matching the migration header's evidence claim."""
+        from core.config.sqlite_bootstrap import run_migrations
+
+        db_path = tmp_path / "studio.db"
+        conn = sqlite3.connect(db_path)
+        run_migrations(conn, target_version=139, apply_unreleased=True)
+        conn.commit()
+
+        tables = [
+            row[0]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        ]
+        offenders = []
+        for table in tables:
+            for fk in conn.execute(f'PRAGMA foreign_key_list("{table}")').fetchall():
+                if fk[2] in self.DERIVED_STATE_DROPPED_TABLES:
+                    offenders.append((table, fk[2]))
+        assert not offenders, (
+            "a table has a FOREIGN KEY into one of the migration-140 dropped "
+            f"tables — a rebuild (migration-137 pattern) is needed: {offenders}"
+        )
+
+    def test_pragma_foreign_key_check_passes_after_drop(self, migrated_db):
+        """Dropping both tables must not leave any dangling FK violation
+        elsewhere in the schema."""
+        conn, _db_path = migrated_db
+        violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+        assert not violations, f"foreign_key_check violations after migration 140: {violations}"
+
+    def test_vw_security_summary_rebuilt_over_security_events(self, migrated_db):
+        """vw_security_summary (migration 112) used to read FROM
+        findings_current_status; migration 140 rebuilds it to derive the same
+        shape directly from security_events (the migration-118 drop/recreate
+        view guard pattern) so it keeps working after the table is dropped."""
+        conn, _db_path = migrated_db
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='view' AND name = 'vw_security_summary'"
+        ).fetchone()
+        assert row is not None, "vw_security_summary should survive migration 140 (rebuilt)"
+
+        conn.execute("""INSERT INTO security_events
+               (event_id, event_kind, project_id, severity, title, file_path,
+                line_number, scanner_type, created_at)
+               VALUES ('m140-finding-1', 'finding.recorded', 'proj-m140', 'high',
+                       'Test finding', 'app.py', 5, 'semgrep', datetime('now'))""")
+        conn.commit()
+        rows = conn.execute(
+            "SELECT finding_id, tool, severity, status FROM vw_security_summary"
+            " WHERE finding_id = 'm140-finding-1'"
+        ).fetchall()
+        assert len(rows) == 1
+        assert rows[0]["status"] == "open"
+        assert rows[0]["severity"] == "high"
+        assert rows[0]["tool"] == "semgrep"
+
+
 class TestVerifyVerdictPersistence:
     def test_write_eval_run_updates_wo_and_emits_event(self, migrated_db, tmp_path, monkeypatch):
         from core.work_orders.verify import _write_eval_run

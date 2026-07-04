@@ -67,7 +67,7 @@ CLASSIFICATION: dict[str, str] = {
     "execution_events": "KEEP",
     "execution_nodes": "DROP",  # Dropped migration 131: dead writer create_node(), dream_exec.py unregistered from ds CLI
     "execution_outputs": "DROP",  # Dropped migration 131: dead writer add_output(), dream_exec.py unregistered from ds CLI
-    "findings_current_status": "KEEP",
+    "findings_current_status": "DROP",  # Dropped migration 140 (WO dff23cb0): derived status projection over security/readiness events; readers now derive current status from the events directly
     "fts_gotchas": "KEEP",
     "fts_gotchas_config": "KEEP",
     "fts_gotchas_data": "KEEP",
@@ -156,7 +156,7 @@ CLASSIFICATION: dict[str, str] = {
     "shared_context_packets": "DROP",  # Dropped migration 131: writer record_shared_context_packet() exists but all callers use persist=False
     "skill_evaluation_runs": "DROP",  # Dropped migration 131: dead writer record_skill_evaluation(), test-only callers
     "sum_analytics_run": "DROP",
-    "sum_skill_summary": "KEEP",
+    "sum_skill_summary": "DROP",  # Dropped migration 140 (WO dff23cb0): derived rebuild_summaries() rollup over raw_skill_telemetry; get_skill_summaries() now computes the same aggregation live
     "task_attribution_records": "DROP",  # Dropped migration 131: dead writer record_task_attribution(), test-only callers
     "team_rollup_records": "DROP",
     "token_usage_records": "DROP",  # Dropped migration 137 (WO-DBA-DROP): all 113 live rows had

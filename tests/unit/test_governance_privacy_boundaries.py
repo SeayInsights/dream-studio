@@ -74,9 +74,10 @@ CANONICAL_AUTHORITY_TABLES = {
 SCANNER_EVIDENCE_TABLES = {
     "activity_log",
     # sec_sarif_findings / sec_cve_matches / sec_manual_reviews retired in migration 112 (WO-Y).
-    # Scanner evidence now lands on the security_events spine + findings_current_status.
+    # Scanner evidence lands on the security_events spine only — findings_current_status
+    # (the read-only projection over that spine) was dropped in migration 140
+    # (WO dff23cb0); it was never itself a scanner write target.
     "security_events",
-    "findings_current_status",
 }
 
 AUTHORITY_RESIDUE_TOKENS = {

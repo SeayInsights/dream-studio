@@ -69,22 +69,25 @@ def _require_db() -> Path:
 def _get_scan_findings(scan_id: str, db_path: Path) -> list[dict[str, Any]]:
     """Fetch all open findings for a scan from security_events spine.
 
-    findings table was retired in migration 112 (WO-Y). Reads from
-    findings_current_status (the spine read-model).
+    findings table was retired in migration 112 (WO-Y). findings_current_status
+    (the spine read-model) was dropped in migration 140 (WO dff23cb0) — reads
+    now derive current_status from security_events directly (see
+    core/findings/current_status.py).
     """
     from core.findings.mutations import _get_conn
+    from core.findings.current_status import FINDINGS_CURRENT_STATUS_SQL
 
     try:
         conn, owned = _get_conn(db_path)
         try:
             rows = conn.execute(
-                "SELECT fcs.finding_id, se.vuln_class AS rule_id,"
+                f"SELECT fcs.finding_id, se.vuln_class AS rule_id,"
                 "       fcs.file_path, fcs.line_number AS start_line,"
                 "       NULL AS end_line, fcs.severity, se.vuln_class AS category,"
                 "       se.title AS description, NULL AS recommendation,"
                 "       NULL AS finding_hash, NULL AS normalized_snippet,"
                 "       NULL AS code_excerpt, NULL AS enclosing_symbol"
-                " FROM findings_current_status fcs"
+                f" FROM ({FINDINGS_CURRENT_STATUS_SQL}) fcs"
                 " JOIN security_events se ON se.event_id = fcs.finding_id"
                 " JOIN security_events scan_root"
                 "   ON scan_root.event_id = ?"

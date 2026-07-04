@@ -15,7 +15,7 @@ from core.event_store.studio_db import (  # noqa: E402
     last_run,
     run_count,
     import_buffer,
-    rebuild_summaries,
+    get_skill_summaries,
     rolling_window_prune,
 )
 
@@ -39,7 +39,7 @@ def test_schema_creates_all_tables(tmp_path):
         "raw_workflow_nodes",
         "raw_skill_telemetry",
         # cor_skill_corrections: dropped migration 131
-        "sum_skill_summary",
+        # sum_skill_summary: dropped migration 140 (derived; see get_skill_summaries)
         "log_batch_imports",
     }
     assert expected_tables <= names, f"Missing tables: {expected_tables - names}"
@@ -129,10 +129,10 @@ def test_import_buffer_batch_logged(tmp_path):
     assert batch_rows[0]["row_count"] == 2
 
 
-# ── 7. rebuild_summaries self-heals corrupted data ────────────────────────────
+# ── 7. get_skill_summaries computes live from raw_skill_telemetry ─────────────
 
 
-def test_rebuild_summaries_self_heals(tmp_path):
+def test_get_skill_summaries_computes_live(tmp_path):
     db = tmp_path / "test.db"
     buf = tmp_path / "buf.jsonl"
     # Insert 5 rows for 'build' (all success=1) via import_buffer
@@ -149,32 +149,28 @@ def test_rebuild_summaries_self_heals(tmp_path):
     buf.write_text("\n".join(lines), encoding="utf-8")
     import_buffer(buf, db_path=db)
 
-    rebuild_summaries(db_path=db)
-
-    conn = _connect(db)
-    row = conn.execute(
-        "SELECT times_used, success_rate FROM sum_skill_summary WHERE skill_name='build'"
-    ).fetchone()
+    rows = get_skill_summaries(db_path=db)
+    row = next((r for r in rows if r["skill_name"] == "build"), None)
     assert row is not None, "Expected a summary row for 'build'"
     assert row["times_used"] == 5
     assert abs(row["success_rate"] - 1.0) < 1e-9
 
-    # Corrupt the summary
-    conn.execute("UPDATE sum_skill_summary SET times_used=999 WHERE skill_name='build'")
-    conn.commit()
-    conn.close()
+    # Importing more telemetry for the same skill changes the live computation
+    # on the very next call — there is no cached state that can go stale.
+    buf2 = tmp_path / "buf2.jsonl"
+    buf2.write_text(
+        json.dumps({"skill_name": "build", "success": 0, "invoked_at": "2026-01-02T00:00:00+00:00"})
+        + "\n",
+        encoding="utf-8",
+    )
+    import_buffer(buf2, db_path=db)
 
-    # Rebuild should self-heal
-    rebuild_summaries(db_path=db)
-
-    conn = _connect(db)
-    row2 = conn.execute(
-        "SELECT times_used FROM sum_skill_summary WHERE skill_name='build'"
-    ).fetchone()
-    conn.close()
+    rows2 = get_skill_summaries(db_path=db)
+    row2 = next((r for r in rows2 if r["skill_name"] == "build"), None)
+    assert row2 is not None
     assert (
-        row2["times_used"] == 5
-    ), f"Expected times_used=5 after self-heal, got {row2['times_used']}"
+        row2["times_used"] == 6
+    ), f"Expected times_used=6 after new import, got {row2['times_used']}"
 
 
 # ── 8. Graceful degradation on bad DB path ────────────────────────────────────

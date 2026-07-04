@@ -6,6 +6,7 @@ from typing import Dict, Any
 
 from fastapi import APIRouter, HTTPException, Query
 
+from core.findings.current_status import FINDINGS_CURRENT_STATUS_SQL, security_spine_present
 from core.production_readiness import production_readiness_dashboard_summary
 from projections.api.routes.sqlite_schema import object_exists, table_columns
 from projections.api.lib.project_helpers import (
@@ -92,18 +93,15 @@ async def list_projects(
             else "NULL"
         )
         # pi_bugs, pi_violations, pi_dependencies dropped in migration 084 — return 0 constants
-        security_columns = (
-            table_columns(conn, "findings_current_status")
-            if object_exists(conn, "findings_current_status")
-            else set()
-        )
+        # findings_current_status dropped migration 140 (WO dff23cb0) — derive
+        # from security_events at read time (core/findings/current_status.py).
         security_open_count_expr = (
             _optional_count_expr(
-                "findings_current_status",
+                f"({FINDINGS_CURRENT_STATUS_SQL})",
                 "project_id",
                 condition="current_status NOT IN ('resolved', 'mitigated', 'false_positive', 'closed')",
             ).replace("project_id = p.project_id", _security_alias_expr("p.project_id"))
-            if "project_id" in security_columns
+            if security_spine_present(conn)
             else "0"
         )
         attention_open_count_expr = (
@@ -240,11 +238,9 @@ async def list_projects(
                 "reason": "Default All Projects shows only current legitimate project authority rows; temp, pytest, demo, placeholder, inactive, adapter-worktree, missing-path, and retained legacy rows are excluded from normal operator views.",
                 "source_tables": ["business_projects"]
                 + (["prd_documents"] if object_exists(conn, "prd_documents") else [])
-                + (
-                    ["findings_current_status"]
-                    if object_exists(conn, "findings_current_status")
-                    else []
-                )
+                # findings_current_status dropped migration 140 (WO dff23cb0) —
+                # derived from security_events at read time, not a schema object.
+                + (["security_events"] if object_exists(conn, "security_events") else [])
                 + (
                     ["dashboard_attention_items"]
                     if object_exists(conn, "dashboard_attention_items")

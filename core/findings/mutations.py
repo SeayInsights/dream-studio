@@ -1,8 +1,10 @@
 """Emit-only creators for the findings event spine (AD-6 / WO-Y).
 
 record_finding() and set_finding_status() write to the security_events spine
-only. They never write to findings_current_status — that is FindingsProjection's
-job (AD-6: no direct row write to read-model tables).
+only (AD-6: no direct row write to read-model tables). findings_current_status
+(the projection that used to fold this spine into a "current status" table)
+was dropped in migration 140 (WO dff23cb0) — see core/findings/current_status.py
+for the read-time derivation that replaced it.
 
 Both functions also emit canonical events for cross-system observability (fail-open).
 """
@@ -57,8 +59,9 @@ def record_finding(
 ) -> str:
     """Insert a finding.recorded event into security_events.
 
-    Returns the generated finding_id (UUID). FindingsProjection materialises
-    this into findings_current_status on the next fold_spine() call.
+    Returns the generated finding_id (UUID). Current status is derived at read
+    time from security_events (see core/findings/current_status.py) — there is
+    no separate projection to update.
 
     Also emits a finding.recorded canonical event (fail-open, for observability).
     """
@@ -150,7 +153,8 @@ def set_finding_status(
 ) -> None:
     """Insert a finding.status_changed event into security_events.
 
-    FindingsProjection will update findings_current_status on next fold_spine().
+    Current status is derived at read time from security_events (see
+    core/findings/current_status.py) — the next read picks this up immediately.
 
     new_status: open | mitigated | false_positive | accepted | resolved
     """

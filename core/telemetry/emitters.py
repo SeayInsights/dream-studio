@@ -374,8 +374,9 @@ def emit_security_finding(
 
     def _write(conn: sqlite3.Connection) -> TelemetryEmitResult:
         existing = conn.execute(
-            # findings retired migration 112 (WO-Y); dedup via security_events spine directly
-            # (findings_current_status is a projection that lags until fold_spine() runs).
+            # findings retired migration 112 (WO-Y); dedup via security_events spine directly.
+            # findings_current_status (dropped migration 140) is now a read-time
+            # derivation over this same spine, never a separate lagging projection.
             "SELECT event_id FROM security_events WHERE event_id = ? AND event_kind = 'finding.recorded'",
             (finding_id,),
         ).fetchone()
@@ -459,7 +460,9 @@ def emit_security_finding(
         # to live here was removed — pure duplication of the execution_events row
         # above (0 production rows). Attention-worthy findings (critical/high
         # severity, or open/unresolved status) are still fully queryable via the
-        # security_events / findings_current_status spine written above.
+        # security_events spine written above (findings_current_status dropped
+        # migration 140 — current status is derived from security_events at
+        # read time, see core/findings/current_status.py).
         return TelemetryEmitResult(True, event_id=event_id, record_id=finding_id)
 
     return _emit(

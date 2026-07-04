@@ -1,11 +1,18 @@
-"""WO-Y: findings event-spine correctness (security_events + findings_current_status).
+"""WO-Y: findings event-spine correctness (security_events spine).
+
+findings_current_status (the materialized projection FindingsProjection used
+to fold security_events into) was dropped in migration 140 (WO dff23cb0) —
+pure derived state duplicating its source. current_status is now derived at
+read time via core.findings.current_status.FINDINGS_CURRENT_STATUS_SQL.
 
 Covers:
 - record_finding() writes to security_events spine
 - set_finding_status() appends a status-change event
-- FindingsProjection.fold_spine() materialises findings_current_status correctly
-- fold_spine() is idempotent (no duplicate rows on repeated calls)
-- fold_spine() applies status-change events to update current_status
+- FINDINGS_CURRENT_STATUS_SQL derives an open finding correctly
+- FINDINGS_CURRENT_STATUS_SQL is idempotent/stable across repeated queries
+  (no persisted state to duplicate — every call recomputes from security_events)
+- FINDINGS_CURRENT_STATUS_SQL applies status-change events to current_status
+- FINDINGS_CURRENT_STATUS_SQL degrades gracefully when security_events is missing
 - Migrations 111 / 112 DDL assertions
 """
 
@@ -185,12 +192,19 @@ def test_set_finding_status_multiple_transitions(spine_db):
     assert rows[0] == 2
 
 
-# ── FindingsProjection.fold_spine ─────────────────────────────────────────────
+# ── FINDINGS_CURRENT_STATUS_SQL (read-time derivation, migration 140) ─────────
 
 
-def test_fold_spine_materialises_open_finding(mem_conn):
-    from core.projections.findings_projection import FindingsProjection
+def _current_status_row(conn: sqlite3.Connection, finding_id: str) -> sqlite3.Row | None:
+    from core.findings.current_status import FINDINGS_CURRENT_STATUS_SQL
 
+    return conn.execute(
+        f"SELECT * FROM ({FINDINGS_CURRENT_STATUS_SQL}) WHERE finding_id = ?",
+        (finding_id,),
+    ).fetchone()
+
+
+def test_derivation_computes_open_finding(mem_conn):
     eid = str(uuid.uuid4())
     mem_conn.execute(
         """INSERT INTO security_events
@@ -201,21 +215,15 @@ def test_fold_spine_materialises_open_finding(mem_conn):
     )
     mem_conn.commit()
 
-    n = FindingsProjection().fold_spine(mem_conn)
+    row = _current_status_row(mem_conn, eid)
 
-    assert n == 1
-    row = mem_conn.execute(
-        "SELECT * FROM findings_current_status WHERE finding_id = ?", (eid,)
-    ).fetchone()
     assert row is not None
     assert row["current_status"] == "open"
     assert row["severity"] == "critical"
     assert row["project_id"] == "proj-fold-1"
 
 
-def test_fold_spine_is_idempotent(mem_conn):
-    from core.projections.findings_projection import FindingsProjection
-
+def test_derivation_is_stable_across_repeated_queries(mem_conn):
     eid = str(uuid.uuid4())
     mem_conn.execute(
         """INSERT INTO security_events
@@ -225,19 +233,13 @@ def test_fold_spine_is_idempotent(mem_conn):
     )
     mem_conn.commit()
 
-    proj = FindingsProjection()
-    proj.fold_spine(mem_conn)
-    proj.fold_spine(mem_conn)
+    first = _current_status_row(mem_conn, eid)
+    second = _current_status_row(mem_conn, eid)
 
-    count = mem_conn.execute(
-        "SELECT COUNT(*) FROM findings_current_status WHERE finding_id = ?", (eid,)
-    ).fetchone()[0]
-    assert count == 1
+    assert dict(first) == dict(second)
 
 
-def test_fold_spine_applies_status_change_to_read_model(mem_conn):
-    from core.projections.findings_projection import FindingsProjection
-
+def test_derivation_applies_status_change(mem_conn):
     fid = str(uuid.uuid4())
     sid = str(uuid.uuid4())
     now = _now()
@@ -256,33 +258,27 @@ def test_fold_spine_applies_status_change_to_read_model(mem_conn):
     )
     mem_conn.commit()
 
-    FindingsProjection().fold_spine(mem_conn)
-
-    row = mem_conn.execute(
-        "SELECT current_status, last_status_event_id"
-        " FROM findings_current_status WHERE finding_id = ?",
-        (fid,),
-    ).fetchone()
+    row = _current_status_row(mem_conn, fid)
     assert row["current_status"] == "resolved"
     assert row["last_status_event_id"] == sid
 
 
-def test_fold_spine_skips_gracefully_when_table_missing():
-    from core.projections.findings_projection import FindingsProjection
+def test_derivation_returns_nothing_when_security_events_missing():
+    from core.findings.current_status import FINDINGS_CURRENT_STATUS_SQL
 
     empty_conn = sqlite3.connect(":memory:")
-    result = FindingsProjection().fold_spine(empty_conn)
-    empty_conn.close()
-
-    assert result == 0
-
-
-# ── end-to-end: record + fold + status ────────────────────────────────────────
+    try:
+        with pytest.raises(sqlite3.OperationalError):
+            empty_conn.execute(f"SELECT * FROM ({FINDINGS_CURRENT_STATUS_SQL})").fetchall()
+    finally:
+        empty_conn.close()
 
 
-def test_end_to_end_record_fold_status(spine_db):
+# ── end-to-end: record + derive + status ──────────────────────────────────────
+
+
+def test_end_to_end_record_derive_status(spine_db):
     from core.findings.mutations import record_finding, set_finding_status
-    from core.projections.findings_projection import FindingsProjection
 
     fid = record_finding(
         project_id="proj-e2e",
@@ -294,13 +290,7 @@ def test_end_to_end_record_fold_status(spine_db):
 
     conn = sqlite3.connect(str(spine_db))
     conn.row_factory = sqlite3.Row
-
-    FindingsProjection().fold_spine(conn)
-    conn.commit()
-
-    row = conn.execute(
-        "SELECT current_status FROM findings_current_status WHERE finding_id = ?", (fid,)
-    ).fetchone()
+    row = _current_status_row(conn, fid)
     assert row["current_status"] == "open"
     conn.close()
 
@@ -308,12 +298,7 @@ def test_end_to_end_record_fold_status(spine_db):
 
     conn = sqlite3.connect(str(spine_db))
     conn.row_factory = sqlite3.Row
-    FindingsProjection().fold_spine(conn)
-    conn.commit()
-
-    row = conn.execute(
-        "SELECT current_status FROM findings_current_status WHERE finding_id = ?", (fid,)
-    ).fetchone()
+    row = _current_status_row(conn, fid)
     assert row["current_status"] == "mitigated"
     conn.close()
 

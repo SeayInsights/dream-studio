@@ -294,7 +294,6 @@ def _import_and_rotate_buffer() -> int:
     try:
         from core.event_store.studio_db import (
             import_buffer,
-            rebuild_summaries,
             rolling_window_prune,
         )
 
@@ -304,7 +303,7 @@ def _import_and_rotate_buffer() -> int:
         n = import_buffer(buf)
         buf.replace(buf.with_suffix(".jsonl.bak"))
         buf.write_bytes(b"")
-        rebuild_summaries()
+        # get_skill_summaries computes live from raw_skill_telemetry — no rebuild step
         rolling_window_prune()
         return n
     except Exception:

@@ -1324,7 +1324,8 @@ def _active_adapter_execution_validation(staleness_report: Mapping[str, Any]) ->
 
 def _source_tables() -> list[str]:
     tables = set(REQUIRED_SHARED_INTELLIGENCE_TABLES)
-    tables.add("findings_current_status")
+    # findings_current_status dropped migration 140 (WO dff23cb0) — derived
+    # from security_events at read time, not a schema object.
     tables.add("security_events")
     tables.update(
         {

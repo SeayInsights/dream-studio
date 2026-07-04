@@ -3,7 +3,7 @@
 import sqlite3
 from typing import Any
 
-from projections.api.routes.sqlite_schema import object_exists, table_columns
+from core.findings.current_status import FINDINGS_CURRENT_STATUS_SQL, security_spine_present
 
 
 def _security_alias_expr(project_ref: str) -> str:
@@ -27,30 +27,24 @@ def _security_assignment_summary(
     conn: sqlite3.Connection,
     visible_projects: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    if not object_exists(conn, "findings_current_status"):
+    # findings_current_status dropped migration 140 (WO dff23cb0) — current
+    # status is derived from security_events at read time (see
+    # core/findings/current_status.py); security_events is the real presence
+    # gate now (it always carried project_id, so the old "no project_id
+    # column in this schema snapshot" branch can no longer occur).
+    if not security_spine_present(conn):
         return {
             "classification": "unavailable",
             "unassigned_legacy_finding_count": 0,
             "unassigned_project_ids": [],
             "source_tables": [],
         }
-    if "project_id" not in table_columns(conn, "findings_current_status"):
-        return {
-            "classification": "unavailable",
-            "reason": "findings_current_status has no project_id column in this schema snapshot.",
-            "mapped_project_alias_count": 0,
-            "unassigned_legacy_finding_count": 0,
-            "unassigned_project_ids": [],
-            "source_tables": ["findings_current_status"],
-            "derived_view": True,
-            "primary_authority": False,
-        }
     aliases: set[str] = set()
     for project in visible_projects:
         aliases.update(_security_aliases(str(project.get("project_id") or "")))
-    rows = conn.execute("""
+    rows = conn.execute(f"""
         SELECT COALESCE(project_id, '<null>') AS project_id, COUNT(*) AS count
-        FROM findings_current_status
+        FROM ({FINDINGS_CURRENT_STATUS_SQL})
         GROUP BY COALESCE(project_id, '<null>')
         ORDER BY count DESC
         """).fetchall()
@@ -65,7 +59,7 @@ def _security_assignment_summary(
         "unassigned_legacy_finding_count": sum(item["count"] for item in unassigned),
         "unassigned_project_ids": unassigned,
         "unassigned_policy": "manual_review_required_or_retention_only; not shown in normal project cards until mapped",
-        "source_tables": ["findings_current_status"],
+        "source_tables": ["security_events"],
         "derived_view": True,
         "primary_authority": False,
     }

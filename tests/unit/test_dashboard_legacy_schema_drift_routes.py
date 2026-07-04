@@ -159,7 +159,7 @@ def test_legacy_dashboard_route_empty_and_fallback_shapes_are_dashboard_safe(
         assert {project["project_id"] for project in projects["projects"]} == {"dream-studio"}
         assert (
             security["findings"] == []
-        )  # findings_current_status absent in drift schema → empty by design
+        )  # security_events absent in drift schema → empty by design (findings_current_status dropped migration 140)
         assert (
             hooks["summary"]["total_executions"] == 0
         )  # hook_executions absent in drift schema → 0

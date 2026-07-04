@@ -210,13 +210,9 @@ def ingest_analytics_payload(
 
     if execute:
         conn.commit()
-        if written.get("security_events"):
-            try:
-                from core.projections.findings_projection import FindingsProjection
-
-                FindingsProjection().fold_spine(conn)
-            except Exception:  # noqa: BLE001
-                pass
+        # findings_current_status dropped migration 140 (WO dff23cb0) — status
+        # readers derive current_status from security_events at read time
+        # (core/findings/current_status.py); no projection to fold here.
 
     return {
         "schema": ANALYTICS_INGESTION_SCHEMA,
