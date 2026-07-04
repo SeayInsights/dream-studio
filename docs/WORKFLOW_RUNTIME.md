@@ -242,3 +242,5 @@ These are **not abstracted** — they're passed directly to the orchestrating ag
 <!-- Last reviewed 2026-07-04 — WO-CI-457-FOLLOWUP (667d04e9): pin-tests gate gains tests/unit/test_module_registry_contract.py + tests/unit/test_contract_atlas.py (third post-merge red from the exact-set/contract class — module registry contracts now block at push). No engine change. -->
 
 <!-- Last reviewed 2026-07-04 — WO-CI-460-FOLLOWUP (d033e6f8): pin-tests gate gains tests/unit/test_state_contract_boundaries.py (fourth post-merge red from grep-based contract tests outside pr-smoke; boundary greps now block at push). Comment-substring parser weakness tracked in WO f1037037. No engine change. -->
+
+<!-- Last reviewed 2026-07-04 — WO-CI-462-FOLLOWUP (dce86173): pre-push gains a blocking unit-collect gate (pytest tests/unit --collect-only) — the #462 squash red was 7 phase-19x tests reading deleted migration files, an import-time error invisible to evals/pin-tests/pr-smoke. The 7 files now inline the deleted migrations 095-098 verbatim (recovered from git history) to preserve their hand-built scaffolds. No engine change. -->

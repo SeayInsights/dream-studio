@@ -78,6 +78,19 @@ gates:
       test_duckdb_business_schema.py, packs.yaml handler lists, regenerated
       plugin.json, a schema-debt doc entry for new migrations).
 
+  - id: unit-collect
+    tier: blocking
+    description: >
+      Full tests/unit collection smoke (--collect-only). Catches import-time
+      errors the pr-smoke subset never sees — e.g. a test that read a migration
+      file the squash deleted (the #462 post-merge red: 7 phase-19x files errored
+      at collection). Cheap (seconds); no test bodies run.
+    command: [py, -m, pytest, tests/unit, --collect-only, -q]
+    fail_hint: >
+      A test file errors at import/collection — usually a path to a deleted file
+      or a renamed symbol. Fix the import; do not skip. This mirrors what the
+      full-CI unit run does before it can even start.
+
   - id: atlas-leak
     tier: blocking
     description: >
