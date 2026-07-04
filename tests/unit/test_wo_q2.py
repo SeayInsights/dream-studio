@@ -227,9 +227,16 @@ def sdlc_env(tmp_path, monkeypatch):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
     _reset_db_runtime()
 
+    # WO-SQUASH-TESTS: apply the real lean baseline (migration 142) instead of a
+    # hand-built DDL mirror. The mirror had drifted (missing business_work_orders.
+    # originating_symptom, added migration 125), so work_order_projection could not
+    # materialise rows. run_migrations gives the complete current schema and cannot drift.
+    from core.config.sqlite_bootstrap import run_migrations
+
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
-    conn.executescript("PRAGMA journal_mode = WAL;\n" + _ALL_DDL)
+    conn.execute("PRAGMA journal_mode = WAL;")
+    run_migrations(conn, apply_unreleased=True)
     conn.commit()
     conn.close()
 

@@ -22,6 +22,9 @@ from core.config.sqlite_bootstrap import run_migrations
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
+_MIGRATION_032_SQL = "-- Migration 032: Semantic memory convergence â€” Phase 3B schema extension\n--\n-- Adds columns to memory_entries for provenance tracking, lifecycle state,\n-- and idempotent ingestion from multiple source systems.\n-- The \"source\" column continues to hold memory_type (lesson|gotcha|correction|etc).\n\nALTER TABLE memory_entries ADD COLUMN source_type TEXT DEFAULT 'unknown';\nALTER TABLE memory_entries ADD COLUMN source_id TEXT;\nALTER TABLE memory_entries ADD COLUMN lifecycle_state TEXT DEFAULT 'ACTIVE';\nALTER TABLE memory_entries ADD COLUMN confidence REAL;\nALTER TABLE memory_entries ADD COLUMN provenance JSON;\nALTER TABLE memory_entries ADD COLUMN lineage JSON;\nALTER TABLE memory_entries ADD COLUMN relationships JSON;\nALTER TABLE memory_entries ADD COLUMN updated_at TEXT;\n\n-- Idempotent ingestion: (source_type, source_id) uniquely identifies a memory\nCREATE UNIQUE INDEX IF NOT EXISTS idx_memory_provenance\nON memory_entries(source_type, source_id) WHERE source_id IS NOT NULL;\n\n-- Lifecycle filtering for retrieval\nCREATE INDEX IF NOT EXISTS idx_memory_lifecycle\nON memory_entries(lifecycle_state);\n"
+
+
 def _source_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
@@ -40,7 +43,6 @@ def _fresh_conn_skipping_011() -> sqlite3.Connection:
     migration, which is the root cause of the M2 idx_memory_lifecycle casualty.
     """
     from core.config.sqlite_bootstrap import migration_files, split_statements, _migration_version
-    import os
 
     conn = sqlite3.connect(":memory:")
     conn.execute(
@@ -138,9 +140,10 @@ def test_install_safety_alter_table_still_swallowed_on_absent_memory_entries():
     """
     from core.config.sqlite_bootstrap import split_statements
 
-    mig032 = (_source_root() / "core/event_store/migrations/032_semantic_memory.sql").read_text(
-        encoding="utf-8"
-    )
+    # WO-SQUASH-TESTS: migration 032 deleted (folded into 142); its text is
+    # inlined verbatim (from git history) so this test can still exercise the
+    # live split_statements + swallow-narrowing logic against real 032 statements.
+    mig032 = _MIGRATION_032_SQL
 
     swallowed_types = []
     propagated_types = []
