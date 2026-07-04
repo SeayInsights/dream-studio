@@ -1,10 +1,31 @@
 """WO-DBA-EVAL-DECISION gate tests.
 
-Covers migration 134 (business_work_orders verify columns), migration 135
-(eval/decision history backfill into business_canonical_events), migration 136
-(drop the now-legacy ds_eval_runs/hook_eval_runs/decision_log/decision_event_link
-tables), the live event emission paths (verify verdicts, decisions, eval runs),
-and the event-type routing registry entries.
+Covers migration 134 (business_work_orders verify columns) plus the migration
+136/139/140/141 drop-family fresh-chain assertions, the live event emission
+paths (verify verdicts, decisions, eval runs), and the event-type routing
+registry entries.
+
+WO-SQUASH-BASELINE (5fd84891, 2026-07-04) collapsed migrations 001-141 into
+142_lean_baseline.sql; the individual migration files no longer exist. Two
+classes were removed in that change set because their subject was the
+mid-chain mechanics of a since-deleted migration file, not a fresh-chain
+schema invariant:
+  - TestMigration135Backfill executed 135_backfill_eval_decision_events.sql
+    directly (file deleted) and asserted on synthetic backfill events that
+    only exist when the chain replays that specific historical seed-then-
+    backfill sequence -- a fresh baseline install has no legacy rows to
+    backfill in the first place.
+  - TestMigration136DropTables seeded pre-136 legacy tables at a
+    target_version=134 checkpoint that no longer exists in the squashed
+    chain (the baseline is the only migration; there is no way to "stop at
+    134"), then asserted the same backfill-derived events. Same removal
+    rationale as 135.
+The remaining classes' fresh-chain assertions (tables absent, no dangling FK,
+no dangling view) hold unchanged against the baseline and were kept; their
+sub-tests that checkpointed at a specific pre-142 version (target_version=138/
+139/140) were removed for the same reason -- those versions no longer exist.
+See tests/unit/test_migration_142_baseline.py for the WO-SQUASH-BASELINE
+replacement data-preservation proof.
 """
 
 from __future__ import annotations
@@ -17,22 +38,9 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MIGRATION_135 = (
-    REPO_ROOT / "core" / "event_store" / "migrations" / "135_backfill_eval_decision_events.sql"
-)
 
 WO_ID = "abcd1234-0000-0000-0000-000000000001"
 PROJECT_ID = "11111111-0000-0000-0000-000000000001"
-
-# Tables dropped by migration 136 (WO-DBA-EVAL-DECISION T4) — history lives on
-# in business_canonical_events (work_order.verified / eval.run.completed /
-# decision.recorded) via the migration 135 backfill + live spool emission.
-DROPPED_EVAL_DECISION_TABLES = (
-    "ds_eval_runs",
-    "hook_eval_runs",
-    "decision_log",
-    "decision_event_link",
-)
 
 
 @pytest.fixture
@@ -57,53 +65,6 @@ def _seed_work_order(conn) -> None:
     conn.commit()
 
 
-def _seed_legacy_eval_decision_rows(conn) -> None:
-    """Seed rows into the pre-migration-136 ds_eval_runs/hook_eval_runs/decision_log
-    (+decision_event_link) tables. Caller must run this against a connection
-    migrated to <= 134 — before migration 136 drops these tables."""
-    _seed_work_order(conn)
-    conn.execute(
-        "INSERT INTO ds_eval_runs"
-        " (run_id, eval_id, started_at, completed_at, event_score, behavior_score,"
-        "  total_score, passed, failure_reasons, run_mode)"
-        " VALUES ('run-verify-1', ?, '2026-01-02T00:00:00Z', '2026-01-02T00:01:00Z',"
-        "  0.9, 0.8, 0.85, 1, '[]', 'fixture')",
-        (f"work_order_verify:{WO_ID[:8]}",),
-    )
-    conn.execute(
-        "INSERT INTO ds_eval_runs"
-        " (run_id, eval_id, started_at, completed_at, total_score, passed,"
-        "  failure_reasons, run_mode)"
-        " VALUES ('run-live-1', 'skill:ds-core', '2026-01-03T00:00:00Z',"
-        "  '2026-01-03T00:01:00Z', 0.7, 1, '[]', 'live')",
-    )
-    conn.execute(
-        "INSERT INTO ds_eval_runs"
-        " (run_id, eval_id, started_at, completed_at, passed, failure_reasons, run_mode)"
-        " VALUES ('run-outcome-1', ?, '2026-01-04T00:00:00Z', '2026-01-04T00:01:00Z',"
-        "  0, '[\"symptom persists\"]', 'outcome')",
-        (f"outcome:{WO_ID[:8]}",),
-    )
-    conn.execute(
-        "INSERT INTO hook_eval_runs"
-        " (run_id, hook_id, eval_type, passed, score, failure_reasons, created_at)"
-        " VALUES ('run-hook-1', 'on-edit-dispatch', 'guardrail', 1, 1.0, '[]',"
-        "  '2026-01-05T00:00:00Z')",
-    )
-    conn.execute(
-        "INSERT INTO decision_log"
-        " (decision_id, decision_type, context, outcome, reasoning, confidence,"
-        "  policy_applied, source_subsystem, timestamp)"
-        " VALUES ('dec-1', 'ttl.assignment', '{}', '\"7d\"', '{}', 0.9,"
-        "  'ttl-policy-v1', 'research', '2026-01-06T00:00:00Z')",
-    )
-    conn.execute(
-        "INSERT INTO decision_event_link (decision_id, event_id, relation_type)"
-        " VALUES ('dec-1', 'evt-999', 'triggered')",
-    )
-    conn.commit()
-
-
 def _spool_events(spool_root: Path) -> list[dict]:
     return [json.loads(p.read_text(encoding="utf-8")) for p in sorted(spool_root.rglob("*.json"))]
 
@@ -115,111 +76,27 @@ class TestMigration134VerifyColumns:
         assert {"verify_status", "verify_score", "verified_at"} <= cols
 
 
-class TestMigration135Backfill:
-    @pytest.fixture
-    def pre136_db(self, tmp_path):
-        """DB migrated through 134 only — the legacy ds_eval_runs/hook_eval_runs/
-        decision_log/decision_event_link tables still exist here, pre-dating
-        migration 135's backfill and migration 136's drop (WO-DBA-EVAL-DECISION T4)."""
-        from core.config.sqlite_bootstrap import run_migrations
-
-        db_path = tmp_path / "studio.db"
-        conn = sqlite3.connect(db_path)
-        run_migrations(conn, target_version=134, apply_unreleased=True)
-        conn.commit()
-        return conn, db_path
-
-    def _apply_backfill(self, conn) -> None:
-        conn.executescript(MIGRATION_135.read_text(encoding="utf-8"))
-        conn.commit()
-
-    def test_backfill_produces_expected_events(self, pre136_db):
-        conn, _ = pre136_db
-        _seed_legacy_eval_decision_rows(conn)
-        self._apply_backfill(conn)
-
-        row = conn.execute(
-            "SELECT work_order_id, project_id, payload FROM business_canonical_events"
-            " WHERE event_type = 'work_order.verified'"
-            " AND event_id = 'backfill-135-evalrun-run-verify-1'"
-        ).fetchone()
-        assert row is not None
-        assert row[0] == WO_ID  # short-id join resolved the full work_order_id
-        assert row[1] == PROJECT_ID
-        payload = json.loads(row[2])
-        assert payload["composite_score"] == 0.85 and payload["passed"] == 1
-
-        eval_ids = {
-            json.loads(r[0])["eval_id"]
-            for r in conn.execute(
-                "SELECT payload FROM business_canonical_events"
-                " WHERE event_type = 'eval.run.completed'"
-            )
-        }
-        assert {"skill:ds-core", f"outcome:{WO_ID[:8]}", "hook:on-edit-dispatch"} <= eval_ids
-
-        outcome_row = conn.execute(
-            "SELECT work_order_id FROM business_canonical_events"
-            " WHERE event_id = 'backfill-135-evalrun-run-outcome-1'"
-        ).fetchone()
-        assert outcome_row[0] == WO_ID
-
-        dec = conn.execute(
-            "SELECT payload FROM business_canonical_events"
-            " WHERE event_type = 'decision.recorded'"
-            " AND event_id = 'backfill-135-decision-dec-1'"
-        ).fetchone()
-        payload = json.loads(dec[0])
-        assert payload["policy_applied"] == "ttl-policy-v1"
-        assert payload["triggered_event_id"] == "evt-999"
-
-    def test_backfill_is_idempotent(self, pre136_db):
-        conn, _ = pre136_db
-        _seed_legacy_eval_decision_rows(conn)
-        self._apply_backfill(conn)
-        before = conn.execute("SELECT COUNT(*) FROM business_canonical_events").fetchone()[0]
-        self._apply_backfill(conn)
-        after = conn.execute("SELECT COUNT(*) FROM business_canonical_events").fetchone()[0]
-        assert before == after
-
-
 class TestMigration136DropTables:
-    def test_tables_dropped_and_backfilled_history_survives(self, tmp_path):
-        """After the full chain (through 136), the four legacy tables are gone but
-        the migration-135 backfilled events they seeded remain in
-        business_canonical_events (WO-DBA-EVAL-DECISION T4)."""
-        from core.config.sqlite_bootstrap import run_migrations
+    """WO-DBA-EVAL-DECISION T4: ds_eval_runs, hook_eval_runs, decision_log, and
+    decision_event_link are gone from the fresh baseline schema; their history
+    lives on in business_canonical_events (work_order.verified /
+    eval.run.completed / decision.recorded) via live spool emission."""
 
-        db_path = tmp_path / "studio.db"
-        conn = sqlite3.connect(db_path)
-        # Stop at 134 so the legacy tables exist to seed, before 135's backfill
-        # and 136's drop run.
-        run_migrations(conn, target_version=134, apply_unreleased=True)
-        conn.commit()
-        _seed_legacy_eval_decision_rows(conn)
+    DROPPED_EVAL_DECISION_TABLES = (
+        "ds_eval_runs",
+        "hook_eval_runs",
+        "decision_log",
+        "decision_event_link",
+    )
 
-        # Continue the chain to the latest migration: 135 backfills the seeded
-        # rows into business_canonical_events, then 136 drops the source tables.
-        run_migrations(conn, apply_unreleased=True)
-        conn.commit()
-
-        for table in DROPPED_EVAL_DECISION_TABLES:
+    def test_tables_absent_after_full_chain(self, migrated_db):
+        conn, _db_path = migrated_db
+        for table in self.DROPPED_EVAL_DECISION_TABLES:
             row = conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
                 (table,),
             ).fetchone()
-            assert row is None, f"{table} should be dropped by migration 136"
-
-        counts = dict(
-            conn.execute(
-                "SELECT event_type, COUNT(*) FROM business_canonical_events"
-                " WHERE event_id LIKE 'backfill-135-%'"
-                " GROUP BY event_type"
-            ).fetchall()
-        )
-        assert counts.get("work_order.verified", 0) >= 1
-        assert counts.get("eval.run.completed", 0) >= 1
-        assert counts.get("decision.recorded", 0) >= 1
+            assert row is None, f"{table} should not exist in the fresh baseline schema"
 
 
 class TestMigration139DropTables:
@@ -245,18 +122,12 @@ class TestMigration139DropTables:
             ).fetchone()
             assert row is None, f"{table} should be dropped by migration 139"
 
-    def test_no_foreign_key_referenced_the_dropped_tables(self, tmp_path):
-        """Migration 139 drops the three tables outright (no table-reconstruction
-        rebuild) because nothing else has a FOREIGN KEY into them — verify that
-        invariant holds against the migration-138 schema (immediately before 139
-        runs), matching the migration header's evidence claim."""
-        from core.config.sqlite_bootstrap import run_migrations
-
-        db_path = tmp_path / "studio.db"
-        conn = sqlite3.connect(db_path)
-        run_migrations(conn, target_version=138, apply_unreleased=True)
-        conn.commit()
-
+    def test_no_foreign_key_references_the_dropped_tables_in_fresh_schema(self, migrated_db):
+        """No table in the fresh baseline schema has a FOREIGN KEY into any of
+        the three dropped tables (WO-SQUASH-BASELINE narrowed this from a
+        target_version=138 pre-drop checkpoint, which no longer exists post-
+        squash, to a fresh-schema absence check — equivalent end state)."""
+        conn, _db_path = migrated_db
         tables = [
             row[0]
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
@@ -301,18 +172,12 @@ class TestMigration140DropDerivedState:
             ).fetchone()
             assert row is None, f"{table} should be dropped by migration 140"
 
-    def test_no_foreign_key_referenced_the_dropped_tables(self, tmp_path):
-        """Migration 140 drops both tables outright (no table-reconstruction
-        rebuild) because nothing else has a FOREIGN KEY into them — verify
-        that invariant holds against the migration-139 schema (immediately
-        before 140 runs), matching the migration header's evidence claim."""
-        from core.config.sqlite_bootstrap import run_migrations
-
-        db_path = tmp_path / "studio.db"
-        conn = sqlite3.connect(db_path)
-        run_migrations(conn, target_version=139, apply_unreleased=True)
-        conn.commit()
-
+    def test_no_foreign_key_references_the_dropped_tables_in_fresh_schema(self, migrated_db):
+        """No table in the fresh baseline schema has a FOREIGN KEY into either
+        dropped table (WO-SQUASH-BASELINE narrowed this from a
+        target_version=139 pre-drop checkpoint, which no longer exists post-
+        squash, to a fresh-schema absence check — equivalent end state)."""
+        conn, _db_path = migrated_db
         tables = [
             row[0]
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
@@ -386,20 +251,16 @@ class TestMigration141DropWorkflowRawTables:
             ).fetchone()
             assert row is None, f"{table} should be dropped by migration 141"
 
-    def test_no_external_foreign_key_referenced_the_dropped_tables(self, tmp_path):
-        """Migration 141 drops both tables outright (no table-reconstruction
-        rebuild) because no OTHER table has a FOREIGN KEY into them — verify
-        that invariant holds against the migration-140 schema (immediately
-        before 141 runs), matching the migration header's evidence claim.
+    def test_no_external_foreign_key_references_the_dropped_tables_in_fresh_schema(
+        self, migrated_db
+    ):
+        """No OTHER table in the fresh baseline schema has a FOREIGN KEY into
+        either dropped table (WO-SQUASH-BASELINE narrowed this from a
+        target_version=140 pre-drop checkpoint, which no longer exists post-
+        squash, to a fresh-schema absence check — equivalent end state).
         raw_workflow_nodes -> raw_workflow_runs is expected (both tables are
-        dropped together)."""
-        from core.config.sqlite_bootstrap import run_migrations
-
-        db_path = tmp_path / "studio.db"
-        conn = sqlite3.connect(db_path)
-        run_migrations(conn, target_version=140, apply_unreleased=True)
-        conn.commit()
-
+        dropped together, so neither exists in the fresh schema either)."""
+        conn, _db_path = migrated_db
         tables = [
             row[0]
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()

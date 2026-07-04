@@ -70,14 +70,19 @@ def test_no_gaps_in_migration_numbering():
             assert f"{gap:03d}" in readme_text, f"Gap {gap:03d} not documented in migrations README"
 
 
-def test_memory_entries_exists_after_011():
-    """Migration 011 must create memory_entries table (required by 032)."""
+def test_memory_entries_exists_after_baseline():
+    """memory_entries must exist once the baseline applies (WO-SQUASH-BASELINE,
+    5fd84891, 2026-07-04). Migrations 001-141 (including 011, which originally
+    created memory_entries, and 032, which required it) were collapsed into
+    142_lean_baseline.sql; the discrete target_version=11 checkpoint this test
+    used to assert against no longer exists in the squashed chain, so the
+    invariant is now checked against the full-chain result instead."""
     conn = _fresh_conn()
     try:
-        run_migrations(conn, target_version=11)
+        run_migrations(conn)
         cursor = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='memory_entries'"
         )
-        assert cursor.fetchone() is not None, "memory_entries table missing after migration 011"
+        assert cursor.fetchone() is not None, "memory_entries table missing after baseline apply"
     finally:
         conn.close()

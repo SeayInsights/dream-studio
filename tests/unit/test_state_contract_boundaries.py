@@ -196,10 +196,14 @@ def test_telemetry_modules_do_not_mutate_authoritative_state_tables_directly():
 
 
 def test_memory_retrieval_remains_rebuildable_projection_of_memory_entries():
+    """WO-SQUASH-BASELINE (5fd84891, 2026-07-04): migration 033 (the original
+    memory_fts CREATE) was collapsed into 142_lean_baseline.sql; the memory_fts
+    PROJECTION doc-comment now lives directly above its CREATE VIRTUAL TABLE
+    statement in the baseline file."""
     store_source = _read(REPO_ROOT / "core" / "memory" / "store.py")
     retrieval_source = _read(REPO_ROOT / "core" / "memory" / "retrieval.py")
     migration_source = _read(
-        REPO_ROOT / "core" / "event_store" / "migrations" / "033_memory_fts.sql"
+        REPO_ROOT / "core" / "event_store" / "migrations" / "142_lean_baseline.sql"
     )
 
     assert "memory_entries is the canonical semantic memory authority" in store_source
