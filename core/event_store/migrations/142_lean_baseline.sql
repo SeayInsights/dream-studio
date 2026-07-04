@@ -1339,4 +1339,26 @@ BEGIN
     DELETE FROM memory_fts WHERE memory_id = old.memory_id;
 END;
 
+-- ── Reference seed: business_work_order_types ───────────────────────────────
+-- WO-SQUASH-BASELINE data-preservation: the pre-squash chain seeded these 10
+-- work-order type rows (migration 049 literal seed, widened by later ALTER+
+-- UPDATE migrations to the 9-column final shape). Schema-only regeneration of
+-- the baseline dropped them, which broke start_work_order for every type
+-- (eval test_skill_contract_evals). INSERT OR IGNORE = idempotent, preserves
+-- any operator-added types on an existing DB.
+INSERT OR IGNORE INTO business_work_order_types (
+    type_id, label, pre_build_gate, build_executor, post_build_gate,
+    workflow_template, precondition_skill, task_generator, resolution_instructions
+) VALUES
+  ('ui_component', 'UI Component', 'design_brief_locked', 'fullstack:frontend', 'design_critique|anti_slop_passed', 'ui-feature', 'ds-website:discover', 'ds-core:plan', 'Fill design brief fields and lock before building.'),
+  ('ui_page', 'UI Page', 'design_brief_locked', 'website:page', 'design_critique|anti_slop_passed', 'ui-feature', 'ds-website:discover', 'ds-core:plan', 'Fill design brief fields and lock before building.'),
+  ('api_endpoint', 'API Endpoint', 'api_contract_exists', 'fullstack:backend', 'security_scan', 'idea-to-pr', NULL, 'ds-core:plan', NULL),
+  ('authentication', 'Authentication', 'api_contract_and_security_review', 'fullstack:backend', 'security_scan', 'idea-to-pr', NULL, 'ds-core:plan', NULL),
+  ('saas_feature', 'SaaS Feature', 'api_contract_exists', 'saas-build', 'security_scan', 'idea-to-pr', NULL, 'ds-core:plan', NULL),
+  ('data_pipeline', 'Data Pipeline', NULL, 'fullstack:backend', 'security_scan', 'idea-to-pr', NULL, 'ds-core:plan', NULL),
+  ('game_mechanic', 'Game Mechanic', 'spec_approved', 'game-dev', 'game_validate', 'game-feature', NULL, 'ds-core:plan', NULL),
+  ('deployment', 'Deployment', 'all_tests_pass', 'devops-engineer', 'security_scan', NULL, NULL, NULL, NULL),
+  ('infrastructure', 'Infrastructure', NULL, 'devops-engineer', 'independent_review', 'idea-to-pr', NULL, 'ds-core:plan', NULL),
+  ('documentation', 'Documentation', NULL, 'core:build', NULL, NULL, NULL, 'ds-core:plan', NULL);
+
 PRAGMA foreign_keys=ON;
