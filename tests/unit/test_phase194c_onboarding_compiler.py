@@ -24,15 +24,201 @@ from unittest.mock import patch
 import pytest
 
 REPO_ROOT = Path(__file__).parents[2]
-M095 = (REPO_ROOT / "core/event_store/migrations/095_unified_extensions_schema.sql").read_text(
-    encoding="utf-8"
-)
-M096 = (REPO_ROOT / "core/event_store/migrations/096_friction_signals.sql").read_text(
-    encoding="utf-8"
-)
-M097 = (REPO_ROOT / "core/event_store/migrations/097_gap_classifier_columns.sql").read_text(
-    encoding="utf-8"
-)
+# WO-SQUASH-BASELINE: migration 095 deleted (folded into 142); content inlined verbatim to preserve this test's scaffold.
+M095 = """-- Migration 095: Unified Extensions Schema (Phase 19.1)
+--
+-- Foundation for Phase 19 Adaptive Learning + Skill Enrichment.
+-- Stores operator-confirmed extensions that layer on top of canonical skills.
+-- Canonical skills are NEVER modified; extensions are additive overlays.
+--
+-- ── Decision 6 readiness query ──────────────────────────────────────────────
+-- Extensions eligible for activation (past the experimental gate):
+--
+--   SELECT * FROM ds_user_extensions
+--   WHERE status = 'experimental'
+--     AND past_wo_count >= 5
+--     AND current_eval_score >= baseline_eval_score * 0.95
+--     AND user_confirmed_at IS NOT NULL;
+--
+-- Rules (Decision 6):
+--   past_wo_count < 5 → stays 'experimental', requires explicit user override
+--   past_wo_count >= 5 AND score >= 0.95 × baseline → eligible for 'active'
+--   past_wo_count >= 5 AND score < 0.95 × baseline → stays 'experimental' with warning
+--   user_confirmed_at NULL → human has not approved → never activates automatically
+--
+-- ── Extension types ──────────────────────────────────────────────────────────
+--   example       — compiled example from accepted past outputs (DSPy-style bootstrap)
+--   gap_filler    — content addressing a capability gap not in canonical skill
+--   threshold_override — adjusted detection threshold for a specific rule
+--   option_override   — changed default option (e.g., severity weight)
+--   mode_addition     — entirely new skill mode derived from usage patterns
+--   trigger_alias     — additional routing keyword for an existing skill
+--
+-- ── Status transitions ───────────────────────────────────────────────────────
+--   proposed → experimental (after user confirms proposal)
+--   experimental → active    (after Decision 6 criteria met + explicit activation)
+--   experimental → rejected  (user declines)
+--   active → suppressed      (user suppresses; suppressed_reason required)
+--   active → deprecated      (superseded by newer extension)
+--   any → rejected           (retroactive validation fails hard)
+
+CREATE TABLE IF NOT EXISTS ds_user_extensions (
+    -- Identity
+    extension_id            TEXT PRIMARY KEY,
+    skill_id                TEXT NOT NULL,  -- canonical skill being extended (e.g., 'ds-quality:security')
+
+    -- Extension definition
+    extension_type          TEXT NOT NULL CHECK(extension_type IN (
+                                'example', 'gap_filler', 'threshold_override',
+                                'option_override', 'mode_addition', 'trigger_alias'
+                            )),
+    content                 TEXT NOT NULL,  -- JSON or markdown; type-specific structure
+
+    -- Provenance
+    source_signal           TEXT,           -- 'friction' | 'pattern' | 'manual' | 'eval_gap'
+    compiled_from           TEXT,           -- JSON refs: WO IDs, session IDs, or signal IDs
+
+    -- Lifecycle
+    status                  TEXT NOT NULL DEFAULT 'proposed' CHECK(status IN (
+                                'proposed', 'experimental', 'active',
+                                'suppressed', 'rejected', 'deprecated'
+                            )),
+    created_at              TEXT NOT NULL DEFAULT (datetime('now')),
+    last_validated_at       TEXT,           -- when retroactive validation last ran
+
+    -- Decision 6 validation fields
+    baseline_eval_score     REAL CHECK(
+                                baseline_eval_score IS NULL OR
+                                (baseline_eval_score >= 0.0 AND baseline_eval_score <= 1.0)
+                            ),
+    current_eval_score      REAL CHECK(
+                                current_eval_score IS NULL OR
+                                (current_eval_score >= 0.0 AND current_eval_score <= 1.0)
+                            ),
+    past_wo_count           INTEGER NOT NULL DEFAULT 0
+                                CHECK(past_wo_count >= 0),
+
+    -- Human confirmation (required before activation)
+    user_confirmed_at       TEXT,           -- NULL = not yet confirmed
+    user_confirmed_by       TEXT,           -- operator ID who confirmed
+
+    -- Suppression
+    suppressed_reason       TEXT            -- required when status='suppressed'
+);
+
+-- ── Indexes ───────────────────────────────────────────────────────────────────
+
+-- Primary lookup: active extensions for a given skill
+CREATE INDEX IF NOT EXISTS idx_extensions_skill_status
+    ON ds_user_extensions(skill_id, status);
+
+-- Phase 19 activation candidates
+CREATE INDEX IF NOT EXISTS idx_extensions_decision6
+    ON ds_user_extensions(status, past_wo_count, current_eval_score)
+    WHERE status = 'experimental';
+
+-- Readiness query optimization
+CREATE INDEX IF NOT EXISTS idx_extensions_active
+    ON ds_user_extensions(skill_id)
+    WHERE status = 'active';
+
+-- ── Constraint: suppressed_reason required when suppressed ────────────────────
+-- SQLite does not support CREATE CONSTRAINT directly; enforced via CHECK.
+-- Application layer must validate this as well.
+-- (CHECK on multi-column conditions not supported in SQLite without triggers)
+"""
+# WO-SQUASH-BASELINE: migration 096 deleted (folded into 142); content inlined verbatim to preserve this test's scaffold.
+M096 = """-- Migration 096: Friction signals table + finding dismissal columns (Phase 19.2)
+--
+-- Adds:
+--   1. ds_friction_signals — harvested friction observations (passive capture at session-end)
+--   2. findings.dismissed_at — when operator dismissed a finding
+--   3. findings.dismissed_reason — text reason for dismissal
+--
+-- Three signal types (roadmap-explicit -- deferred types added on demand):
+--   dismissed_finding   — finding dismissed by operator (false positive pattern)
+--   partial_completion  — scan completed but findings never engaged with
+--   pattern_gap         — low-confidence workflow pattern (inconsistent skill usage)
+--
+-- Consumer contract for 19.3 (Gap Classifier):
+--   SELECT * FROM ds_friction_signals WHERE classified_as IS NULL ORDER BY created_at
+--
+-- Idempotency: bucket_key TEXT UNIQUE — harvester uses INSERT OR IGNORE.
+-- Consecutive harvester runs produce no duplicate rows.
+
+CREATE TABLE IF NOT EXISTS ds_friction_signals (
+    signal_id       TEXT PRIMARY KEY,
+    session_id      TEXT,
+    project_id      TEXT,
+    signal_type     TEXT NOT NULL CHECK(signal_type IN (
+                        'dismissed_finding',
+                        'partial_completion',
+                        'pattern_gap'
+                    )),
+    skill_id        TEXT,
+    rule_id         TEXT,
+    source_table    TEXT NOT NULL,
+    source_id       TEXT NOT NULL,
+    context         TEXT NOT NULL DEFAULT '{}',
+    bucket_key      TEXT NOT NULL UNIQUE,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+
+    -- 19.3 Gap Classifier writes these back after classification
+    classified_as   TEXT CHECK(classified_as IS NULL OR classified_as IN (
+                        'capability', 'personalization', 'onboarding'
+                    )),
+    classified_at   TEXT,
+
+    -- 19.4 Guided Expansion links extension after compilation
+    extension_id    TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_friction_signals_skill
+    ON ds_friction_signals(skill_id)
+    WHERE skill_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_friction_signals_unclassified
+    ON ds_friction_signals(created_at)
+    WHERE classified_as IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_friction_signals_type
+    ON ds_friction_signals(signal_type, created_at);
+
+-- Add dismissal tracking to the findings table.
+-- dismissed_at IS NOT NULL → finding was dismissed by operator.
+-- dismissed_reason is free text (e.g. "false positive — test file").
+ALTER TABLE findings ADD COLUMN dismissed_at TEXT;
+ALTER TABLE findings ADD COLUMN dismissed_reason TEXT;
+"""
+# WO-SQUASH-BASELINE: migration 097 deleted (folded into 142); content inlined verbatim to preserve this test's scaffold.
+M097 = """-- Migration 097: Gap Classifier columns on ds_friction_signals (Phase 19.3)
+--
+-- Adds three columns to ds_friction_signals to support the hybrid
+-- SQL+LLM classifier and operator review workflow:
+--
+--   classification_confidence REAL  — 0.0-1.0; SQL Tier 1 sets >= 0.8,
+--                                     LLM Tier 2 sets 0.6-0.79, NULL = deferred
+--   classification_reason TEXT      — one-line explanation shown in ds learn review
+--   classification_skipped INTEGER  — operator dismissed this signal from review;
+--                                     excluded from ds learn review output
+--
+-- No new table. All classifier results write back to ds_friction_signals.
+--
+-- Consumer contract for 19.4 (Guided Expansion):
+--   SELECT * FROM ds_friction_signals
+--   WHERE classified_as IS NOT NULL
+--     AND classification_skipped = 0
+--     AND extension_id IS NULL
+--   ORDER BY classification_confidence DESC
+
+ALTER TABLE ds_friction_signals ADD COLUMN classification_confidence REAL;
+ALTER TABLE ds_friction_signals ADD COLUMN classification_reason TEXT;
+ALTER TABLE ds_friction_signals ADD COLUMN classification_skipped INTEGER NOT NULL DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS idx_friction_classified_ready
+    ON ds_friction_signals(classified_as, classification_confidence)
+    WHERE classified_as IS NOT NULL AND classification_skipped = 0 AND extension_id IS NULL;
+"""
 
 FINDINGS_BASE = """
 CREATE TABLE IF NOT EXISTS findings (
