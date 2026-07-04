@@ -38,7 +38,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import uuid
@@ -931,9 +930,26 @@ def _run_graders_parallel(
             mocks["migration"] = _MOCK_MIGRATION.copy()
         return mocks
 
-    procs = {name: _spawn_grader(prompt) for name, prompt in prompts.items()}
+    # Spawn each grader. When the `claude` CLI is absent (CI, or any host without
+    # it), Popen raises FileNotFoundError — treat that grader as unreviewable
+    # rather than letting the exception abort the whole verify (the post-merge
+    # main-red on WO-FIX-VERIFY-GATE). It then flows through the existing
+    # unreviewable-graders path (no false-done: unreviewable never certifies).
+    procs: dict[str, "subprocess.Popen[str] | None"] = {}
+    for name, prompt in prompts.items():
+        try:
+            procs[name] = _spawn_grader(prompt)
+        except FileNotFoundError:
+            procs[name] = None
     results: dict[str, dict[str, Any]] = {}
     for name, proc in procs.items():
+        if proc is None:
+            results[name] = {
+                "unreviewable": True,
+                "reason": "grader_cli_unavailable",
+                "_grader_error": "claude CLI not found on this host",
+            }
+            continue
         try:
             result = _collect_grader(proc)
         except Exception as exc:
@@ -1460,12 +1476,6 @@ def verify_work_order(
         # ambient changes. Only when there is NO commit evidence AND no passing
         # executable check is the work genuinely unreviewable (no-false-done).
         #
-        # The LLM graders require the `claude` CLI. When it is absent (CI, or any
-        # host without it) and not in mock mode, no independent review can run —
-        # go unreviewable rather than spawn a grader that would crash. Skip the
-        # (pytest-spawning) evidence fallback when graders cannot run anyway.
-        _graders_runnable = bool(os.environ.get(_MOCK_ENV)) or shutil.which("claude") is not None
-
         # An escalated WO (its originating symptom regressed) must not certify from
         # its own executable AC alone — that is the same check that may have passed
         # before the regression. Escalated work demands a genuine re-review, so the
@@ -1476,26 +1486,19 @@ def verify_work_order(
         _is_escalated = read_escalation(work_order_id, db_path=db_path) is not None
 
         authority_certified = False
-        if _graders_runnable and git_diff is None and not _is_escalated:
+        if git_diff is None and not _is_escalated:
             ac_results = run_executable_checks(tasks, db_path)
             evidence_text, has_passing = _authority_evidence(work_order_id, tasks, ac_results)
             if has_passing:
                 git_diff = evidence_text
                 authority_certified = True
 
-        if (git_diff is None or not _graders_runnable) and not os.environ.get(_MOCK_ENV):
+        if git_diff is None and not os.environ.get(_MOCK_ENV):
             token = wo["title"].split(" - ")[0].strip()
-            if not _graders_runnable:
-                warning = (
-                    "independent review unreviewable: the 'claude' grader CLI is not "
-                    "available on this host, so no LLM review can run. Work is NOT "
-                    "certified — review manually or run verify where the grader is present."
-                )
-            else:
-                warning = (
-                    f"independent review unreviewable: no commits found referencing "
-                    f"{work_order_id[:8]} or '{token}'. Work is NOT certified — review manually."
-                )
+            warning = (
+                f"independent review unreviewable: no commits found referencing "
+                f"{work_order_id[:8]} or '{token}'. Work is NOT certified — review manually."
+            )
             scores = {
                 "completion_score": 0.0,
                 "correctness_score": 0.0,

@@ -8,8 +8,9 @@ The fix: when _collect_git_commits finds nothing, fall back to the WO's own
 executable AC results (SQL/TEST/API-CHECK) as objective authority proof — a
 WO-scoped signal that does not depend on commit messages. Only genuinely-no-
 evidence (no commits AND no passing executable check) stays unreviewable
-(no false-done). When the `claude` grader CLI is absent, verify is unreviewable
-rather than crashing on a grader spawn.
+(no false-done). When the `claude` grader CLI is absent (Popen raises
+FileNotFoundError), that grader is treated as unreviewable rather than crashing
+the whole verify — the post-merge main-red this WO's follow-up repaired.
 """
 
 from __future__ import annotations
@@ -158,12 +159,17 @@ class TestAuthorityCertification:
         assert result["spawned_work_orders"] == []
 
     def test_grader_cli_absent_is_unreviewable_not_crash(self, tmp_path, monkeypatch):
-        """When the `claude` grader CLI is missing (CI), verify degrades to
-        unreviewable instead of spawning a grader that raises FileNotFoundError
-        — the regression that turned main red on the WO-FIX-VERIFY-GATE merge.
-        A passing AC would otherwise route into grading; no grader = unreviewable."""
+        """When the `claude` grader CLI is missing (CI), _spawn_grader raises
+        FileNotFoundError. Verify must degrade to an unreviewable verdict instead
+        of letting the exception abort the whole run — the regression that turned
+        main red on the WO-FIX-VERIFY-GATE merge. A passing AC routes into grading
+        via the authority-evidence fallback; a missing grader = unreviewable."""
+
+        def _boom(_prompt):
+            raise FileNotFoundError("[Errno 2] No such file or directory: 'claude'")
+
         monkeypatch.delenv("DREAM_STUDIO_VERIFY_MOCK", raising=False)
-        monkeypatch.setattr("core.work_orders.verify.shutil.which", lambda _n: None)
+        monkeypatch.setattr("core.work_orders.verify._spawn_grader", _boom)
         repo = _make_git_repo(tmp_path, ["chore: unrelated"])
         db_path = _make_db(tmp_path)
         wo_id = str(uuid.uuid4())
@@ -182,4 +188,5 @@ class TestAuthorityCertification:
 
         assert result["ok"] is True  # did not crash
         assert result["unreviewable"] is True
-        assert "grader" in result["auto_continue_warning"].lower()
+        # A missing CLI surfaces every grader as unreviewable (grader_cli_unavailable).
+        assert result["unreviewable_graders"]
