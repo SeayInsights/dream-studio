@@ -346,14 +346,20 @@ class SLATracker:
                 return result["successes"] / total * 100.0
 
             if metric == "workflows_success_rate":
-                # Workflow success rate as percentage
+                # Workflow success rate as percentage. WO 9f47a1a0: raw_workflow_runs
+                # (write-orphaned since 2026-05-18) dropped migration 141 — source is
+                # now workflow.completed canonical events (ai_canonical_events),
+                # keyed by the payload's started_at (routing is AI-only per
+                # config/event_type_registry.py).
                 cursor.execute(
                     """
                     SELECT
                         COUNT(*) as total,
-                        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as successes
-                    FROM raw_workflow_runs
-                    WHERE started_at >= ?
+                        SUM(CASE WHEN json_extract(payload, '$.status') = 'completed'
+                            THEN 1 ELSE 0 END) as successes
+                    FROM ai_canonical_events
+                    WHERE event_type = 'workflow.completed'
+                      AND json_extract(payload, '$.started_at') >= ?
                 """,
                     (cutoff_str,),
                 )

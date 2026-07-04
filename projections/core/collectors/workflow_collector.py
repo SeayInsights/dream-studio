@@ -1,5 +1,16 @@
-"""WorkflowCollector - Collects workflow execution metrics from studio.db"""
+"""WorkflowCollector - Collects workflow execution metrics from ai_canonical_events.
 
+WO 9f47a1a0: repointed from the write-orphaned raw_workflow_runs /
+raw_workflow_nodes tables (dropped migration 141 — see
+core/event_store/migrations/141_drop_orphaned_workflow_raw_tables.sql) to the
+workflow.completed / workflow.node.completed canonical events emitted by
+control/execution/workflow/state.py via the spool. Both event types route
+AI-only (config/event_type_registry.py), so ai_canonical_events is the sole
+source table. Honest-empty (zeroed/blank) when the table is absent or has no
+matching rows — never fabricated data.
+"""
+
+import json
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -7,7 +18,8 @@ from typing import Any
 
 
 class WorkflowCollector:
-    """Collects and aggregates workflow metrics from raw_workflow_runs and raw_workflow_nodes tables"""
+    """Collects and aggregates workflow metrics from workflow.completed /
+    workflow.node.completed canonical events (ai_canonical_events)."""
 
     def __init__(self, db_path: str | None = None):
         """
@@ -20,6 +32,31 @@ class WorkflowCollector:
             self.db_path = str(Path.home() / ".dream-studio" / "state" / "studio.db")
         else:
             self.db_path = db_path
+
+    def _has_ai_canonical_events(self, conn: sqlite3.Connection) -> bool:
+        return (
+            conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ai_canonical_events'"
+            ).fetchone()
+            is not None
+        )
+
+    def _completed_runs(self, conn: sqlite3.Connection, cutoff_date: str) -> list[dict[str, Any]]:
+        rows = conn.execute(
+            """
+            SELECT payload FROM ai_canonical_events
+            WHERE event_type = 'workflow.completed'
+              AND json_extract(payload, '$.started_at') >= ?
+            """,
+            (cutoff_date,),
+        ).fetchall()
+        runs = []
+        for row in rows:
+            try:
+                runs.append(json.loads(row["payload"]))
+            except (TypeError, ValueError):
+                continue
+        return runs
 
     def collect(self, days: int = 90) -> dict[str, Any]:
         """
@@ -39,122 +76,83 @@ class WorkflowCollector:
         """
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        cutoff_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
         try:
-            # Total runs
-            cursor.execute(
-                """
-                SELECT COUNT(*) as total
-                FROM raw_workflow_runs
-                WHERE started_at >= ?
-            """,
-                (cutoff_date,),
-            )
-            total_runs = cursor.fetchone()["total"]
+            if not self._has_ai_canonical_events(conn):
+                return {
+                    "total_runs": 0,
+                    "by_workflow": {},
+                    "by_status": {},
+                    "success_rate": 0.0,
+                    "avg_completion_time_minutes": 0.0,
+                    "total_nodes_executed": 0,
+                }
 
-            # By workflow with success rate and duration
-            cursor.execute(
-                """
-                SELECT
-                    workflow,
-                    COUNT(*) as count,
-                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
-                    AVG(
-                        CASE
-                            WHEN finished_at IS NOT NULL AND started_at IS NOT NULL
-                            THEN (julianday(finished_at) - julianday(started_at)) * 24 * 60
-                            ELSE NULL
-                        END
-                    ) as avg_duration_minutes
-                FROM raw_workflow_runs
-                WHERE started_at >= ?
-                GROUP BY workflow
-                ORDER BY count DESC
-            """,
-                (cutoff_date,),
-            )
+            cutoff_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+            runs = self._completed_runs(conn, cutoff_date)
 
-            by_workflow = {}
-            for row in cursor.fetchall():
-                workflow = row["workflow"]
-                count = row["count"]
-                completed = row["completed"] or 0
-                success_rate = (completed / count * 100) if count > 0 else 0.0
+            total_runs = len(runs)
+            by_workflow_acc: dict[str, dict[str, Any]] = {}
+            by_status: dict[str, int] = {}
+            completed_durations: list[float] = []
+            completed_count = 0
+            run_keys: list[str] = []
 
+            for run in runs:
+                workflow = run.get("workflow") or "unknown"
+                status = run.get("status") or "unknown"
+                run_key = run.get("run_key")
+                if run_key:
+                    run_keys.append(run_key)
+                by_status[status] = by_status.get(status, 0) + 1
+
+                acc = by_workflow_acc.setdefault(
+                    workflow, {"count": 0, "completed": 0, "durations": []}
+                )
+                acc["count"] += 1
+
+                duration_minutes = _duration_minutes(run)
+                if status == "completed":
+                    acc["completed"] += 1
+                    completed_count += 1
+                    if duration_minutes is not None:
+                        completed_durations.append(duration_minutes)
+                if duration_minutes is not None:
+                    acc["durations"].append(duration_minutes)
+
+            by_workflow: dict[str, Any] = {}
+            for workflow, acc in by_workflow_acc.items():
+                count = acc["count"]
+                success_rate = (acc["completed"] / count * 100) if count > 0 else 0.0
+                avg_duration = (
+                    round(sum(acc["durations"]) / len(acc["durations"]), 2)
+                    if acc["durations"]
+                    else 0.0
+                )
                 by_workflow[workflow] = {
                     "count": count,
                     "success_rate": round(success_rate, 1),
-                    "avg_duration_minutes": (
-                        round(row["avg_duration_minutes"], 2)
-                        if row["avg_duration_minutes"]
-                        else 0.0
-                    ),
+                    "avg_duration_minutes": avg_duration,
                 }
 
-            # By status
-            cursor.execute(
-                """
-                SELECT status, COUNT(*) as count
-                FROM raw_workflow_runs
-                WHERE started_at >= ?
-                GROUP BY status
-                ORDER BY count DESC
-            """,
-                (cutoff_date,),
-            )
-            by_status = {row["status"]: row["count"] for row in cursor.fetchall()}
-
-            # Overall success rate
-            cursor.execute(
-                """
-                SELECT
-                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
-                    COUNT(*) as total
-                FROM raw_workflow_runs
-                WHERE started_at >= ?
-            """,
-                (cutoff_date,),
-            )
-            result = cursor.fetchone()
-            success_rate = (
-                (result["completed"] / result["total"] * 100) if result["total"] > 0 else 0.0
-            )
-
-            # Average completion time
-            cursor.execute(
-                """
-                SELECT
-                    AVG(
-                        (julianday(finished_at) - julianday(started_at)) * 24 * 60
-                    ) as avg_completion_minutes
-                FROM raw_workflow_runs
-                WHERE started_at >= ?
-                AND finished_at IS NOT NULL
-                AND status = 'completed'
-            """,
-                (cutoff_date,),
-            )
-            result = cursor.fetchone()
+            success_rate = (completed_count / total_runs * 100) if total_runs > 0 else 0.0
             avg_completion_time = (
-                round(result["avg_completion_minutes"], 2)
-                if result["avg_completion_minutes"]
+                round(sum(completed_durations) / len(completed_durations), 2)
+                if completed_durations
                 else 0.0
             )
 
-            # Total nodes executed
-            cursor.execute(
-                """
-                SELECT COUNT(*) as total_nodes
-                FROM raw_workflow_nodes n
-                JOIN raw_workflow_runs r ON n.run_key = r.run_key
-                WHERE r.started_at >= ?
-            """,
-                (cutoff_date,),
-            )
-            total_nodes = cursor.fetchone()["total_nodes"]
+            total_nodes_executed = 0
+            if run_keys:
+                placeholders = ",".join("?" for _ in run_keys)
+                total_nodes_executed = conn.execute(
+                    f"""
+                    SELECT COUNT(*) FROM ai_canonical_events
+                    WHERE event_type = 'workflow.node.completed'
+                      AND json_extract(payload, '$.run_key') IN ({placeholders})
+                    """,
+                    run_keys,
+                ).fetchone()[0]
 
             return {
                 "total_runs": total_runs,
@@ -162,7 +160,7 @@ class WorkflowCollector:
                 "by_status": by_status,
                 "success_rate": round(success_rate, 1),
                 "avg_completion_time_minutes": avg_completion_time,
-                "total_nodes_executed": total_nodes,
+                "total_nodes_executed": total_nodes_executed,
             }
 
         finally:
@@ -180,26 +178,29 @@ class WorkflowCollector:
         """
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        cutoff_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
         try:
-            cursor.execute(
-                """
-                SELECT
-                    DATE(started_at) as date,
-                    COUNT(*) as runs,
-                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completions
-                FROM raw_workflow_runs
-                WHERE started_at >= ?
-                GROUP BY DATE(started_at)
-                ORDER BY date ASC
-            """,
-                (cutoff_date,),
-            )
+            if not self._has_ai_canonical_events(conn):
+                return []
 
-            return [dict(row) for row in cursor.fetchall()]
+            cutoff_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+            runs = self._completed_runs(conn, cutoff_date)
+
+            by_date: dict[str, dict[str, int]] = {}
+            for run in runs:
+                started_at = run.get("started_at") or ""
+                date = started_at[:10]
+                if not date:
+                    continue
+                acc = by_date.setdefault(date, {"runs": 0, "completions": 0})
+                acc["runs"] += 1
+                if run.get("status") == "completed":
+                    acc["completions"] += 1
+
+            return [
+                {"date": date, "runs": acc["runs"], "completions": acc["completions"]}
+                for date, acc in sorted(by_date.items())
+            ]
 
         finally:
             conn.close()
@@ -216,55 +217,76 @@ class WorkflowCollector:
         """
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
 
         try:
+            if not self._has_ai_canonical_events(conn):
+                return []
+
+            rows = conn.execute(
+                "SELECT payload FROM ai_canonical_events"
+                " WHERE event_type = 'workflow.node.completed'"
+            ).fetchall()
+            nodes = []
+            for row in rows:
+                try:
+                    nodes.append(json.loads(row["payload"]))
+                except (TypeError, ValueError):
+                    continue
             if workflow_name:
-                cursor.execute(
-                    """
-                    SELECT
-                        n.node_id,
-                        COUNT(*) as executions,
-                        AVG(n.duration_s) as avg_duration_s,
-                        SUM(CASE WHEN n.status = 'failed' THEN 1 ELSE 0 END) as failures
-                    FROM raw_workflow_nodes n
-                    JOIN raw_workflow_runs r ON n.run_key = r.run_key
-                    WHERE r.workflow = ?
-                    GROUP BY n.node_id
-                    ORDER BY executions DESC
-                """,
-                    (workflow_name,),
-                )
-            else:
-                cursor.execute("""
-                    SELECT
-                        node_id,
-                        COUNT(*) as executions,
-                        AVG(duration_s) as avg_duration_s,
-                        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failures
-                    FROM raw_workflow_nodes
-                    GROUP BY node_id
-                    ORDER BY executions DESC
-                """)
+                nodes = [n for n in nodes if n.get("workflow") == workflow_name]
+
+            acc: dict[str, dict[str, Any]] = {}
+            for node in nodes:
+                node_id = node.get("node_id") or "unknown"
+                entry = acc.setdefault(node_id, {"executions": 0, "durations": [], "failures": 0})
+                entry["executions"] += 1
+                duration_ms = node.get("duration_ms")
+                if duration_ms is not None:
+                    entry["durations"].append(duration_ms / 1000.0)
+                if node.get("status") == "failed":
+                    entry["failures"] += 1
 
             result = []
-            for row in cursor.fetchall():
-                executions = row["executions"]
-                failures = row["failures"] or 0
+            for node_id, entry in acc.items():
+                executions = entry["executions"]
+                failures = entry["failures"]
                 failure_rate = (failures / executions * 100) if executions > 0 else 0.0
-
+                avg_duration_s = (
+                    round(sum(entry["durations"]) / len(entry["durations"]), 2)
+                    if entry["durations"]
+                    else 0.0
+                )
                 result.append(
                     {
-                        "node_id": row["node_id"],
+                        "node_id": node_id,
                         "executions": executions,
-                        "avg_duration_s": (
-                            round(row["avg_duration_s"], 2) if row["avg_duration_s"] else 0.0
-                        ),
+                        "avg_duration_s": avg_duration_s,
                         "failure_rate": round(failure_rate, 1),
                     }
                 )
-
+            result.sort(key=lambda r: r["executions"], reverse=True)
             return result
 
         finally:
             conn.close()
+
+
+def _duration_minutes(run: dict[str, Any]) -> float | None:
+    """Duration in minutes, preferring the payload's duration_ms, falling back
+    to a started_at/finished_at diff for older or hand-built payloads."""
+    duration_ms = run.get("duration_ms")
+    if duration_ms is not None:
+        try:
+            return float(duration_ms) / 1000.0 / 60.0
+        except (TypeError, ValueError):
+            pass
+    started = run.get("started_at")
+    finished = run.get("finished_at")
+    if not started or not finished:
+        return None
+    try:
+        start = datetime.fromisoformat(started)
+        end = datetime.fromisoformat(finished)
+        return (end - start).total_seconds() / 60.0
+    except (ValueError, TypeError):
+        return None
