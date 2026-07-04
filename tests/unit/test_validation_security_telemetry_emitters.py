@@ -61,19 +61,17 @@ def test_validation_result_emitter_writes_event_result_outcome_and_attention(
         ).fetchone()
         assert validation["status"] == "failed"
         assert "pytest" in validation["command"]
+        # outcome_records + dashboard_attention_items dropped migration 139
+        # (WO-AI-SPINE, AD-5) — pure duplication of the execution_events row
+        # this emitter already writes (outcome_status='failed' below is both
+        # the outcome and the attention-worthy signal).
         assert (
             conn.execute(
-                "SELECT COUNT(*) FROM outcome_records WHERE event_id = ? AND outcome_status = 'failed'",
+                "SELECT COUNT(*) FROM execution_events WHERE event_id = ? AND outcome_status = 'failed'",
                 (result.event_id,),
             ).fetchone()[0]
             == 1
         )
-        attention = conn.execute(
-            "SELECT attention_type, prompt_required FROM dashboard_attention_items WHERE event_id = ?",
-            (result.event_id,),
-        ).fetchone()
-        assert attention["attention_type"] == "validation_failure"
-        assert attention["prompt_required"] == 0
     finally:
         conn.close()
 
@@ -99,7 +97,14 @@ def test_eval_artifact_path_dual_writes_validation_without_breaking_file_output(
             ("skill_identifier_safety",),
         ).fetchone()
         assert row["status"] == "passed"
-        assert conn.execute("SELECT COUNT(*) FROM outcome_records").fetchone()[0] == 1
+        # outcome_records dropped migration 139 (WO-AI-SPINE, AD-5) — outcomes are
+        # derived from execution_events.
+        assert (
+            conn.execute(
+                "SELECT COUNT(*) FROM execution_events WHERE event_type = 'validation.result_recorded'"
+            ).fetchone()[0]
+            == 1
+        )
     finally:
         conn.close()
 
@@ -153,13 +158,9 @@ def test_security_finding_emitter_is_idempotent_and_records_file_line_attention(
             ).fetchone()[0]
             == 1
         )
-        assert (
-            conn.execute(
-                "SELECT COUNT(*) FROM dashboard_attention_items WHERE event_id = ? AND attention_type = 'security_finding'",
-                (first.event_id,),
-            ).fetchone()[0]
-            == 1
-        )
+        # dashboard_attention_items dropped migration 139 (WO-AI-SPINE, AD-5) — pure
+        # duplication; the security_events row above (open, high severity) is
+        # already the attention-worthy signal, fully queryable on that spine.
     finally:
         conn.close()
 

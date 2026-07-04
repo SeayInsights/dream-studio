@@ -345,14 +345,22 @@ def test_legacy_migration_creates_fresh_home_migrates_sqlite_and_keeps_rollback(
     )
     bootstrap_database(home / "state" / "studio.db")
     with _sqlite(home / "state" / "studio.db") as conn:
+        # decision_records dropped migration 139 (WO-AI-SPINE, AD-5) — this test
+        # only needs an arbitrary pre-existing authority row to prove data
+        # survives the legacy migration; execution_events is the live spine.
         conn.execute(
             """
-            INSERT OR REPLACE INTO decision_records(
-                decision_id, project_id, decision_type, decision_status,
-                selected_option, source_refs_json, evidence_refs_json
-            ) VALUES (?, ?, ?, ?, ?, '[]', '[]')
+            INSERT OR REPLACE INTO execution_events(
+                event_id, event_type, event_name, project_id, outcome_status
+            ) VALUES (?, ?, ?, ?, ?)
             """,
-            ("legacy-decision-1", "dream-studio", "operator_decision", "approved", "upgrade"),
+            (
+                "legacy-decision-1",
+                "decision.recorded",
+                "Legacy decision",
+                "dream-studio",
+                "approved",
+            ),
         )
         conn.commit()
     (home / "reports").mkdir()
@@ -401,7 +409,7 @@ def test_legacy_migration_creates_fresh_home_migrates_sqlite_and_keeps_rollback(
     assert Path(result["backup_runtime_path"], "reports", "old-report.md").exists()
     with _sqlite(home / "state" / "studio.db") as conn:
         count = conn.execute(
-            "SELECT COUNT(*) FROM decision_records WHERE decision_id = ?",
+            "SELECT COUNT(*) FROM execution_events WHERE event_id = ?",
             ("legacy-decision-1",),
         ).fetchone()[0]
     assert count == 1

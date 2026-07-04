@@ -25,7 +25,9 @@ def dashboard_data_freshness_status(db_path: Path | str | None = None) -> dict[s
             table: _count(conn, table)
             for table in (
                 "execution_events",
-                "dashboard_attention_items",
+                # dashboard_attention_items, decision_records: dropped migration 139
+                # (WO-AI-SPINE, AD-5) — attention/decision freshness now follows
+                # execution_events (see the attention_queue section below).
                 "skill_invocations",
                 "hook_invocations",
                 "tool_invocations",
@@ -35,7 +37,6 @@ def dashboard_data_freshness_status(db_path: Path | str | None = None) -> dict[s
                 "findings_current_status",
                 "security_events",
                 "research_evidence_records",
-                "decision_records",
                 "raw_sessions",
                 "raw_skill_telemetry",
                 "raw_workflow_runs",
@@ -176,11 +177,14 @@ def _section_statuses(
         _section(
             "attention_queue",
             "/api/telemetry/attention",
-            "fresh" if counts["dashboard_attention_items"] else "empty by design",
-            "Attention queue reads dashboard_attention_items.",
-            ["dashboard_attention_items"],
-            counts["dashboard_attention_items"],
-            _latest(conn, "dashboard_attention_items", "created_at"),
+            "fresh" if counts["execution_events"] else "empty by design",
+            # dashboard_attention_items dropped migration 139 (WO-AI-SPINE, AD-5) —
+            # attention is now derived from execution_events (see
+            # core/telemetry/read_models.py's _ATTENTION_EVENTS_VIEW_SQL).
+            "Attention queue derives from execution_events (dashboard_attention_items dropped migration 139).",
+            ["execution_events"],
+            counts["execution_events"],
+            _latest(conn, "execution_events", "created_at"),
         ),
         _section(
             "component_usage",

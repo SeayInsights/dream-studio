@@ -61,13 +61,9 @@ def test_workflow_invocation_emitter_is_idempotent_and_writes_attention(tmp_path
             ).fetchone()[0]
             == 1
         )
-        assert (
-            conn.execute(
-                "SELECT COUNT(*) FROM dashboard_attention_items WHERE event_id = ? AND attention_type = 'workflow_status_attention'",
-                (first.event_id,),
-            ).fetchone()[0]
-            == 1
-        )
+        # dashboard_attention_items dropped migration 139 (WO-AI-SPINE, AD-5) — pure
+        # duplication of the execution_events row above, whose outcome_status='failed'
+        # (asserted above) is already the attention-worthy signal.
     finally:
         conn.close()
 
@@ -134,11 +130,9 @@ def test_research_evidence_emitter_records_operator_verification_attention(tmp_p
         assert row["confidence"] == "medium"
         assert row["operator_verification_required"] == 1
         assert "material-risk" in row["question"]
-        attention = conn.execute(
-            "SELECT operator_action_required, prompt_required FROM dashboard_attention_items WHERE event_id = ?",
-            (result.event_id,),
-        ).fetchone()
-        assert dict(attention) == {"operator_action_required": 1, "prompt_required": 0}
+        # dashboard_attention_items dropped migration 139 (WO-AI-SPINE, AD-5) — pure
+        # duplication; operator_verification_required above (still on
+        # research_evidence_records) is already the attention-worthy signal.
     finally:
         conn.close()
 
@@ -196,19 +190,19 @@ def test_decision_emitter_records_attention_and_is_idempotent(tmp_path: Path) ->
     assert second.emitted is False
     conn = _connect(db_path)
     try:
+        # decision_records + dashboard_attention_items dropped migration 139
+        # (WO-AI-SPINE, AD-5) — pure duplication of the execution_events row
+        # below. selected_option/approval flags are not persisted as separate
+        # columns anywhere post-migration; event_name/outcome_status carry the
+        # decision_type/decision_status for read-model derivation.
         row = conn.execute(
-            "SELECT decision_type, selected_option FROM decision_records WHERE decision_id = ?",
+            "SELECT event_name, outcome_status FROM execution_events WHERE event_id = ?",
             (first.record_id,),
         ).fetchone()
         assert dict(row) == {
-            "decision_type": "architecture.approval",
-            "selected_option": "require_operator_approval",
+            "event_name": "Decision: architecture.approval",
+            "outcome_status": "recorded",
         }
-        attention = conn.execute(
-            "SELECT operator_action_required, prompt_required FROM dashboard_attention_items WHERE event_id = ?",
-            (first.event_id,),
-        ).fetchone()
-        assert dict(attention) == {"operator_action_required": 1, "prompt_required": 0}
     finally:
         conn.close()
 
@@ -218,7 +212,8 @@ def test_decision_emission_dual_writes_canonical_event_and_telemetry(
 ) -> None:
     """emit_decision's sole durable write is the decision.recorded canonical event
     (decision_log/decision_event_link dropped migration 136, WO-DBA-EVAL-DECISION
-    T4); it also dual-writes decision_records via the telemetry bridge."""
+    T4); it also dual-writes execution_events via the telemetry bridge
+    (decision_records dropped migration 139, WO-AI-SPINE, AD-5 — pure duplication)."""
     db_path = _db(tmp_path)
     monkeypatch.setenv("DREAM_STUDIO_TELEMETRY_DB", str(db_path))
     spool_root = tmp_path / "spool"
@@ -255,13 +250,16 @@ def test_decision_emission_dual_writes_canonical_event_and_telemetry(
             assert payload["decision_type"] == "route.continue"
             assert payload["policy_applied"] == "route-first"
 
+            # decision_records dropped migration 139 (WO-AI-SPINE, AD-5) — the
+            # telemetry bridge's dual-write now lands only on execution_events.
             row = conn.execute(
-                "SELECT decision_type, selected_option FROM decision_records WHERE decision_id = ?",
+                "SELECT event_name, outcome_status FROM execution_events"
+                " WHERE event_type = 'decision.recorded' AND event_id = ?",
                 (decision.decision_id,),
             ).fetchone()
             assert dict(row) == {
-                "decision_type": "route.continue",
-                "selected_option": "continue_internal",
+                "event_name": "Decision: route.continue",
+                "outcome_status": "recorded",
             }
         finally:
             conn.close()
