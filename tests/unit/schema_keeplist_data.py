@@ -130,7 +130,13 @@ CLASSIFICATION: dict[str, str] = {
     "raw_skill_telemetry": "KEEP",
     "raw_specs": "DROP",
     "raw_tasks": "DROP",
-    "raw_token_usage": "KEEP",
+    "raw_token_usage": "DROP",  # Dropped migration 138 (WO 468ce225): 3 stale rows, no
+    #                             accounting fields, no FK/view references. Superseded by
+    #                             canonical token.consumed events + the DuckDB
+    #                             aggregate_metrics.db token_usage_records view. Writers
+    #                             removed: studio_db.insert_token_usage, migrate_to_db.py
+    #                             ::_ingest_token_log, backfill_token_sessions.py
+    #                             ::backfill_token_usage.
     "raw_workflow_nodes": "KEEP",
     "raw_workflow_runs": "KEEP",
     "readiness_events": "KEEP",
