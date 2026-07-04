@@ -5,6 +5,7 @@ from typing import Dict, Any
 
 from fastapi import APIRouter, HTTPException, Query
 
+from core.findings.current_status import FINDINGS_CURRENT_STATUS_SQL, security_spine_present
 from core.production_readiness import production_readiness_dashboard_summary
 from core.shared_intelligence.task_attribution import project_recent_attributed_work
 from projections.api.routes.sqlite_schema import object_exists, table_columns
@@ -84,16 +85,13 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
             else "NULL"
         )
         # pi_dependencies dropped in migration 084; 0 is hardcoded in the query
-        security_columns = (
-            table_columns(conn, "findings_current_status")
-            if object_exists(conn, "findings_current_status")
-            else set()
-        )
+        # findings_current_status dropped migration 140 (WO dff23cb0) — derive
+        # from security_events at read time (core/findings/current_status.py).
         security_open_count_expr = (
-            "(SELECT COUNT(*) FROM findings_current_status WHERE "
+            f"(SELECT COUNT(*) FROM ({FINDINGS_CURRENT_STATUS_SQL}) WHERE "
             f"{_security_alias_expr('business_projects.project_id')} "
             "AND current_status NOT IN ('resolved', 'mitigated', 'false_positive', 'closed'))"
-            if "project_id" in security_columns
+            if security_spine_present(conn)
             else "0"
         )
         attention_open_count_expr = (

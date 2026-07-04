@@ -1,12 +1,13 @@
 """Security findings API routes for vulnerability tracking dashboard"""
 
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel
 import tempfile
 
 from core.config.database import get_connection
+from core.findings.current_status import FINDINGS_CURRENT_STATUS_SQL, security_spine_present
 from projections.api.routes.sqlite_schema import has_columns, object_exists, table_columns
 from projections.parsers.sarif_parser import parse_sarif_file
 
@@ -29,14 +30,17 @@ async def dismiss_finding(finding_id: str, body: DismissRequest) -> Dict[str, An
     """
     from core.findings.mutations import set_finding_status
 
+    # findings_current_status dropped migration 140 (WO dff23cb0) — derive from
+    # security_events at read time (core/findings/current_status.py).
     with get_connection() as conn:
-        if not object_exists(conn, "findings_current_status"):
+        if not security_spine_present(conn):
             raise HTTPException(
                 status_code=503,
-                detail="findings_current_status not present — migration 111 not yet applied",
+                detail="security_events not present — migration 111 not yet applied",
             )
         row = conn.execute(
-            "SELECT finding_id FROM findings_current_status WHERE finding_id = ?", (finding_id,)
+            f"SELECT finding_id FROM ({FINDINGS_CURRENT_STATUS_SQL}) WHERE finding_id = ?",
+            (finding_id,),
         ).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=f"Finding {finding_id!r} not found")
@@ -81,15 +85,16 @@ def _security_fallback_findings(
     since: Optional[str],
     limit: int,
 ) -> list[dict[str, Any]]:
-    """Return findings from findings_current_status (spine read-model, WO-Y / AD-10).
+    """Return findings derived from security_events (spine, WO-Y / AD-10).
 
-    Falls back to empty list if the spine tables are not yet present.
+    findings_current_status (the old materialized read-model) was dropped in
+    migration 140 (WO dff23cb0); current status is now derived from
+    security_events at read time (core/findings/current_status.py). Falls
+    back to empty list if the spine tables are not yet present.
     """
     findings: list[dict[str, Any]] = []
 
-    if not has_columns(
-        conn, "findings_current_status", ["finding_id", "severity", "current_status"]
-    ):
+    if not security_spine_present(conn):
         # Pre-migration install: spine not yet present; return empty (not an error).
         return findings
 
@@ -99,7 +104,7 @@ def _security_fallback_findings(
         "       COALESCE(se.title, '') AS message,"
         "       fcs.current_status AS status, fcs.scanner_type AS tool,"
         "       fcs.created_at"
-        " FROM findings_current_status fcs"
+        f" FROM ({FINDINGS_CURRENT_STATUS_SQL}) fcs"
         " LEFT JOIN security_events se ON se.event_id = fcs.finding_id"
         " WHERE 1=1"
     )
@@ -143,6 +148,21 @@ def _count_group(conn, table: str, column: str, cutoff: str) -> dict[str, int]:
         return {}
     rows = conn.execute(
         f"SELECT {column} as key, COUNT(*) as count FROM {table} WHERE created_at >= ? GROUP BY {column}",
+        (cutoff,),
+    ).fetchall()
+    return {str(row["key"]): int(row["count"]) for row in rows if row["key"] is not None}
+
+
+def _security_finding_count_group(conn, column: str, cutoff: str) -> dict[str, int]:
+    """Like _count_group, but over the security_events-derived findings view
+    (findings_current_status dropped migration 140, WO dff23cb0 — see
+    core/findings/current_status.py) instead of a real table name."""
+    if not security_spine_present(conn):
+        return {}
+    rows = conn.execute(
+        f"SELECT {column} as key, COUNT(*) as count"
+        f" FROM ({FINDINGS_CURRENT_STATUS_SQL})"
+        f" WHERE created_at >= ? GROUP BY {column}",
         (cutoff,),
     ).fetchall()
     return {str(row["key"]): int(row["count"]) for row in rows if row["key"] is not None}
@@ -213,13 +233,11 @@ async def list_all_findings(
             payload["source_status"] = {
                 "classification": "fresh" if findings else "empty by design",
                 "reason": "Dashboard security findings are read from current compatible security finding tables because the optional summary view does not expose the full dashboard contract.",
+                # findings_current_status dropped migration 140 (WO dff23cb0) —
+                # derived from security_events at read time, not a schema object.
                 "source_tables": [
                     name
-                    for name in (
-                        "findings_current_status",
-                        "security_events",
-                        "vw_security_summary",
-                    )
+                    for name in ("security_events", "vw_security_summary")
                     if object_exists(conn, name)
                 ],
                 "retired_view_columns_missing": sorted(
@@ -320,13 +338,15 @@ async def list_sarif_findings(
                 },
             }
 
+        # findings_current_status dropped migration 140 (WO dff23cb0) — derive
+        # from security_events at read time (core/findings/current_status.py).
         query = (
             "SELECT se.event_id AS sarif_finding_id, se.scanner_type AS scan_tool,"
             "       se.vuln_class AS rule_id, se.severity, se.file_path, se.line_number,"
             "       se.title AS message, se.cwe_id, se.created_at,"
             "       COALESCE(fcs.current_status, 'open') AS status"
             " FROM security_events se"
-            " LEFT JOIN findings_current_status fcs ON fcs.finding_id = se.event_id"
+            f" LEFT JOIN ({FINDINGS_CURRENT_STATUS_SQL}) fcs ON fcs.finding_id = se.event_id"
             " WHERE se.event_kind = 'finding.recorded'"
         )
         params: list = []
@@ -486,9 +506,10 @@ async def get_security_stats(
     try:
         cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
-        # Aggregate from findings_current_status spine read-model (WO-Y / AD-10).
+        # Aggregate findings derived from security_events (WO-Y / AD-10 spine;
+        # findings_current_status dropped migration 140, WO dff23cb0).
         findings_by_severity = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-        for sev, count in _count_group(conn, "findings_current_status", "severity", cutoff).items():
+        for sev, count in _security_finding_count_group(conn, "severity", cutoff).items():
             if sev in findings_by_severity:
                 findings_by_severity[sev] += count
 
@@ -507,8 +528,8 @@ async def get_security_stats(
 
         # Count by status
         findings_by_status = {}
-        for item_status, count in _count_group(
-            conn, "findings_current_status", "current_status", cutoff
+        for item_status, count in _security_finding_count_group(
+            conn, "current_status", cutoff
         ).items():
             findings_by_status[item_status] = findings_by_status.get(item_status, 0) + count
 
@@ -532,10 +553,10 @@ async def get_security_stats(
                 count = 0
             trend_data.append({"date": date, "count": count})
 
+        # findings_current_status dropped migration 140 (WO dff23cb0) — derived
+        # from security_events at read time, not a schema object.
         source_tables = [
-            name
-            for name in ("findings_current_status", "security_events", "vw_security_summary")
-            if object_exists(conn, name)
+            name for name in ("security_events", "vw_security_summary") if object_exists(conn, name)
         ]
 
         return {
@@ -547,7 +568,7 @@ async def get_security_stats(
             "source_status": {
                 "classification": "fresh" if source_tables else "empty by design",
                 "reason": (
-                    "Security stats aggregate findings_current_status + security_events spine (WO-Y / AD-10)."
+                    "Security stats derive findings from the security_events spine at read time (WO-Y / AD-10; WO dff23cb0)."
                     if source_tables
                     else "No security spine tables present in this DB snapshot."
                 ),

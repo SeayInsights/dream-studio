@@ -165,11 +165,13 @@ def test_contract_atlas_dependency_graph_uses_confirmed_edges_only(
         atlas = build_contract_atlas(conn, repo_root=repo_root, project_id="dream-studio")
 
     graph = atlas["confirmed_dependency_graph"]
-    # security_analytics module reads from the live security spine (migration 111 replaced findings)
+    # security_analytics module reads from the live security spine (migration 111
+    # replaced findings; findings_current_status itself dropped migration 140,
+    # WO dff23cb0 — security_events is the real source table now).
     assert any(
         edge["source"] == "module:security_analytics"
         and edge["relation"] == "reads_source_table"
-        and edge["target"] == "table:findings_current_status"
+        and edge["target"] == "table:security_events"
         for edge in graph["edges"]
     )
     # Confirmed-only graph: every edge must have edge_status == "confirmed"

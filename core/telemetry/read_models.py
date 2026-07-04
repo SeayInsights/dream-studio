@@ -16,6 +16,7 @@ from typing import Any
 from urllib.parse import quote
 
 from core.config.database import get_db_path
+from core.findings.current_status import FINDINGS_CURRENT_STATUS_SQL
 from core.shared_intelligence.usage_accounting import adapter_usage_accounting_summary
 from core.telemetry.execution_spine import dashboard_module_declarations
 
@@ -36,7 +37,10 @@ FACT_TABLES: tuple[str, ...] = (
     # SQLite-table branch kept for any not-yet-migrated authority).
     "ai_adapter_accounting_profiles",
     "ai_usage_operational_records",  # KEPT: live writer analytics_ingestion.ingest_analytics_payload()
-    "findings_current_status",  # findings retired in migration 112 → findings_current_status
+    # findings_current_status: dropped migration 140 (WO dff23cb0) — findings
+    # are derived from security_events at read time (see
+    # core/findings/current_status.py); security_events is the required table.
+    "security_events",
     "validation_results",
     "research_evidence_records",
     # decision_records: dropped migration 139 (WO-AI-SPINE, AD-5) — decisions are
@@ -364,7 +368,9 @@ def process_run_timeline(process_run_id: str, db_path: Path | str | None = None)
             # process_runs: dropped migration 131
             "token_usage_records",
             "validation_results",
-            "findings_current_status",
+            # findings_current_status: dropped migration 140 (WO dff23cb0) —
+            # derived from security_events at read time (see below "findings").
+            "security_events",
             "research_evidence_records",
             # decision_records, outcome_records, dashboard_attention_items: dropped
             # migration 139 (WO-AI-SPINE, AD-5) — decisions/outcomes/attention below
@@ -799,6 +805,19 @@ def _outcome_row_count(conn: sqlite3.Connection, scope: ScopeFilter | None = Non
     )
 
 
+def _security_finding_row_count(conn: sqlite3.Connection, scope: ScopeFilter | None = None) -> int:
+    """Like _row_count, but over the security_events-derived findings view
+    (findings_current_status dropped migration 140, WO dff23cb0 — see
+    core/findings/current_status.py)."""
+    where, params = _where_scope(scope)
+    return int(
+        conn.execute(
+            f"SELECT COUNT(*) FROM ({FINDINGS_CURRENT_STATUS_SQL}) {where}", params
+        ).fetchone()[0]
+        or 0
+    )
+
+
 def _component_usage(
     conn: sqlite3.Connection,
     table: str,
@@ -1012,10 +1031,11 @@ def _component_hardening_intelligence(
                     "success_count": usage.get("success_count"),
                     "failure_count": usage.get("failure_count"),
                     "validation_count": _row_count(conn, "validation_results", scope),
-                    # findings_current_status lacks milestone_id/task_id/process_run_id
-                    "security_finding_count": _row_count(
+                    # findings_current_status dropped migration 140 (WO dff23cb0);
+                    # the security_events-derived view also lacks
+                    # milestone_id/task_id/process_run_id — project-only scope.
+                    "security_finding_count": _security_finding_row_count(
                         conn,
-                        "findings_current_status",
                         ScopeFilter(project_id=scope.project_id) if scope else None,
                     ),
                     "outcome_count": _outcome_row_count(conn, scope),
@@ -1377,7 +1397,8 @@ def _token_cost_intelligence(
 def _security_rollup(
     conn: sqlite3.Connection, scope: ScopeFilter | None = None
 ) -> list[dict[str, Any]]:
-    # findings retired in migration 112 (WO-Y); read from findings_current_status spine.
+    # findings retired in migration 112 (WO-Y); findings_current_status dropped
+    # migration 140 (WO dff23cb0) — derive from security_events.
     where, params = _where_scope_project_only(scope)
     try:
         return _rows(
@@ -1391,7 +1412,7 @@ def _security_rollup(
                 severity,
                 current_status AS status,
                 COUNT(*) AS finding_count
-            FROM findings_current_status
+            FROM ({FINDINGS_CURRENT_STATUS_SQL})
             {where}
             GROUP BY project_id, file_path, line_number, severity, current_status
             ORDER BY finding_count DESC, severity DESC, file_path
@@ -1406,7 +1427,8 @@ def _security_remediation_intelligence(
     conn: sqlite3.Connection,
     scope: ScopeFilter | None = None,
 ) -> dict[str, Any]:
-    # findings retired in migration 112 (WO-Y); read from findings_current_status spine.
+    # findings retired in migration 112 (WO-Y); findings_current_status dropped
+    # migration 140 (WO dff23cb0) — derive from security_events.
     # Use fcs.project_id to avoid "ambiguous column name" in the LEFT JOIN.
     if scope and scope.project_id:
         fcs_where = "WHERE fcs.project_id = ?"
@@ -1440,7 +1462,7 @@ def _security_remediation_intelligence(
                 NULL AS evidence_refs_json,
                 fcs.created_at,
                 fcs.updated_at
-            FROM findings_current_status fcs
+            FROM ({FINDINGS_CURRENT_STATUS_SQL}) fcs
             LEFT JOIN security_events se ON se.event_id = fcs.finding_id
             {fcs_where}
             ORDER BY
@@ -1503,7 +1525,8 @@ def _security_remediation_intelligence(
 def _security_status_counts(
     conn: sqlite3.Connection, scope: ScopeFilter | None = None
 ) -> list[dict[str, Any]]:
-    # findings retired in migration 112 (WO-Y); read from findings_current_status spine.
+    # findings retired in migration 112 (WO-Y); findings_current_status dropped
+    # migration 140 (WO dff23cb0) — derive from security_events.
     where, params = _where_scope_project_only(scope)
     try:
         return _rows(
@@ -1514,7 +1537,7 @@ def _security_status_counts(
                 severity,
                 current_status AS status,
                 COUNT(*) AS finding_count
-            FROM findings_current_status
+            FROM ({FINDINGS_CURRENT_STATUS_SQL})
             {where}
             GROUP BY project_id, severity, current_status
             ORDER BY finding_count DESC, severity, current_status
@@ -1529,7 +1552,9 @@ def _security_attribution(
     conn: sqlite3.Connection, scope: ScopeFilter | None = None
 ) -> list[dict[str, Any]]:
     # findings retired in migration 112 (WO-Y); attribution columns not on spine.
-    # Return project/severity/status summary only; agent attribution is empty.
+    # findings_current_status dropped migration 140 (WO dff23cb0) — derive from
+    # security_events. Return project/severity/status summary only; agent
+    # attribution is empty.
     where, params = _where_scope_project_only(scope)
     try:
         return _rows(
@@ -1544,7 +1569,7 @@ def _security_attribution(
                 severity,
                 current_status AS status,
                 COUNT(*) AS finding_count
-            FROM findings_current_status
+            FROM ({FINDINGS_CURRENT_STATUS_SQL})
             {where}
             GROUP BY project_id, severity, current_status
             ORDER BY finding_count DESC, severity DESC
@@ -1631,10 +1656,11 @@ def _validation_outcome_intelligence(
                 "milestone_id": validation["milestone_id"],
                 "task_id": validation["task_id"],
                 "process_run_id": validation["process_run_id"],
-                # findings_current_status lacks milestone_id/task_id/process_run_id
-                "security_finding_count": _row_count(
+                # findings_current_status dropped migration 140 (WO dff23cb0);
+                # the security_events-derived view also lacks
+                # milestone_id/task_id/process_run_id — project-only scope.
+                "security_finding_count": _security_finding_row_count(
                     conn,
-                    "findings_current_status",
                     ScopeFilter(project_id=validation_scope.project_id),
                 ),
                 "token_total": token_total,
@@ -1931,7 +1957,10 @@ def _source_tables_for_components(components: Mapping[str, tuple[str, str, str]]
         "execution_events",
         "token_usage_records",
         "validation_results",
-        "findings_current_status",  # findings retired in migration 112
+        # findings_current_status (findings retired in migration 112) dropped
+        # migration 140 (WO dff23cb0) — findings are derived from
+        # security_events at read time, which is the required table now.
+        "security_events",
         # outcome_records: dropped migration 139 (WO-AI-SPINE, AD-5) — outcomes are
         # derived from execution_events, already listed above.
     ]

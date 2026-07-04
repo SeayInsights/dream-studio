@@ -5,7 +5,8 @@ from typing import Dict, Any
 
 from fastapi import APIRouter, HTTPException
 
-from projections.api.routes.sqlite_schema import object_exists, table_columns
+from core.findings.current_status import FINDINGS_CURRENT_STATUS_SQL, security_spine_present
+from projections.api.routes.sqlite_schema import object_exists
 from projections.api.lib.project_helpers import (
     get_db_connection,
     _empty_project_source_status,
@@ -26,20 +27,12 @@ async def get_project_security(project_id: str) -> Dict[str, Any]:
     try:
         cursor = conn.cursor()
 
-        if object_exists(conn, "findings_current_status"):
-            if "project_id" not in table_columns(conn, "findings_current_status"):
-                return {
-                    "project_id": project_id,
-                    "findings": [],
-                    "count": 0,
-                    "source_status": {
-                        "classification": "unavailable",
-                        "reason": "findings_current_status has no project_id column in this schema snapshot.",
-                        "source_tables": ["findings_current_status"],
-                        "derived_view": True,
-                        "primary_authority": False,
-                    },
-                }
+        # findings_current_status dropped migration 140 (WO dff23cb0) — derived
+        # from security_events at read time (core/findings/current_status.py).
+        # security_events (not findings_current_status) has always been the
+        # real presence gate: the two were created by the same migration-111
+        # DDL statement and security_events always carried project_id.
+        if security_spine_present(conn):
             aliases = _security_aliases(project_id)
             placeholders = ",".join("?" for _ in aliases)
             rows = cursor.execute(
@@ -55,7 +48,7 @@ async def get_project_security(project_id: str) -> Dict[str, Any]:
                     fcs.current_status AS status,
                     fcs.scanner_type,
                     fcs.created_at
-                FROM findings_current_status fcs
+                FROM ({FINDINGS_CURRENT_STATUS_SQL}) fcs
                 LEFT JOIN security_events se ON se.event_id = fcs.finding_id
                 WHERE fcs.project_id IN ({placeholders})
                   AND fcs.current_status NOT IN ('resolved', 'mitigated', 'false_positive')
@@ -96,12 +89,12 @@ async def get_project_security(project_id: str) -> Dict[str, Any]:
                 "count": len(findings),
                 "alias_policy": {
                     "aliases": aliases,
-                    "reason": "Security findings read from findings_current_status spine read-model (WO-Y / AD-10).",
+                    "reason": "Security findings derived from the security_events spine (WO-Y / AD-10; WO dff23cb0).",
                 },
                 "source_status": {
                     "classification": "fresh",
-                    "reason": "Project security detail is read from findings_current_status spine read-model.",
-                    "source_tables": ["findings_current_status", "security_events"],
+                    "reason": "Project security detail is derived from the security_events spine at read time.",
+                    "source_tables": ["security_events"],
                     "derived_view": True,
                     "primary_authority": False,
                 },

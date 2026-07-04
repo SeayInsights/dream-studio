@@ -478,12 +478,10 @@ def main() -> None:
     except ImportError:
         logger.warning("PreflightProjection not found — skipping spine registration.")
 
-    try:
-        from core.projections.findings_projection import FindingsProjection
-
-        runner.register_spine(FindingsProjection())
-    except ImportError:
-        logger.warning("FindingsProjection not found — skipping spine registration.")
+    # FindingsProjection removed WO dff23cb0 (migration 140 drops
+    # findings_current_status); security/lifecycle-status readers now derive
+    # current status from security_events directly (see
+    # core/findings/current_status.py).
 
     # TokenConsumptionProjection removed WO-DBA-DROP (migration 137 drops
     # token_usage_records); the DuckDB events_fact pipeline is the read side now.

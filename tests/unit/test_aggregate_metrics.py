@@ -11,26 +11,26 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import duckdb  # noqa: E402
-import pytest  # noqa: E402
 
 from core.analytics.aggregate_metrics import ensure_aggregate_schema, run_aggregation  # noqa: E402
 
 
 def _make_source_db(tmp_path: Path) -> Path:
-    """Create a minimal source DB with findings + scan_runs.
+    """Create a minimal source DB with security_events (finding spine) + scan_runs.
 
     guard_events is NOT created: it was dropped in migration 133 (all writers
     were test-only with no production callers). Tests must not recreate dead tables.
+
+    findings_current_status was dropped in migration 140 (WO dff23cb0) — finding
+    rollups are now derived from security_events (finding.recorded /
+    finding.status_changed events) at read time via
+    core.findings.current_status.FINDINGS_CURRENT_STATUS_SQL. Seed the spine
+    directly instead of a materialized status table: f1/f2/f4 stay 'open'
+    (no status event), f3 gets a finding.status_changed event to 'fixed'.
     """
     db = tmp_path / "studio.db"
     conn = sqlite3.connect(str(db))
     conn.executescript("""
-        CREATE TABLE findings_current_status (
-            finding_id TEXT PRIMARY KEY, project_id TEXT,
-            introduced_by_skill_id TEXT,
-            rule_id TEXT, severity TEXT, current_status TEXT DEFAULT 'open',
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
         CREATE TABLE scan_runs (
             scan_id TEXT PRIMARY KEY, project_id TEXT, skill_id TEXT,
             is_baseline INTEGER DEFAULT 0, findings_count INTEGER DEFAULT 0,
@@ -38,17 +38,28 @@ def _make_source_db(tmp_path: Path) -> Path:
         );
         CREATE TABLE security_events (
             event_id TEXT PRIMARY KEY, parent_event_id TEXT, event_kind TEXT NOT NULL,
-            project_id TEXT, vuln_class TEXT, severity TEXT, created_at TEXT NOT NULL
+            correlation_id TEXT, project_id TEXT, work_order_id TEXT,
+            scanner_type TEXT, cwe_id TEXT, owasp_category TEXT, cve_id TEXT,
+            file_path TEXT, line_number INTEGER, vuln_class TEXT, exploitability TEXT,
+            severity TEXT, title TEXT, body TEXT, created_at TEXT NOT NULL
         );
-        INSERT INTO findings_current_status VALUES
-            ('f1', 'proj-a', 'security', 'sec-001', 'critical', 'open', datetime('now')),
-            ('f2', 'proj-a', 'security', 'sec-001', 'high', 'open', datetime('now')),
-            ('f3', 'proj-a', 'code-quality', 'cq-001', 'medium', 'fixed', datetime('now')),
-            ('f4', 'proj-b', 'backend-api', 'api-004', 'critical', 'open', datetime('now'));
+        INSERT INTO security_events
+            (event_id, parent_event_id, event_kind, project_id, scanner_type, vuln_class, severity, title, created_at)
+        VALUES
+            ('f1', NULL, 'finding.recorded', 'proj-a', 'security', 'sec-001', 'critical', 'finding f1', datetime('now')),
+            ('f2', NULL, 'finding.recorded', 'proj-a', 'security', 'sec-001', 'high', 'finding f2', datetime('now')),
+            ('f3', NULL, 'finding.recorded', 'proj-a', 'code-quality', 'cq-001', 'medium', 'finding f3', datetime('now')),
+            ('f4', NULL, 'finding.recorded', 'proj-b', 'backend-api', 'api-004', 'critical', 'finding f4', datetime('now'));
+        INSERT INTO security_events
+            (event_id, parent_event_id, event_kind, project_id, body, created_at)
+        VALUES
+            ('f3-status', 'f3', 'finding.status_changed', 'proj-a', 'fixed', datetime('now'));
         INSERT INTO scan_runs VALUES
             ('s1', 'proj-a', 'security', 1, 2, 'completed', datetime('now')),
             ('s2', 'proj-a', 'security', 0, 1, 'completed', datetime('now'));
-        INSERT INTO security_events VALUES
+        INSERT INTO security_events
+            (event_id, parent_event_id, event_kind, project_id, vuln_class, severity, created_at)
+        VALUES
             ('e1', NULL, 'finding.recorded', 'proj-a', 'sql-injection', 'high', datetime('now')),
             ('e2', NULL, 'finding.recorded', 'proj-a', 'sql-injection', 'critical', datetime('now'));
     """)
@@ -100,11 +111,14 @@ class TestAggregationPipeline:
         assert isinstance(result["tables_written"].get("finding_rollups"), int)
         assert result["tables_written"]["finding_rollups"] > 0
 
-        # Verify finding_rollups count matches raw count
+        # Verify finding_rollups count matches raw count, both derived from the
+        # same security_events spine (findings_current_status dropped migration 140).
+        from core.findings.current_status import FINDINGS_CURRENT_STATUS_SQL
+
         src = sqlite3.connect(str(source_db))
         src.row_factory = sqlite3.Row
         raw_count = src.execute(
-            "SELECT COUNT(*) as c FROM findings_current_status WHERE project_id = 'proj-a'"
+            f"SELECT COUNT(*) as c FROM ({FINDINGS_CURRENT_STATUS_SQL}) WHERE project_id = 'proj-a'"
         ).fetchone()["c"]
         src.close()
 

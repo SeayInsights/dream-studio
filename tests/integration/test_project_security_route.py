@@ -5,7 +5,6 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 
 from core.config.database import DB_PATH_ENV, DatabaseRuntime
@@ -41,15 +40,21 @@ def _seed_project(conn: sqlite3.Connection) -> None:
 def test_security_renders_or_honest_empty(tmp_path: Path, monkeypatch) -> None:
     """T4: /api/v1/projects/{uuid}/security returns honest empty state or live findings.
 
-    Scenario A — no findings_current_status table exists:
-    Route falls through to pi_violations (also absent) and returns honest empty
-    state with count == 0. This is by-design behaviour, not a bug.
+    findings_current_status (a materialized projection over security_events)
+    was dropped in migration 140 (WO dff23cb0) — current status is now derived
+    from security_events at read time (core/findings/current_status.py).
 
-    Scenario B — findings_current_status exists with 2 open findings for DS_UUID:
-    Route reads them, excludes none (both are 'open'), returns count == 2.
+    Scenario A — no finding.recorded events on the spine:
+    Route derives zero findings from the (empty) security_events spine and
+    returns honest empty state with count == 0. This is by-design behaviour,
+    not a bug.
+
+    Scenario B — security_events has 2 finding.recorded events (both 'open',
+    the default status with no finding.status_changed event) for DS_UUID:
+    Route derives them, excludes none, returns count == 2.
     """
 
-    # ── Scenario A: no findings table ────────────────────────────────────────
+    # ── Scenario A: no findings on the spine ─────────────────────────────────
     db_path_a = tmp_path / "empty.db"
     bootstrap_database(db_path_a)
     conn_a = sqlite3.connect(str(db_path_a))
@@ -79,12 +84,13 @@ def test_security_renders_or_honest_empty(tmp_path: Path, monkeypatch) -> None:
     try:
         _seed_project(conn_b)
 
-        # findings_current_status already created by bootstrap_database (migration 111)
+        # security_events already created by bootstrap_database (migration 111).
+        # Both findings stay 'open' (the CTE default) — no status_changed event.
         conn_b.executemany(
-            "INSERT INTO findings_current_status"
-            " (finding_id, project_id, title, severity, file_path, line_number,"
-            "  current_status, scanner_type, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
+            "INSERT INTO security_events"
+            " (event_id, event_kind, project_id, title, severity, file_path, line_number,"
+            "  scanner_type, created_at)"
+            " VALUES (?, 'finding.recorded', ?, ?, ?, ?, ?, ?, datetime('now'))",
             [
                 (
                     "fnd-1",
@@ -93,7 +99,6 @@ def test_security_renders_or_honest_empty(tmp_path: Path, monkeypatch) -> None:
                     "high",
                     "core/db.py",
                     42,
-                    "open",
                     "static_analysis",
                 ),
                 (
@@ -103,7 +108,6 @@ def test_security_renders_or_honest_empty(tmp_path: Path, monkeypatch) -> None:
                     "critical",
                     "config.py",
                     10,
-                    "open",
                     "secret_scan",
                 ),
             ],
@@ -135,11 +139,17 @@ def test_security_renders_or_honest_empty(tmp_path: Path, monkeypatch) -> None:
 def test_end_to_end(tmp_path: Path, monkeypatch) -> None:
     """T5 (end-to-end): security route filters resolved findings and surface availability agrees.
 
-    1. Bootstrap a DB, seed business_projects and findings_current_status with
-       1 open high finding and 1 resolved medium finding.
+    findings_current_status (dropped migration 140, WO dff23cb0) used to carry
+    current_status as a column; current status is now derived from the latest
+    finding.status_changed event on the security_events spine (or 'open' if
+    none — see core/findings/current_status.py).
+
+    1. Bootstrap a DB, seed business_projects and security_events with
+       1 open high finding and 1 resolved medium finding (resolved via a
+       finding.status_changed event).
     2. Call GET /api/v1/projects/{uuid}/security.
     3. Assert status 200, count == 1 (resolved is excluded), the high finding present.
-    4. Verify _project_surface_availability returns security=True when the table exists.
+    4. Verify _project_surface_availability returns security=True when security_events exists.
     """
     db_path = tmp_path / "e2e.db"
     bootstrap_database(db_path)
@@ -148,12 +158,12 @@ def test_end_to_end(tmp_path: Path, monkeypatch) -> None:
     try:
         _seed_project(conn)
 
-        # findings_current_status already created by bootstrap_database (migration 111)
+        # security_events already created by bootstrap_database (migration 111)
         conn.executemany(
-            "INSERT INTO findings_current_status"
-            " (finding_id, project_id, title, severity, file_path, line_number,"
-            "  current_status, scanner_type, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
+            "INSERT INTO security_events"
+            " (event_id, event_kind, project_id, title, severity, file_path, line_number,"
+            "  scanner_type, created_at)"
+            " VALUES (?, 'finding.recorded', ?, ?, ?, ?, ?, ?, datetime('now'))",
             [
                 (
                     "fnd-open-1",
@@ -162,7 +172,6 @@ def test_end_to_end(tmp_path: Path, monkeypatch) -> None:
                     "high",
                     "core/loader.py",
                     88,
-                    "open",
                     "static_analysis",
                 ),
                 (
@@ -172,10 +181,16 @@ def test_end_to_end(tmp_path: Path, monkeypatch) -> None:
                     "medium",
                     "requirements.txt",
                     5,
-                    "resolved",
                     "dependency_scan",
                 ),
             ],
+        )
+        conn.execute(
+            "INSERT INTO security_events"
+            " (event_id, parent_event_id, event_kind, project_id, body, created_at)"
+            " VALUES ('fnd-resolved-1-status', 'fnd-resolved-1', 'finding.status_changed',"
+            "  ?, 'resolved', datetime('now'))",
+            (DS_UUID,),
         )
         conn.commit()
 
@@ -185,7 +200,7 @@ def test_end_to_end(tmp_path: Path, monkeypatch) -> None:
         availability = _project_surface_availability(conn)
         assert availability["security"] is True, (
             f"_project_surface_availability should return security=True when "
-            f"findings_current_status exists, got: {availability}"
+            f"security_events exists, got: {availability}"
         )
     finally:
         conn.close()

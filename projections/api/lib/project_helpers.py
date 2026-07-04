@@ -618,10 +618,10 @@ def _project_surface_availability(conn: sqlite3.Connection) -> dict[str, bool]:
     return {
         "overview": True,
         "prds": object_exists(conn, "prd_documents"),
-        "security": any(
-            object_exists(conn, name)
-            for name in ("findings_current_status", "security_events", "pi_violations")
-        ),
+        # findings_current_status dropped migration 140 (WO dff23cb0) — security
+        # findings now derive from security_events at read time (never a
+        # standalone schema object to probe for presence).
+        "security": any(object_exists(conn, name) for name in ("security_events", "pi_violations")),
         "dependencies": object_exists(conn, "pi_dependencies")
         and {"from_component", "to_component"}.issubset(dependency_columns),
         "activity": any(

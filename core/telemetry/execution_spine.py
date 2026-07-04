@@ -30,8 +30,8 @@ DASHBOARD_MODULES: tuple[dict[str, Any], ...] = (
         "module_name": "Security Analytics",
         "module_type": "dashboard_projection",
         "docker_profile": "security-scanners",
-        "owns_tables": ["security_events", "findings_current_status"],
-        "source_tables": ["execution_events", "security_events", "findings_current_status"],
+        "owns_tables": ["security_events"],
+        "source_tables": ["execution_events", "security_events"],
         "dashboard_cards": ["findings_by_severity", "findings_by_file", "component_attribution"],
         "drilldown_paths": ["project", "milestone", "task", "process_run", "file_line", "finding"],
         "empty_state": "No security findings recorded for the selected scope.",
@@ -405,14 +405,10 @@ def record_security_finding(conn: sqlite3.Connection, **values: Any) -> None:
         except Exception:  # noqa: BLE001
             pass
 
-    # Eagerly refresh findings_current_status projection so read models see the
-    # new finding immediately (FindingsProjection.fold_spine is idempotent).
-    try:
-        from core.projections.findings_projection import FindingsProjection
-
-        FindingsProjection().fold_spine(conn)
-    except Exception:  # noqa: BLE001
-        pass
+    # findings_current_status dropped migration 140 (WO dff23cb0) — status
+    # readers derive current_status from security_events directly (see
+    # core/findings/current_status.py), computed fresh on every read, so there
+    # is no projection to refresh here.
 
 
 def resolve_security_finding(
@@ -421,9 +417,10 @@ def resolve_security_finding(
     """Record a finding.status_changed event on the security_events spine.
 
     findings table retired in migration 112 (WO-Y). Checks the spine directly
-    (not findings_current_status, which is a projection and may lag). Writes
-    the status event via the provided conn to avoid cross-connection writes.
-    Returns True if the finding exists and the status event was written.
+    (findings_current_status, dropped migration 140, was always derived from
+    this same spine and could never disagree with it). Writes the status
+    event via the provided conn to avoid cross-connection writes. Returns
+    True if the finding exists and the status event was written.
     """
     import uuid as _uuid
     from datetime import datetime as _dt
@@ -567,11 +564,14 @@ def usage_by_component(
 
 
 def findings_rollup(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    # findings retired in migration 112 (WO-Y); read from findings_current_status spine.
+    # findings retired in migration 112 (WO-Y); findings_current_status dropped
+    # migration 140 (WO dff23cb0) — derive current_status from security_events.
+    from core.findings.current_status import FINDINGS_CURRENT_STATUS_SQL
+
     try:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT project_id, file_path, severity, COUNT(*) AS finding_count
-            FROM findings_current_status
+            FROM ({FINDINGS_CURRENT_STATUS_SQL})
             GROUP BY project_id, file_path, severity
             ORDER BY finding_count DESC, severity, file_path
             """).fetchall()

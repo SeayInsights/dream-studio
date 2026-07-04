@@ -136,12 +136,15 @@ class RiskScoringEngine:
         event_data = json.loads(event.get("event_data", "{}"))
         file_path = event_data.get("file_path")
 
-        # File-level risk (0-30) — sec_sarif_findings retired, read from spine read-model.
+        # File-level risk (0-30) — sec_sarif_findings retired, findings_current_status
+        # dropped migration 140 (WO dff23cb0); derive from security_events.
+        from core.findings.current_status import FINDINGS_CURRENT_STATUS_SQL
+
         file_risk = 0.0
         try:
             if file_path:
                 cursor.execute(
-                    "SELECT COUNT(*) FROM findings_current_status"
+                    f"SELECT COUNT(*) FROM ({FINDINGS_CURRENT_STATUS_SQL})"
                     " WHERE file_path = ? AND current_status = 'open'",
                     (file_path,),
                 )
@@ -150,7 +153,7 @@ class RiskScoringEngine:
 
             # Project-level risk (0-40)
             cursor.execute(
-                "SELECT COUNT(*) FROM findings_current_status WHERE current_status = 'open'"
+                f"SELECT COUNT(*) FROM ({FINDINGS_CURRENT_STATUS_SQL}) WHERE current_status = 'open'"
             )
             total_findings = cursor.fetchone()[0]
             project_risk = min(40.0, total_findings * 0.4)

@@ -66,8 +66,12 @@ def run_aggregation(db_path: Path | None = None) -> dict:
     agg = _connect_aggregate(db_path)
     try:
         # ── finding_rollups ────────────────────────────────────────────────────
+        # findings_current_status dropped migration 140 (WO dff23cb0); derive
+        # current_status from security_events (core/findings/current_status.py).
         try:
-            rows = src.execute("""
+            from core.findings.current_status import FINDINGS_CURRENT_STATUS_SQL
+
+            rows = src.execute(f"""
                 SELECT
                     project_id,
                     'unknown' AS skill_id,
@@ -77,7 +81,7 @@ def run_aggregation(db_path: Path | None = None) -> dict:
                     0 AS new_count,
                     SUM(CASE WHEN current_status IN ('resolved','fixed') THEN 1 ELSE 0 END) AS fixed_count,
                     SUM(CASE WHEN current_status = 'open' THEN 1 ELSE 0 END) AS persisting_count
-                FROM findings_current_status
+                FROM ({FINDINGS_CURRENT_STATUS_SQL})
                 WHERE project_id IS NOT NULL
                 GROUP BY project_id, severity, day
             """).fetchall()

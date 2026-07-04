@@ -106,12 +106,19 @@ dependencies = ["fastapi", "pydantic"]
             "'unknown', '{}', 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
             (str(demo_root),),
         )
-        # Security spine tables: security_events (spine) + findings_current_status (projection)
-        # Replaced dead `findings` table (migration 112 dropped it; migration 111 created the spine).
+        # Security spine table: security_events. Replaced dead `findings` table
+        # (migration 112 dropped it; migration 111 created the spine).
+        # findings_current_status (the old projection over this spine) was
+        # dropped in migration 140 (WO dff23cb0) — current status is derived
+        # from security_events at read time (core/findings/current_status.py),
+        # so seeding the spine alone is sufficient; no separate table to seed.
+        # parent_event_id, work_order_id, and body are required columns for
+        # FINDINGS_CURRENT_STATUS_SQL's status-change derivation.
         conn.execute(
             "CREATE TABLE security_events("
-            "event_id TEXT PRIMARY KEY, event_kind TEXT NOT NULL, project_id TEXT, "
-            "severity TEXT, title TEXT, file_path TEXT, line_number INTEGER, "
+            "event_id TEXT PRIMARY KEY, parent_event_id TEXT, event_kind TEXT NOT NULL, "
+            "project_id TEXT, work_order_id TEXT, "
+            "severity TEXT, title TEXT, body TEXT, file_path TEXT, line_number INTEGER, "
             "vuln_class TEXT, scanner_type TEXT, "
             "created_at TEXT NOT NULL DEFAULT (datetime('now', 'utc')))"
         )
@@ -120,18 +127,6 @@ dependencies = ["fastapi", "pydantic"]
             "file_path, line_number, scanner_type) "
             "VALUES('finding-1', 'finding.recorded', 'dream-studio', 'medium', 'Real CI finding', "
             "'.github/workflows/ci.yml', 1, 'SAST')"
-        )
-        conn.execute(
-            "CREATE TABLE findings_current_status("
-            "finding_id TEXT PRIMARY KEY, project_id TEXT, severity TEXT, file_path TEXT, "
-            "line_number INTEGER, scanner_type TEXT, current_status TEXT NOT NULL DEFAULT 'open', "
-            "title TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
-        )
-        conn.execute(
-            "INSERT INTO findings_current_status(finding_id, project_id, severity, file_path, "
-            "line_number, scanner_type, current_status, title, created_at, updated_at) "
-            "VALUES('finding-1', 'dream-studio', 'medium', '.github/workflows/ci.yml', 1, "
-            "'SAST', 'open', 'Real CI finding', '2026-05-14T00:00:00Z', '2026-05-14T00:00:00Z')"
         )
         # dashboard_attention_items dropped migration 139 (WO-AI-SPINE, AD-5) — not
         # created here; project_detail.py / project_list.py guard with
@@ -261,7 +256,8 @@ def test_all_projects_defaults_to_current_local_builds_authority(
         project = payload["projects"][0]
         assert project["project_authority_status"]["include_in_default_operator_view"] is True
         assert project["project_authority_status"]["classification"] == "current_legitimate_project"
-        # Security spine (migration 111): findings_current_status has 1 open finding
+        # Security spine (migration 111): security_events has 1 open finding
+        # (findings_current_status projection dropped migration 140, WO dff23cb0)
         assert project["security_package_status"]["open_findings"] == 1
         assert project["security_lifecycle_status"]["security_status"] == "blocked_by_open_findings"
         assert (
@@ -289,12 +285,6 @@ def test_project_security_uses_high_confidence_legacy_alias(tmp_path: Path, monk
             "file_path, line_number, scanner_type) "
             "VALUES('finding-alias', 'finding.recorded', 'project_dream_studio', 'high', "
             "'Alias-matched finding', 'core/security/lifecycle.py', 10, 'SAST')"
-        )
-        conn.execute(
-            "INSERT INTO findings_current_status(finding_id, project_id, severity, file_path, "
-            "line_number, scanner_type, current_status, title, created_at, updated_at) "
-            "VALUES('finding-alias', 'project_dream_studio', 'high', 'core/security/lifecycle.py', "
-            "10, 'SAST', 'open', 'Alias-matched finding', '2026-05-14T00:00:00Z', '2026-05-14T00:00:00Z')"
         )
         conn.commit()
     client = _client_for_db(db_path, monkeypatch)

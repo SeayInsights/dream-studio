@@ -389,11 +389,14 @@ def _split_scan_ids(raw: str) -> list[str]:
 
 
 def _security_open_finding_count(conn: sqlite3.Connection, *, project_id: str) -> int:
-    # Read from findings_current_status (spine read-model, WO-Y / AD-10).
-    # Falls back to 0 if the table is absent (pre-migration installs).
+    # Derived from security_events (WO-Y / AD-10 spine; findings_current_status
+    # dropped migration 140, WO dff23cb0 — see core/findings/current_status.py).
+    # Falls back to 0 if security_events is absent (pre-migration installs).
+    from core.findings.current_status import FINDINGS_CURRENT_STATUS_SQL
+
     try:
         row = conn.execute(
-            "SELECT COUNT(*) FROM findings_current_status"
+            f"SELECT COUNT(*) FROM ({FINDINGS_CURRENT_STATUS_SQL})"
             " WHERE project_id = ? AND current_status = 'open'",
             (project_id,),
         ).fetchone()

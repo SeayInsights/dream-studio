@@ -447,6 +447,8 @@ def build_scan_scope(
 
 def get_scan_summary(project_id: str) -> dict[str, Any]:
     """Return scan history summary for a project (queryable per project_id)."""
+    from core.findings.current_status import FINDINGS_CURRENT_STATUS_SQL
+
     db_path = _require_db()
     try:
         with _connect(db_path) as conn:
@@ -460,11 +462,13 @@ def get_scan_summary(project_id: str) -> dict[str, Any]:
                 (project_id,),
             ).fetchall()
             finding_rows = conn.execute(
-                # findings retired migration 112 (WO-Y); read from spine read-model.
-                """SELECT COALESCE(se.vuln_class,'') AS rule_id, fcs.severity,
+                # findings retired migration 112 (WO-Y); findings_current_status
+                # dropped migration 140 (WO dff23cb0) — derive from security_events
+                # (see core/findings/current_status.py).
+                f"""SELECT COALESCE(se.vuln_class,'') AS rule_id, fcs.severity,
                           fcs.file_path, fcs.line_number AS start_line,
                           COALESCE(fcs.title,'') AS description, fcs.current_status AS status
-                   FROM findings_current_status fcs
+                   FROM ({FINDINGS_CURRENT_STATUS_SQL}) fcs
                    LEFT JOIN security_events se ON se.event_id = fcs.finding_id
                    WHERE fcs.project_id = ?
                    ORDER BY fcs.severity DESC, fcs.created_at DESC""",

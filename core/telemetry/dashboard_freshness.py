@@ -34,7 +34,8 @@ def dashboard_data_freshness_status(db_path: Path | str | None = None) -> dict[s
                 "workflow_invocations",
                 "token_usage_records",
                 "validation_results",
-                "findings_current_status",
+                # findings_current_status: dropped migration 140 (WO dff23cb0) —
+                # derived from security_events at read time, not a schema object.
                 "security_events",
                 "research_evidence_records",
                 "raw_sessions",
@@ -274,7 +275,7 @@ def _section_statuses(
                 )
             ),
             "Security dashboard reads vw_security_summary, a current view over compatible security authority tables.",
-            ["vw_security_summary", "findings_current_status", "security_events"],
+            ["vw_security_summary", "security_events"],
             counts["vw_security_summary"],
             _latest(conn, "vw_security_summary", "created_at"),
         ),
