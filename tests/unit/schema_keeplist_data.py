@@ -46,10 +46,10 @@ CLASSIFICATION: dict[str, str] = {
     "compliance_review_flags": "DROP",  # Dropped migration 133: persist=False dead gate — _record_compliance_flags() only reachable when persist=True, which no production caller passes
     "connector_ingestion_runs": "DROP",  # Dropped migration 131: dead writer ingest_connector_payload(), test-only callers
     "cor_skill_corrections": "DROP",  # Dropped migration 131: dead writer skill_correct(), only reachable via unregistered __main__
-    "dashboard_attention_items": "KEEP",
+    "dashboard_attention_items": "DROP",  # Dropped migration 139 (WO-AI-SPINE, AD-5): 0 production rows; record_dashboard_attention() writer removed — pure duplication of the execution_events row each caller already wrote
     "decision_event_link": "DROP",  # Dropped migration 136: emit_decision's decision.recorded canonical event is the sole durable write; join replaced by payload.triggered_event_id
     "decision_log": "DROP",  # Dropped migration 136: writer emit_decision() repointed to decision.recorded canonical events; readers repointed to business_canonical_events
-    "decision_records": "KEEP",
+    "decision_records": "DROP",  # Dropped migration 139 (WO-AI-SPINE, AD-5): 0 production rows; emit_decision_record() no longer writes it — pure duplication of the execution_events row it already wrote
     "demo_case_study_packets": "DROP",
     "ds_config": "KEEP",
     # ds_documents cluster removed from classification: migration 127 dropped
@@ -102,7 +102,7 @@ CLASSIFICATION: dict[str, str] = {
     "memory_fts_docsize": "KEEP",
     "memory_fts_idx": "KEEP",
     "model_provider_profiles": "DROP",  # Dropped migration 131: dead writer record_model_provider_profile(), test-only callers
-    "outcome_records": "KEEP",
+    "outcome_records": "DROP",  # Dropped migration 139 (WO-AI-SPINE, AD-5): 2 stale rows (retired studio-onboard runs); _record_outcome() writer removed — pure duplication of the execution_events row each caller already wrote
     "pending_audits": "DROP",  # Dropped migration 131: dead writer defer_project_audit(), never called from any production path
     "policy_decision_records": "DROP",  # Dropped migration 133: test-only writer record_policy_decision(); no production CLI/hook/route calls it
     "preflight_events": "KEEP",

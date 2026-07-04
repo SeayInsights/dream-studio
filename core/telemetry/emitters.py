@@ -13,12 +13,19 @@ from typing import Any
 
 from core.config.database import get_db_path
 from core.telemetry.execution_spine import (
-    record_dashboard_attention,
     record_execution_event,
     record_research_evidence,
     record_security_finding,
     resolve_security_finding,
 )
+
+# WO-AI-SPINE (migration 139, AD-5): decision_records, outcome_records, and
+# dashboard_attention_items were dropped — their writers below already
+# dual-wrote execution_events, so the per-type tables were pure duplication
+# (0/2/0 production rows). record_dashboard_attention() and the outcome_records
+# INSERT helper were removed from execution_spine.py alongside them; readers
+# now derive decision/outcome/attention state from execution_events filtered
+# by event_type + outcome_status (see core/telemetry/read_models.py).
 
 TELEMETRY_DB_ENV = "DREAM_STUDIO_TELEMETRY_DB"
 TELEMETRY_DISABLED_ENV = "DREAM_STUDIO_TELEMETRY_DISABLED"
@@ -248,7 +255,14 @@ def emit_validation_result(
     db_path: Path | str | None = None,
     mode: str = MODE_BEST_EFFORT,
 ) -> TelemetryEmitResult:
-    """Dual-write validation/eval results into validation, outcome, and attention facts."""
+    """Dual-write validation/eval results into execution_events and validation_results.
+
+    WO-AI-SPINE (migration 139): the outcome_records and dashboard_attention_items
+    writes below were removed — they were pure duplication of the
+    execution_events row this function already writes (0/2/0 production rows
+    across the three retired tables). Outcome/attention readers now derive
+    their view from execution_events filtered by event_type + outcome_status.
+    """
 
     ctx = _context(context)
     normalized_status = _status(status)
@@ -256,7 +270,6 @@ def emit_validation_result(
     def _write(conn: sqlite3.Connection) -> TelemetryEmitResult:
         event_id = _id("validation-event")
         validation_id = _id("validation")
-        outcome_id = _id("outcome")
         merged_source_refs = _refs(ctx.source_refs, source_refs)
         merged_evidence_refs = _refs(ctx.evidence_refs, evidence_refs)
         event_metadata = {
@@ -306,42 +319,6 @@ def emit_validation_result(
                 "evidence_refs_json": json.dumps(merged_evidence_refs, sort_keys=True),
             },
         )
-        conn.execute(
-            """
-            INSERT INTO outcome_records (
-                outcome_id, project_id, milestone_id, task_id, process_run_id,
-                event_id, outcome_type, outcome_status, summary, evidence_refs_json
-            ) VALUES (
-                :outcome_id, :project_id, :milestone_id, :task_id, :process_run_id,
-                :event_id, 'validation', :outcome_status, :summary, :evidence_refs_json
-            )
-            """,
-            {
-                **ctx.scope(),
-                "outcome_id": outcome_id,
-                "event_id": event_id,
-                "outcome_status": normalized_status,
-                "summary": summary,
-                "evidence_refs_json": json.dumps(merged_evidence_refs, sort_keys=True),
-            },
-        )
-        attention = _validation_attention(normalized_status, fail_count, error_count, warning_count)
-        if attention is not None:
-            record_dashboard_attention(
-                conn,
-                **ctx.scope(),
-                event_id=event_id,
-                attention_id=_id("attention"),
-                attention_type=attention,
-                severity=_attention_severity(normalized_status),
-                title=f"Validation {normalized_status}: {validation_type}",
-                summary=summary or f"Validation result recorded as {normalized_status}.",
-                action_required=normalized_status in {"failed", "error", "warning"},
-                operator_action_required=False,
-                prompt_required=False,
-                source_refs=merged_source_refs,
-                evidence_refs=merged_evidence_refs,
-            )
         return TelemetryEmitResult(True, event_id=event_id, record_id=validation_id)
 
     return _emit(
@@ -351,8 +328,6 @@ def emit_validation_result(
         required_tables=(
             "execution_events",
             "validation_results",
-            "outcome_records",
-            "dashboard_attention_items",
         ),
     )
 
@@ -480,32 +455,18 @@ def emit_security_finding(
             _write_event(_envelope.to_dict(), root=None)
         except Exception:
             pass  # fail-open; SQLite write already succeeded
-        if normalized_severity in {"critical", "high"} or normalized_status in {
-            "open",
-            "unresolved",
-        }:
-            record_dashboard_attention(
-                conn,
-                **ctx.scope(),
-                event_id=event_id,
-                attention_id=_id("attention"),
-                attention_type="security_finding",
-                severity=normalized_severity,
-                title=f"{normalized_severity.title()} security finding",
-                summary=description,
-                action_required=True,
-                operator_action_required=False,
-                prompt_required=False,
-                source_refs=merged_source_refs,
-                evidence_refs=merged_evidence_refs,
-            )
+        # WO-AI-SPINE (migration 139): the dashboard_attention_items write that used
+        # to live here was removed — pure duplication of the execution_events row
+        # above (0 production rows). Attention-worthy findings (critical/high
+        # severity, or open/unresolved status) are still fully queryable via the
+        # security_events / findings_current_status spine written above.
         return TelemetryEmitResult(True, event_id=event_id, record_id=finding_id)
 
     return _emit(
         _write,
         db_path=db_path,
         mode=mode,
-        required_tables=("execution_events", "security_events", "dashboard_attention_items"),
+        required_tables=("execution_events", "security_events"),
     )
 
 
@@ -578,7 +539,14 @@ def emit_workflow_invocation(
     db_path: Path | str | None = None,
     mode: str = MODE_BEST_EFFORT,
 ) -> TelemetryEmitResult:
-    """Dual-write workflow execution facts while preserving raw workflow tables."""
+    """Dual-write workflow execution facts while preserving raw workflow tables.
+
+    WO-AI-SPINE (migration 139): the outcome_records and dashboard_attention_items
+    writes below were removed — pure duplication of the execution_events row this
+    function already writes. Readers derive outcome/attention state from
+    execution_events filtered by event_type='workflow.invocation_recorded' and
+    outcome_status.
+    """
 
     ctx = _context(context)
     workflow_status = (_text(status) or "unknown").lower()
@@ -627,42 +595,13 @@ def emit_workflow_invocation(
             metadata=workflow_metadata,
             outcome_status=normalized_status,
         )
-        _record_outcome(
-            conn,
-            ctx,
-            event_id=event_id,
-            outcome_type="workflow",
-            outcome_status=normalized_status,
-            summary=f"Workflow {workflow_id} recorded with status {normalized_status}.",
-            evidence_refs=merged_evidence_refs,
-        )
-        if normalized_status in {"failed", "error", "warning", "completed_with_failures"}:
-            record_dashboard_attention(
-                conn,
-                **ctx.scope(),
-                event_id=event_id,
-                attention_id=_id("attention"),
-                attention_type="workflow_status_attention",
-                severity=_attention_severity(normalized_status),
-                title=f"Workflow {normalized_status}: {workflow_id}",
-                summary=f"Workflow {workflow_id} requires review for status {normalized_status}.",
-                action_required=True,
-                operator_action_required=False,
-                prompt_required=False,
-                source_refs=merged_source_refs,
-                evidence_refs=merged_evidence_refs,
-            )
         return TelemetryEmitResult(True, event_id=event_id, record_id=event_id)
 
     return _emit(
         _write,
         db_path=db_path,
         mode=mode,
-        required_tables=(
-            "execution_events",
-            "outcome_records",
-            "dashboard_attention_items",
-        ),
+        required_tables=("execution_events",),
     )
 
 
@@ -731,27 +670,10 @@ def emit_research_evidence_record(
             operator_verification_required=operator_verification_required,
             evidence_refs=merged_evidence_refs,
         )
-        prompt_required = decision_class in {
-            "true_unknown_prompt_required",
-            "blocked_due_to_source_uncertainty",
-            "blocked_due_to_safety_or_sensitive_context",
-        }
-        if operator_verification_required or prompt_required:
-            record_dashboard_attention(
-                conn,
-                **ctx.scope(),
-                event_id=event_id,
-                attention_id=_id("attention"),
-                attention_type="research_verification_required",
-                severity="warning" if not prompt_required else "high",
-                title="Research verification required",
-                summary=source_summary or question,
-                action_required=True,
-                operator_action_required=operator_verification_required,
-                prompt_required=prompt_required,
-                source_refs=merged_source_refs,
-                evidence_refs=merged_evidence_refs,
-            )
+        # WO-AI-SPINE (migration 139): the dashboard_attention_items write that
+        # used to live here was removed — pure duplication (0 production rows).
+        # operator_verification_required and decision_class remain fully
+        # queryable directly on research_evidence_records above.
         return TelemetryEmitResult(True, event_id=event_id, record_id=normalized_research_id)
 
     return _emit(
@@ -761,7 +683,6 @@ def emit_research_evidence_record(
         required_tables=(
             "execution_events",
             "research_evidence_records",
-            "dashboard_attention_items",
         ),
     )
 
@@ -787,7 +708,19 @@ def emit_decision_record(
     db_path: Path | str | None = None,
     mode: str = MODE_BEST_EFFORT,
 ) -> TelemetryEmitResult:
-    """Dual-write decision/operator-decision facts into decision_records."""
+    """Dual-write decision/operator-decision facts into the execution_events spine.
+
+    WO-AI-SPINE (migration 139): decision_records, outcome_records, and
+    dashboard_attention_items were dropped (0/2/0 production rows) — this
+    function's execution_events row was already a full dual-write of the
+    decision, so the per-type tables were pure duplication. The stable
+    decision_id is now used directly as the execution_events primary key
+    (mirroring emit_workflow_invocation's idempotency pattern below), so
+    duplicate calls with the same decision_id remain a no-op. selected_option
+    and rationale are not persisted as separate columns anywhere post-migration
+    139; event_name captures decision_type and outcome_status captures
+    decision_status for read-model derivation (see core/telemetry/read_models.py).
+    """
 
     ctx = _context(context)
     decision_id = source_decision_id or _stable_id(
@@ -797,7 +730,7 @@ def emit_decision_record(
 
     def _write(conn: sqlite3.Connection) -> TelemetryEmitResult:
         existing = conn.execute(
-            "SELECT decision_id FROM decision_records WHERE decision_id = ?",
+            "SELECT event_id FROM execution_events WHERE event_id = ?",
             (decision_id,),
         ).fetchone()
         if existing is not None:
@@ -805,16 +738,19 @@ def emit_decision_record(
                 False, record_id=decision_id, error="duplicate decision record skipped"
             )
 
-        event_id = _id("decision-event")
+        event_id = decision_id
         merged_source_refs = _refs(ctx.source_refs, source_refs)
         merged_evidence_refs = _refs(ctx.evidence_refs, evidence_refs)
         decision_metadata = {
             "options_considered": list(options_considered or []),
+            "selected_option": selected_option,
+            "rationale": rationale,
             "route_impact": route_impact,
             "outcome_impact": outcome_impact,
             "research_id": research_id,
             "operator_required": operator_required,
             "approval_required": approval_required,
+            "prompt_required": prompt_required,
             "metadata": dict(metadata or {}),
         }
         record_execution_event(
@@ -830,67 +766,13 @@ def emit_decision_record(
             metadata=decision_metadata,
             outcome_status=normalized_status,
         )
-        conn.execute(
-            """
-            INSERT INTO decision_records (
-                decision_id, project_id, milestone_id, task_id, process_run_id,
-                event_id, decision_type, decision_status, selected_option,
-                rationale, source_refs_json, evidence_refs_json
-            ) VALUES (
-                :decision_id, :project_id, :milestone_id, :task_id, :process_run_id,
-                :event_id, :decision_type, :decision_status, :selected_option,
-                :rationale, :source_refs_json, :evidence_refs_json
-            )
-            """,
-            {
-                **ctx.scope(),
-                "decision_id": decision_id,
-                "event_id": event_id,
-                "decision_type": decision_type,
-                "decision_status": normalized_status,
-                "selected_option": selected_option,
-                "rationale": rationale,
-                "source_refs_json": json.dumps(merged_source_refs, sort_keys=True),
-                "evidence_refs_json": json.dumps(merged_evidence_refs, sort_keys=True),
-            },
-        )
-        _record_outcome(
-            conn,
-            ctx,
-            event_id=event_id,
-            outcome_type="decision",
-            outcome_status=normalized_status,
-            summary=rationale or f"Decision {decision_type} recorded.",
-            evidence_refs=merged_evidence_refs,
-        )
-        if operator_required or approval_required or prompt_required:
-            record_dashboard_attention(
-                conn,
-                **ctx.scope(),
-                event_id=event_id,
-                attention_id=_id("attention"),
-                attention_type="decision_attention",
-                severity="high" if prompt_required else "warning",
-                title=f"Decision attention: {decision_type}",
-                summary=rationale or f"Decision {decision_type} requires attention.",
-                action_required=True,
-                operator_action_required=operator_required or approval_required,
-                prompt_required=prompt_required,
-                source_refs=merged_source_refs,
-                evidence_refs=merged_evidence_refs,
-            )
         return TelemetryEmitResult(True, event_id=event_id, record_id=decision_id)
 
     return _emit(
         _write,
         db_path=db_path,
         mode=mode,
-        required_tables=(
-            "execution_events",
-            "decision_records",
-            "outcome_records",
-            "dashboard_attention_items",
-        ),
+        required_tables=("execution_events",),
     )
 
 
@@ -924,29 +806,6 @@ def _severity(value: Any) -> str:
     return text
 
 
-def _attention_severity(status: str) -> str:
-    if status == "error":
-        return "high"
-    if status == "failed":
-        return "warning"
-    if status == "warning":
-        return "warning"
-    return "info"
-
-
-def _validation_attention(
-    status: str,
-    fail_count: int | None,
-    error_count: int | None,
-    warning_count: int | None,
-) -> str | None:
-    if status in {"failed", "error"} or (fail_count or 0) > 0 or (error_count or 0) > 0:
-        return "validation_failure"
-    if status == "warning" or (warning_count or 0) > 0:
-        return "validation_warning"
-    return None
-
-
 def _stable_security_finding_id(
     *,
     ctx: TelemetryContext,
@@ -974,38 +833,6 @@ def _stable_security_finding_id(
 def _stable_id(prefix: str, *parts: Any) -> str:
     stable = "|".join(str(part) for part in parts if part is not None)
     return f"{prefix}-{uuid.uuid5(uuid.NAMESPACE_URL, stable).hex}"
-
-
-def _record_outcome(
-    conn: sqlite3.Connection,
-    ctx: TelemetryContext,
-    *,
-    event_id: str,
-    outcome_type: str,
-    outcome_status: str,
-    summary: str | None,
-    evidence_refs: Sequence[str],
-) -> None:
-    conn.execute(
-        """
-        INSERT INTO outcome_records (
-            outcome_id, project_id, milestone_id, task_id, process_run_id,
-            event_id, outcome_type, outcome_status, summary, evidence_refs_json
-        ) VALUES (
-            :outcome_id, :project_id, :milestone_id, :task_id, :process_run_id,
-            :event_id, :outcome_type, :outcome_status, :summary, :evidence_refs_json
-        )
-        """,
-        {
-            **ctx.scope(),
-            "outcome_id": _id("outcome"),
-            "event_id": event_id,
-            "outcome_type": outcome_type,
-            "outcome_status": outcome_status,
-            "summary": summary,
-            "evidence_refs_json": json.dumps(list(evidence_refs), sort_keys=True),
-        },
-    )
 
 
 def _int_or_none(value: Any) -> int | None:

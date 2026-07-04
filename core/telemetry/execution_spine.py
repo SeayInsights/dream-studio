@@ -94,7 +94,9 @@ DASHBOARD_MODULES: tuple[dict[str, Any], ...] = (
         "module_type": "dashboard_projection",
         "docker_profile": "workflow-workers",
         "owns_tables": ["execution_events"],
-        "source_tables": ["execution_events", "outcome_records"],
+        # outcome_records: dropped migration 139 (WO-AI-SPINE, AD-5) — outcomes are
+        # derived from execution_events filtered by event_type + outcome_status.
+        "source_tables": ["execution_events"],
         "dashboard_cards": ["workflow_usage", "workflow_success_failure"],
         "drilldown_paths": ["project", "milestone", "task", "process_run", "workflow", "outcome"],
         "empty_state": "No workflow invocations recorded for the selected scope.",
@@ -117,13 +119,15 @@ DASHBOARD_MODULES: tuple[dict[str, Any], ...] = (
         "docker_profile": None,
         "owns_tables": [
             "research_evidence_records",
-            "decision_records",
             # blocker_resolution_records: dropped migration 130
+            # decision_records: dropped migration 139 (WO-AI-SPINE, AD-5) — decisions
+            # are derived from execution_events (event_type='decision.recorded').
         ],
         "source_tables": [
             "research_evidence_records",
-            "decision_records",
+            "execution_events",
             # blocker_resolution_records: dropped migration 130
+            # decision_records: dropped migration 139 (WO-AI-SPINE, AD-5)
         ],
         "dashboard_cards": ["research_confidence", "decision_status"],
         "drilldown_paths": ["project", "milestone", "task", "research", "decision"],
@@ -148,11 +152,13 @@ DASHBOARD_MODULES: tuple[dict[str, Any], ...] = (
         "module_type": "dashboard_projection",
         "docker_profile": None,
         # route_decision_records: dropped migration 131
-        "owns_tables": ["dashboard_attention_items"],
+        # dashboard_attention_items: dropped migration 139 (WO-AI-SPINE, AD-5) —
+        # attention is derived from execution_events, not a dedicated owned table.
+        "owns_tables": [],
         "source_tables": [
             "execution_events",
             # route_decision_records: dropped migration 131
-            "dashboard_attention_items",
+            # dashboard_attention_items: dropped migration 139 (WO-AI-SPINE, AD-5)
         ],
         "dashboard_cards": ["dashboard_attention"],
         "drilldown_paths": ["project", "milestone", "task", "attention_item"],
@@ -442,41 +448,11 @@ def resolve_security_finding(
         return False
 
 
-def record_dashboard_attention(conn: sqlite3.Connection, **values: Any) -> None:
-    _execute(
-        conn,
-        """
-        INSERT INTO dashboard_attention_items (
-            attention_id, project_id, milestone_id, task_id, process_run_id,
-            event_id, attention_type, severity, title, summary, action_required,
-            operator_action_required, prompt_required, status, source_refs_json,
-            evidence_refs_json
-        ) VALUES (
-            :attention_id, :project_id, :milestone_id, :task_id, :process_run_id,
-            :event_id, :attention_type, :severity, :title, :summary, :action_required,
-            :operator_action_required, :prompt_required, :status, :source_refs_json,
-            :evidence_refs_json
-        )
-        """,
-        {
-            "attention_id": values["attention_id"],
-            "project_id": values.get("project_id"),
-            "milestone_id": values.get("milestone_id"),
-            "task_id": values.get("task_id"),
-            "process_run_id": values.get("process_run_id"),
-            "event_id": values.get("event_id"),
-            "attention_type": values["attention_type"],
-            "severity": values["severity"],
-            "title": values["title"],
-            "summary": values.get("summary"),
-            "action_required": 1 if values.get("action_required") else 0,
-            "operator_action_required": 1 if values.get("operator_action_required") else 0,
-            "prompt_required": 1 if values.get("prompt_required") else 0,
-            "status": values.get("status", "open"),
-            "source_refs_json": _json(values.get("source_refs"), []),
-            "evidence_refs_json": _json(values.get("evidence_refs"), []),
-        },
-    )
+# record_dashboard_attention() removed: dashboard_attention_items dropped
+# migration 139 (WO-AI-SPINE, AD-5) — it was pure duplication of the
+# execution_events row each caller already wrote (0 production rows). Dashboard
+# attention state is now derived from execution_events in
+# core/telemetry/read_models.py, filtered by event_type + outcome_status.
 
 
 def record_research_evidence(conn: sqlite3.Connection, **values: Any) -> None:

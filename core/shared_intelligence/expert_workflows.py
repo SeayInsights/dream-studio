@@ -70,11 +70,10 @@ APPLICATION_AUTOMATION_BOUNDARIES = (
 AUTHORITY_WRITE_TARGETS = (
     "workflow_invocations",
     "skill_invocations",
-    "decision_records",
     "research_evidence_records",
     "validation_results",
     # artifact_records: dropped migration 130
-    "dashboard_attention_items",
+    # decision_records + dashboard_attention_items: dropped migration 139 (WO-AI-SPINE, AD-5)
     "work_order_records",
 )
 

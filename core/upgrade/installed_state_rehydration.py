@@ -34,8 +34,9 @@ REHYDRATION_DOMAINS: tuple[dict[str, Any], ...] = (
     {
         "source_domain": "work_orders",
         "target_domain": "work-order records and evidence refs",
-        "target_tables": ["route_decision_records", "outcome_records"],
+        "target_tables": ["route_decision_records"],
         # artifact_records: dropped migration 130
+        # outcome_records: dropped migration 139 (WO-AI-SPINE, AD-5)
         "source_evidence": ["integration_matrix"],
         "status": "map_in_rehearsal",
     },
@@ -48,10 +49,11 @@ REHYDRATION_DOMAINS: tuple[dict[str, Any], ...] = (
     },
     {
         "source_domain": "decisions",
-        "target_domain": "decision_records and canonical decisions",
-        "target_tables": ["decision_records"],
+        "target_domain": "decision.recorded events in business_canonical_events and execution_events",
+        "target_tables": [],
         # decision_log + decision_event_link: dropped migration 136 (WO-DBA-EVAL-DECISION T4)
-        # — decisions are now decision.recorded events in business_canonical_events.
+        # decision_records: dropped migration 139 (WO-AI-SPINE, AD-5) — decisions are now
+        # decision.recorded events in business_canonical_events / execution_events only.
         "source_evidence": ["research_decision_bridge"],
         "status": "map_in_rehearsal",
     },
@@ -65,14 +67,16 @@ REHYDRATION_DOMAINS: tuple[dict[str, Any], ...] = (
     {
         "source_domain": "findings",
         "target_domain": "findings with file/line/severity/status",
-        "target_tables": ["findings", "dashboard_attention_items"],
+        "target_tables": ["findings"],
+        # dashboard_attention_items: dropped migration 139 (WO-AI-SPINE, AD-5)
         "source_evidence": ["security_bridge"],
         "status": "map_in_rehearsal",
     },
     {
         "source_domain": "validations_evals",
-        "target_domain": "validation_results and outcome_records",
-        "target_tables": ["validation_results", "outcome_records"],
+        "target_domain": "validation_results (outcome_records dropped migration 139)",
+        "target_tables": ["validation_results"],
+        # outcome_records: dropped migration 139 (WO-AI-SPINE, AD-5)
         "source_evidence": ["dashboard_read_models", "integration_matrix"],
         "status": "map_in_rehearsal",
     },

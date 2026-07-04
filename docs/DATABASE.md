@@ -64,6 +64,7 @@ Dream Studio's SQLite authority covers:
   with 0 rows, no production writers, and no live readers. Dashboard read-model functions that
   queried them have been removed; `canonical_events_legacy_backup` data was already fully migrated
   to `ai_canonical_events` + `business_canonical_events`.
+<!-- 2026-07-04 — migration 139 (WO-AI-SPINE, AD-5): dropped decision_records, outcome_records, dashboard_attention_items (0/2/0 production rows). These were per-type telemetry fact tables whose writers in core/telemetry/emitters.py already dual-wrote execution_events; the per-type tables were pure duplication. Dashboard/read-model consumers now derive decisions/outcomes/attention from execution_events filtered by event_type ('decision.recorded', 'validation.result_recorded', 'workflow.invocation_recorded', 'security.finding_recorded'). -->
 - release/cutover evidence summaries where safe.
 
 Current Capability Center, scoped-agent, and GitHub repo intake

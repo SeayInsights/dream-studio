@@ -133,12 +133,10 @@ dependencies = ["fastapi", "pydantic"]
             "VALUES('finding-1', 'dream-studio', 'medium', '.github/workflows/ci.yml', 1, "
             "'SAST', 'open', 'Real CI finding', '2026-05-14T00:00:00Z', '2026-05-14T00:00:00Z')"
         )
-        conn.execute(
-            "CREATE TABLE dashboard_attention_items(item_id TEXT, project_id TEXT, status TEXT)"
-        )
-        conn.execute(
-            "INSERT INTO dashboard_attention_items VALUES('attention-1', 'dream-studio', 'open')"
-        )
+        # dashboard_attention_items dropped migration 139 (WO-AI-SPINE, AD-5) — not
+        # created here; project_detail.py / project_list.py guard with
+        # object_exists() and return the honest-empty shape (attention_open=0,
+        # attention_items classification="unavailable") when the table is absent.
         conn.execute(
             "CREATE TABLE validation_results(result_id TEXT, project_id TEXT, status TEXT)"
         )
@@ -204,7 +202,10 @@ def test_project_details_separates_health_and_sqlite_readiness_authority(
         ]
         assert "external_project" in payload["module_runtime_profile_fit"]["fit_modules"]
         assert payload["validation_state"]["recent"]["recent_count"] == 2
-        assert payload["attention_items"]["open_count"] == 1
+        # dashboard_attention_items dropped migration 139 (WO-AI-SPINE, AD-5) —
+        # _attention_detail_items() honest-empties when the table is absent.
+        assert payload["attention_items"]["classification"] == "unavailable"
+        assert payload["attention_items"]["items"] == []
         assert isinstance(payload.get("manual_review_controls", []), list)
         assert isinstance(payload.get("remediation_work_orders", []), list)
         # production_readiness_* tables dropped in migration 112 → no persisted readiness data
@@ -269,9 +270,12 @@ def test_all_projects_defaults_to_current_local_builds_authority(
             ]
             is False
         )
-        assert project["work_order_status"]["attention_open"] == 1
+        # dashboard_attention_items dropped migration 139 (WO-AI-SPINE, AD-5) —
+        # attention_open_count_expr's object_exists() guard returns 0, and the
+        # table no longer appears in the honest source_tables list.
+        assert project["work_order_status"]["attention_open"] == 0
         assert project["telemetry_status"]["event_count"] == 1
-        assert "dashboard_attention_items" in payload["source_status"]["source_tables"]
+        assert "dashboard_attention_items" not in payload["source_status"]["source_tables"]
         assert "execution_events" in payload["source_status"]["source_tables"]
     finally:
         DatabaseRuntime.reset_instance()

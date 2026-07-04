@@ -222,6 +222,63 @@ class TestMigration136DropTables:
         assert counts.get("decision.recorded", 0) >= 1
 
 
+class TestMigration139DropTables:
+    """WO-AI-SPINE (work order a0cdd612-4c53-4cda-ab07-f940f8f814d5, AD-5):
+    decision_records, outcome_records, and dashboard_attention_items are pure
+    duplication of the execution_events row every writer in
+    core/telemetry/emitters.py already wrote (0/2/0 production rows)."""
+
+    AI_SPINE_DROPPED_TABLES = (
+        "decision_records",
+        "outcome_records",
+        "dashboard_attention_items",
+    )
+
+    def test_tables_absent_after_full_chain(self, migrated_db):
+        """After the full migration chain (through 139), the three tables are
+        gone from a fresh install."""
+        conn, _db_path = migrated_db
+        for table in self.AI_SPINE_DROPPED_TABLES:
+            row = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
+                (table,),
+            ).fetchone()
+            assert row is None, f"{table} should be dropped by migration 139"
+
+    def test_no_foreign_key_referenced_the_dropped_tables(self, tmp_path):
+        """Migration 139 drops the three tables outright (no table-reconstruction
+        rebuild) because nothing else has a FOREIGN KEY into them — verify that
+        invariant holds against the migration-138 schema (immediately before 139
+        runs), matching the migration header's evidence claim."""
+        from core.config.sqlite_bootstrap import run_migrations
+
+        db_path = tmp_path / "studio.db"
+        conn = sqlite3.connect(db_path)
+        run_migrations(conn, target_version=138, apply_unreleased=True)
+        conn.commit()
+
+        tables = [
+            row[0]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        ]
+        offenders = []
+        for table in tables:
+            for fk in conn.execute(f'PRAGMA foreign_key_list("{table}")').fetchall():
+                if fk[2] in self.AI_SPINE_DROPPED_TABLES:
+                    offenders.append((table, fk[2]))
+        assert not offenders, (
+            "a table has a FOREIGN KEY into one of the migration-139 dropped "
+            f"tables — a rebuild (migration-137 pattern) is needed: {offenders}"
+        )
+
+    def test_pragma_foreign_key_check_passes_after_drop(self, migrated_db):
+        """Dropping the three tables must not leave any dangling FK violation
+        elsewhere in the schema."""
+        conn, _db_path = migrated_db
+        violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+        assert not violations, f"foreign_key_check violations after migration 139: {violations}"
+
+
 class TestVerifyVerdictPersistence:
     def test_write_eval_run_updates_wo_and_emits_event(self, migrated_db, tmp_path, monkeypatch):
         from core.work_orders.verify import _write_eval_run

@@ -24,7 +24,8 @@ CORE_TABLES: tuple[str, ...] = (
     # process_runs: empty in production (no process.* events emitted); removed from
     # core required tables — summaries derive from execution_events.process_run_id.
     # route_decision_records: dropped migration 131 (dead writer emit_route_decision())
-    "dashboard_attention_items",
+    # dashboard_attention_items: dropped migration 139 (WO-AI-SPINE, AD-5) — attention
+    # is now derived from execution_events (see _ATTENTION_EVENTS_VIEW_SQL below).
 )
 
 FACT_TABLES: tuple[str, ...] = (
@@ -38,12 +39,133 @@ FACT_TABLES: tuple[str, ...] = (
     "findings_current_status",  # findings retired in migration 112 → findings_current_status
     "validation_results",
     "research_evidence_records",
-    "decision_records",
+    # decision_records: dropped migration 139 (WO-AI-SPINE, AD-5) — decisions are
+    # now derived from execution_events (see _DECISION_EVENTS_VIEW_SQL below).
     # blocker_resolution_records: dropped migration 130 (aspirational, 0 rows, no live writer)
     # artifact_records: dropped migration 130 (aspirational, 0 rows, no production writer)
     # authority_projection_records: dropped migration 130 (aspirational, 0 rows, no live writer)
-    "outcome_records",
+    # outcome_records: dropped migration 139 (WO-AI-SPINE, AD-5) — outcomes are now
+    # derived from execution_events (see _OUTCOME_EVENTS_VIEW_SQL below).
 )
+
+# ---------------------------------------------------------------------------
+# WO-AI-SPINE (migration 139, AD-5): decision_records, outcome_records, and
+# dashboard_attention_items were dropped — they were per-type fact tables that
+# duplicated the execution_events row every writer in core/telemetry/emitters.py
+# already wrote (0/2/0 production rows). The three SQL fragments below project
+# execution_events rows back into the retired tables' column shapes so every
+# read model below keeps its original dict/list shape. Fields that were never
+# persisted anywhere except the dropped tables (decision selected_option/
+# rationale, outcome/attention summary, true attention title/severity) are
+# honestly NULL/best-effort derived — see each fragment's comment.
+# ---------------------------------------------------------------------------
+
+# decision_type is recovered from event_name, which emit_decision_record()
+# writes as f"Decision: {decision_type}" ("Decision: " is 10 characters, so the
+# type starts at position 11). decision_status is outcome_status verbatim.
+# selected_option and rationale were only ever persisted in decision_records —
+# they are not recoverable from execution_events and are honestly NULL here.
+_DECISION_EVENTS_VIEW_SQL = """
+    SELECT
+        event_id AS decision_id,
+        project_id,
+        milestone_id,
+        task_id,
+        process_run_id,
+        event_id,
+        SUBSTR(event_name, 11) AS decision_type,
+        outcome_status AS decision_status,
+        NULL AS selected_option,
+        NULL AS rationale,
+        source_refs_json,
+        evidence_refs_json,
+        created_at
+    FROM execution_events
+    WHERE event_type = 'decision.recorded'
+"""
+
+# outcome_type maps 1:1 from event_type — these are exactly the three event
+# types emit_validation_result / emit_workflow_invocation / emit_decision_record
+# write, matching outcome_records' historical outcome_type values verbatim.
+# summary was only ever persisted in outcome_records and is honestly NULL here.
+_OUTCOME_EVENTS_VIEW_SQL = """
+    SELECT
+        event_id AS outcome_id,
+        project_id,
+        milestone_id,
+        task_id,
+        process_run_id,
+        event_id,
+        CASE event_type
+            WHEN 'validation.result_recorded' THEN 'validation'
+            WHEN 'workflow.invocation_recorded' THEN 'workflow'
+            WHEN 'decision.recorded' THEN 'decision'
+        END AS outcome_type,
+        outcome_status,
+        NULL AS summary,
+        evidence_refs_json,
+        created_at
+    FROM execution_events
+    WHERE event_type IN (
+        'validation.result_recorded', 'workflow.invocation_recorded', 'decision.recorded'
+    )
+"""
+
+# dashboard_attention_items was written conditionally (only on bad outcomes) by
+# emit_validation_result, emit_workflow_invocation, and emit_security_finding.
+# The condition is approximated here from outcome_status alone (the per-item
+# fail/error/warning counts and true finding severity were never persisted on
+# execution_events, only on the dropped table / are unavailable at read time).
+# Security findings default to "warning" severity since true severity isn't on
+# execution_events (only the finding's status is) — an open/unresolved finding
+# still deserves operator attention even without its original severity.
+# research.evidence_recorded and decision.recorded attention triggers depended
+# entirely on boolean flags (operator_verification_required, prompt_required,
+# operator_required, approval_required) that were never persisted on
+# execution_events either; those two event types are intentionally excluded
+# here rather than over- or under-including them. research_evidence_records
+# still carries operator_verification_required directly for callers that need it.
+_ATTENTION_EVENTS_VIEW_SQL = """
+    SELECT
+        event_id AS attention_id,
+        project_id,
+        milestone_id,
+        task_id,
+        process_run_id,
+        event_id,
+        CASE
+            WHEN event_type = 'validation.result_recorded' AND outcome_status = 'warning'
+                THEN 'validation_warning'
+            WHEN event_type = 'validation.result_recorded' THEN 'validation_failure'
+            WHEN event_type = 'workflow.invocation_recorded' THEN 'workflow_status_attention'
+            WHEN event_type = 'security.finding_recorded' THEN 'security_finding'
+        END AS attention_type,
+        CASE
+            WHEN event_type = 'security.finding_recorded' THEN 'warning'
+            WHEN outcome_status = 'error' THEN 'high'
+            WHEN outcome_status IN ('failed', 'warning') THEN 'warning'
+            ELSE 'info'
+        END AS severity,
+        event_name AS title,
+        NULL AS summary,
+        1 AS action_required,
+        0 AS operator_action_required,
+        0 AS prompt_required,
+        'open' AS status,
+        source_refs_json,
+        evidence_refs_json,
+        created_at,
+        created_at AS updated_at
+    FROM execution_events
+    WHERE (
+        event_type IN ('validation.result_recorded', 'workflow.invocation_recorded')
+        AND outcome_status IN ('failed', 'error', 'warning')
+    )
+    OR (
+        event_type = 'security.finding_recorded'
+        AND outcome_status IN ('open', 'unresolved')
+    )
+"""
 
 COMPONENT_TABLES: Mapping[str, tuple[str, str, str]] = {
     "agent": ("execution_events", "agent_id", "Agent Analytics"),
@@ -244,11 +366,11 @@ def process_run_timeline(process_run_id: str, db_path: Path | str | None = None)
             "validation_results",
             "findings_current_status",
             "research_evidence_records",
-            "decision_records",
+            # decision_records, outcome_records, dashboard_attention_items: dropped
+            # migration 139 (WO-AI-SPINE, AD-5) — decisions/outcomes/attention below
+            # are derived from execution_events (already listed above).
             # blocker_resolution_records: dropped migration 130
             # artifact_records: dropped migration 130
-            "outcome_records",
-            "dashboard_attention_items",
         ]
         return _with_authority(
             "process_run_timeline",
@@ -305,17 +427,17 @@ def process_run_timeline(process_run_id: str, db_path: Path | str | None = None)
                 "research": _scoped_rows(
                     conn, "research_evidence_records", scope, order_by="created_at, research_id"
                 ),
-                "decisions": _scoped_rows(
-                    conn, "decision_records", scope, order_by="created_at, decision_id"
+                "decisions": _scoped_rows_from_sql(
+                    conn, _DECISION_EVENTS_VIEW_SQL, scope, order_by="created_at, decision_id"
                 ),
                 # blockers removed: blocker_resolution_records dropped migration 130
                 # artifacts removed: artifact_records dropped migration 130
-                "outcomes": _scoped_rows(
-                    conn, "outcome_records", scope, order_by="created_at, outcome_id"
+                "outcomes": _scoped_rows_from_sql(
+                    conn, _OUTCOME_EVENTS_VIEW_SQL, scope, order_by="created_at, outcome_id"
                 ),
-                "attention": _scoped_rows(
+                "attention": _scoped_rows_from_sql(
                     conn,
-                    "dashboard_attention_items",
+                    _ATTENTION_EVENTS_VIEW_SQL,
                     scope,
                     order_by="created_at, attention_id",
                 ),
@@ -332,7 +454,8 @@ def workflow_execution_graph(workflow_id: str, db_path: Path | str | None = None
             "execution_events",
             # process_runs: dropped migration 131
             "validation_results",
-            "outcome_records",
+            # outcome_records: dropped migration 139 (WO-AI-SPINE, AD-5) — outcomes
+            # below are derived from execution_events.
             "token_usage_records",
         ]
         invocations = _rows(
@@ -438,7 +561,9 @@ def workflow_execution_graph(workflow_id: str, db_path: Path | str | None = None
                 "outcomes": (
                     _rows(
                         conn,
-                        f"SELECT * FROM outcome_records WHERE process_run_id IN ({process_placeholders}) ORDER BY created_at, outcome_id",
+                        f"SELECT * FROM ({_OUTCOME_EVENTS_VIEW_SQL}) AS outcome_view"
+                        f" WHERE process_run_id IN ({process_placeholders})"
+                        f" ORDER BY created_at, outcome_id",
                         process_params,
                     )
                     if process_run_ids
@@ -508,13 +633,15 @@ def dashboard_attention_summary(
     status: str | None = None,
 ) -> dict[str, Any]:
     with _connect(db_path) as conn:
-        _require_tables(conn, ("dashboard_attention_items",))
+        # dashboard_attention_items: dropped migration 139 (WO-AI-SPINE, AD-5) —
+        # attention items are now derived from execution_events.
+        _require_tables(conn, ("execution_events",))
         where = "WHERE status = ?" if status else ""
         params: tuple[Any, ...] = (status,) if status else ()
         items = _rows(
             conn,
             f"""
-            SELECT * FROM dashboard_attention_items
+            SELECT * FROM ({_ATTENTION_EVENTS_VIEW_SQL})
             {where}
             ORDER BY prompt_required DESC, operator_action_required DESC, action_required DESC,
                      severity DESC, created_at ASC, attention_id ASC
@@ -523,7 +650,7 @@ def dashboard_attention_summary(
         )
         return _with_authority(
             "dashboard_attention_summary",
-            ["dashboard_attention_items"],
+            ["execution_events"],
             {
                 "status_filter": status,
                 "open_items": [item for item in items if item.get("status") == "open"],
@@ -658,6 +785,18 @@ def _distinct_count(
 def _row_count(conn: sqlite3.Connection, table: str, scope: ScopeFilter | None = None) -> int:
     where, params = _where_scope(scope)
     return int(conn.execute(f"SELECT COUNT(*) FROM {table} {where}", params).fetchone()[0] or 0)
+
+
+def _outcome_row_count(conn: sqlite3.Connection, scope: ScopeFilter | None = None) -> int:
+    """Like _row_count, but over the execution_events-derived outcome view
+    (outcome_records dropped migration 139, WO-AI-SPINE)."""
+    where, params = _where_scope(scope)
+    return int(
+        conn.execute(
+            f"SELECT COUNT(*) FROM ({_OUTCOME_EVENTS_VIEW_SQL}) {where}", params
+        ).fetchone()[0]
+        or 0
+    )
 
 
 def _component_usage(
@@ -879,7 +1018,7 @@ def _component_hardening_intelligence(
                         "findings_current_status",
                         ScopeFilter(project_id=scope.project_id) if scope else None,
                     ),
-                    "outcome_count": _row_count(conn, "outcome_records", scope),
+                    "outcome_count": _outcome_row_count(conn, scope),
                     "token_total": token_total,
                     "dashboard_ready": True,
                     "derived_view": True,
@@ -1566,7 +1705,7 @@ def _research_decision_rollup(
             decision_status,
             selected_option,
             COUNT(*) AS decision_count
-        FROM decision_records
+        FROM ({_DECISION_EVENTS_VIEW_SQL})
         {where}
         GROUP BY project_id, milestone_id, task_id, decision_type, decision_status, selected_option
         ORDER BY decision_count DESC, decision_type
@@ -1595,7 +1734,7 @@ def _attention_rollup(
             operator_action_required,
             prompt_required,
             COUNT(*) AS item_count
-        FROM dashboard_attention_items
+        FROM ({_ATTENTION_EVENTS_VIEW_SQL})
         {where}
         GROUP BY project_id, milestone_id, task_id, process_run_id,
                  attention_type, severity, status,
@@ -1624,7 +1763,7 @@ def _attention_groups(
             COUNT(*) AS item_count,
             MAX(created_at) AS latest_created_at,
             MIN(title) AS example_title
-        FROM dashboard_attention_items
+        FROM ({_ATTENTION_EVENTS_VIEW_SQL})
         {where}
         GROUP BY attention_type, severity, status,
                  action_required, operator_action_required, prompt_required
@@ -1649,7 +1788,7 @@ def _outcome_rollup(
             outcome_type,
             outcome_status,
             COUNT(*) AS outcome_count
-        FROM outcome_records
+        FROM ({_OUTCOME_EVENTS_VIEW_SQL})
         {where}
         GROUP BY project_id, milestone_id, task_id, outcome_type, outcome_status
         ORDER BY outcome_count DESC, outcome_type
@@ -1681,6 +1820,21 @@ def _scoped_rows(
 ) -> list[dict[str, Any]]:
     where, params = _where_scope(scope)
     return _rows(conn, f"SELECT * FROM {table} {where} ORDER BY {order_by}", params)
+
+
+def _scoped_rows_from_sql(
+    conn: sqlite3.Connection,
+    view_sql: str,
+    scope: ScopeFilter,
+    *,
+    order_by: str,
+) -> list[dict[str, Any]]:
+    """Like _scoped_rows, but over a derived-view SQL fragment (e.g. the
+    execution_events projections for decisions/outcomes/attention — see
+    _DECISION_EVENTS_VIEW_SQL / _OUTCOME_EVENTS_VIEW_SQL / _ATTENTION_EVENTS_VIEW_SQL)
+    instead of a real table name."""
+    where, params = _where_scope(scope)
+    return _rows(conn, f"SELECT * FROM ({view_sql}) {where} ORDER BY {order_by}", params)
 
 
 def _process_runs_from_events(
@@ -1778,7 +1932,8 @@ def _source_tables_for_components(components: Mapping[str, tuple[str, str, str]]
         "token_usage_records",
         "validation_results",
         "findings_current_status",  # findings retired in migration 112
-        "outcome_records",
+        # outcome_records: dropped migration 139 (WO-AI-SPINE, AD-5) — outcomes are
+        # derived from execution_events, already listed above.
     ]
     tables.extend(table for table, _column, _label in components.values())
     return list(dict.fromkeys(tables))

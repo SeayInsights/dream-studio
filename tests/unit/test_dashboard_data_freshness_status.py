@@ -35,7 +35,9 @@ def _drift_db(tmp_path: Path) -> Path:
         conn.execute(
             "INSERT INTO execution_events(event_id, created_at) VALUES('event-1', '2026-05-14T00:00:00Z')"
         )
-        conn.execute("CREATE TABLE dashboard_attention_items(attention_id TEXT, created_at TEXT)")
+        # dashboard_attention_items dropped migration 139 (WO-AI-SPINE, AD-5) — not
+        # created here; dashboard_freshness.py's attention_queue section now
+        # follows execution_events instead.
         conn.execute(
             "CREATE TABLE token_usage_records("
             "token_usage_id TEXT, input_tokens INTEGER, output_tokens INTEGER, created_at TEXT)"

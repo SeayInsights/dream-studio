@@ -7,7 +7,6 @@ import pytest
 
 from core.event_store.studio_db import _connect
 from core.telemetry.execution_spine import (
-    record_dashboard_attention,
     record_execution_event,
     record_invocation,
     record_security_finding,
@@ -240,63 +239,80 @@ def _seed_read_model_dbs(db_path: Path, analytics_db: Path) -> None:
                 0,
             ),
         )
+        # decision_records dropped migration 139 (WO-AI-SPINE, AD-5) — decisions are
+        # derived from execution_events filtered by event_type='decision.recorded'.
+        # decision_id/outcome_status are recovered from event_id/outcome_status;
+        # event_name follows emit_decision_record()'s "Decision: {decision_type}"
+        # format so decision_type is recoverable via SUBSTR in the read model.
         conn.execute(
             """
-            INSERT INTO decision_records (
-                decision_id, project_id, milestone_id, task_id, process_run_id,
-                event_id, decision_type, decision_status, selected_option, rationale
+            INSERT INTO execution_events (
+                event_id, event_type, event_name, project_id, milestone_id, task_id,
+                process_run_id, source_refs_json, evidence_refs_json, outcome_status
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 "decision-read-model-test",
+                "decision.recorded",
+                "Decision: dashboard.authority",
                 scope["project_id"],
                 scope["milestone_id"],
                 scope["task_id"],
                 scope["process_run_id"],
-                "event-read-model-test",
-                "dashboard.authority",
+                "[]",
+                "[]",
                 "recorded",
-                "derived_view",
-                "Dashboard read models are not primary authority.",
             ),
         )
         # record_blocker_resolution removed: blocker_resolution_records dropped migration 130
         # INSERT INTO artifact_records removed: artifact_records dropped migration 130
+        # outcome_records dropped migration 139 (WO-AI-SPINE, AD-5) — outcomes are
+        # derived from execution_events filtered by event_type IN
+        # ('validation.result_recorded', 'workflow.invocation_recorded', 'decision.recorded').
         conn.execute(
             """
-            INSERT INTO outcome_records (
-                outcome_id, project_id, milestone_id, task_id, process_run_id,
-                event_id, outcome_type, outcome_status, summary
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO execution_events (
+                event_id, event_type, event_name, project_id, milestone_id, task_id,
+                process_run_id, source_refs_json, evidence_refs_json, outcome_status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 "outcome-read-model-test",
+                "validation.result_recorded",
+                "Validation result: read model validation",
                 scope["project_id"],
                 scope["milestone_id"],
                 scope["task_id"],
                 scope["process_run_id"],
-                "event-read-model-test",
-                "validation",
+                "[]",
+                "[]",
                 "passed",
-                "Read model validation passed.",
             ),
         )
         # route_decision_records dropped migration 131 — no record_route_decision; the
         # global summary's route_status / route_explainability now return empty.
-        record_dashboard_attention(
-            conn,
-            **scope,
-            event_id="event-read-model-test",
-            attention_id="attention-read-model-test",
-            attention_type="security_finding",
-            severity="warning",
-            title="Synthetic dashboard attention item",
-            summary="Attention rollup should remain dashboard-ready.",
-            action_required=True,
-            operator_action_required=False,
-            prompt_required=False,
-            source_refs=["tests/unit/test_telemetry_read_models.py"],
-            evidence_refs=["read_model_evidence.yaml"],
+        # dashboard_attention_items dropped migration 139 (WO-AI-SPINE, AD-5) —
+        # attention is derived from execution_events; a security.finding_recorded
+        # event with outcome_status='open' is the attention-worthy shape.
+        conn.execute(
+            """
+            INSERT INTO execution_events (
+                event_id, event_type, event_name, project_id, milestone_id, task_id,
+                process_run_id, source_refs_json, evidence_refs_json, outcome_status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "attention-read-model-test",
+                "security.finding_recorded",
+                "Security finding: DS-READMODEL-001",
+                scope["project_id"],
+                scope["milestone_id"],
+                scope["task_id"],
+                scope["process_run_id"],
+                '["tests/unit/test_telemetry_read_models.py"]',
+                '["read_model_evidence.yaml"]',
+                "open",
+            ),
         )
         conn.commit()
 
@@ -410,7 +426,11 @@ def test_global_summary_reads_telemetry_spine_and_marks_derived(
     assert summary["validation_outcome_intelligence"]["correlations"][0]["token_total"] == 225
     assert summary["validation_outcome_intelligence"]["policy"]["primary_authority"] is False
     assert summary["research_decisions"]["research"][0]["decision_class"] == "no_research_needed"
-    assert summary["research_decisions"]["decisions"][0]["selected_option"] == "derived_view"
+    # decision_records dropped migration 139 (WO-AI-SPINE, AD-5) — decisions are now
+    # derived from execution_events; decision_type is recovered from event_name,
+    # but selected_option was never persisted anywhere else and is honestly NULL.
+    assert summary["research_decisions"]["decisions"][0]["decision_type"] == "dashboard.authority"
+    assert summary["research_decisions"]["decisions"][0]["selected_option"] is None
     # research_blocker_resolution removed: blocker_resolution_records dropped migration 130
     # artifact_lineage_lifecycle removed: artifact_records dropped migration 130
     assert summary["dashboard_attention"][0]["prompt_required"] == 0
@@ -459,11 +479,15 @@ def test_project_milestone_task_and_process_drilldowns(
     )
     timeline = process_run_timeline("process-run-read-model-test", db_path)
 
-    assert project["entity_counts"]["events"] == 1
+    # entity_counts["events"] == 4: the base workflow event plus the three
+    # decision/outcome/attention execution_events rows seeded in place of the
+    # decision_records/outcome_records/dashboard_attention_items inserts
+    # (dropped migration 139, WO-AI-SPINE, AD-5) — all now live on the spine.
+    assert project["entity_counts"]["events"] == 4
     assert milestone["component_usage"]["tool"][0]["component_id"] == "pytest"
     assert task["tokens"][0]["model_id"] == "claude-sonnet-4-6"
     assert timeline["process_run"]["process_run_id"] == "process-run-read-model-test"
-    assert timeline["events"][0]["event_id"] == "event-read-model-test"
+    assert "event-read-model-test" in {event["event_id"] for event in timeline["events"]}
     assert timeline["invocations"]["agent"][0]["agent_id"] == "codex"
     assert timeline["validations"][0]["validation_id"] == "validation-read-model-test"
     assert timeline["findings"][0]["start_line"] == 1
@@ -493,9 +517,11 @@ def test_workflow_execution_graph_links_process_events_validations_and_outcomes(
     }
     assert any(edge["relationship"] == "observed_in_process_run" for edge in graph["edges"])
     assert graph["process_runs"][0]["process_run_id"] == "process-run-read-model-test"
-    assert graph["events"][0]["event_id"] == "event-read-model-test"
+    assert "event-read-model-test" in {event["event_id"] for event in graph["events"]}
     assert graph["validations"][0]["validation_id"] == "validation-read-model-test"
-    assert graph["outcomes"][0]["outcome_id"] == "outcome-read-model-test"
+    # outcome_records dropped migration 139 (WO-AI-SPINE, AD-5) — outcomes are derived
+    # from execution_events, so the decision.recorded seed row now also appears here.
+    assert "outcome-read-model-test" in {outcome["outcome_id"] for outcome in graph["outcomes"]}
     assert graph["tokens"][0]["workflow_id"] == "route-first"
     assert graph["node_metadata_gap"]["workflow_node_table_available"] is False
 
@@ -506,23 +532,28 @@ def test_component_usage_and_attention_rollups(
     db_path = _db(tmp_path)
     _seed_read_model_dbs(db_path, _isolate_analytics(monkeypatch, tmp_path))
     with _connect(db_path) as conn:
-        record_dashboard_attention(
-            conn,
-            project_id="dream-studio",
-            milestone_id="dashboard_read_models_for_telemetry_spine",
-            task_id="read-model-test",
-            process_run_id="process-run-read-model-test",
-            event_id="event-read-model-test",
-            attention_id="attention-read-model-test-duplicate",
-            attention_type="security_finding",
-            severity="warning",
-            title="Synthetic dashboard attention item duplicate",
-            summary="Duplicate attention facts should group for dashboard scanability.",
-            action_required=True,
-            operator_action_required=False,
-            prompt_required=False,
-            source_refs=["tests/unit/test_telemetry_read_models.py"],
-            evidence_refs=["read_model_evidence.yaml"],
+        # dashboard_attention_items dropped migration 139 (WO-AI-SPINE, AD-5) — a
+        # second security.finding_recorded/open event groups with the one seeded
+        # by _seed_read_model_dbs to exercise the dashboard-scanability grouping.
+        conn.execute(
+            """
+            INSERT INTO execution_events (
+                event_id, event_type, event_name, project_id, milestone_id, task_id,
+                process_run_id, source_refs_json, evidence_refs_json, outcome_status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "attention-read-model-test-duplicate",
+                "security.finding_recorded",
+                "Security finding: DS-READMODEL-002 duplicate",
+                "dream-studio",
+                "dashboard_read_models_for_telemetry_spine",
+                "read-model-test",
+                "process-run-read-model-test",
+                '["tests/unit/test_telemetry_read_models.py"]',
+                '["read_model_evidence.yaml"]',
+                "open",
+            ),
         )
         conn.commit()
 
@@ -674,23 +705,26 @@ def test_validation_outcome_intelligence_correlates_failures_without_authorizing
                 "Synthetic validation failure for correlation testing.",
             ),
         )
+        # outcome_records dropped migration 139 (WO-AI-SPINE, AD-5) — outcomes are
+        # derived from execution_events filtered by event_type='validation.result_recorded'.
         conn.execute(
             """
-            INSERT INTO outcome_records (
-                outcome_id, project_id, milestone_id, task_id, process_run_id,
-                event_id, outcome_type, outcome_status, summary
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO execution_events (
+                event_id, event_type, event_name, project_id, milestone_id, task_id,
+                process_run_id, source_refs_json, evidence_refs_json, outcome_status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 "outcome-failed-correlation-test",
+                "validation.result_recorded",
+                "Validation result: synthetic failure",
                 "dream-studio",
                 "dashboard_read_models_for_telemetry_spine",
                 "read-model-test",
                 "process-run-read-model-test",
-                "event-read-model-test",
-                "validation",
+                "[]",
+                "[]",
                 "failed",
-                "Synthetic validation failure outcome.",
             ),
         )
         conn.commit()
@@ -712,7 +746,11 @@ def test_validation_outcome_intelligence_correlates_failures_without_authorizing
     assert any(
         row["outcome_status"] == "failed" for row in intelligence["correlations"][0]["outcomes"]
     )
-    assert intelligence["correlations"][0]["component_counts"]["tool"] == 1
+    # component_counts["tool"] counts all execution_events rows in scope (not just
+    # tool_id IS NOT NULL rows) — now 5: the base workflow event, the decision/
+    # outcome/attention seeds (moved onto the spine, migration 139, WO-AI-SPINE),
+    # and this test's own synthetic failed-validation event.
+    assert intelligence["correlations"][0]["component_counts"]["tool"] == 5
     assert intelligence["policy"]["requires_future_work_order_for_fixes"] is True
 
 
@@ -753,23 +791,26 @@ def test_token_cost_intelligence_correlates_cost_with_outcomes_without_provider_
         cache_creation_input_tokens=100,
     )
     with _connect(db_path) as conn:
+        # outcome_records dropped migration 139 (WO-AI-SPINE, AD-5) — outcomes are
+        # derived from execution_events filtered by event_type='validation.result_recorded'.
         conn.execute(
             """
-            INSERT INTO outcome_records (
-                outcome_id, project_id, milestone_id, task_id, process_run_id,
-                event_id, outcome_type, outcome_status, summary
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO execution_events (
+                event_id, event_type, event_name, project_id, milestone_id, task_id,
+                process_run_id, source_refs_json, evidence_refs_json, outcome_status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 "outcome-token-cost-test",
+                "validation.result_recorded",
+                "Validation result: synthetic token cost outcome",
                 scope["project_id"],
                 scope["milestone_id"],
                 scope["task_id"],
                 scope["process_run_id"],
-                None,
-                "validation",
+                "[]",
+                "[]",
                 "passed",
-                "Synthetic token cost outcome.",
             ),
         )
         conn.commit()
