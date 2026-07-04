@@ -42,50 +42,7 @@ def token_log(tmp_path: Path) -> Path:
     return log
 
 
-class TestBackfillTokenSessions:
-    def test_backfill_token_usage(
-        self, test_db: Path, token_log: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr("core.config.paths.meta_dir", lambda: token_log.parent)
-        from interfaces.cli.backfill_token_sessions import backfill_token_usage
-
-        result = backfill_token_usage(test_db, project_id="test-project")
-        assert result["inserted"] == 5
-        assert result["total"] == 5
-        assert result["with_session_id"] == 5
-
-        conn = sqlite3.connect(str(test_db))
-        rows = conn.execute("SELECT * FROM raw_token_usage ORDER BY id").fetchall()
-        assert len(rows) == 5
-        assert rows[0][1] == "aaaaaaaa-1111-2222-3333-444444444444"  # session_id
-        assert rows[0][2] == "test-project"  # project_id
-        assert "2026-04-20T10:00:00" in rows[0][7]  # recorded_at has real timestamp
-        conn.close()
-
-    def test_backfill_dry_run(
-        self, test_db: Path, token_log: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr("core.config.paths.meta_dir", lambda: token_log.parent)
-        from interfaces.cli.backfill_token_sessions import backfill_token_usage
-
-        result = backfill_token_usage(test_db, dry_run=True)
-        assert result["dry_run"] is True
-
-        conn = sqlite3.connect(str(test_db))
-        count = conn.execute("SELECT COUNT(*) FROM raw_token_usage").fetchone()[0]
-        assert count == 0
-        conn.close()
-
-    def test_backfill_idempotent(
-        self, test_db: Path, token_log: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr("core.config.paths.meta_dir", lambda: token_log.parent)
-        from interfaces.cli.backfill_token_sessions import backfill_token_usage
-
-        backfill_token_usage(test_db)
-        result2 = backfill_token_usage(test_db)
-        assert result2["total"] == 5
-
+class TestBackfillSessions:
     def test_backfill_sessions(
         self, test_db: Path, token_log: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

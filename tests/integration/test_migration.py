@@ -120,51 +120,9 @@ class TestMigrateSentinels:
         assert _COUNTS.get("raw_sentinels", 0) == 2
 
 
-class TestMigrateTokenLog:
-    def test_ingest_token_log(self, tmp_path, monkeypatch):
-        from interfaces.cli.migrate_to_db import _ingest_token_log, _COUNTS
-
-        db_path = tmp_path / "test.db"
-        _connect(db_path).close()
-        monkeypatch.setattr("core.event_store.studio_db._db_path", lambda: db_path)
-        _COUNTS.clear()
-
-        log = tmp_path / "token-log.md"
-        log.write_text(
-            "# Token Log\n\n"
-            "| Timestamp | Session | Model | Prompt | Completion | Total |\n"
-            "|---|---|---|---|---|---|\n"
-            "| 2026-05-01T00:00:00Z | sess-1 | sonnet | 100 | 50 | 150 |\n"
-            "| 2026-05-01T00:01:00Z | sess-1 | haiku | 200 | 80 | 280 |\n",
-            encoding="utf-8",
-        )
-        _ingest_token_log(log)
-        assert _COUNTS.get("raw_token_usage", 0) == 2
-
-    def test_token_log_idempotent(self, tmp_path, monkeypatch):
-        from interfaces.cli.migrate_to_db import _ingest_token_log, _COUNTS
-
-        db_path = tmp_path / "test.db"
-        _connect(db_path).close()
-        monkeypatch.setattr("core.event_store.studio_db._db_path", lambda: db_path)
-
-        log = tmp_path / "token-log.md"
-        log.write_text(
-            "# Token Log\n\n| Ts | S | M | P | C | T |\n|---|---|---|---|---|---|\n"
-            "| 2026-05-01 | s1 | sonnet | 100 | 50 | 150 |\n",
-            encoding="utf-8",
-        )
-
-        _COUNTS.clear()
-        _ingest_token_log(log)
-        first = _COUNTS.get("raw_token_usage", 0)
-
-        _COUNTS.clear()
-        _ingest_token_log(log)
-        second = _COUNTS.get("raw_token_usage", 0)
-
-        assert first == 1
-        assert second == 0
+# TestMigrateTokenLog removed — _ingest_token_log and raw_token_usage were
+# dropped in migration 138 (WO 468ce225); superseded by canonical
+# token.consumed events and the DuckDB token_usage_records view.
 
 
 # ── Daily backup ──────────────────────────────────────────────────────────

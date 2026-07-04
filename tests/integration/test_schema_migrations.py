@@ -198,9 +198,8 @@ class TestIndexes:
         "idx_lessons_status",
         "idx_lessons_source",
         "idx_sentinels_type",
-        "idx_tokens_session",
-        "idx_tokens_project_date",
-        "idx_tokens_skill",
+        # idx_tokens_session, idx_tokens_project_date, idx_tokens_skill removed
+        # (raw_token_usage dropped in migration 138)
     ]
 
     def test_all_indexes_exist(self, tmp_path):
@@ -273,7 +272,7 @@ class TestOperationalTables:
         "raw_handoffs",
         "raw_lessons",
         "raw_sentinels",
-        "raw_token_usage",
+        # raw_token_usage dropped migration 138 (WO 468ce225)
     ]
 
     def test_all_new_tables_created(self, tmp_path):
