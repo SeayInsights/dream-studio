@@ -39,15 +39,35 @@ from core.config.paths import state_dir
 logger = logging.getLogger(__name__)
 
 
-def _ensure_native_duckdb(path: Path) -> None:
-    """Remove a legacy SQLite file masquerading at the DuckDB path.
+class AnalyticsStoreFormatError(RuntimeError):
+    """The analytics store file exists but is not a native DuckDB store.
 
-    DuckDB will silently open a SQLite file via its compat layer, defeating the
-    native columnar store (the WO-DUCKDB-REAL bug). The analytics store is
-    NEVER-AUTHORITY and fully rebuildable, so a legacy SQLite file is deleted
-    with a loud warning rather than silently used.
+    Raised by connect_analytics (fail-loud) rather than letting DuckDB open a
+    wrong-format file — a SQLite masquerade opens silently via DuckDB's compat
+    layer (row-store, not columnar), and a corrupt file yields a cryptic error.
+    The analytics store is NEVER-AUTHORITY and rebuildable: delete it to rebuild.
     """
-    if path.exists() and path.read_bytes()[:16].startswith(b"SQLite format 3"):
+
+
+def _ensure_native_duckdb(path: Path) -> None:
+    """Guarantee the file at ``path`` is a native DuckDB store, or fail loud.
+
+    DuckDB silently opens a SQLite file via its compat layer, defeating the
+    native columnar store (the WO-DUCKDB-REAL bug). Handling:
+      - absent or empty file → no-op (DuckDB initialises it natively);
+      - SQLite masquerade → deleted + recreated native, with a loud warning
+        (analytics is rebuildable, so self-heal beats crashing);
+      - native DuckDB (``DUCK`` magic at offset 8) → accepted;
+      - anything else (corrupt/foreign) → AnalyticsStoreFormatError (fail-loud),
+        instead of a silent wrong-format open or a swallowed None.
+    """
+    if not path.exists():
+        return
+    head = path.read_bytes()[:16]
+    if not head:
+        return  # empty file — duckdb.connect writes a fresh native header
+
+    if head.startswith(b"SQLite format 3"):
         logger.warning(
             "aggregate_metrics.db at %s is a legacy SQLite file — removing and "
             "recreating as a native DuckDB store (analytics is rebuildable).",
@@ -55,6 +75,15 @@ def _ensure_native_duckdb(path: Path) -> None:
         )
         for suffix in ("", "-wal", "-shm"):
             Path(str(path) + suffix).unlink(missing_ok=True)
+        return
+
+    # Native DuckDB stores carry the ASCII magic "DUCK" at byte offset 8.
+    if b"DUCK" not in head:
+        raise AnalyticsStoreFormatError(
+            f"aggregate_metrics.db at {path} is not a native DuckDB store "
+            f"(header={head!r}); refusing to open it silently. The analytics "
+            f"store is rebuildable — delete the file to have it recreated."
+        )
 
 
 _ROLLUP_TABLES_DDL = """
