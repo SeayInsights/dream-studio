@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 import sys
-import argparse, functools, hashlib, json, re, sqlite3, sys, time
+import argparse
+import functools
+import hashlib
+import json
+import sqlite3
+import time
 from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -503,18 +508,6 @@ def import_buffer(buffer_path: Path, db_path: Path | None = None) -> int:
 
 
 @_with_retry
-def rebuild_summaries(db_path: Path | None = None) -> None:
-    try:
-        with _db_transaction(db_path) as c:
-            c.executescript(
-                """DELETE FROM sum_skill_summary;
-INSERT INTO sum_skill_summary SELECT skill_name,COUNT(*),AVG(success),AVG(input_tokens),AVG(output_tokens),AVG(execution_time_s),MAX(CASE WHEN success=1 THEN invoked_at END),MAX(CASE WHEN success=0 THEN invoked_at END),datetime('now') FROM (SELECT * FROM effective_skill_runs WHERE skill_name IN (SELECT skill_name FROM raw_skill_telemetry GROUP BY skill_name HAVING COUNT(*)>=5) ORDER BY id DESC LIMIT 30) GROUP BY skill_name;"""
-            )
-    except Exception as e:
-        _reraise_if_busy(e)
-
-
-@_with_retry
 def rolling_window_prune(db_path: Path | None = None) -> int:
     try:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
@@ -535,10 +528,36 @@ def rolling_window_prune(db_path: Path | None = None) -> int:
 
 
 def get_skill_summaries(db_path: Path | None = None) -> list[dict]:
+    """Compute per-skill rollups directly from raw_skill_telemetry (via the
+    effective_skill_runs view) at read time.
+
+    sum_skill_summary (a persisted rebuild_summaries() rollup) was dropped in
+    migration 140 — it was pure derived state duplicating raw_skill_telemetry.
+    This SELECT is the same aggregation the old rebuild_summaries() INSERT used:
+    only skills with >=5 total telemetry rows qualify, computed over the most
+    recent 30 qualifying effective_skill_runs rows (by id, across all skills).
+    """
     try:
         c = _connect(db_path)
         try:
-            rows = c.execute("SELECT * FROM sum_skill_summary").fetchall()
+            rows = c.execute("""SELECT
+    skill_name,
+    COUNT(*) AS times_used,
+    AVG(success) AS success_rate,
+    AVG(input_tokens) AS avg_input_tokens,
+    AVG(output_tokens) AS avg_output_tokens,
+    AVG(execution_time_s) AS avg_exec_time_s,
+    MAX(CASE WHEN success=1 THEN invoked_at END) AS last_success,
+    MAX(CASE WHEN success=0 THEN invoked_at END) AS last_failure,
+    datetime('now') AS updated_at
+FROM (
+    SELECT * FROM effective_skill_runs
+    WHERE skill_name IN (
+        SELECT skill_name FROM raw_skill_telemetry GROUP BY skill_name HAVING COUNT(*)>=5
+    )
+    ORDER BY id DESC LIMIT 30
+)
+GROUP BY skill_name""").fetchall()
             result = []
             for r in rows:
                 d = dict(r)
@@ -1934,7 +1953,6 @@ def main() -> None:
     args = ap.parse_args()
     if args.cmd == "import-and-rebuild":
         n = import_buffer(Path(args.buffer))
-        rebuild_summaries()
         print(f"imported {n} rows")
     elif args.cmd == "prune":
         print(f"pruned {rolling_window_prune()} rows")
@@ -1945,7 +1963,7 @@ def main() -> None:
             "raw_workflow_nodes",
             "raw_skill_telemetry",
             # cor_skill_corrections dropped migration 131
-            "sum_skill_summary",
+            # sum_skill_summary dropped migration 140 (derived; see get_skill_summaries)
             "log_batch_imports",
             "raw_operational_snapshots",
             "raw_approaches",
