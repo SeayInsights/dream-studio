@@ -263,196 +263,41 @@ def _reraise_if_busy(e: Exception) -> None:
 # ── Workflow functions ──────────────────────────────────────────────────────
 
 
-@_with_retry
-def archive_workflow(
-    run_key: str,
-    wf: dict,
-    db_path: Path | None = None,
-    *,
-    prd_id: str | None = None,
-    task_id: str | None = None,
-    session_id: str | None = None,
-) -> bool:
-    """
-    Archive workflow run to raw_workflow_runs and raw_workflow_nodes.
-
-    Writes to activity_log FIRST via EventNormalizer, then links via activity_id (Phase 3 traceability).
-
-    Args:
-        run_key: Unique workflow run identifier
-        wf: Workflow dict with keys: workflow, yaml_path, status, started, nodes
-        db_path: Optional database path
-        prd_id: Optional PRD ID for cross-domain linkage
-        task_id: Optional task ID for cross-domain linkage
-        session_id: Optional session ID for cross-domain linkage
-    """
-    try:
-        nodes = wf.get("nodes", {})
-        started_at = wf.get("started", _NOW())
-        status = wf["status"]
-
-        # Calculate duration if workflow is finished
-        duration_ms = None
-        if wf.get("finished"):
-            try:
-                start = datetime.fromisoformat(started_at)
-                end = datetime.fromisoformat(wf["finished"])
-                duration_ms = int((end - start).total_seconds() * 1000)
-            except (ValueError, TypeError):
-                pass
-
-        with _db_transaction(db_path) as c:
-            # 1. Emit canonical event (TA0c: activity_log retired)
-            _try_emit_canonical(
-                _CanonicalEventType.WORKFLOW_COMPLETED,
-                {
-                    "workflow": wf["workflow"],
-                    "yaml_path": wf.get("yaml_path", ""),
-                    "status": status,
-                    "node_count": len(nodes),
-                    "nodes_done": sum(
-                        1 for n in nodes.values() if n.get("status") in ("completed", "skipped")
-                    ),
-                    "duration_ms": duration_ms,
-                },
-                session_id=session_id,
-                task_id=task_id,
-                prd_id=prd_id,
-            )
-            activity_id = None  # deprecated FK column
-
-            # 2. Insert into raw_workflow_runs with activity_id FK
-            c.execute(
-                """INSERT INTO raw_workflow_runs
-                   (run_key, workflow, yaml_path, status, started_at,
-                    node_count, nodes_done, activity_id, prd_id, task_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    run_key,
-                    wf["workflow"],
-                    wf["yaml_path"],
-                    status,
-                    started_at,
-                    len(nodes),
-                    sum(1 for n in nodes.values() if n.get("status") in ("completed", "skipped")),
-                    activity_id,
-                    prd_id,
-                    task_id,
-                ),
-            )
-
-            # 3. Insert workflow nodes (with individual activity_id entries)
-            for nid, nd in nodes.items():
-                node_status = nd.get("status", "")
-                node_duration_ms = None
-
-                # Calculate node duration if available
-                if nd.get("started") and nd.get("finished"):
-                    try:
-                        node_start = datetime.fromisoformat(nd["started"])
-                        node_end = datetime.fromisoformat(nd["finished"])
-                        node_duration_ms = int((node_end - node_start).total_seconds() * 1000)
-                    except (ValueError, TypeError):
-                        pass
-
-                # Emit canonical event for workflow node (TA0c: activity_log retired)
-                _try_emit_canonical(
-                    _CanonicalEventType.WORKFLOW_NODE_COMPLETED,
-                    {
-                        "node_id": nid,
-                        "workflow": wf["workflow"],
-                        "status": node_status,
-                        "output": nd.get("output", ""),
-                        "duration_ms": node_duration_ms,
-                    },
-                    session_id=session_id,
-                    task_id=task_id,
-                    prd_id=prd_id,
-                )
-                node_activity_id = None  # deprecated FK column
-
-                # Insert into raw_workflow_nodes with activity_id FK
-                c.execute(
-                    """INSERT INTO raw_workflow_nodes
-                       (run_key, node_id, status, started_at, finished_at,
-                        duration_s, output, activity_id)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        run_key,
-                        nid,
-                        node_status,
-                        nd.get("started"),
-                        nd.get("finished"),
-                        nd.get("duration_s"),
-                        nd.get("output"),
-                        node_activity_id,
-                    ),
-                )
-        _emit_workflow_telemetry(
-            run_key=run_key,
-            wf=wf,
-            status=status,
-            duration_ms=duration_ms,
-            prd_id=prd_id,
-            task_id=task_id,
-            session_id=session_id,
-            db_path=db_path,
-        )
-        return True
-    except Exception as e:
-        _reraise_if_busy(e)
-        return False
-
-
-def _emit_workflow_telemetry(
-    *,
-    run_key: str,
-    wf: dict,
-    status: str,
-    duration_ms: int | None,
-    prd_id: str | None,
-    task_id: str | None,
-    session_id: str | None,
-    db_path: Path | None,
-) -> None:
-    """Best-effort dual-write from legacy workflow archive tables."""
-
-    try:
-        from core.telemetry.emitters import TelemetryContext, emit_workflow_invocation
-
-        emit_workflow_invocation(
-            workflow_id=str(wf.get("workflow") or "unknown"),
-            status=status,
-            run_key=run_key,
-            yaml_path=str(wf.get("yaml_path") or ""),
-            started_at=wf.get("started"),
-            ended_at=wf.get("finished"),
-            duration_ms=duration_ms,
-            nodes=wf.get("nodes", {}),
-            context=TelemetryContext(
-                project_id="dream-studio",
-                milestone_id=prd_id,
-                task_id=task_id,
-                process_run_id=run_key,
-                source_refs=("core/event_store/studio_db.py",),
-                evidence_refs=(f"raw_workflow_runs:{run_key}",),
-            ),
-            metadata={"session_id": session_id},
-            db_path=db_path,
-        )
-    except Exception:
-        return
-
-
 def last_run(workflow_name: str, db_path: Path | None = None) -> dict | None:
+    """Most recent workflow.completed canonical event for a workflow name.
+
+    WO 9f47a1a0: raw_workflow_runs (write-orphaned since ~2026-05-18) dropped
+    by migration 141 — see
+    core/event_store/migrations/141_drop_orphaned_workflow_raw_tables.sql.
+    archive_workflow()'s DB write is gone; control/execution/workflow/state.py
+    now emits workflow.completed canonical events straight to the spool, which
+    the ingestor projects into ai_canonical_events (routing is AI-only per
+    config/event_type_registry.py). Read-side is honestly empty (None) until
+    ingestion has run for a given event.
+    """
     try:
         c = _connect(db_path)
         try:
             r = c.execute(
-                "SELECT run_key,status,started_at,finished_at FROM raw_workflow_runs WHERE workflow=? ORDER BY finished_at DESC LIMIT 1",
+                """SELECT payload FROM ai_canonical_events
+                   WHERE event_type = 'workflow.completed'
+                     AND json_extract(payload, '$.workflow') = ?
+                   ORDER BY COALESCE(
+                       json_extract(payload, '$.finished_at'),
+                       json_extract(payload, '$.started_at')
+                   ) DESC
+                   LIMIT 1""",
                 (workflow_name,),
             ).fetchone()
-            return dict(r) if r else None
+            if r is None:
+                return None
+            payload = json.loads(r["payload"])
+            return {
+                "run_key": payload.get("run_key"),
+                "status": payload.get("status"),
+                "started_at": payload.get("started_at"),
+                "finished_at": payload.get("finished_at"),
+            }
         finally:
             c.close()
     except Exception:
@@ -460,11 +305,19 @@ def last_run(workflow_name: str, db_path: Path | None = None) -> dict | None:
 
 
 def run_count(workflow_name: str, db_path: Path | None = None) -> int:
+    """Count of workflow.completed canonical events for a workflow name.
+
+    WO 9f47a1a0: see last_run() docstring — raw_workflow_runs dropped
+    migration 141, this now counts ai_canonical_events rows instead.
+    """
     try:
         c = _connect(db_path)
         try:
             n = c.execute(
-                "SELECT COUNT(*) FROM raw_workflow_runs WHERE workflow=?", (workflow_name,)
+                """SELECT COUNT(*) FROM ai_canonical_events
+                   WHERE event_type = 'workflow.completed'
+                     AND json_extract(payload, '$.workflow') = ?""",
+                (workflow_name,),
             ).fetchone()[0]
             return n
         finally:
@@ -509,19 +362,23 @@ def import_buffer(buffer_path: Path, db_path: Path | None = None) -> int:
 
 @_with_retry
 def rolling_window_prune(db_path: Path | None = None) -> int:
+    """Prune rolling-window telemetry tables.
+
+    WO 9f47a1a0: the raw_workflow_nodes/raw_workflow_runs DELETEs that used to
+    live here were dropped along with the tables themselves (migration 141,
+    write-orphaned since 2026-05-18 — see
+    core/event_store/migrations/141_drop_orphaned_workflow_raw_tables.sql).
+    Canonical workflow.completed/workflow.node.completed events are
+    append-only in ai_canonical_events and are not pruned by this function.
+    """
     try:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
         with _db_transaction(db_path) as c:
             d1 = c.execute(
                 "DELETE FROM raw_skill_telemetry WHERE id NOT IN (SELECT id FROM raw_skill_telemetry t2 WHERE t2.skill_name=raw_skill_telemetry.skill_name ORDER BY id DESC LIMIT 100)"
             ).rowcount
-            d2 = c.execute(
-                "DELETE FROM raw_workflow_nodes WHERE run_key IN (SELECT run_key FROM raw_workflow_runs WHERE finished_at<?)",
-                (cutoff,),
-            ).rowcount
-            d3 = c.execute("DELETE FROM raw_workflow_runs WHERE finished_at<?", (cutoff,)).rowcount
             d4 = c.execute("DELETE FROM raw_approaches WHERE captured_at<?", (cutoff,)).rowcount
-        return d1 + d2 + d3 + d4
+        return d1 + d4
     except Exception as e:
         _reraise_if_busy(e)
         return 0
@@ -1959,8 +1816,7 @@ def main() -> None:
     elif args.cmd == "status":
         c = _connect()
         tables = [
-            "raw_workflow_runs",
-            "raw_workflow_nodes",
+            # raw_workflow_runs, raw_workflow_nodes dropped migration 141 (WO 9f47a1a0)
             "raw_skill_telemetry",
             # cor_skill_corrections dropped migration 131
             # sum_skill_summary dropped migration 140 (derived; see get_skill_summaries)

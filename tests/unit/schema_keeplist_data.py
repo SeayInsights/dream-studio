@@ -137,8 +137,8 @@ CLASSIFICATION: dict[str, str] = {
     #                             removed: studio_db.insert_token_usage, migrate_to_db.py
     #                             ::_ingest_token_log, backfill_token_sessions.py
     #                             ::backfill_token_usage.
-    "raw_workflow_nodes": "KEEP",
-    "raw_workflow_runs": "KEEP",
+    "raw_workflow_nodes": "DROP",  # Dropped migration 141 (WO 9f47a1a0): write-orphaned since 2026-05-18 — archive_workflow() silently failed; replaced by spool-emitted workflow.node.completed canonical events
+    "raw_workflow_runs": "DROP",  # Dropped migration 141 (WO 9f47a1a0): write-orphaned since 2026-05-18 — archive_workflow() silently failed; replaced by spool-emitted workflow.completed canonical events
     "readiness_events": "KEEP",
     "reg_analyzed_repos": "DROP",
     "reg_gotchas": "KEEP",

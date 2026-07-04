@@ -362,6 +362,80 @@ class TestMigration140DropDerivedState:
         assert rows[0]["tool"] == "semgrep"
 
 
+class TestMigration141DropWorkflowRawTables:
+    """WO 9f47a1a0-11db-4fcb-9d93-d350fd9a5a6f (operator-approved pre-squash
+    removal): raw_workflow_runs (2 rows) and raw_workflow_nodes (25 rows) both
+    last wrote 2026-05-18 despite daily workflow runs — archive_workflow()
+    silently swallowed its own INSERT failures. Replaced by direct spool
+    emission of workflow.completed / workflow.node.completed canonical events
+    (control/execution/workflow/state.py)."""
+
+    WORKFLOW_RAW_DROPPED_TABLES = (
+        "raw_workflow_runs",
+        "raw_workflow_nodes",
+    )
+
+    def test_tables_absent_after_full_chain(self, migrated_db):
+        """After the full migration chain (through 141), both tables are gone
+        from a fresh install."""
+        conn, _db_path = migrated_db
+        for table in self.WORKFLOW_RAW_DROPPED_TABLES:
+            row = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
+                (table,),
+            ).fetchone()
+            assert row is None, f"{table} should be dropped by migration 141"
+
+    def test_no_external_foreign_key_referenced_the_dropped_tables(self, tmp_path):
+        """Migration 141 drops both tables outright (no table-reconstruction
+        rebuild) because no OTHER table has a FOREIGN KEY into them — verify
+        that invariant holds against the migration-140 schema (immediately
+        before 141 runs), matching the migration header's evidence claim.
+        raw_workflow_nodes -> raw_workflow_runs is expected (both tables are
+        dropped together)."""
+        from core.config.sqlite_bootstrap import run_migrations
+
+        db_path = tmp_path / "studio.db"
+        conn = sqlite3.connect(db_path)
+        run_migrations(conn, target_version=140, apply_unreleased=True)
+        conn.commit()
+
+        tables = [
+            row[0]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        ]
+        offenders = []
+        for table in tables:
+            if table == "raw_workflow_nodes":
+                continue  # the expected internal FK into raw_workflow_runs
+            for fk in conn.execute(f'PRAGMA foreign_key_list("{table}")').fetchall():
+                if fk[2] in self.WORKFLOW_RAW_DROPPED_TABLES:
+                    offenders.append((table, fk[2]))
+        assert not offenders, (
+            "a table has a FOREIGN KEY into one of the migration-141 dropped "
+            f"tables — a rebuild (migration-137 pattern) is needed: {offenders}"
+        )
+
+    def test_pragma_foreign_key_check_passes_after_drop(self, migrated_db):
+        """Dropping both tables must not leave any dangling FK violation
+        elsewhere in the schema."""
+        conn, _db_path = migrated_db
+        violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+        assert not violations, f"foreign_key_check violations after migration 141: {violations}"
+
+    def test_no_view_references_the_dropped_tables(self, migrated_db):
+        """No live SQLite VIEW reads FROM either dropped table."""
+        conn, _db_path = migrated_db
+        conn.row_factory = sqlite3.Row
+        views = conn.execute("SELECT sql FROM sqlite_master WHERE type='view'").fetchall()
+        offenders = [
+            row["sql"]
+            for row in views
+            if row["sql"] and any(table in row["sql"] for table in self.WORKFLOW_RAW_DROPPED_TABLES)
+        ]
+        assert not offenders, f"views still reference dropped workflow raw tables: {offenders}"
+
+
 class TestVerifyVerdictPersistence:
     def test_write_eval_run_updates_wo_and_emits_event(self, migrated_db, tmp_path, monkeypatch):
         from core.work_orders.verify import _write_eval_run

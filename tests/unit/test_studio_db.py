@@ -11,7 +11,6 @@ import pytest
 
 from core.event_store.studio_db import (  # noqa: E402
     _connect,
-    archive_workflow,
     last_run,
     run_count,
     import_buffer,
@@ -35,8 +34,10 @@ def test_schema_creates_all_tables(tmp_path):
 
     names = {r["name"] for r in rows}
     expected_tables = {
-        "raw_workflow_runs",
-        "raw_workflow_nodes",
+        # raw_workflow_runs / raw_workflow_nodes: dropped migration 141 (WO
+        # 9f47a1a0) — write-orphaned since 2026-05-18; see
+        # test_last_run_and_run_count_read_canonical_workflow_completed_events
+        # for the replacement ai_canonical_events-backed read path.
         "raw_skill_telemetry",
         # cor_skill_corrections: dropped migration 131
         # sum_skill_summary: dropped migration 140 (derived; see get_skill_summaries)
@@ -46,32 +47,43 @@ def test_schema_creates_all_tables(tmp_path):
     assert "effective_skill_runs" in names, "View effective_skill_runs not found"
 
 
-# ── 2. archive_workflow round-trip → last_run ─────────────────────────────────
+# ── 2. last_run / run_count read workflow.completed canonical events ─────────
 
 
-def test_archive_workflow_round_trip(tmp_path):
+def test_last_run_and_run_count_read_canonical_workflow_completed_events(tmp_path):
+    """WO 9f47a1a0: archive_workflow() + raw_workflow_runs/raw_workflow_nodes
+    dropped (migration 141, write-orphaned since 2026-05-18). last_run()/
+    run_count() now derive from workflow.completed canonical events in
+    ai_canonical_events (payload.workflow) — the same shape
+    control/execution/workflow/state.py emits via the spool."""
     db = tmp_path / "test.db"
-    wf = {
-        "workflow": "hotfix",
-        "yaml_path": "/tmp/hotfix.yaml",
-        "status": "completed",
-        "started": "2026-01-01T00:00:00+00:00",
-        "nodes": {
-            "n1": {
-                "status": "completed",
-                "started": None,
-                "finished": None,
-                "duration_s": None,
-                "output": None,
-            }
-        },
-    }
-    result = archive_workflow("hotfix-123", wf, db_path=db)
-    assert result is True
+    conn = _connect(db)
+    payload = json.dumps(
+        {
+            "run_key": "hotfix-123",
+            "workflow": "hotfix",
+            "yaml_path": "/tmp/hotfix.yaml",
+            "status": "completed",
+            "started_at": "2026-01-01T00:00:00+00:00",
+            "finished_at": "2026-01-01T00:05:00+00:00",
+            "duration_ms": 300000,
+            "node_count": 1,
+            "nodes_done": 1,
+        }
+    )
+    conn.execute(
+        """INSERT INTO ai_canonical_events
+           (event_id, event_type, event_timestamp, trace, payload, workflow_id)
+           VALUES (?, 'workflow.completed', ?, '{}', ?, ?)""",
+        ("evt-hotfix-1", "2026-01-01T00:05:00+00:00", payload, "hotfix"),
+    )
+    conn.commit()
+    conn.close()
 
     row = last_run("hotfix", db_path=db)
     assert row is not None
     assert row["status"] == "completed"
+    assert run_count("hotfix", db_path=db) == 1
 
 
 # ── 3. last_run returns None for absent workflow ───────────────────────────────
@@ -182,14 +194,6 @@ def test_graceful_on_bad_db_path(tmp_path):
     blocker.write_text("not a directory")
     bad = blocker / "test.db"
 
-    wf = {
-        "workflow": "x",
-        "yaml_path": "/x.yaml",
-        "status": "done",
-        "started": "2026-01-01T00:00:00+00:00",
-        "nodes": {},
-    }
-    assert archive_workflow("run-x", wf, db_path=bad) is False
     assert last_run("x", db_path=bad) is None
     assert run_count("x", db_path=bad) == 0
     assert import_buffer(tmp_path / "nonexistent.jsonl", db_path=bad) == 0

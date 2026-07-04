@@ -17,7 +17,7 @@ from core.event_store.studio_db import (  # noqa: E402
     insert_approach,
     upsert_gotcha,
     search_gotchas_db,
-    archive_workflow,
+    import_buffer,
 )
 
 
@@ -183,8 +183,8 @@ class TestIndexes:
         "idx_telemetry_project",
         "idx_telemetry_session",
         # idx_corrections_telemetry removed (cor_skill_corrections dropped in migration 131)
-        "idx_wfnodes_runkey",
-        "idx_wfruns_workflow",
+        # idx_wfnodes_runkey, idx_wfruns_workflow removed (raw_workflow_nodes/runs
+        # dropped migration 141, WO 9f47a1a0)
         "idx_gotchas_skill",
         "idx_gotchas_discovered",
         # idx_skills_pack, idx_workflows_category removed (dead tables in migration 128)
@@ -231,36 +231,43 @@ class TestIndexes:
 
 class TestRetry:
     def test_retry_on_simulated_busy(self, tmp_path):
-        """Verify _with_retry retries on SQLITE_BUSY and eventually succeeds."""
+        """Verify _with_retry retries on SQLITE_BUSY and eventually succeeds.
+
+        WO 9f47a1a0: archive_workflow() (the original target here) was
+        deleted along with raw_workflow_runs/raw_workflow_nodes (migration
+        141, write-orphaned since 2026-05-18). import_buffer() is another
+        @_with_retry-decorated studio_db function and exercises the exact
+        same generic retry mechanism this test targets.
+        """
         db = tmp_path / "test.db"
         _connect(db).close()
 
         call_count = 0
-        original_archive = archive_workflow.__wrapped__
+        original_import = import_buffer.__wrapped__
 
         def patched(*args, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count < 3:
                 raise sqlite3.OperationalError("database is locked")
-            return original_archive(*args, **kwargs)
+            return original_import(*args, **kwargs)
 
         from core.event_store import studio_db as mod
 
-        orig = mod.archive_workflow
+        orig = mod.import_buffer
         try:
-            mod.archive_workflow = mod._with_retry(patched, backoffs=(0.01, 0.01, 0.01))
-            wf = {
-                "workflow": "test",
-                "yaml_path": "/tmp/test.yaml",
-                "status": "completed",
-                "nodes": {},
-            }
-            result = mod.archive_workflow("retry-test", wf, db_path=db)
-            assert result is True
+            mod.import_buffer = mod._with_retry(patched, backoffs=(0.01, 0.01, 0.01))
+            buf = tmp_path / "buf.jsonl"
+            buf.write_text(
+                '{"skill_name": "retry-test", "success": 1,'
+                ' "invoked_at": "2026-01-01T00:00:00+00:00"}\n',
+                encoding="utf-8",
+            )
+            result = mod.import_buffer(buf, db_path=db)
+            assert result == 1
             assert call_count == 3
         finally:
-            mod.archive_workflow = orig
+            mod.import_buffer = orig
 
 
 # ── New operational tables exist ────────────────────────────────────────────
