@@ -66,7 +66,7 @@ def _gap(title: str, *, category: str, description: str = "gap desc") -> dict:
     }
 
 
-def _spawn(conn, gaps, *, milestone_id=_MILESTONE_ID):
+def _spawn(conn, gaps, *, milestone_id=_MILESTONE_ID, reviewed_wo=_REVIEWED_WO):
     from core.work_orders.verify import _insert_gap_work_orders
 
     return _insert_gap_work_orders(
@@ -74,7 +74,7 @@ def _spawn(conn, gaps, *, milestone_id=_MILESTONE_ID):
         gaps=gaps,
         project_id=_PROJECT_ID,
         milestone_id=milestone_id,
-        reviewed_work_order_id=_REVIEWED_WO,
+        reviewed_work_order_id=reviewed_wo,
         reviewed_wo_title="Parent WO",
         reviewed_wo_sequence=10,
     )
@@ -149,3 +149,27 @@ def test_respawn_cap_blocks_repeat():
     assert _wo_count(conn) == 1  # no new WO created
     assert second[0].get("respawn_suppressed") is True
     assert second[0]["work_order_id"] == spawned_id
+
+
+def test_advisory_category_dedupes_across_reviewed_wos():
+    """WO-GAP-DEDUPE-CLASS: a GENERIC advisory category (missing-behavioral-ac)
+    reviewed on two DIFFERENT work orders must dedup project-wide → one WO, not a
+    near-duplicate per reviewed WO (the 13-duplicate spiral this WO fixes)."""
+    conn = _make_conn()
+    _spawn(conn, [_gap("Add behavioral ACs", category="missing-behavioral-ac")], reviewed_wo="wo-A")
+    second = _spawn(
+        conn, [_gap("Add behavioral ACs", category="missing-behavioral-ac")], reviewed_wo="wo-B"
+    )
+
+    assert _wo_count(conn) == 1, "advisory class must spawn one project-wide tracking WO"
+    assert second[0].get("merged_into_existing") is True
+
+
+def test_content_specific_category_still_scoped_per_reviewed_wo():
+    """Negative control: a content-specific category (missing-tests) is genuinely
+    different work on different WOs and must still spawn one WO PER reviewed WO."""
+    conn = _make_conn()
+    _spawn(conn, [_gap("Add tests for WO-A", category="missing-tests")], reviewed_wo="wo-A")
+    _spawn(conn, [_gap("Add tests for WO-B", category="missing-tests")], reviewed_wo="wo-B")
+
+    assert _wo_count(conn) == 2, "content-specific gaps must not collapse across WOs"
