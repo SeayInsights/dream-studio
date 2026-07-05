@@ -5,8 +5,7 @@ NO LLM narration. Pure structured findings + metrics.
 """
 
 from __future__ import annotations
-from typing import Dict, List
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from .model import OrganizationGraph
 from .cross_repo_analyzer import CrossRepoAnalysis
@@ -17,7 +16,7 @@ class VPMetrics:
     """VP Engineering metrics (deterministic KPIs)."""
 
     system_health_score: float  # 0.0-1.0
-    risk_hotspots: List[str]  # Capability IDs with high risk
+    risk_hotspots: list[str]  # Capability IDs with high risk
     duplication_rate: float  # % of LOC that is duplicated
     consolidation_candidates: int  # Number of opportunities
     total_repositories: int
@@ -30,9 +29,9 @@ class VPMetrics:
 class EngineeringDebtMap:
     """Engineering-focused debt map."""
 
-    coupling_hotspots: List[Dict]  # High coupling modules
-    refactor_targets: List[str]  # Module IDs needing refactoring
-    dependency_explosion_points: List[str]  # Modules with high fan-out
+    coupling_hotspots: list[dict]  # High coupling modules
+    refactor_targets: list[str]  # Module IDs needing refactoring
+    dependency_explosion_points: list[str]  # Modules with high fan-out
 
 
 @dataclass
@@ -40,17 +39,17 @@ class SecurityComplianceView:
     """Security/compliance view."""
 
     guardrail_coverage: float  # % of modules with guardrails
-    missing_decision_instrumentation: List[str]  # Module IDs
-    risk_exposure_nodes: List[str]  # Capability IDs with high risk
+    missing_decision_instrumentation: list[str]  # Module IDs
+    risk_exposure_nodes: list[str]  # Capability IDs with high risk
 
 
 @dataclass
 class ProductView:
     """Product-focused view."""
 
-    reusable_capability_clusters: List[Dict]
-    productization_candidates: List[str]  # Capability IDs
-    cross_repo_reusable_modules: List[str]
+    reusable_capability_clusters: list[dict]
+    productization_candidates: list[str]  # Capability IDs
+    cross_repo_reusable_modules: list[str]
 
 
 class RoleBasedInsightEngine:
@@ -186,7 +185,7 @@ class RoleBasedInsightEngine:
         ]
 
         # Cross-repo reusable = modules used by multiple capabilities
-        module_usage: Dict[str, int] = {}
+        module_usage: dict[str, int] = {}
         for cap in self.graph.capabilities.values():
             for mod_id in cap.source_modules:
                 module_usage[mod_id] = module_usage.get(mod_id, 0) + 1

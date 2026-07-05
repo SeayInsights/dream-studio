@@ -5,7 +5,6 @@ Computes graph-derived metrics. NO synthetic scoring.
 """
 
 from __future__ import annotations
-from typing import Dict, List
 
 from .model import Repository, Module, Capability, Edge, OrganizationGraph, RelationshipType
 
@@ -21,10 +20,10 @@ class OrganizationGraphBuilder:
 
     def build_graph(
         self,
-        repositories: Dict[str, Repository],
-        modules: Dict[str, Module],
-        capabilities: Dict[str, Capability],
-        edges: List[Edge],
+        repositories: dict[str, Repository],
+        modules: dict[str, Module],
+        capabilities: dict[str, Capability],
+        edges: list[Edge],
     ) -> OrganizationGraph:
         """Build complete organization graph.
 
@@ -127,7 +126,7 @@ class OrganizationGraphBuilder:
             # LOC (total)
             repo.loc = sum(m.loc for m in repo_modules)
 
-    def integrate_decision_signals(self, decision_coverage_map: Dict[str, float]):
+    def integrate_decision_signals(self, decision_coverage_map: dict[str, float]):
         """Integrate decision coverage signals into capability risk scores.
 
         Args:

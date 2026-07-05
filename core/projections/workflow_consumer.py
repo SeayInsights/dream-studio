@@ -7,7 +7,6 @@ Created: 2026-05-08
 """
 
 import logging
-from typing import Optional
 
 from core.config.database import get_connection
 from core.event_store.event_store import EventStore
@@ -35,7 +34,7 @@ class WorkflowEventConsumer:
         self.projection = WorkflowMetricsProjection()
 
         # Track last consumed event ID
-        self.last_event_id: Optional[str] = None
+        self.last_event_id: str | None = None
 
     def consume_all_events(self):
         """Consume all workflow events from EventStore and update projection.
@@ -89,7 +88,7 @@ class WorkflowEventConsumer:
             logger.info(f"Processed {new_events_count} new workflow events")
             self._save_last_event_id()
 
-    def _query_events(self, event_type: str, after_event_id: Optional[str] = None):
+    def _query_events(self, event_type: str, after_event_id: str | None = None):
         """Query events from EventStore.
 
         Args:

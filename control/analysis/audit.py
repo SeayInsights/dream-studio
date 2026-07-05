@@ -1,6 +1,6 @@
-import sys
+from datetime import UTC
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Any
 import re
 
 
@@ -20,8 +20,8 @@ from emitters.shared.spool_writer import write_envelopes
 
 
 def audit_architecture(
-    path: Path, project_data: Dict[str, Any], stack: Dict[str, Any]
-) -> Dict[str, Any]:
+    path: Path, project_data: dict[str, Any], stack: dict[str, Any]
+) -> dict[str, Any]:
     """
     Audit project architecture for violations.
 
@@ -226,7 +226,7 @@ def _should_skip(file_path: Path) -> bool:
     return any(pattern in str(file_path) for pattern in skip_patterns)
 
 
-def _store_violations(violations: List[Dict]) -> None:
+def _store_violations(violations: list[dict]) -> None:
     """Store violations in pi_violations table."""
     if not violations:
         return
@@ -239,7 +239,7 @@ def _store_violations(violations: List[Dict]) -> None:
 
         from core.config.database import transaction
         import json
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         # Map specific violation types to schema categories
         TYPE_MAP = {
@@ -321,7 +321,7 @@ def _store_violations(violations: List[Dict]) -> None:
                         v.get("fix_recommendation"),
                         v.get("effort_estimate"),
                         "open",
-                        datetime.now(timezone.utc).isoformat(),
+                        datetime.now(UTC).isoformat(),
                     ),
                 )
     except Exception as e:
@@ -330,7 +330,7 @@ def _store_violations(violations: List[Dict]) -> None:
         traceback.print_exc()  # Debug: show errors during development
 
 
-def _store_improvements(improvements: List[Dict]) -> None:
+def _store_improvements(improvements: list[dict]) -> None:
     """Store improvements in pi_improvements table."""
     if not improvements:
         return
@@ -343,7 +343,7 @@ def _store_improvements(improvements: List[Dict]) -> None:
 
         from core.config.database import transaction
         import json
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         # Map specific improvement types to schema categories
         TYPE_MAP = {
@@ -422,7 +422,7 @@ def _store_improvements(improvements: List[Dict]) -> None:
                         imp.get("benefit"),
                         imp.get("effort_estimate"),
                         "proposed",
-                        datetime.now(timezone.utc).isoformat(),
+                        datetime.now(UTC).isoformat(),
                     ),
                 )
     except Exception as e:

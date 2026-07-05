@@ -14,7 +14,6 @@ import platform as _platform
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +98,7 @@ def _default_profile_path() -> Path:
     return Path.home() / ".dream-studio" / "state" / "platform.json"
 
 
-def ensure_platform_recorded(profile_path: Optional[Path] = None) -> PlatformProfile:
+def ensure_platform_recorded(profile_path: Path | None = None) -> PlatformProfile:
     """Detect and persist platform profile. Idempotent. Returns the profile.
 
     Called at install and ds doctor. Overwrites on each call so the profile
@@ -113,7 +112,7 @@ def ensure_platform_recorded(profile_path: Optional[Path] = None) -> PlatformPro
     return profile
 
 
-def get_platform_profile(profile_path: Optional[Path] = None) -> PlatformProfile:
+def get_platform_profile(profile_path: Path | None = None) -> PlatformProfile:
     """Read recorded platform profile. If not present, detect and record."""
     path = profile_path if profile_path is not None else _default_profile_path()
     if not path.is_file():

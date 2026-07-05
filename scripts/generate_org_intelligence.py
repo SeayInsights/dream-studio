@@ -7,7 +7,6 @@ from __future__ import annotations
 import json
 import yaml
 from pathlib import Path
-from typing import List
 
 from core.org_intelligence import (
     MultiRepoIngestor,
@@ -19,7 +18,7 @@ from core.org_intelligence import (
 
 
 def generate_org_intelligence(
-    repo_paths: List[str],
+    repo_paths: list[str],
     output_dir: str,
 ):
     """Generate complete organization intelligence.

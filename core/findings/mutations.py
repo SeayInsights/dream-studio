@@ -13,16 +13,16 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
 
 
-def _get_conn(db_path: Optional[Path]) -> tuple[sqlite3.Connection, bool]:
+def _get_conn(db_path: Path | None) -> tuple[sqlite3.Connection, bool]:
     if db_path is not None:
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row

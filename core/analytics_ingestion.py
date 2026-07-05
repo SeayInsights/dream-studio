@@ -11,7 +11,7 @@ import hashlib
 import json
 import sqlite3
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -154,7 +154,7 @@ def ingest_analytics_payload(
 
     source_refs = _json_list(payload.get("source_refs"))
     evidence_refs = _json_list(payload.get("evidence_refs"))
-    ingested_at = str(payload.get("ingested_at") or datetime.now(timezone.utc).isoformat())
+    ingested_at = str(payload.get("ingested_at") or datetime.now(UTC).isoformat())
     tables = _table_names(conn)
     written: Counter[str] = Counter()
     planned: Counter[str] = Counter()

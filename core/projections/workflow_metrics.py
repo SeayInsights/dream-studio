@@ -9,8 +9,7 @@ Consumes workflow events and projects them into aggregated KPI metrics:
 Created: 2026-05-08
 """
 
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from core.config.database import get_connection, transaction
 
@@ -99,7 +98,7 @@ class WorkflowMetricsProjection:
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_phase_name ON workflow_phases(phase_name)")
 
-    def consume_workflow_started(self, event: Dict[str, Any]):
+    def consume_workflow_started(self, event: dict[str, Any]):
         """Consume workflow.started event.
 
         Args:
@@ -121,7 +120,7 @@ class WorkflowMetricsProjection:
                 ),
             )
 
-    def consume_workflow_completed(self, event: Dict[str, Any]):
+    def consume_workflow_completed(self, event: dict[str, Any]):
         """Consume workflow.completed event.
 
         Args:
@@ -155,7 +154,7 @@ class WorkflowMetricsProjection:
             # Update KPIs for this workflow type
             self._update_workflow_kpis(payload["workflow_type"], conn)
 
-    def consume_workflow_failed(self, event: Dict[str, Any]):
+    def consume_workflow_failed(self, event: dict[str, Any]):
         """Consume workflow.failed event.
 
         Args:
@@ -193,7 +192,7 @@ class WorkflowMetricsProjection:
             if payload.get("phase_failed"):
                 self._update_phase_failure(payload["phase_failed"], conn)
 
-    def consume_workflow_phase_completed(self, event: Dict[str, Any]):
+    def consume_workflow_phase_completed(self, event: dict[str, Any]):
         """Consume workflow.phase_completed event.
 
         Args:
@@ -340,7 +339,7 @@ class WorkflowMetricsProjection:
             (phase_name,),
         )
 
-    def get_workflow_kpis(self, workflow_type: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_workflow_kpis(self, workflow_type: str | None = None) -> list[dict[str, Any]]:
         """Query workflow KPIs.
 
         Args:
@@ -359,7 +358,7 @@ class WorkflowMetricsProjection:
 
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_phase_kpis(self, phase_name: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_phase_kpis(self, phase_name: str | None = None) -> list[dict[str, Any]]:
         """Query phase KPIs.
 
         Args:
@@ -379,8 +378,8 @@ class WorkflowMetricsProjection:
             return [dict(row) for row in cursor.fetchall()]
 
     def get_recent_workflows(
-        self, workflow_type: Optional[str] = None, limit: int = 10
-    ) -> List[Dict[str, Any]]:
+        self, workflow_type: str | None = None, limit: int = 10
+    ) -> list[dict[str, Any]]:
         """Get recent workflow executions.
 
         Args:

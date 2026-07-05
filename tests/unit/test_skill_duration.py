@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parents[2]
@@ -22,7 +22,7 @@ DASHBOARD_HTML = REPO_ROOT / "projections/frontend/dashboard.html"
 
 # Anchor event timestamps relative to now so they remain inside any days=N
 # query window regardless of wall-clock date.
-_BASE = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
+_BASE = (datetime.now(UTC) - timedelta(days=7)).strftime("%Y-%m-%d")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

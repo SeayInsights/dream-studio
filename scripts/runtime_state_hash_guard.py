@@ -15,7 +15,7 @@ import json
 import subprocess
 import sys
 from dataclasses import dataclass, asdict
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -60,9 +60,7 @@ def snapshot(path: Path) -> FileSnapshot:
         sha256=_sha256(path),
         size_bytes=stat.st_size,
         mtime_ns=stat.st_mtime_ns,
-        mtime_utc=datetime.fromtimestamp(stat.st_mtime, timezone.utc)
-        .isoformat()
-        .replace("+00:00", "Z"),
+        mtime_utc=datetime.fromtimestamp(stat.st_mtime, UTC).isoformat().replace("+00:00", "Z"),
     )
 
 

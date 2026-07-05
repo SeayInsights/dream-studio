@@ -16,7 +16,7 @@ Analyzes real estate skill repositories for 10 key capabilities:
 """
 
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any
 import sys
 
 # Add parent to path for imports
@@ -58,7 +58,7 @@ class RealEstateSkillAnalyzer(BaseAnalyzer):
     def get_domain_name(self) -> str:
         return "real_estate"
 
-    def get_capabilities(self) -> List[str]:
+    def get_capabilities(self) -> list[str]:
         return [
             "listings",
             "mls_integration",
@@ -72,7 +72,7 @@ class RealEstateSkillAnalyzer(BaseAnalyzer):
             "reporting",
         ]
 
-    def analyze_capability(self, capability: str) -> Dict[str, Any]:
+    def analyze_capability(self, capability: str) -> dict[str, Any]:
         """Route capability analysis to specific method"""
         method_map = {
             "listings": self._analyze_listings,
@@ -92,7 +92,7 @@ class RealEstateSkillAnalyzer(BaseAnalyzer):
 
         return method_map[capability]()
 
-    def score_repository(self) -> Dict[str, float]:
+    def score_repository(self) -> dict[str, float]:
         """Calculate weighted overall score"""
         scores = {}
 
@@ -105,7 +105,7 @@ class RealEstateSkillAnalyzer(BaseAnalyzer):
 
         return scores
 
-    def _analyze_listings(self) -> Dict[str, Any]:
+    def _analyze_listings(self) -> dict[str, Any]:
         """
         Analyze property listing capabilities
 
@@ -161,7 +161,7 @@ class RealEstateSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_mls(self) -> Dict[str, Any]:
+    def _analyze_mls(self) -> dict[str, Any]:
         """
         Analyze MLS integration capabilities
 
@@ -212,7 +212,7 @@ class RealEstateSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_cma(self) -> Dict[str, Any]:
+    def _analyze_cma(self) -> dict[str, Any]:
         """
         Analyze comparative market analysis capabilities
 
@@ -270,7 +270,7 @@ class RealEstateSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_valuation(self) -> Dict[str, Any]:
+    def _analyze_valuation(self) -> dict[str, Any]:
         """
         Analyze property valuation/appraisal capabilities
 
@@ -320,7 +320,7 @@ class RealEstateSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_market_data(self) -> Dict[str, Any]:
+    def _analyze_market_data(self) -> dict[str, Any]:
         """
         Analyze market data aggregation capabilities
 
@@ -375,7 +375,7 @@ class RealEstateSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_search(self) -> Dict[str, Any]:
+    def _analyze_search(self) -> dict[str, Any]:
         """
         Analyze property search/filtering capabilities
 
@@ -432,7 +432,7 @@ class RealEstateSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_investment(self) -> Dict[str, Any]:
+    def _analyze_investment(self) -> dict[str, Any]:
         """
         Analyze investment analysis capabilities
 
@@ -496,7 +496,7 @@ class RealEstateSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_documents(self) -> Dict[str, Any]:
+    def _analyze_documents(self) -> dict[str, Any]:
         """
         Analyze document generation capabilities
 
@@ -550,7 +550,7 @@ class RealEstateSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_crm(self) -> Dict[str, Any]:
+    def _analyze_crm(self) -> dict[str, Any]:
         """
         Analyze client management capabilities
 
@@ -606,7 +606,7 @@ class RealEstateSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_reporting(self) -> Dict[str, Any]:
+    def _analyze_reporting(self) -> dict[str, Any]:
         """
         Analyze market reporting capabilities
 
@@ -661,7 +661,7 @@ class RealEstateSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def get_unique_features(self) -> List[str]:
+    def get_unique_features(self) -> list[str]:
         """Identify unique real estate features this repo has"""
         unique = []
 

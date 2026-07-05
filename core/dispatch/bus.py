@@ -21,8 +21,9 @@ Usage:
 import logging
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from dataclasses import dataclass
+from typing import Any
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +32,8 @@ logger = logging.getLogger(__name__)
 class HandlerResult:
     handler_name: str = ""
     success: bool = True
-    output: Optional[str] = None
-    error: Optional[str] = None
+    output: str | None = None
+    error: str | None = None
     duration_ms: float = 0.0
     skipped: bool = False
 
@@ -64,9 +65,9 @@ class Handler(ABC):
         return False
 
     @abstractmethod
-    def handle(self, payload: Dict[str, Any]) -> HandlerResult: ...
+    def handle(self, payload: dict[str, Any]) -> HandlerResult: ...
 
-    def should_run(self, payload: Dict[str, Any]) -> bool:
+    def should_run(self, payload: dict[str, Any]) -> bool:
         """Optional gate — return False to skip this handler."""
         return True
 
@@ -75,8 +76,8 @@ class EventBus:
     """Pub/sub event bus with error isolation and priority ordering."""
 
     def __init__(self) -> None:
-        self._handlers: Dict[str, List[Handler]] = {}
-        self._middleware: List[Callable] = []
+        self._handlers: dict[str, list[Handler]] = {}
+        self._middleware: list[Callable] = []
 
     def subscribe(self, handler: Handler) -> None:
         topic = handler.topic
@@ -86,20 +87,20 @@ class EventBus:
         self._handlers[topic].sort(key=lambda h: h.priority)
         logger.debug(f"Subscribed {handler.name} to {topic} (priority {handler.priority})")
 
-    def unsubscribe(self, handler_name: str, topic: Optional[str] = None) -> None:
+    def unsubscribe(self, handler_name: str, topic: str | None = None) -> None:
         topics = [topic] if topic else list(self._handlers.keys())
         for t in topics:
             if t in self._handlers:
                 self._handlers[t] = [h for h in self._handlers[t] if h.name != handler_name]
 
-    def publish(self, topic: str, payload: Dict[str, Any]) -> List[HandlerResult]:
+    def publish(self, topic: str, payload: dict[str, Any]) -> list[HandlerResult]:
         """Publish event to all subscribers. Returns results in execution order."""
         handlers = self._handlers.get(topic, [])
         if not handlers:
             logger.debug(f"No handlers for topic: {topic}")
             return []
 
-        results: List[HandlerResult] = []
+        results: list[HandlerResult] = []
         for handler in handlers:
             if not handler.should_run(payload):
                 results.append(HandlerResult(handler_name=handler.name, skipped=True))
@@ -135,13 +136,13 @@ class EventBus:
 
         return results
 
-    def topics(self) -> List[str]:
+    def topics(self) -> list[str]:
         return list(self._handlers.keys())
 
-    def handlers_for(self, topic: str) -> List[str]:
+    def handlers_for(self, topic: str) -> list[str]:
         return [h.name for h in self._handlers.get(topic, [])]
 
-    def health(self) -> Dict[str, Any]:
+    def health(self) -> dict[str, Any]:
         return {
             "topics": len(self._handlers),
             "total_handlers": sum(len(hs) for hs in self._handlers.values()),

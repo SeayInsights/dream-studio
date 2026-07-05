@@ -6,12 +6,9 @@ import json
 import logging
 import sqlite3
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
-from typing import Any
 from unittest import mock
-
-import pytest
 
 # ── fixture UUIDs ──────────────────────────────────────────────────────────────
 
@@ -26,7 +23,7 @@ TASK_B = "66666666-6666-6666-6666-666666666666"
 # Anchor test data relative to now so it stays inside any days=N query window.
 # A hardcoded absolute date is a time-bomb: it silently falls outside the 30-day
 # cutoff once wall-clock passes it (this broke CI on 2026-06-21).
-NOW = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+NOW = (datetime.now(UTC) - timedelta(days=7)).isoformat()
 
 
 # ── in-memory DB helpers ───────────────────────────────────────────────────────

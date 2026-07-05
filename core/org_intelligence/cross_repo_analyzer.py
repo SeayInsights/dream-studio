@@ -5,7 +5,6 @@ RULE-BASED. NO ML. Graph-derived only.
 """
 
 from __future__ import annotations
-from typing import Dict, List, Set, Tuple
 from dataclasses import dataclass, field
 
 from .model import OrganizationGraph, Capability
@@ -16,7 +15,7 @@ class DuplicateCapability:
     """Detected duplicate capability across repositories."""
 
     capability_name: str
-    repos: List[str]
+    repos: list[str]
     total_loc: int
     module_count: int
     avg_coupling: float
@@ -29,7 +28,7 @@ class ConsolidationOpportunity:
 
     opportunity_id: str
     capability_name: str
-    source_repos: List[str]
+    source_repos: list[str]
     target_repo: str  # Recommended consolidation target
     reason: str
     estimated_effort: str  # S | M | L
@@ -40,8 +39,8 @@ class ConsolidationOpportunity:
 class CrossRepoAnalysis:
     """Complete cross-repository analysis."""
 
-    duplicates: List[DuplicateCapability] = field(default_factory=list)
-    consolidation_opportunities: List[ConsolidationOpportunity] = field(default_factory=list)
+    duplicates: list[DuplicateCapability] = field(default_factory=list)
+    consolidation_opportunities: list[ConsolidationOpportunity] = field(default_factory=list)
     total_duplication_loc: int = 0
     duplication_rate: float = 0.0  # % of total LOC that is duplicated
 
@@ -81,7 +80,7 @@ class CrossRepoAnalyzer:
 
         return analysis
 
-    def _detect_duplicates(self) -> List[DuplicateCapability]:
+    def _detect_duplicates(self) -> list[DuplicateCapability]:
         """Detect duplicate capabilities across repositories.
 
         Returns:
@@ -90,7 +89,7 @@ class CrossRepoAnalyzer:
         duplicates = []
 
         # Group capabilities by normalized name
-        cap_groups: Dict[str, List[Capability]] = {}
+        cap_groups: dict[str, list[Capability]] = {}
         for capability in self.graph.capabilities.values():
             name = capability.normalized_name
             if name not in cap_groups:
@@ -158,8 +157,8 @@ class CrossRepoAnalyzer:
         return score
 
     def _identify_consolidation_opportunities(
-        self, duplicates: List[DuplicateCapability]
-    ) -> List[ConsolidationOpportunity]:
+        self, duplicates: list[DuplicateCapability]
+    ) -> list[ConsolidationOpportunity]:
         """Identify consolidation opportunities from duplicates.
 
         Args:
@@ -192,7 +191,7 @@ class CrossRepoAnalyzer:
 
         return opportunities
 
-    def _select_target_repo(self, capability_name: str, repos: List[str]) -> str:
+    def _select_target_repo(self, capability_name: str, repos: list[str]) -> str:
         """Select target repository for consolidation.
 
         Args:

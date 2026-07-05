@@ -6,7 +6,7 @@ All objects must trace to file paths or existing system records.
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import List, Dict, Set, Any
+from typing import Any
 from enum import Enum
 
 
@@ -31,7 +31,7 @@ class Repository:
     id: str  # Unique ID (repo name or hash)
     name: str  # Repository name
     path: str  # Absolute file path
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     # Derived metrics (graph-computed)
     module_count: int = 0
@@ -51,11 +51,11 @@ class Module:
     file_path: str  # Relative path within repo
 
     # Code structure (from AST)
-    imports: List[str] = field(default_factory=list)
-    exports: List[str] = field(default_factory=list)  # Functions, classes exported
+    imports: list[str] = field(default_factory=list)
+    exports: list[str] = field(default_factory=list)  # Functions, classes exported
 
     # Capability tags (from normalizer)
-    capability_tags: List[str] = field(default_factory=list)
+    capability_tags: list[str] = field(default_factory=list)
 
     # Metrics (from existing repo intelligence)
     loc: int = 0
@@ -73,8 +73,8 @@ class Capability:
     normalized_name: str  # Normalized capability name
 
     # Source traceability
-    source_modules: List[str] = field(default_factory=list)  # Module IDs
-    source_repos: Set[str] = field(default_factory=set)  # Repository IDs
+    source_modules: list[str] = field(default_factory=list)  # Module IDs
+    source_repos: set[str] = field(default_factory=set)  # Repository IDs
 
     # Metrics (DERIVED from existing signals only)
     risk_score: float = 0.0  # From decision coverage + audit signals
@@ -98,7 +98,7 @@ class Edge:
     relationship_type: RelationshipType
 
     # Edge metadata (source evidence)
-    evidence: Dict[str, Any] = field(default_factory=dict)
+    evidence: dict[str, Any] = field(default_factory=dict)
     weight: float = 1.0  # Edge weight (for graph algorithms)
 
 
@@ -110,17 +110,17 @@ class OrganizationGraph:
     """
 
     # Nodes
-    repositories: Dict[str, Repository] = field(default_factory=dict)
-    modules: Dict[str, Module] = field(default_factory=dict)
-    capabilities: Dict[str, Capability] = field(default_factory=dict)
+    repositories: dict[str, Repository] = field(default_factory=dict)
+    modules: dict[str, Module] = field(default_factory=dict)
+    capabilities: dict[str, Capability] = field(default_factory=dict)
 
     # Edges
-    edges: List[Edge] = field(default_factory=list)
+    edges: list[Edge] = field(default_factory=list)
 
     # Index for fast lookup
-    _edges_by_source: Dict[str, List[Edge]] = field(default_factory=dict)
-    _edges_by_target: Dict[str, List[Edge]] = field(default_factory=dict)
-    _edges_by_type: Dict[RelationshipType, List[Edge]] = field(default_factory=dict)
+    _edges_by_source: dict[str, list[Edge]] = field(default_factory=dict)
+    _edges_by_target: dict[str, list[Edge]] = field(default_factory=dict)
+    _edges_by_type: dict[RelationshipType, list[Edge]] = field(default_factory=dict)
 
     def add_repository(self, repo: Repository):
         """Add repository to graph."""
@@ -151,15 +151,15 @@ class OrganizationGraph:
             self._edges_by_type[edge.relationship_type] = []
         self._edges_by_type[edge.relationship_type].append(edge)
 
-    def get_outgoing_edges(self, node_id: str) -> List[Edge]:
+    def get_outgoing_edges(self, node_id: str) -> list[Edge]:
         """Get all edges from a node."""
         return self._edges_by_source.get(node_id, [])
 
-    def get_incoming_edges(self, node_id: str) -> List[Edge]:
+    def get_incoming_edges(self, node_id: str) -> list[Edge]:
         """Get all edges to a node."""
         return self._edges_by_target.get(node_id, [])
 
-    def get_edges_by_type(self, rel_type: RelationshipType) -> List[Edge]:
+    def get_edges_by_type(self, rel_type: RelationshipType) -> list[Edge]:
         """Get all edges of a specific type."""
         return self._edges_by_type.get(rel_type, [])
 
@@ -169,7 +169,7 @@ class OrganizationGraph:
         out_degree = len(self.get_outgoing_edges(node_id))
         return in_degree, out_degree
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Export graph to dictionary (for JSON serialization)."""
         return {
             "repositories": {

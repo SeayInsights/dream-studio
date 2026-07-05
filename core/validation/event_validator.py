@@ -8,8 +8,6 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
-from typing import Dict, List, Optional
 from uuid import UUID
 
 import jsonschema
@@ -20,7 +18,7 @@ class ValidationResult:
     """Result of event validation."""
 
     is_valid: bool
-    errors: List[str]
+    errors: list[str]
 
     def __bool__(self) -> bool:
         return self.is_valid
@@ -53,14 +51,14 @@ class EventValidator:
         # Compile regex for event_type format
         self.event_type_pattern = re.compile(r"^[a-z]+\.[a-z_]+\.[a-z_]+$")
 
-    def _load_taxonomy(self, path: str) -> Dict:
+    def _load_taxonomy(self, path: str) -> dict:
         """Load event taxonomy from JSON file."""
-        with open(path, "r") as f:
+        with open(path) as f:
             return json.load(f)
 
-    def _load_schema(self, path: str) -> Dict:
+    def _load_schema(self, path: str) -> dict:
         """Load JSON Schema for canonical events."""
-        with open(path, "r") as f:
+        with open(path) as f:
             return json.load(f)
 
     def _flatten_taxonomy(self) -> set:
@@ -70,7 +68,7 @@ class EventValidator:
             allowed.update(events)
         return allowed
 
-    def validate(self, event: Dict) -> ValidationResult:
+    def validate(self, event: dict) -> ValidationResult:
         """
         Validate event against all rules.
 
@@ -155,7 +153,7 @@ class EventValidator:
         """
         return bool(self.event_type_pattern.match(event_type))
 
-    def validate_trace(self, trace: Dict) -> bool:
+    def validate_trace(self, trace: dict) -> bool:
         """
         Check if trace contains at least one ID.
 
@@ -169,7 +167,7 @@ class EventValidator:
             return False
         return any(trace.values())
 
-    def get_allowed_event_types(self) -> List[str]:
+    def get_allowed_event_types(self) -> list[str]:
         """
         Get list of all allowed event types.
 
@@ -178,7 +176,7 @@ class EventValidator:
         """
         return sorted(self.allowed_types)
 
-    def get_event_types_for_domain(self, domain: str) -> List[str]:
+    def get_event_types_for_domain(self, domain: str) -> list[str]:
         """
         Get event types for a specific domain.
 

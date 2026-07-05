@@ -15,9 +15,9 @@ Usage:
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 from enum import Enum
 
 
@@ -37,7 +37,7 @@ class Stage(str, Enum):
 class TraceLogger:
     """SQLite write operation tracer with structured logging."""
 
-    def __init__(self, trace_file: Optional[Path] = None, console: bool = True):
+    def __init__(self, trace_file: Path | None = None, console: bool = True):
         """
         Initialize trace logger.
 
@@ -63,7 +63,7 @@ class TraceLogger:
             Stage.ERROR: "[ERROR]",
         }
 
-    def log(self, level: str, stage: str, data: Dict[str, Any], context: Optional[Dict] = None):
+    def log(self, level: str, stage: str, data: dict[str, Any], context: dict | None = None):
         """
         Log a write operation stage.
 
@@ -73,7 +73,7 @@ class TraceLogger:
             data: Stage-specific data to log
             context: Optional additional context
         """
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = datetime.now(UTC).isoformat()
 
         log_entry = {"timestamp": timestamp, "level": level, "stage": stage, "data": data}
 
@@ -109,7 +109,7 @@ class TraceLogger:
         data.update(kwargs)
         self.log("INFO", Stage.PREPARE, data)
 
-    def execute(self, rowcount: Optional[int] = None, lastrowid: Optional[int] = None, **kwargs):
+    def execute(self, rowcount: int | None = None, lastrowid: int | None = None, **kwargs):
         """Log query execution."""
         data = {}
         if rowcount is not None:
@@ -137,7 +137,7 @@ class TraceLogger:
         data.update(kwargs)
         self.log("WARN", Stage.ROLLBACK, data)
 
-    def error(self, error: str, error_type: Optional[str] = None, **kwargs):
+    def error(self, error: str, error_type: str | None = None, **kwargs):
         """Log error."""
         data = {"error": str(error)}
         if error_type:
@@ -156,7 +156,7 @@ class TraceLogger:
             return []
 
         traces = []
-        with open(self.trace_file, "r", encoding="utf-8") as f:
+        with open(self.trace_file, encoding="utf-8") as f:
             for line in f:
                 if line.strip():
                     try:

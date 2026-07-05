@@ -16,7 +16,7 @@ Analyzes finance skill repositories for 10 key capabilities:
 """
 
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any
 import sys
 
 # Add parent to path for imports
@@ -58,7 +58,7 @@ class FinanceSkillAnalyzer(BaseAnalyzer):
     def get_domain_name(self) -> str:
         return "finance"
 
-    def get_capabilities(self) -> List[str]:
+    def get_capabilities(self) -> list[str]:
         return [
             "accounting",
             "invoicing",
@@ -72,7 +72,7 @@ class FinanceSkillAnalyzer(BaseAnalyzer):
             "compliance",
         ]
 
-    def analyze_capability(self, capability: str) -> Dict[str, Any]:
+    def analyze_capability(self, capability: str) -> dict[str, Any]:
         """Route capability analysis to specific method"""
         method_map = {
             "accounting": self._analyze_accounting,
@@ -92,7 +92,7 @@ class FinanceSkillAnalyzer(BaseAnalyzer):
 
         return method_map[capability]()
 
-    def score_repository(self) -> Dict[str, float]:
+    def score_repository(self) -> dict[str, float]:
         """Calculate weighted overall score"""
         scores = {}
 
@@ -105,7 +105,7 @@ class FinanceSkillAnalyzer(BaseAnalyzer):
 
         return scores
 
-    def _analyze_accounting(self) -> Dict[str, Any]:
+    def _analyze_accounting(self) -> dict[str, Any]:
         """
         Analyze accounting system capabilities
 
@@ -164,7 +164,7 @@ class FinanceSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_invoicing(self) -> Dict[str, Any]:
+    def _analyze_invoicing(self) -> dict[str, Any]:
         """
         Analyze invoice management capabilities
 
@@ -219,7 +219,7 @@ class FinanceSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_ledger(self) -> Dict[str, Any]:
+    def _analyze_ledger(self) -> dict[str, Any]:
         """
         Analyze ledger system capabilities
 
@@ -274,7 +274,7 @@ class FinanceSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_tax(self) -> Dict[str, Any]:
+    def _analyze_tax(self) -> dict[str, Any]:
         """
         Analyze tax preparation capabilities
 
@@ -329,7 +329,7 @@ class FinanceSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_budgeting(self) -> Dict[str, Any]:
+    def _analyze_budgeting(self) -> dict[str, Any]:
         """
         Analyze budget planning capabilities
 
@@ -384,7 +384,7 @@ class FinanceSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_reporting(self) -> Dict[str, Any]:
+    def _analyze_reporting(self) -> dict[str, Any]:
         """
         Analyze financial reporting capabilities
 
@@ -449,7 +449,7 @@ class FinanceSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_expenses(self) -> Dict[str, Any]:
+    def _analyze_expenses(self) -> dict[str, Any]:
         """
         Analyze expense tracking capabilities
 
@@ -504,7 +504,7 @@ class FinanceSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_reconciliation(self) -> Dict[str, Any]:
+    def _analyze_reconciliation(self) -> dict[str, Any]:
         """
         Analyze reconciliation capabilities
 
@@ -559,7 +559,7 @@ class FinanceSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_integration(self) -> Dict[str, Any]:
+    def _analyze_integration(self) -> dict[str, Any]:
         """
         Analyze platform integration capabilities
 
@@ -612,7 +612,7 @@ class FinanceSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_compliance(self) -> Dict[str, Any]:
+    def _analyze_compliance(self) -> dict[str, Any]:
         """
         Analyze compliance/audit support capabilities
 
@@ -667,7 +667,7 @@ class FinanceSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def get_unique_features(self) -> List[str]:
+    def get_unique_features(self) -> list[str]:
         """Identify unique finance features this repo has"""
         unique = []
 

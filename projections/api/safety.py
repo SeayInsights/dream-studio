@@ -6,8 +6,6 @@ Prevents accidental exposure of private/internal data through the API.
 
 from __future__ import annotations
 
-from typing import List
-
 # ── Data Classification ─────────────────────────────────────────────────────
 
 SAFE_LOCAL_SUMMARY = "safe_local_summary"
@@ -64,7 +62,7 @@ DECISION_LOG_PRIVATE_COLUMNS = ("reasoning", "context", "outcome")
 DEFAULT_DASHBOARD_PORT = 8000
 
 
-def localhost_origins(port: int = DEFAULT_DASHBOARD_PORT) -> List[str]:
+def localhost_origins(port: int = DEFAULT_DASHBOARD_PORT) -> list[str]:
     """Return CORS origins for localhost on the given port."""
     return [
         f"http://127.0.0.1:{port}",

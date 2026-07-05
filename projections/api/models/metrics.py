@@ -1,7 +1,7 @@
 """Pydantic models for metrics endpoints"""
 
 from pydantic import BaseModel, Field
-from typing import Dict, List, Any, Optional
+from typing import Any
 from datetime import datetime
 
 
@@ -9,20 +9,20 @@ class MetricsQuery(BaseModel):
     """Query parameters for metrics endpoints"""
 
     days: int = Field(default=30, ge=1, le=365, description="Number of days to analyze")
-    project: Optional[str] = Field(default=None, description="Filter by project")
-    skill: Optional[str] = Field(default=None, description="Filter by skill")
-    model: Optional[str] = Field(default=None, description="Filter by model")
+    project: str | None = Field(default=None, description="Filter by project")
+    skill: str | None = Field(default=None, description="Filter by skill")
+    model: str | None = Field(default=None, description="Filter by model")
 
 
 class SessionMetrics(BaseModel):
     """Session metrics response"""
 
     total_sessions: int
-    outcomes: Dict[str, int]
+    outcomes: dict[str, int]
     avg_duration_minutes: float
-    by_project: Dict[str, int]
-    timeline: List[Dict[str, Any]]
-    day_of_week: Dict[str, int]
+    by_project: dict[str, int]
+    timeline: list[dict[str, Any]]
+    day_of_week: dict[str, int]
     success_rate: float = 0.0
 
 
@@ -32,9 +32,9 @@ class SkillMetrics(BaseModel):
     total_invocations: int
     unique_skills: int
     overall_success_rate: float
-    by_skill: Dict[str, Dict[str, Any]]
-    top_skills: List[Dict[str, Any]]
-    failures: List[Dict[str, Any]]
+    by_skill: dict[str, dict[str, Any]]
+    top_skills: list[dict[str, Any]]
+    failures: list[dict[str, Any]]
 
 
 class TokenMetrics(BaseModel):
@@ -44,42 +44,42 @@ class TokenMetrics(BaseModel):
     input_tokens: int
     output_tokens: int
     cache_hits: int
-    total_cost_usd: Optional[float] = None
-    by_model: Dict[str, Dict[str, Any]]
-    by_project: Dict[str, Dict[str, Any]]
+    total_cost_usd: float | None = None
+    by_model: dict[str, dict[str, Any]]
+    by_project: dict[str, dict[str, Any]]
     daily_average: float
-    timeline: List[Dict[str, Any]]
+    timeline: list[dict[str, Any]]
 
 
 class ModelMetrics(BaseModel):
     """Model metrics response"""
 
     total_invocations: int
-    by_model: Dict[str, Dict[str, Any]]
-    distribution_pct: Dict[str, float]
-    success_rates: Dict[str, float]
-    performance_rank: List[str]
+    by_model: dict[str, dict[str, Any]]
+    distribution_pct: dict[str, float]
+    success_rates: dict[str, float]
+    performance_rank: list[str]
 
 
 class LessonMetrics(BaseModel):
     """Lesson metrics response"""
 
     total_lessons: int
-    by_source: Dict[str, int]
-    by_status: Dict[str, int]
-    by_confidence: Dict[str, int]
+    by_source: dict[str, int]
+    by_status: dict[str, int]
+    by_confidence: dict[str, int]
     capture_rate: float
     promoted_count: int
-    recent_lessons: List[Dict[str, Any]]
+    recent_lessons: list[dict[str, Any]]
 
 
 class WorkflowMetrics(BaseModel):
     """Workflow metrics response"""
 
     total_workflows: int
-    by_workflow: Dict[str, Dict[str, Any]]
+    by_workflow: dict[str, dict[str, Any]]
     overall_success_rate: float
-    by_status: Dict[str, int]
+    by_status: dict[str, int]
     avg_completion_time_minutes: float
     total_nodes: int
 
@@ -102,4 +102,4 @@ class MetricsError(BaseModel):
 
     error: str
     message: str
-    details: Optional[Dict[str, Any]] = None
+    details: dict[str, Any] | None = None

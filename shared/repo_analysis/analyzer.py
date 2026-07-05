@@ -5,12 +5,11 @@ Systematic analysis of SKILL.md files to extract patterns and organizational str
 """
 
 import re
-import json
 import yaml
 from pathlib import Path
 from collections import defaultdict
 from dataclasses import dataclass, asdict
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 
 @dataclass
@@ -22,7 +21,7 @@ class SkillAnalysis:
     name: str
     line_count: int
     has_frontmatter: bool
-    frontmatter: Dict[str, Any]
+    frontmatter: dict[str, Any]
     has_decision_tables: bool
     decision_table_count: int
     has_do_dont_examples: bool
@@ -35,8 +34,8 @@ class SkillAnalysis:
     code_block_count: int
     reference_link_count: int
     anchor_link_count: int
-    sections: List[str]
-    trigger_keywords: List[str]
+    sections: list[str]
+    trigger_keywords: list[str]
 
 
 @dataclass
@@ -46,14 +45,14 @@ class RepoStructure:
     repo: str
     total_skills: int
     skills_with_references: int
-    reference_files: List[str]
-    design_systems: List[str]
+    reference_files: list[str]
+    design_systems: list[str]
     has_claude_md: bool
     has_agents_md: bool
     has_skill_standards: bool
     has_pr_template: bool
     has_validation_ci: bool
-    directory_structure: Dict[str, int]
+    directory_structure: dict[str, int]
 
 
 class RepoAnalyzer:
@@ -68,16 +67,16 @@ class RepoAnalyzer:
     """
 
     def __init__(self):
-        self.skill_analyses: List[SkillAnalysis] = []
-        self.repo_structures: Dict[str, RepoStructure] = {}
-        self.patterns_found: Dict[str, List[Dict]] = defaultdict(list)
-        self.repos_to_analyze: List[tuple[Path, str]] = []
+        self.skill_analyses: list[SkillAnalysis] = []
+        self.repo_structures: dict[str, RepoStructure] = {}
+        self.patterns_found: dict[str, list[dict]] = defaultdict(list)
+        self.repos_to_analyze: list[tuple[Path, str]] = []
 
     def add_repo(self, repo_path: Path, repo_name: str):
         """Add a repository to the analysis queue"""
         self.repos_to_analyze.append((repo_path, repo_name))
 
-    def extract_frontmatter(self, content: str) -> tuple[bool, Dict]:
+    def extract_frontmatter(self, content: str) -> tuple[bool, dict]:
         """Extract YAML frontmatter from markdown"""
         if not content.startswith("---"):
             return False, {}
@@ -132,7 +131,7 @@ class RepoAnalyzer:
         matches = sum(len(re.findall(p, content, re.IGNORECASE)) for p in patterns)
         return matches > 0, matches
 
-    def extract_sections(self, content: str) -> List[str]:
+    def extract_sections(self, content: str) -> list[str]:
         """Extract markdown section headers (##, ###)"""
         headers = re.findall(r"^#{2,3}\s+(.+)$", content, re.MULTILINE)
         return headers
@@ -155,7 +154,7 @@ class RepoAnalyzer:
         """Count anchor links (#section)"""
         return len(re.findall(r"\[.*?\]\(.*?#.*?\)", content))
 
-    def extract_trigger_keywords(self, frontmatter: Dict) -> List[str]:
+    def extract_trigger_keywords(self, frontmatter: dict) -> list[str]:
         """Extract trigger keywords from frontmatter"""
         triggers = []
         if "triggers" in frontmatter:
@@ -169,7 +168,7 @@ class RepoAnalyzer:
         return triggers
 
     def analyze_skill_file(
-        self, file_path: Path, repo: str, base_path: Optional[Path] = None
+        self, file_path: Path, repo: str, base_path: Path | None = None
     ) -> SkillAnalysis:
         """
         Comprehensive analysis of a SKILL.md file
@@ -374,7 +373,7 @@ class RepoAnalyzer:
             print(f"   - Total SKILL.md files analyzed: {len(self.skill_analyses)}")
             print(f"   - Patterns identified: {len(self.patterns_found)}")
 
-    def generate_report(self) -> Dict:
+    def generate_report(self) -> dict:
         """
         Generate comprehensive analysis report
 
@@ -393,7 +392,7 @@ class RepoAnalyzer:
             "statistics": self.generate_statistics(),
         }
 
-    def generate_statistics(self) -> Dict:
+    def generate_statistics(self) -> dict:
         """Generate comparative statistics across repositories"""
         stats = {
             "by_repo": defaultdict(lambda: defaultdict(int)),

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import datetime, UTC
+from typing import Any
 
 from .schema import Decision
 
@@ -16,7 +16,7 @@ def emit_decision(
     confidence: float,
     policy_applied: str,
     source_subsystem: str,
-    event_id: Optional[str] = None,
+    event_id: str | None = None,
 ) -> Decision:
     """Emit a decision to the decision log with optional event linkage.
 
@@ -37,7 +37,7 @@ def emit_decision(
         RuntimeError: If decision write or event link fails
     """
     decision_id = str(uuid.uuid4())
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(UTC).isoformat()
 
     decision = Decision(
         decision_id=decision_id,
@@ -56,7 +56,7 @@ def emit_decision(
     return decision
 
 
-def _emit_decision_event(decision: Decision, event_id: Optional[str]) -> None:
+def _emit_decision_event(decision: Decision, event_id: str | None) -> None:
     """Emit the decision.recorded canonical event via the spool → ingestor path.
 
     This is now the primary, sole durable write for a decision (T4 dropped
@@ -102,7 +102,7 @@ def _emit_decision_event(decision: Decision, event_id: Optional[str]) -> None:
         ) from e
 
 
-def _emit_decision_telemetry(decision: Decision, event_id: Optional[str]) -> None:
+def _emit_decision_telemetry(decision: Decision, event_id: str | None) -> None:
     """Best-effort dual-write from canonical decision_log to telemetry spine."""
 
     try:

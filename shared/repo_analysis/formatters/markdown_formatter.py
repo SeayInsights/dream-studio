@@ -4,10 +4,8 @@ Markdown Report Formatter
 Formats repository analysis results as readable Markdown documentation.
 """
 
-from typing import Dict, List
 
-
-def format_report(report: Dict) -> str:
+def format_report(report: dict) -> str:
     """
     Format analysis report as comprehensive Markdown document
 
@@ -49,7 +47,7 @@ def format_report(report: Dict) -> str:
     return "\n\n".join(sections)
 
 
-def format_summary_only(report: Dict) -> str:
+def format_summary_only(report: dict) -> str:
     """
     Format only summary section as Markdown
 
@@ -63,7 +61,7 @@ def format_summary_only(report: Dict) -> str:
     return "\n\n".join(sections)
 
 
-def format_patterns_only(report: Dict) -> str:
+def format_patterns_only(report: dict) -> str:
     """
     Format only patterns section as Markdown
 
@@ -82,7 +80,7 @@ def _format_header() -> str:
     return "# Repository Analysis Report"
 
 
-def _format_summary(summary: Dict) -> str:
+def _format_summary(summary: dict) -> str:
     """Format summary section"""
     lines = ["## Summary\n"]
 
@@ -97,7 +95,7 @@ def _format_summary(summary: Dict) -> str:
     return "\n".join(lines)
 
 
-def _format_repo_structures(repo_structures: Dict) -> str:
+def _format_repo_structures(repo_structures: dict) -> str:
     """Format repository structures section"""
     lines = ["## Repository Structures\n"]
 
@@ -125,7 +123,7 @@ def _format_repo_structures(repo_structures: Dict) -> str:
     return "\n".join(lines)
 
 
-def _format_adoption_rates(adoption_rates: Dict) -> str:
+def _format_adoption_rates(adoption_rates: dict) -> str:
     """Format pattern adoption rates section"""
     lines = ["## Pattern Adoption Rates\n"]
 
@@ -145,7 +143,7 @@ def _format_adoption_rates(adoption_rates: Dict) -> str:
     return "\n".join(lines)
 
 
-def _format_patterns(patterns: Dict) -> str:
+def _format_patterns(patterns: dict) -> str:
     """Format patterns detected section"""
     lines = ["## Patterns Detected\n"]
 
@@ -172,7 +170,7 @@ def _format_patterns(patterns: Dict) -> str:
     return "\n".join(lines)
 
 
-def _format_statistics(statistics: Dict) -> str:
+def _format_statistics(statistics: dict) -> str:
     """Format statistics section"""
     lines = ["## Statistics\n"]
 
@@ -209,7 +207,7 @@ def _format_statistics(statistics: Dict) -> str:
     return "\n".join(lines)
 
 
-def format_comparison_table(reports: List[Dict], repo_names: List[str]) -> str:
+def format_comparison_table(reports: list[dict], repo_names: list[str]) -> str:
     """
     Format side-by-side comparison table for multiple repositories
 

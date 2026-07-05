@@ -12,15 +12,14 @@ Validation checks:
 import sys
 import re
 from pathlib import Path
-from typing import List, Tuple, Optional
 import yaml
 
 
 class ValidationResult:
     def __init__(self, check_name: str):
         self.check_name = check_name
-        self.errors: List[Tuple[str, str]] = []
-        self.warnings: List[Tuple[str, str]] = []
+        self.errors: list[tuple[str, str]] = []
+        self.warnings: list[tuple[str, str]] = []
 
     def add_error(self, file_path: str, message: str):
         self.errors.append((file_path, message))
@@ -49,12 +48,12 @@ class ValidationResult:
                 print(f"          {message}")
 
 
-def check_line_counts(skill_files: List[Path]) -> ValidationResult:
+def check_line_counts(skill_files: list[Path]) -> ValidationResult:
     """Check line count limits: main SKILL.md <300, mode SKILL.md <150"""
     result = ValidationResult("Line Count Limits")
 
     for skill_file in skill_files:
-        with open(skill_file, "r", encoding="utf-8") as f:
+        with open(skill_file, encoding="utf-8") as f:
             line_count = sum(1 for _ in f)
 
         # Determine if this is a main or mode SKILL.md
@@ -70,7 +69,7 @@ def check_line_counts(skill_files: List[Path]) -> ValidationResult:
     return result
 
 
-def check_yaml_frontmatter(skill_files: List[Path]) -> ValidationResult:
+def check_yaml_frontmatter(skill_files: list[Path]) -> ValidationResult:
     """Check that YAML frontmatter blocks are valid"""
     result = ValidationResult("YAML Frontmatter Validation")
 
@@ -78,7 +77,7 @@ def check_yaml_frontmatter(skill_files: List[Path]) -> ValidationResult:
     frontmatter_pattern = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.MULTILINE | re.DOTALL)
 
     for skill_file in skill_files:
-        with open(skill_file, "r", encoding="utf-8") as f:
+        with open(skill_file, encoding="utf-8") as f:
             content = f.read()
 
         match = frontmatter_pattern.match(content)
@@ -92,7 +91,7 @@ def check_yaml_frontmatter(skill_files: List[Path]) -> ValidationResult:
     return result
 
 
-def check_banned_phrases(skill_files: List[Path]) -> ValidationResult:
+def check_banned_phrases(skill_files: list[Path]) -> ValidationResult:
     """Check for scaffolding phrases that should be removed"""
     result = ValidationResult("Banned Phrases Check")
 
@@ -110,7 +109,7 @@ def check_banned_phrases(skill_files: List[Path]) -> ValidationResult:
     ]
 
     for skill_file in skill_files:
-        with open(skill_file, "r", encoding="utf-8") as f:
+        with open(skill_file, encoding="utf-8") as f:
             content = f.read().lower()
 
         found_phrases = []
@@ -128,7 +127,7 @@ def check_banned_phrases(skill_files: List[Path]) -> ValidationResult:
     return result
 
 
-def check_reference_links(skill_files: List[Path]) -> ValidationResult:
+def check_reference_links(skill_files: list[Path]) -> ValidationResult:
     """Check that all reference links have corresponding anchors"""
     result = ValidationResult("Reference Link Validation")
 
@@ -140,7 +139,7 @@ def check_reference_links(skill_files: List[Path]) -> ValidationResult:
     heading_pattern = re.compile(r"^#+\s+(.+)$", re.MULTILINE)
 
     for skill_file in skill_files:
-        with open(skill_file, "r", encoding="utf-8") as f:
+        with open(skill_file, encoding="utf-8") as f:
             content = f.read()
 
         # Find all reference links
@@ -176,7 +175,7 @@ def check_reference_links(skill_files: List[Path]) -> ValidationResult:
     return result
 
 
-def find_skill_files(root_dir: Path, changed_files: Optional[List[str]] = None) -> List[Path]:
+def find_skill_files(root_dir: Path, changed_files: list[str] | None = None) -> list[Path]:
     """
     Find SKILL.md files to validate.
     If changed_files is provided, only return those files.

@@ -30,6 +30,7 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from datetime import UTC
 
 logger = logging.getLogger(__name__)
 
@@ -171,8 +172,8 @@ class RetroactiveValidator:
             logger.debug("increment_for_session failed (non-blocking): %s", exc)
 
     def _check_disambiguation(
-        self, ext: dict[str, Any], result: "ValidationResult"
-    ) -> "ValidationResult":
+        self, ext: dict[str, Any], result: ValidationResult
+    ) -> ValidationResult:
         """Phase 19.6: run description collision check after validation passes.
 
         If collision found, reverts verdict from 'active' to 'experimental' and
@@ -562,6 +563,6 @@ class OnboardingValidator:
 
 
 def _now_iso() -> str:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")

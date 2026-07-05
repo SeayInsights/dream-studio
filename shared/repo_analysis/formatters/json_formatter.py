@@ -5,10 +5,9 @@ Formats repository analysis results as structured JSON.
 """
 
 import json
-from typing import Dict
 
 
-def format_report(report: Dict) -> str:
+def format_report(report: dict) -> str:
     """
     Format analysis report as JSON
 
@@ -26,7 +25,7 @@ def format_report(report: Dict) -> str:
     return json.dumps(report, indent=2, ensure_ascii=False)
 
 
-def format_compact(report: Dict) -> str:
+def format_compact(report: dict) -> str:
     """
     Format analysis report as compact JSON (no indentation)
 
@@ -39,7 +38,7 @@ def format_compact(report: Dict) -> str:
     return json.dumps(report, separators=(",", ":"), ensure_ascii=False)
 
 
-def format_summary_only(report: Dict) -> str:
+def format_summary_only(report: dict) -> str:
     """
     Format only the summary section as JSON
 
@@ -56,7 +55,7 @@ def format_summary_only(report: Dict) -> str:
     return json.dumps(summary_report, indent=2, ensure_ascii=False)
 
 
-def format_patterns_only(report: Dict) -> str:
+def format_patterns_only(report: dict) -> str:
     """
     Format only the patterns section as JSON
 

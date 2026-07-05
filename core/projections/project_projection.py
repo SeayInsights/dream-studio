@@ -19,8 +19,8 @@ Out-of-order tolerance:
 
 import logging
 import sqlite3
-from datetime import datetime, timezone
-from typing import Any, Dict
+from datetime import datetime, UTC
+from typing import Any
 
 from core.projections.framework import Projection, RetryPolicy
 
@@ -54,7 +54,7 @@ class ProjectProjection(Projection):
         # Migration 076 owns the business_projects DDL additions.
         pass
 
-    def handle(self, event: Dict[str, Any], conn: sqlite3.Connection) -> int:
+    def handle(self, event: dict[str, Any], conn: sqlite3.Connection) -> int:
         """Apply one canonical event to business_projects.
 
         Returns 1 for a successfully applied event, 0 if skipped.
@@ -66,7 +66,7 @@ class ProjectProjection(Projection):
         event_type = event["event_type"]
         event_id = event["event_id"]
         ts = event["event_timestamp"]
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         project_id = (
             event.get("project_id")

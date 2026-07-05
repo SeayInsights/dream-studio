@@ -445,7 +445,7 @@ def main() -> None:
         print(f"Error: input file not found: {input_path}", file=sys.stderr)
         sys.exit(1)
 
-    with open(input_path, "r", encoding="utf-8") as fh:
+    with open(input_path, encoding="utf-8") as fh:
         brand = json.load(fh)
 
     output_dir = (

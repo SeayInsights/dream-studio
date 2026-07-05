@@ -12,8 +12,8 @@ import sqlite3
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import datetime, UTC
+from typing import Any
 from uuid import uuid4
 
 from core.config.database import get_connection
@@ -31,13 +31,13 @@ class IngestionRecord:
     source_id: str
     memory_type: str
     content: str
-    confidence: Optional[float]
+    confidence: float | None
     category: str
-    tags: List[str]
-    metadata: Dict[str, Any]
+    tags: list[str]
+    metadata: dict[str, Any]
     original_timestamp: str
-    project: Optional[str] = None
-    skill: Optional[str] = None
+    project: str | None = None
+    skill: str | None = None
 
 
 @dataclass
@@ -47,7 +47,7 @@ class IngestionResult:
     records_ingested: int
     records_updated: int
     records_skipped: int
-    errors: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
     duration_ms: float = 0.0
 
 
@@ -63,7 +63,7 @@ class IngestionConsumer(ABC):
     def source_type(self) -> str: ...
 
     @abstractmethod
-    def fetch_pending(self, conn: sqlite3.Connection) -> List[IngestionRecord]:
+    def fetch_pending(self, conn: sqlite3.Connection) -> list[IngestionRecord]:
         """Fetch records from the source that need ingestion."""
         ...
 
@@ -101,7 +101,7 @@ class IngestionConsumer(ABC):
     def _ingest_one(
         self, record: IngestionRecord, store: MemoryStore, result: IngestionResult
     ) -> None:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         existing = self._find_existing(record, store)
 
@@ -137,7 +137,7 @@ class IngestionConsumer(ABC):
         else:
             result.records_ingested += 1
 
-    def _find_existing(self, record: IngestionRecord, store: MemoryStore) -> Optional[MemoryEntry]:
+    def _find_existing(self, record: IngestionRecord, store: MemoryStore) -> MemoryEntry | None:
         with get_connection(read_only=True) as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
@@ -165,7 +165,7 @@ class LessonIngestionConsumer(IngestionConsumer):
     def source_type(self) -> str:
         return "raw_lessons"
 
-    def fetch_pending(self, conn: sqlite3.Connection) -> List[IngestionRecord]:
+    def fetch_pending(self, conn: sqlite3.Connection) -> list[IngestionRecord]:
         rows = conn.execute("""
             SELECT rl.lesson_id, rl.source, rl.confidence, rl.status,
                    rl.title, rl.what_happened, rl.lesson, rl.evidence,
@@ -234,7 +234,7 @@ class GotchaIngestionConsumer(IngestionConsumer):
     def source_type(self) -> str:
         return "reg_gotchas"
 
-    def fetch_pending(self, conn: sqlite3.Connection) -> List[IngestionRecord]:
+    def fetch_pending(self, conn: sqlite3.Connection) -> list[IngestionRecord]:
         rows = conn.execute("""
             SELECT rg.gotcha_id, rg.skill_id, rg.severity, rg.title,
                    rg.context, rg.fix, rg.keywords, rg.discovered, rg.times_hit
@@ -312,7 +312,7 @@ class DecisionIngestionConsumer(IngestionConsumer):
     def source_type(self) -> str:
         return "canonical_events"
 
-    def fetch_pending(self, conn: sqlite3.Connection) -> List[IngestionRecord]:
+    def fetch_pending(self, conn: sqlite3.Connection) -> list[IngestionRecord]:
         try:
             rows = conn.execute("""
                 SELECT event_id, event_type, timestamp, payload, severity,
@@ -378,12 +378,12 @@ class DecisionIngestionConsumer(IngestionConsumer):
         return records
 
 
-def run_all_ingestion(store: Optional[MemoryStore] = None) -> List[IngestionResult]:
+def run_all_ingestion(store: MemoryStore | None = None) -> list[IngestionResult]:
     """Run all ingestion consumers and return results."""
     if store is None:
         store = MemoryStore()
 
-    consumers: List[IngestionConsumer] = [
+    consumers: list[IngestionConsumer] = [
         LessonIngestionConsumer(),
         GotchaIngestionConsumer(),
         # CorrectionIngestionConsumer retired migration 131 (cor_skill_corrections dropped)

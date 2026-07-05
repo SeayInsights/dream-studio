@@ -25,7 +25,6 @@ import csv
 import json
 import pathlib
 import sys
-from typing import Optional
 
 try:
     import yaml
@@ -247,7 +246,7 @@ def is_netcompat_rule(rule_id: str) -> bool:
     return "-zsc-" in rid or "-net-" in rid or rid.startswith("zsc-") or rid.startswith("net-")
 
 
-def classify_finding(rule_id: str) -> Optional[str]:
+def classify_finding(rule_id: str) -> str | None:
     """
     Map a rule ID to a finding category using the suffix.
     Returns None if the rule ID doesn't match any known pattern.
@@ -457,7 +456,7 @@ def print_summary(rows: list[dict], output_path: pathlib.Path, proxy_type: str) 
 def run_analysis(
     scans_dir: pathlib.Path,
     profile: dict,
-    extra_repos: Optional[list[str]] = None,
+    extra_repos: list[str] | None = None,
 ) -> list[dict]:
     """
     Core analysis pipeline. Works with ingested SARIF or sample data.

@@ -12,9 +12,7 @@ Retirement of this bridge requires migrating skill execution event emission
 directly to the spool pipeline; that migration is not yet scoped.
 """
 
-import json
-from datetime import datetime, timezone
-from typing import Dict, Optional
+from datetime import datetime, UTC
 from uuid import uuid4
 
 from core.event_store.event_store import EventStore
@@ -43,12 +41,12 @@ class LegacyBridge:
         activity_type: str,
         stream_id: str,
         stream_type: str,
-        event_data: Optional[Dict] = None,
-        prd_id: Optional[str] = None,
-        task_id: Optional[str] = None,
-        session_id: Optional[str] = None,
-        workflow_run_key: Optional[str] = None,
-        skill_id: Optional[str] = None,
+        event_data: dict | None = None,
+        prd_id: str | None = None,
+        task_id: str | None = None,
+        session_id: str | None = None,
+        workflow_run_key: str | None = None,
+        skill_id: str | None = None,
         status: str = "completed",
         severity: str = "info",
     ) -> bool:
@@ -111,7 +109,7 @@ class LegacyBridge:
         canonical_event = {
             "event_id": str(uuid4()),
             "event_type": event_type,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "trace": trace,
             "severity": canonical_severity,
             "payload": {

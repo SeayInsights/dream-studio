@@ -17,16 +17,15 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 # Add project root to path for canonical imports
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from core.config import paths
-from core.config.database import get_connection
 
 # Event store for dual-write migration (Phase 2)
 try:
@@ -96,7 +95,7 @@ def _pulse_path() -> Path:
     return paths.meta_dir() / PULSE_FILENAME
 
 
-def _check_schema(doc: Dict[str, Any], source: Path) -> None:
+def _check_schema(doc: dict[str, Any], source: Path) -> None:
     stored = doc.get("schema_version", 1)
     if not isinstance(stored, int) or stored > SCHEMA_VERSION:
         raise SchemaVersionError(
@@ -106,7 +105,7 @@ def _check_schema(doc: Dict[str, Any], source: Path) -> None:
         )
 
 
-def _atomic_write(path: Path, payload: Dict[str, Any]) -> None:
+def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
     """Write JSON atomically via temp file + rename to prevent partial writes."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
@@ -122,7 +121,7 @@ def _atomic_write(path: Path, payload: Dict[str, Any]) -> None:
         raise
 
 
-def read_config() -> Dict[str, Any]:
+def read_config() -> dict[str, Any]:
     """Return the user config dict, or a default stub if the file is absent or corrupt."""
     path = _config_path()
     if not path.is_file():
@@ -136,7 +135,7 @@ def read_config() -> Dict[str, Any]:
     return doc
 
 
-def write_config(data: Dict[str, Any]) -> Path:
+def write_config(data: dict[str, Any]) -> Path:
     """Persist the user config atomically, stamping schema_version."""
     path = _config_path()
     _atomic_write(path, {**data, "schema_version": SCHEMA_VERSION})
@@ -164,7 +163,7 @@ def write_config(data: Dict[str, Any]) -> Path:
     return path
 
 
-def read_pulse() -> Dict[str, Any]:
+def read_pulse() -> dict[str, Any]:
     """Return the latest pulse snapshot, or an empty dict if none exists."""
     path = _pulse_path()
     if not path.is_file():
@@ -178,7 +177,7 @@ def read_pulse() -> Dict[str, Any]:
     return doc
 
 
-def write_pulse(data: Dict[str, Any]) -> Path:
+def write_pulse(data: dict[str, Any]) -> Path:
     """Persist the latest pulse snapshot atomically, stamping schema_version."""
     path = _pulse_path()
     _atomic_write(path, {**data, "schema_version": SCHEMA_VERSION})
@@ -219,7 +218,7 @@ def backup_db() -> Path | None:
         src.backup(dst)
         dst.close()
         src.close()
-        if datetime.now(timezone.utc).day == 1:
+        if datetime.now(UTC).day == 1:
             conn = sqlite3.connect(str(db_path))
             conn.execute("VACUUM")
             conn.close()
@@ -252,7 +251,7 @@ def _maybe_cloud_push() -> None:
         # Log push attempt as sentinel
         from core.event_store import studio_db
 
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
         studio_db.set_sentinel(f"cloud-push-{today}", "backup")
     except Exception:
         pass

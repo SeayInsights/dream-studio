@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Optional
 
 try:
     import yaml
@@ -30,7 +29,7 @@ VALID_STATUSES = {"pending", "in_progress", "implemented", "verified"}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
 
 
-def _parse_yaml(path: Path) -> tuple[Optional[dict], Optional[str]]:
+def _parse_yaml(path: Path) -> tuple[dict | None, str | None]:
     """Parse YAML file, returning (data, error)."""
     try:
         size = path.stat().st_size
@@ -136,7 +135,7 @@ def validate_registry(path: Path) -> list[str]:
     return errors
 
 
-def load_registry(path: Path) -> Optional[dict]:
+def load_registry(path: Path) -> dict | None:
     """Load and validate registry. Returns data if valid, None if invalid (prints errors)."""
     data, parse_error = _parse_yaml(path)
     if parse_error:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 from runtime.lib.domains import game_validate
 
@@ -15,7 +15,7 @@ class ValidationOutput(NamedTuple):
     should_block: bool
 
 
-def validate_and_format(file_path: Path) -> Optional[ValidationOutput]:
+def validate_and_format(file_path: Path) -> ValidationOutput | None:
     """Orchestrate validation and format output for a game file.
 
     Returns None if no validation needed (not a game file, no issues found).

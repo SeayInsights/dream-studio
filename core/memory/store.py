@@ -13,8 +13,8 @@ import json
 import math
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import datetime, UTC
+from typing import Any
 from uuid import uuid4
 
 from core.config.database import get_connection, transaction
@@ -71,34 +71,34 @@ class MemoryEntry:
     )
     source_id: str = ""  # FK to source record (lesson_id, gotcha_id, etc.)
     lifecycle_state: str = "ACTIVE"  # persisted as string; see MemoryLifecycle for valid values
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     importance: float = 0.5  # 0.0-1.0
-    confidence: Optional[float] = None  # 0.0-1.0
+    confidence: float | None = None  # 0.0-1.0
     created_at: str = ""
     updated_at: str = ""
     last_accessed: str = ""
     access_count: int = 0
-    tags: List[str] = field(default_factory=list)
-    project: Optional[str] = None
-    skill: Optional[str] = None
-    provenance: Dict[str, Any] = field(default_factory=dict)
-    lineage: Dict[str, Any] = field(default_factory=dict)
-    relationships: List[Dict[str, Any]] = field(default_factory=list)
-    embedding: Optional[List[float]] = None
+    tags: list[str] = field(default_factory=list)
+    project: str | None = None
+    skill: str | None = None
+    provenance: dict[str, Any] = field(default_factory=dict)
+    lineage: dict[str, Any] = field(default_factory=dict)
+    relationships: list[dict[str, Any]] = field(default_factory=list)
+    embedding: list[float] | None = None
 
 
 @dataclass
 class MemoryQuery:
-    text: Optional[str] = None
-    memory_type: Optional[str] = None
-    category: Optional[str] = None
-    tags: Optional[List[str]] = None
-    project: Optional[str] = None
-    skill: Optional[str] = None
+    text: str | None = None
+    memory_type: str | None = None
+    category: str | None = None
+    tags: list[str] | None = None
+    project: str | None = None
+    skill: str | None = None
     min_importance: float = 0.0
     limit: int = 10
     include_decayed: bool = False
-    lifecycle_states: Optional[List[str]] = None
+    lifecycle_states: list[str] | None = None
 
 
 @dataclass
@@ -113,7 +113,7 @@ class MemoryStore:
 
     DEFAULT_HALF_LIFE = 30.0
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: str | None = None):
         self.db_path = db_path or str(state_dir() / "studio.db")
         self._ensure_tables()
 
@@ -135,7 +135,7 @@ class MemoryStore:
     def store(self, entry: MemoryEntry) -> str:
         if not entry.memory_id:
             entry.memory_id = str(uuid4())
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         if not entry.created_at:
             entry.created_at = now
         entry.updated_at = now
@@ -186,7 +186,7 @@ class MemoryStore:
         if not entry.source_type or not entry.source_id:
             raise ValueError("upsert_by_provenance requires source_type and source_id")
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         entry.updated_at = now
         if entry.provenance:
             entry.provenance["ingested_at"] = now
@@ -239,7 +239,7 @@ class MemoryStore:
 
     # ── Retrieval ────────────────────────────────────────────────────────────
 
-    def retrieve(self, query: MemoryQuery) -> List[RetrievalResult]:
+    def retrieve(self, query: MemoryQuery) -> list[RetrievalResult]:
         """Retrieve memories with relevance ranking."""
         sql = "SELECT * FROM memory_entries WHERE 1=1"
         params: list = []
@@ -278,8 +278,8 @@ class MemoryStore:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(sql, params).fetchall()
 
-        results: List[RetrievalResult] = []
-        now = datetime.now(timezone.utc)
+        results: list[RetrievalResult] = []
+        now = datetime.now(UTC)
 
         for row in rows:
             entry = self._row_to_entry(row)
@@ -358,11 +358,11 @@ class MemoryStore:
 
             conn.execute(
                 "UPDATE memory_entries SET lifecycle_state = ?, updated_at = ? WHERE memory_id = ?",
-                (new_state, datetime.now(timezone.utc).isoformat(), memory_id),
+                (new_state, datetime.now(UTC).isoformat(), memory_id),
             )
 
     def record_access(self, memory_id: str) -> None:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         with transaction() as conn:
             conn.execute(
                 """
@@ -384,7 +384,7 @@ class MemoryStore:
                     updated_at = ?
                 WHERE memory_id = ?
             """,
-                (delta, datetime.now(timezone.utc).isoformat(), memory_id),
+                (delta, datetime.now(UTC).isoformat(), memory_id),
             )
 
     def decay_importance(self, memory_id: str, delta: float = 0.1) -> None:
@@ -396,7 +396,7 @@ class MemoryStore:
                     updated_at = ?
                 WHERE memory_id = ?
             """,
-                (delta, datetime.now(timezone.utc).isoformat(), memory_id),
+                (delta, datetime.now(UTC).isoformat(), memory_id),
             )
 
     # ── Convenience ingest methods ───────────────────────────────────────────
@@ -405,14 +405,14 @@ class MemoryStore:
         self,
         lesson_path: str,
         content: str,
-        skill: Optional[str] = None,
-        project: Optional[str] = None,
-        source_id: Optional[str] = None,
-        confidence: Optional[float] = None,
+        skill: str | None = None,
+        project: str | None = None,
+        source_id: str | None = None,
+        confidence: float | None = None,
     ) -> str:
         """Ingest a lesson into memory via canonical API."""
         tags = _auto_tags(content)
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         entry = MemoryEntry(
             memory_id=str(uuid4()),
@@ -446,13 +446,13 @@ class MemoryStore:
         title: str,
         fix: str,
         severity: str,
-        skill: Optional[str] = None,
-        source_id: Optional[str] = None,
+        skill: str | None = None,
+        source_id: str | None = None,
     ) -> str:
         importance = {"critical": 0.95, "high": 0.8, "medium": 0.6, "low": 0.4}.get(
             severity.lower(), 0.5
         )
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         entry = MemoryEntry(
             memory_id=str(uuid4()),
@@ -486,9 +486,9 @@ class MemoryStore:
         reasoning: str,
         confidence: float,
         subsystem: str,
-        source_id: Optional[str] = None,
+        source_id: str | None = None,
     ) -> str:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         entry = MemoryEntry(
             memory_id=str(uuid4()),
@@ -517,7 +517,7 @@ class MemoryStore:
 
     # ── Stats ────────────────────────────────────────────────────────────────
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         with get_connection(read_only=True) as conn:
             total = conn.execute("SELECT COUNT(*) FROM memory_entries").fetchone()[0]
             by_type = {}
@@ -544,7 +544,7 @@ class MemoryStore:
             "avg_importance": round(avg_importance or 0, 3),
         }
 
-    def get_entry(self, memory_id: str) -> Optional[MemoryEntry]:
+    def get_entry(self, memory_id: str) -> MemoryEntry | None:
         with get_connection(read_only=True) as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
@@ -591,7 +591,7 @@ def _col(row, name):
         return None
 
 
-def _auto_tags(content: str) -> List[str]:
+def _auto_tags(content: str) -> list[str]:
     tags = []
     cl = content.lower()
     if "security" in cl:

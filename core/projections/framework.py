@@ -59,8 +59,8 @@ import sqlite3
 import traceback
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Literal, Optional
+from datetime import datetime, timedelta, UTC
+from typing import Any, Literal
 
 from config.event_type_registry import all_entries, is_registered
 from core.config.database import get_connection, transaction
@@ -72,7 +72,7 @@ logger = logging.getLogger(__name__)
 
 CanonicalSource = Literal["business", "ai", "both"]
 
-_TABLE_FOR_SOURCE: Dict[str, str] = {
+_TABLE_FOR_SOURCE: dict[str, str] = {
     "business": "business_canonical_events",
     "ai": "ai_canonical_events",
 }
@@ -100,7 +100,7 @@ class RetryPolicy:
     def next_retry_at(self, attempt: int) -> str:
         """Return ISO-format UTC timestamp for the next retry."""
         delay = self.delay_for(attempt)
-        ts = datetime.now(timezone.utc) + timedelta(seconds=delay)
+        ts = datetime.now(UTC) + timedelta(seconds=delay)
         return ts.isoformat()
 
 
@@ -125,7 +125,7 @@ class ProjectionResult:
     projection_name: str
     events_processed: int
     rows_written: int
-    errors: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
     duration_ms: float = 0.0
 
 
@@ -167,15 +167,15 @@ class Projection(ABC):
     # ── Class-level declarations (override in subclasses) ─────────────────────
 
     name: str = ""
-    consumed_event_types: List[str] = field(default_factory=list)
+    consumed_event_types: list[str] = field(default_factory=list)
     source_canonical: CanonicalSource = "business"
-    target_tables: List[str] = field(default_factory=list)
+    target_tables: list[str] = field(default_factory=list)
     retry_policy: RetryPolicy = field(default_factory=RetryPolicy)
 
     # ── Backward-compat: property alias for event_types ───────────────────────
 
     @property
-    def event_types(self) -> List[str]:
+    def event_types(self) -> list[str]:
         """Alias for consumed_event_types — preserved for consumers.py compat."""
         return self.consumed_event_types
 
@@ -192,7 +192,7 @@ class Projection(ABC):
         ...
 
     @abstractmethod
-    def handle(self, event: Dict[str, Any], conn: sqlite3.Connection) -> int:
+    def handle(self, event: dict[str, Any], conn: sqlite3.Connection) -> int:
         """Process a single canonical event and write to target table(s).
 
         Contract:
@@ -283,7 +283,7 @@ class Projection(ABC):
         self,
         conn: sqlite3.Connection,
         table: str,
-        row: Dict[str, Any],
+        row: dict[str, Any],
         conflict_key: str,
     ) -> int:
         """INSERT ... ON CONFLICT(conflict_key) DO UPDATE SET for all other columns.
@@ -324,7 +324,7 @@ class ProjectionRegistry:
     """
 
     def __init__(self) -> None:
-        self._projections: Dict[str, Projection] = {}
+        self._projections: dict[str, Projection] = {}
         # Build a set of known event_types from the event type registry for
         # validation (wildcard check uses LIKE semantics against prefixes).
         self._known_types: frozenset[str] = frozenset(e.event_type for e in all_entries())
@@ -357,7 +357,7 @@ class ProjectionRegistry:
                     et,
                 )
 
-    def get_projections_for_event_type(self, event_type: str, source: str) -> List[Projection]:
+    def get_projections_for_event_type(self, event_type: str, source: str) -> list[Projection]:
         """Return all projections that consume the given event_type from the given source.
 
         Matching rules:
@@ -376,7 +376,7 @@ class ProjectionRegistry:
                     break
         return result
 
-    def all_projections(self) -> List[Projection]:
+    def all_projections(self) -> list[Projection]:
         """Return all registered projections."""
         return list(self._projections.values())
 
@@ -387,11 +387,11 @@ class ProjectionRegistry:
             tables.update(proj.target_tables)
         return frozenset(tables)
 
-    def get(self, name: str) -> Optional[Projection]:
+    def get(self, name: str) -> Projection | None:
         """Return projection by name or None."""
         return self._projections.get(name)
 
-    def summary(self) -> Dict[str, Any]:
+    def summary(self) -> dict[str, Any]:
         """Return summary dict for `ds projection list`."""
         return {
             "count": len(self._projections),
@@ -429,7 +429,7 @@ def _source_matches(projection_source: CanonicalSource, event_source: str) -> bo
     return projection_source == event_source
 
 
-def _build_type_filter(event_types: List[str]) -> tuple[str, list]:
+def _build_type_filter(event_types: list[str]) -> tuple[str, list]:
     """Build a SQL WHERE clause fragment for event type matching.
 
     Returns (clause, params) where clause is something like:
@@ -450,13 +450,13 @@ def _build_type_filter(event_types: List[str]) -> tuple[str, list]:
 # ── Row → event dict conversion ───────────────────────────────────────────────
 
 
-def _row_to_event(row: sqlite3.Row, source: str) -> Dict[str, Any]:
+def _row_to_event(row: sqlite3.Row, source: str) -> dict[str, Any]:
     """Convert a sqlite3.Row from a canonical table to a normalized event dict.
 
     Works with both business_canonical_events and ai_canonical_events.
     The _source key indicates which canonical the event came from.
     """
-    event: Dict[str, Any] = {
+    event: dict[str, Any] = {
         "event_id": row["event_id"],
         "event_type": row["event_type"],
         "event_timestamp": row["event_timestamp"],
@@ -516,18 +516,18 @@ class ProjectionEngine:
 
     def __init__(
         self,
-        db_path: Optional[str] = None,
-        analytics_conn: Optional[Any] = None,
+        db_path: str | None = None,
+        analytics_conn: Any | None = None,
     ) -> None:
         self.db_path = db_path or str(state_dir() / "studio.db")
         self._analytics_conn = analytics_conn  # DuckDB conn; None until WO-TS3 wires projections
         self._registry = ProjectionRegistry()
         # Legacy dict for backward compat with apply_incremental / rebuild
-        self._projections: Dict[str, Projection] = {}
+        self._projections: dict[str, Projection] = {}
         self._ensure_meta_tables()
 
     @property
-    def analytics_conn(self) -> Optional[Any]:
+    def analytics_conn(self) -> Any | None:
         """DuckDB analytics connection, or None if not yet wired (see WO-TS3)."""
         return self._analytics_conn
 
@@ -562,7 +562,7 @@ class ProjectionEngine:
 
     # ── Main cycle ────────────────────────────────────────────────────────────
 
-    def run_cycle(self, projection_name: Optional[str] = None) -> List[ProjectionResult]:
+    def run_cycle(self, projection_name: str | None = None) -> list[ProjectionResult]:
         """Execute one full processing cycle: retries first, then new events.
 
         Args:
@@ -572,7 +572,7 @@ class ProjectionEngine:
         Returns:
             List of ProjectionResult, one per projection processed.
         """
-        targets: List[Projection] = (
+        targets: list[Projection] = (
             [self._projections[projection_name]]
             if projection_name and projection_name in self._projections
             else list(self._projections.values())
@@ -592,10 +592,10 @@ class ProjectionEngine:
         start = time.monotonic()
         events_processed = 0
         rows_written = 0
-        errors: List[str] = []
+        errors: list[str] = []
 
         # Determine which canonical table(s) to query.
-        sources: List[str] = (
+        sources: list[str] = (
             ["business", "ai"] if proj.source_canonical == "both" else [proj.source_canonical]
         )
 
@@ -687,7 +687,7 @@ class ProjectionEngine:
 
     def _advance_cursor(self, projection_name: str, cursor_col: str, event_id: str) -> None:
         """Update the cursor in projection_state to the given event_id."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         with transaction() as conn:
             conn.execute(
                 f"""
@@ -722,7 +722,7 @@ class ProjectionEngine:
     def _schedule_retry(
         self,
         proj: Projection,
-        event: Dict[str, Any],
+        event: dict[str, Any],
         source: str,
         error_message: str,
         error_traceback: str,
@@ -792,7 +792,7 @@ class ProjectionEngine:
         retry_count: int,
     ) -> None:
         """Write an entry to projection_dead_letter."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         with transaction() as conn:
             conn.execute(
                 """
@@ -815,7 +815,7 @@ class ProjectionEngine:
 
     def _process_retries(self, proj: Projection) -> None:
         """Process all due retry entries for this projection."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         with get_connection(read_only=True) as conn:
             due = conn.execute(
@@ -925,7 +925,7 @@ class ProjectionEngine:
         start = time.monotonic()
         events_processed = 0
         rows_written = 0
-        errors: List[str] = []
+        errors: list[str] = []
 
         # Detect v2 vs legacy projection.
         is_v2 = bool(proj.source_canonical) and bool(proj.consumed_event_types)
@@ -959,7 +959,7 @@ class ProjectionEngine:
                     conn.row_factory = sqlite3.Row
                     rows = conn.execute(query, type_params).fetchall()
 
-                last_event_id: Optional[str] = None
+                last_event_id: str | None = None
                 for row in rows:
                     event = _row_to_event(row, source)
                     try:
@@ -1027,7 +1027,7 @@ class ProjectionEngine:
             duration_ms=elapsed,
         )
 
-    def rebuild_all(self) -> List[ProjectionResult]:
+    def rebuild_all(self) -> list[ProjectionResult]:
         """Rebuild every registered projection."""
         results = []
         for name in self._projections:
@@ -1036,9 +1036,9 @@ class ProjectionEngine:
 
     # ── Health / inspection ───────────────────────────────────────────────────
 
-    def health(self) -> Dict[str, Any]:
+    def health(self) -> dict[str, Any]:
         """Return projection health status (includes both v2 and legacy projections)."""
-        status: Dict[str, Any] = {"projections": {}}
+        status: dict[str, Any] = {"projections": {}}
         with get_connection(read_only=True) as conn:
             # Count events across all three canonical tables.
             for tbl in ("business_canonical_events", "ai_canonical_events", "canonical_events"):
@@ -1077,7 +1077,7 @@ class ProjectionEngine:
 
     # ── Legacy / backward-compat methods ─────────────────────────────────────
 
-    def apply_incremental(self, projection_name: Optional[str] = None) -> List[ProjectionResult]:
+    def apply_incremental(self, projection_name: str | None = None) -> list[ProjectionResult]:
         """Legacy incremental dispatch: reads from canonical_events.
 
         Kept for pre-v2 consumers.py projections.  V2 projections should use
@@ -1113,7 +1113,7 @@ class ProjectionEngine:
 
         events_processed = 0
         rows_written = 0
-        errors: List[str] = []
+        errors: list[str] = []
         last_event_id = ""
         last_timestamp = last_ts
 
@@ -1147,11 +1147,11 @@ class ProjectionEngine:
             duration_ms=elapsed,
         )
 
-    def apply_since(self, cursor: Optional[str] = None) -> List[ProjectionResult]:
+    def apply_since(self, cursor: str | None = None) -> list[ProjectionResult]:
         """Alias for apply_incremental (legacy API)."""
         return self.apply_incremental()
 
-    def get_checkpoint(self, name: str) -> Optional[ProjectionCheckpoint]:
+    def get_checkpoint(self, name: str) -> ProjectionCheckpoint | None:
         """Return legacy ProjectionCheckpoint for a projection (backward compat)."""
         with get_connection(read_only=True) as conn:
             row = conn.execute(
@@ -1177,7 +1177,7 @@ class ProjectionEngine:
         rebuilt: bool = False,
     ) -> None:
         """Write legacy projection_checkpoints row (backward compat)."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         conn.execute(
             """
             INSERT INTO projection_checkpoints
@@ -1217,7 +1217,7 @@ class ProjectionEngine:
 # ── Legacy canonical_events row format ────────────────────────────────────────
 
 
-def _legacy_row_to_event(row: Any) -> Dict[str, Any]:
+def _legacy_row_to_event(row: Any) -> dict[str, Any]:
     """Convert a row from the legacy canonical_events table to an event dict.
 
     Preserved exactly as in pre-v2 for consumers.py backward compat.
@@ -1227,7 +1227,7 @@ def _legacy_row_to_event(row: Any) -> Dict[str, Any]:
     def _get(row: Any, idx: int, key: str) -> Any:
         return row[idx] if isinstance(row, tuple) else row[key]
 
-    event: Dict[str, Any] = {
+    event: dict[str, Any] = {
         "event_id": _get(row, 0, "event_id"),
         "event_type": _get(row, 1, "event_type"),
         "timestamp": _get(row, 2, "timestamp"),

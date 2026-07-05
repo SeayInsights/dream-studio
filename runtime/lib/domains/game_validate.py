@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 # --- Configuration ---
 
@@ -125,7 +125,7 @@ class ValidationResult(NamedTuple):
     info: list[str]
 
 
-def detect_project(file_path: Path) -> Optional[ProjectContext]:
+def detect_project(file_path: Path) -> ProjectContext | None:
     """Find the Godot project root with structural validation.
 
     Returns None if:
@@ -193,7 +193,7 @@ def relative_to_project(file_path: Path, project_root: Path) -> str:
         return str(file_path).replace("\\", "/")
 
 
-def classify_path(rel_path: str, file_path: Optional[Path] = None) -> set[str]:
+def classify_path(rel_path: str, file_path: Path | None = None) -> set[str]:
     """Classify a file path into domain categories.
 
     Primary: match directory names against keyword sets.

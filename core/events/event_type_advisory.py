@@ -13,13 +13,12 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import FrozenSet, Optional
 
 logger = logging.getLogger(__name__)
 
 _TAXONOMY_PATH = Path("docs/canonical/event_taxonomy_v1.json")
 
-_cached_event_types: Optional[FrozenSet[str]] = None
+_cached_event_types: frozenset[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -28,12 +27,12 @@ class AdvisoryResult:
 
     is_registered: bool
     event_type: str
-    message: Optional[str] = None
+    message: str | None = None
 
 
 def get_registered_event_types(
-    taxonomy_path: Optional[Path] = None,
-) -> FrozenSet[str]:
+    taxonomy_path: Path | None = None,
+) -> frozenset[str]:
     """Load canonical event types from event_taxonomy_v1.json.
 
     Returns the same set of types that EventValidator uses for hard validation.
@@ -47,7 +46,7 @@ def get_registered_event_types(
     path = taxonomy_path or _TAXONOMY_PATH
 
     try:
-        with open(path, "r") as f:
+        with open(path) as f:
             taxonomy = json.load(f)
     except FileNotFoundError:
         logger.warning(
@@ -67,7 +66,7 @@ def get_registered_event_types(
 
 def validate_event_type_advisory(
     event_type: str,
-    taxonomy_path: Optional[Path] = None,
+    taxonomy_path: Path | None = None,
 ) -> AdvisoryResult:
     """Check if an event type is registered in the canonical taxonomy.
 

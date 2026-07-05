@@ -21,7 +21,6 @@ import subprocess
 import tempfile
 import shutil
 from pathlib import Path
-from typing import List, Tuple, Optional
 import argparse
 
 # Add parent directories to path for imports
@@ -74,7 +73,7 @@ def clone_repo(url: str, temp_dir: Path, verbose: bool = False) -> Path:
         sys.exit(1)
 
 
-def prepare_repos(inputs: List[str], verbose: bool = False) -> Tuple[List[str], Optional[Path]]:
+def prepare_repos(inputs: list[str], verbose: bool = False) -> tuple[list[str], Path | None]:
     """
     Prepare repositories for analysis (clone URLs, validate paths)
 

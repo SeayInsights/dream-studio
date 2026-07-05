@@ -253,7 +253,7 @@ def extract_css_vars(html: str) -> tuple:
 
 def load_brand_tokens(path: str) -> dict:
     """Parse brand-tokens.json and return structured dict."""
-    with open(path, "r", encoding="utf-8-sig") as f:
+    with open(path, encoding="utf-8-sig") as f:
         raw = json.load(f)
 
     tokens = {

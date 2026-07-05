@@ -10,7 +10,6 @@ import sys
 import re
 from pathlib import Path
 from dataclasses import dataclass
-from typing import List, Tuple
 
 
 @dataclass
@@ -26,7 +25,7 @@ class AntiPattern:
     dont: str
     category: str
 
-    def matches(self, keyword: str) -> Tuple[bool, int]:
+    def matches(self, keyword: str) -> tuple[bool, int]:
         """
         Check if pattern matches keyword and return relevance score.
         Higher score = better match.
@@ -58,7 +57,7 @@ class AntiPattern:
         return (False, 0)
 
 
-def parse_anti_patterns(file_path: Path) -> List[AntiPattern]:
+def parse_anti_patterns(file_path: Path) -> list[AntiPattern]:
     """Parse anti-patterns.md file into structured data"""
     content = file_path.read_text(encoding="utf-8")
     patterns = []
@@ -145,7 +144,7 @@ def parse_anti_patterns(file_path: Path) -> List[AntiPattern]:
     return patterns
 
 
-def search_patterns(patterns: List[AntiPattern], keyword: str) -> List[Tuple[AntiPattern, int]]:
+def search_patterns(patterns: list[AntiPattern], keyword: str) -> list[tuple[AntiPattern, int]]:
     """Search patterns by keyword and return ranked results"""
     results = []
 
@@ -160,7 +159,7 @@ def search_patterns(patterns: List[AntiPattern], keyword: str) -> List[Tuple[Ant
     return results
 
 
-def format_output(results: List[Tuple[AntiPattern, int]], keyword: str):
+def format_output(results: list[tuple[AntiPattern, int]], keyword: str):
     """Format and print search results"""
     if not results:
         print(f"\nNo anti-patterns found matching '{keyword}'")

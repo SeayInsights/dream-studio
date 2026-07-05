@@ -16,7 +16,7 @@ Analyzes career skill repositories for 10 key capabilities:
 """
 
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any
 import sys
 
 # Add parent to path for imports
@@ -58,7 +58,7 @@ class CareerSkillAnalyzer(BaseAnalyzer):
     def get_domain_name(self) -> str:
         return "career"
 
-    def get_capabilities(self) -> List[str]:
+    def get_capabilities(self) -> list[str]:
         return [
             "resume_templates",
             "job_search",
@@ -72,7 +72,7 @@ class CareerSkillAnalyzer(BaseAnalyzer):
             "skill_assessment",
         ]
 
-    def analyze_capability(self, capability: str) -> Dict[str, Any]:
+    def analyze_capability(self, capability: str) -> dict[str, Any]:
         """Route capability analysis to specific method"""
         method_map = {
             "resume_templates": self._analyze_resume_templates,
@@ -92,7 +92,7 @@ class CareerSkillAnalyzer(BaseAnalyzer):
 
         return method_map[capability]()
 
-    def score_repository(self) -> Dict[str, float]:
+    def score_repository(self) -> dict[str, float]:
         """Calculate weighted overall score"""
         scores = {}
 
@@ -105,7 +105,7 @@ class CareerSkillAnalyzer(BaseAnalyzer):
 
         return scores
 
-    def _analyze_resume_templates(self) -> Dict[str, Any]:
+    def _analyze_resume_templates(self) -> dict[str, Any]:
         """
         Analyze resume template capabilities
 
@@ -163,7 +163,7 @@ class CareerSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_job_search(self) -> Dict[str, Any]:
+    def _analyze_job_search(self) -> dict[str, Any]:
         """
         Analyze job search strategy capabilities
 
@@ -220,7 +220,7 @@ class CareerSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_interview_prep(self) -> Dict[str, Any]:
+    def _analyze_interview_prep(self) -> dict[str, Any]:
         """
         Analyze interview preparation capabilities
 
@@ -280,7 +280,7 @@ class CareerSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_cover_letters(self) -> Dict[str, Any]:
+    def _analyze_cover_letters(self) -> dict[str, Any]:
         """
         Analyze cover letter generation capabilities
 
@@ -327,7 +327,7 @@ class CareerSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_salary_negotiation(self) -> Dict[str, Any]:
+    def _analyze_salary_negotiation(self) -> dict[str, Any]:
         """
         Analyze salary negotiation capabilities
 
@@ -375,7 +375,7 @@ class CareerSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_portfolio(self) -> Dict[str, Any]:
+    def _analyze_portfolio(self) -> dict[str, Any]:
         """
         Analyze portfolio building capabilities
 
@@ -427,7 +427,7 @@ class CareerSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_ats_optimization(self) -> Dict[str, Any]:
+    def _analyze_ats_optimization(self) -> dict[str, Any]:
         """
         Analyze ATS optimization capabilities
 
@@ -476,7 +476,7 @@ class CareerSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_career_progression(self) -> Dict[str, Any]:
+    def _analyze_career_progression(self) -> dict[str, Any]:
         """
         Analyze career progression planning capabilities
 
@@ -523,7 +523,7 @@ class CareerSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_networking(self) -> Dict[str, Any]:
+    def _analyze_networking(self) -> dict[str, Any]:
         """
         Analyze networking strategy capabilities
 
@@ -564,7 +564,7 @@ class CareerSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_skill_assessment(self) -> Dict[str, Any]:
+    def _analyze_skill_assessment(self) -> dict[str, Any]:
         """
         Analyze skill assessment capabilities
 
@@ -603,7 +603,7 @@ class CareerSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def get_unique_features(self) -> List[str]:
+    def get_unique_features(self) -> list[str]:
         """Identify unique career features this repo has"""
         unique = []
 

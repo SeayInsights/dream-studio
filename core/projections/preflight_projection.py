@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class PreflightProjection:
             logger.debug("preflight_events not available yet — fold_spine skipped")
             return 0
 
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+        now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
         upserted = 0
         for row in findings:
             finding_id = row[0]  # event_id

@@ -7,7 +7,7 @@ import sqlite3
 import subprocess
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -25,7 +25,7 @@ TASK_A = "11111111-1111-1111-1111-111111111111"
 # Anchor relative to now so fixture data stays valid regardless of wall-clock date.
 # A hardcoded absolute date is a dormant time-bomb: if windowed queries are added
 # later, they would silently exclude stale fixture rows.
-NOW = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+NOW = (datetime.now(UTC) - timedelta(days=7)).isoformat()
 ORPHAN_PROJECT_ID = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
 
 
@@ -321,8 +321,6 @@ def test_handle_post_tool_use_captures_git_context(tmp_path, monkeypatch):
 
     fake_commit = "abc1234def5678abc1234def5678abc1234def56"
     fake_branch = "feat/ta3-token-capture-hook"
-
-    import core.telemetry.token_capture as _tc
 
     def fake_run(cmd, **kwargs):
         if "rev-parse" in cmd and "HEAD" in cmd and "--abbrev-ref" not in cmd:

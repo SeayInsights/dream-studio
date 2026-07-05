@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 
 from core.shared_intelligence.authority import require_shared_intelligence_tables
@@ -46,7 +46,7 @@ def learning_hardening_dashboard_view(
 
     return {
         "model_name": "shared_intelligence_learning_hardening_dashboard_view",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "derived_view": True,
         "primary_authority": False,
         "routing_authority": False,
