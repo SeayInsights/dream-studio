@@ -1217,13 +1217,28 @@ def _gap_category(gap: dict[str, Any]) -> str:
     return re.sub(r"[^a-z0-9]+", "-", title).strip("-")
 
 
-def _gap_key(reviewed_work_order_id: str, gap: dict[str, Any]) -> str:
-    """Stable dedup key for a spawned gap: (reviewed WO id + gap category).
+# WO-GAP-DEDUPE-CLASS: generic advisory gap categories that are the SAME finding
+# on any work order (they do not describe a specific WO's content). These dedup
+# project-wide by category alone, so the class spawns at most one open tracking WO
+# instead of a near-duplicate per reviewed WO. Content-specific categories
+# (missing-tests, task-N-incomplete, …) stay scoped to the reviewed WO.
+_ADVISORY_PROJECT_WIDE_CATEGORIES = frozenset({"missing-behavioral-ac"})
 
-    Stored as a ``[gap-key: ...]`` marker on the spawned WO's description so later
-    re-reviews recognize prior spawns regardless of title phrasing (T1).
+
+def _gap_key(reviewed_work_order_id: str, gap: dict[str, Any]) -> str:
+    """Stable dedup key for a spawned gap.
+
+    Normally (reviewed WO id + gap category), stored as a ``[gap-key: ...]`` marker
+    on the spawned WO's description so later re-reviews recognize prior spawns
+    regardless of title phrasing (T1). For generic advisory categories
+    (``_ADVISORY_PROJECT_WIDE_CATEGORIES``) the reviewed-WO id is dropped so the
+    class dedups project-wide — otherwise the same advisory finding respawns a
+    near-duplicate WO on every reviewed WO (WO-GAP-DEDUPE-CLASS).
     """
-    return f"{reviewed_work_order_id}::{_gap_category(gap)}"
+    category = _gap_category(gap)
+    if category in _ADVISORY_PROJECT_WIDE_CATEGORIES:
+        return f"advisory::{category}"
+    return f"{reviewed_work_order_id}::{category}"
 
 
 def _gap_key_marker(gap_key: str) -> str:
