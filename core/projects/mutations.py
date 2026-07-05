@@ -9,7 +9,7 @@ responsible for serialization.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +36,7 @@ def set_active_project(
     dream_studio_home: Path | None = None,
 ) -> dict[str, Any]:
     db_path = _require_db(source_root, dream_studio_home)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     with _connect(db_path) as conn:
         row = conn.execute(
             "SELECT project_id FROM business_projects WHERE project_id = ?",
@@ -104,7 +104,7 @@ def deactivate_project(
     dream_studio_home: Path | None = None,
 ) -> dict[str, Any]:
     db_path = _require_db(source_root, dream_studio_home)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     with _connect(db_path) as conn:
         row = conn.execute(
             "SELECT project_id FROM business_projects WHERE project_id = ?",
@@ -249,7 +249,7 @@ def delete_project(
 
         from canonical.events.envelope import CanonicalEventEnvelope
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         for t_task_id, t_work_order_id, t_project_id, t_milestone_id in task_rows:
             _spool_writer.write_event(
@@ -369,7 +369,7 @@ def _write_project_marker(
     project_id: str,
     project_name: str,
     created_at: str,
-    db_path: "Path | None" = None,
+    db_path: Path | None = None,
 ) -> None:
     """Write the JSON .dream-studio-project marker file to project_path.
 
@@ -501,7 +501,7 @@ def register_project(
 
     db_path = _require_db(source_root, dream_studio_home)
     project_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     resolved_path = str(Path(project_path).resolve()) if project_path is not None else None
     with _connect(db_path) as conn:
         # Idempotency: return existing project when same project_path already registered.
@@ -613,7 +613,7 @@ def set_project_vision(project_id: str, vision_statement: str) -> dict:
     """
     from core.event_store.studio_db import _connect
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     try:
         with _connect() as conn:
             rows = conn.execute(
@@ -650,7 +650,7 @@ def set_project_vision(project_id: str, vision_statement: str) -> dict:
 
 def update_project_path(
     project_id: str,
-    project_path: "Path | str",
+    project_path: Path | str,
 ) -> dict[str, Any]:
     """Set or update project_path on an already-registered project.
 
@@ -665,7 +665,7 @@ def update_project_path(
     from core.event_store.studio_db import _connect
 
     resolved = str(Path(project_path).resolve())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     try:
         with _connect() as conn:

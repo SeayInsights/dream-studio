@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 
 PLATFORM_HARDENING_SCHEMA = "dream_studio.platform_hardening.v1"
@@ -261,7 +261,7 @@ def platform_hardening_summary(conn: sqlite3.Connection) -> dict[str, Any]:
     return {
         "schema": PLATFORM_HARDENING_SCHEMA,
         "model_name": "dream_studio_platform_hardening",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "derived_view": True,
         "primary_authority": False,
         "routing_authority": False,

@@ -3,7 +3,7 @@
 import json
 
 from fastapi import APIRouter
-from typing import Any, Dict, List
+from typing import Any
 
 from core.config.database import get_connection
 
@@ -19,7 +19,7 @@ def _has_table(conn, table: str) -> bool:
 
 
 @router.get("/health")
-async def get_eval_health() -> Dict[str, Any]:
+async def get_eval_health() -> dict[str, Any]:
     """Return eval baseline pass rates and recent run history for the dashboard."""
     conn = get_connection()
     try:
@@ -96,7 +96,7 @@ async def get_eval_health() -> Dict[str, Any]:
 
 
 @registry_router.get("/registry")
-async def get_eval_registry() -> List[Dict[str, Any]]:
+async def get_eval_registry() -> list[dict[str, Any]]:
     """Return eval_registry entries joined with baseline scores from ds_eval_baselines."""
     conn = get_connection()
     try:

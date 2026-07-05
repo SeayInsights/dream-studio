@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 
 from core.production_readiness import production_readiness_control_catalog
@@ -42,7 +42,7 @@ def capability_center_summary(
     return {
         "schema": CAPABILITY_CENTER_SCHEMA,
         "model_name": "dream_studio_capability_center",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "project_id": project_id,
         "derived_view": True,
         "primary_authority": False,

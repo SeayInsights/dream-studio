@@ -9,9 +9,9 @@ All intelligence rules are data-driven with explicit thresholds.
 """
 
 from fastapi import APIRouter, HTTPException
-from typing import List, Dict, Any
+from typing import Any
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from core.config.database import get_connection
 from core.analytics.duckdb_store import connect_analytics
@@ -24,7 +24,7 @@ router = APIRouter()
 # ── Tier 1: Critical Issues ──────────────────────────────────────────────────
 
 
-def get_cost_alerts(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+def get_cost_alerts(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     """Detect high token usage patterns that need attention.
 
     Alert triggered when: repo uses > 50M tokens in 30 days
@@ -83,7 +83,7 @@ def get_cost_alerts(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
     return alerts
 
 
-def get_reliability_alerts(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+def get_reliability_alerts(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     """Detect skills with high failure rates.
 
     Alert triggered when: failure_rate > 20% AND total_runs >= 5 in past 7 days
@@ -133,7 +133,7 @@ def get_reliability_alerts(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
     return alerts
 
 
-def get_performance_alerts(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+def get_performance_alerts(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     """Detect slow hooks impacting developer experience.
 
     Alert triggered when: avg_duration > 10s in past 7 days.
@@ -186,7 +186,7 @@ def get_performance_alerts(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
         duck_conn.close()
 
 
-def get_critical_issues() -> List[Dict[str, Any]]:
+def get_critical_issues() -> list[dict[str, Any]]:
     """Get all critical issues sorted by priority.
 
     Returns list of issues needing immediate attention.
@@ -215,7 +215,7 @@ def get_critical_issues() -> List[Dict[str, Any]]:
 # ── Tier 2: Health Snapshot ──────────────────────────────────────────────────
 
 
-def get_health_snapshot() -> Dict[str, Any]:
+def get_health_snapshot() -> dict[str, Any]:
     """Get overall system health across 4 dimensions.
 
     Returns dict with quality, cost, performance, and activity scores.
@@ -316,7 +316,7 @@ def get_health_snapshot() -> Dict[str, Any]:
 # ── Tier 2: What's Working (Wins) ────────────────────────────────────────────
 
 
-def get_whats_working() -> List[Dict[str, Any]]:
+def get_whats_working() -> list[dict[str, Any]]:
     """Get positive signals - what's going well.
 
     Returns list of wins to reinforce good patterns.
@@ -421,7 +421,7 @@ def get_whats_working() -> List[Dict[str, Any]]:
 
 
 @router.get("/overview")
-async def get_overview() -> Dict[str, Any]:
+async def get_overview() -> dict[str, Any]:
     """Get complete dashboard intelligence in one call.
 
     Returns all three tiers:
@@ -436,7 +436,7 @@ async def get_overview() -> Dict[str, Any]:
             "tier1_critical": get_critical_issues(),
             "tier2_health": get_health_snapshot(),
             "tier2_wins": get_whats_working(),
-            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "last_updated": datetime.now(UTC).isoformat(),
         }
     except Exception as e:
         raise HTTPException(
@@ -448,7 +448,7 @@ async def get_overview() -> Dict[str, Any]:
 
 
 @router.get("/token-intelligence")
-async def get_token_intelligence() -> Dict[str, Any]:
+async def get_token_intelligence() -> dict[str, Any]:
     """Get token/cost domain intelligence.
 
     Returns attention_needed, health metrics, and wins for token usage.
@@ -467,7 +467,7 @@ async def get_token_intelligence() -> Dict[str, Any]:
                     "active_sessions": {"value": "0", "status": "ok", "display": "past 7 days"},
                 },
                 "whats_working": [],
-                "last_updated": datetime.now(timezone.utc).isoformat(),
+                "last_updated": datetime.now(UTC).isoformat(),
                 "source_status": {
                     "classification": "empty by design",
                     "source_tables": ["token_usage_records"],
@@ -585,7 +585,7 @@ async def get_token_intelligence() -> Dict[str, Any]:
             "attention_needed": attention_needed,
             "health": health,
             "whats_working": wins,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "last_updated": datetime.now(UTC).isoformat(),
         }
 
     except Exception as e:
@@ -600,7 +600,7 @@ async def get_token_intelligence() -> Dict[str, Any]:
 
 
 @router.get("/agent-capabilities")
-async def get_agent_capabilities() -> Dict[str, Any]:
+async def get_agent_capabilities() -> dict[str, Any]:
     """Get skills/agent domain intelligence.
 
     Returns attention_needed, health metrics, and wins for skills/agents.
@@ -623,7 +623,7 @@ async def get_agent_capabilities() -> Dict[str, Any]:
                     "active_skills": {"value": "0", "status": "ok", "display": "skills in use"},
                 },
                 "whats_working": [],
-                "last_updated": datetime.now(timezone.utc).isoformat(),
+                "last_updated": datetime.now(UTC).isoformat(),
                 "source_status": {
                     "classification": "empty by design",
                     "source_tables": ["skill_invocations"],
@@ -777,7 +777,7 @@ async def get_agent_capabilities() -> Dict[str, Any]:
             "attention_needed": attention_needed,
             "health": health,
             "whats_working": wins,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "last_updated": datetime.now(UTC).isoformat(),
         }
 
     except Exception as e:
@@ -792,7 +792,7 @@ async def get_agent_capabilities() -> Dict[str, Any]:
 
 
 @router.get("/architecture")
-async def get_architecture_intelligence() -> Dict[str, Any]:
+async def get_architecture_intelligence() -> dict[str, Any]:
     """Get projects/architecture domain intelligence.
 
     Returns attention_needed, health metrics, and wins for projects.
@@ -853,7 +853,7 @@ async def get_architecture_intelligence() -> Dict[str, Any]:
             "attention_needed": attention_needed,
             "health": health,
             "whats_working": wins,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "last_updated": datetime.now(UTC).isoformat(),
         }
 
     except Exception as e:
@@ -868,7 +868,7 @@ async def get_architecture_intelligence() -> Dict[str, Any]:
 
 
 @router.get("/system-controls")
-async def get_system_controls_intelligence() -> Dict[str, Any]:
+async def get_system_controls_intelligence() -> dict[str, Any]:
     """Get hooks/security domain intelligence.
 
     Returns attention_needed, health metrics, and wins for system controls.
@@ -1005,7 +1005,7 @@ async def get_system_controls_intelligence() -> Dict[str, Any]:
             "attention_needed": attention_needed,
             "health": health,
             "whats_working": wins,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "last_updated": datetime.now(UTC).isoformat(),
         }
 
     except Exception as e:
@@ -1148,7 +1148,7 @@ async def list_friction_signals(
     signal_type: str | None = None,
     classified: bool = False,
     limit: int = 100,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """List friction signals. Default: unclassified only (19.3 consumer view).
 
     Query params:
@@ -1162,8 +1162,8 @@ async def list_friction_signals(
         if _friction_table_missing(conn):
             return {"signals": [], "count": 0, "note": "Migration 096 not yet applied"}
 
-        params: List[Any] = []
-        conditions: List[str] = []
+        params: list[Any] = []
+        conditions: list[str] = []
 
         if not classified:
             conditions.append("classified_as IS NULL")
@@ -1197,7 +1197,7 @@ async def get_friction_classifications(
     classified_as: str | None = None,
     min_confidence: float = 0.0,
     limit: int = 100,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Classified signals grouped by classification type.
 
     Query params:
@@ -1213,7 +1213,7 @@ async def get_friction_classifications(
         except sqlite3.OperationalError:
             return {"signals": [], "by_type": {}, "count": 0}
 
-        params: List[Any] = [min_confidence]
+        params: list[Any] = [min_confidence]
         conditions = [
             "classified_as IS NOT NULL",
             "classification_confidence >= ?",
@@ -1231,7 +1231,7 @@ async def get_friction_classifications(
         ).fetchall()
 
         signals = [dict(r) for r in rows]
-        by_type: Dict[str, int] = {}
+        by_type: dict[str, int] = {}
         for s in signals:
             t = s.get("classified_as") or "unclassified"
             by_type[t] = by_type.get(t, 0) + 1
@@ -1244,7 +1244,7 @@ async def get_friction_classifications(
 
 
 @router.get("/friction-signals/{signal_id}")
-async def get_friction_signal(signal_id: str) -> Dict[str, Any]:
+async def get_friction_signal(signal_id: str) -> dict[str, Any]:
     """Retrieve a single friction signal by ID."""
     conn = get_connection()
     try:

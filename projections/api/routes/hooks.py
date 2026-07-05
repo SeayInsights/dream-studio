@@ -1,6 +1,6 @@
 """Hook execution tracking API routes for webhooks dashboard"""
 
-from typing import Dict, Any, Optional
+from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Path
 
 from core.config.database import get_connection
@@ -12,12 +12,12 @@ router = APIRouter()
 
 def _empty_executions(
     *,
-    hook_name: Optional[str],
-    status: Optional[str],
-    since: Optional[str],
+    hook_name: str | None,
+    status: str | None,
+    since: str | None,
     limit: int,
     reason: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     return {
         "executions": [],
         "count": 0,
@@ -37,7 +37,7 @@ def _empty_executions(
 
 
 def _fallback_hook_invocations(
-    conn, hook_name: Optional[str], status: Optional[str], since: Optional[str], limit: int
+    conn, hook_name: str | None, status: str | None, since: str | None, limit: int
 ) -> list[dict[str, Any]]:
     if not has_columns(
         conn, "execution_events", ["event_id", "hook_id", "outcome_status", "created_at"]
@@ -103,13 +103,13 @@ def _fallback_hook_invocations(
 
 @router.get("/hooks/executions")
 async def list_hook_executions(
-    hook_name: Optional[str] = Query(None, description="Filter by hook name"),
-    status: Optional[str] = Query(
+    hook_name: str | None = Query(None, description="Filter by hook name"),
+    status: str | None = Query(
         None, description="Filter by status (success, failed, timeout, pending, running)"
     ),
-    since: Optional[str] = Query(None, description="Filter by date (YYYY-MM-DD format)"),
+    since: str | None = Query(None, description="Filter by date (YYYY-MM-DD format)"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of results"),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     List recent hook executions with activity log data joined.
 
@@ -235,7 +235,7 @@ async def list_hook_executions(
 @router.get("/hooks/executions/{exec_id}")
 async def get_hook_execution_details(
     exec_id: str = Path(..., description="Hook execution ID (event_id UUID)")
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get detailed information about a single hook execution.
 
@@ -312,7 +312,7 @@ async def get_hook_execution_details(
 
 
 @router.get("/hooks/performance")
-async def get_hook_performance() -> Dict[str, Any]:
+async def get_hook_performance() -> dict[str, Any]:
     """
     Get hook execution performance statistics.
 
@@ -411,7 +411,7 @@ async def get_hook_performance() -> Dict[str, Any]:
 
 
 @router.get("/hooks/stats")
-async def get_hook_stats() -> Dict[str, Any]:
+async def get_hook_stats() -> dict[str, Any]:
     """Return dashboard-compatible hook execution summary stats.
 
     This is a legacy dashboard alias for the hook performance summary. Empty
@@ -422,7 +422,7 @@ async def get_hook_stats() -> Dict[str, Any]:
 
 
 @router.get("/hooks/anomalies")
-async def list_hook_anomalies() -> Dict[str, Any]:
+async def list_hook_anomalies() -> dict[str, Any]:
     """
     Anomaly detection was retired when activity_log was dropped (migration 063).
     Returns an empty result set.
@@ -436,7 +436,7 @@ async def list_hook_anomalies() -> Dict[str, Any]:
 
 
 @router.get("/hooks/tool-activity")
-async def list_tool_activity(limit: int = Query(default=50, le=200)) -> Dict[str, Any]:
+async def list_tool_activity(limit: int = Query(default=50, le=200)) -> dict[str, Any]:
     """Tool invocation telemetry — every tool Claude used.
 
     Reads from execution_events (unified spine) filtered by tool_id IS NOT NULL.
@@ -469,7 +469,7 @@ async def list_tool_activity(limit: int = Query(default=50, le=200)) -> Dict[str
 
 
 @router.get("/hooks/validation-failures")
-async def list_validation_failures(limit: int = Query(default=50, le=200)) -> Dict[str, Any]:
+async def list_validation_failures(limit: int = Query(default=50, le=200)) -> dict[str, Any]:
     """Event validation failures — events that failed schema/constraint validation.
 
     Previously invisible: 443+ rows in validation_failures with no dashboard surface.
@@ -505,7 +505,7 @@ async def list_validation_failures(limit: int = Query(default=50, le=200)) -> Di
 
 
 @router.get("/hooks/raw-events")
-async def list_raw_events(limit: int = Query(default=30, le=100)) -> Dict[str, Any]:
+async def list_raw_events(limit: int = Query(default=30, le=100)) -> dict[str, Any]:
     """Raw canonical events from the Claude Code event ingestor.
 
     Previously invisible: 6,500+ rows in raw_claude_code_events with no surface.

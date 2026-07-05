@@ -1,7 +1,7 @@
 """Project security findings endpoint."""
 
 import logging
-from typing import Dict, Any
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
@@ -19,7 +19,7 @@ router = APIRouter()
 
 
 @router.get("/{project_id}/security")
-async def get_project_security(project_id: str) -> Dict[str, Any]:
+async def get_project_security(project_id: str) -> dict[str, Any]:
     """
     Get security findings for a specific project.
     """

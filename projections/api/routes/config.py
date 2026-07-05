@@ -1,6 +1,6 @@
 """ds_config API route — exposes key/value config table for the dashboard."""
 
-from typing import Any, Dict, List
+from typing import Any
 
 from fastapi import APIRouter
 
@@ -17,7 +17,7 @@ def _has_table(conn, table: str) -> bool:
 
 
 @router.get("/config")
-async def get_config() -> List[Dict[str, Any]]:
+async def get_config() -> list[dict[str, Any]]:
     """Return all rows from ds_config as a list of {key, value, updated_at}."""
     conn = get_connection()
     try:

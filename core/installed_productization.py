@@ -13,7 +13,7 @@ import os
 import shutil
 import sqlite3
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -1224,7 +1224,7 @@ def _write_runtime_config(
         "module_profiles": profiles,
         "rehearsal": rehearsal,
         "live_state": not rehearsal,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
     _write_json(config_path, payload)
     return config_path
@@ -1235,7 +1235,7 @@ def _backup_manifest(paths: Any, backup_id: str) -> dict[str, Any]:
         "backup_id": backup_id,
         "source_home": str(paths.dream_studio_home),
         "sqlite_path": str(paths.sqlite_path),
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "schema_version": latest_migration_version(),
         "restore_requires_operator_approval": True,
     }
@@ -1572,7 +1572,7 @@ def _windows_powershell_launcher(source_root: Path, dream_studio_home: Path) -> 
 
 
 def _timestamp_slug() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
 def _truthy(value: Any) -> bool:

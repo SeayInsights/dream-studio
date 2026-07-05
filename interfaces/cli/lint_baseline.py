@@ -11,7 +11,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Iterable
+from collections.abc import Iterable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BASELINE = REPO_ROOT / "runtime" / "config" / "release-gates" / "flake8-baseline.txt"

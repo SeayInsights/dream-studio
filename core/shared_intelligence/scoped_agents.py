@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 
 SCOPED_AGENT_SCHEMA = "dream_studio.scoped_agents.v1"
@@ -89,7 +89,7 @@ def scoped_agent_registry(conn: sqlite3.Connection | None = None) -> dict[str, A
     return {
         "schema": SCOPED_AGENT_SCHEMA,
         "model_name": "dream_studio_scoped_agent_registry",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "derived_view": True,
         "primary_authority": False,
         "agent_is_authority": False,
@@ -140,7 +140,7 @@ def scoped_context_packet(
     return {
         "schema": "dream_studio.scoped_agent_context_packet.v1",
         "model_name": "dream_studio_scoped_agent_context_packet",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "derived_view": True,
         "primary_authority": False,
         "agent_is_authority": False,

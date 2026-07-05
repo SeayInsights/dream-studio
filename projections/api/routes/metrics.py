@@ -2,7 +2,7 @@
 
 import sqlite3
 from fastapi import APIRouter, HTTPException, Query
-from typing import Optional, List, Dict, Any
+from typing import Any
 from datetime import datetime, timedelta
 
 from core.config.database import get_connection
@@ -61,7 +61,7 @@ def _optional_float(value: Any) -> float | None:
     return None if value is None else float(value)
 
 
-def _build_token_timeline(db_path: str, days: int) -> List[Dict[str, Any]]:
+def _build_token_timeline(db_path: str, days: int) -> list[dict[str, Any]]:
     cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     conn = get_connection()
     conn.row_factory = sqlite3.Row
@@ -88,7 +88,7 @@ def _build_token_timeline(db_path: str, days: int) -> List[Dict[str, Any]]:
         """,
             (*REPORTABLE_COST_VISIBILITIES, cutoff),
         ).fetchall()
-        by_date: Dict[str, Dict[str, Any]] = {}
+        by_date: dict[str, dict[str, Any]] = {}
         for r in rows:
             d = r["date"]
             inp = r["input_tokens"] or 0
@@ -112,7 +112,7 @@ def _build_token_timeline(db_path: str, days: int) -> List[Dict[str, Any]]:
         conn.close()
 
 
-def _build_success_trend(db_path: str, days: int) -> List[Dict[str, Any]]:
+def _build_success_trend(db_path: str, days: int) -> list[dict[str, Any]]:
     cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     conn = get_connection()
     conn.row_factory = sqlite3.Row
@@ -144,7 +144,7 @@ def _build_success_trend(db_path: str, days: int) -> List[Dict[str, Any]]:
         conn.close()
 
 
-def _build_skill_heatmap(db_path: str, days: int) -> List[Dict[str, Any]]:
+def _build_skill_heatmap(db_path: str, days: int) -> list[dict[str, Any]]:
     cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     conn = get_connection()
     conn.row_factory = sqlite3.Row
@@ -173,9 +173,9 @@ def _build_skill_heatmap(db_path: str, days: int) -> List[Dict[str, Any]]:
 @router.get("/", response_model=AllMetricsResponse)
 async def get_all_metrics(
     days: int = Query(default=30, ge=1, le=365, description="Number of days to analyze"),
-    project: Optional[str] = Query(default=None, description="Filter by project"),
-    skill: Optional[str] = Query(default=None, description="Filter by skill"),
-    model: Optional[str] = Query(default=None, description="Filter by model"),
+    project: str | None = Query(default=None, description="Filter by project"),
+    skill: str | None = Query(default=None, description="Filter by skill"),
+    model: str | None = Query(default=None, description="Filter by model"),
 ):
     """Get all metrics combined"""
     try:

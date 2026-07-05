@@ -8,7 +8,7 @@ Note: emission flows through the spool pipeline, not direct to SQLite.
 
 from uuid import uuid4
 import logging
-from typing import Dict, Any, Optional
+from typing import Any
 
 from canonical.events.envelope import CanonicalEventEnvelope
 from canonical.events.redactor import redact_file_path
@@ -19,11 +19,11 @@ logger = logging.getLogger(__name__)
 
 def emit_security_event(
     event_type: str,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     severity: str = "info",
     conn=None,
     validate: bool = True,
-) -> Optional[str]:
+) -> str | None:
     """Emit security event through canonical spool pipeline.
 
     Args:

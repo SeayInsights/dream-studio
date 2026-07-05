@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 import yaml
@@ -59,7 +59,7 @@ def format_registry_table(workflows: list[dict]) -> str:
     """Return a box-drawing table listing all workflows."""
     if not workflows:
         return "No workflows found."
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     wn = max(4, max(len(w["name"]) for w in workflows))
     wd = min(45, max(11, max(len(w["description"]) for w in workflows)))
     wt, wl, wr = 6, 8, 4

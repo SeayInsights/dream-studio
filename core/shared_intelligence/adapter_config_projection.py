@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 
 from core.shared_intelligence.adapter_alignment import (
@@ -45,7 +45,7 @@ def adapter_config_projection(
         "adapter_owns_source_of_truth": False,
         "config_write_authorized": False,
         "requires_future_explicit_approval_for_config_writes": True,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
     }
 
 
@@ -64,7 +64,7 @@ def adapter_config_projection_report(
     ]
     return {
         "model_name": "shared_intelligence_adapter_config_projection_report",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "derived_view": True,
         "primary_authority": False,
         "routing_authority": False,

@@ -41,7 +41,7 @@ import re
 import subprocess
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -851,7 +851,7 @@ def _spawn_grader(prompt: str) -> subprocess.Popen:  # type: ignore[type-arg]
     return proc
 
 
-def _extract_first_json_object(text: str) -> "str | None":
+def _extract_first_json_object(text: str) -> str | None:
     """Return the first balanced top-level JSON object substring, or None."""
     start = text.find("{")
     if start == -1:
@@ -935,7 +935,7 @@ def _run_graders_parallel(
     # rather than letting the exception abort the whole verify (the post-merge
     # main-red on WO-FIX-VERIFY-GATE). It then flows through the existing
     # unreviewable-graders path (no false-done: unreviewable never certifies).
-    procs: dict[str, "subprocess.Popen[str] | None"] = {}
+    procs: dict[str, subprocess.Popen[str] | None] = {}
     for name, prompt in prompts.items():
         try:
             procs[name] = _spawn_grader(prompt)
@@ -1270,7 +1270,7 @@ def _insert_gap_work_orders(
     reviewed_wo_title: str,
     reviewed_wo_sequence: int | None,
 ) -> list[dict[str, Any]]:
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     spawned: list[dict[str, Any]] = []
 
     base_seq = reviewed_wo_sequence or 0
@@ -1434,7 +1434,7 @@ def verify_work_order(
             "auto_continue_warning": str | None,
         }
     """
-    started_at = datetime.now(timezone.utc).isoformat()
+    started_at = datetime.now(UTC).isoformat()
     p_root = planning_root or Path.cwd() / ".planning"
     db_path = _require_db(source_root, dream_studio_home)
 
@@ -1505,7 +1505,7 @@ def verify_work_order(
                 "quality_score": 0.0,
                 "composite_score": 0.0,
             }
-            completed_at = datetime.now(timezone.utc).isoformat()
+            completed_at = datetime.now(UTC).isoformat()
             _write_eval_run(
                 conn,
                 work_order_id=work_order_id,
@@ -1613,7 +1613,7 @@ def verify_work_order(
                 "quality_score": 0.0,
                 "composite_score": 0.0,
             }
-            completed_at = datetime.now(timezone.utc).isoformat()
+            completed_at = datetime.now(UTC).isoformat()
             _write_eval_run(
                 conn,
                 work_order_id=work_order_id,
@@ -1737,7 +1737,7 @@ def verify_work_order(
                 reviewed_wo_sequence=wo.get("sequence_order"),
             )
 
-        completed_at = datetime.now(timezone.utc).isoformat()
+        completed_at = datetime.now(UTC).isoformat()
 
         # Write eval run.
         _write_eval_run(

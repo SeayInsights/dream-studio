@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Any
 
 from core.config.database import get_connection, get_db_path
 from projections.core.alerts.rule_manager import RuleManager
@@ -22,21 +22,21 @@ class RuleDefinition(BaseModel):
     metric_path: str = Field(..., description="Path to metric (e.g., 'skill.success_rate')")
     condition: str = Field(..., description="Comparison operator: gt, lt, eq, gte, lte")
     threshold: float = Field(..., description="Threshold value to trigger alert")
-    severity: Optional[str] = Field(
+    severity: str | None = Field(
         default="warning", description="Alert severity: info, warning, critical"
     )
-    enabled: Optional[bool] = Field(default=True, description="Whether rule is active")
+    enabled: bool | None = Field(default=True, description="Whether rule is active")
 
 
 class RuleUpdate(BaseModel):
     """Alert rule update - all fields optional"""
 
-    rule_name: Optional[str] = Field(None, description="Name of the alert rule")
-    metric_path: Optional[str] = Field(None, description="Path to metric")
-    condition: Optional[str] = Field(None, description="Comparison operator: gt, lt, eq, gte, lte")
-    threshold: Optional[float] = Field(None, description="Threshold value")
-    severity: Optional[str] = Field(None, description="Alert severity: info, warning, critical")
-    enabled: Optional[bool] = Field(None, description="Whether rule is active")
+    rule_name: str | None = Field(None, description="Name of the alert rule")
+    metric_path: str | None = Field(None, description="Path to metric")
+    condition: str | None = Field(None, description="Comparison operator: gt, lt, eq, gte, lte")
+    threshold: float | None = Field(None, description="Threshold value")
+    severity: str | None = Field(None, description="Alert severity: info, warning, critical")
+    enabled: bool | None = Field(None, description="Whether rule is active")
 
 
 class AlertRule(BaseModel):
@@ -75,7 +75,7 @@ def _alert_rules_readable(conn) -> bool:
 # Endpoints
 
 
-@router.get("/rules", response_model=List[AlertRule])
+@router.get("/rules", response_model=list[AlertRule])
 async def list_rules():
     """
     Get all alert rules (enabled and disabled).
@@ -296,7 +296,7 @@ async def delete_rule(rule_id: str):
 
 
 @router.get("/sla")
-async def get_sla_metrics() -> Dict[str, Any]:
+async def get_sla_metrics() -> dict[str, Any]:
     """
     Get current SLA metrics for display in dashboard gauges.
 

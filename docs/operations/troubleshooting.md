@@ -302,3 +302,5 @@ authority before continuing implementation.
 <!-- Last reviewed 2026-06-28 — Batch 1 canonical-first migration (migration 133): no troubleshooting-guidance change. migration 133 drops 4 dead violator tables (compliance_review_flags, release_readiness_records, policy_decision_records, guard_events) — none had live production writers or operator-facing diagnostic paths. -->
 
 <!-- Last reviewed 2026-07-04 — migration 139 (WO-AI-SPINE, AD-5): no troubleshooting-guidance change. migration 139 drops decision_records, outcome_records, and dashboard_attention_items (0/2/0 production rows; pure duplication of the execution_events row their writers in core/telemetry/emitters.py already wrote) — none had operator-facing diagnostic paths. -->
+
+<!-- Reviewed 2026-07-05 — WO 6d978483 (PEP 585/604 modernization [2/2]): source files in this domain received mechanical type-annotation modernization only (PEP 585 builtin generics, PEP 604 unions, datetime.UTC) via ruff UP safe autofixes. No contract, behavior, schema, routing, API-shape, or CLI-surface change — reviewed, no doc content change needed. -->

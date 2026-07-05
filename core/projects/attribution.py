@@ -15,7 +15,6 @@ from __future__ import annotations
 import re
 import sqlite3
 from pathlib import Path
-from typing import Optional
 
 
 def _slugify(text: str) -> str:
@@ -27,7 +26,7 @@ def _slugify(text: str) -> str:
     return text.strip("-")
 
 
-def resolve_project_uuid(key: str, conn: sqlite3.Connection) -> Optional[str]:
+def resolve_project_uuid(key: str, conn: sqlite3.Connection) -> str | None:
     """Resolve a project key to a registered business_projects UUID.
 
     Tries (in order):

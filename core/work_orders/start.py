@@ -34,7 +34,7 @@ for backward compat with operator terminals.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -323,7 +323,7 @@ def write_work_order_context(
             "write_work_order_context requires an ok=True brief_data dict; " f"got {brief_data}"
         )
 
-    now = now or datetime.now(timezone.utc).isoformat()
+    now = now or datetime.now(UTC).isoformat()
     work_order_id = brief_data["work_order_id"]
     title = brief_data["title"]
     type_id = brief_data["type_id"]
@@ -546,7 +546,7 @@ def start_work_order(
         return _preflight_block
 
     p_root = planning_root or Path.cwd() / ".planning"
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     context_path = write_work_order_context(brief_data, planning_root=p_root, now=now)
 
     try:

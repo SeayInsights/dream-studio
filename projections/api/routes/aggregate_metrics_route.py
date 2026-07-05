@@ -6,7 +6,7 @@ per project — what no existing route does today.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from fastapi import APIRouter, Query
 
@@ -31,9 +31,9 @@ def _aggregate_db_conn():
 
 @router.get("/aggregate", summary="Cross-skill findings summary per project")
 async def get_aggregate_metrics(
-    project_id: Optional[str] = Query(None, description="Filter by project UUID"),
+    project_id: str | None = Query(None, description="Filter by project UUID"),
     days: int = Query(30, ge=1, le=365, description="Lookback window in days"),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Cross-skill findings rollup. Aggregates finding_rollups table across all 6 skills."""
     conn = _aggregate_db_conn()
     if conn is None:

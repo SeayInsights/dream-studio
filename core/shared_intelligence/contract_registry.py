@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import fnmatch
 from collections.abc import Iterable, Mapping
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 
 CONTRACT_REGISTRY_SCHEMA = "dream_studio.contract_registry.v1"
@@ -690,7 +690,7 @@ def contract_registry() -> dict[str, Any]:
 
     return {
         "schema": CONTRACT_REGISTRY_SCHEMA,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "derived_view": True,
         "primary_authority": False,
         "routing_authority": False,
@@ -775,7 +775,7 @@ def change_impact_report(
     status = "fail" if blocking or private_artifact_risk_detected else "pass"
     return {
         "schema": DOC_DRIFT_GATE_SCHEMA,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "derived_view": True,
         "primary_authority": False,
         "routing_authority": False,

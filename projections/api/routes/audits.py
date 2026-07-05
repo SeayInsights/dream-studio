@@ -1,7 +1,7 @@
 """Audit tracking API routes for comprehensive dashboard"""
 
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional
+from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Path
 from pydantic import BaseModel
 
@@ -18,23 +18,23 @@ class AuditRunCreate(BaseModel):
     audit_scope: str  # project, prd, task, skill, file, function
     target_id: str
     target_type: str  # project, prd, task, skill, file, function, module
-    activity_id: Optional[int] = None
-    summary: Optional[str] = None
+    activity_id: int | None = None
+    summary: str | None = None
 
 
 @router.get("/audits/runs")
 async def list_audit_runs(
-    audit_type: Optional[str] = Query(
+    audit_type: str | None = Query(
         None,
         description="Filter by audit type (code_quality, security, performance, architecture, compliance)",
     ),
-    target_id: Optional[str] = Query(None, description="Filter by target ID"),
-    status: Optional[str] = Query(
+    target_id: str | None = Query(None, description="Filter by target ID"),
+    status: str | None = Query(
         None, description="Filter by status (running, completed, failed, cancelled)"
     ),
-    since: Optional[str] = Query(None, description="Filter by date (YYYY-MM-DD format)"),
+    since: str | None = Query(None, description="Filter by date (YYYY-MM-DD format)"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of results"),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     List audit runs with optional filters.
 
@@ -144,7 +144,7 @@ async def list_audit_runs(
 @router.get("/audits/runs/{audit_id}")
 async def get_audit_run_details(
     audit_id: str = Path(..., description="Audit run ID")
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get detailed information about a single audit run.
 
@@ -234,7 +234,7 @@ async def get_audit_run_details(
 
 
 @router.post("/audits/runs")
-async def create_audit_run(body: AuditRunCreate) -> Dict[str, Any]:
+async def create_audit_run(body: AuditRunCreate) -> dict[str, Any]:
     """
     Create a new audit run.
 
@@ -351,7 +351,7 @@ async def create_audit_run(body: AuditRunCreate) -> Dict[str, Any]:
 @router.get("/audits/stats")
 async def get_audit_stats(
     days: int = Query(30, ge=1, le=365, description="Number of days to analyze")
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get aggregate statistics for audit runs.
 
@@ -517,7 +517,7 @@ async def get_audit_stats(
 @router.get("/audits/findings/{audit_id}")
 async def get_audit_findings(
     audit_id: str = Path(..., description="Audit run ID")
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get findings for a specific audit run.
 

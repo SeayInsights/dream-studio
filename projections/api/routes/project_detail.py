@@ -1,7 +1,7 @@
 """Project detail, health, history, analysis run, and activity endpoints."""
 
 import logging
-from typing import Dict, Any
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -31,7 +31,7 @@ router = APIRouter()
 
 
 @router.get("/{project_id}/health")
-async def get_project_health(project_id: str) -> Dict[str, Any]:
+async def get_project_health(project_id: str) -> dict[str, Any]:
     """
     Get detailed health metrics for a specific project.
 
@@ -121,7 +121,7 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
             if object_exists(conn, "route_decision_records")
             else "0"
         )
-        project_query = """
+        project_query = f"""
         SELECT
             project_id,
             name AS project_name,
@@ -156,25 +156,7 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
             COALESCE({route_blocker_count_expr}, 0) as route_blocker_count
         FROM business_projects
         WHERE project_id = ?
-        """.format(
-            stack_detected_expr=stack_detected_expr,
-            stack_json_expr=stack_json_expr,
-            project_type_expr=project_type_expr,
-            project_source_expr=project_source_expr,
-            status_expr=status_expr,
-            is_temp_expr=is_temp_expr,
-            prd_count_expr=prd_count_expr,
-            latest_prd_status_expr=latest_prd_status_expr,
-            latest_prd_title_expr=latest_prd_title_expr,
-            latest_prd_file_path_expr=latest_prd_file_path_expr,
-            latest_prd_created_at_expr=latest_prd_created_at_expr,
-            security_open_count_expr=security_open_count_expr,
-            attention_open_count_expr=attention_open_count_expr,
-            validation_failed_count_expr=validation_failed_count_expr,
-            validation_passed_count_expr=validation_passed_count_expr,
-            telemetry_event_count_expr=telemetry_event_count_expr,
-            route_blocker_count_expr=route_blocker_count_expr,
-        )
+        """
 
         project_row = cursor.execute(project_query, (project_id,)).fetchone()
 
@@ -250,7 +232,7 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
 
 
 @router.get("/{project_id}/details")
-async def get_project_details(project_id: str) -> Dict[str, Any]:
+async def get_project_details(project_id: str) -> dict[str, Any]:
     """Return project detail view data with health and readiness separated."""
 
     health_payload = await get_project_health(project_id)
@@ -427,7 +409,7 @@ async def get_project_details(project_id: str) -> Dict[str, Any]:
 @router.get("/{project_id}/history")
 async def get_project_history(
     project_id: str, limit: int = Query(20, ge=1, le=100)
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get analysis run history for a project.
 
@@ -478,7 +460,7 @@ async def get_project_history(
 
 
 @router.get("/analysis-runs/{run_id}")
-async def get_analysis_run(run_id: str) -> Dict[str, Any]:
+async def get_analysis_run(run_id: str) -> dict[str, Any]:
     """
     Get detailed information about a specific analysis run.
 
@@ -549,7 +531,7 @@ async def get_analysis_run(run_id: str) -> Dict[str, Any]:
 @router.get("/{project_id}/activity")
 async def get_project_activity(
     project_id: str, limit: int = Query(20, ge=1, le=100)
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get recent activity timeline for a specific project.
     """

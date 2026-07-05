@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -27,9 +27,6 @@ from control.execution.workflow.engine import (  # noqa: E402
     resolve_templates,
 )
 from control.execution.workflow.state import (  # noqa: E402
-    _read_state,
-    _write_state,
-    _state_lock,
     _write_checkpoint,
     SCHEMA_VERSION,
 )
@@ -267,7 +264,6 @@ class WorkflowRunner:
 
         Returns True if any node failed.
         """
-        import json
 
         wf_state = self._load_state()
         wf = wf_state.get("active_workflows", {}).get(self.wf_key, {})
@@ -416,7 +412,7 @@ class WorkflowRunner:
         """Atomically update a node's status in workflows.json."""
         import json
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         lock_path = paths.state_dir() / "workflows.json.lock"
         lock_path.parent.mkdir(parents=True, exist_ok=True)
 

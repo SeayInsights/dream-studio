@@ -9,9 +9,8 @@ import json
 import sqlite3
 import time
 from contextlib import contextmanager
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
-from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from core.config import paths  # noqa: E402
@@ -59,17 +58,17 @@ try:
 except ImportError:
     _SPOOL_WRITER_AVAILABLE = False
 
-_NOW = lambda: datetime.now(timezone.utc).isoformat()
+_NOW = lambda: datetime.now(UTC).isoformat()
 
 
 def _try_emit_canonical(
-    event_type: "_CanonicalEventType",
+    event_type: _CanonicalEventType,
     payload: dict,
     *,
-    session_id: "str | None" = None,
-    task_id: "str | None" = None,
-    prd_id: "str | None" = None,
-    skill_id: "str | None" = None,
+    session_id: str | None = None,
+    task_id: str | None = None,
+    prd_id: str | None = None,
+    skill_id: str | None = None,
 ) -> None:
     """Emit a canonical event to spool. No-op if spool writer is unavailable."""
     if not _SPOOL_WRITER_AVAILABLE:
@@ -372,7 +371,7 @@ def rolling_window_prune(db_path: Path | None = None) -> int:
     append-only in ai_canonical_events and are not pruned by this function.
     """
     try:
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+        cutoff = (datetime.now(UTC) - timedelta(days=90)).isoformat()
         with _db_transaction(db_path) as c:
             d1 = c.execute(
                 "DELETE FROM raw_skill_telemetry WHERE id NOT IN (SELECT id FROM raw_skill_telemetry t2 WHERE t2.skill_name=raw_skill_telemetry.skill_name ORDER BY id DESC LIMIT 100)"
@@ -1408,7 +1407,7 @@ def cache_research(
     """
     try:
         cache_id = hashlib.sha256(topic.encode()).hexdigest()[:16]
-        expires_at = (datetime.now(timezone.utc) + timedelta(days=ttl_days)).isoformat()
+        expires_at = (datetime.now(UTC) + timedelta(days=ttl_days)).isoformat()
 
         with _db_transaction(db_path) as c:
             # 1. Emit canonical event (TA0c: activity_log retired)
@@ -1556,7 +1555,7 @@ def has_sentinel(sentinel_key: str, db_path: Path | None = None) -> bool:
         if not r:
             return False
         if r["expires_at"]:
-            return datetime.fromisoformat(r["expires_at"]) > datetime.now(timezone.utc)
+            return datetime.fromisoformat(r["expires_at"]) > datetime.now(UTC)
         return True
     except Exception:
         return False
@@ -1585,19 +1584,19 @@ def insert_hook_execution(
     hook_type: str,
     trigger_context: dict,
     started_at: str,
-    completed_at: Optional[str] = None,
-    duration_ms: Optional[int] = None,
+    completed_at: str | None = None,
+    duration_ms: int | None = None,
     exit_code: int = 0,
     status: str = "success",
-    output: Optional[str] = None,
-    error_message: Optional[str] = None,
-    cpu_time_ms: Optional[int] = None,
-    memory_mb: Optional[float] = None,
-    prd_id: Optional[str] = None,
-    task_id: Optional[str] = None,
-    session_id: Optional[str] = None,
+    output: str | None = None,
+    error_message: str | None = None,
+    cpu_time_ms: int | None = None,
+    memory_mb: float | None = None,
+    prd_id: str | None = None,
+    task_id: str | None = None,
+    session_id: str | None = None,
     db_path: Path | None = None,
-) -> Optional[int]:
+) -> int | None:
     """
     Emit the HOOK_EXECUTION_LOGGED canonical event for a hook execution.
 

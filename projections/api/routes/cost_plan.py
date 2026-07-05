@@ -6,7 +6,7 @@ projections.core.cost_analysis.plan_comparison.
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import APIRouter
 
@@ -18,7 +18,7 @@ router = APIRouter()
 
 
 @router.get("/cost/plan-comparison")
-async def get_plan_comparison() -> Dict[str, Any]:
+async def get_plan_comparison() -> dict[str, Any]:
     """Return plan vs API-equivalent cost comparison.
 
     Response shape::

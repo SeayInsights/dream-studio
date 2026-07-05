@@ -6,7 +6,7 @@ the projection stays authoritative, then the read-model row is updated directly.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +23,7 @@ def set_sequence_order(
 ) -> dict[str, Any]:
     """Set sequence_order on a work order. Sparse convention: 10, 20, 30…"""
     db_path = _require_db(source_root, dream_studio_home)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     with _connect(db_path) as conn:
         row = conn.execute(
@@ -68,7 +68,7 @@ def add_dependency(
         return {"ok": False, "error": "A work order cannot depend on itself"}
 
     db_path = _require_db(source_root, dream_studio_home)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     with _connect(db_path) as conn:
         wo_row = conn.execute(
@@ -120,7 +120,7 @@ def remove_dependency(
 ) -> dict[str, Any]:
     """Remove a dependency edge."""
     db_path = _require_db(source_root, dream_studio_home)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     with _connect(db_path) as conn:
         wo_row = conn.execute(

@@ -21,7 +21,7 @@ import json
 import re
 import subprocess
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +34,7 @@ from core.projects.mutations import register_project
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 # ── Finding hash computation ──────────────────────────────────────────────────
@@ -54,7 +54,7 @@ def compute_finding_hash(
     norm_file = file_path.replace("\\", "/").strip()
     norm_snippet = _normalize_snippet(code_excerpt or "")
     h = hashlib.sha256()
-    h.update(f"{rule_id}|{norm_file}|{norm_snippet}".encode("utf-8"))
+    h.update(f"{rule_id}|{norm_file}|{norm_snippet}".encode())
     return h.hexdigest()
 
 

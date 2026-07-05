@@ -3,7 +3,7 @@
 import statistics
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Query
-from typing import Dict, Any, List
+from typing import Any
 
 from core.config.database import get_connection
 from core.analytics.duckdb_store import connect_analytics
@@ -20,7 +20,7 @@ def _connect_analytics():
     return connect_analytics(read_only=True)
 
 
-def _empty_anomalies() -> Dict[str, Any]:
+def _empty_anomalies() -> dict[str, Any]:
     return {
         "anomalies": [],
         "scatter_data": [],
@@ -39,7 +39,7 @@ def _empty_anomalies() -> Dict[str, Any]:
     }
 
 
-def _empty_performance() -> Dict[str, Any]:
+def _empty_performance() -> dict[str, Any]:
     return {
         "session_flow": {"started": 0, "completed": 0, "failed": 0, "timeout": 0, "other": 0},
         "day_of_week": [0, 0, 0, 0, 0, 0, 0],
@@ -55,7 +55,7 @@ def _empty_performance() -> Dict[str, Any]:
 
 
 @router.get("/anomalies")
-async def get_anomalies(days: int = Query(default=30, ge=1, le=365)) -> Dict[str, Any]:
+async def get_anomalies(days: int = Query(default=30, ge=1, le=365)) -> dict[str, Any]:
     """Detect anomalies using z-score on session duration and token usage.
 
     Session data reads from DuckDB aggregate_metrics.db (raw_sessions view with
@@ -92,7 +92,7 @@ async def get_anomalies(days: int = Query(default=30, ge=1, le=365)) -> Dict[str
             return _empty_anomalies()
 
         # Augment tokens from SQLite token_usage_sql if available
-        token_by_session: Dict[str, int] = {}
+        token_by_session: dict[str, int] = {}
         sql_conn = _connect()
         try:
             token_sql = token_usage_sql(sql_conn)
@@ -123,8 +123,8 @@ async def get_anomalies(days: int = Query(default=30, ge=1, le=365)) -> Dict[str
         dur_mean, dur_std = statistics.mean(durations), statistics.pstdev(durations) or 1
         tok_mean, tok_std = statistics.mean(tokens), statistics.pstdev(tokens) or 1
 
-        scatter_data: List[Dict[str, Any]] = []
-        anomalies: List[Dict[str, Any]] = []
+        scatter_data: list[dict[str, Any]] = []
+        anomalies: list[dict[str, Any]] = []
         severity_counts = {"low": 0, "medium": 0, "high": 0}
 
         for r in rows_data:
@@ -180,7 +180,7 @@ async def get_anomalies(days: int = Query(default=30, ge=1, le=365)) -> Dict[str
 
 
 @router.get("/trends")
-async def get_trends(days: int = Query(default=30, ge=1, le=365)) -> Dict[str, Any]:
+async def get_trends(days: int = Query(default=30, ge=1, le=365)) -> dict[str, Any]:
     """Analyze daily trends for sessions, tokens, and cost with linear regression.
 
     Session counts and token/cost trends both read from DuckDB
@@ -241,7 +241,7 @@ async def get_trends(days: int = Query(default=30, ge=1, le=365)) -> Dict[str, A
         tok_map = {r["date"]: r["tokens"] for r in token_rows}
         cost_map = {r["date"]: r["cost"] for r in token_rows if r["cost"] is not None}
 
-        def _regression(values: List[float]):
+        def _regression(values: list[float]):
             n = len(values)
             if n < 2:
                 return values[:], 0.0
@@ -282,7 +282,7 @@ async def get_trends(days: int = Query(default=30, ge=1, le=365)) -> Dict[str, A
 
 
 @router.get("/performance")
-async def get_performance(days: int = Query(default=30, ge=1, le=365)) -> Dict[str, Any]:
+async def get_performance(days: int = Query(default=30, ge=1, le=365)) -> dict[str, Any]:
     """Analyze session performance: flow breakdown, day-of-week, and hourly activity.
 
     Reads from DuckDB aggregate_metrics.db (raw_sessions view over events_fact).

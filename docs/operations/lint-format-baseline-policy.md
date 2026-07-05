@@ -301,3 +301,5 @@ docs, and prove docs drift without weakening unrelated release-gate checks.
 <!-- reviewed 2026-06-26: migration 128 dead-tables removal — no content changes required -->
 
 <!-- Last reviewed 2026-06-27 — Wave 2 substrate realignment (migration 131, worktree-agent-a910d590fedb5c672): flake8-baseline.txt regenerated for Wave 2: net entry count 332 → 330 (two F821 'undefined name emit_route_decision' entries in test_telemetry_emitter_integration.py resolved when that retired-function test was deleted). No lint-policy, publication-boundary, packaging, docker-module-profile, or privacy-classification change. -->
+
+<!-- Reviewed 2026-07-05 — WO 6d978483 (PEP 585/604 modernization [2/2]): source files in this domain received mechanical type-annotation modernization only (PEP 585 builtin generics, PEP 604 unions, datetime.UTC) via ruff UP safe autofixes. No contract, behavior, schema, routing, API-shape, or CLI-surface change — reviewed, no doc content change needed. -->

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -52,7 +52,7 @@ def mark_task_done(
                 "error": f"Task {task_id} does not belong to work order {work_order_id}",
             }
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         remaining = conn.execute(
             "SELECT COUNT(*) FROM business_tasks"
@@ -166,7 +166,7 @@ def block_work_order(
             return {"ok": False, "error": f"Work order not found: {work_order_id}"}
 
         _, title, project_id = wo_row
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         conn.execute(
             "UPDATE business_work_orders"
@@ -235,7 +235,7 @@ def unblock_work_order(
                 "error": f"Work order is not blocked (status: {wo_status})",
             }
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         conn.execute(
             "UPDATE business_work_orders"
@@ -306,7 +306,7 @@ def reopen_work_order(
             return {"ok": False, "error": f"Work order not found: {work_order_id}"}
 
         _, title, prev_status, project_id = wo_row
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         conn.execute(
             "UPDATE business_work_orders"
@@ -395,7 +395,7 @@ def create_work_order(
 
     db_path = _require_db(source_root, dream_studio_home)
     work_order_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     with _connect(db_path) as conn:
         row = conn.execute(
             "SELECT project_id FROM business_projects WHERE project_id = ?",
@@ -482,7 +482,7 @@ def create_task(
 
     db_path = _require_db(source_root, dream_studio_home)
     task_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     milestone_id: str | None = None
     with _connect(db_path) as conn:
         wo_row = conn.execute(
@@ -560,7 +560,7 @@ def set_originating_symptom(
     Returns ``{"ok": True, "work_order_id": str}`` or ``{"ok": False, "error": ...}``.
     """
     db_path = _require_db(source_root, dream_studio_home)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     with _connect(db_path) as conn:
         row = conn.execute(
             "SELECT work_order_id FROM business_work_orders WHERE work_order_id = ?",

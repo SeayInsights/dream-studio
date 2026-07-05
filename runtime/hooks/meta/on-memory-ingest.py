@@ -20,6 +20,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from datetime import UTC
 
 _DEFAULT_INTERVAL_SECS = 300
 
@@ -64,12 +65,12 @@ def _within_cooldown() -> bool:
 
 def _write_result(results: list, duration_ms: float) -> None:
     try:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         _STATE_DIR.mkdir(parents=True, exist_ok=True)
         summary = {
             "ok": True,
-            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "completed_at": datetime.now(UTC).isoformat(),
             "completed_at_ts": time.time(),
             "duration_ms": round(duration_ms),
             "consumers": [

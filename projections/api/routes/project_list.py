@@ -2,7 +2,7 @@
 
 import logging
 from collections import Counter
-from typing import Dict, Any
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -27,7 +27,7 @@ router = APIRouter()
 @router.get("")
 async def list_projects(
     limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     List all analyzed projects with their latest health scores.
 
@@ -147,7 +147,7 @@ async def list_projects(
         # business_projects has UUID ids — no path deduplication needed (no ranked_projects CTE)
         # Analysis columns (health_score, pi_* counts) removed in migration 084; return NULL/0.
         # Column mapping: reg_projects.project_name → business_projects.name
-        query = """
+        query = f"""
         SELECT
             p.project_id,
             p.name AS project_name,
@@ -187,25 +187,7 @@ async def list_projects(
         FROM business_projects p
         WHERE p.status != 'deleted'
         ORDER BY COALESCE(p.last_session_at, p.updated_at) DESC
-        """.format(
-            project_type_expr=project_type_expr,
-            project_source_expr=project_source_expr,
-            status_expr=status_expr,
-            is_temp_expr=is_temp_expr,
-            stack_detected_expr=stack_detected_expr,
-            stack_json_expr=stack_json_expr,
-            prd_count_expr=prd_count_expr,
-            latest_prd_status_expr=latest_prd_status_expr,
-            latest_prd_title_expr=latest_prd_title_expr,
-            latest_prd_file_path_expr=latest_prd_file_path_expr,
-            latest_prd_created_at_expr=latest_prd_created_at_expr,
-            security_open_count_expr=security_open_count_expr,
-            attention_open_count_expr=attention_open_count_expr,
-            validation_failed_count_expr=validation_failed_count_expr,
-            validation_passed_count_expr=validation_passed_count_expr,
-            telemetry_event_count_expr=telemetry_event_count_expr,
-            route_blocker_count_expr=route_blocker_count_expr,
-        )
+        """
 
         rows = cursor.execute(query).fetchall()
         candidate_projects = []

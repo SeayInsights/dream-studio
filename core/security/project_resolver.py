@@ -3,7 +3,6 @@ Helper to resolve project (PRD node) from any execution graph node.
 Ensures security findings always link back to the project root.
 """
 
-from typing import Optional, Dict, List
 from pathlib import Path
 
 from core.config.database import get_connection
@@ -12,7 +11,7 @@ from core.config.database import get_connection
 class ProjectResolver:
     """Resolves project (PRD) from any node in execution graph."""
 
-    def get_prd_for_node(self, node_id: str) -> Optional[str]:
+    def get_prd_for_node(self, node_id: str) -> str | None:
         """
         Walk up execution graph to find PRD node.
 
@@ -59,7 +58,7 @@ class ProjectResolver:
         finally:
             conn.close()
 
-    def get_project_hierarchy(self, prd_id: str) -> Dict:
+    def get_project_hierarchy(self, prd_id: str) -> dict:
         """
         Get full project hierarchy from PRD.
 
@@ -149,7 +148,7 @@ class ProjectResolver:
         finally:
             conn.close()
 
-    def get_project_path(self, node_id: str) -> Optional[Path]:
+    def get_project_path(self, node_id: str) -> Path | None:
         """
         Get project path from node metadata.
 
@@ -193,7 +192,7 @@ class ProjectResolver:
         finally:
             conn.close()
 
-    def list_all_projects(self) -> List[Dict]:
+    def list_all_projects(self) -> list[dict]:
         """
         List all PRD nodes with their security status.
 
@@ -226,7 +225,7 @@ class ProjectResolver:
         finally:
             conn.close()
 
-    def get_affected_nodes_for_finding(self, finding_id: str) -> List[Dict]:
+    def get_affected_nodes_for_finding(self, finding_id: str) -> list[dict]:
         """
         Get all nodes affected by a finding (walk down hierarchy).
 
