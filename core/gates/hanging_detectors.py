@@ -256,9 +256,35 @@ def detect_stale_removed_symbol_tests(
 _SIG_RE = re.compile(r"\b(?:def|function)\s+([A-Za-z_]\w*)\s*\(([^)]*)\)")
 
 
+def _split_top_level_commas(param_str: str) -> list[str]:
+    """Split on commas at bracket depth 0 only.
+
+    A naive ``param_str.split(",")`` fabricates phantom params from commas inside
+    bracketed annotations (``Union[A, B]``, ``Dict[K, V]``, ``tuple[A, B]``). That
+    made an annotation-only change like ``Union[A, B]`` -> ``A | B`` look like a
+    signature change and blocked PEP 604 modernization (WO-BLAST-PARAM-SPLIT).
+    """
+    parts: list[str] = []
+    depth = 0
+    current: list[str] = []
+    for ch in param_str:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth = max(0, depth - 1)
+        if ch == "," and depth == 0:
+            parts.append("".join(current))
+            current = []
+        else:
+            current.append(ch)
+    if current:
+        parts.append("".join(current))
+    return parts
+
+
 def _param_names(param_str: str) -> tuple[str, ...]:
     names: list[str] = []
-    for raw in param_str.split(","):
+    for raw in _split_top_level_commas(param_str):
         tok = raw.strip()
         if not tok or tok in ("self", "cls", "*", "/"):
             continue
