@@ -34,7 +34,7 @@ import os
 import re
 import sqlite3
 import warnings
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 
@@ -100,7 +100,7 @@ def _backup_live_db(conn: sqlite3.Connection, db_file: str, current_version: int
 
     backup_dir = Path.home() / ".dream-studio" / "state" / "backups"
     backup_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     backup_path = backup_dir / f"studio-pre-{current_version + 1}-{timestamp}.db"
     dest = sqlite3.connect(str(backup_path))
     try:
@@ -435,7 +435,7 @@ def run_migrations(
 
         conn.execute(
             "INSERT INTO _schema_version(version, applied_at) VALUES(?, ?)",
-            (version, datetime.now(timezone.utc).isoformat()),
+            (version, datetime.now(UTC).isoformat()),
         )
         conn.commit()
 

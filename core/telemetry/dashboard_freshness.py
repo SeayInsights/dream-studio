@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -53,7 +53,7 @@ def dashboard_data_freshness_status(db_path: Path | str | None = None) -> dict[s
         duckdb_token_count = _duckdb_token_count()
         sections = _section_statuses(conn, table_counts, duckdb_token_count)
         backfill_plan = plan_legacy_telemetry_backfill(path)
-        generated_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
         return {
             "model_name": "dashboard_data_freshness_status",
             "generated_at": generated_at,

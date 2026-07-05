@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -280,7 +280,7 @@ def build_secure_production_readiness_gate(
 ) -> dict[str, Any]:
     """Build and optionally persist a secure production readiness gate result."""
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     changed = changed_files or []
     impact = classify_production_readiness_impact(changed, lifecycle_event=lifecycle_event)
     security_gate = build_security_lifecycle_gate(

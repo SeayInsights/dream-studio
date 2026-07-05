@@ -13,7 +13,7 @@ import json
 import re
 import subprocess
 from collections.abc import Iterable, Mapping, Sequence
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -134,7 +134,7 @@ def build_repo_publication_readiness(
     head = _git_text(root, "rev-parse", "HEAD")
     return {
         "schema": PUBLICATION_READINESS_SCHEMA,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "branch": branch,
         "head": head,
         "status": status,
@@ -218,7 +218,7 @@ def refresh_repo_publication_artifacts(
                 _write_json_yaml(path, payload)
     return {
         "schema": "dream_studio.repo_publication.artifact_refresh.v1",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "execute": execute,
         "output_dir": str(output),
         "planned_writes": planned,

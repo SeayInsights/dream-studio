@@ -11,7 +11,7 @@ import json
 import re
 import sqlite3
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -149,7 +149,7 @@ def build_contract_atlas(
     atlas = {
         "schema": CONTRACT_ATLAS_SCHEMA,
         "model_name": "dream_studio_contract_atlas",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "project_id": effective_project_id,
         "export_scope": "private",
         "private_by_default": True,

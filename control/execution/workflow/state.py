@@ -24,7 +24,7 @@ import argparse
 import json
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -45,12 +45,8 @@ from control.execution.workflow.engine import (  # noqa: E402
     _file_lock,
     _extract_node_ids,
     _evaluate,
-    _resolve_ref,
-    _coerce,
     _compute_ready_nodes,
     _check_context_budget,
-    resolve_templates,
-    compress_node_output,
 )
 
 SCHEMA_VERSION = 1
@@ -110,7 +106,7 @@ def _write_checkpoint(workflow_key: str, node_id: str | None, status: str) -> No
                 "workflow_key": workflow_key,
                 "last_node": node_id,
                 "status": status,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             },
             indent=2,
         ),
@@ -337,7 +333,7 @@ def cmd_start(args: argparse.Namespace) -> None:
             return
 
         key = f"{args.name}-{int(time.time())}"
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         data.setdefault("active_workflows", {})[key] = {
             "workflow": args.name,
             "started": now,
@@ -376,7 +372,7 @@ def cmd_update(args: argparse.Namespace) -> None:
             print(f"Error: node '{args.node_id}' not in workflow", file=sys.stderr)
             sys.exit(1)
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         node = nodes[args.node_id]
         node["status"] = args.status
 
@@ -554,7 +550,7 @@ def cmd_next(args: argparse.Namespace) -> None:
     ready, skipped_by_condition = _compute_ready_nodes(yaml_nodes, state_nodes, wf)
 
     if skipped_by_condition:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         for nid in skipped_by_condition:
             state_nodes[nid]["status"] = "skipped"
             state_nodes[nid]["finished"] = now
@@ -579,7 +575,7 @@ def cmd_next(args: argparse.Namespace) -> None:
     if len(ready) > 1:
         budget_result = _check_context_budget(len(ready))
         if budget_result == "block":
-            now = datetime.now(timezone.utc).isoformat()
+            now = datetime.now(UTC).isoformat()
             with _state_lock():
                 data2 = _read_state()
                 wf2 = data2.get("active_workflows", {}).get(args.key, {})

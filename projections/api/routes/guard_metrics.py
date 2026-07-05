@@ -1,6 +1,6 @@
 """Guard metrics API route for LLM Guard dashboard surfacing."""
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from fastapi import APIRouter, Query
 
@@ -12,9 +12,9 @@ router = APIRouter()
 
 @router.get("/metrics", summary="Guard activity metrics across all projects")
 async def get_guard_metrics(
-    project_id: Optional[str] = Query(None, description="Filter by project"),
+    project_id: str | None = Query(None, description="Filter by project"),
     limit: int = Query(10, ge=1, le=100),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Guard activity metrics: findings by severity, memory skips, delta blocks, top rules."""
     # When called directly (e.g. in tests, outside FastAPI DI), limit may be a Query object
     if not isinstance(limit, int):
@@ -89,12 +89,12 @@ async def get_guard_metrics(
 
 
 @router.get("/metrics/{project_id}", summary="Guard metrics for a specific project")
-async def get_project_guard_metrics(project_id: str) -> Dict[str, Any]:
+async def get_project_guard_metrics(project_id: str) -> dict[str, Any]:
     """Guard activity for a specific project."""
     return await get_guard_metrics(project_id=project_id)
 
 
-def _guard_empty() -> Dict[str, Any]:
+def _guard_empty() -> dict[str, Any]:
     return {
         "total_events": 0,
         "by_action": {},

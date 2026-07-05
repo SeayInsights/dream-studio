@@ -29,7 +29,6 @@ import sqlite3
 import sys
 import time
 from pathlib import Path
-from typing import Optional
 
 # ── Configuration defaults (overridden by config.yml if present) ───────────
 _CFG_ENABLED = True
@@ -75,7 +74,7 @@ def _load_config() -> dict:
     return {}
 
 
-def _get_db_path() -> Optional[Path]:
+def _get_db_path() -> Path | None:
     """Resolve Dream Studio SQLite path. Fail-open."""
     try:
         override = os.environ.get("DREAM_STUDIO_DB_PATH")
@@ -86,7 +85,7 @@ def _get_db_path() -> Optional[Path]:
         return None
 
 
-def _resolve_active_project(conn: sqlite3.Connection) -> Optional[str]:
+def _resolve_active_project(conn: sqlite3.Connection) -> str | None:
     """Return active project_id or None if not found."""
     try:
         row = conn.execute(
@@ -162,7 +161,7 @@ def _fts_query(prompt: str) -> str:
 def _search_memories(
     conn: sqlite3.Connection,
     prompt: str,
-    project_id: Optional[str],
+    project_id: str | None,
     max_results: int,
     min_score: float,
     dedup: bool,

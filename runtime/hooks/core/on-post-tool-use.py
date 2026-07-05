@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 
@@ -45,7 +45,7 @@ def _emergency_log(error: str, payload_raw: str) -> None:
         log_dir.mkdir(parents=True, exist_ok=True)
         log_path = log_dir / "hook-failures.jsonl"
         entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             "category": "failure",
             "source": "on-post-tool-use.shim",
             "details": {

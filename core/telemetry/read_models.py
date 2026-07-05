@@ -10,7 +10,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -737,7 +737,7 @@ def _require_tables(conn: sqlite3.Connection, tables: Sequence[str]) -> None:
 def _with_authority(
     model_name: str, source_tables: Sequence[str], payload: Mapping[str, Any]
 ) -> dict[str, Any]:
-    generated_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     return {
         "model_name": model_name,
         "derived_view": True,

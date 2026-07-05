@@ -13,7 +13,7 @@ import json
 import re
 import sqlite3
 from collections.abc import Iterable, Mapping
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -109,7 +109,7 @@ def build_contract_atlas_freshness_manifest(
     return {
         "schema": CONTRACT_ATLAS_LIFECYCLE_SCHEMA,
         "model_name": "contract_atlas_lifecycle_freshness_manifest",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "project_id": project_id or private_atlas.get("project_id") or "dream-studio",
         "derived_view": True,
         "primary_authority": False,
@@ -214,7 +214,7 @@ def refresh_contract_atlas_exports(
     return {
         "schema": "dream_studio.contract_atlas_export_refresh.v1",
         "model_name": "contract_atlas_export_refresh",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "derived_view": True,
         "primary_authority": False,
         "db_write_authorized": False,

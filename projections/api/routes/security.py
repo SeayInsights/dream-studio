@@ -1,7 +1,7 @@
 """Security findings API routes for vulnerability tracking dashboard"""
 
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
+from typing import Any
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel
 import tempfile
@@ -22,7 +22,7 @@ class DismissRequest(BaseModel):
 
 
 @router.post("/findings/{finding_id}/dismiss")
-async def dismiss_finding(finding_id: str, body: DismissRequest) -> Dict[str, Any]:
+async def dismiss_finding(finding_id: str, body: DismissRequest) -> dict[str, Any]:
     """Mark a finding as dismissed (false_positive) on the security_events spine.
 
     Calls set_finding_status() to record a finding.status_changed event.
@@ -63,7 +63,7 @@ async def dismiss_finding(finding_id: str, body: DismissRequest) -> Dict[str, An
     }
 
 
-def _security_empty(filters: dict[str, Any]) -> Dict[str, Any]:
+def _security_empty(filters: dict[str, Any]) -> dict[str, Any]:
     return {
         "findings": [],
         "count": 0,
@@ -80,9 +80,9 @@ def _security_empty(filters: dict[str, Any]) -> Dict[str, Any]:
 def _security_fallback_findings(
     conn,
     *,
-    severity: Optional[str],
-    status: Optional[str],
-    since: Optional[str],
+    severity: str | None,
+    status: str | None,
+    since: str | None,
     limit: int,
 ) -> list[dict[str, Any]]:
     """Return findings derived from security_events (spine, WO-Y / AD-10).
@@ -181,13 +181,13 @@ def _count_since(conn, table: str, cutoff: str) -> int:
 
 @router.get("/security/findings")
 async def list_all_findings(
-    severity: Optional[str] = Query(
+    severity: str | None = Query(
         None, description="Filter by severity (critical, high, medium, low, info)"
     ),
-    status: Optional[str] = Query(None, description="Filter by status (varies by source)"),
-    since: Optional[str] = Query(None, description="Filter by date (YYYY-MM-DD format)"),
+    status: str | None = Query(None, description="Filter by status (varies by source)"),
+    since: str | None = Query(None, description="Filter by date (YYYY-MM-DD format)"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of results"),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     List all security findings across all 4 source types.
 
@@ -302,17 +302,17 @@ async def list_all_findings(
 
 @router.get("/security/sarif")
 async def list_sarif_findings(
-    scan_tool: Optional[str] = Query(
+    scan_tool: str | None = Query(
         None, description="Filter by scan tool (semgrep, bandit, trivy, etc.)"
     ),
-    status: Optional[str] = Query(
+    status: str | None = Query(
         None, description="Filter by status (open, mitigated, false_positive, accepted)"
     ),
-    severity: Optional[str] = Query(
+    severity: str | None = Query(
         None, description="Filter by severity (critical, high, medium, low, info)"
     ),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of results"),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     List SARIF findings only.
 
@@ -404,15 +404,15 @@ async def list_sarif_findings(
 
 @router.get("/security/cve")
 async def list_cve_matches(
-    package_name: Optional[str] = Query(None, description="Filter by package name"),
-    status: Optional[str] = Query(
+    package_name: str | None = Query(None, description="Filter by package name"),
+    status: str | None = Query(
         None, description="Filter by status (vulnerable, patched, mitigated)"
     ),
-    severity: Optional[str] = Query(
+    severity: str | None = Query(
         None, description="Filter by severity (critical, high, medium, low)"
     ),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of results"),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     List CVE matches only.
 
@@ -448,14 +448,14 @@ async def list_cve_matches(
 
 @router.get("/security/reviews")
 async def list_manual_reviews(
-    reviewer: Optional[str] = Query(None, description="Filter by reviewer name"),
-    review_type: Optional[str] = Query(
+    reviewer: str | None = Query(None, description="Filter by reviewer name"),
+    review_type: str | None = Query(
         None,
         description="Filter by review type (code_review, architecture_review, security_review)",
     ),
-    status: Optional[str] = Query(None, description="Filter by status (draft, published, closed)"),
+    status: str | None = Query(None, description="Filter by status (draft, published, closed)"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of results"),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     List manual reviews only.
 
@@ -491,7 +491,7 @@ async def list_manual_reviews(
 @router.get("/security/stats")
 async def get_security_stats(
     days: int = Query(30, ge=1, le=365, description="Number of days to analyze")
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get aggregate statistics for security findings.
 
@@ -587,7 +587,7 @@ async def get_security_stats(
 @router.post("/security/sarif/import")
 async def import_sarif_file(
     file: UploadFile = File(..., description="SARIF file to import")
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Upload SARIF file for parsing and import.
 

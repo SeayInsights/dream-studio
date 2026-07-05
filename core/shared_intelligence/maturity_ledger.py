@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 
 MATURITY_LEDGER_SCHEMA = "dream_studio.maturity_ledger.v1"
@@ -487,7 +487,7 @@ def maturity_ledger(*, project_id: str | None = None) -> dict[str, Any]:
     return {
         "schema": MATURITY_LEDGER_SCHEMA,
         "model_name": "dream_studio_current_maturity_ledger",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "project_id": project_id,
         "derived_view": True,
         "primary_authority": False,

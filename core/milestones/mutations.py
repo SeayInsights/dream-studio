@@ -8,7 +8,7 @@ the CLI wrapper in `interfaces/cli/ds.py` is responsible for serialization.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -50,7 +50,7 @@ def create_milestone(
 
     db_path = _require_db(source_root, dream_studio_home)
     milestone_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     with _connect(db_path) as conn:
         row = conn.execute(
             "SELECT project_id FROM business_projects WHERE project_id = ?",

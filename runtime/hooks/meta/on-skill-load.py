@@ -5,7 +5,7 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 
@@ -65,7 +65,7 @@ def main() -> None:
         log_path = paths.meta_dir() / "skill-usage.log"
         with log_path.open("a", encoding="utf-8") as f:
             f.write(
-                f"{datetime.now(timezone.utc).isoformat()}\t{skill_name}\t{os.environ.get('CLAUDE_SESSION_ID', 'unknown')}\n"
+                f"{datetime.now(UTC).isoformat()}\t{skill_name}\t{os.environ.get('CLAUDE_SESSION_ID', 'unknown')}\n"
             )
     except Exception:
         pass

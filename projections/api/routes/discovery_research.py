@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from typing import List
 
 from fastapi import APIRouter, HTTPException, Query, Path as PathParam
 from fastapi.responses import Response
@@ -15,7 +14,7 @@ router = APIRouter()
 
 class ResearchRequest(BaseModel):
     topic: str
-    focus_areas: List[str] = []
+    focus_areas: list[str] = []
 
     @field_validator("topic")
     @classmethod

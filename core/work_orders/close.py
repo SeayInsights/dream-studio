@@ -37,7 +37,7 @@ behavior stays identical.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -64,7 +64,7 @@ def run_gate_check(
     work_order_id: str,
     project_id: str,
     conn: Any,
-    db_path: "Path | None" = None,
+    db_path: Path | None = None,
 ) -> tuple[bool, str]:
     """Return (passed, failure_reason). failure_reason is empty string when passed=True.
 
@@ -404,7 +404,7 @@ def _evaluate_gates(
     work_order_id: str,
     project_id: str,
     planning_root: Path,
-    db_path: "Path | None" = None,
+    db_path: Path | None = None,
 ) -> list[str]:
     """Run pre+post gate checks (split on ``|``). Return list of failure reasons."""
 
@@ -711,7 +711,7 @@ def close_work_order(
                 "failures": gate_failures,
             }
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         if force and gate_failures:
             for reason in gate_failures:

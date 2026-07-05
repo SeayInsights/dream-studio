@@ -403,3 +403,5 @@ the source repo.
 <!-- Last reviewed 2026-06-28 — Batch 1 canonical-first migration (migration 133): shared_intelligence route source_tables list cleaned of all dropped-table references. platform_hardening.py PLATFORM_HARDENING_TABLES is now empty (policy_decision_records dropped migration 133). Live productization surface (adapter_authority_profiles, capability_route_records) unchanged. -->
 
 <!-- Last reviewed 2026-07-04 — migration 139 (WO-AI-SPINE, AD-5): core/module_contracts.py telemetry module owned_tables list updated — outcome_records removed (dropped migration 139; pure duplication of execution_events dual-write, 0/2/0 production rows). No installed adapter runtime behavior, state, routing, or productization change. -->
+
+<!-- Reviewed 2026-07-05 — WO 6d978483 (PEP 585/604 modernization [2/2]): source files in this domain received mechanical type-annotation modernization only (PEP 585 builtin generics, PEP 604 unions, datetime.UTC) via ruff UP safe autofixes. No contract, behavior, schema, routing, API-shape, or CLI-surface change — reviewed, no doc content change needed. -->

@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import json as _json
 import sqlite3
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import datetime, UTC
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -32,7 +32,7 @@ def _ext_tables_missing(conn: sqlite3.Connection) -> bool:
         return True
 
 
-def _parse_vd(raw: Any) -> Dict[str, Any]:
+def _parse_vd(raw: Any) -> dict[str, Any]:
     if not raw:
         return {}
     try:
@@ -41,7 +41,7 @@ def _parse_vd(raw: Any) -> Dict[str, Any]:
         return {}
 
 
-def _health_tier(ext: Dict[str, Any]) -> str:
+def _health_tier(ext: dict[str, Any]) -> str:
     current = ext.get("current_eval_score")
     baseline = ext.get("baseline_eval_score")
     if current is None or baseline is None or baseline == 0:
@@ -72,7 +72,7 @@ def _type_label(ext_type: str) -> str:
 async def list_extensions(
     status: str = "active",
     limit: int = 50,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """List extensions filtered by status.
 
     Panel usage:
@@ -106,7 +106,7 @@ async def list_extensions(
 
 
 @router.get("/extensions/health")
-async def get_extension_health() -> Dict[str, Any]:
+async def get_extension_health() -> dict[str, Any]:
     """Aggregated health view — Extension Health panel.
 
     Operator framing: which customizations are improving / holding / degrading.
@@ -119,7 +119,7 @@ async def get_extension_health() -> Dict[str, Any]:
         rows = conn.execute(
             "SELECT * FROM ds_user_extensions WHERE status = 'active' ORDER BY created_at DESC"
         ).fetchall()
-        buckets: Dict[str, List[Dict[str, Any]]] = {
+        buckets: dict[str, list[dict[str, Any]]] = {
             "improving": [],
             "steady": [],
             "degrading": [],
@@ -137,7 +137,7 @@ async def get_extension_health() -> Dict[str, Any]:
 
 
 @router.get("/extensions/summary")
-async def get_extension_summary() -> Dict[str, Any]:
+async def get_extension_summary() -> dict[str, Any]:
     """Summary counts for the Adaptation tab header widget."""
     conn = get_connection()
     try:
@@ -182,7 +182,7 @@ async def get_extension_summary() -> Dict[str, Any]:
 
 
 @router.get("/extensions/{extension_id}/effect-summary")
-async def get_extension_effect_summary(extension_id: str) -> Dict[str, Any]:
+async def get_extension_effect_summary(extension_id: str) -> dict[str, Any]:
     """What has this extension actually done since going active?
 
     Personalization: finding count (can be derived from findings table).
@@ -237,7 +237,7 @@ async def get_extension_effect_summary(extension_id: str) -> Dict[str, Any]:
 
 
 @router.get("/extensions/{extension_id}")
-async def get_extension_detail(extension_id: str) -> Dict[str, Any]:
+async def get_extension_detail(extension_id: str) -> dict[str, Any]:
     """Full extension detail with validation timeline."""
     conn = get_connection()
     try:
@@ -267,7 +267,7 @@ class RevertRequest(BaseModel):
 
 
 @router.post("/extensions/{extension_id}/revert")
-async def revert_extension(extension_id: str, body: RevertRequest) -> Dict[str, Any]:
+async def revert_extension(extension_id: str, body: RevertRequest) -> dict[str, Any]:
     """Revert (dismiss) an active extension.
 
     The revert button is the most important UX control in Phase 19 — it surfaces
@@ -292,7 +292,7 @@ async def revert_extension(extension_id: str, body: RevertRequest) -> Dict[str, 
         e = dict(row)
         detail = _parse_vd(e.get("validation_detail"))
         detail["revert"] = {
-            "reverted_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
+            "reverted_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S"),
             "reason": body.reason or "operator reverted via dashboard",
             "previous_status": e.get("status"),
         }

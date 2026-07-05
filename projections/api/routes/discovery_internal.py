@@ -7,7 +7,6 @@ Part of unified-discovery API Layer (FR-001).
 
 import logging
 from fastapi import APIRouter, HTTPException, Query, Path as PathParam
-from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from core.graph import query as graph_query
@@ -27,8 +26,8 @@ class GraphNode(BaseModel):
     name: str
     component_type: str
     path: str
-    lines: Optional[int] = None
-    complexity_score: Optional[float] = None
+    lines: int | None = None
+    complexity_score: float | None = None
     incoming_edges: int = 0
     outgoing_edges: int = 0
     centrality_score: int = 0
@@ -40,14 +39,14 @@ class GraphEdge(BaseModel):
     source: str
     target: str
     dependency_type: str
-    strength: Optional[float] = None
+    strength: float | None = None
 
 
 class GraphResponse(BaseModel):
     """Full dependency graph response"""
 
-    nodes: List[GraphNode]
-    edges: List[GraphEdge]
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]
     node_count: int = Field(description="Total number of nodes")
     edge_count: int = Field(description="Total number of edges")
 

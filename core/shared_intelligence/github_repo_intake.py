@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 
 GITHUB_REPO_INTAKE_SCHEMA = "dream_studio.github_repo_intake.v1"
@@ -71,7 +71,7 @@ def github_repo_intake_workflow() -> dict[str, Any]:
     return {
         "schema": GITHUB_REPO_INTAKE_SCHEMA,
         "model_name": "dream_studio_github_repo_intake_workflow",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "derived_view": True,
         "primary_authority": False,
         "db_write_authorized": False,

@@ -26,7 +26,7 @@ spool events (one per failure), and still completes the milestone.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -184,7 +184,7 @@ def close_milestone(
                 "failures": failures,
             }
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         if force and failures:
             for reason in failures:

@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 
@@ -35,7 +35,7 @@ def main(output_path: str = "bom.json") -> None:
     bom = {
         "git_sha": git_sha,
         "python_version": python_version,
-        "build_date_utc": datetime.now(timezone.utc).isoformat(),
+        "build_date_utc": datetime.now(UTC).isoformat(),
         "packages": pip_packages,
         "failed_tests": [],
     }

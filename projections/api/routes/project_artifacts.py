@@ -1,7 +1,7 @@
 """Project PRDs and dependencies endpoints."""
 
 import logging
-from typing import Dict, Any
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -20,7 +20,7 @@ router = APIRouter()
 
 
 @router.get("/{project_id}/prds")
-async def get_project_prds(project_id: str) -> Dict[str, Any]:
+async def get_project_prds(project_id: str) -> dict[str, Any]:
     """
     Get all PRDs associated with a specific project.
     """
@@ -121,7 +121,7 @@ async def get_project_prds(project_id: str) -> Dict[str, Any]:
 @router.get("/{project_id}/dependencies")
 async def get_project_dependencies(
     project_id: str, limit: int = Query(100, ge=1, le=500)
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get dependency graph for a specific project.
     Returns nodes and edges for visualization.
@@ -172,7 +172,7 @@ async def get_project_dependencies(
         )
 
         # Get dependencies
-        deps_query = """
+        deps_query = f"""
         SELECT
             {dependency_id_expr},
             from_component,
@@ -182,11 +182,7 @@ async def get_project_dependencies(
         FROM pi_dependencies
         WHERE project_id = ?
         LIMIT ?
-        """.format(
-            dependency_id_expr=dependency_id_expr,
-            dependency_type_expr=dependency_type_expr,
-            strength_expr=strength_expr,
-        )
+        """
 
         rows = cursor.execute(deps_query, (project_id, limit)).fetchall()
         components = _component_index(conn, project_id)

@@ -15,7 +15,6 @@ import logging
 import threading
 import atexit
 from contextlib import contextmanager
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +55,7 @@ class DatabaseRuntime:
     _instance = None
     _lock = threading.Lock()
 
-    def __init__(self, db_path: Optional[Path] = None):
+    def __init__(self, db_path: Path | None = None):
         """Initialize database runtime."""
         self.db_path = db_path or self._get_default_db_path()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -65,7 +64,7 @@ class DatabaseRuntime:
         logger.info(f"DatabaseRuntime initialized at {self.db_path}")
 
     @classmethod
-    def get_instance(cls, db_path: Optional[Path] = None):
+    def get_instance(cls, db_path: Path | None = None):
         """Get singleton database runtime instance."""
         if cls._instance is None:
             with cls._lock:
@@ -266,7 +265,7 @@ class DatabaseContext:
             read_only: If True, open in read-only mode (no commit)
         """
         self.read_only = read_only
-        self.conn: Optional[sqlite3.Connection] = None
+        self.conn: sqlite3.Connection | None = None
 
     def __enter__(self) -> sqlite3.Connection:
         """Enter context - open connection."""
@@ -358,7 +357,7 @@ def health_check() -> dict:
         return {"status": "error", "error": str(e)}
 
 
-def initialize_database(db_path: Optional[Path] = None):
+def initialize_database(db_path: Path | None = None):
     """
     Initialize database runtime with custom path.
 
