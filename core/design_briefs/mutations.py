@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -62,7 +62,7 @@ def create_design_brief(
 
     _require_db(source_root, dream_studio_home)  # validate DB exists before emitting
     brief_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     try:
         import spool.writer as _spool_writer
 
@@ -115,7 +115,7 @@ def lock_design_brief(
     """
 
     db_path = _require_db(source_root, dream_studio_home)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     with _connect(db_path) as conn:
         row = conn.execute(
             "SELECT brief_id, project_id FROM business_design_briefs WHERE brief_id = ?",
@@ -165,7 +165,7 @@ def update_design_brief_field(
             "error": (f"Unknown field: {field}. Valid fields: {sorted(BRIEF_UPDATABLE_FIELDS)}"),
         }
     db_path = _require_db(source_root, dream_studio_home)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     with _connect(db_path) as conn:
         row = conn.execute(
             "SELECT status, project_id FROM business_design_briefs WHERE brief_id = ?",
@@ -219,7 +219,7 @@ def set_design_system(
             ),
         }
     db_path = _require_db(source_root, dream_studio_home)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     with _connect(db_path) as conn:
         row = conn.execute(
             "SELECT status, project_id FROM business_design_briefs WHERE brief_id = ?",

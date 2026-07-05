@@ -21,7 +21,6 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from functools import wraps
 
@@ -37,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 # Cache configuration
 CACHE_TTL_SECONDS = 300  # 5 minutes
-_graph_cache: Dict[str, tuple[nx.DiGraph, float]] = {}
+_graph_cache: dict[str, tuple[nx.DiGraph, float]] = {}
 
 
 class CachedGraphBuilder:
@@ -66,7 +65,7 @@ class CachedGraphBuilder:
         """
         self.cache_ttl = cache_ttl_seconds
         self.max_cache_size = max_cache_size
-        self._cache: Dict[str, Tuple[nx.DiGraph, float, str]] = (
+        self._cache: dict[str, tuple[nx.DiGraph, float, str]] = (
             {}
         )  # cache_key -> (graph, timestamp, max_updated_at)
 
@@ -245,7 +244,7 @@ class CachedGraphBuilder:
             self._cache.clear()
             logger.debug("Cleared all graph caches")
 
-    def get_cache_stats(self) -> Dict[str, int]:
+    def get_cache_stats(self) -> dict[str, int]:
         """Return cache statistics."""
         return {
             "size": len(self._cache),
@@ -266,8 +265,8 @@ class Component:
     name: str
     file_path: str
     type: str
-    lines: Optional[int] = None
-    complexity_score: Optional[float] = None
+    lines: int | None = None
+    complexity_score: float | None = None
 
 
 @dataclass
@@ -282,7 +281,7 @@ class ImpactReport:
     """
 
     component_id: str
-    affected_components: List[Component]
+    affected_components: list[Component]
     risk_score: float
     depth: int
 
@@ -387,7 +386,7 @@ def get_dependencies(
     project_id: str | None = None,
     graph: nx.DiGraph | None = None,
     db_path: Path | None = None,
-) -> List[Component]:
+) -> list[Component]:
     """Get N-hop forward dependencies (components this component depends on).
 
     Performs a breadth-first traversal of outgoing edges from the given component.
@@ -446,7 +445,7 @@ def get_dependents(
     project_id: str | None = None,
     graph: nx.DiGraph | None = None,
     db_path: Path | None = None,
-) -> List[Component]:
+) -> list[Component]:
     """Get N-hop backward dependencies (components that depend on this component).
 
     Performs a breadth-first traversal of incoming edges to the given component.
@@ -566,7 +565,7 @@ def analyze_impact(
 @_timed
 def detect_cycles(
     project_id: str | None = None, graph: nx.DiGraph | None = None, db_path: Path | None = None
-) -> List[List[Component]]:
+) -> list[list[Component]]:
     """Find circular dependencies (cycles) in the dependency graph.
 
     Uses NetworkX's simple_cycles algorithm to find all cycles. Cycles are returned
@@ -616,7 +615,7 @@ def detect_cycles(
 
 
 @_timed
-def calculate_centrality(graph: nx.DiGraph) -> Dict[str, float]:
+def calculate_centrality(graph: nx.DiGraph) -> dict[str, float]:
     """Calculate PageRank centrality scores for all components.
 
     PageRank identifies the most "important" components based on the dependency graph
@@ -658,7 +657,7 @@ def shortest_path(
     project_id: str | None = None,
     graph: nx.DiGraph | None = None,
     db_path: Path | None = None,
-) -> List[Component]:
+) -> list[Component]:
     """Find shortest dependency path between two components.
 
     Uses Dijkstra's algorithm to find the shortest path from source to target
@@ -726,7 +725,7 @@ def clear_cache(project_id: str | None = None):
 
 
 @_timed
-def detect_communities(graph: nx.DiGraph) -> Dict[str, int]:
+def detect_communities(graph: nx.DiGraph) -> dict[str, int]:
     """Detect communities (clusters) in the dependency graph using Louvain algorithm.
 
     Communities represent groups of components that depend heavily on each other.
@@ -785,7 +784,7 @@ def detect_communities(graph: nx.DiGraph) -> Dict[str, int]:
 
 
 @_timed
-def get_project_stats(project_id: str, db_path: Path | None = None) -> Dict[str, any]:
+def get_project_stats(project_id: str, db_path: Path | None = None) -> dict[str, any]:
     """Get aggregate statistics for a project's dependency graph.
 
     Calculates component count, dependency count, average centrality,
@@ -847,7 +846,7 @@ def get_project_stats(project_id: str, db_path: Path | None = None) -> Dict[str,
         raise
 
 
-def graph_to_dict(graph: nx.DiGraph, limit: int | None = None, offset: int = 0) -> Dict[str, any]:
+def graph_to_dict(graph: nx.DiGraph, limit: int | None = None, offset: int = 0) -> dict[str, any]:
     """Convert NetworkX graph to dictionary format for API responses with pagination support.
 
     Args:

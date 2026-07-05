@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from datetime import datetime, timedelta, UTC
 from unittest import mock
 
 import pytest
@@ -23,7 +22,7 @@ WO_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc"
 # Anchor relative to now so fixture data stays valid regardless of wall-clock date.
 # A hardcoded absolute date is a dormant time-bomb: if windowed queries are added
 # later, they would silently exclude stale fixture rows.
-NOW = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+NOW = (datetime.now(UTC) - timedelta(days=7)).isoformat()
 
 
 # ── unit: _validate_sdlc_event ────────────────────────────────────────────────

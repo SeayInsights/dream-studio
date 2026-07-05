@@ -9,8 +9,8 @@ complete the business-table event-sourcing layer for tasks.
 
 import logging
 import sqlite3
-from datetime import datetime, timezone
-from typing import Any, Dict
+from datetime import datetime, UTC
+from typing import Any
 
 from core.projections.framework import Projection, RetryPolicy
 
@@ -49,7 +49,7 @@ class TaskProjection(Projection):
         # Migration 072 owns the business_tasks DDL additions.
         pass
 
-    def handle(self, event: Dict[str, Any], conn: sqlite3.Connection) -> int:
+    def handle(self, event: dict[str, Any], conn: sqlite3.Connection) -> int:
         """Apply one canonical event to business_tasks.
 
         Returns 1 for every successfully applied event, 0 if skipped.
@@ -61,7 +61,7 @@ class TaskProjection(Projection):
         event_type = event["event_type"]
         event_id = event["event_id"]
         ts = event["event_timestamp"]
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         # task_id is denormalized onto the canonical row; fall back to trace.
         task_id = event.get("task_id") or (event.get("trace") or {}).get("task_id")

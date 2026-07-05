@@ -1,8 +1,8 @@
 from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import datetime, UTC
+from typing import Any
 
 SCHEMA_VERSION = 1
 
@@ -14,7 +14,7 @@ class CanonicalEventEnvelope:
     payload: dict[str, Any]
 
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     schema_version: int = SCHEMA_VERSION
 
     severity: str = "info"
@@ -69,7 +69,7 @@ _VALID_ATTRIBUTION_STATUSES: frozenset[str] = frozenset(
 )
 
 
-def _validate_sdlc_event(envelope: dict[str, Any]) -> Optional[str]:
+def _validate_sdlc_event(envelope: dict[str, Any]) -> str | None:
     """Validate SDLC-domain events have required attribution fields.
 
     Returns an error message if validation fails, None if OK.

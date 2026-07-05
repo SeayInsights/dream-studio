@@ -14,9 +14,8 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Optional
 
 _FINDING_TYPES = frozenset({"blast_radius", "impact", "risk", "spec_reference", "dependency"})
 _SEVERITIES = frozenset({"critical", "high", "medium", "low", "info"})
@@ -24,10 +23,10 @@ _STATUSES = frozenset({"open", "acknowledged", "mitigated", "accepted_risk", "re
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
 
 
-def _get_conn(db_path: Optional[Path]) -> tuple[sqlite3.Connection, bool]:
+def _get_conn(db_path: Path | None) -> tuple[sqlite3.Connection, bool]:
     """Return (conn, owned) where owned=True means we created the connection."""
     if db_path is not None:
         conn = sqlite3.connect(str(db_path))
@@ -52,11 +51,11 @@ def create_preflight(
     source: str,
     severity: str,
     summary: str,
-    body: Optional[str] = None,
+    body: str | None = None,
     author_type: str = "system",
-    correlation_id: Optional[str] = None,
-    parent_event_id: Optional[str] = None,
-    db_path: Optional[Path] = None,
+    correlation_id: str | None = None,
+    parent_event_id: str | None = None,
+    db_path: Path | None = None,
 ) -> str:
     """Emit a preflight.created event to the preflight_events spine.
 
@@ -110,9 +109,9 @@ def set_preflight_status(
     finding_event_id: str,
     work_order_id: str,
     new_status: str,
-    source: Optional[str] = None,
+    source: str | None = None,
     author_type: str = "system",
-    db_path: Optional[Path] = None,
+    db_path: Path | None = None,
 ) -> str:
     """Emit a preflight.status_changed event to the preflight_events spine.
 

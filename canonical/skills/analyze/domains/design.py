@@ -16,7 +16,7 @@ Analyzes design skill repositories for 10 key capabilities:
 """
 
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any
 import sys
 
 # Add parent to path for imports
@@ -59,7 +59,7 @@ class DesignSkillAnalyzer(BaseAnalyzer):
     def get_domain_name(self) -> str:
         return "design"
 
-    def get_capabilities(self) -> List[str]:
+    def get_capabilities(self) -> list[str]:
         return [
             "color_systems",
             "typography",
@@ -73,7 +73,7 @@ class DesignSkillAnalyzer(BaseAnalyzer):
             "register_system",
         ]
 
-    def analyze_capability(self, capability: str) -> Dict[str, Any]:
+    def analyze_capability(self, capability: str) -> dict[str, Any]:
         """Route capability analysis to specific method"""
         method_map = {
             "color_systems": self._analyze_color_systems,
@@ -93,7 +93,7 @@ class DesignSkillAnalyzer(BaseAnalyzer):
 
         return method_map[capability]()
 
-    def score_repository(self) -> Dict[str, float]:
+    def score_repository(self) -> dict[str, float]:
         """Calculate weighted overall score"""
         scores = {}
 
@@ -109,7 +109,7 @@ class DesignSkillAnalyzer(BaseAnalyzer):
 
     # Capability analysis methods
 
-    def _analyze_color_systems(self) -> Dict[str, Any]:
+    def _analyze_color_systems(self) -> dict[str, Any]:
         """
         Analyze color system capabilities
 
@@ -165,7 +165,7 @@ class DesignSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_typography(self) -> Dict[str, Any]:
+    def _analyze_typography(self) -> dict[str, Any]:
         """
         Analyze typography capabilities
 
@@ -212,7 +212,7 @@ class DesignSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_components(self) -> Dict[str, Any]:
+    def _analyze_components(self) -> dict[str, Any]:
         """
         Analyze component library capabilities
 
@@ -266,7 +266,7 @@ class DesignSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_design_systems(self) -> Dict[str, Any]:
+    def _analyze_design_systems(self) -> dict[str, Any]:
         """
         Analyze design system documentation
 
@@ -326,7 +326,7 @@ class DesignSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_brand_protocols(self) -> Dict[str, Any]:
+    def _analyze_brand_protocols(self) -> dict[str, Any]:
         """
         Analyze brand protocol capabilities
 
@@ -378,7 +378,7 @@ class DesignSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_reasoning(self) -> Dict[str, Any]:
+    def _analyze_reasoning(self) -> dict[str, Any]:
         """
         Analyze design reasoning capabilities
 
@@ -433,7 +433,7 @@ class DesignSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_anti_patterns(self) -> Dict[str, Any]:
+    def _analyze_anti_patterns(self) -> dict[str, Any]:
         """
         Analyze anti-pattern detection capabilities
 
@@ -490,7 +490,7 @@ class DesignSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_export_formats(self) -> Dict[str, Any]:
+    def _analyze_export_formats(self) -> dict[str, Any]:
         """
         Analyze export format capabilities
 
@@ -545,7 +545,7 @@ class DesignSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_quality_gates(self) -> Dict[str, Any]:
+    def _analyze_quality_gates(self) -> dict[str, Any]:
         """
         Analyze quality gate capabilities
 
@@ -591,7 +591,7 @@ class DesignSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def _analyze_register_system(self) -> Dict[str, Any]:
+    def _analyze_register_system(self) -> dict[str, Any]:
         """
         Analyze register system capabilities
 
@@ -642,7 +642,7 @@ class DesignSkillAnalyzer(BaseAnalyzer):
             "quality": quality,
         }
 
-    def get_unique_features(self) -> List[str]:
+    def get_unique_features(self) -> list[str]:
         """
         Identify unique features this design repo has
 

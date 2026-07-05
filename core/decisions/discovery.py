@@ -4,7 +4,6 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
 
 
 @dataclass
@@ -19,7 +18,7 @@ class DiscoveredDecisionPoint:
     function_name: str = ""
 
 
-def discover_decision_points(root_dirs: List[str]) -> List[DiscoveredDecisionPoint]:
+def discover_decision_points(root_dirs: list[str]) -> list[DiscoveredDecisionPoint]:
     """Scan Python files for potential decision points.
 
     Args:
@@ -41,7 +40,7 @@ def discover_decision_points(root_dirs: List[str]) -> List[DiscoveredDecisionPoi
                 continue
 
             try:
-                with open(py_file, "r", encoding="utf-8") as f:
+                with open(py_file, encoding="utf-8") as f:
                     source = f.read()
 
                 tree = ast.parse(source, filename=str(py_file))

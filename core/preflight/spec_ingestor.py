@@ -13,7 +13,6 @@ from __future__ import annotations
 import logging
 import sqlite3
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +67,7 @@ def _already_ingested(rel_path: str, conn: sqlite3.Connection) -> bool:
 def ingest_specs(
     planning_root: Path,
     *,
-    db_path: Optional[Path] = None,
+    db_path: Path | None = None,
     dry_run: bool = False,
 ) -> list[dict]:
     """Ingest all eligible spec files under planning_root as preflight findings.
@@ -98,7 +97,7 @@ def ingest_specs(
                         candidates.append(md)
 
     ingested = []
-    conn: Optional[sqlite3.Connection] = None
+    conn: sqlite3.Connection | None = None
     owned = False
 
     if not dry_run:

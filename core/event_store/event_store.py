@@ -7,9 +7,8 @@ Provides append-only event ledger with mandatory validation gate.
 import json
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Dict, List, Optional
 from uuid import uuid4
 
 from core.validation.event_validator import EventValidator, ValidationResult
@@ -101,7 +100,7 @@ class EventStore:
         # No tables created here; dual-canonical tables are created on demand by
         # _write_to_dual_canonical, and the migration system owns all other tables.
 
-    def write_event(self, event: Dict) -> bool:
+    def write_event(self, event: dict) -> bool:
         """
         Write event to store (with mandatory validation).
 
@@ -134,7 +133,7 @@ class EventStore:
         _write_to_dual_canonical(event, Path(self.db_path))
         return True
 
-    def _log_validation_failure(self, event: Dict, result: ValidationResult):
+    def _log_validation_failure(self, event: dict, result: ValidationResult):
         """Log validation failure.
 
         The SQLite validation_failures projection table was dropped in migration 129
@@ -145,7 +144,7 @@ class EventStore:
         event emission path is the sole writer going forward.
         """
 
-    def _emit_validation_failure_event(self, event: Dict, result: ValidationResult):
+    def _emit_validation_failure_event(self, event: dict, result: ValidationResult):
         """
         Emit event.validation.failed event (for monitoring).
 
@@ -156,7 +155,7 @@ class EventStore:
         failure_event = {
             "event_id": str(uuid4()),
             "event_type": "event.validation.failed",
-            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "trace": event.get("trace", {}),
             "severity": "high",
             "payload": {
@@ -172,12 +171,12 @@ class EventStore:
 
     def query_events(
         self,
-        event_type: Optional[str] = None,
-        start_time: Optional[str] = None,
-        end_time: Optional[str] = None,
-        trace_filter: Optional[Dict] = None,
+        event_type: str | None = None,
+        start_time: str | None = None,
+        end_time: str | None = None,
+        trace_filter: dict | None = None,
         limit: int = 100,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Query events from canonical_events.
 
@@ -239,7 +238,7 @@ class EventStore:
 
         return events
 
-    def get_validation_failures(self, limit: int = 100) -> List[Dict]:
+    def get_validation_failures(self, limit: int = 100) -> list[dict]:
         """
         Get recent validation failures (for debugging).
 

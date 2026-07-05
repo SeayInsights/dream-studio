@@ -17,7 +17,6 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
 
 # Add project root to path for imports
 _project_root = Path(__file__).resolve().parents[2]
@@ -60,7 +59,7 @@ SEVERITY_TO_STATUS = {
 }
 
 
-def _extract_cwe_ids(result: dict) -> Optional[str]:
+def _extract_cwe_ids(result: dict) -> str | None:
     """Extract CWE IDs from SARIF result object.
 
     SARIF can store CWE IDs in multiple locations:
@@ -95,7 +94,7 @@ def _extract_cwe_ids(result: dict) -> Optional[str]:
     return json.dumps(cwe_ids) if cwe_ids else None
 
 
-def _extract_cvss_score(result: dict) -> Optional[float]:
+def _extract_cvss_score(result: dict) -> float | None:
     """Extract CVSS score from SARIF result properties.
 
     Args:
@@ -128,7 +127,7 @@ def _normalize_severity(sarif_level: str) -> str:
     return SARIF_TO_FINDING_SEVERITY.get(sarif_level.lower(), "medium")
 
 
-def _check_duplicate(rule_id: str, file_path: str, line_number: Optional[int]) -> bool:
+def _check_duplicate(rule_id: str, file_path: str, line_number: int | None) -> bool:
     """Check if a finding already exists in security_events.
 
     Deduplication logic: same rule_id + file_path + line_number = duplicate.
@@ -189,7 +188,7 @@ def parse_sarif_file(file_path: str) -> int:
         raise FileNotFoundError(f"SARIF file not found: {file_path}")
 
     try:
-        with open(sarif_path, "r", encoding="utf-8") as f:
+        with open(sarif_path, encoding="utf-8") as f:
             sarif_data = json.load(f)
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON in SARIF file {file_path}: {e}")

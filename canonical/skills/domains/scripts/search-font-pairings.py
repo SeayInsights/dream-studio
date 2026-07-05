@@ -171,7 +171,7 @@ def main():
         sys.exit(1)
 
     # Read and parse the markdown file
-    with open(md_path, "r", encoding="utf-8") as f:
+    with open(md_path, encoding="utf-8") as f:
         md_content = f.read()
 
     pairings = parse_font_pairings(md_content)

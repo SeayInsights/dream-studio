@@ -9,8 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, UTC
 
 from core.config.database import get_connection
 from core.pricing.claude_models import compute_cost
@@ -25,7 +24,7 @@ _log = logging.getLogger(__name__)
 
 def _iso(dt: datetime) -> str:
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt.isoformat()
 
 
@@ -89,7 +88,7 @@ def _resolve_project_names(
         return {}
 
 
-def _fetch_token_events(trace_key: str, trace_value: str, since: Optional[datetime]) -> list:
+def _fetch_token_events(trace_key: str, trace_value: str, since: datetime | None) -> list:
     """Query canonical_events for token.consumed filtered by one trace field."""
     conn = get_connection()
     conn.row_factory = sqlite3.Row
@@ -117,7 +116,7 @@ def _fetch_token_events(trace_key: str, trace_value: str, since: Optional[dateti
 # ---------------------------------------------------------------------------
 
 
-def token_spend_by_project(project_id: str, since: Optional[datetime] = None) -> dict:
+def token_spend_by_project(project_id: str, since: datetime | None = None) -> dict:
     """Aggregate token.consumed events for a project.
 
     Returns: total tokens, total cost, attribution breakdown by status.
@@ -128,7 +127,7 @@ def token_spend_by_project(project_id: str, since: Optional[datetime] = None) ->
     return result
 
 
-def token_spend_by_milestone(milestone_id: str, since: Optional[datetime] = None) -> dict:
+def token_spend_by_milestone(milestone_id: str, since: datetime | None = None) -> dict:
     """Aggregate token.consumed events scoped to a milestone.
 
     Only events whose trace.milestone_id matches are included;
@@ -140,7 +139,7 @@ def token_spend_by_milestone(milestone_id: str, since: Optional[datetime] = None
     return result
 
 
-def token_spend_by_work_order(work_order_id: str, since: Optional[datetime] = None) -> dict:
+def token_spend_by_work_order(work_order_id: str, since: datetime | None = None) -> dict:
     """Aggregate token.consumed events scoped to a work order."""
     rows = _fetch_token_events("work_order_id", work_order_id, since)
     result = _aggregate_token_rows(rows)
@@ -148,7 +147,7 @@ def token_spend_by_work_order(work_order_id: str, since: Optional[datetime] = No
     return result
 
 
-def token_spend_by_task(task_id: str, since: Optional[datetime] = None) -> dict:
+def token_spend_by_task(task_id: str, since: datetime | None = None) -> dict:
     """Aggregate token.consumed events scoped to a task."""
     rows = _fetch_token_events("task_id", task_id, since)
     result = _aggregate_token_rows(rows)
@@ -156,7 +155,7 @@ def token_spend_by_task(task_id: str, since: Optional[datetime] = None) -> dict:
     return result
 
 
-def attribution_coverage(project_id: Optional[str] = None) -> dict:
+def attribution_coverage(project_id: str | None = None) -> dict:
     """Return fully_attributed / partial / orphan breakdown for token.consumed events.
 
     If project_id is provided, scoped to that project. Otherwise global.
@@ -223,7 +222,7 @@ def attribution_coverage(project_id: Optional[str] = None) -> dict:
     }
 
 
-def orphan_events(project_id: Optional[str] = None, limit: int = 50) -> list[dict]:
+def orphan_events(project_id: str | None = None, limit: int = 50) -> list[dict]:
     """Return recent orphan token.consumed events for drill-down.
 
     Events are considered orphans when attribution_status is NULL or 'orphan'.
@@ -297,7 +296,7 @@ def canonical_token_metrics(days: int) -> dict:
     """
     from datetime import timedelta
 
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
     conn = get_connection()
     conn.row_factory = sqlite3.Row
     try:
@@ -414,7 +413,7 @@ def exec_time_ranges_from_canonical(days: int) -> dict[str, dict[str, float]]:
     """
     from datetime import timedelta
 
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
     conn = get_connection()
     conn.row_factory = sqlite3.Row
     try:

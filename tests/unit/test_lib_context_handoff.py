@@ -7,8 +7,6 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from control.context.handoff import (  # noqa: E402
@@ -178,13 +176,13 @@ def test_active_files_parses_status_lines(tmp_path, monkeypatch):
 
 def test_write_handoff_mkdir_failure_returns_none(tmp_path, monkeypatch):
     import control.context.handoff as handoff_mod
-    from datetime import datetime, timezone
+    from datetime import datetime, UTC
 
     monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
     # Mock utcnow to return a fixed date so we can pre-block it
-    fixed_date = datetime(2026, 5, 7, 12, 0, 0, tzinfo=timezone.utc)
+    fixed_date = datetime(2026, 5, 7, 12, 0, 0, tzinfo=UTC)
     monkeypatch.setattr(handoff_mod, "utcnow", lambda: fixed_date)
 
     # Create sessions dir normally

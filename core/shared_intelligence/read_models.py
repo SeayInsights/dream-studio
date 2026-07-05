@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 
 from core.shared_intelligence.authority import require_shared_intelligence_tables
@@ -367,7 +367,7 @@ def _severity_score(severity: str | None) -> int:
 def _with_authority(model_name: str, payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "model_name": model_name,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "derived_view": True,
         "primary_authority": False,
         "routing_authority": False,

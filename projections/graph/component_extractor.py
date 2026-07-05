@@ -14,7 +14,6 @@ import re
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
 
 from core.event_store import studio_db
 from core.config.database import transaction
@@ -23,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 @contextmanager
-def _component_transaction(db_path: Optional[Path] = None):
+def _component_transaction(db_path: Path | None = None):
     """Open a write transaction, honoring explicit DB paths for test isolation."""
     if db_path is None:
         with transaction() as conn:
@@ -53,8 +52,8 @@ class Component:
     lines: int
     line_start: int
     line_end: int
-    docstring: Optional[str] = None
-    imports: Optional[List[str]] = None
+    docstring: str | None = None
+    imports: list[str] | None = None
 
 
 @dataclass
@@ -62,12 +61,12 @@ class Import:
     """Represents an import statement."""
 
     module: str
-    names: List[str]  # List of imported names (empty for `import foo`)
+    names: list[str]  # List of imported names (empty for `import foo`)
     line: int
-    alias: Optional[str] = None
+    alias: str | None = None
 
 
-def extract_imports(file_path: Path) -> List[Import]:
+def extract_imports(file_path: Path) -> list[Import]:
     """Parse import statements from a Python file.
 
     Args:
@@ -110,7 +109,7 @@ def extract_imports(file_path: Path) -> List[Import]:
     return imports
 
 
-def _extract_imports_regex(file_path: Path) -> List[Import]:
+def _extract_imports_regex(file_path: Path) -> list[Import]:
     """Fallback regex-based import extraction for files with syntax errors.
 
     Args:
@@ -151,7 +150,7 @@ def _extract_imports_regex(file_path: Path) -> List[Import]:
     return imports
 
 
-def extract_functions(ast_tree: ast.AST) -> List[ast.FunctionDef]:
+def extract_functions(ast_tree: ast.AST) -> list[ast.FunctionDef]:
     """Walk AST to extract all function definitions.
 
     Args:
@@ -167,7 +166,7 @@ def extract_functions(ast_tree: ast.AST) -> List[ast.FunctionDef]:
     return functions
 
 
-def extract_classes(ast_tree: ast.AST) -> List[ast.ClassDef]:
+def extract_classes(ast_tree: ast.AST) -> list[ast.ClassDef]:
     """Walk AST to extract all class definitions.
 
     Args:
@@ -183,7 +182,7 @@ def extract_classes(ast_tree: ast.AST) -> List[ast.ClassDef]:
     return classes
 
 
-def _get_docstring(node: ast.AST) -> Optional[str]:
+def _get_docstring(node: ast.AST) -> str | None:
     """Extract docstring from a function or class node.
 
     Args:
@@ -195,7 +194,7 @@ def _get_docstring(node: ast.AST) -> Optional[str]:
     return ast.get_docstring(node)
 
 
-def _calculate_lines(node: ast.AST, source_lines: List[str]) -> int:
+def _calculate_lines(node: ast.AST, source_lines: list[str]) -> int:
     """Calculate the number of lines spanned by an AST node.
 
     Args:
@@ -230,8 +229,8 @@ def _make_component_id(project_id: str, file_path: str, name: str) -> str:
 
 
 def extract_components(
-    file_path: Path, project_id: str, project_root: Optional[Path] = None
-) -> List[Component]:
+    file_path: Path, project_id: str, project_root: Path | None = None
+) -> list[Component]:
     """Parse Python file and return all components (functions, classes, module).
 
     Args:
@@ -331,7 +330,7 @@ def extract_components(
     return components
 
 
-def save_to_db(components: List[Component], db_path: Optional[Path] = None) -> bool:
+def save_to_db(components: list[Component], db_path: Path | None = None) -> bool:
     """Upsert components to the pi_components table and populate pi_dependencies.
 
     Args:

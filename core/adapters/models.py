@@ -5,7 +5,7 @@ TraceContext authority lives in core/events/trace.py.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -30,7 +30,7 @@ class CanonicalEvent:
     event_type: str = ""
     entity_type: str = ""
     entity_id: str = ""
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     severity: SeverityLevel = "info"
     payload: dict[str, Any] = field(default_factory=dict)
     trace: TraceContext = field(default_factory=TraceContext)

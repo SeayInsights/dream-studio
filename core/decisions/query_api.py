@@ -1,7 +1,6 @@
 """Fluent API wrapper for decision querying."""
 
 from __future__ import annotations
-from typing import Optional
 
 from . import query_engine
 from .schema import Decision
@@ -11,9 +10,9 @@ class DecisionQuery:
     """Fluent API for querying decisions."""
 
     def __init__(self):
-        self._decision_type: Optional[str] = None
-        self._subsystem: Optional[str] = None
-        self._min_confidence: Optional[float] = None
+        self._decision_type: str | None = None
+        self._subsystem: str | None = None
+        self._min_confidence: float | None = None
         self._limit: int = 100
 
     def decisions(self) -> DecisionQuery:

@@ -7,7 +7,6 @@ Created: 2026-05-07 (Phase 1 - Event System Improvements)
 """
 
 from enum import Enum
-from typing import Set
 
 
 class EventCriticality(Enum):
@@ -20,7 +19,7 @@ class EventCriticality(Enum):
 
 # Define which event types are critical
 # These events MUST be persisted or execution should stop
-CRITICAL_EVENT_TYPES: Set[str] = {
+CRITICAL_EVENT_TYPES: set[str] = {
     "execution.started",
     "execution.completed",
     "execution.failed",
@@ -39,7 +38,7 @@ CRITICAL_EVENT_TYPES: Set[str] = {
 
 
 # Important events should log errors but not block
-IMPORTANT_EVENT_TYPES: Set[str] = {
+IMPORTANT_EVENT_TYPES: set[str] = {
     "task.started",
     "task.completed",
     "task.failed",

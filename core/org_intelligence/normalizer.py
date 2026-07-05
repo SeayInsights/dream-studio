@@ -5,7 +5,6 @@ NO ML. NO heuristics. Explicit pattern matching only.
 """
 
 from __future__ import annotations
-from typing import Dict, List, Set
 from pathlib import Path
 
 from .model import Module, Capability
@@ -73,11 +72,11 @@ class CapabilityNormalizer:
     """
 
     def __init__(self):
-        self.capabilities: Dict[str, Capability] = {}
+        self.capabilities: dict[str, Capability] = {}
 
     def normalize_modules(
-        self, modules: Dict[str, Module], repositories: Dict[str, any]
-    ) -> Dict[str, Capability]:
+        self, modules: dict[str, Module], repositories: dict[str, any]
+    ) -> dict[str, Capability]:
         """Normalize modules into capabilities.
 
         Args:
@@ -92,7 +91,7 @@ class CapabilityNormalizer:
             module.capability_tags = self._tag_module(module)
 
         # Step 2: Group modules by capability
-        capability_groups: Dict[str, List[str]] = {}  # capability_name → module_ids
+        capability_groups: dict[str, list[str]] = {}  # capability_name → module_ids
 
         for module_id, module in modules.items():
             for tag in module.capability_tags:
@@ -132,7 +131,7 @@ class CapabilityNormalizer:
 
         return self.capabilities
 
-    def _tag_module(self, module: Module) -> List[str]:
+    def _tag_module(self, module: Module) -> list[str]:
         """Tag module with capability patterns.
 
         Args:
@@ -168,7 +167,7 @@ class CapabilityNormalizer:
 
         return tags
 
-    def get_capability_ontology(self) -> Dict[str, Dict]:
+    def get_capability_ontology(self) -> dict[str, dict]:
         """Get capability ontology as dict (for YAML export).
 
         Returns:

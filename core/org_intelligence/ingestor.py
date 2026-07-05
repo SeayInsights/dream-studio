@@ -8,7 +8,6 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Dict, Optional
 
 from .model import Repository, Module, Edge, RelationshipType
 
@@ -18,10 +17,10 @@ class ParsedModule:
     """Package-local parsed module summary for org intelligence ingestion."""
 
     path: str
-    imports: List[str] = field(default_factory=list)
-    functions: List[str] = field(default_factory=list)
-    classes: List[str] = field(default_factory=list)
-    dependencies: List[str] = field(default_factory=list)
+    imports: list[str] = field(default_factory=list)
+    functions: list[str] = field(default_factory=list)
+    classes: list[str] = field(default_factory=list)
+    dependencies: list[str] = field(default_factory=list)
     loc: int = 0
 
 
@@ -29,7 +28,7 @@ class ParsedModule:
 class RepoStructure:
     """Package-local repository parse result."""
 
-    modules: List[ParsedModule] = field(default_factory=list)
+    modules: list[ParsedModule] = field(default_factory=list)
 
 
 class RepoParser:
@@ -41,7 +40,7 @@ class RepoParser:
         self.repo_path = Path(repo_path).resolve()
 
     def parse(self) -> RepoStructure:
-        modules: List[ParsedModule] = []
+        modules: list[ParsedModule] = []
         for path in sorted(self.repo_path.rglob("*.py")):
             if any(part in self.SKIP_DIRS for part in path.parts):
                 continue
@@ -52,9 +51,9 @@ class RepoParser:
         relative = path.relative_to(self.repo_path).as_posix()
         source = path.read_text(encoding="utf-8", errors="ignore")
         loc = sum(1 for line in source.splitlines() if line.strip())
-        imports: List[str] = []
-        functions: List[str] = []
-        classes: List[str] = []
+        imports: list[str] = []
+        functions: list[str] = []
+        classes: list[str] = []
 
         try:
             tree = ast.parse(source)
@@ -91,11 +90,11 @@ class MultiRepoIngestor:
     """
 
     def __init__(self):
-        self.repositories: Dict[str, Repository] = {}
-        self.modules: Dict[str, Module] = {}
-        self.edges: List[Edge] = []
+        self.repositories: dict[str, Repository] = {}
+        self.modules: dict[str, Module] = {}
+        self.edges: list[Edge] = []
 
-    def ingest_repository(self, repo_path: str, repo_name: Optional[str] = None) -> str:
+    def ingest_repository(self, repo_path: str, repo_name: str | None = None) -> str:
         """Ingest a single repository.
 
         Args:
@@ -167,7 +166,7 @@ class MultiRepoIngestor:
 
         return repo_id
 
-    def ingest_folder(self, folder_path: str) -> List[str]:
+    def ingest_folder(self, folder_path: str) -> list[str]:
         """Ingest all repositories in a folder.
 
         Args:
@@ -209,7 +208,7 @@ class MultiRepoIngestor:
 
         return repo_ids
 
-    def ingest_multiple(self, repo_paths: List[str]) -> List[str]:
+    def ingest_multiple(self, repo_paths: list[str]) -> list[str]:
         """Ingest multiple repositories.
 
         Args:
@@ -228,7 +227,7 @@ class MultiRepoIngestor:
 
         return repo_ids
 
-    def _generate_repo_id(self, repo_path: Path, repo_name: Optional[str] = None) -> str:
+    def _generate_repo_id(self, repo_path: Path, repo_name: str | None = None) -> str:
         """Generate deterministic repository ID.
 
         Args:
@@ -257,7 +256,7 @@ class MultiRepoIngestor:
         normalized = file_path.replace("\\", "/").replace("/", ".").replace(".py", "")
         return f"{repo_id}:{normalized}"
 
-    def get_results(self) -> tuple[Dict[str, Repository], Dict[str, Module], List[Edge]]:
+    def get_results(self) -> tuple[dict[str, Repository], dict[str, Module], list[Edge]]:
         """Get ingestion results.
 
         Returns:

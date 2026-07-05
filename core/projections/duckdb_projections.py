@@ -15,14 +15,14 @@ stays in studio.db (Store 3 authority) — never in DuckDB.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import datetime, UTC
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class DuckDBExecutionEventProjection:
@@ -33,7 +33,7 @@ class DuckDBExecutionEventProjection:
         "execution.failed",
     ]
 
-    def handle(self, event: Dict[str, Any], conn: Any) -> int:
+    def handle(self, event: dict[str, Any], conn: Any) -> int:
         event_type = event["event_type"]
         event_id = event["event_id"]
         ts = event.get("event_timestamp") or _now()
@@ -70,17 +70,17 @@ class DuckDBExecutionEventProjection:
 
 # ── Routing registry ──────────────────────────────────────────────────────────
 
-_PROJECTIONS: List[Any] = [
+_PROJECTIONS: list[Any] = [
     DuckDBExecutionEventProjection(),
 ]
 
-_EVENT_TYPE_MAP: Dict[str, list] = {}
+_EVENT_TYPE_MAP: dict[str, list] = {}
 for _p in _PROJECTIONS:
     for _et in _p.consumed_event_types:
         _EVENT_TYPE_MAP.setdefault(_et, []).append(_p)
 
 
-def dispatch_to_duckdb(event: Dict[str, Any], conn: Any) -> int:
+def dispatch_to_duckdb(event: dict[str, Any], conn: Any) -> int:
     """Route one canonical event to all matching DuckDB projections.
 
     Fail-open: individual projection errors are logged, not propagated.

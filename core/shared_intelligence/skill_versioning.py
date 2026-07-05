@@ -7,7 +7,7 @@ authority. It never promotes, rewrites, or executes a component update.
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 import json
 import sqlite3
 from typing import Any
@@ -336,7 +336,7 @@ def _loads(raw: str | None, default: Any) -> Any:
 def _with_authority(model_name: str, payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "model_name": model_name,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "derived_view": True,
         "primary_authority": False,
         "routing_authority": False,

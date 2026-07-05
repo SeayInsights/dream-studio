@@ -9,8 +9,8 @@ complete the business-table event-sourcing layer for milestones.
 
 import logging
 import sqlite3
-from datetime import datetime, timezone
-from typing import Any, Dict
+from datetime import datetime, UTC
+from typing import Any
 
 from core.projections.framework import Projection, RetryPolicy
 
@@ -46,7 +46,7 @@ class MilestoneProjection(Projection):
         # Migration 073 owns the business_milestones DDL additions.
         pass
 
-    def handle(self, event: Dict[str, Any], conn: sqlite3.Connection) -> int:
+    def handle(self, event: dict[str, Any], conn: sqlite3.Connection) -> int:
         """Apply one canonical event to business_milestones.
 
         Returns 1 for every successfully applied event, 0 if skipped.
@@ -58,7 +58,7 @@ class MilestoneProjection(Projection):
         event_type = event["event_type"]
         event_id = event["event_id"]
         ts = event["event_timestamp"]
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         # milestone_id is denormalized onto the canonical row; fall back to trace.
         milestone_id = event.get("milestone_id") or (event.get("trace") or {}).get("milestone_id")

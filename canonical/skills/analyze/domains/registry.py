@@ -7,7 +7,6 @@ Supports registration, retrieval, and auto-detection of domain analyzers.
 """
 
 from pathlib import Path
-from typing import Dict, Type, List, Optional
 import sys
 
 # Add parent to path for imports
@@ -34,12 +33,12 @@ class DomainAnalyzerRegistry:
         domains = DomainAnalyzerRegistry.list_domains()
     """
 
-    _analyzers: Dict[str, Type[BaseAnalyzer]] = {}
-    _domain_markers: Dict[str, List[str]] = {}
+    _analyzers: dict[str, type[BaseAnalyzer]] = {}
+    _domain_markers: dict[str, list[str]] = {}
 
     @classmethod
     def register(
-        cls, domain: str, analyzer_class: Type[BaseAnalyzer], markers: Optional[List[str]] = None
+        cls, domain: str, analyzer_class: type[BaseAnalyzer], markers: list[str] | None = None
     ):
         """
         Register a domain analyzer
@@ -88,7 +87,7 @@ class DomainAnalyzerRegistry:
         return analyzer_class(repo_path, repo_name)
 
     @classmethod
-    def list_domains(cls) -> List[str]:
+    def list_domains(cls) -> list[str]:
         """
         List all registered domains
 
@@ -98,7 +97,7 @@ class DomainAnalyzerRegistry:
         return sorted(cls._analyzers.keys())
 
     @classmethod
-    def get_domain_info(cls) -> Dict[str, Dict[str, any]]:
+    def get_domain_info(cls) -> dict[str, dict[str, any]]:
         """
         Get information about all registered domains
 

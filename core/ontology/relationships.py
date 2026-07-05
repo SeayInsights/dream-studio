@@ -11,7 +11,7 @@ Created: 2026-05-09 (Phase 4F - Relationship Advisory Validation)
 
 import logging
 from types import MappingProxyType
-from typing import FrozenSet, Mapping, Optional, Sequence, Union
+from collections.abc import Mapping, Sequence
 
 from core.ontology.registry import ValidationResult
 from core.ontology.schema import (
@@ -23,11 +23,11 @@ from core.ontology.schema import (
 
 logger = logging.getLogger(__name__)
 
-_KNOWN_ENTITY_VALUES: FrozenSet[str] = frozenset(m.value for m in EntityType)
-_KNOWN_RELATION_VALUES: FrozenSet[str] = frozenset(m.value for m in RelationType)
+_KNOWN_ENTITY_VALUES: frozenset[str] = frozenset(m.value for m in EntityType)
+_KNOWN_RELATION_VALUES: frozenset[str] = frozenset(m.value for m in RelationType)
 
 
-def _to_str(value: Union[EntityType, RelationType, str]) -> str:
+def _to_str(value: EntityType | RelationType | str) -> str:
     return value.value if isinstance(value, (EntityType, RelationType)) else str(value)
 
 
@@ -67,24 +67,24 @@ class RelationshipCatalog:
     def all_specs(self) -> tuple[RelationshipSpec, ...]:
         return self._all_specs
 
-    def has_relation(self, relation_type: Union[RelationType, str]) -> bool:
+    def has_relation(self, relation_type: RelationType | str) -> bool:
         return _to_str(relation_type) in _KNOWN_RELATION_VALUES
 
-    def has_specs(self, relation_type: Union[RelationType, str]) -> bool:
+    def has_specs(self, relation_type: RelationType | str) -> bool:
         return _to_str(relation_type) in self._by_relation
 
-    def get_specs(self, relation_type: Union[RelationType, str]) -> tuple[RelationshipSpec, ...]:
+    def get_specs(self, relation_type: RelationType | str) -> tuple[RelationshipSpec, ...]:
         return self._by_relation.get(_to_str(relation_type), ())
 
     def validate_relationship(
         self,
-        source_type: Union[EntityType, str],
-        relation_type: Union[RelationType, str],
-        target_type: Union[EntityType, str],
+        source_type: EntityType | str,
+        relation_type: RelationType | str,
+        target_type: EntityType | str,
         *,
-        source_id: Optional[str] = None,
-        target_id: Optional[str] = None,
-        context: Optional[dict] = None,
+        source_id: str | None = None,
+        target_id: str | None = None,
+        context: dict | None = None,
     ) -> ValidationResult:
         """Validate a relationship against the canonical catalog.
 
@@ -138,13 +138,13 @@ RELATIONSHIP_CATALOG = RelationshipCatalog(CANONICAL_RELATIONSHIPS)
 
 
 def validate_relationship(
-    source_type: Union[EntityType, str],
-    relation_type: Union[RelationType, str],
-    target_type: Union[EntityType, str],
+    source_type: EntityType | str,
+    relation_type: RelationType | str,
+    target_type: EntityType | str,
     *,
-    source_id: Optional[str] = None,
-    target_id: Optional[str] = None,
-    context: Optional[dict] = None,
+    source_id: str | None = None,
+    target_id: str | None = None,
+    context: dict | None = None,
 ) -> ValidationResult:
     """Validate a relationship against the canonical catalog.
 

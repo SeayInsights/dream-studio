@@ -18,8 +18,8 @@ Out-of-order tolerance:
 
 import logging
 import sqlite3
-from datetime import datetime, timezone
-from typing import Any, Dict
+from datetime import datetime, UTC
+from typing import Any
 
 from core.projections.framework import Projection, RetryPolicy
 
@@ -65,7 +65,7 @@ class DesignBriefProjection(Projection):
         # Migration 074 owns the business_design_briefs DDL additions.
         pass
 
-    def handle(self, event: Dict[str, Any], conn: sqlite3.Connection) -> int:
+    def handle(self, event: dict[str, Any], conn: sqlite3.Connection) -> int:
         """Apply one canonical event to business_design_briefs.
 
         Returns 1 for every successfully applied event, 0 if skipped.
@@ -77,7 +77,7 @@ class DesignBriefProjection(Projection):
         event_type = event["event_type"]
         event_id = event["event_id"]
         ts = event["event_timestamp"]
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         brief_id = (event.get("trace") or {}).get("brief_id") or payload.get("brief_id")
         if not brief_id:

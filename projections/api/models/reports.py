@@ -1,7 +1,7 @@
 """Pydantic models for reports endpoints"""
 
 from pydantic import BaseModel, Field
-from typing import Dict, List, Any, Optional
+from typing import Any
 from datetime import datetime
 from enum import Enum
 
@@ -32,7 +32,7 @@ def _normalize_export_source(source: str) -> str:
     return source.strip().lower()
 
 
-def _private_sources_in(sources: List[str] | None) -> list[str]:
+def _private_sources_in(sources: list[str] | None) -> list[str]:
     private_sources: list[str] = []
     for source in sources or []:
         normalized = _normalize_export_source(source)
@@ -45,9 +45,9 @@ def _private_sources_in(sources: List[str] | None) -> list[str]:
 def classify_export_privacy(
     *,
     include_raw_data: bool = False,
-    sources: List[str] | None = None,
+    sources: list[str] | None = None,
     redaction_classification: str | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Classify an export/report request before any file is produced.
 
     Raw local runtime state can only pass this gate when the caller explicitly
@@ -80,7 +80,7 @@ def classify_export_privacy(
     }
 
 
-def validate_export_payload(data: Dict[str, Any]) -> None:
+def validate_export_payload(data: dict[str, Any]) -> None:
     """Reject direct exporter payloads that contain raw private source keys."""
     discovered: list[str] = []
 
@@ -132,19 +132,19 @@ class ReportCreate(BaseModel):
 
     name: str = Field(min_length=1, max_length=200)
     type: ReportType
-    description: Optional[str] = None
+    description: str | None = None
     days: int = Field(default=30, ge=1, le=365)
-    filters: Optional[Dict[str, Any]] = None
-    sections: Optional[List[str]] = None  # Which sections to include
+    filters: dict[str, Any] | None = None
+    sections: list[str] | None = None  # Which sections to include
 
 
 class ReportUpdate(BaseModel):
     """Update report request"""
 
-    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
-    description: Optional[str] = None
-    filters: Optional[Dict[str, Any]] = None
-    sections: Optional[List[str]] = None
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+    filters: dict[str, Any] | None = None
+    sections: list[str] | None = None
 
 
 class Report(BaseModel):
@@ -153,10 +153,10 @@ class Report(BaseModel):
     id: str
     name: str
     type: ReportType
-    description: Optional[str]
+    description: str | None
     days: int
-    filters: Dict[str, Any]
-    sections: List[str]
+    filters: dict[str, Any]
+    sections: list[str]
     created_at: datetime
     updated_at: datetime
     generated_count: int = 0
@@ -168,18 +168,18 @@ class ReportContent(BaseModel):
     id: str
     name: str
     type: ReportType
-    metadata: Dict[str, Any]
-    metrics: Dict[str, Any]
-    insights: Dict[str, Any]
-    recommendations: List[Dict[str, Any]]
-    charts: Optional[List[Dict[str, Any]]] = None
+    metadata: dict[str, Any]
+    metrics: dict[str, Any]
+    insights: dict[str, Any]
+    recommendations: list[dict[str, Any]]
+    charts: list[dict[str, Any]] | None = None
     generated_at: datetime
 
 
 class ReportList(BaseModel):
     """List of reports"""
 
-    reports: List[Report]
+    reports: list[Report]
     total: int
     page: int = 1
     page_size: int = 50
@@ -188,12 +188,12 @@ class ReportList(BaseModel):
 class ExportRequest(BaseModel):
     """Export request"""
 
-    report_id: Optional[str] = None
+    report_id: str | None = None
     format: ReportFormat
     include_charts: bool = True
     include_raw_data: bool = False
-    sources: List[str] = Field(default_factory=list)
-    redaction_classification: Optional[str] = None
+    sources: list[str] = Field(default_factory=list)
+    redaction_classification: str | None = None
 
 
 class ExportResponse(BaseModel):
@@ -202,7 +202,7 @@ class ExportResponse(BaseModel):
     export_id: str
     format: ReportFormat
     status: str  # "processing", "complete", "failed"
-    download_url: Optional[str] = None
-    expires_at: Optional[datetime] = None
-    file_size_bytes: Optional[int] = None
-    privacy_classification: Optional[str] = None
+    download_url: str | None = None
+    expires_at: datetime | None = None
+    file_size_bytes: int | None = None
+    privacy_classification: str | None = None

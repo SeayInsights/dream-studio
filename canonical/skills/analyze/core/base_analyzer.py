@@ -8,7 +8,7 @@ and implement domain-specific capability detection and scoring.
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Any
 import re
 
 
@@ -57,7 +57,7 @@ class BaseAnalyzer(ABC):
         """
 
     @abstractmethod
-    def get_capabilities(self) -> List[str]:
+    def get_capabilities(self) -> list[str]:
         """
         Return list of capabilities this domain analyzer detects
 
@@ -72,7 +72,7 @@ class BaseAnalyzer(ABC):
         """
 
     @abstractmethod
-    def analyze_capability(self, capability: str) -> Dict[str, Any]:
+    def analyze_capability(self, capability: str) -> dict[str, Any]:
         """
         Analyze a specific capability in the repository
 
@@ -90,7 +90,7 @@ class BaseAnalyzer(ABC):
         """
 
     @abstractmethod
-    def score_repository(self) -> Dict[str, float]:
+    def score_repository(self) -> dict[str, float]:
         """
         Calculate overall repository scoring for this domain
 
@@ -105,7 +105,7 @@ class BaseAnalyzer(ABC):
 
     # Optional methods - can be overridden by subclasses
 
-    def get_unique_features(self) -> List[str]:
+    def get_unique_features(self) -> list[str]:
         """
         Identify unique features this repo has that others don't
 
@@ -116,7 +116,7 @@ class BaseAnalyzer(ABC):
         """
         return []
 
-    def generate_recommendations(self, comparison_repos: Optional[List[str]] = None) -> List[str]:
+    def generate_recommendations(self, comparison_repos: list[str] | None = None) -> list[str]:
         """
         Generate actionable recommendations
 
@@ -130,7 +130,7 @@ class BaseAnalyzer(ABC):
 
     # Common utility methods available to all analyzers
 
-    def find_files(self, pattern: str, case_sensitive: bool = False) -> List[Path]:
+    def find_files(self, pattern: str, case_sensitive: bool = False) -> list[Path]:
         """
         Find files matching glob pattern
 
@@ -174,8 +174,8 @@ class BaseAnalyzer(ABC):
         return len(self.find_files(pattern, case_sensitive))
 
     def search_content(
-        self, pattern: str, file_extensions: Optional[List[str]] = None, max_results: int = 100
-    ) -> List[Dict[str, Any]]:
+        self, pattern: str, file_extensions: list[str] | None = None, max_results: int = 100
+    ) -> list[dict[str, Any]]:
         """
         Search file content for regex pattern (grep-like)
 
@@ -271,7 +271,7 @@ class BaseAnalyzer(ABC):
         file_path = self.repo_path / file_name
         return file_path.exists() and file_path.is_file()
 
-    def read_file(self, file_path: str) -> Optional[str]:
+    def read_file(self, file_path: str) -> str | None:
         """
         Read file content
 
@@ -305,7 +305,7 @@ class BaseAnalyzer(ABC):
             return 0
         return len(content.split("\n"))
 
-    def calculate_quality_score(self, count: int, thresholds: Dict[str, int]) -> tuple[float, str]:
+    def calculate_quality_score(self, count: int, thresholds: dict[str, int]) -> tuple[float, str]:
         """
         Calculate quality score and label based on count and thresholds
 

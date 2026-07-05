@@ -10,7 +10,6 @@ import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional
 from core.config.database import get_connection, transaction
 from core.event_store import studio_db
 from canonical.events.envelope import CanonicalEventEnvelope
@@ -30,7 +29,7 @@ def _default_db_path() -> Path:
 class RiskScoringEngine:
     """Compute and emit risk scores for events in the activity log."""
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: str | None = None):
         """Initialize with database path.
 
         Args:
@@ -66,7 +65,7 @@ class RiskScoringEngine:
             with transaction() as conn:
                 yield conn
 
-    def fetch_unscored_events(self, limit: int = 100) -> List[Dict]:
+    def fetch_unscored_events(self, limit: int = 100) -> list[dict]:
         """Fetch events that need risk scoring.
 
         Queries canonical_events for events that:
@@ -115,7 +114,7 @@ class RiskScoringEngine:
 
         return events
 
-    def compute_risk_score(self, event: Dict) -> float:
+    def compute_risk_score(self, event: dict) -> float:
         """Compute risk score for a single event (0-100).
 
         Risk is computed from three factors:
@@ -177,7 +176,7 @@ class RiskScoringEngine:
         total_risk = file_risk + project_risk + temporal_risk
         return round(total_risk, 2)
 
-    def emit_enriched_event(self, event: Dict, risk_score: float) -> None:
+    def emit_enriched_event(self, event: dict, risk_score: float) -> None:
         """Emit enriched event to the canonical event spool.
 
         Creates a new RISK_SCORE_COMPUTED canonical event that references

@@ -10,7 +10,7 @@ values. ``_parse_json_field`` handles both shapes defensively.
 
 from __future__ import annotations
 import json
-from typing import Any, Optional
+from typing import Any
 
 from core.event_store.studio_db import _connect
 from .schema import Decision
@@ -50,9 +50,9 @@ def _decision_from_payload(payload: dict[str, Any], event_timestamp: str) -> Dec
 
 
 def get_decisions(
-    decision_type: Optional[str] = None,
-    subsystem: Optional[str] = None,
-    min_confidence: Optional[float] = None,
+    decision_type: str | None = None,
+    subsystem: str | None = None,
+    min_confidence: float | None = None,
     limit: int = 100,
 ) -> list[Decision]:
     """Query decisions with optional filters.

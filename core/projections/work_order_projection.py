@@ -10,8 +10,8 @@ class contains only the state-machine logic, not any engine plumbing.
 
 import logging
 import sqlite3
-from datetime import datetime, timezone
-from typing import Any, Dict
+from datetime import datetime, UTC
+from typing import Any
 
 from core.projections.framework import Projection, RetryPolicy
 
@@ -52,7 +52,7 @@ class WorkOrderProjection(Projection):
         # Migration 069 owns the business_work_orders DDL.
         pass
 
-    def handle(self, event: Dict[str, Any], conn: sqlite3.Connection) -> int:
+    def handle(self, event: dict[str, Any], conn: sqlite3.Connection) -> int:
         """Apply one canonical event to business_work_orders.
 
         Returns 1 for every successfully applied event, 0 if skipped (idempotent
@@ -66,7 +66,7 @@ class WorkOrderProjection(Projection):
         event_type = event["event_type"]
         event_id = event["event_id"]
         ts = event["event_timestamp"]
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         # work_order_id is denormalized onto the canonical row; fall back to
         # the payload for events emitted before the denormalization was added.

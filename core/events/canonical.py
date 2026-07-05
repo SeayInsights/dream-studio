@@ -8,7 +8,6 @@ Migrated from projections.models.events during system unification (2026-05-07).
 """
 
 from datetime import datetime
-from typing import Optional
 from pydantic import BaseModel, Field
 
 
@@ -59,8 +58,8 @@ class SecurityFinding(BaseModel):
     finding_id: str = Field(..., description="Unique identifier for this finding")
     source_type: str = Field(..., description="Finding source: sarif, cve, manual, hook_check")
     severity: str = Field(..., description="Severity level: info, low, medium, high, critical")
-    file_path: Optional[str] = Field(None, description="File path where finding was detected")
-    line_number: Optional[int] = Field(None, description="Line number in file (if applicable)")
+    file_path: str | None = Field(None, description="File path where finding was detected")
+    line_number: int | None = Field(None, description="Line number in file (if applicable)")
     message: str = Field(..., description="Human-readable description of the finding")
     status: str = Field(..., description="Finding status: open, triaged, fixed, ignored")
     created_at: datetime = Field(..., description="When the finding was created")

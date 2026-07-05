@@ -20,7 +20,6 @@ Usage:
 
 import sys
 from pathlib import Path
-from typing import List, Dict, Optional, Union
 
 # Add parent directory to path to import shared modules
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -41,12 +40,12 @@ except ImportError:
 
 
 def analyze_repositories(
-    repo_paths: List[str],
+    repo_paths: list[str],
     output_format: str = "dict",
-    patterns_filter: Optional[List[str]] = None,
-    domain: Optional[str] = None,
+    patterns_filter: list[str] | None = None,
+    domain: str | None = None,
     verbose: bool = False,
-) -> Union[Dict, str]:
+) -> dict | str:
     """
     Analyze repositories for SKILL.md patterns or domain-specific capabilities
 
@@ -101,7 +100,7 @@ def analyze_repositories(
 
 def analyze_single_repo(
     repo_path: str, output_format: str = "dict", verbose: bool = False
-) -> Union[Dict, str]:
+) -> dict | str:
     """
     Analyze a single repository (convenience wrapper)
 
@@ -117,8 +116,8 @@ def analyze_single_repo(
 
 
 def compare_repositories(
-    repo_paths: List[str], focus_patterns: Optional[List[str]] = None, verbose: bool = False
-) -> Dict:
+    repo_paths: list[str], focus_patterns: list[str] | None = None, verbose: bool = False
+) -> dict:
     """
     Compare multiple repositories side-by-side
 
@@ -158,11 +157,11 @@ def compare_repositories(
 
 
 def extract_patterns_for_enhancement(
-    source_repos: List[str],
+    source_repos: list[str],
     target_repo: str,
     min_adoption_threshold: float = 0.5,
     verbose: bool = False,
-) -> Dict:
+) -> dict:
     """
     Identify patterns from source repos that could enhance target repo
 
@@ -232,7 +231,7 @@ def extract_patterns_for_enhancement(
     }
 
 
-def _filter_patterns(report: Dict, pattern_filter: List[str]) -> Dict:
+def _filter_patterns(report: dict, pattern_filter: list[str]) -> dict:
     """Filter report to include only specified patterns"""
     filtered_patterns = {k: v for k, v in report.get("patterns", {}).items() if k in pattern_filter}
 
@@ -242,7 +241,7 @@ def _filter_patterns(report: Dict, pattern_filter: List[str]) -> Dict:
     return report
 
 
-def _generate_recommendations(report: Dict) -> List[str]:
+def _generate_recommendations(report: dict) -> list[str]:
     """Generate actionable recommendations from analysis report"""
     recommendations = []
 
@@ -276,7 +275,7 @@ def _generate_recommendations(report: Dict) -> List[str]:
     return recommendations
 
 
-def _estimate_effort(recommended_patterns: List[Dict]) -> str:
+def _estimate_effort(recommended_patterns: list[dict]) -> str:
     """Estimate effort required to implement recommended patterns"""
     pattern_count = len(recommended_patterns)
 
@@ -290,11 +289,11 @@ def _estimate_effort(recommended_patterns: List[Dict]) -> str:
 
 
 def _analyze_general_patterns(
-    validated_repos: List[tuple],
+    validated_repos: list[tuple],
     output_format: str,
-    patterns_filter: Optional[List[str]],
+    patterns_filter: list[str] | None,
     verbose: bool,
-) -> Union[Dict, str]:
+) -> dict | str:
     """
     Run general SKILL.md pattern analysis (backward compatible)
 
@@ -336,12 +335,12 @@ def _analyze_general_patterns(
 
 
 def _analyze_domain_specific(
-    validated_repos: List[tuple],
+    validated_repos: list[tuple],
     domain: str,
     output_format: str,
-    capabilities_filter: Optional[List[str]],
+    capabilities_filter: list[str] | None,
     verbose: bool,
-) -> Union[Dict, str]:
+) -> dict | str:
     """
     Run domain-specific capability analysis
 
@@ -426,7 +425,7 @@ def _analyze_domain_specific(
     return results
 
 
-def _format_domain_results_markdown(results: Dict) -> str:
+def _format_domain_results_markdown(results: dict) -> str:
     """Format domain-specific results as markdown"""
     lines = [
         f"# {results['domain'].title()} Skill Analysis",

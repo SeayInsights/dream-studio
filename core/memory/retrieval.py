@@ -12,8 +12,8 @@ Usage:
 import logging
 import math
 import sqlite3
-from datetime import datetime, timezone
-from typing import List, Optional, Protocol
+from datetime import datetime, UTC
+from typing import Protocol
 
 from core.config.database import get_connection, transaction
 from core.memory.store import (
@@ -50,8 +50,8 @@ def check_fts5_capability() -> dict:
 
 class MemoryRetriever(Protocol):
     def search(
-        self, query: str, filters: Optional[MemoryQuery] = None, top_k: int = 10
-    ) -> List[RetrievalResult]: ...
+        self, query: str, filters: MemoryQuery | None = None, top_k: int = 10
+    ) -> list[RetrievalResult]: ...
 
     def rebuild_index(self) -> int: ...
 
@@ -67,7 +67,7 @@ class FTS5MemoryRetriever:
 
     DEFAULT_HALF_LIFE = 30.0
 
-    def __init__(self, store: Optional[MemoryStore] = None):
+    def __init__(self, store: MemoryStore | None = None):
         self.store = store or MemoryStore()
         self._ensure_fts()
 
@@ -89,8 +89,8 @@ class FTS5MemoryRetriever:
                 raise
 
     def search(
-        self, query: str, filters: Optional[MemoryQuery] = None, top_k: int = 10
-    ) -> List[RetrievalResult]:
+        self, query: str, filters: MemoryQuery | None = None, top_k: int = 10
+    ) -> list[RetrievalResult]:
         if not query or not query.strip():
             return []
 
@@ -100,7 +100,7 @@ class FTS5MemoryRetriever:
             return self._fts_search(query, filters, top_k)
         return self._keyword_search(query, filters, top_k)
 
-    def _fts_search(self, query: str, filters: MemoryQuery, top_k: int) -> List[RetrievalResult]:
+    def _fts_search(self, query: str, filters: MemoryQuery, top_k: int) -> list[RetrievalResult]:
         safe_query = self._sanitize_fts_query(query)
         if not safe_query:
             return []
@@ -146,7 +146,7 @@ class FTS5MemoryRetriever:
 
     def _keyword_search(
         self, query: str, filters: MemoryQuery, top_k: int
-    ) -> List[RetrievalResult]:
+    ) -> list[RetrievalResult]:
         return self.store.retrieve(
             MemoryQuery(
                 text=query,
@@ -162,9 +162,9 @@ class FTS5MemoryRetriever:
             )
         )
 
-    def _rank_results(self, rows, top_k: int, include_decayed: bool) -> List[RetrievalResult]:
-        results: List[RetrievalResult] = []
-        now = datetime.now(timezone.utc)
+    def _rank_results(self, rows, top_k: int, include_decayed: bool) -> list[RetrievalResult]:
+        results: list[RetrievalResult] = []
+        now = datetime.now(UTC)
 
         max_bm25 = 1.0
         if rows:
