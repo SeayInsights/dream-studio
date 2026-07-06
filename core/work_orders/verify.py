@@ -955,16 +955,22 @@ def _run_graders_parallel(
         except Exception as exc:
             # Grader failure is non-fatal; return a safe default so the rest proceeds.
             result = {"_grader_error": str(exc)}
-        # T2: retry once on unreviewable (empty LLM output). Short timeout so
-        # retries add at most ~30s to the close path.
-        if result.get("unreviewable") and not result.get("_grader_error"):
+        # Retry once on a transient grader miss — empty output (unreviewable) OR
+        # non-JSON output (_grader_error, e.g. the grader replied in prose). Both
+        # are LLM formatting flakes a fresh call usually resolves; without the
+        # non-JSON retry a prose reply defaults the score to 0.0 and false-FAILs
+        # the WO (WO-GRADER-RETRY-NONJSON — WO-GAP-DEDUPE-CLASS needed 3 manual
+        # verify runs). Skip when the CLI is simply absent (grader_cli_unavailable)
+        # — a re-spawn cannot recover that. Accept the retry only if it is clean.
+        needs_retry = result.get("unreviewable") or result.get("_grader_error")
+        if needs_retry and result.get("reason") != "grader_cli_unavailable":
             try:
                 retry_proc = _spawn_grader(prompts[name])
-                retry_result = _collect_grader(retry_proc, timeout=30)
-                if not retry_result.get("unreviewable"):
+                retry_result = _collect_grader(retry_proc, timeout=60)
+                if not retry_result.get("unreviewable") and not retry_result.get("_grader_error"):
                     result = retry_result
             except Exception:
-                pass  # keep original unreviewable on retry failure
+                pass  # keep original result on retry failure
         results[name] = result
     return results
 
