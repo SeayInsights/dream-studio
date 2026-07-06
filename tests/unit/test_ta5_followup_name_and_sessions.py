@@ -221,11 +221,18 @@ class TestSessionMetricsNoneOutcomes:
         assert None not in result["outcomes"]
         assert "unknown" in result["outcomes"] or "completed" in result["outcomes"]
 
-    def test_session_collector_none_outcome_counted_correctly(self, tmp_path):
-        """NULL outcome rows count toward 'unknown', not silently dropped."""
+    def test_session_collector_none_outcome_counted_correctly(self, tmp_path, monkeypatch):
+        """NULL outcome rows count toward 'unknown', not silently dropped.
+
+        collect() prefers the DuckDB analytics store and only falls back to the
+        seeded SQLite db_path when DuckDB is empty — so without isolating the
+        DuckDB source this test reads the real analytics store (deterministic only
+        on a clean CI runner). Force the SQLite path the test is exercising."""
         import sqlite3 as _sqlite3
 
         from projections.core.collectors.session_collector import SessionCollector
+
+        monkeypatch.setattr(SessionCollector, "_collect_duckdb", lambda self, cutoff: None)
 
         db_file = tmp_path / "test.db"
         conn = _sqlite3.connect(str(db_file))
