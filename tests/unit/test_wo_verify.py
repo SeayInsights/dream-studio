@@ -696,3 +696,52 @@ def test_verify_subprocess_calls_force_utf8_encoding() -> None:
                 if "encoding" not in kwargs:
                     offenders.append(node.lineno)
     assert not offenders, f"subprocess calls in verify.py missing encoding= at lines {offenders}"
+
+
+# ---------------------------------------------------------------------------
+# WO-GRADER-RETRY-NONJSON: a grader that returns non-JSON (prose) on the first
+# call must be retried, not left as a 0.0-score false-FAIL.
+# ---------------------------------------------------------------------------
+
+
+def test_grader_retries_on_non_json_and_recovers() -> None:
+    """A first-call non-JSON (_grader_error) result is retried once; a clean
+    retry result replaces it. Without this the prose reply defaults the score to
+    0.0 and false-FAILs the WO (WO-GAP-DEDUPE-CLASS needed 3 manual verify runs)."""
+    from core.work_orders.verify import _run_graders_parallel
+
+    valid = {"completion_passed": True, "completion_score": 1.0}
+    collect = MagicMock(
+        side_effect=[
+            {"_grader_error": "Grader returned non-JSON.\nRaw:\nAll tests pass, verified."},
+            valid,
+        ]
+    )
+    with (
+        patch.dict(os.environ, {}, clear=False),
+        patch("core.work_orders.verify._spawn_grader", return_value=MagicMock()),
+        patch("core.work_orders.verify._collect_grader", collect),
+    ):
+        os.environ.pop("DREAM_STUDIO_VERIFY_MOCK", None)
+        results = _run_graders_parallel({"completion": "prompt"})
+
+    assert results["completion"] == valid, "non-JSON first call must be recovered by the retry"
+    assert collect.call_count == 2, "grader must be retried exactly once on non-JSON"
+
+
+def test_grader_cli_unavailable_is_not_retried() -> None:
+    """When the CLI is absent (spawn raises FileNotFoundError), the grader is
+    unreviewable and NOT retried — a re-spawn cannot recover a missing binary."""
+    from core.work_orders.verify import _run_graders_parallel
+
+    spawn = MagicMock(side_effect=FileNotFoundError("claude"))
+    collect = MagicMock()
+    with (
+        patch("core.work_orders.verify._spawn_grader", spawn),
+        patch("core.work_orders.verify._collect_grader", collect),
+    ):
+        os.environ.pop("DREAM_STUDIO_VERIFY_MOCK", None)
+        results = _run_graders_parallel({"completion": "prompt"})
+
+    assert results["completion"].get("reason") == "grader_cli_unavailable"
+    assert collect.call_count == 0, "absent CLI must not be collected or retried"
