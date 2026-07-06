@@ -38,6 +38,8 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+from core.gates.sql_comments import strip_sql_comments
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 Finding = dict[str, Any]
@@ -442,7 +444,11 @@ def detect_migration_file_db_duplication(
         path = _normalize(f["path"])
         if "migrations/" not in path or not path.endswith(".sql"):
             continue
-        created = {m.group(1).lower() for ln in f["added"] for m in _CREATE_RE.finditer(ln)}
+        created = {
+            m.group(1).lower()
+            for ln in f["added"]
+            for m in _CREATE_RE.finditer(strip_sql_comments(ln))
+        }
         for table in sorted(created):
             if not migrations_dir.is_dir():
                 continue
@@ -451,7 +457,7 @@ def detect_migration_file_db_duplication(
                 if rel == path:
                     continue
                 try:
-                    sql = mig.read_text(encoding="utf-8")
+                    sql = strip_sql_comments(mig.read_text(encoding="utf-8"))
                 except OSError:
                     continue
                 if any(m.group(1).lower() == table for m in _CREATE_RE.finditer(sql)):

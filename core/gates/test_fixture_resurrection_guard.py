@@ -25,6 +25,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from core.gates.sql_comments import strip_sql_comments
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MIGRATIONS_DIR = REPO_ROOT / "core" / "event_store" / "migrations"
 
@@ -72,7 +74,7 @@ def build_dead_table_ledger() -> frozenset[str]:
         if num == 0:
             continue
         try:
-            sql = f.read_text(encoding="utf-8")
+            sql = strip_sql_comments(f.read_text(encoding="utf-8"))
         except OSError:
             continue
 
@@ -124,7 +126,7 @@ def main() -> int:
         return 0
 
     base_ref = os.environ.get("DREAM_STUDIO_BASE_REF", "origin/main")
-    diff = _diff_text(base_ref)
+    diff = strip_sql_comments(_diff_text(base_ref))
     if not diff:
         return 0
 

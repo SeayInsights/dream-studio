@@ -214,3 +214,73 @@ def test_gate_fires_for_ds_documents_in_diff(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     monkeypatch.setattr(guard, "_diff_text", lambda _base_ref: _make_diff("ds_documents"))
     assert guard.main() == 1
+
+
+# ---------------------------------------------------------------------------
+# WO-GATE-SQL-PARSERS: DDL keywords inside comments must not trip the gate
+# ---------------------------------------------------------------------------
+
+
+def test_gate_ignores_dead_table_ddl_in_python_comment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A CREATE TABLE for a dead table inside a `#` comment is prose, not real
+    DDL, and must NOT trip the guard (WO-GATE-SQL-PARSERS)."""
+    dead = guard.build_dead_table_ledger()
+    any_dead = next(iter(dead))
+    diff = (
+        "diff --git a/tests/unit/test_x.py b/tests/unit/test_x.py\n"
+        "--- a/tests/unit/test_x.py\n"
+        "+++ b/tests/unit/test_x.py\n"
+        f"+    # historical note: we used to CREATE TABLE {any_dead} (id INTEGER)\n"
+    )
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.setattr(guard, "_diff_text", lambda _base_ref: diff)
+    assert guard.main() == 0, "DDL inside a # comment must not trip the guard"
+
+
+def test_gate_still_fires_on_real_ddl_alongside_comment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Negative control: real DDL on its own line still fires even when a comment
+    with DDL is also present."""
+    dead = guard.build_dead_table_ledger()
+    any_dead = next(iter(dead))
+    diff = (
+        "diff --git a/tests/unit/test_x.py b/tests/unit/test_x.py\n"
+        "--- a/tests/unit/test_x.py\n"
+        "+++ b/tests/unit/test_x.py\n"
+        "+    # CREATE TABLE ignore_me (id)\n"
+        f'+    conn.execute("CREATE TABLE {any_dead} (id INTEGER)")\n'
+    )
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.setattr(guard, "_diff_text", lambda _base_ref: diff)
+    assert guard.main() == 1, "real DDL must still fire"
+
+
+def test_ledger_ignores_ddl_in_sql_comments(tmp_path: Path) -> None:
+    """Commented CREATE TABLE lines (-- and /* */) must not add junk table names
+    (if/is/on/…) to the dead-table ledger; real DDL is still recorded."""
+    mig_dir = tmp_path / "migrations"
+    mig_dir.mkdir()
+    (mig_dir / "001_create.sql").write_text(
+        "-- CREATE TABLE if_ghost (id);\n"
+        "/* planned: CREATE TABLE block_ghost (id); */\n"
+        "CREATE TABLE real_zombie (id INTEGER PRIMARY KEY);\n",
+        encoding="utf-8",
+    )
+    (mig_dir / "002_drop.sql").write_text(
+        "-- DROP TABLE real_zombie was considered\nDROP TABLE real_zombie;\n",
+        encoding="utf-8",
+    )
+    with patch.object(guard, "MIGRATIONS_DIR", mig_dir):
+        dead = guard.build_dead_table_ledger()
+    assert "real_zombie" in dead
+    assert "if_ghost" not in dead and "block_ghost" not in dead
+    assert "if" not in dead and "is" not in dead
+
+
+def test_strip_sql_comments_helper() -> None:
+    from core.gates.sql_comments import strip_sql_comments
+
+    assert "CREATE" not in strip_sql_comments("-- CREATE TABLE if x")
+    assert "CREATE" not in strip_sql_comments("# CREATE TABLE if x")
+    assert "CREATE" not in strip_sql_comments("/* CREATE TABLE x */")
+    # real DDL (including inside a string literal, no comment marker) is preserved
+    assert "CREATE TABLE foo" in strip_sql_comments('conn.execute("CREATE TABLE foo")')
