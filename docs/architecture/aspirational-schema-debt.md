@@ -475,3 +475,5 @@ base tables or zero live consumers at time of drop.
 
 
 <!-- Last reviewed 2026-07-04 — WO-M143-STALE-FK (57bc41bc): migration 143 rebuilds audit_runs and capability_route_records without the FK clauses referencing dropped tables (activity_log; model_provider_profiles). The lean baseline (142) reproduced these clauses verbatim from the historical schema — SQLite does not strip a FK when its parent table is dropped, and validates the parent only at DML time under foreign_keys=ON, so INSERTs into these (0-row, live-writer) tables would raise "no such table". Migration-118/137 stale-FK pattern; the capability_route_records FK to adapter_authority_profiles (live) is preserved. -->
+
+<!-- Reviewed 2026-07-06 — WO-GATE-SQL-PARSERS (f1037037): core/config/schema_coherence.py _SELF_SCAN_EXCLUDE gained core/gates/sql_comments.py, whose docstring quotes DDL-pattern prose to document the shared comment-stripper. It is detection-rule text, not a DDL call site — excluding it keeps the staleness guard from counting phantom tables. No schema, coherence-rule, or audit-status change. -->
