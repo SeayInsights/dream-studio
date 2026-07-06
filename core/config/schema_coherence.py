@@ -107,6 +107,10 @@ _SELF_SCAN_EXCLUDE: frozenset[str] = frozenset(
         # Independent review prompt template contains "CREATE TABLE IF NOT EXISTS"
         # as an example pattern to detect — not an actual DDL call site.
         "core/work_orders/verify.py",
+        # Shared gate comment-stripper: its docstring quotes DDL-pattern prose
+        # ("# CREATE TABLE if needed", "DROP TABLE") to explain what it strips —
+        # detection rule text, not DDL call sites (WO-GATE-SQL-PARSERS).
+        "core/gates/sql_comments.py",
     }
 )
 
