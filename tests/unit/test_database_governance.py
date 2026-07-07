@@ -153,7 +153,9 @@ class TestRootMigrationsLegacy:
 class TestSchemaVersionAuthority:
 
     def test_studio_db_manages_schema_version(self):
-        source = (REPO_ROOT / "core" / "event_store" / "studio_db.py").read_text(encoding="utf-8")
+        source = (REPO_ROOT / "core" / "event_store" / "migration_runner.py").read_text(
+            encoding="utf-8"
+        )
         assert "_schema_version" in source
 
     def test_no_schema_version_in_routes(self):

@@ -326,7 +326,7 @@ def test_legacy_research_engine_imports_and_classifies_opt_in_status():
 
     assert engine.ENGINE_STATUS == "legacy_opt_in"
     assert engine.ENGINE_AUTHORITY_CLASSIFICATION == "raw_research_advisory_lineage"
-    assert engine._connect.__module__ == "core.event_store.studio_db"
+    assert engine._connect.__module__ == "core.event_store.connection"
 
     source = _read(REPO_ROOT / "control" / "research" / "engine.py")
     assert "legacy opt-in" in source.lower()

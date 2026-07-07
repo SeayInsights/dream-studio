@@ -508,3 +508,6 @@ Migration 067 (067_dual_canonical.sql): Adds business_canonical_events and ai_ca
 <!-- Last reviewed 2026-07-04 — WO-M143-STALE-FK (57bc41bc): migration 143 (118-pattern table reconstruction) removes FK clauses to dropped tables from audit_runs / capability_route_records. First forward migration after the lean baseline (142) — confirms the baseline + forward-migration model works; .released_version → 143. -->
 
 <!-- Reviewed 2026-07-05 — WO 6d978483 (PEP 585/604 modernization [2/2]): source files in this domain received mechanical type-annotation modernization only (PEP 585 builtin generics, PEP 604 unions, datetime.UTC) via ruff UP safe autofixes. No contract, behavior, schema, routing, API-shape, or CLI-surface change — reviewed, no doc content change needed. -->
+
+
+<!-- Reviewed 2026-07-07 — WO-SPLIT-STUDIO-DB (a1217e95): core/event_store/studio_db.py (1,851 lines) was split into connection.py / event_writer.py / event_reader.py / migration_runner.py behind a facade (studio_db.py) that re-exports the full public API plus the private helpers external callers imported (_connect, _db_path, _run_migrations, _split_statements, _migrations_dir, get_connection). Pure structural split — no schema, migration, table, or DDL change; the migration runner still delegates to core.config.sqlite_bootstrap. -->

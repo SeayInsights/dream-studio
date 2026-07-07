@@ -14,7 +14,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from core.event_store import studio_db
+from core.event_store import studio_db  # noqa: E402
+from core.event_store import connection  # noqa: E402
 
 
 def _get_envelope(mock_write):
@@ -28,7 +29,7 @@ def _get_envelope(mock_write):
 def test_log_skill_execution_basic(tmp_path):
     """Test basic skill execution logging emits correct canonical event."""
     db_path = tmp_path / "test.db"
-    with patch("core.event_store.studio_db._write_envelopes") as mock_write:
+    with patch("core.event_store.connection._write_envelopes") as mock_write:
         result = studio_db.log_skill_execution(
             skill_name="ds-core",
             skill_args="build",
@@ -50,7 +51,7 @@ def test_log_skill_execution_basic(tmp_path):
 def test_log_skill_execution_default_model_is_provider_neutral(tmp_path):
     """Default skill metadata should not make any provider canonical."""
     db_path = tmp_path / "test.db"
-    with patch("core.event_store.studio_db._write_envelopes") as mock_write:
+    with patch("core.event_store.connection._write_envelopes") as mock_write:
         result = studio_db.log_skill_execution(
             skill_name="ds-core",
             skill_args="build",
@@ -68,7 +69,7 @@ def test_log_skill_execution_default_model_is_provider_neutral(tmp_path):
 def test_log_skill_execution_with_duration(tmp_path):
     """Test skill execution logging with duration and token counts."""
     db_path = tmp_path / "test.db"
-    with patch("core.event_store.studio_db._write_envelopes") as mock_write:
+    with patch("core.event_store.connection._write_envelopes") as mock_write:
         result = studio_db.log_skill_execution(
             skill_name="ds-quality",
             skill_args="debug",
@@ -93,7 +94,7 @@ def test_log_skill_execution_with_duration(tmp_path):
 def test_log_skill_execution_failed_status(tmp_path):
     """Test skill execution logging with failed status."""
     db_path = tmp_path / "test.db"
-    with patch("core.event_store.studio_db._write_envelopes") as mock_write:
+    with patch("core.event_store.connection._write_envelopes") as mock_write:
         result = studio_db.log_skill_execution(
             skill_name="ds-security",
             skill_args="scan",
@@ -114,7 +115,7 @@ def test_log_skill_execution_failed_status(tmp_path):
 def test_log_skill_execution_with_trace_linkage(tmp_path):
     """Test skill execution logging with PRD/task linkage."""
     db_path = tmp_path / "test.db"
-    with patch("core.event_store.studio_db._write_envelopes") as mock_write:
+    with patch("core.event_store.connection._write_envelopes") as mock_write:
         result = studio_db.log_skill_execution(
             skill_name="ds-domains",
             skill_args="saas-build",
@@ -138,5 +139,5 @@ def test_normalizer_integration():
     """Test that EventNormalizer is available and registered."""
     from core.event_store import studio_db
 
-    assert studio_db._NORMALIZER_AVAILABLE is True
-    assert studio_db._event_normalizer.is_registered("claude") is True
+    assert connection._NORMALIZER_AVAILABLE is True
+    assert connection._event_normalizer.is_registered("claude") is True
