@@ -1,5 +1,7 @@
 # Database Guide
 
+> **Canonical model:** see [docs/architecture/three-store-data-architecture.md](architecture/three-store-data-architecture.md) for the three-store split (studio.db authority · aggregate_metrics.db DuckDB derived · files.db docstore) and the event spine.
+
 Dream Studio uses SQLite as the local structured authority for operational intelligence. The public repo contains schema migrations, bootstrap code, read models, tests, and docs. The operator's live database is private runtime state.
 
 > **Verify against the live DB, not this doc.** Schema evolves via numbered migrations.
@@ -255,7 +257,7 @@ Never commit live DB files, backups, WAL/SHM files, dumps, raw telemetry, cutove
 
 <!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->
 
-<!-- Last reviewed 2026-05-22 — Phase 18.0 C3: migration 065 added ( 65_remove_test_fixture_contamination.sql). Data-only (no DDL): deletes 23 test fixture rows from ds_projects that were written to the production DB by pytest tests bypassing guard_real_homedir (names: 'My Project', 'Programmatic Project', 'API Project', 'TA0 Verification Test', 'TA0 E2E Verify'). Idempotent DELETE WHERE. No schema change. No authorization boundary change. -->
+<!-- Last reviewed 2026-05-22 — Phase 18.0 C3: migration 065 added (65_remove_test_fixture_contamination.sql). Data-only (no DDL): deletes 23 test fixture rows from ds_projects that were written to the production DB by pytest tests bypassing guard_real_homedir (names: 'My Project', 'Programmatic Project', 'API Project', 'TA0 Verification Test', 'TA0 E2E Verify'). Idempotent DELETE WHERE. No schema change. No authorization boundary change. -->
 
 <!-- Last reviewed 2026-05-22 -- Phase 18.1.1 adds migration 066 (066_raw_claude_code_events.sql), establishing the L1 raw layer of the v2 data architecture. The new raw_claude_code_events table preserves the full native event shape (source_payload TEXT) for every Claude Code event, with 14 indexes covering individual correlation ID components (session_id, project_id, workflow_id, skill_id, agent_id, hook_id, tool_id), the composed correlation_id, event_type, received_at, event_timestamp, and compound pairs (project x time, type x time, session x type). The spool ingestor dual-writes to raw_claude_code_events FIRST (raw write failure leaves the spool file in inbox for retry), then proceeds to canonical_events. A backfill script (scripts/backfill_raw_claude_code_events.py) reconstructed 1,909 existing canonical_events rows into raw using INSERT OR IGNORE; backfilled rows carry _backfill=True in source_payload to distinguish them from forward-written events. raw_claude_code_events is the first adapter-specific raw table; future adapters will get separate tables (raw_cursor_events, raw_codex_events, etc.). -->
 
