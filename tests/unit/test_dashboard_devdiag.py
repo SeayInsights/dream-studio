@@ -18,6 +18,8 @@ ACs verified:
 
 from __future__ import annotations
 
+from tests.dashboard_source import dashboard_source
+
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parents[2]
@@ -30,7 +32,7 @@ DASHBOARD_HTML = REPO_ROOT / "projections/frontend/dashboard.html"
 def test_no_tab_except_devdiag_has_the_three_blocks():
     """The old hooks-invisible-tables div is gone; three list ids each appear exactly once;
     ensureBusinessStorySections no longer injects the per-page developer-diagnostics drawer."""
-    text = DASHBOARD_HTML.read_text(encoding="utf-8")
+    text = dashboard_source()
 
     # Old loose div must be completely removed
     assert "hooks-invisible-tables" not in text, (
@@ -62,7 +64,7 @@ def test_no_tab_except_devdiag_has_the_three_blocks():
 
 def test_devdiag_page_renders_three_sections():
     """The developer-diagnostics tab-content div exists and contains all three list ids."""
-    text = DASHBOARD_HTML.read_text(encoding="utf-8")
+    text = dashboard_source()
 
     tab_marker = '<div id="developer-diagnostics" class="tab-content">'
     assert (
@@ -100,7 +102,7 @@ def test_devdiag_page_renders_three_sections():
 
 def test_security_first_section_is_security():
     """The security tab leads with security-total-findings before any devdiag markers."""
-    text = DASHBOARD_HTML.read_text(encoding="utf-8")
+    text = dashboard_source()
 
     sec_marker = '<div id="security" class="tab-content">'
     assert sec_marker in text, "security tab-content div must exist."
@@ -146,7 +148,7 @@ def test_security_first_section_is_security():
 
 def test_end_to_end():
     """Nav item, tab-content, switchTab init block, and tabsInitialized entry all present."""
-    text = DASHBOARD_HTML.read_text(encoding="utf-8")
+    text = dashboard_source()
 
     # Nav item in sidebar
     assert (

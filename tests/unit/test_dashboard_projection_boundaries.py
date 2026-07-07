@@ -129,7 +129,7 @@ def _is_allowed_dashboard_write(endpoint: str, method: str) -> bool:
 
 def _dashboard_write_calls() -> list[tuple[str, str, str]]:
     calls: list[tuple[str, str, str]] = []
-    for path in [REPO_ROOT / "projections" / "frontend" / "dashboard.html"]:
+    for path in [REPO_ROOT / "projections" / "frontend" / "static" / "dashboard.js"]:
         source = _read(path)
         for match in FETCH_WITH_OPTIONS.finditer(source):
             method_match = HTTP_METHOD.search(match.group("options"))
@@ -144,14 +144,14 @@ def test_dashboard_write_like_calls_stay_on_named_api_exceptions():
     write_calls = _dashboard_write_calls()
 
     assert write_calls == [
-        ("projections/frontend/dashboard.html", "POST", "/api/v1/alerts/rules"),
+        ("projections/frontend/static/dashboard.js", "POST", "/api/v1/alerts/rules"),
         (
-            "projections/frontend/dashboard.html",
+            "projections/frontend/static/dashboard.js",
             "POST",
             "/api/v1/intelligence/extensions/${_revertExtId}/revert",
         ),
-        ("projections/frontend/dashboard.html", "POST", "/api/v1/security/sarif/import"),
-        ("projections/frontend/dashboard.html", "PUT", "/api/v1/alerts/rules/${ruleId}"),
+        ("projections/frontend/static/dashboard.js", "POST", "/api/v1/security/sarif/import"),
+        ("projections/frontend/static/dashboard.js", "PUT", "/api/v1/alerts/rules/${ruleId}"),
     ]
 
     offenders = [

@@ -106,6 +106,15 @@ app.include_router(config_router, prefix="/api/v2", tags=["config-v2"])
 # Frontend routes
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 
+# WO-SPLIT-DASHBOARD: dashboard.html's inline <style>/<script> were extracted to
+# frontend/static/{dashboard.css,dashboard.js}; mount that dir so the shell loads
+# them as /static/* (classic scripts to preserve the globals the inline handlers use).
+_STATIC_DIR = FRONTEND_DIR / "static"
+if _STATIC_DIR.is_dir():
+    from fastapi.staticfiles import StaticFiles
+
+    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
 
 @app.get("/")
 async def root():

@@ -9,6 +9,8 @@ Validates that the Evals tab has:
 
 from __future__ import annotations
 
+from tests.dashboard_source import dashboard_source
+
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -17,7 +19,7 @@ DASHBOARD_HTML = REPO_ROOT / "projections" / "frontend" / "dashboard.html"
 
 def test_evals_tab_shows_baselines_and_runs() -> None:
     """Evals tab has render elements and JS for baselines + recent runs + empty-state."""
-    text = DASHBOARD_HTML.read_text(encoding="utf-8")
+    text = dashboard_source()
 
     # --- DOM elements present ---
     assert 'id="evals"' in text, "Evals tab container (id=evals) must be present in dashboard.html"

@@ -12,6 +12,8 @@ Three tests:
 
 from __future__ import annotations
 
+from tests.dashboard_source import dashboard_source
+
 import sqlite3
 import uuid
 from datetime import datetime, timedelta, UTC
@@ -236,7 +238,7 @@ def test_skill_duration_available_per_invocation() -> None:
 
 def test_skills_duration_charts_render() -> None:
     """T2: dashboard.html wires avg-duration and distribution chart from leaderboard data."""
-    text = DASHBOARD_HTML.read_text(encoding="utf-8")
+    text = dashboard_source()
 
     # skills-avg-duration element is populated from avg_duration_minutes (not hardcoded 0)
     assert "skills-avg-duration" in text, "skills-avg-duration element must exist in dashboard.html"
