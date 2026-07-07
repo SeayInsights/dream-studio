@@ -59,7 +59,7 @@ def test_read_helper_closes_connection_on_query_error(tmp_path, monkeypatch) -> 
     db.parent.mkdir(parents=True)
     bootstrap_database(db)
 
-    import core.event_store.studio_db as sdb
+    import core.event_store.event_reader as sdb
 
     real_connect = sdb._connect
     closed = {"count": 0}

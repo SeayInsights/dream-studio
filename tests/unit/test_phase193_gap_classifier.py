@@ -772,7 +772,7 @@ class TestSessionHookIntegration:
 
     def test_classifier_hook_in_studio_db_is_nonblocking(self):
         """The classifier call in studio_db.end_session() is inside a try/except."""
-        source = (Path(__file__).parents[2] / "core" / "event_store" / "studio_db.py").read_text(
+        source = (Path(__file__).parents[2] / "core" / "event_store" / "event_writer.py").read_text(
             encoding="utf-8"
         )
         assert "GapClassifier" in source, "GapClassifier hook not found in studio_db.py"

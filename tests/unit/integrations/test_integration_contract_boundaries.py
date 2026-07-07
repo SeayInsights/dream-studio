@@ -130,7 +130,8 @@ def test_legacy_top_level_adapters_imports_absent_from_new_layers():
 
 
 def test_core_skill_logging_bootstrap_keeps_normalizer_available():
-    from core.event_store import studio_db
+    # WO-SPLIT-STUDIO-DB: the normalizer state moved from studio_db to connection.
+    from core.event_store import connection
 
-    assert studio_db._NORMALIZER_AVAILABLE is True
-    assert studio_db._event_normalizer.is_registered("claude") is True
+    assert connection._NORMALIZER_AVAILABLE is True
+    assert connection._event_normalizer.is_registered("claude") is True
