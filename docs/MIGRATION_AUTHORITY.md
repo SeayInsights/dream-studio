@@ -1,5 +1,7 @@
 # Migration Authority
 
+> **Baseline:** migrations 001–141 were squashed into `142_lean_baseline`; forward migrations are 143+. See [docs/architecture/three-store-data-architecture.md](architecture/three-store-data-architecture.md) for the store model.
+
 ## Dev vs Live Migration Workflow
 
 **Problem:** Migrations auto-apply on every `_connect()` call. Without a guard, adding a migration file on a feature branch would silently mutate the live authority DB (`~/.dream-studio/state/studio.db`) the next time any `ds` command runs — before the PR is reviewed or merged.
@@ -324,7 +326,7 @@ Migration `102_drop_canonical_events.sql` is a structural migration (rename + vi
 
 <!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->
 
-<!-- Last reviewed 2026-05-22 — Phase 18.0 C3: migration 065 ( 65_remove_test_fixture_contamination.sql) added. Cleans 23 test fixture rows from ds_projects written directly to production studio.db by tests that bypassed the guard_real_homedir autouse fixture via the DatabaseRuntime singleton retaining a stale real-DB path. guard_real_homedir now calls DatabaseRuntime.reset_instance() before yield and after yield. Three tests in test_ta3_token_capture.py fixed to pass dream_studio_home=db_home / DREAM_STUDIO_HOME env var. -->
+<!-- Last reviewed 2026-05-22 — Phase 18.0 C3: migration 065 (65_remove_test_fixture_contamination.sql) added. Cleans 23 test fixture rows from ds_projects written directly to production studio.db by tests that bypassed the guard_real_homedir autouse fixture via the DatabaseRuntime singleton retaining a stale real-DB path. guard_real_homedir now calls DatabaseRuntime.reset_instance() before yield and after yield. Three tests in test_ta3_token_capture.py fixed to pass dream_studio_home=db_home / DREAM_STUDIO_HOME env var. -->
 
 <!-- Last reviewed 2026-05-22 -- Phase 18.1.1 adds migration 066 (066_raw_claude_code_events.sql). Additive DDL: creates raw_claude_code_events table (event_id PK, received_at, event_type, event_timestamp, schema_version, source_payload, session_id, project_id, workflow_id, skill_id, agent_id, hook_id, tool_id, model_id, adapter_id, correlation_id) plus 14 indexes per Commitment 8 (mandatory indexing). This is the L1 raw layer: adapter-specific, immutable, indexed for analytical drill-down. The spool ingestor creates the table inline (CREATE TABLE IF NOT EXISTS) so the table is queryable before the migration runner applies 066. Raw write failure during spool ingest returns the spool file to inbox for retry. No existing tables modified. The backfill exception: scripts/backfill_raw_claude_code_events.py uses INSERT OR IGNORE and does not run as a migration; it is a one-time operator tool. -->
 
