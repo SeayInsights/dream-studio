@@ -1,0 +1,8160 @@
+        const DASHBOARD_PAGE_STORIES = {
+            projects: {
+                eyebrow: 'Portfolio health',
+                title: 'Projects by readiness and attention',
+                summary: 'Projects shows current legitimate work, readiness posture, security load, and the next safe action per project.',
+                means: 'This is the operator map for active, paused, draft, and manual-review project authority.',
+                matters: 'Healthy project routing depends on PRD, validation, security, and evidence coverage matching each project.',
+                action: 'Open a project card when health, readiness, or security evidence is missing.'
+            },
+            security: {
+                eyebrow: 'Risk posture',
+                title: 'Can work continue safely?',
+                summary: 'Security turns findings into posture: safe to continue, needs triage, or blocked.',
+                means: 'The page groups security load by severity, source confidence, and triage lane.',
+                matters: 'Security should affect release readiness without burying the operator in raw finding tables.',
+                action: 'Triage critical and high findings, then resolve source conflicts before release decisions.'
+            },
+            models: {
+                eyebrow: 'AI usage',
+                title: 'Model contribution and cost confidence',
+                summary: 'Models explains usage and operational value while keeping unknown billing data honest.',
+                means: 'Token and model signals are usage telemetry unless a trusted cost authority is present.',
+                matters: 'This prevents fake cost precision while still showing model contribution and efficiency.',
+                action: 'Use cost confidence before drawing spend conclusions from token activity.'
+            },
+            skills: {
+                eyebrow: 'Capability reliability',
+                title: 'Which capabilities are dependable?',
+                summary: 'Skills interprets skill usage as capability reliability, maturity, and watchlist risk.',
+                means: 'Frequent or failing skills become candidates for hardening, evaluation, or replacement.',
+                matters: 'Reliable capabilities let Dream Studio execute repeatable work with less operator supervision.',
+                action: 'Review low-success or unmapped capabilities before routing important work through them.'
+            },
+            hooks: {
+                eyebrow: 'Lifecycle automation',
+                title: 'Are automation surfaces healthy?',
+                summary: 'Hooks shows whether lifecycle automation is ready, quiet, failing, unavailable, or awaiting approval.',
+                means: 'Low hook volume can be healthy, missing data, or an instrumentation gap.',
+                matters: 'Hook health affects validation, evidence indexing, attention emission, and handoff reliability.',
+                action: 'Investigate failing hooks and classify quiet hooks before treating them as healthy.'
+            },
+            workflows: {
+                eyebrow: 'Execution loop',
+                title: 'Workflows and lesson promotion',
+                summary: 'Workflows shows milestone execution and the improvement loop from run to lesson to hardening.',
+                means: 'Historical lessons can exist even when current workflow instrumentation is sparse.',
+                matters: 'Workflow outcomes should improve gates, tests, and future routing rather than stay as reports.',
+                action: 'Promote validated lessons and investigate instrumentation mismatches.'
+            },
+            anomalies: {
+                eyebrow: 'Reliability risk',
+                title: 'Anomalies are not the same as health',
+                summary: 'Anomalies separates detected outliers from reliability risks such as timeouts or sparse data.',
+                means: 'No anomaly detected does not mean healthy; reliability risk can still exist.',
+                matters: 'Operators need data sufficiency and confidence before trusting anomaly status.',
+                action: 'Check timeout and completion flow when anomaly counts are low but reliability signals are weak.'
+            },
+            learning: {
+                eyebrow: 'Learning flywheel',
+                title: 'Corrections become better future runs',
+                summary: 'Learning shows whether corrections, evidence, candidates, promotions, and improved runs are instrumented.',
+                means: 'Empty learning data is valid only when the page explains what evidence is missing.',
+                matters: 'Dream Studio should improve from failures without promoting private or unsupported conclusions.',
+                action: 'Capture evidence-backed lessons and leave unsupported trends unavailable.'
+            },
+            ml: {
+                eyebrow: 'Recommendation intelligence',
+                title: 'What works, what to watch, and where to grow',
+                summary: 'ML Insights turns evidence into recommendations with confidence and suggested action.',
+                means: 'Small samples should produce cautious recommendations, not generic analytics claims.',
+                matters: 'Recommendation quality depends on source-backed observations and clear next actions.',
+                action: 'Use high-confidence recommendations first and treat low-confidence items as watchlist candidates.'
+            }
+        };
+
+        const OPERATING_LOOP_STEPS = [
+            ['Goal', 'complete'],
+            ['Plan', 'complete'],
+            ['Route', 'in_progress'],
+            ['Execute', 'in_progress'],
+            ['Validate', 'unavailable'],
+            ['Evidence', 'in_progress'],
+            ['Gate', 'needs_approval'],
+            ['Next Action', 'needs_approval']
+        ];
+
+        const RAW_TECHNICAL_MARKERS = [
+            '/api/',
+            'route_decision_records',
+            'validation_results',
+            'analytics_routes',
+            'endpoint',
+            'source_tables',
+            'derived_view=',
+            'primary_authority=',
+            'routing_authority='
+        ];
+
+        const DASHBOARD_SOURCE_STATES = [
+            'loading',
+            'available',
+            'empty_but_valid',
+            'unavailable_missing_source',
+            'unavailable_missing_projection',
+            'unavailable_not_implemented',
+            'stale',
+            'source_conflict',
+            'manual_review_required',
+            'blocked_by_policy'
+        ];
+
+        const DASHBOARD_REUSABLE_COMPONENTS = [
+            'DashboardShell',
+            'SidebarNavigation',
+            'TopBar',
+            'AlertBell',
+            'AlertDrawer',
+            'PageStoryHeader',
+            'BusinessStoryCard',
+            'MetricCard',
+            'ChartCard',
+            'InterpretationCard',
+            'EmptyState',
+            'SourceConflictState',
+            'DataFreshnessBadge',
+            'DeveloperDiagnosticsDrawer',
+            'DrilldownPanel',
+            'GroupedTable',
+            'StatusPill'
+        ];
+
+        const DASHBOARD_VIEW_MODEL_CONCEPTS = [
+            'DashboardStoryProjection',
+            'OperatingLoopViewModel',
+            'AttentionSummaryViewModel',
+            'ProjectPortfolioViewModel',
+            'SecurityPostureViewModel',
+            'ModelUsageViewModel',
+            'CapabilityReliabilityViewModel',
+            'HookHealthViewModel',
+            'WorkflowHealthViewModel',
+            'AnomalyReliabilityViewModel',
+            'LearningFlywheelViewModel',
+            'InsightRecommendationViewModel'
+        ];
+
+        function createPageStoryHeader(pageId, story) {
+            return `
+                <section class="business-story-header" data-page-story="${pageId}">
+                    <div class="business-story-eyebrow">${story.eyebrow}</div>
+                    <h2 class="business-story-title">${story.title}</h2>
+                    <p class="business-story-summary">${story.summary}</p>
+                </section>
+                <section class="interpretation-grid" data-component="InterpretationCards" data-page="${pageId}">
+                    <article class="interpretation-card">
+                        <h3>What this means</h3>
+                        <p>${story.means}</p>
+                    </article>
+                    <article class="interpretation-card">
+                        <h3>Why it matters</h3>
+                        <p>${story.matters}</p>
+                    </article>
+                    <article class="interpretation-card">
+                        <h3>What needs action</h3>
+                        <p>${story.action}</p>
+                    </article>
+                </section>
+            `;
+        }
+
+        function createOperatingLoopView() {
+            return `
+                <section class="operating-loop" data-component="OperatingLoopViewModel" aria-label="Operating loop">
+                    ${OPERATING_LOOP_STEPS.map(([label, status]) => `
+                        <div class="loop-node">
+                            <div class="text-sm font-bold text-gray-900">${label}</div>
+                            <span class="loop-node-status">${status}</span>
+                        </div>
+                    `).join('')}
+                </section>
+            `;
+        }
+
+        function createDeveloperDiagnostics(pageId) {
+            return `
+                <details class="developer-diagnostics" data-component="DeveloperDiagnosticsDrawer" data-page="${pageId}">
+                    <summary>Developer diagnostics</summary>
+                    <pre>${RAW_TECHNICAL_MARKERS.join('\\n')}</pre>
+                </details>
+            `;
+        }
+
+        function ensureBusinessStorySections() {
+            Object.entries(DASHBOARD_PAGE_STORIES).forEach(([pageId, story]) => {
+                const page = document.getElementById(pageId);
+                if (!page || page.querySelector(`[data-page-story="${pageId}"]`)) {
+                    return;
+                }
+                const storyHtml = createPageStoryHeader(pageId, story);
+                const loopHtml = pageId === 'overview' ? createOperatingLoopView() : '';
+                const stateHtml = createPageSourceStatePanel(pageId);
+                page.insertAdjacentHTML('afterbegin', storyHtml + loopHtml + stateHtml);
+            });
+        }
+
+        function createPageSourceStatePanel(pageId) {
+            const states = {
+                overview: 'Evidence/readiness summary: validation state, security state, approval state, projection freshness, and source confidence are shown when current authority data is available.',
+                projects: 'Project source state: empty_but_valid, unavailable_missing_projection, stale, source_conflict, loading, and manual_review_required are rendered explicitly instead of leaving the portfolio stuck loading.',
+                security: 'Security source state: source_conflict is shown if posture KPIs disagree with finding rows.',
+                models: 'Cost confidence: unknown_no_billing_authority until provider billing metadata or configured allocation exists.',
+                skills: 'Capability source state: unmapped or low-success skills become watchlist items rather than raw leaderboard noise.',
+                hooks: 'Hook source state: quiet, ready, failing, unavailable, and instrumentation_gap are distinct lifecycle states.',
+                workflows: 'Workflow source state: zero workflows with existing lessons is treated as instrumentation mismatch or historical learning, not contradiction.',
+                anomalies: 'Reliability state: No anomaly detected does not mean healthy; reliability risk exists when timeouts or sparse outcomes are present.',
+                learning: 'Learning source state: empty_but_valid means learning authority is available but no current rows exist; synthetic trend lines stay disabled.',
+                ml: 'Recommendation state: low sample sizes reduce confidence and require drilldown before action.'
+            };
+            const text = states[pageId];
+            if (!text) return '';
+            const cls = pageId === 'security' ? 'source-conflict-panel' : 'empty-state-panel';
+            const state = pageId === 'security' ? 'source_conflict' : 'empty_but_valid';
+            return `<section class="${cls}" data-source-state="${state}" data-page="${pageId}">${text}</section>`;
+        }
+
+        function toggleAlertDrawer(forceOpen) {
+            const drawer = document.getElementById('alert-drawer');
+            if (!drawer) return;
+            const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : drawer.classList.contains('hidden');
+            drawer.classList.toggle('hidden', !shouldOpen);
+        }
+
+        function renderAlertDrawer(alerts) {
+            const container = document.getElementById('alert-drawer-content');
+            if (!container) return;
+            if (!alerts || alerts.length === 0) {
+                container.innerHTML = '<div class="empty-state-panel" data-empty-state="empty_but_valid">No active attention items are available from current dashboard sources.</div>';
+                return;
+            }
+            const groups = {
+                approval_required: [],
+                validation_failures: [],
+                manual_review: [],
+                workflow_attention: [],
+                security: [],
+                stale_data: []
+            };
+            alerts.forEach(alertItem => {
+                const raw = String(alertItem.category || alertItem.type || alertItem.severity || '').toLowerCase();
+                if (raw.includes('approval')) groups.approval_required.push(alertItem);
+                else if (raw.includes('validation') || raw.includes('fail')) groups.validation_failures.push(alertItem);
+                else if (raw.includes('manual')) groups.manual_review.push(alertItem);
+                else if (raw.includes('security')) groups.security.push(alertItem);
+                else if (raw.includes('stale')) groups.stale_data.push(alertItem);
+                else groups.workflow_attention.push(alertItem);
+            });
+            container.innerHTML = Object.entries(groups).map(([group, items]) => {
+                const label = group.replace(/_/g, ' ');
+                const body = items.length
+                    ? items.slice(0, 5).map(item => `
+                        <article class="rounded-md border border-gray-200 p-3">
+                            <div class="text-sm font-semibold text-gray-900">${item.title || item.message || 'Attention item'}</div>
+                            <div class="mt-1 text-xs text-gray-600">Why it matters: ${item.reason || 'This may affect safe continuation.'}</div>
+                            <div class="mt-1 text-xs text-gray-600">Action needed: ${item.action || item.recommendation || 'Review and classify.'}</div>
+                            <div class="mt-2 text-xs text-gray-500">Owner/category: ${item.owner || item.category || 'Unassigned'} | Severity: ${item.severity || 'unknown'} | Confidence: ${item.source_confidence || 'unknown'}</div>
+                        </article>
+                    `).join('')
+                    : '<div class="empty-state-panel" data-empty-state="empty_but_valid">No current items in this group.</div>';
+                return `<section><h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">${label}</h3><div class="space-y-2">${body}</div></section>`;
+            }).join('');
+        }
+
+        // Tab switching functionality
+        const tabsInitialized = {
+            overview: false,
+            skills: false,
+            models: false,
+            workflows: false,
+            alerts: false,
+            ml: false,
+            anomalies: false,
+            hooks: false,
+            projects: false,
+            learning: false,
+            prd: false,
+            graph: false,
+            security: false,
+            'audit-history': false,
+            evals: false,
+            config: false,
+            'developer-diagnostics': false
+        };
+
+        function switchTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+
+            // Remove active state from all tab buttons (if they exist - for backward compatibility)
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('tab-active');
+                button.classList.add('text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+                button.classList.remove('text-blue-500');
+            });
+
+            // Show selected tab content
+            const targetTab = document.getElementById(tabName);
+            if (targetTab) {
+                targetTab.classList.add('active');
+            }
+
+            // Add active state to selected tab button (if it exists)
+            const activeButton = document.querySelector(`[data-tab="${tabName}"]`);
+            if (activeButton) {
+                activeButton.classList.add('tab-active');
+                activeButton.classList.remove('text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+                activeButton.classList.add('text-blue-500');
+            }
+
+            // Initialize tab if not already initialized
+            if (tabName === 'hooks' && !tabsInitialized.hooks) {
+                tabsInitialized.hooks = true;
+                loadHooksData();
+            } else if (tabName === 'skills' && !tabsInitialized.skills) {
+                tabsInitialized.skills = true;
+                initSkillsTab();
+            } else if (tabName === 'models' && !tabsInitialized.models) {
+                tabsInitialized.models = true;
+                initModelsTab();
+            } else if (tabName === 'workflows' && !tabsInitialized.workflows) {
+                tabsInitialized.workflows = true;
+                initWorkflowsTab();
+            } else if (tabName === 'alerts' && !tabsInitialized.alerts) {
+                tabsInitialized.alerts = true;
+                initAlertsTab();
+            } else if (tabName === 'ml' && !tabsInitialized.ml) {
+                tabsInitialized.ml = true;
+                initMLTab();
+            } else if (tabName === 'anomalies' && !tabsInitialized.anomalies) {
+                tabsInitialized.anomalies = true;
+                initAnomaliesTab();
+            } else if (tabName === 'projects' && !tabsInitialized.projects) {
+                tabsInitialized.projects = true;
+                initProjectsTab();
+            } else if (tabName === 'learning' && !tabsInitialized.learning) {
+                tabsInitialized.learning = true;
+                initLearningTab();
+            } else if (tabName === 'prd' && !tabsInitialized.prd) {
+                tabsInitialized.prd = true;
+                initPRDTab();
+            } else if (tabName === 'graph' && !tabsInitialized.graph) {
+                tabsInitialized.graph = true;
+                initGraphTab();
+            } else if (tabName === 'security' && !tabsInitialized.security) {
+                tabsInitialized.security = true;
+                initSecurityTab();
+            } else if (tabName === 'audit-history' && !tabsInitialized['audit-history']) {
+                tabsInitialized['audit-history'] = true;
+                initAuditHistoryTab();
+            } else if (tabName === 'evals' && !tabsInitialized.evals) {
+                tabsInitialized.evals = true;
+                initEvalsTab();
+            } else if (tabName === 'config' && !tabsInitialized.config) {
+                tabsInitialized.config = true;
+                loadDsConfig();
+            } else if (tabName === 'developer-diagnostics' && !tabsInitialized['developer-diagnostics']) {
+                tabsInitialized['developer-diagnostics'] = true;
+                loadInvisibleTables();
+            }
+        }
+
+        // Load initial hooks data from API
+        async function loadHooksData() {
+            try {
+                const [execResponse, statsResponse] = await Promise.all([
+                    fetch('/api/v1/hooks/executions?limit=200'),
+                    fetch('/api/v1/hooks/stats'),
+                ]);
+                const execData = await execResponse.json();
+                const statsData = await statsResponse.json();
+
+                const executions = execData.executions || [];
+                const byHook = (statsData && statsData.by_hook) || {};
+
+                // ── Summary cards ─────────────────────────────────────────
+                if (statsData && statsData.summary) {
+                    const { total_executions, total_failures, overall_success_rate } = statsData.summary;
+                    document.getElementById('hooks-total-executions').textContent = total_executions.toLocaleString();
+                    document.getElementById('hooks-total-failures').textContent = total_failures.toLocaleString();
+                    document.getElementById('hooks-success-rate').textContent = `${(overall_success_rate * 100).toFixed(1)}%`;
+                    const anomalies = executions.filter(e => e.is_anomaly).length;
+                    const anomaliesEl = document.getElementById('hooks-total-anomalies');
+                    if (anomaliesEl) anomaliesEl.textContent = anomalies.toLocaleString();
+                }
+
+                // ── Timeline chart (executions per day, last 7 days) ──────
+                const dayBuckets = {};
+                const today = new Date();
+                for (let i = 6; i >= 0; i--) {
+                    const d = new Date(today);
+                    d.setDate(d.getDate() - i);
+                    dayBuckets[d.toISOString().slice(0, 10)] = 0;
+                }
+                executions.forEach(exec => {
+                    const key = (exec.started_at || '').slice(0, 10);
+                    if (key in dayBuckets) dayBuckets[key]++;
+                });
+                if (charts.hooksTimeline) { charts.hooksTimeline.destroy(); charts.hooksTimeline = null; }
+                const timelineCtx = document.getElementById('hooksTimelineChart');
+                if (timelineCtx) {
+                    charts.hooksTimeline = new Chart(timelineCtx, {
+                        type: 'line',
+                        data: {
+                            labels: Object.keys(dayBuckets),
+                            datasets: [{ label: 'Executions', data: Object.values(dayBuckets),
+                                borderColor: 'rgb(59, 130, 246)', backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                                tension: 0.4, fill: true }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                    });
+                }
+
+                // ── Performance distribution chart (avg ms per hook) ──────
+                const perfLabels = Object.keys(byHook);
+                const perfData = perfLabels.map(h => +(byHook[h].avg_duration_ms || 0).toFixed(1));
+                if (charts.hooksPerformance) { charts.hooksPerformance.destroy(); charts.hooksPerformance = null; }
+                const perfCtx = document.getElementById('hooksPerformanceChart');
+                if (perfCtx) {
+                    if (perfLabels.length > 0) {
+                        charts.hooksPerformance = new Chart(perfCtx, {
+                            type: 'bar',
+                            data: {
+                                labels: perfLabels,
+                                datasets: [{ label: 'Avg Duration (ms)', data: perfData,
+                                    backgroundColor: 'rgba(147, 51, 234, 0.7)' }]
+                            },
+                            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                        });
+                    } else {
+                        const perfWrapper = perfCtx.parentElement;
+                        if (perfWrapper) perfWrapper.innerHTML = '<div class="flex items-center justify-center h-full text-sm text-gray-400">No per-hook performance data yet</div>';
+                    }
+                }
+
+                // ── Hook status cards ─────────────────────────────────────
+                const cardsContainer = document.getElementById('hooks-cards-container');
+                if (cardsContainer) {
+                    if (Object.keys(byHook).length > 0) {
+                    cardsContainer.innerHTML = '';
+                    Object.entries(byHook).forEach(([hookName, stats]) => {
+                        const pct = ((stats.success_rate || 0) * 100).toFixed(1);
+                        const color = stats.failure_count > 0 ? 'red' : 'green';
+                        const card = document.createElement('div');
+                        card.className = 'bg-white rounded-lg shadow p-5';
+                        card.innerHTML = `
+                            <div class="flex items-center justify-between mb-3">
+                                <h4 class="text-sm font-semibold text-gray-900 truncate">${hookName}</h4>
+                                <span class="px-2 py-1 text-xs font-semibold rounded bg-${color}-100 text-${color}-700">${pct}%</span>
+                            </div>
+                            <div class="text-xs text-gray-500 space-y-1">
+                                <div class="flex justify-between"><span>Executions</span><span class="font-medium">${stats.execution_count}</span></div>
+                                <div class="flex justify-between"><span>Failures</span><span class="font-medium text-red-600">${stats.failure_count}</span></div>
+                                <div class="flex justify-between"><span>Avg duration</span><span class="font-medium">${(+(stats.avg_duration_ms || 0)).toFixed(0)} ms</span></div>
+                            </div>`;
+                        cardsContainer.appendChild(card);
+                    });
+                    } else {
+                        cardsContainer.innerHTML = '<div class="col-span-full text-center py-8 text-gray-500">No per-hook breakdown available yet — hook_executions data is loading or by_hook stats are not yet computed.</div>';
+                    }
+                }
+
+                // ── Detailed execution table ───────────────────────────────
+                const hooksTableBody = document.querySelector('#hooks-table tbody');
+                if (hooksTableBody && executions.length > 0) {
+                    const placeholder = hooksTableBody.querySelector('tr td[colspan]');
+                    if (placeholder) placeholder.parentElement.remove();
+                    executions.forEach(exec => {
+                        const row = document.createElement('tr');
+                        row.className = exec.is_anomaly ? 'anomaly-row hover:bg-yellow-100' : 'hover:bg-gray-50';
+                        const statusColor = exec.status === 'success' ? 'green' : exec.status === 'failed' ? 'red' : 'yellow';
+                        const badgeHtml = exec.is_anomaly
+                            ? '<span class="ml-2 px-2 py-1 text-xs font-semibold rounded bg-yellow-100 text-yellow-800">Anomaly</span>'
+                            : '';
+                        row.innerHTML = `
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${exec.hook_name || 'unknown'}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-${statusColor}-100 text-${statusColor}-800">
+                                    ${exec.status || 'unknown'}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${exec.duration_ms || 0} ms</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${exec.started_at ? new Date(exec.started_at).toLocaleString() : ''}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm">${badgeHtml}</td>
+                        `;
+                        hooksTableBody.appendChild(row);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading hooks data:', error);
+            }
+        }
+
+        // Update last updated time
+        function updateLastUpdatedTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            document.getElementById('lastUpdated').textContent = timeString;
+        }
+
+        // Chart instances
+        let charts = {
+            sessionTimeline: null,
+            topSkills: null,
+            modelDistribution: null,
+            costOverTime: null,
+            slaResponseTimeGauge: null,
+            slaErrorRateGauge: null,
+            slaAvailabilityGauge: null,
+            slaCustomGauge: null,
+            topTriggeredRules: null,
+            resolutionTime: null,
+            anomalyScatter: null,
+            trendAnalysis: null,
+            cacheHitRate: null,
+            trustScoreDist: null,
+            fpRateTrends: null,
+            tokenEfficiency: null,
+            securitySeverity: null,
+            securityTrend: null,
+            auditFrequency: null,
+            auditFindingsTrend: null
+        };
+
+        // Real-time update state
+        let lastChartUpdate = 0;
+        const CHART_UPDATE_THROTTLE = 1000; // 1 second throttle
+        const MAX_TIMELINE_POINTS = 100; // Sliding window limit
+
+        // Animate number change (count-up effect)
+        function animateNumber(element, targetValue, prefix = '', suffix = '') {
+            const currentText = element.textContent.replace(prefix, '').replace(suffix, '');
+            const currentValue = parseFloat(currentText) || 0;
+            const diff = targetValue - currentValue;
+            const duration = 500; // Animation duration in ms
+            const steps = 20;
+            const stepValue = diff / steps;
+            const stepDuration = duration / steps;
+
+            let currentStep = 0;
+
+            const interval = setInterval(() => {
+                currentStep++;
+                const newValue = currentValue + (stepValue * currentStep);
+
+                if (currentStep >= steps) {
+                    clearInterval(interval);
+                    element.textContent = prefix + targetValue.toLocaleString() + suffix;
+                } else {
+                    element.textContent = prefix + Math.round(newValue).toLocaleString() + suffix;
+                }
+            }, stepDuration);
+        }
+
+        // Show toast notification
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${
+                type === 'error' ? 'bg-red-500' :
+                type === 'warning' ? 'bg-yellow-500' :
+                type === 'success' ? 'bg-green-500' :
+                'bg-blue-500'
+            }`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.3s ease-out';
+                setTimeout(() => {
+                    document.body.removeChild(toast);
+                }, 300);
+            }, 5000);
+        }
+
+        // API Base URL
+        const API_BASE = '/api/v1/metrics';
+        const TELEMETRY_API_BASE = '/api/telemetry';
+        // Fetch data from API
+        async function fetchMetrics(endpoint) {
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error(`Error fetching ${endpoint}:`, error);
+                return null;
+            }
+        }
+
+        async function fetchTelemetry(endpoint) {
+            try {
+                const response = await fetch(`${TELEMETRY_API_BASE}${endpoint}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.warn(`Telemetry fetch failed for ${endpoint}:`, error);
+                return null;
+            }
+        }
+
+        async function fetchTelemetryPath(path) {
+            try {
+                const response = await fetch(path);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.warn(`Telemetry drilldown fetch failed for ${path}:`, error);
+                return null;
+            }
+        }
+
+        function telemetryNumber(value) {
+            return Number(value || 0).toLocaleString();
+        }
+
+        function telemetryEscapeHtml(value) {
+            const replacements = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            };
+            return String(value ?? '').replace(/[&<>"']/g, char => replacements[char]);
+        }
+
+        function telemetrySum(rows, field) {
+            if (!Array.isArray(rows)) return 0;
+            return rows.reduce((total, row) => total + Number(row?.[field] || 0), 0);
+        }
+
+        function telemetryArrayCount(value) {
+            return Array.isArray(value) ? value.length : 0;
+        }
+
+        function setTelemetryText(id, value) {
+            const element = document.getElementById(id);
+            if (element) element.textContent = value;
+        }
+
+        function renderTelemetryOverview(summary) {
+            if (!summary) return;
+            const entityCounts = summary.entity_counts || {};
+            const tokenTotal = telemetrySum(summary.token_usage, 'total_tokens');
+            const securityTotal = telemetrySum(summary.security_findings, 'finding_count');
+            const validationTotal = telemetrySum(summary.validation_outcomes, 'validation_count');
+            const decisionTotal = telemetrySum(summary.research_decisions?.decisions, 'decision_count');
+            const researchTotal = telemetrySum(summary.research_decisions?.research, 'research_count');
+
+            setTelemetryText('telemetry-events-count', telemetryNumber(entityCounts.events));
+            setTelemetryText('telemetry-projects-count', telemetryNumber(entityCounts.projects));
+            setTelemetryText('telemetry-tokens-total', telemetryNumber(tokenTotal));
+            setTelemetryText('telemetry-security-count', telemetryNumber(securityTotal));
+            setTelemetryText('telemetry-validation-count', telemetryNumber(validationTotal));
+            setTelemetryText('telemetry-decision-count', telemetryNumber(decisionTotal + researchTotal));
+            setTelemetryText('telemetry-generated-at', `Snapshot: ${summary.generated_at || '--'}`);
+            const sourceCount = (summary.source_tables || []).length;
+            setTelemetryText('telemetry-source-tables', sourceCount ? `Source confidence: ${sourceCount} authority source(s) available` : 'Source confidence: unavailable_missing_source');
+            setTelemetryText(
+                'telemetry-authority-metadata',
+                `derived_view=${summary.derived_view === true}, primary_authority=${summary.primary_authority === true}, routing_authority=${summary.routing_authority === true}`
+            );
+            renderTelemetryDrilldowns(summary);
+        }
+
+        function telemetryRollupRow(label, value, note = '') {
+            return `
+                <div class="flex items-start justify-between gap-3 border-b border-gray-100 py-1.5">
+                    <span>${telemetryEscapeHtml(label)}</span>
+                    <span class="text-right font-medium text-gray-900">${telemetryEscapeHtml(value)}</span>
+                </div>
+                ${note ? `<div class="pb-1 text-xs text-gray-500">${telemetryEscapeHtml(note)}</div>` : ''}
+            `;
+        }
+
+        function renderTelemetryOperationsIntelligence(summary, attention, components, status) {
+            const routeContainer = document.getElementById('telemetry-route-approval-rollup');
+            const tokenContainer = document.getElementById('telemetry-token-cost-rollup');
+            const validationContainer = document.getElementById('telemetry-validation-security-rollup');
+            const researchContainer = document.getElementById('telemetry-research-artifact-rollup');
+            const readinessContainer = document.getElementById('telemetry-release-readiness-rollup');
+            const authorityContainer = document.getElementById('telemetry-authority-state-rollup');
+
+            const routeRows = summary?.route_status || [];
+            const routeTotal = telemetrySum(routeRows, 'route_count');
+            const handoffCount = routeRows
+                .filter(row => Number(row.handoff_required || 0) === 1)
+                .reduce((total, row) => total + Number(row.route_count || 0), 0);
+            const approvalItems = attention?.approval_required_items || [];
+            const promptItems = attention?.prompt_required_items || [];
+            if (routeContainer) {
+                routeContainer.innerHTML = [
+                    telemetryRollupRow('Route decisions', telemetryNumber(routeTotal), 'From route authority records.'),
+                    telemetryRollupRow('Handoff-gated routes', telemetryNumber(handoffCount), 'Should stay exceptional, not normal workflow.'),
+                    telemetryRollupRow('Operator approvals open', telemetryNumber(approvalItems.length)),
+                    telemetryRollupRow('Prompt-required items', telemetryNumber(promptItems.length))
+                ].join('');
+            }
+
+            const tokenRows = summary?.token_cost_intelligence?.by_model_provider_component || summary?.token_usage || [];
+            const tokenTotal = telemetrySum(tokenRows, 'total_tokens');
+            const reportableCost = tokenRows.reduce((total, row) => {
+                const value = row.reportable_cost;
+                return value === null || value === undefined ? total : total + Number(value || 0);
+            }, 0);
+            const hasReportableCost = tokenRows.some(row => row.reportable_cost !== null && row.reportable_cost !== undefined);
+            const topModel = tokenRows[0]?.model_id || 'no model rows';
+            if (tokenContainer) {
+                tokenContainer.innerHTML = [
+                    telemetryRollupRow('Total tokens', telemetryNumber(tokenTotal), 'Grouped by project, model, provider, and component.'),
+                    telemetryRollupRow('Reportable cost', hasReportableCost ? `$${reportableCost.toFixed(4)}` : 'unknown'),
+                    telemetryRollupRow('Top model/provider', `${topModel} / ${tokenRows[0]?.provider || 'unknown'}`)
+                ].join('');
+            }
+
+            const validationRows = summary?.validation_outcomes || [];
+            const validationTotal = telemetrySum(validationRows, 'validation_count');
+            const failedValidations = validationRows
+                .filter(row => String(row.status || '').toLowerCase().includes('fail'))
+                .reduce((total, row) => total + Number(row.validation_count || 0), 0);
+            const securityRows = summary?.security_findings || [];
+            const securityTotal = telemetrySum(securityRows, 'finding_count');
+            if (validationContainer) {
+                validationContainer.innerHTML = [
+                    telemetryRollupRow('Validation results', telemetryNumber(validationTotal)),
+                    telemetryRollupRow('Failed validations', telemetryNumber(failedValidations), 'Actionable failures flow to attention/work orders.'),
+                    telemetryRollupRow('Security findings', telemetryNumber(securityTotal), securityTotal ? 'Grouped by severity/status.' : 'Honest empty state from security authority.')
+                ].join('');
+            }
+
+            const researchTotal = telemetrySum(summary?.research_decisions?.research, 'research_count');
+            const decisionTotal = telemetrySum(summary?.research_decisions?.decisions, 'decision_count');
+            const artifactCounts = summary?.artifact_lineage_lifecycle?.lifecycle_counts || [];
+            const artifactTotal = telemetrySum(artifactCounts, 'artifact_count');
+            if (researchContainer) {
+                researchContainer.innerHTML = [
+                    telemetryRollupRow('Research records', telemetryNumber(researchTotal)),
+                    telemetryRollupRow('Decision records', telemetryNumber(decisionTotal)),
+                    telemetryRollupRow('Dashboard-visible artifacts', telemetryNumber(artifactTotal), 'Artifacts remain source-backed; dashboard is derived.')
+                ].join('');
+            }
+
+            const openAttention = attention?.open_items || [];
+            const warningCount = openAttention.filter(item => item.severity === 'warning').length;
+            const releaseState = warningCount || approvalItems.length ? 'attention required' : 'ready for local dogfood';
+            if (readinessContainer) {
+                readinessContainer.innerHTML = [
+                    telemetryRollupRow('Readiness state', releaseState),
+                    telemetryRollupRow('Open attention items', telemetryNumber(openAttention.length)),
+                    telemetryRollupRow('Warning items', telemetryNumber(warningCount))
+                ].join('');
+            }
+
+            const db = status?.db_status || {};
+            const drift = status?.schema_drift || [];
+            const staleSections = (status?.section_statuses || []).filter(section => !['fresh', 'empty by design'].includes(section.classification));
+            if (authorityContainer) {
+                authorityContainer.innerHTML = [
+                    telemetryRollupRow('Schema/frontier', `${db.schema_version ?? '--'} / ${db.repo_migration_frontier ?? '--'}`),
+                    telemetryRollupRow('Schema drift', telemetryNumber(drift.length)),
+                    telemetryRollupRow('Sections needing review', telemetryNumber(staleSections.length), 'Normal views should be fresh or honest empty states.')
+                ].join('');
+            }
+        }
+
+        function renderTelemetryAttention(attention) {
+            const container = document.getElementById('telemetry-attention-list');
+            const humanLoopContainer = document.getElementById('telemetry-human-loop-list');
+            if (!container) return;
+            renderTelemetryHumanLoopQueue(attention, humanLoopContainer);
+            const openItems = attention?.open_items || [];
+            const groupedItems = attention?.grouped_items || [];
+            const rollup = attention?.rollup || [];
+            if (!openItems.length && !groupedItems.length && !rollup.length) {
+                container.innerHTML = '<div class="text-gray-500">No open telemetry attention items.</div>';
+                return;
+            }
+            const grouped = groupedItems.slice(0, 5).map(item => `
+                <div class="rounded-md border border-gray-200 p-3">
+                    <div class="font-medium text-gray-900">${telemetryEscapeHtml(item.example_title || item.attention_type || 'Telemetry attention')}</div>
+                    <div class="text-xs text-gray-500">${telemetryNumber(item.item_count)} item(s) / ${telemetryEscapeHtml(item.severity || 'info')} / ${telemetryEscapeHtml(item.status || 'open')} / ${telemetryEscapeHtml(item.attention_type || 'unknown')}</div>
+                </div>
+            `);
+            const items = grouped.length ? [] : openItems.slice(0, 5).map(item => `
+                <div class="rounded-md border border-gray-200 p-3">
+                    <div class="font-medium text-gray-900">${telemetryEscapeHtml(item.title || item.attention_type || 'Telemetry attention')}</div>
+                    <div class="text-xs text-gray-500">${telemetryEscapeHtml(item.severity || 'info')} / ${telemetryEscapeHtml(item.status || 'open')} / ${telemetryEscapeHtml(item.attention_type || 'unknown')}</div>
+                </div>
+            `);
+            const counts = rollup.slice(0, 3).map(item => `
+                <div class="text-xs text-gray-500">${telemetryEscapeHtml(item.attention_type || 'attention')}: ${telemetryNumber(item.item_count)}</div>
+            `);
+            container.innerHTML = [...grouped, ...items, ...counts].join('');
+        }
+
+        function renderTelemetryHumanLoopQueue(attention, container) {
+            if (!container) return;
+            const promptItems = attention?.prompt_required_items || [];
+            const approvalItems = attention?.approval_required_items || [];
+            const combined = [...promptItems, ...approvalItems]
+                .filter((item, index, all) => all.findIndex(candidate => candidate.attention_id === item.attention_id) === index)
+                .slice(0, 4);
+            if (!combined.length) {
+                container.innerHTML = '<div class="rounded-md border border-gray-200 p-3 text-gray-500">No prompt-required or operator-approval telemetry items.</div>';
+                return;
+            }
+            container.innerHTML = combined.map(item => `
+                <div class="rounded-md border border-yellow-200 bg-yellow-50 p-3">
+                    <div class="font-medium text-yellow-900">${telemetryEscapeHtml(item.title || item.attention_type || 'Human-loop attention')}</div>
+                    <div class="text-xs text-yellow-800">${telemetryEscapeHtml(item.severity || 'info')} / prompt_required=${item.prompt_required === 1} / operator_action_required=${item.operator_action_required === 1}</div>
+                    <div class="text-xs text-yellow-700">Dashboard is a derived view; resolve through source authority refs.</div>
+                </div>
+            `).join('');
+        }
+
+        function renderTelemetryComponents(components, modules) {
+            const container = document.getElementById('telemetry-component-list');
+            if (!container) return;
+            const usage = components?.usage || {};
+            const rows = ['agent', 'skill', 'workflow', 'hook', 'tool'].map(type => {
+                const count = (usage[type]?.rows || []).reduce((total, row) => total + Number(row.invocation_count || 0), 0);
+                return `<div class="flex justify-between border-b border-gray-100 py-1"><span>${telemetryEscapeHtml(type)}</span><span class="font-medium">${telemetryNumber(count)}</span></div>`;
+            });
+            if (!Object.keys(usage).length) {
+                rows.push('<div class="text-gray-500">No component usage recorded yet.</div>');
+            }
+            container.innerHTML = rows.join('');
+
+            const moduleContainer = document.getElementById('telemetry-module-list');
+            if (!moduleContainer) return;
+            const moduleItems = (modules?.modules || modules?.module_availability || []).slice(0, 6);
+            moduleContainer.innerHTML = moduleItems.length
+                ? moduleItems.map(module => `<div class="flex justify-between border-b border-gray-100 py-1"><span>${telemetryEscapeHtml(module.module_name || module.module_id)}</span><span>${module.enabled ? 'enabled' : 'disabled'}</span></div>`).join('')
+                : '<div class="text-gray-500">Telemetry modules report empty states when data is absent.</div>';
+        }
+
+        function renderTelemetryDrilldowns(summary) {
+            const container = document.getElementById('telemetry-drilldown-list');
+            if (!container) return;
+            const groups = summary?.drilldown_entry_points || {};
+            const entries = Object.entries(groups)
+                .flatMap(([group, items]) => (items || []).slice(0, 4).map(item => ({...item, group})))
+                .slice(0, 10);
+            if (entries.length) {
+                container.innerHTML = entries.map(item => {
+                    const metric = item.event_count || item.invocation_count || item.status || item.run_type || 'available';
+                    return `
+                        <div class="rounded-md border border-gray-200 p-3">
+                            <div class="font-medium text-gray-900">${telemetryEscapeHtml(item.label || item.entity_id || item.group)}</div>
+                            <div class="text-xs text-gray-500">${telemetryEscapeHtml(item.group)} / ${telemetryEscapeHtml(metric)}</div>
+                            <code class="text-xs text-gray-500">${telemetryEscapeHtml(item.api_path || '')}</code>
+                            <button type="button" class="telemetry-drilldown-button mt-2 text-xs font-medium text-blue-700 hover:text-blue-900" data-telemetry-drilldown-path="${telemetryEscapeHtml(item.api_path || '')}">Inspect detail</button>
+                        </div>
+                    `;
+                }).join('');
+                container.onclick = async event => {
+                    const button = event.target.closest('.telemetry-drilldown-button');
+                    if (!button) return;
+                    const path = button.getAttribute('data-telemetry-drilldown-path');
+                    if (!path) return;
+                    const detail = await fetchTelemetryPath(path);
+                    renderTelemetryDrilldownDetail(path, detail);
+                };
+                return;
+            }
+            const routes = [
+                ['/api/telemetry/projects', 'Project telemetry'],
+                ['/api/telemetry/milestones/{milestone_id}', 'Milestone telemetry'],
+                ['/api/telemetry/tasks/{task_id}', 'Task telemetry'],
+                ['/api/telemetry/process-runs/{process_run_id}', 'Process-run timeline'],
+                ['/api/telemetry/components/{component_type}/{component_id}', 'Component telemetry']
+            ];
+            container.innerHTML = routes.map(([route, label]) => `
+                <div class="rounded-md border border-gray-200 p-3">
+                    <div class="font-medium text-gray-900">${telemetryEscapeHtml(label)}</div>
+                    <code class="text-xs text-gray-500">${telemetryEscapeHtml(route)}</code>
+                </div>
+            `).join('');
+        }
+
+        function renderTelemetryDrilldownDetail(path, detail) {
+            const container = document.getElementById('telemetry-drilldown-detail');
+            if (!container) return;
+            if (!detail) {
+                container.innerHTML = `
+                    <div class="font-medium text-yellow-800">Drilldown unavailable</div>
+                    <div class="text-xs text-gray-500">${telemetryEscapeHtml(path)}</div>
+                `;
+                return;
+            }
+            const entityCounts = detail.entity_counts || {};
+            const rows = [
+                ['model', detail.model_name || 'telemetry_drilldown'],
+                ['events', entityCounts.events ?? telemetryArrayCount(detail.events)],
+                ['process_runs', entityCounts.process_runs ?? (detail.process_run ? 1 : telemetryArrayCount(detail.process_runs))],
+                ['tokens', telemetryArrayCount(detail.tokens || detail.token_usage)],
+                ['validations', telemetryArrayCount(detail.validations || detail.validation_outcomes)],
+                ['attention', telemetryArrayCount(detail.attention || detail.dashboard_attention)],
+                ['derived_view', detail.derived_view === true],
+                ['primary_authority', detail.primary_authority === true]
+            ];
+            container.innerHTML = `
+                <div class="font-medium text-gray-900">${telemetryEscapeHtml(detail.model_name || 'Telemetry drilldown')}</div>
+                <code class="block text-xs text-gray-500 mb-2">${telemetryEscapeHtml(path)}</code>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-1">
+                    ${rows.map(([label, value]) => `<div class="flex justify-between border-b border-gray-100 py-1"><span>${telemetryEscapeHtml(label)}</span><span>${telemetryEscapeHtml(value)}</span></div>`).join('')}
+                </div>
+                    <div class="mt-2 text-xs text-gray-500">Source confidence: ${telemetryEscapeHtml((detail.source_tables || []).length ? 'authority-backed detail available' : 'unavailable_missing_source')}</div>
+            `;
+        }
+
+        function renderTelemetryFreshness(status) {
+            const list = document.getElementById('telemetry-freshness-list');
+            const backfill = document.getElementById('telemetry-backfill-status');
+            const dbStatus = document.getElementById('telemetry-db-status');
+            if (!list) return;
+            if (!status) {
+                list.innerHTML = '<div class="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-yellow-800">Freshness metadata unavailable; legacy dashboard sections remain active.</div>';
+                return;
+            }
+            const db = status.db_status || {};
+            const backfillStatus = status.backfill_status || {};
+            if (backfill) {
+                backfill.textContent = `Backfill status: ${backfillStatus.overall_status || 'unknown'} / candidates=${telemetryNumber(backfillStatus.candidate_count)} / dry_run=${backfillStatus.dry_run === true}`;
+            }
+            if (dbStatus) {
+                dbStatus.textContent = `DB schema: ${db.schema_version ?? '--'} / repo frontier: ${db.repo_migration_frontier ?? '--'} / source: ${db.db_path_kind || 'unknown'}`;
+            }
+            const sections = status.section_statuses || [];
+            if (!sections.length) {
+                list.innerHTML = '<div class="rounded-md border border-blue-100 bg-white p-3">No freshness sections reported.</div>';
+                return;
+            }
+            list.innerHTML = sections.slice(0, 12).map(section => `
+                <div class="rounded-md border border-blue-100 bg-white p-3">
+                    <div class="font-medium">${telemetryEscapeHtml(section.section_id || 'section')}</div>
+                    <div>${telemetryEscapeHtml(section.classification || 'unknown')}</div>
+                    <div class="text-blue-700">rows=${telemetryNumber(section.row_count)} / latest=${telemetryEscapeHtml(section.latest_observed_at || '--')}</div>
+                    <code class="text-blue-700">${telemetryEscapeHtml(section.route || '')}</code>
+                </div>
+            `).join('');
+        }
+
+        async function initTelemetrySurface() {
+            const [summary, attention, components, modules, status] = await Promise.all([
+                fetchTelemetry('/summary'),
+                fetchTelemetry('/attention'),
+                fetchTelemetry('/components'),
+                fetchTelemetry('/modules'),
+                fetchTelemetry('/status')
+            ]);
+            const warning = document.getElementById('telemetry-warning');
+            if (!summary) {
+                if (warning) warning.classList.remove('hidden');
+                setTelemetryText('telemetry-status', 'Telemetry unavailable');
+                return;
+            }
+            if (warning) warning.classList.add('hidden');
+            setTelemetryText('telemetry-status', 'Telemetry loaded');
+            renderTelemetryOverview(summary);
+            renderTelemetryAttention(attention);
+            renderTelemetryComponents(components, modules);
+            renderTelemetryFreshness(status);
+            renderTelemetryOperationsIntelligence(summary, attention, components, status);
+        }
+
+        // Update KPI cards
+        async function updateKPIs() {
+            // Fetch all metrics
+            const [sessions, tokens, skills, alertHistory] = await Promise.all([
+                fetchMetrics('/sessions'),
+                fetchMetrics('/tokens'),
+                fetchMetrics('/skills'),
+                fetch('/api/v1/alerts/history').then(r => r.ok ? r.json() : []).catch(() => [])
+            ]);
+
+            if (sessions) {
+                document.getElementById('kpi-total-sessions').textContent =
+                    sessions.total_sessions || 0;
+
+                const successRate = sessions.success_rate || 0;
+                document.getElementById('kpi-success-rate').textContent =
+                    `${(successRate * 100).toFixed(1)}%`;
+            }
+
+            if (tokens) {
+                const totalCost = tokens.total_cost;
+                document.getElementById('kpi-total-cost').textContent =
+                    totalCost === null || totalCost === undefined ? 'unknown' : `$${totalCost.toFixed(2)}`;
+            }
+
+            const activeAlerts = Array.isArray(alertHistory)
+                ? alertHistory.filter(alert => !['resolved', 'closed', 'dismissed'].includes(String(alert.status || '').toLowerCase())).length
+                : 0;
+            document.getElementById('kpi-active-alerts').textContent = activeAlerts.toLocaleString();
+            const alertBellCount = document.getElementById('alert-bell-count');
+            if (alertBellCount) {
+                alertBellCount.textContent = activeAlerts.toLocaleString();
+            }
+            renderAlertDrawer(Array.isArray(alertHistory) ? alertHistory : []);
+        }
+
+        // Initialize Session Timeline Chart
+        async function initSessionTimelineChart() {
+            const data = await fetchMetrics('/sessions');
+            if (!data || !data.timeline) {
+                console.warn('No session timeline data available');
+                return;
+            }
+
+            const ctx = document.getElementById('sessionTimelineChart').getContext('2d');
+
+            // Destroy existing chart if it exists
+            if (charts.sessionTimeline) {
+                charts.sessionTimeline.destroy();
+            }
+
+            charts.sessionTimeline = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.timeline.map(d => d.date),
+                    datasets: [{
+                        label: 'Sessions',
+                        data: data.timeline.map(d => d.count),
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 3,
+                        pointHoverRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Top Skills Chart
+        async function initTopSkillsChart() {
+            const data = await fetchMetrics('/skills');
+            if (!data || !data.top_skills) {
+                console.warn('No skills data available');
+                return;
+            }
+
+            const ctx = document.getElementById('topSkillsChart').getContext('2d');
+
+            if (charts.topSkills) {
+                charts.topSkills.destroy();
+            }
+
+            // Take top 10 skills
+            const topSkills = data.top_skills.slice(0, 10);
+
+            charts.topSkills = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: topSkills.map(s => s.skill_name),
+                    datasets: [{
+                        label: 'Usage Count',
+                        data: topSkills.map(s => s.usage_count),
+                        backgroundColor: '#3b82f6',
+                        borderColor: '#2563eb',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const skill = topSkills[context.dataIndex];
+                                    return `Avg duration: ${skill.avg_duration_minutes.toFixed(1)}m`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Model Distribution Chart
+        async function initModelDistributionChart() {
+            const data = await fetchMetrics('/models');
+            if (!data || !data.model_distribution) {
+                console.warn('No model distribution data available');
+                const mdWrapper = document.getElementById('modelDistributionChart')?.parentElement;
+                if (mdWrapper) mdWrapper.innerHTML = '<div class="flex items-center justify-center h-full text-sm text-gray-400">No model usage data yet</div>';
+                return;
+            }
+
+            const ctx = document.getElementById('modelDistributionChart').getContext('2d');
+
+            if (charts.modelDistribution) {
+                charts.modelDistribution.destroy();
+            }
+
+            const modelColors = {
+                'sonnet': '#3b82f6',
+                'haiku': '#10b981',
+                'opus': '#f59e0b',
+                'other': '#6b7280'
+            };
+
+            charts.modelDistribution = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: data.model_distribution.map(m => m.model_name),
+                    datasets: [{
+                        data: data.model_distribution.map(m => m.usage_count),
+                        backgroundColor: data.model_distribution.map(m => {
+                            const modelKey = m.model_name.toLowerCase();
+                            for (const [key, color] of Object.entries(modelColors)) {
+                                if (modelKey.includes(key)) return color;
+                            }
+                            return modelColors.other;
+                        }),
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 15,
+                                font: {
+                                    size: 11
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return `${label}: ${value} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Cost Over Time Chart
+        async function initCostOverTimeChart() {
+            const data = await fetchMetrics('/tokens');
+            if (!data || !data.cost_timeline || !data.cost_timeline.some(d => d.cost !== null && d.cost !== undefined)) {
+                console.warn('No reportable cost timeline data available');
+                const cotWrapper = document.getElementById('costOverTimeChart')?.parentElement;
+                if (cotWrapper) cotWrapper.innerHTML = '<div class="flex items-center justify-center h-full text-sm text-gray-400">Cost data not yet reportable — token usage records exist but cost attribution is not available.</div>';
+                return;
+            }
+
+            const ctx = document.getElementById('costOverTimeChart').getContext('2d');
+
+            if (charts.costOverTime) {
+                charts.costOverTime.destroy();
+            }
+
+            // Create gradient
+            const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+            gradient.addColorStop(0, 'rgba(34, 197, 94, 0.3)');
+            gradient.addColorStop(1, 'rgba(34, 197, 94, 0.0)');
+
+            charts.costOverTime = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.cost_timeline.map(d => d.date),
+                    datasets: [{
+                        label: 'Reportable Cost (USD)',
+                        data: data.cost_timeline.map(d => d.cost),
+                        borderColor: '#22c55e',
+                        backgroundColor: gradient,
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 3,
+                        pointHoverRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    return `$${context.parsed.y.toFixed(2)}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value.toFixed(2);
+                                }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        async function loadAdapterProjections() {
+            const container = document.getElementById('adapter-projections-body');
+            try {
+                const resp = await fetch('/api/shared-intelligence/adapters/projections?project_id=dream-studio');
+                if (!resp.ok) {
+                    if (container) container.textContent = 'Adapter projections unavailable.';
+                    return;
+                }
+                const data = await resp.json();
+                const rows = data?.projections || [];
+                if (!rows.length) {
+                    if (container) container.textContent = 'No adapter projections registered.';
+                    return;
+                }
+                if (container) {
+                    container.innerHTML = rows.slice(0, 10).map(item => `
+                        <div class="flex items-center justify-between border-b border-gray-100 py-1.5 last:border-0">
+                            <span class="font-mono text-xs text-gray-800">${item.adapter_id || 'adapter'}</span>
+                            <span class="text-xs text-gray-500">${item.adapter_type || 'projection'} &mdash; config_write_authorized=${item.config_write_authorized === true}</span>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {
+                if (container) container.textContent = 'Adapter projections unavailable.';
+            }
+        }
+
+        // What each operator setting controls. Falls back to a generic note for
+        // unknown keys so every row explains itself rather than being a bare value.
+        const DS_CONFIG_DESCRIPTIONS = {
+            'eval.friction_threshold': 'Rubric score below which an eval is flagged as friction (needs attention).',
+            'eval.pending_rerun_ttl_hours': 'How long a queued eval re-run stays pending before it is re-surfaced.',
+            'context.handoff_threshold': 'Context size at which an automatic session handoff is written.',
+            'context.compact_threshold': 'Context size at which the conversation is compacted.',
+            'escalation.retry_cap': 'Maximum automatic retries before a work order escalates to the operator.',
+        };
+        function dsConfigDescription(key) {
+            if (DS_CONFIG_DESCRIPTIONS[key]) return DS_CONFIG_DESCRIPTIONS[key];
+            const prefix = String(key || '').split('.')[0];
+            return `Operator override for ${prefix || 'runtime'} behaviour (env var &gt; this row &gt; default).`;
+        }
+
+        async function loadDsConfig() {
+            const tbody = document.getElementById('ds-config-body');
+            try {
+                const resp = await fetch('/api/v2/config');
+                const data = await resp.json();
+                if (!Array.isArray(data) || data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-gray-400 pt-3 text-sm">No overrides set — all defaults apply. Set one with <code>ds config set &lt;key&gt; &lt;value&gt;</code>.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = data.map(row => {
+                    const updated = row.updated_at ? formatDateTime(row.updated_at) : '&mdash;';
+                    return `<tr class="border-b border-gray-100 last:border-0">
+                        <td class="py-2 pr-8 font-mono text-xs text-gray-800">${row.key}</td>
+                        <td class="py-2 pr-8 text-sm text-gray-700">${row.value}</td>
+                        <td class="py-2 pr-8 text-xs text-gray-600">${dsConfigDescription(row.key)}</td>
+                        <td class="py-2 text-xs text-gray-500">${updated}</td>
+                    </tr>`;
+                }).join('');
+            } catch (e) {
+                if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="text-gray-400 text-sm">Config unavailable.</td></tr>';
+            }
+        }
+
+        async function loadEvalRegistry() {
+            const tbody = document.getElementById('eval-registry-body');
+            try {
+                const resp = await fetch('/api/v2/eval/registry');
+                const data = await resp.json();
+                if (!Array.isArray(data) || data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-gray-400 pt-3 text-sm">No eval registry entries yet.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = data.map(row => {
+                    const rowClass = row.friction_flag ? 'bg-yellow-50' : '';
+                    const friction = row.friction_flag
+                        ? '<span class="text-yellow-700 font-semibold">&#9888; Yes</span>'
+                        : '<span class="text-gray-400">No</span>';
+                    const score = row.rubric_score != null ? row.rubric_score : '&mdash;';
+                    const baseline = row.baseline_score != null ? parseFloat(row.baseline_score).toFixed(2) : '&mdash;';
+                    const lastRun = row.last_run_at ? formatDateTime(row.last_run_at) : '&mdash;';
+                    return `<tr class="${rowClass}">
+                        <td class="py-1.5 pr-6 font-mono text-xs text-gray-800">${row.target_id}</td>
+                        <td class="py-1.5 pr-6 text-xs text-gray-500">${row.target_type}</td>
+                        <td class="py-1.5 pr-6">${score}</td>
+                        <td class="py-1.5 pr-6">${baseline}</td>
+                        <td class="py-1.5 pr-6">${friction}</td>
+                        <td class="py-1.5 text-xs text-gray-500">${lastRun}</td>
+                    </tr>`;
+                }).join('');
+            } catch (e) {
+                if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-gray-400 text-sm">Eval registry unavailable.</td></tr>';
+            }
+        }
+
+        // Initialize all Overview tab components
+        async function initOverviewTab() {
+            try {
+                await updateKPIs();
+                await Promise.all([
+                    initTelemetrySurface(),
+                    initSessionTimelineChart(),
+                    initTopSkillsChart(),
+                    initModelDistributionChart(),
+                    initCostOverTimeChart(),
+                    loadEvalRegistry(),
+                    loadAdapterProjections()
+                ]);
+                console.log('Overview tab initialized successfully');
+            } catch (error) {
+                console.error('Error initializing Overview tab:', error);
+                // Show user-friendly error message
+                alert('Unable to load dashboard data. Please check that the API server is running.');
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set initial time
+            updateLastUpdatedTime();
+            ensureBusinessStorySections();
+
+            // Update time every second
+            setInterval(updateLastUpdatedTime, 1000);
+
+            // Initialize Overview tab (default)
+            tabsInitialized.overview = true;
+            initOverviewTab();
+
+            // Set Overview as active in sidebar
+            document.querySelectorAll('.sidebar-section-title, .sidebar-item').forEach(elem => {
+                if (elem.getAttribute('onclick') === "navigate('overview')") {
+                    elem.classList.add('active');
+                }
+            });
+
+            console.log('Dream Studio Analytics Dashboard initialized');
+        });
+
+        // ==================== DATE FORMATTING HELPERS ====================
+
+        function formatDateTime(isoString) {
+            if (!isoString) return 'N/A';
+            const date = new Date(isoString);
+            return date.toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            });
+        }
+
+        function formatDate(isoString) {
+            if (!isoString) return 'N/A';
+            const date = new Date(isoString);
+            return date.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric'
+            });
+        }
+
+        function formatTime(isoString) {
+            if (!isoString) return 'N/A';
+            const date = new Date(isoString);
+            return date.toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            });
+        }
+
+        function formatRelativeTime(isoString) {
+            if (!isoString) return 'N/A';
+            const date = new Date(isoString);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffSecs = Math.floor(diffMs / 1000);
+            const diffMins = Math.floor(diffSecs / 60);
+            const diffHours = Math.floor(diffMins / 60);
+            const diffDays = Math.floor(diffHours / 24);
+
+            if (diffSecs < 60) return 'just now';
+            if (diffMins < 60) return `${diffMins}m ago`;
+            if (diffHours < 24) return `${diffHours}h ago`;
+            if (diffDays < 7) return `${diffDays}d ago`;
+            return formatDate(isoString);
+        }
+
+    // ===== Sidebar Navigation Functions =====
+    function toggleSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        sidebar.classList.toggle('mobile-open');
+    }
+
+    function toggleSection(sectionName) {
+        const section = document.getElementById(`section-${sectionName}`);
+        const chevron = document.getElementById(`chevron-${sectionName}`);
+
+        if (section.classList.contains('expanded')) {
+            section.classList.remove('expanded');
+            chevron.classList.remove('expanded');
+        } else {
+            section.classList.add('expanded');
+            chevron.classList.add('expanded');
+        }
+    }
+
+    function navigate(tabName) {
+        // Remove active state from all sidebar items and section titles
+        document.querySelectorAll('.sidebar-item, .sidebar-section-title').forEach(item => {
+            item.classList.remove('active');
+        });
+
+        // Use existing switchTab function if it exists
+        if (typeof switchTab === 'function') {
+            switchTab(tabName);
+        } else {
+            // Fallback direct navigation
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            const targetTab = document.getElementById(tabName);
+            if (targetTab) {
+                targetTab.classList.add('active');
+            }
+        }
+
+        // Highlight the clicked sidebar item or section title
+        const clickedElement = event?.target?.closest('.sidebar-item, .sidebar-section-title');
+        if (clickedElement) {
+            clickedElement.classList.add('active');
+        } else {
+            // If called programmatically, find element by matching onclick attribute
+            document.querySelectorAll('.sidebar-item, .sidebar-section-title').forEach(item => {
+                if (item.getAttribute('onclick') === `navigate('${tabName}')`) {
+                    item.classList.add('active');
+                }
+            });
+        }
+
+        // Close sidebar on mobile after navigation
+        if (window.innerWidth < 1024) {
+            document.getElementById('sidebar').classList.remove('mobile-open');
+        }
+    }
+
+    // ── Attribution coverage panel (18.4.2a) ─────────────────────────────
+    async function loadAttributionCoverage() {
+        try {
+            const resp = await fetch('/api/v1/insights/attribution-coverage');
+            if (!resp.ok) throw new Error(resp.statusText);
+            const d = await resp.json();
+
+            const fully = d.fully_attributed_pct || 0;
+            const partial = d.partial_pct || 0;
+            const orphan = d.orphan_pct || 0;
+
+            document.getElementById('attr-coverage-pct').textContent = fully.toFixed(1) + '%';
+
+            const el = document.getElementById('attr-coverage-pct');
+            el.classList.remove('text-green-600', 'text-yellow-600', 'text-red-600');
+            if (fully >= 90) el.classList.add('text-green-600');
+            else if (fully >= 70) el.classList.add('text-yellow-600');
+            else el.classList.add('text-red-600');
+
+            // Honest status: if 0%, show investigative note rather than "loading"
+            if (fully === 0 && (d.total_events || 0) > 0) {
+                document.getElementById('attr-coverage-status').textContent =
+                    '⚠ 0% attributed — token write-path under investigation (WO-B)';
+            } else if ((d.total_events || 0) === 0) {
+                document.getElementById('attr-coverage-status').textContent =
+                    'No token events recorded yet';
+            } else {
+                document.getElementById('attr-coverage-status').textContent =
+                    d.below_threshold ? '⚠ Below 90% threshold' : '✓ Above threshold';
+            }
+
+            document.getElementById('attr-bar-full').style.width = fully + '%';
+            document.getElementById('attr-bar-partial').style.width = partial + '%';
+            document.getElementById('attr-bar-orphan').style.width = orphan + '%';
+
+            document.getElementById('attr-full-lbl').textContent =
+                fully.toFixed(1) + '% (' + (d.fully_attributed_count || 0) + ')';
+            document.getElementById('attr-partial-lbl').textContent =
+                partial.toFixed(1) + '% (' + (d.partial_count || 0) + ')';
+            document.getElementById('attr-orphan-lbl').textContent =
+                orphan.toFixed(1) + '% (' + (d.orphan_count || 0) + ')';
+            document.getElementById('attr-total-lbl').textContent = d.total_events || 0;
+        } catch (e) {
+            document.getElementById('attr-coverage-status').textContent = 'Error: ' + e.message;
+            document.getElementById('attr-coverage-pct').textContent = '--';
+        }
+    }
+
+    async function loadAttributionOrphans() {
+        try {
+            const resp = await fetch('/api/v1/insights/attribution-coverage/orphans?limit=50');
+            if (!resp.ok) throw new Error(resp.statusText);
+            const d = await resp.json();
+            const tbody = document.getElementById('attr-orphan-rows');
+            if (!d.orphans || d.orphans.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="px-3 py-4 text-center text-gray-400">No orphan events found</td></tr>';
+                return;
+            }
+            tbody.innerHTML = d.orphans.map(ev => `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="px-3 py-2 text-gray-500">${(ev.timestamp||'').slice(0,19)}</td>
+                    <td class="px-3 py-2"><span class="text-red-600">${ev.attribution_status}</span></td>
+                    <td class="px-3 py-2">${ev.tool_name||'—'}</td>
+                    <td class="px-3 py-2 font-mono text-xs">${(ev.project_id||'—').slice(0,8)}</td>
+                    <td class="px-3 py-2 text-gray-500">${ev.probable_cause}</td>
+                </tr>`).join('');
+        } catch (e) {
+            document.getElementById('attr-orphan-rows').innerHTML =
+                `<tr><td colspan="5" class="px-3 py-4 text-center text-red-400">Error: ${e.message}</td></tr>`;
+        }
+    }
+
+    function toggleAttrDrilldown() {
+        const panel = document.getElementById('attr-drilldown');
+        const btn = document.getElementById('attr-drilldown-btn');
+        if (panel.classList.contains('hidden')) {
+            panel.classList.remove('hidden');
+            btn.textContent = '▼ Hide orphans';
+            loadAttributionOrphans();
+        } else {
+            panel.classList.add('hidden');
+            btn.textContent = '▶ View recent orphans';
+        }
+    }
+
+    // ── T4: Token attribution breakouts (token_usage_records → project/milestone/task/skill/agent)
+    async function loadAttributionBreakouts() {
+        const statusEl = document.getElementById('attr-breakouts-status');
+        function _emptyTable(tbodyId, keyLabel) {
+            const tb = document.getElementById(tbodyId);
+            if (tb) tb.innerHTML = '<tr><td colspan="3" class="px-3 py-3 text-center text-gray-400">No data yet</td></tr>';
+        }
+        function _fillTable(tbodyId, rows, keyField) {
+            const tb = document.getElementById(tbodyId);
+            if (!tb) return;
+            if (!rows || rows.length === 0) {
+                tb.innerHTML = '<tr><td colspan="3" class="px-3 py-3 text-center text-gray-400">No data yet</td></tr>';
+                return;
+            }
+            tb.innerHTML = rows.map(row => {
+                const keyVal = (row[keyField] || '').toString();
+                const displayKey = keyVal.length > 20 ? keyVal.slice(0, 8) + '…' + keyVal.slice(-8) : keyVal;
+                return `<tr class="border-b hover:bg-gray-50">
+                    <td class="px-3 py-2 font-mono text-xs text-gray-700" title="${escHtml(keyVal)}">${escHtml(displayKey)}</td>
+                    <td class="px-3 py-2 text-right font-mono">${(row.tokens || 0).toLocaleString()}</td>
+                    <td class="px-3 py-2 text-right text-gray-500">${row.records || 0}</td>
+                </tr>`;
+            }).join('');
+        }
+        try {
+            const resp = await fetch('/api/v1/insights/attribution-breakouts');
+            if (!resp.ok) throw new Error(resp.statusText);
+            const d = await resp.json();
+            if (statusEl) {
+                if (d.data_status === 'empty') {
+                    statusEl.textContent = 'token_usage_records: 0 rows — breakouts populate as token events are recorded.';
+                } else {
+                    statusEl.textContent = `${d.total_records.toLocaleString()} records, ${d.total_tokens.toLocaleString()} total tokens.`;
+                }
+            }
+            // by_project: show name when available, fall back to truncated UUID
+            (function() {
+                const tb = document.getElementById('attr-breakout-project');
+                if (!tb) return;
+                const rows = d.by_project || [];
+                if (rows.length === 0) {
+                    tb.innerHTML = '<tr><td colspan="3" class="px-3 py-3 text-center text-gray-400">No data yet</td></tr>';
+                    return;
+                }
+                tb.innerHTML = rows.map(row => {
+                    const rawId = (row.project_id || '').toString();
+                    const displayName = row.project_name || (rawId.length > 20 ? rawId.slice(0, 8) + '…' + rawId.slice(-8) : rawId);
+                    return `<tr class="border-b hover:bg-gray-50">
+                        <td class="px-3 py-2 text-xs text-gray-700" title="${escHtml(rawId)}">${escHtml(displayName)}</td>
+                        <td class="px-3 py-2 text-right font-mono">${(row.tokens || 0).toLocaleString()}</td>
+                        <td class="px-3 py-2 text-right text-gray-500">${row.records || 0}</td>
+                    </tr>`;
+                }).join('');
+            })();
+            _fillTable('attr-breakout-milestone', d.by_milestone, 'milestone_id');
+            _fillTable('attr-breakout-task', d.by_task, 'task_id');
+            _fillTable('attr-breakout-skill', d.by_skill, 'skill_id');
+            _fillTable('attr-breakout-agent', d.by_agent, 'agent_id');
+        } catch (e) {
+            if (statusEl) statusEl.textContent = 'Breakouts unavailable: ' + e.message;
+            ['attr-breakout-project', 'attr-breakout-milestone', 'attr-breakout-task',
+             'attr-breakout-skill', 'attr-breakout-agent'].forEach(id => _emptyTable(id));
+        }
+    }
+
+    // Load attribution data when tab becomes active
+    const _origNavigate = navigate;
+    navigate = function(tabName) {
+        _origNavigate(tabName);
+        if (tabName === 'attribution-coverage') { loadAttributionCoverage(); loadAttributionBreakouts(); }
+    };
+
+    // ── Memory Surface panel (18.4.4 — Chain 7) ──────────────────────────
+    // Explain why a surfaced memory is worth acting on, by category.
+    function memoryWhyItMatters(category) {
+        const map = {
+            gotcha: 'A known trap in this area — read it before changing related code to avoid repeating it.',
+            lesson: 'A captured lesson from prior work — apply it so the same mistake is not re-made.',
+            correction: 'An operator correction — your default behaviour here was wrong before; follow this instead.',
+            feedback: 'Operator guidance on how to work — align your approach with it.',
+            project: 'Ongoing project context not derivable from the code — keeps the work on-goal.',
+        };
+        return map[String(category || '').toLowerCase()]
+            || 'Surfaced because it is relevant to the current work context.';
+    }
+
+    async function loadMemorySurface() {
+        try {
+            const resp = await fetch('/api/v1/insights/memory-surface');
+            if (!resp.ok) throw new Error(resp.statusText);
+            const d = await resp.json();
+
+            document.getElementById('c7-total-entries').textContent = d.total_entries ?? '--';
+            document.getElementById('c7-surfaced-session').textContent = d.surfaced_this_session ?? 0;
+            document.getElementById('c7-sources').textContent =
+                d.source_types ? Object.keys(d.source_types).length : '--';
+
+            const badge = document.getElementById('c7-status-badge');
+            if ((d.total_entries ?? 0) === 0) {
+                badge.textContent = 'Empty — run ds memory ingest';
+                badge.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800';
+            } else {
+                badge.textContent = 'Active';
+                badge.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800';
+            }
+
+            const list = document.getElementById('c7-surfaced-list');
+            if (!d.recently_surfaced || d.recently_surfaced.length === 0) {
+                list.innerHTML = '<div class="text-gray-400">No memories surfaced yet this session. Memories surface when a gotcha, lesson, or correction is relevant to current work — run <code>ds memory ingest</code> if this stays empty.</div>';
+            } else {
+                list.innerHTML = d.recently_surfaced.map(m => {
+                    const why = memoryWhyItMatters(m.category);
+                    return `<div class="border-l-2 border-blue-200 pl-3 py-1">
+                        <span class="text-xs text-gray-400">[${m.importance_label}] ${m.category}</span>
+                        <div>${(m.content || '').slice(0, 100)}${(m.content||'').length > 100 ? '…' : ''}</div>
+                        <div class="text-xs text-gray-600 mt-0.5"><span class="font-medium">Why it matters:</span> ${why}</div>
+                    </div>`;
+                }).join('');
+            }
+        } catch (e) {
+            document.getElementById('c7-surfaced-list').innerHTML =
+                `<div class="text-red-400 text-sm">Error: ${e.message}</div>`;
+        }
+    }
+
+    // Extend navigate to load memory surface panel on tab switch
+    const _navigateWithC7 = navigate;
+    navigate = function(tabName) {
+        _navigateWithC7(tabName);
+        if (tabName === 'memory-surface') loadMemorySurface();
+        if (tabName === 'adaptation') loadAdaptationPanels();
+        if (tabName === 'attribution-coverage') { loadAttributionCoverage(); loadAttributionBreakouts(); }
+    };
+
+    // ── Fix #5: Surface previously-invisible tables on Hooks tab ─────────────
+
+    let _invisibleTablesLoaded = false;
+
+    async function loadInvisibleTables() {
+        if (_invisibleTablesLoaded) return;
+        const container = document.getElementById('devdiag-invisible-tables');
+        if (container) container.style.display = 'block';
+        _invisibleTablesLoaded = true;
+        const rawMarkersEl = document.getElementById('devdiag-raw-markers');
+        if (rawMarkersEl) rawMarkersEl.textContent = RAW_TECHNICAL_MARKERS.join('\n');
+        await Promise.all([loadToolActivity(), loadValidationFailures(), loadRawEvents()]);
+    }
+
+    async function loadToolActivity() {
+        const el = document.getElementById('tool-activity-list');
+        const cntEl = document.getElementById('tool-activity-count');
+        try {
+            const r = await fetch('/api/v1/hooks/tool-activity?limit=30');
+            if (!r.ok) { el.textContent = 'Unavailable'; return; }
+            const d = await r.json();
+            if (cntEl) cntEl.textContent = `${d.count.toLocaleString()} total`;
+            const top = Object.entries(d.top_tools || {}).sort((a,b)=>b[1]-a[1]).slice(0,8);
+            if (!d.invocations?.length) { el.textContent = 'No records'; return; }
+            el.innerHTML = '<div class="grid grid-cols-2 gap-2 mb-3">' +
+                top.map(([t,c])=>`<div class="flex justify-between text-xs py-1 border-b border-gray-50"><span>${escHtml(t)}</span><span class="font-mono text-indigo-600">${c}</span></div>`).join('') +
+                '</div><div class="text-xs text-gray-400">Recent: ' +
+                d.invocations.slice(0,3).map(i=>`${escHtml(i.tool_id||'?')} (${escHtml(i.status||'?')})`).join(', ') + '</div>';
+        } catch { el.textContent = 'Error loading tool activity'; }
+    }
+
+    async function loadValidationFailures() {
+        const el = document.getElementById('validation-failures-list');
+        const cntEl = document.getElementById('validation-failures-count');
+        try {
+            const r = await fetch('/api/v1/hooks/validation-failures?limit=20');
+            if (!r.ok) { el.textContent = 'Unavailable'; return; }
+            const d = await r.json();
+            if (cntEl) cntEl.textContent = `${d.count.toLocaleString()} total`;
+            if (!d.failures?.length) { el.textContent = 'No validation failures'; return; }
+            const top = Object.entries(d.by_event_type || {}).sort((a,b)=>b[1]-a[1]);
+            el.innerHTML = '<div class="text-xs text-gray-500 mb-2">By event type: ' +
+                top.map(([t,c])=>`${escHtml(t)} (${c})`).join(', ') +
+                '</div><div class="text-xs text-gray-400">Most recent: ' +
+                escHtml(d.failures[0]?.event_type||'?') + ' at ' +
+                escHtml((d.failures[0]?.attempted_at||'').slice(0,19)) + '</div>';
+        } catch { el.textContent = 'Error loading validation failures'; }
+    }
+
+    async function loadRawEvents() {
+        const el = document.getElementById('raw-events-list');
+        const cntEl = document.getElementById('raw-events-count');
+        try {
+            const r = await fetch('/api/v1/hooks/raw-events?limit=20');
+            if (!r.ok) { el.textContent = 'Unavailable'; return; }
+            const d = await r.json();
+            if (cntEl) cntEl.textContent = `${d.count.toLocaleString()} total`;
+            if (!d.events?.length) { el.textContent = 'No raw events'; return; }
+            const top = Object.entries(d.by_event_type || {}).sort((a,b)=>b[1]-a[1]).slice(0,5);
+            el.innerHTML = '<div class="text-xs text-gray-500 mb-2">Top types: ' +
+                top.map(([t,c])=>`${escHtml(t)} (${c})`).join(', ') +
+                '</div><div class="text-xs text-gray-400">Most recent: ' +
+                escHtml(d.events[0]?.event_type||'?') + ' at ' +
+                escHtml((d.events[0]?.received_at||'').slice(0,19)) + '</div>';
+        } catch { el.textContent = 'Error loading raw events'; }
+    }
+
+    // ── Phase 19.9 Adaptation Tab ─────────────────────────────────────────
+
+    let _revertExtId = null;
+
+    function loadAdaptationPanels() {
+        loadAdaptationSummary();
+        loadPersonalizationTimeline();
+        loadPatternsAwaitingReview();
+        loadExtensionHealth();
+        loadExperimentalExtensions();
+    }
+
+    async function loadAdaptationSummary() {
+        // Show 0 on any error path — never leave stats at '--' (honest empty-state).
+        function _setAdaptationZeros() {
+            document.getElementById('ad-active-count').textContent = '0';
+            document.getElementById('ad-experimental-count').textContent = '0';
+            document.getElementById('ad-signals-total').textContent = '0';
+            document.getElementById('ad-pending-review').textContent = '0';
+        }
+        try {
+            const r = await fetch('/api/v1/intelligence/extensions/summary');
+            if (!r.ok) { _setAdaptationZeros(); return; }
+            const d = await r.json();
+            document.getElementById('ad-active-count').textContent = d.extensions?.active ?? 0;
+            document.getElementById('ad-experimental-count').textContent = d.extensions?.experimental ?? 0;
+            document.getElementById('ad-signals-total').textContent = d.friction_signals?.total ?? 0;
+            document.getElementById('ad-pending-review').textContent = d.friction_signals?.pending_review ?? 0;
+            // Badge on nav item
+            const pending = (d.friction_signals?.pending_review ?? 0) + (d.extensions?.proposed ?? 0);
+            const badge = document.getElementById('adaptation-badge');
+            if (badge && pending > 0) { badge.textContent = pending; badge.classList.remove('hidden'); }
+        } catch (e) { _setAdaptationZeros(); }
+    }
+
+    async function loadPersonalizationTimeline() {
+        const el = document.getElementById('ad-personalization-list');
+        try {
+            const r = await fetch('/api/v1/intelligence/extensions?status=active&limit=20');
+            if (!r.ok) { el.innerHTML = '<div class="text-gray-400 text-sm py-4 text-center">Unable to load.</div>'; return; }
+            const d = await r.json();
+            const personal = (d.extensions || []).filter(e => ['threshold_override','option_override'].includes(e.extension_type));
+            if (!personal.length) {
+                el.innerHTML = '<div class="text-center text-gray-400 py-6 text-sm">No personalization changes yet.<br>Dream Studio will notice patterns as you work.</div>';
+                return;
+            }
+            el.innerHTML = personal.map(e => `
+                <div class="border border-gray-100 rounded-lg p-3 flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                        <div class="text-sm font-medium text-gray-800 truncate">${escHtml(e.skill_id || '')}</div>
+                        <div class="text-xs text-gray-500">${escHtml(e.type_label || e.extension_type)} &bull; N=${e.past_wo_count ?? 0} WOs</div>
+                        <div class="text-xs text-indigo-600 mt-0.5" id="effect-${escHtml(e.extension_id||'')}">Loading effect...</div>
+                    </div>
+                    <button onclick="openRevertModal('${escHtml(e.extension_id||'')}','${escHtml(e.skill_id||'')} ${escHtml(e.type_label||'')}')"
+                        class="flex-shrink-0 text-xs text-red-500 hover:text-red-700 border border-red-200 rounded px-2 py-1 hover:bg-red-50">Revert</button>
+                </div>
+            `).join('');
+            // Load effect counts
+            personal.forEach(e => { loadEffectSummary(e.extension_id); });
+        } catch(err) { el.innerHTML = '<div class="text-gray-400 text-sm py-4 text-center">Data unavailable.</div>'; }
+    }
+
+    async function loadEffectSummary(extId) {
+        try {
+            const r = await fetch(`/api/v1/intelligence/extensions/${extId}/effect-summary`);
+            if (!r.ok) return;
+            const d = await r.json();
+            const el = document.getElementById(`effect-${extId}`);
+            if (el) el.textContent = d.tracked ? d.description : 'Active — effects not yet tracked';
+        } catch(e) {}
+    }
+
+    async function loadPatternsAwaitingReview() {
+        const el = document.getElementById('ad-patterns-list');
+        try {
+            const r = await fetch('/api/v1/intelligence/friction-signals/classifications?limit=10');
+            if (!r.ok) { el.innerHTML = '<div class="text-gray-400 text-sm py-4 text-center">Unable to load.</div>'; return; }
+            const d = await r.json();
+            const sigs = d.signals || [];
+            const pending = sigs.filter(s => !s.extension_id);
+            if (!pending.length) {
+                el.innerHTML = '<div class="text-center text-gray-400 py-6 text-sm">No patterns pending review.</div>';
+                return;
+            }
+            const typeLabel = t => ({'dismissed_finding':'Dismissed finding','partial_completion':'Ignored output','pattern_gap':'Unstable pattern'}[t] || t);
+            const classLabel = c => ({'capability':'capability gap','personalization':'personal preference','onboarding':'onboarding gap'}[c] || c);
+            el.innerHTML = pending.slice(0,8).map(s => `
+                <div class="border border-gray-100 rounded p-3">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <span class="text-xs font-medium text-gray-700">${escHtml(typeLabel(s.signal_type||''))}</span>
+                            <span class="ml-2 text-xs text-indigo-500">${escHtml(s.classified_as ? classLabel(s.classified_as) : 'pending')}</span>
+                        </div>
+                        <span class="text-xs text-gray-400">${escHtml(s.skill_id||'')}</span>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1">${escHtml(s.classification_reason||'')}</div>
+                </div>
+            `).join('');
+        } catch(err) { el.innerHTML = '<div class="text-gray-400 text-sm py-4 text-center">Data unavailable.</div>'; }
+    }
+
+    async function loadExtensionHealth() {
+        const el = document.getElementById('ad-health-list');
+        try {
+            const r = await fetch('/api/v1/intelligence/extensions/health');
+            if (!r.ok) { el.innerHTML = '<div class="text-gray-400 text-sm py-4 text-center">Unable to load.</div>'; return; }
+            const d = await r.json();
+            const all = [...(d.improving||[]), ...(d.steady||[]), ...(d.degrading||[]), ...(d.untracked||[])];
+            if (!all.length) {
+                el.innerHTML = '<div class="text-center text-gray-400 py-6 text-sm">No active extensions yet.</div>';
+                return;
+            }
+            const tierBadge = t => ({
+                improving: '<span class="text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700">↑ improving</span>',
+                steady:    '<span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">= steady</span>',
+                degrading: '<span class="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-600">↓ degrading</span>',
+                untracked: '<span class="text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-500">active</span>',
+            }[t] || '');
+            el.innerHTML = all.slice(0,8).map(e => `
+                <div class="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
+                    <div>
+                        <span class="text-sm text-gray-800">${escHtml(e.skill_id||'')}</span>
+                        <span class="ml-1 text-xs text-gray-400">${escHtml(e.type_label||'')}</span>
+                    </div>
+                    ${tierBadge(e.health_tier)}
+                </div>
+            `).join('');
+        } catch(err) { el.innerHTML = '<div class="text-gray-400 text-sm py-4 text-center">Data unavailable.</div>'; }
+    }
+
+    async function loadExperimentalExtensions() {
+        const el = document.getElementById('ad-experimental-list');
+        try {
+            const r = await fetch('/api/v1/intelligence/extensions?status=experimental&limit=10');
+            if (!r.ok) { el.innerHTML = '<div class="text-gray-400 text-sm py-4 text-center">Unable to load.</div>'; return; }
+            const d = await r.json();
+            if (!d.extensions?.length) {
+                el.innerHTML = '<div class="text-center text-gray-400 py-6 text-sm">No extensions awaiting data.</div>';
+                return;
+            }
+            el.innerHTML = d.extensions.map(e => {
+                const n = e.past_wo_count ?? 0;
+                const pct = Math.min(100, Math.round(n / 5 * 100));
+                const vd = e.validation_summary || {};
+                const blocking = vd.verdict_reason || (n < 5 ? `${n}/5 work orders` : 'score below threshold');
+                return `
+                    <div class="border border-gray-100 rounded-lg p-3">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <div class="text-sm font-medium text-gray-800">${escHtml(e.skill_id||'')}</div>
+                                <div class="text-xs text-gray-400">${escHtml(e.type_label||'')} &bull; ${escHtml(blocking)}</div>
+                            </div>
+                            <span class="text-xs text-yellow-600 font-medium">${n}/5 WOs</span>
+                        </div>
+                        <div class="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div class="h-full bg-indigo-400 rounded-full transition-all" style="width:${pct}%"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } catch(err) { el.innerHTML = '<div class="text-gray-400 text-sm py-4 text-center">Data unavailable.</div>'; }
+    }
+
+    function openRevertModal(extId, description) {
+        _revertExtId = extId;
+        document.getElementById('ad-revert-description').textContent =
+            `Revert "${description}"? This will remove the change from your next build.`;
+        document.getElementById('ad-revert-reason').value = '';
+        document.getElementById('ad-revert-modal').classList.remove('hidden');
+    }
+
+    function closeRevertModal() {
+        document.getElementById('ad-revert-modal').classList.add('hidden');
+        _revertExtId = null;
+    }
+
+    async function confirmRevert() {
+        if (!_revertExtId) return;
+        const reason = document.getElementById('ad-revert-reason').value;
+        try {
+            const r = await fetch(`/api/v1/intelligence/extensions/${_revertExtId}/revert`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason }),
+            });
+            if (r.ok) {
+                closeRevertModal();
+                loadPersonalizationTimeline();
+                loadAdaptationSummary();
+            }
+        } catch(e) { alert('Revert failed. Please try again.'); }
+    }
+
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // Add hooks script
+
+// Hooks table state
+let hooksTableExpanded = false;
+let hooksTablePage = 1;
+const hooksTablePageSize = 50;
+let hooksTableData = [];
+let hooksTableFiltered = [];
+
+// Toggle hooks table visibility
+function toggleHooksTable() {
+    const container = document.getElementById('hooks-table-container');
+    const chevron = document.getElementById('hooks-table-chevron');
+    hooksTableExpanded = !hooksTableExpanded;
+
+    if (hooksTableExpanded) {
+        container.classList.remove('hidden');
+        chevron.style.transform = 'rotate(180deg)';
+    } else {
+        container.classList.add('hidden');
+        chevron.style.transform = 'rotate(0deg)';
+    }
+}
+
+// Filter hooks table
+function filterHooksTable() {
+    const searchTerm = document.getElementById('hooks-search').value.toLowerCase();
+    const statusFilter = document.getElementById('hooks-status-filter').value;
+
+    hooksTableFiltered = hooksTableData.filter(hook => {
+        const matchesSearch = hook.name.toLowerCase().includes(searchTerm);
+        const matchesStatus = statusFilter === 'all' || hook.status === statusFilter;
+        return matchesSearch && matchesStatus;
+    });
+
+    hooksTablePage = 1;
+    renderHooksTable();
+}
+
+// Sort hooks table
+function sortHooksTable(column) {
+    // Implementation would go here
+    console.log('Sort by:', column);
+}
+
+// Pagination
+function hooksTablePrevPage() {
+    if (hooksTablePage > 1) {
+        hooksTablePage--;
+        renderHooksTable();
+    }
+}
+
+function hooksTableNextPage() {
+    const maxPage = Math.ceil(hooksTableFiltered.length / hooksTablePageSize);
+    if (hooksTablePage < maxPage) {
+        hooksTablePage++;
+        renderHooksTable();
+    }
+}
+
+// Render hooks table (placeholder)
+function renderHooksTable() {
+    // Implementation connects to actual data source
+    const start = (hooksTablePage - 1) * hooksTablePageSize;
+    const end = Math.min(start + hooksTablePageSize, hooksTableFiltered.length);
+
+    document.getElementById('hooks-showing-start').textContent = hooksTableFiltered.length > 0 ? start + 1 : 0;
+    document.getElementById('hooks-showing-end').textContent = end;
+    document.getElementById('hooks-total-count').textContent = hooksTableFiltered.length;
+
+    // Update button states
+    document.getElementById('hooks-prev-btn').disabled = hooksTablePage === 1;
+    document.getElementById('hooks-next-btn').disabled = hooksTablePage >= Math.ceil(hooksTableFiltered.length / hooksTablePageSize);
+}
+
+// Create hook status card
+function createHookCard(hook) {
+    const statusColors = {
+        ok: { bg: 'bg-green-50', border: 'border-green-500', text: 'text-green-700', icon: 'text-green-600' },
+        warning: { bg: 'bg-yellow-50', border: 'border-yellow-500', text: 'text-yellow-700', icon: 'text-yellow-600' },
+        error: { bg: 'bg-red-50', border: 'border-red-500', text: 'text-red-700', icon: 'text-red-600' }
+    };
+
+    const colors = statusColors[hook.status] || statusColors.ok;
+
+    return `
+        <div class="hook-card ${colors.bg} rounded-lg shadow p-4 border-l-4 ${colors.border}">
+            <div class="flex justify-between items-start mb-3">
+                <div>
+                    <h4 class="font-semibold text-gray-900">${hook.name}</h4>
+                    <p class="text-xs text-gray-600 mt-1">${hook.type || 'Hook'}</p>
+                </div>
+                <span class="${colors.icon}">
+                    ${hook.status === 'ok' ? '✓' : hook.status === 'warning' ? '⚠' : '✗'}
+                </span>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                    <p class="text-gray-600">Executions</p>
+                    <p class="font-semibold ${colors.text}">${hook.executions || 0}</p>
+                </div>
+                <div>
+                    <p class="text-gray-600">Avg Time</p>
+                    <p class="font-semibold ${colors.text}">${hook.avgTime || 0}ms</p>
+                </div>
+                <div>
+                    <p class="text-gray-600">Success Rate</p>
+                    <p class="font-semibold ${colors.text}">${hook.successRate || 100}%</p>
+                </div>
+                <div>
+                    <p class="text-gray-600">Last Run</p>
+                    <p class="font-semibold ${colors.text}">${hook.lastRun || 'Never'}</p>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Initialize hooks visualizations
+function initHooksCharts() {
+    // Timeline chart
+    const timelineCtx = document.getElementById('hooksTimelineChart');
+    if (timelineCtx) {
+        new Chart(timelineCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Executions',
+                    data: [],
+                    borderColor: 'rgb(59, 130, 246)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+    }
+
+    // Performance distribution chart
+    const perfCtx = document.getElementById('hooksPerformanceChart');
+    if (perfCtx) {
+        new Chart(perfCtx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Avg Duration (ms)',
+                    data: [],
+                    backgroundColor: 'rgba(147, 51, 234, 0.7)'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+    }
+}
+
+// initHooksCharts() is called from loadHooksData() when the Hooks tab is opened,
+// so it can be populated with real API data rather than empty placeholders.
+
+        // ==================== MOBILE TOUCH HANDLERS ====================
+
+        // Touch handlers for swipe navigation between tabs
+        document.addEventListener('DOMContentLoaded', function() {
+            const tabNavigation = document.querySelector('nav[aria-label="Tabs"]');
+            if (!tabNavigation) return;
+
+            let touchStartX = 0;
+            let touchEndX = 0;
+            const minSwipeDistance = 50; // minimum distance for swipe
+
+            // Get all tab buttons in order
+            const tabButtons = Array.from(document.querySelectorAll('.tab-button'));
+
+            tabNavigation.addEventListener('touchstart', function(e) {
+                touchStartX = e.changedTouches[0].screenX;
+            }, { passive: true });
+
+            tabNavigation.addEventListener('touchend', function(e) {
+                touchEndX = e.changedTouches[0].screenX;
+                handleSwipeGesture();
+            }, { passive: true });
+
+            function handleSwipeGesture() {
+                const swipeDistance = touchEndX - touchStartX;
+
+                // Not enough movement to be considered a swipe
+                if (Math.abs(swipeDistance) < minSwipeDistance) {
+                    return;
+                }
+
+                // Find currently active tab
+                const activeButton = document.querySelector('.tab-button.tab-active');
+                if (!activeButton) return;
+
+                const currentIndex = tabButtons.indexOf(activeButton);
+
+                // Swipe left -> next tab
+                if (swipeDistance < 0 && currentIndex < tabButtons.length - 1) {
+                    const nextTab = tabButtons[currentIndex + 1];
+                    const tabName = nextTab.getAttribute('data-tab');
+                    switchTab(tabName);
+                }
+
+                // Swipe right -> previous tab
+                if (swipeDistance > 0 && currentIndex > 0) {
+                    const prevTab = tabButtons[currentIndex - 1];
+                    const tabName = prevTab.getAttribute('data-tab');
+                    switchTab(tabName);
+                }
+            }
+        });
+
+        // Window resize handler for responsive charts
+        let resizeTimer;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(function() {
+                // Chart.js responsive mode handles this automatically
+                // But we log it for debugging
+                console.log('Window resized, charts auto-adjusting');
+            }, 250);
+        });
+
+        // ==================== SKILLS TAB ====================
+
+        let skillsData = {
+            leaderboard: [],
+            successTrend: [],
+            heatmap: [],
+            recentFailures: []
+        };
+
+        let skillsSortState = {
+            column: 'invocations',
+            ascending: false
+        };
+
+        // Fetch and populate Skills tab
+        async function initSkillsTab() {
+            try {
+                const data = await fetchMetrics('/skills');
+                if (!data) {
+                    console.warn('No skills data available');
+                    populateSkillsLeaderboard([]);
+                    return;
+                }
+
+                skillsData = data;
+
+                // Update summary cards
+                updateSkillsSummary(data);
+
+                // Populate leaderboard
+                populateSkillsLeaderboard(data.leaderboard || []);
+
+                // Initialize charts
+                await Promise.all([
+                    initSkillSuccessRateChart(data.success_trend || []),
+                    initSkillExecutionTimeChart(data.leaderboard || []),
+                    initSkillHeatmap(data.heatmap || [])
+                ]);
+
+                // Populate recent failures
+                populateRecentFailures(data.recent_failures || []);
+
+                console.log('Skills tab initialized successfully');
+            } catch (error) {
+                console.error('Error initializing Skills tab:', error);
+                // Ensure 'Loading skills data...' is never left as the final state
+                populateSkillsLeaderboard([]);
+            }
+        }
+
+        // Update summary cards
+        function updateSkillsSummary(data) {
+            const mostUsed = data.most_used_skill || '--';
+            const mostUsedCount = data.most_used_count || 0;
+            const avgDuration = data.avg_duration_minutes || 0;
+            const successRate = data.overall_success_rate || 0;
+            const totalInvocations = data.total_invocations || 0;
+
+            document.getElementById('skills-most-used').textContent = mostUsed;
+            document.getElementById('skills-most-used-count').textContent = `${mostUsedCount.toLocaleString()} invocations`;
+            document.getElementById('skills-avg-duration').textContent = `${avgDuration.toFixed(1)}m`;
+            document.getElementById('skills-success-rate').textContent = `${(successRate * 100).toFixed(1)}%`;
+            document.getElementById('skills-total-invocations').textContent = `${totalInvocations.toLocaleString()} total invocations`;
+        }
+
+        // Populate skills leaderboard table
+        function populateSkillsLeaderboard(leaderboard) {
+            const tbody = document.getElementById('skills-table-body');
+
+            if (!leaderboard || leaderboard.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500">No skills data available</td></tr>';
+                return;
+            }
+
+            // Sort leaderboard
+            const sorted = [...leaderboard].sort((a, b) => {
+                const col = skillsSortState.column;
+                let aVal, bVal;
+
+                switch(col) {
+                    case 'name':
+                        aVal = a.skill_name || '';
+                        bVal = b.skill_name || '';
+                        break;
+                    case 'invocations':
+                        aVal = a.invocations || 0;
+                        bVal = b.invocations || 0;
+                        break;
+                    case 'success_rate':
+                        aVal = a.success_rate || 0;
+                        bVal = b.success_rate || 0;
+                        break;
+                    case 'avg_time':
+                        aVal = a.avg_duration_minutes || 0;
+                        bVal = b.avg_duration_minutes || 0;
+                        break;
+                    case 'cost':
+                        aVal = a.avg_cost ?? -1;
+                        bVal = b.avg_cost ?? -1;
+                        break;
+                }
+
+                if (skillsSortState.ascending) {
+                    return aVal > bVal ? 1 : -1;
+                } else {
+                    return aVal < bVal ? 1 : -1;
+                }
+            });
+
+            tbody.innerHTML = sorted.map(skill => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${skill.skill_name}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${skill.invocations.toLocaleString()}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        <span class="${skill.success_rate >= 0.9 ? 'text-green-600 font-semibold' : skill.success_rate >= 0.7 ? 'text-yellow-600' : 'text-red-600'}">
+                            ${(skill.success_rate * 100).toFixed(1)}%
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${skill.avg_duration_minutes.toFixed(1)}m</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${skill.avg_cost === null || skill.avg_cost === undefined ? 'unknown' : '$' + skill.avg_cost.toFixed(3)}</td>
+                </tr>
+            `).join('');
+
+            // Update sort indicators
+            document.querySelectorAll('.sort-indicator').forEach(el => {
+                const col = el.getAttribute('data-col');
+                if (col === skillsSortState.column) {
+                    el.textContent = skillsSortState.ascending ? ' ▲' : ' ▼';
+                } else {
+                    el.textContent = '';
+                }
+            });
+        }
+
+        // Sort skills table
+        function sortSkillsTable(column) {
+            if (skillsSortState.column === column) {
+                skillsSortState.ascending = !skillsSortState.ascending;
+            } else {
+                skillsSortState.column = column;
+                skillsSortState.ascending = column === 'name'; // Ascending for name, descending for numbers
+            }
+
+            populateSkillsLeaderboard(skillsData.leaderboard || []);
+        }
+
+        // Initialize Success Rate Trend Chart
+        async function initSkillSuccessRateChart(trendData) {
+            const ctx = document.getElementById('skillSuccessRateChart').getContext('2d');
+
+            if (charts.skillSuccessRate) {
+                charts.skillSuccessRate.destroy();
+            }
+
+            if (!trendData || trendData.length === 0) {
+                console.warn('No success rate trend data available');
+                const ssrWrapper = document.getElementById('skillSuccessRateChart')?.parentElement;
+                if (ssrWrapper) ssrWrapper.innerHTML = '<div class="flex items-center justify-center h-full text-sm text-gray-400">No success rate trend data yet</div>';
+                return;
+            }
+
+            charts.skillSuccessRate = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: trendData.map(d => d.date),
+                    datasets: [{
+                        label: 'Success Rate',
+                        data: trendData.map(d => d.success_rate * 100),
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 3,
+                        pointHoverRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.parsed.y.toFixed(1)}%`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Execution Time Distribution Chart (horizontal bar with min/avg/max)
+        async function initSkillExecutionTimeChart(leaderboard) {
+            const ctx = document.getElementById('skillExecutionTimeChart').getContext('2d');
+
+            if (charts.skillExecutionTime) {
+                charts.skillExecutionTime.destroy();
+            }
+
+            if (!leaderboard || leaderboard.length === 0) {
+                console.warn('No execution time data available');
+                const etWrapper = document.getElementById('skillExecutionTimeChart')?.parentElement;
+                if (etWrapper) etWrapper.innerHTML = '<div class="flex items-center justify-center h-full text-sm text-gray-400">No execution time data yet</div>';
+                return;
+            }
+
+            // Take top 10 skills by invocations
+            const topSkills = [...leaderboard].sort((a, b) => b.invocations - a.invocations).slice(0, 10);
+
+            charts.skillExecutionTime = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: topSkills.map(s => s.skill_name),
+                    datasets: [
+                        {
+                            label: 'Min',
+                            data: topSkills.map(s => s.min_duration_minutes || 0),
+                            backgroundColor: '#93c5fd',
+                            borderColor: '#3b82f6',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Avg',
+                            data: topSkills.map(s => s.avg_duration_minutes || 0),
+                            backgroundColor: '#3b82f6',
+                            borderColor: '#2563eb',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Max',
+                            data: topSkills.map(s => s.max_duration_minutes || 0),
+                            backgroundColor: '#1e40af',
+                            borderColor: '#1e3a8a',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                font: { size: 11 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${context.parsed.x.toFixed(1)}m`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + 'm';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Skill Heatmap (CSS grid-based)
+        async function initSkillHeatmap(heatmapData) {
+            const container = document.getElementById('skillHeatmap');
+
+            if (!heatmapData || heatmapData.length === 0) {
+                container.innerHTML = '<div class="col-span-full text-center text-gray-500 py-8">No heatmap data available</div>';
+                return;
+            }
+
+            // Extract unique skills and hours
+            const skills = [...new Set(heatmapData.map(d => d.skill_name))];
+            const hours = Array.from({length: 24}, (_, i) => i);
+
+            // Create lookup map
+            const dataMap = new Map();
+            heatmapData.forEach(d => {
+                const key = `${d.skill_name}-${d.hour}`;
+                dataMap.set(key, d.invocations || 0);
+            });
+
+            // Find max value for color scaling
+            const maxInvocations = Math.max(...heatmapData.map(d => d.invocations || 0));
+
+            // Build heatmap HTML
+            let html = '<div class="text-xs font-medium text-gray-700"></div>';
+
+            // Header row (hours)
+            hours.forEach(hour => {
+                html += `<div class="text-xs font-medium text-gray-700 text-center">${hour.toString().padStart(2, '0')}</div>`;
+            });
+
+            // Data rows
+            skills.forEach(skill => {
+                html += `<div class="text-xs font-medium text-gray-700 truncate" title="${skill}">${skill}</div>`;
+
+                hours.forEach(hour => {
+                    const key = `${skill}-${hour}`;
+                    const invocations = dataMap.get(key) || 0;
+                    const intensity = maxInvocations > 0 ? invocations / maxInvocations : 0;
+
+                    // Color scale: white -> blue
+                    const bgColor = intensity > 0
+                        ? `rgba(59, 130, 246, ${0.1 + intensity * 0.9})`
+                        : '#f9fafb';
+
+                    html += `<div class="text-xs text-center border border-gray-200 rounded p-1"
+                                  style="background-color: ${bgColor};"
+                                  title="${skill} at ${hour}:00 - ${invocations} invocations">
+                                  ${invocations > 0 ? invocations : ''}
+                             </div>`;
+                });
+            });
+
+            container.innerHTML = html;
+        }
+
+        // Populate recent failures accordion
+        function populateRecentFailures(failures) {
+            const container = document.getElementById('skills-recent-failures');
+
+            if (!failures || failures.length === 0) {
+                container.innerHTML = '<div class="text-sm text-gray-500 text-center py-4">No recent failures</div>';
+                return;
+            }
+
+            container.innerHTML = failures.map((failure, index) => `
+                <div class="border border-red-200 rounded-lg">
+                    <button class="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-red-50 transition-colors"
+                            onclick="toggleFailureDetail(${index})">
+                        <div class="flex-1">
+                            <div class="font-medium text-gray-900">${failure.skill_name}</div>
+                            <div class="text-xs text-gray-500 mt-1">${new Date(failure.timestamp).toLocaleString()}</div>
+                        </div>
+                        <svg class="w-5 h-5 text-gray-500 transition-transform" id="failure-icon-${index}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </button>
+                    <div class="hidden px-4 py-3 border-t border-red-200 bg-red-50" id="failure-detail-${index}">
+                        <div class="text-sm">
+                            <div class="mb-2"><span class="font-medium">Error:</span> ${failure.error_message || 'Unknown error'}</div>
+                            <div class="mb-2"><span class="font-medium">Duration:</span> ${(failure.duration_minutes || 0).toFixed(1)}m</div>
+                            <div class="mb-2"><span class="font-medium">Session ID:</span> <code class="text-xs bg-white px-2 py-1 rounded">${failure.session_id || 'N/A'}</code></div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Toggle failure detail accordion
+        function toggleFailureDetail(index) {
+            const detail = document.getElementById(`failure-detail-${index}`);
+            const icon = document.getElementById(`failure-icon-${index}`);
+
+            if (detail.classList.contains('hidden')) {
+                detail.classList.remove('hidden');
+                icon.style.transform = 'rotate(180deg)';
+            } else {
+                detail.classList.add('hidden');
+                icon.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        // Add chart instances for Skills tab
+        charts.skillSuccessRate = null;
+        charts.skillExecutionTime = null;
+
+        // ==================== MODELS & TOKENS TAB ====================
+
+        let modelsData = {
+            summary: {},
+            performance: [],
+            tokenTimeline: [],
+            costByModel: [],
+            costByProject: [],
+            costBySkill: [],
+            efficiency: [],
+            cacheTimeline: []
+        };
+
+        // Fetch and populate Models & Tokens tab
+        async function initModelsTab() {
+            try {
+                const [tokensData, modelsData] = await Promise.all([
+                    fetchMetrics('/tokens'),
+                    fetchMetrics('/models')
+                ]);
+
+                if (!tokensData || !modelsData) {
+                    console.warn('No models/tokens data available');
+                    return;
+                }
+
+                // Combine data (data is at root level, not .summary)
+                const combinedData = {
+                    summary: {
+                        total_tokens: tokensData.total_tokens || 0,
+                        total_cost: tokensData.total_cost,
+                        cache_hit_rate: tokensData.cache_hit_rate || 0,
+                        most_efficient_model: modelsData.most_efficient_model || '--',
+                        most_efficient_rate: modelsData.most_efficient_rate || 0
+                    },
+                    performance: modelsData.model_performance || Object.values(modelsData.by_model || {}),
+                    tokenTimeline: tokensData.timeline || [],
+                    costByModel: Object.entries(modelsData.by_model || {}).map(([k,v]) => ({...v, name: k})),
+                    costByProject: Object.entries(tokensData.by_project || {}).map(([k,v]) => ({...v, name: k})),
+                    costBySkill: Object.entries(tokensData.by_skill || {}).map(([k,v]) => ({...v, name: k})),
+                    efficiency: modelsData.token_efficiency || [],
+                    cacheTimeline: modelsData.cache_timeline || []
+                };
+
+                // Update summary cards
+                updateModelsSummary(combinedData.summary);
+
+                // Initialize all charts
+                await Promise.all([
+                    initModelPerformanceRadarChart(combinedData.performance),
+                    initTokenTimelineChart(combinedData.tokenTimeline),
+                    initCostByModelChart(combinedData.costByModel),
+                    initCostByProjectChart(combinedData.costByProject),
+                    initCostBySkillChart(combinedData.costBySkill),
+                    initTokenEfficiencyChart(combinedData.efficiency),
+                    initCacheHitRateGaugeChart(combinedData.cache_hit_rate),
+                    initCacheHitRateTimelineChart(combinedData.cacheTimeline)
+                ]);
+
+                // Load plan vs API-equivalent cost panel (independent fetch)
+                initPlanVsApiCostPanel();
+
+                console.log('Models & Tokens tab initialized successfully');
+            } catch (error) {
+                console.error('Error initializing Models & Tokens tab:', error);
+            }
+        }
+
+        // Update summary cards
+        function updateModelsSummary(summary) {
+            const totalTokens = summary.total_tokens || 0;
+            const totalCost = summary.total_cost;
+            const cacheHitRate = summary.cache_hit_rate || 0;
+            const mostEfficient = summary.most_efficient_model || '--';
+            const mostEfficientRate = summary.most_efficient_rate || 0;
+
+            // Format large numbers with K/M suffix
+            const formatLargeNumber = (num) => {
+                if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+                if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+                return num.toLocaleString();
+            };
+
+            document.getElementById('models-total-tokens').textContent = formatLargeNumber(totalTokens);
+            document.getElementById('models-total-cost').textContent =
+                totalCost === null || totalCost === undefined ? 'unknown' : `$${totalCost.toFixed(2)}`;
+            document.getElementById('models-cache-hit-rate').textContent = `${(cacheHitRate * 100).toFixed(1)}%`;
+            document.getElementById('models-most-efficient').textContent = mostEfficient;
+            document.getElementById('models-most-efficient-rate').textContent = `${mostEfficientRate.toFixed(0)} tokens/sec`;
+        }
+
+        // Initialize Plan vs API-equivalent cost panel
+        async function initPlanVsApiCostPanel() {
+            const container = document.getElementById('plan-vs-api-cost-content');
+            if (!container) return;
+            try {
+                const resp = await fetch('/api/v1/cost/plan-comparison');
+                if (!resp.ok) {
+                    container.innerHTML = '<div class="text-sm text-red-500">Unable to load plan comparison data.</div>';
+                    return;
+                }
+                const data = await resp.json();
+                const apiTotal = (data.api_equivalent_total_usd || 0).toFixed(4);
+                const coverage = data.coverage || {};
+                const pricedCount = coverage.priced_record_count || 0;
+                const unpricedCount = coverage.unpriced_record_count || 0;
+                const totalCount = coverage.record_count || 0;
+
+                let planHtml = '';
+                if (!data.plan_configured) {
+                    planHtml = '<div class="mb-3 p-3 bg-gray-50 rounded text-sm text-gray-600">'
+                        + 'No subscription plan configured — set <code>cost.plan_name</code> and <code>cost.plan_monthly_usd</code> via <code>ds config set</code> to compare plan cost vs API-equivalent usage.'
+                        + '</div>';
+                } else {
+                    const planMonthly = (data.plan_monthly_usd || 0).toFixed(2);
+                    const delta = data.delta_usd;
+                    let deltaHtml = '';
+                    if (delta !== null && delta !== undefined) {
+                        const absDelta = Math.abs(delta).toFixed(4);
+                        if (delta < 0) {
+                            deltaHtml = '<div class="text-sm text-green-600 mt-1">Saved $' + absDelta + ' vs plan allowance</div>';
+                        } else {
+                            deltaHtml = '<div class="text-sm text-orange-600 mt-1">$' + absDelta + ' over plan allowance</div>';
+                        }
+                    }
+                    planHtml = '<div class="mb-3 p-3 bg-blue-50 rounded">'
+                        + '<div class="text-sm font-medium text-blue-800">Plan: ' + (data.plan_name || '') + '</div>'
+                        + '<div class="text-sm text-blue-700">Monthly allowance: $' + planMonthly + '</div>'
+                        + deltaHtml
+                        + '</div>';
+                }
+
+                let byModelHtml = '';
+                const byModel = data.by_model || [];
+                if (byModel.length > 0) {
+                    const rows = byModel.map(function(m) {
+                        return '<tr><td class="py-1 pr-4 text-xs text-gray-700">' + m.model_id + '</td>'
+                            + '<td class="py-1 pr-4 text-xs text-gray-500">' + (m.tokens || 0).toLocaleString() + '</td>'
+                            + '<td class="py-1 text-xs text-gray-700">$' + (m.usd || 0).toFixed(4) + '</td></tr>';
+                    }).join('');
+                    byModelHtml = '<div class="mt-3"><div class="text-xs font-medium text-gray-600 mb-1">Per-model breakdown</div>'
+                        + '<table class="w-full"><thead><tr>'
+                        + '<th class="py-1 pr-4 text-left text-xs text-gray-500">Model</th>'
+                        + '<th class="py-1 pr-4 text-left text-xs text-gray-500">Tokens</th>'
+                        + '<th class="py-1 text-left text-xs text-gray-500">API-equiv USD</th>'
+                        + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+                }
+
+                const coverageNote = '<div class="mt-2 text-xs text-gray-400">'
+                    + 'Coverage: ' + pricedCount + '/' + totalCount + ' records priced'
+                    + (unpricedCount > 0 ? ' (' + unpricedCount + ' unpriced rows contribute $0)' : '')
+                    + '</div>';
+
+                container.innerHTML = planHtml
+                    + '<div class="text-sm"><span class="font-medium text-gray-700">API-equivalent cost (all usage):</span> $' + apiTotal + '</div>'
+                    + coverageNote
+                    + byModelHtml;
+            } catch (err) {
+                container.innerHTML = '<div class="text-sm text-red-500">Error loading plan comparison: ' + err.message + '</div>';
+                console.error('Plan vs API-equivalent cost panel error:', err);
+            }
+        }
+
+        // Initialize Model Performance Comparison (Radar Chart)
+        async function initModelPerformanceRadarChart(performanceData) {
+            const ctx = document.getElementById('modelPerformanceRadarChart').getContext('2d');
+
+            if (charts.modelPerformanceRadar) {
+                charts.modelPerformanceRadar.destroy();
+            }
+
+            if (!performanceData || performanceData.length === 0) {
+                console.warn('No model performance data available');
+                return;
+            }
+
+            const palette = [
+                { border: '#3b82f6', bg: 'rgba(59, 130, 246, 0.2)' },
+                { border: '#f59e0b', bg: 'rgba(245, 158, 11, 0.2)' },
+                { border: '#10b981', bg: 'rgba(16, 185, 129, 0.2)' },
+                { border: '#ef4444', bg: 'rgba(239, 68, 68, 0.2)' },
+                { border: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.2)' },
+                { border: '#ec4899', bg: 'rgba(236, 72, 153, 0.2)' },
+                { border: '#06b6d4', bg: 'rgba(6, 182, 212, 0.2)' }
+            ];
+
+            const datasets = performanceData.map((model, idx) => {
+                const colors = palette[idx % palette.length];
+
+                return {
+                    label: model.model_name,
+                    data: [
+                        model.speed || 0,
+                        model.success_rate || 0,
+                        model.efficiency || 0
+                    ],
+                    borderColor: colors.border,
+                    backgroundColor: colors.bg,
+                    borderWidth: 2,
+                    pointBackgroundColor: colors.border,
+                    pointBorderColor: '#fff',
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: colors.border
+                };
+            });
+
+            charts.modelPerformanceRadar = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['Speed', 'Success Rate', 'Efficiency'],
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 15,
+                                font: { size: 11 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.dataset.label || '';
+                                    const value = context.parsed.r || 0;
+                                    return `${label}: ${value.toFixed(2)}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 1,
+                            ticks: {
+                                stepSize: 0.2,
+                                callback: function(value) {
+                                    return (value * 100).toFixed(0) + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Token Usage Timeline (Stacked Area Chart)
+        async function initTokenTimelineChart(timelineData) {
+            const ctx = document.getElementById('tokenTimelineChart').getContext('2d');
+
+            if (charts.tokenTimeline) {
+                charts.tokenTimeline.destroy();
+            }
+
+            if (!timelineData || timelineData.length === 0) {
+                console.warn('No token timeline data available');
+                return;
+            }
+
+            charts.tokenTimeline = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: timelineData.map(d => d.date),
+                    datasets: [
+                        {
+                            label: 'Input Tokens',
+                            data: timelineData.map(d => d.input_tokens || 0),
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                            fill: true,
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Output Tokens',
+                            data: timelineData.map(d => d.output_tokens || 0),
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.6)',
+                            fill: true,
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Cached Tokens',
+                            data: timelineData.map(d => d.cached_tokens || 0),
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245, 158, 11, 0.6)',
+                            fill: true,
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 15,
+                                font: { size: 11 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.dataset.label || '';
+                                    const value = context.parsed.y || 0;
+                                    return `${label}: ${value.toLocaleString()}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    if (value >= 1000000) return (value / 1000000).toFixed(1) + 'M';
+                                    if (value >= 1000) return (value / 1000).toFixed(1) + 'K';
+                                    return value;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Cost by Model Pie Chart
+        async function initCostByModelChart(costData) {
+            const ctx = document.getElementById('costByModelChart').getContext('2d');
+
+            if (charts.costByModel) {
+                charts.costByModel.destroy();
+            }
+
+            const reportableData = (costData || []).filter(d => d.cost !== null && d.cost !== undefined);
+            if (reportableData.length === 0) {
+                console.warn('No reportable cost by model data available');
+                return;
+            }
+
+            const modelColors = {
+                'sonnet': '#3b82f6',
+                'haiku': '#10b981',
+                'opus': '#f59e0b',
+                'other': '#6b7280'
+            };
+
+            charts.costByModel = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: reportableData.map(d => d.model_name),
+                    datasets: [{
+                        data: reportableData.map(d => d.cost),
+                        backgroundColor: reportableData.map(d => {
+                            const modelKey = d.model_name.toLowerCase();
+                            for (const [key, color] of Object.entries(modelColors)) {
+                                if (modelKey.includes(key)) return color;
+                            }
+                            return modelColors.other;
+                        }),
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 10,
+                                font: { size: 10 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return `${label}: $${value.toFixed(2)} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Cost by Project Pie Chart
+        async function initCostByProjectChart(costData) {
+            const ctx = document.getElementById('costByProjectChart').getContext('2d');
+
+            if (charts.costByProject) {
+                charts.costByProject.destroy();
+            }
+
+            const reportableData = (costData || []).filter(d => d.cost !== null && d.cost !== undefined);
+            if (reportableData.length === 0) {
+                console.warn('No reportable cost by project data available');
+                return;
+            }
+
+            // Use a diverse color palette for projects
+            const colors = [
+                '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+                '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
+            ];
+
+            charts.costByProject = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: reportableData.map(d => d.project_name || 'Unknown'),
+                    datasets: [{
+                        data: reportableData.map(d => d.cost),
+                        backgroundColor: reportableData.map((_, i) => colors[i % colors.length]),
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 10,
+                                font: { size: 10 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return `${label}: $${value.toFixed(2)} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Cost by Skill Pie Chart
+        async function initCostBySkillChart(costData) {
+            const ctx = document.getElementById('costBySkillChart').getContext('2d');
+
+            if (charts.costBySkill) {
+                charts.costBySkill.destroy();
+            }
+
+            const reportableData = (costData || []).filter(d => d.cost !== null && d.cost !== undefined);
+            if (reportableData.length === 0) {
+                console.warn('No reportable cost by skill data available');
+                return;
+            }
+
+            // Use a diverse color palette for skills
+            const colors = [
+                '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+                '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
+            ];
+
+            charts.costBySkill = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: reportableData.map(d => d.skill_name || 'Unknown'),
+                    datasets: [{
+                        data: reportableData.map(d => d.cost),
+                        backgroundColor: reportableData.map((_, i) => colors[i % colors.length]),
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 10,
+                                font: { size: 10 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return `${label}: $${value.toFixed(2)} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Token Efficiency Bar Chart
+        async function initTokenEfficiencyChart(efficiencyData) {
+            const ctx = document.getElementById('tokenEfficiencyChart').getContext('2d');
+
+            if (charts.tokenEfficiency) {
+                charts.tokenEfficiency.destroy();
+            }
+
+            if (!efficiencyData || efficiencyData.length === 0) {
+                console.warn('No token efficiency data available');
+                return;
+            }
+
+            const modelColors = {
+                'sonnet': '#3b82f6',
+                'haiku': '#10b981',
+                'opus': '#f59e0b',
+                'other': '#6b7280'
+            };
+
+            charts.tokenEfficiency = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: efficiencyData.map(d => d.model_name),
+                    datasets: [{
+                        label: 'Tokens per Second',
+                        data: efficiencyData.map(d => d.tokens_per_second || 0),
+                        backgroundColor: efficiencyData.map(d => {
+                            const modelKey = d.model_name.toLowerCase();
+                            for (const [key, color] of Object.entries(modelColors)) {
+                                if (modelKey.includes(key)) return color;
+                            }
+                            return modelColors.other;
+                        }),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.parsed.y.toFixed(0)} tokens/sec`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toFixed(0);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Cache Hit Rate Gauge (Doughnut Chart as Gauge)
+        async function initCacheHitRateGaugeChart(cacheHitRate) {
+            const ctx = document.getElementById('cacheHitRateGaugeChart').getContext('2d');
+
+            if (charts.cacheHitRateGauge) {
+                charts.cacheHitRateGauge.destroy();
+            }
+
+            const rate = (cacheHitRate || 0) * 100;
+
+            // Color based on rate
+            let color = '#ef4444'; // red
+            if (rate >= 70) color = '#10b981'; // green
+            else if (rate >= 40) color = '#f59e0b'; // yellow
+
+            charts.cacheHitRateGauge = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Hit Rate', 'Miss Rate'],
+                    datasets: [{
+                        data: [rate, 100 - rate],
+                        backgroundColor: [color, '#e5e7eb'],
+                        borderWidth: 0,
+                        circumference: 180,
+                        rotation: 270
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            enabled: false
+                        }
+                    },
+                    cutout: '75%'
+                },
+                plugins: [{
+                    id: 'gaugeText',
+                    afterDraw: (chart) => {
+                        const { ctx, chartArea: { left, right, top, bottom } } = chart;
+                        const centerX = (left + right) / 2;
+                        const centerY = (top + bottom) / 2 + 20;
+
+                        ctx.save();
+                        ctx.font = 'bold 32px sans-serif';
+                        ctx.fillStyle = '#111827';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(`${rate.toFixed(1)}%`, centerX, centerY);
+
+                        ctx.font = '12px sans-serif';
+                        ctx.fillStyle = '#6b7280';
+                        ctx.fillText('Cache Hit Rate', centerX, centerY + 25);
+                        ctx.restore();
+                    }
+                }]
+            });
+        }
+
+        // Initialize Cache Hit Rate Timeline (Line Chart)
+        async function initCacheHitRateTimelineChart(timelineData) {
+            const ctx = document.getElementById('cacheHitRateTimelineChart').getContext('2d');
+
+            if (charts.cacheHitRateTimeline) {
+                charts.cacheHitRateTimeline.destroy();
+            }
+
+            if (!timelineData || timelineData.length === 0) {
+                console.warn('No cache hit rate timeline data available');
+                return;
+            }
+
+            charts.cacheHitRateTimeline = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: timelineData.map(d => d.date),
+                    datasets: [{
+                        label: 'Cache Hit Rate',
+                        data: timelineData.map(d => (d.cache_hit_rate || 0) * 100),
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 2,
+                        pointHoverRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.parsed.y.toFixed(1)}%`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                                font: { size: 9 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Add chart instances for Models tab
+        charts.modelPerformanceRadar = null;
+        charts.tokenTimeline = null;
+        charts.costByModel = null;
+        charts.costByProject = null;
+        charts.costBySkill = null;
+        charts.tokenEfficiency = null;
+        charts.cacheHitRateGauge = null;
+        charts.cacheHitRateTimeline = null;
+
+        // ==================== WORKFLOWS & LESSONS TAB ====================
+
+        let workflowsData = {
+            summary: {},
+            status_board: { running: [], completed: [], failed: [] },
+            success_rates: [],
+            lessons: []
+        };
+
+        // Transform API response to frontend format
+        function transformWorkflowData(apiData) {
+            if (!apiData) return null;
+
+            // API can return either:
+            // - Direct collector output: { total_runs, by_workflow, by_status, success_rate, avg_completion_time_minutes, total_nodes_executed }
+            // - Pydantic serialized: { total_workflows, by_workflow, by_status, overall_success_rate, avg_completion_time_minutes, total_nodes }
+            // Frontend expects: { summary: {total_workflows, active, avg_success_rate}, status_board: {running: [], completed: [], failed: []}, success_rates: [] }
+
+            const byWorkflow = apiData.by_workflow || {};
+            const byStatus = apiData.by_status || {};
+
+            // Handle both field name variants
+            const totalWorkflowCount = apiData.total_workflows || apiData.total_runs || 0;
+            const overallSuccessRate = apiData.overall_success_rate || apiData.success_rate || 0;
+
+            // Transform by_workflow dict to success_rates array
+            const successRates = Object.entries(byWorkflow).map(([workflowName, stats]) => ({
+                workflow_name: workflowName,
+                success_rate: (stats.success_rate || 0) / 100, // Convert percentage to 0-1 float
+                total_runs: stats.count || 0
+            }));
+
+            // Create summary object
+            const summary = {
+                total_workflows: Object.keys(byWorkflow).length,
+                active_workflows: byStatus.running || 0,
+                avg_success_rate: overallSuccessRate / 100 // Convert percentage to 0-1 float
+            };
+
+            // Create status_board with counts (we can't get individual workflow records from current API)
+            const statusBoard = {
+                running: [], // API only provides counts, not individual records
+                completed: [],
+                failed: [],
+                // Store counts for display
+                _counts: {
+                    running: byStatus.running || 0,
+                    completed: byStatus.completed || 0,
+                    failed: byStatus.failed || 0
+                }
+            };
+
+            return { summary, status_board: statusBoard, success_rates: successRates };
+        }
+
+        function transformLessonData(apiData) {
+            if (!apiData) return null;
+
+            // API returns: { total_lessons, by_source: {source: count}, by_confidence: {confidence: count}, promoted_count, recent_lessons }
+            // Frontend expects: { summary: {total_lessons, promoted}, recent: [], by_source: [], timeline: [] }
+
+            const bySource = apiData.by_source || {};
+            const byConfidence = apiData.by_confidence || {};
+            const recentLessons = apiData.recent_lessons || [];
+
+            // Map string confidence to numeric (high=0.9, medium=0.6, low=0.3)
+            const confidenceMap = { high: 0.9, medium: 0.6, low: 0.3 };
+
+            // Transform recent_lessons
+            const recent = recentLessons.map(lesson => ({
+                lesson: lesson.title || 'Untitled Lesson',
+                lesson_text: lesson.title || 'Untitled Lesson',
+                confidence: confidenceMap[lesson.confidence] || 0.5,
+                source: lesson.source || 'Unknown',
+                timestamp: lesson.created_at,
+                is_promoted: lesson.status === 'promoted',
+                promoted: lesson.status === 'promoted'
+            }));
+
+            // Transform by_source dict to array
+            const bySourceArray = Object.entries(bySource).map(([source, count]) => {
+                const total = Object.values(bySource).reduce((sum, c) => sum + c, 0);
+                return {
+                    source: source,
+                    count: count,
+                    percentage: total > 0 ? (count / total * 100).toFixed(1) : 0
+                };
+            });
+
+            // Create summary
+            const summary = {
+                total_lessons: apiData.total_lessons || 0,
+                promoted_lessons: apiData.promoted_count || 0,
+                promoted: apiData.promoted_count || 0
+            };
+
+            // Timeline is not available from current API; render an honest empty state.
+            const timeline = [];
+
+            if (!apiData.by_source || Object.keys(apiData.by_source).length === 0) {
+                console.warn('Lessons API: by_source is empty or missing');
+            }
+            if (!apiData.recent_lessons || apiData.recent_lessons.length === 0) {
+                console.warn('Lessons API: recent_lessons is empty or missing');
+            }
+
+            return { summary, recent, by_source: bySourceArray, timeline };
+        }
+
+        // Eval Health tab (18.8.3)
+        async function renderEvalsNeedsAttention(health) {
+            // Lead with what needs attention: regressions (failing baselines) +
+            // the friction queue (friction_flag / pending_rerun from eval_registry).
+            const el = document.getElementById('evals-needs-attention');
+            if (!el) return;
+            const items = [];
+            // Failing baselines = regressions against the recorded baseline.
+            (health.baselines || []).forEach(b => {
+                if (b.passed === false) {
+                    items.push({
+                        sev: 'regression',
+                        label: b.eval_id,
+                        detail: `Score ${b.score !== null && b.score !== undefined ? Number(b.score).toFixed(3) : '--'} is below baseline`,
+                        action: 'Investigate the regression, then re-run to confirm or rebaseline.',
+                    });
+                }
+            });
+            // Friction queue from the eval registry.
+            try {
+                const r = await fetch('/api/v2/eval/registry');
+                if (r.ok) {
+                    const reg = await r.json();
+                    (Array.isArray(reg) ? reg : []).forEach(row => {
+                        if (row.friction_flag) {
+                            items.push({
+                                sev: 'friction',
+                                label: row.target_id,
+                                detail: `Friction-flagged (${row.target_type}), rubric ${row.rubric_score ?? '--'}`,
+                                action: 'Review the degraded target; re-run its eval to clear the flag.',
+                            });
+                        } else if (row.pending_rerun) {
+                            items.push({
+                                sev: 'pending',
+                                label: row.target_id,
+                                detail: `Pending re-run (${row.target_type})`,
+                                action: 'Run the queued eval to refresh its baseline.',
+                            });
+                        }
+                    });
+                }
+            } catch (e) { /* registry optional; regressions still surface */ }
+
+            if (items.length === 0) {
+                el.innerHTML = '<div class="text-green-700 text-sm py-2">&#10003; No regressions — all evals at or above baseline, no friction in the queue.</div>';
+                return;
+            }
+            const color = { regression: 'red', friction: 'yellow', pending: 'blue' };
+            el.innerHTML = items.map(it => `
+                <div class="flex items-start gap-3 border-l-2 border-${color[it.sev]}-300 pl-3 py-1.5">
+                    <span class="px-2 py-0.5 rounded text-xs font-medium bg-${color[it.sev]}-100 text-${color[it.sev]}-700 uppercase">${it.sev}</span>
+                    <div>
+                        <div class="text-sm font-mono text-gray-800">${it.label}</div>
+                        <div class="text-xs text-gray-500">${it.detail}</div>
+                        <div class="text-xs text-gray-700 mt-0.5"><span class="font-medium">Action:</span> ${it.action}</div>
+                    </div>
+                </div>`).join('');
+        }
+
+        async function initEvalsTab() {
+            try {
+                const resp = await fetch('/api/v1/evals/health');
+                if (!resp.ok) throw new Error(resp.statusText);
+                const d = await resp.json();
+
+                await renderEvalsNeedsAttention(d);
+
+                document.getElementById('evals-total').textContent = d.total_evals ?? '--';
+                document.getElementById('evals-status').textContent =
+                    d.source_status ? d.source_status.reason : `${d.passing} passing / ${d.failing} failing`;
+                document.getElementById('evals-pass-rate').textContent =
+                    d.pass_rate !== null ? `${d.pass_rate}%` : '--%';
+                document.getElementById('evals-pass-detail').textContent =
+                    `${d.passing ?? '--'} passing / ${d.failing ?? '--'} failing`;
+                document.getElementById('evals-recent-count').textContent =
+                    d.recent_runs ? d.recent_runs.length : '--';
+
+                const baselinesBody = document.getElementById('evals-baselines-body');
+                if (!d.baselines || d.baselines.length === 0) {
+                    baselinesBody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">No baselines recorded yet.</td></tr>';
+                } else {
+                    baselinesBody.innerHTML = d.baselines.map(b => `
+                        <tr>
+                            <td class="px-4 py-3 text-sm text-gray-900 font-mono">${b.eval_id}</td>
+                            <td class="px-4 py-3 text-sm text-gray-500">${b.version || '--'}</td>
+                            <td class="px-4 py-3 text-sm text-gray-900">${b.score !== null ? b.score.toFixed(3) : '--'}</td>
+                            <td class="px-4 py-3 text-sm">
+                                <span class="px-2 py-1 rounded-full text-xs font-medium ${b.passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
+                                    ${b.passed ? 'PASS' : 'FAIL'}
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-sm text-gray-500">${b.last_run_at ? b.last_run_at.slice(0, 16).replace('T', ' ') : '--'}</td>
+                        </tr>
+                    `).join('');
+                }
+
+                const runsBody = document.getElementById('evals-runs-body');
+                if (!d.recent_runs || d.recent_runs.length === 0) {
+                    runsBody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">No runs recorded yet.</td></tr>';
+                } else {
+                    runsBody.innerHTML = d.recent_runs.map(r => `
+                        <tr>
+                            <td class="px-4 py-3 text-sm text-gray-900 font-mono">${r.eval_id}</td>
+                            <td class="px-4 py-3 text-sm text-gray-900">${r.total_score !== null ? r.total_score.toFixed(3) : '--'}</td>
+                            <td class="px-4 py-3 text-sm">
+                                <span class="px-2 py-1 rounded-full text-xs font-medium ${r.passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
+                                    ${r.passed ? 'PASS' : 'FAIL'}
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-sm text-gray-500">${r.model_tested || '--'}</td>
+                            <td class="px-4 py-3 text-sm text-gray-500">${r.started_at ? r.started_at.slice(0, 16).replace('T', ' ') : '--'}</td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (err) {
+                console.error('Eval Health tab error:', err);
+                document.getElementById('evals-baselines-body').innerHTML =
+                    `<tr><td colspan="5" class="px-4 py-8 text-center text-red-400">Failed to load: ${err.message}</td></tr>`;
+            }
+        }
+
+        // Fetch and populate Workflows & Lessons tab
+        async function initWorkflowsTab() {
+            try {
+                const [workflowsApiData, lessonsApiData] = await Promise.all([
+                    fetchMetrics('/workflows'),
+                    fetchMetrics('/lessons')
+                ]);
+
+                if (!workflowsApiData || !lessonsApiData) {
+                    console.warn('No workflows/lessons data available');
+                    // Show honest empty-states on all summary cards
+                    ['workflows-total', 'workflows-active-count', 'workflows-lessons-total',
+                     'workflows-promoted-count', 'workflows-success-rate'].forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) el.textContent = id.includes('count') || id.includes('rate') ? '—' : '0';
+                    });
+                    const wb = document.getElementById('workflow-running-cards');
+                    if (wb) wb.innerHTML = '<div class="text-sm text-gray-500 text-center py-8">No workflow data yet</div>';
+                    return;
+                }
+
+                // Transform API data to frontend format
+                const workflowsData = transformWorkflowData(workflowsApiData);
+                const lessonsData = transformLessonData(lessonsApiData);
+
+                if (!workflowsData || !lessonsData) {
+                    console.warn('Data transformation failed');
+                    return;
+                }
+
+                // Update summary cards
+                updateWorkflowsSummary(workflowsData, lessonsData);
+
+                // Populate status board
+                populateWorkflowStatusBoard(workflowsData.status_board || { running: [], completed: [], failed: [] });
+
+                // Initialize charts
+                await Promise.all([
+                    initWorkflowSuccessRatesChart(workflowsData.success_rates || []),
+                    initLessonsBySourceTreemap(lessonsData.by_source || []),
+                    initPromotedVsDraftChart(lessonsData.timeline || [])
+                ]);
+
+                // Populate lesson feed
+                populateLessonFeed(lessonsData.recent || []);
+
+                console.log('Workflows & Lessons tab initialized successfully');
+            } catch (error) {
+                console.error('Error initializing Workflows & Lessons tab:', error);
+            }
+        }
+
+        // Update summary cards
+        function updateWorkflowsSummary(workflowsData, lessonsData) {
+            const totalWorkflows = workflowsData.summary?.total_workflows || 0;
+            const activeWorkflows = workflowsData.summary?.active_workflows || 0;
+            const totalLessons = lessonsData.summary?.total_lessons || 0;
+            const promotedLessons = lessonsData.summary?.promoted_lessons || 0;
+            const avgSuccessRate = workflowsData.summary?.avg_success_rate || 0;
+
+            document.getElementById('workflows-total').textContent = totalWorkflows.toLocaleString();
+            document.getElementById('workflows-active-count').textContent = `${activeWorkflows.toLocaleString()} active`;
+            document.getElementById('workflows-lessons-total').textContent = totalLessons.toLocaleString();
+            document.getElementById('workflows-promoted-count').textContent = `${promotedLessons.toLocaleString()} promoted`;
+            document.getElementById('workflows-success-rate').textContent = `${(avgSuccessRate * 100).toFixed(1)}%`;
+        }
+
+        // Populate workflow status board (Kanban)
+        function populateWorkflowStatusBoard(statusBoard) {
+            // API currently only provides counts, not individual workflow records
+            const counts = statusBoard._counts || {};
+            const runningCount = counts.running || 0;
+            const completedCount = counts.completed || 0;
+            const failedCount = counts.failed || 0;
+
+            // Update counts
+            document.getElementById('workflow-running-count').textContent = runningCount;
+            document.getElementById('workflow-completed-count').textContent = completedCount;
+            document.getElementById('workflow-failed-count').textContent = failedCount;
+
+            // Populate Running column from aggregate counts.
+            const runningContainer = document.getElementById('workflow-running-cards');
+            if (runningCount === 0) {
+                runningContainer.innerHTML = '<div class="text-sm text-gray-500 text-center py-8">No running workflows</div>';
+            } else {
+                runningContainer.innerHTML = `
+                    <div class="border border-blue-200 bg-blue-50 rounded-lg p-4 text-center">
+                        <div class="text-3xl font-bold text-blue-600">${runningCount}</div>
+                        <div class="text-sm text-gray-600 mt-2">Active workflows</div>
+                    </div>
+                `;
+            }
+
+            // Populate Completed column
+            const completedContainer = document.getElementById('workflow-completed-cards');
+            if (completedCount === 0) {
+                completedContainer.innerHTML = '<div class="text-sm text-gray-500 text-center py-8">No completed workflows</div>';
+            } else {
+                completedContainer.innerHTML = `
+                    <div class="border border-green-200 bg-green-50 rounded-lg p-4 text-center">
+                        <div class="text-3xl font-bold text-green-600">${completedCount}</div>
+                        <div class="text-sm text-gray-600 mt-2">Completed workflows</div>
+                    </div>
+                `;
+            }
+
+            // Populate Failed column
+            const failedContainer = document.getElementById('workflow-failed-cards');
+            if (failedCount === 0) {
+                failedContainer.innerHTML = '<div class="text-sm text-gray-500 text-center py-8">No failed workflows</div>';
+            } else {
+                failedContainer.innerHTML = `
+                    <div class="border border-red-200 bg-red-50 rounded-lg p-4 text-center">
+                        <div class="text-3xl font-bold text-red-600">${failedCount}</div>
+                        <div class="text-sm text-gray-600 mt-2">Failed workflows</div>
+                    </div>
+                `;
+            }
+        }
+
+        // Initialize Workflow Success Rates Chart (Horizontal Bar)
+        async function initWorkflowSuccessRatesChart(successRates) {
+            const ctx = document.getElementById('workflowSuccessRatesChart').getContext('2d');
+
+            if (charts.workflowSuccessRates) {
+                charts.workflowSuccessRates.destroy();
+            }
+
+            if (!successRates || successRates.length === 0) {
+                console.warn('No workflow success rates data available');
+                const wsrWrapper = document.getElementById('workflowSuccessRatesChart')?.parentElement;
+                if (wsrWrapper) wsrWrapper.innerHTML = '<div class="flex items-center justify-center h-full text-sm text-gray-400">No workflow run data yet</div>';
+                return;
+            }
+
+            // Sort by success rate descending
+            const sorted = [...successRates].sort((a, b) => b.success_rate - a.success_rate).slice(0, 10);
+
+            charts.workflowSuccessRates = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sorted.map(wf => wf.workflow_name),
+                    datasets: [{
+                        label: 'Success Rate',
+                        data: sorted.map(wf => (wf.success_rate || 0) * 100),
+                        backgroundColor: sorted.map(wf => {
+                            const rate = wf.success_rate || 0;
+                            if (rate >= 0.9) return '#10b981'; // green
+                            if (rate >= 0.7) return '#f59e0b'; // yellow
+                            return '#ef4444'; // red
+                        }),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `Success Rate: ${context.parsed.x.toFixed(1)}%`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Lessons by Source Treemap (CSS Grid-based)
+        async function initLessonsBySourceTreemap(bySource) {
+            const container = document.getElementById('lessonsBySourceTreemap');
+
+            if (!bySource || bySource.length === 0) {
+                container.innerHTML = '<div class="flex items-center justify-center h-full text-gray-500">No lessons by source data available</div>';
+                return;
+            }
+
+            // Calculate total for percentage
+            const total = bySource.reduce((sum, item) => sum + (item.count || 0), 0);
+
+            // Sort by count descending
+            const sorted = [...bySource].sort((a, b) => b.count - a.count);
+
+            // Generate color palette
+            const colors = [
+                '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+                '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
+            ];
+
+            // Create treemap rectangles
+            let html = '<div class="grid gap-2 h-full" style="grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); grid-auto-rows: minmax(60px, 1fr);">';
+
+            sorted.forEach((item, index) => {
+                const percentage = total > 0 ? ((item.count / total) * 100).toFixed(1) : 0;
+                const color = colors[index % colors.length];
+
+                html += `
+                    <div class="rounded-lg p-3 flex flex-col justify-between text-white" style="background-color: ${color};" title="${item.source}: ${item.count} lessons (${percentage}%)">
+                        <div class="text-xs font-medium truncate">${item.source}</div>
+                        <div class="text-lg font-bold">${item.count}</div>
+                        <div class="text-xs opacity-90">${percentage}%</div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        // Initialize Promoted vs Draft Chart (Stacked Bar Over Time)
+        async function initPromotedVsDraftChart(timeline) {
+            const ctx = document.getElementById('promotedVsDraftChart').getContext('2d');
+
+            if (charts.promotedVsDraft) {
+                charts.promotedVsDraft.destroy();
+            }
+
+            if (!timeline || timeline.length === 0) {
+                console.warn('No promoted vs draft timeline data available');
+                const pvdWrapper = document.getElementById('promotedVsDraftChart')?.parentElement;
+                if (pvdWrapper) pvdWrapper.innerHTML = '<div class="flex items-center justify-center h-full text-sm text-gray-400">No lesson timeline data yet — lessons will appear here as they are promoted.</div>';
+                return;
+            }
+
+            charts.promotedVsDraft = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: timeline.map(d => d.date),
+                    datasets: [
+                        {
+                            label: 'Promoted',
+                            data: timeline.map(d => d.promoted || 0),
+                            backgroundColor: '#10b981',
+                            borderColor: '#059669',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Draft',
+                            data: timeline.map(d => d.draft || 0),
+                            backgroundColor: '#f59e0b',
+                            borderColor: '#d97706',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 15,
+                                font: { size: 11 }
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Populate Lesson Feed
+        function populateLessonFeed(lessons) {
+            const container = document.getElementById('lesson-feed');
+
+            if (!lessons || lessons.length === 0) {
+                container.innerHTML = '<div class="text-sm text-gray-500 text-center py-8">No recent lessons</div>';
+                return;
+            }
+
+            container.innerHTML = lessons.slice(0, 10).map(lesson => {
+                const confidence = lesson.confidence || 0;
+                let confidenceBadge = '';
+                let confidenceColor = '';
+
+                if (confidence >= 0.8) {
+                    confidenceBadge = 'High';
+                    confidenceColor = 'bg-green-100 text-green-700';
+                } else if (confidence >= 0.5) {
+                    confidenceBadge = 'Medium';
+                    confidenceColor = 'bg-yellow-100 text-yellow-700';
+                } else {
+                    confidenceBadge = 'Low';
+                    confidenceColor = 'bg-red-100 text-red-700';
+                }
+
+                const isPromoted = lesson.is_promoted || false;
+                const promotedBadge = isPromoted
+                    ? '<span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full ml-2">Promoted</span>'
+                    : '<span class="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full ml-2">Draft</span>';
+
+                return `
+                    <div class="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors">
+                        <div class="flex items-start justify-between mb-2">
+                            <div class="font-medium text-sm text-gray-900 flex-1">${lesson.lesson_text || 'Untitled Lesson'}</div>
+                            <span class="text-xs ${confidenceColor} px-2 py-1 rounded-full ml-2">${confidenceBadge}</span>
+                        </div>
+                        <div class="text-xs text-gray-600 mb-1">Source: ${lesson.source || 'Unknown'}</div>
+                        <div class="flex items-center justify-between">
+                            <div class="text-xs text-gray-500">${new Date(lesson.timestamp).toLocaleString()}</div>
+                            ${promotedBadge}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Add chart instances for Workflows & Lessons tab
+        charts.workflowSuccessRates = null;
+        charts.promotedVsDraft = null;
+
+        // Update tab initialization to include workflows
+        const originalSwitchTab = switchTab;
+        switchTab = function(tabName) {
+            originalSwitchTab(tabName);
+
+            // Initialize workflows tab on first visit
+            if (tabName === 'workflows' && !tabsInitialized.workflows) {
+                tabsInitialized.workflows = true;
+                initWorkflowsTab();
+            }
+        };
+
+        // ==================== ALERTS & SLA TAB ====================
+
+        // Initialize Alerts & SLA tab
+        async function initAlertsTab() {
+            try {
+                // Fetch alerts data from /api/v1/alerts (not /api/v1/metrics/alerts)
+                const fetchAlerts = async (endpoint) => {
+                    try {
+                        const response = await fetch(`/api/v1/alerts${endpoint}`);
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+                        return await response.json();
+                    } catch (error) {
+                        console.error(`Error fetching ${endpoint}:`, error);
+                        return null;
+                    }
+                };
+
+                const [slaData, rulesData, historyData, analyticsData] = await Promise.all([
+                    fetchAlerts('/sla'),
+                    fetchAlerts('/rules'),
+                    fetchAlerts('/history'),
+                    fetchAlerts('/analytics')
+                ]);
+
+                if (!slaData || !rulesData || !historyData || !analyticsData) {
+                    console.warn('Some alerts data unavailable');
+                }
+
+                // Initialize SLA gauges
+                await Promise.all([
+                    initSLAGauge('slaResponseTimeGauge', slaData?.response_time || 0, 500, 'ms'),
+                    initSLAGauge('slaErrorRateGauge', (slaData?.error_rate || 0) * 100, 1, '%'),
+                    initSLAGauge('slaAvailabilityGauge', (slaData?.availability || 0) * 100, 99.9, '%'),
+                    initSLAGauge('slaCustomGauge', slaData?.custom_metric || 0, 100, '')
+                ]);
+
+                // Update SLA values
+                document.getElementById('slaResponseTimeValue').textContent = `${slaData?.response_time?.toFixed(0) || '--'}ms`;
+                document.getElementById('slaErrorRateValue').textContent = `${((slaData?.error_rate || 0) * 100).toFixed(2)}%`;
+                document.getElementById('slaAvailabilityValue').textContent = `${((slaData?.availability || 0) * 100).toFixed(3)}%`;
+                document.getElementById('slaCustomValue').textContent = slaData?.custom_metric?.toFixed(1) || '--';
+
+                // Populate alert rules table
+                populateAlertRulesTable(rulesData || []);
+
+                // Populate alert history timeline
+                populateAlertHistoryTimeline(historyData || []);
+
+                // Initialize analytics charts
+                await Promise.all([
+                    initTopTriggeredRulesChart(analyticsData?.top_triggered || []),
+                    initResolutionTimeChart(analyticsData?.resolution_times || [])
+                ]);
+
+                // Wire up Create Rule button
+                document.getElementById('createRuleButton').addEventListener('click', () => {
+                    openCreateRuleModal();
+                });
+
+                console.log('Alerts & SLA tab initialized successfully');
+            } catch (error) {
+                console.error('Error initializing Alerts & SLA tab:', error);
+            }
+        }
+
+        // Initialize SLA gauge chart
+        async function initSLAGauge(canvasId, currentValue, targetValue, unit) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+
+            // Destroy existing chart if it exists
+            const chartKey = canvasId;
+            if (charts[chartKey]) {
+                charts[chartKey].destroy();
+            }
+
+            // Calculate percentage (current vs target)
+            let percentage;
+            if (unit === '%') {
+                // For percentage metrics (error rate, availability)
+                // Green if within target, red if outside
+                percentage = currentValue >= targetValue ? 100 : (currentValue / targetValue) * 100;
+            } else {
+                // For absolute metrics (response time, custom)
+                // Green if below target, red if above
+                percentage = currentValue <= targetValue ? 100 : (targetValue / currentValue) * 100;
+            }
+
+            percentage = Math.min(100, Math.max(0, percentage));
+
+            // Color based on performance
+            let color;
+            if (percentage >= 90) {
+                color = '#10b981'; // green
+            } else if (percentage >= 70) {
+                color = '#f59e0b'; // yellow
+            } else {
+                color = '#ef4444'; // red
+            }
+
+            charts[chartKey] = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [percentage, 100 - percentage],
+                        backgroundColor: [color, '#e5e7eb'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    cutout: '75%',
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            enabled: false
+                        }
+                    }
+                }
+            });
+        }
+
+        // Populate alert rules table
+        function populateAlertRulesTable(rules) {
+            const tbody = document.getElementById('alertRulesTableBody');
+
+            if (!rules || rules.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">No alert rules configured</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = rules.map(rule => {
+                const severityColors = {
+                    'critical': 'bg-red-100 text-red-700',
+                    'warning': 'bg-yellow-100 text-yellow-700',
+                    'info': 'bg-blue-100 text-blue-700'
+                };
+                const severityClass = severityColors[rule.severity] || 'bg-gray-100 text-gray-700';
+
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 text-sm font-medium text-gray-900">${rule.rule_name}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600">${rule.metric_path}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600">${rule.condition}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600">${rule.threshold}</td>
+                        <td class="px-4 py-3">
+                            <span class="text-xs font-medium px-2 py-1 rounded-full ${severityClass}">
+                                ${rule.severity}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3">
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" ${rule.enabled ? 'checked' : ''}
+                                       class="sr-only peer"
+                                       onchange="toggleAlertRule('${rule.rule_id}', this.checked)">
+                                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                            </label>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Toggle alert rule enabled state
+        async function toggleAlertRule(ruleId, enabled) {
+            try {
+                const response = await fetch(`/api/v1/alerts/rules/${ruleId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ enabled })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to update rule: ${response.statusText}`);
+                }
+
+                console.log(`Alert rule ${ruleId} ${enabled ? 'enabled' : 'disabled'}`);
+            } catch (error) {
+                console.error('Error toggling alert rule:', error);
+                alert(`Failed to update alert rule: ${error.message}`);
+            }
+        }
+
+        // Populate alert history timeline
+        function populateAlertHistoryTimeline(events) {
+            const container = document.getElementById('alertHistoryTimeline');
+
+            if (!events || events.length === 0) {
+                container.innerHTML = '<div class="text-center text-gray-400 py-8">No recent alerts</div>';
+                return;
+            }
+
+            const severityIcons = {
+                'critical': '<svg class="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>',
+                'warning': '<svg class="w-5 h-5 text-yellow-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>',
+                'info': '<svg class="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>'
+            };
+
+            const severityColors = {
+                'critical': 'border-red-200 bg-red-50',
+                'warning': 'border-yellow-200 bg-yellow-50',
+                'info': 'border-blue-200 bg-blue-50'
+            };
+
+            container.innerHTML = events.slice(0, 50).map(event => {
+                const icon = severityIcons[event.severity] || severityIcons.info;
+                const colorClass = severityColors[event.severity] || 'border-gray-200 bg-gray-50';
+
+                return `
+                    <div class="flex items-start gap-3 p-3 border rounded-lg ${colorClass}">
+                        <div class="flex-shrink-0 mt-0.5">
+                            ${icon}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-start justify-between gap-2">
+                                <div class="font-medium text-sm text-gray-900">${event.rule_name}</div>
+                                <div class="text-xs text-gray-500 whitespace-nowrap">${new Date(event.timestamp).toLocaleString()}</div>
+                            </div>
+                            <div class="text-sm text-gray-700 mt-1">${event.message}</div>
+                            ${event.resolved ? `<div class="text-xs text-green-600 mt-1">✓ Resolved ${event.resolution_time ? `in ${event.resolution_time}` : ''}</div>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Initialize top triggered rules chart
+        async function initTopTriggeredRulesChart(topRules) {
+            const ctx = document.getElementById('topTriggeredRulesChart').getContext('2d');
+
+            if (charts.topTriggeredRules) {
+                charts.topTriggeredRules.destroy();
+            }
+
+            if (!topRules || topRules.length === 0) {
+                console.warn('No top triggered rules data available');
+                return;
+            }
+
+            // Take top 10
+            const top10 = topRules.slice(0, 10);
+
+            charts.topTriggeredRules = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: top10.map(r => r.rule_name),
+                    datasets: [{
+                        label: 'Trigger Count',
+                        data: top10.map(r => r.count),
+                        backgroundColor: top10.map(r => {
+                            if (r.severity === 'critical') return '#ef4444';
+                            if (r.severity === 'warning') return '#f59e0b';
+                            return '#3b82f6';
+                        }),
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `Triggered: ${context.parsed.x} times`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize resolution time chart (histogram)
+        async function initResolutionTimeChart(resolutionTimes) {
+            const ctx = document.getElementById('resolutionTimeChart').getContext('2d');
+
+            if (charts.resolutionTime) {
+                charts.resolutionTime.destroy();
+            }
+
+            if (!resolutionTimes || resolutionTimes.length === 0) {
+                console.warn('No resolution time data available');
+                return;
+            }
+
+            // Create histogram buckets (in minutes)
+            const buckets = ['0-5m', '5-15m', '15-30m', '30-60m', '1-2h', '2h+'];
+            const bucketCounts = [0, 0, 0, 0, 0, 0];
+
+            resolutionTimes.forEach(time => {
+                const minutes = time.minutes || 0;
+                if (minutes < 5) bucketCounts[0]++;
+                else if (minutes < 15) bucketCounts[1]++;
+                else if (minutes < 30) bucketCounts[2]++;
+                else if (minutes < 60) bucketCounts[3]++;
+                else if (minutes < 120) bucketCounts[4]++;
+                else bucketCounts[5]++;
+            });
+
+            charts.resolutionTime = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: buckets,
+                    datasets: [{
+                        label: 'Alert Count',
+                        data: bucketCounts,
+                        backgroundColor: '#10b981',
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `Alerts: ${context.parsed.y}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        // ==================== CREATE RULE MODAL ====================
+
+        function openCreateRuleModal() {
+            const modal = document.getElementById('createRuleModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeCreateRuleModal() {
+            const modal = document.getElementById('createRuleModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            // Reset form
+            document.getElementById('createRuleForm').reset();
+            // Clear error message
+            const errorDiv = document.getElementById('createRuleError');
+            if (errorDiv) {
+                errorDiv.classList.add('hidden');
+            }
+        }
+
+        async function submitCreateRule(event) {
+            event.preventDefault();
+
+            const form = event.target;
+            const errorDiv = document.getElementById('createRuleError');
+            const submitBtn = document.getElementById('submitRuleBtn');
+
+            // Get form values
+            const ruleName = form.ruleName.value.trim();
+            const metricPath = form.metricPath.value;
+            const condition = form.condition.value;
+            const threshold = parseFloat(form.threshold.value);
+            const severity = form.severity.value;
+
+            // Client-side validation
+            if (!ruleName) {
+                errorDiv.textContent = 'Rule name is required';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+
+            if (!metricPath) {
+                errorDiv.textContent = 'Metric path is required';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+
+            if (isNaN(threshold)) {
+                errorDiv.textContent = 'Threshold must be a valid number';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+
+            // Hide error, disable submit button
+            errorDiv.classList.add('hidden');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Creating...';
+
+            try {
+                const response = await fetch('/api/v1/alerts/rules', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        rule_name: ruleName,
+                        metric_path: metricPath,
+                        condition: condition,
+                        threshold: threshold,
+                        severity: severity,
+                        enabled: true
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ detail: 'Failed to create alert rule' }));
+                    throw new Error(errorData.detail || `Server error: ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                // Success: close modal, refresh table, show toast
+                closeCreateRuleModal();
+                showToast('Alert rule created successfully', 'success');
+
+                // Refresh the alert rules table
+                const rulesResponse = await fetchAlerts('/rules');
+                if (rulesResponse && rulesResponse.rules) {
+                    populateAlertRulesTable(rulesResponse.rules);
+                }
+
+            } catch (error) {
+                // Show error in modal
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('hidden');
+                console.error('Error creating alert rule:', error);
+            } finally {
+                // Re-enable submit button
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create Rule';
+            }
+        }
+
+        // Close modal when clicking outside
+        document.addEventListener('DOMContentLoaded', () => {
+            const modal = document.getElementById('createRuleModal');
+            if (modal) {
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        closeCreateRuleModal();
+                    }
+                });
+            }
+        });
+
+        // ==================== STRENGTHS & GROWTH TAB ====================
+
+        function initMLTab() {
+            // Tab is lazy - content loads only when user clicks "Load Insights"
+            console.log('Strengths & Growth tab initialized');
+        }
+
+        async function loadInsights() {
+            const loadBtn = document.getElementById('load-forecasts-btn');
+            const loadSection = document.getElementById('ml-load-section');
+            const mlContent = document.getElementById('ml-content');
+
+            try {
+                loadBtn.disabled = true;
+                loadBtn.innerHTML = `
+                    <svg class="animate-spin mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Loading Insights...
+                `;
+
+                const [insightsData, rhythmData] = await Promise.all([
+                    fetchInsights('/'),
+                    fetchInsights('/rhythm')
+                ]);
+
+                if (insightsData) {
+                    renderStrengths(insightsData.strengths || []);
+                    renderIssues([...(insightsData.issues || []), ...(insightsData.risks || [])]);
+                    renderOpportunities(insightsData.opportunities || []);
+                }
+
+                if (rhythmData) {
+                    renderRhythm(rhythmData);
+                }
+
+                loadSection.classList.add('hidden');
+                mlContent.classList.remove('hidden');
+            } catch (error) {
+                console.error('Error loading insights:', error);
+                loadBtn.disabled = false;
+                loadBtn.innerHTML = `
+                    <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                    Error - Click to Retry
+                `;
+            }
+        }
+
+        async function fetchInsights(endpoint) {
+            try {
+                const response = await fetch(`/api/v1/insights${endpoint}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return await response.json();
+            } catch (error) {
+                console.error(`Error fetching insights ${endpoint}:`, error);
+                return null;
+            }
+        }
+
+        function renderStrengths(strengths) {
+            const grid = document.getElementById('strengths-grid');
+            if (!strengths || strengths.length === 0) {
+                grid.innerHTML = '<div class="col-span-full text-center text-gray-500 py-4">No strengths detected yet</div>';
+                return;
+            }
+            grid.innerHTML = strengths.map(s => `
+                <div class="border border-green-200 bg-green-50 rounded-lg p-4">
+                    <div class="flex items-start gap-3">
+                        <div class="flex-shrink-0 mt-0.5">
+                            <svg class="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h4 class="text-sm font-semibold text-green-900">${s.title || s.type || 'Strength'}</h4>
+                            <p class="text-sm text-green-800 mt-1">${s.description || ''}</p>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderIssues(items) {
+            const grid = document.getElementById('issues-grid');
+            if (!items || items.length === 0) {
+                grid.innerHTML = '<div class="col-span-full text-center text-gray-500 py-4">No issues detected</div>';
+                return;
+            }
+            grid.innerHTML = items.map(item => {
+                const isRisk = item.severity === 'warning' || item.type?.includes('risk');
+                const color = isRisk ? 'yellow' : 'red';
+                const icon = isRisk
+                    ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>'
+                    : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+                return `
+                    <div class="border border-${color}-200 bg-${color}-50 rounded-lg p-4">
+                        <div class="flex items-start gap-3">
+                            <div class="flex-shrink-0 mt-0.5">
+                                <svg class="h-5 w-5 text-${color}-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">${icon}</svg>
+                            </div>
+                            <div>
+                                <h4 class="text-sm font-semibold text-${color}-900">${item.title || item.type || 'Issue'}</h4>
+                                <p class="text-sm text-${color}-800 mt-1">${item.description || ''}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderRhythm(data) {
+            document.getElementById('rhythm-peak-hour').textContent = `${data.peak_hour}:00`;
+            document.getElementById('rhythm-peak-day').textContent = `${data.peak_day} (${data.busiest_day_count})`;
+            document.getElementById('rhythm-quiet-day').textContent = `${data.quietest_day} (${data.quietest_day_count})`;
+
+            // Callout insight
+            const ratio = data.busiest_day_count / Math.max(data.quietest_day_count, 1);
+            if (ratio >= 2) {
+                const callout = document.getElementById('rhythm-callout');
+                callout.textContent = `You're ${ratio.toFixed(0)}x more active on ${data.peak_day}s than ${data.quietest_day}s. Your peak hour is ${data.peak_hour}:00.`;
+                callout.classList.remove('hidden');
+            }
+
+            // Heatmap as stacked bar chart (hours on x-axis, stacked by day)
+            const ctx = document.getElementById('rhythm-heatmap-chart').getContext('2d');
+            const dayColors = [
+                'rgba(239, 68, 68, 0.7)',
+                'rgba(249, 115, 22, 0.7)',
+                'rgba(234, 179, 8, 0.7)',
+                'rgba(34, 197, 94, 0.7)',
+                'rgba(59, 130, 246, 0.7)',
+                'rgba(139, 92, 246, 0.7)',
+                'rgba(236, 72, 153, 0.7)'
+            ];
+
+            const datasets = data.day_labels.map((day, di) => ({
+                label: day,
+                data: data.heatmap[di],
+                backgroundColor: dayColors[di],
+                borderWidth: 0
+            }));
+
+            if (charts['rhythm-heatmap-chart']) charts['rhythm-heatmap-chart'].destroy();
+            charts['rhythm-heatmap-chart'] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Array.from({length: 24}, (_, i) => `${i}:00`),
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } },
+                        title: { display: true, text: 'Sessions by Hour & Day of Week', font: { size: 13 } }
+                    },
+                    scales: {
+                        x: { stacked: true, ticks: { font: { size: 9 }, maxRotation: 0 } },
+                        y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Sessions' } }
+                    }
+                }
+            });
+        }
+
+        function renderOpportunities(opportunities) {
+            const feed = document.getElementById('opportunities-feed');
+            if (!opportunities || opportunities.length === 0) {
+                feed.innerHTML = '<div class="text-center text-gray-500 py-8">No growth opportunities detected yet. Keep using skills and building data!</div>';
+                return;
+            }
+            feed.innerHTML = opportunities.map(opp => `
+                <div class="border border-blue-200 bg-blue-50 rounded-lg p-4">
+                    <div class="flex items-start gap-3">
+                        <div class="flex-shrink-0 mt-0.5">
+                            <svg class="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h4 class="text-sm font-semibold text-blue-900">${opp.title || opp.type || 'Opportunity'}</h4>
+                            <p class="text-sm text-blue-800 mt-1">${opp.description || ''}</p>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Legacy ML function kept for backward compatibility
+        async function initForecastChart(canvasId, data, label) {
+            if (!data || !data.dates || !data.predicted || !data.confidence_lower || !data.confidence_upper) {
+                console.warn(`No forecast data for ${label}`);
+                return;
+            }
+
+            const ctx = document.getElementById(canvasId).getContext('2d');
+
+            // Destroy existing chart if it exists
+            if (charts[canvasId]) {
+                charts[canvasId].destroy();
+            }
+
+            charts[canvasId] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.dates,
+                    datasets: [
+                        {
+                            label: `${label} Forecast`,
+                            data: data.predicted,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            tension: 0.4,
+                            fill: false,
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            borderWidth: 2
+                        },
+                        {
+                            label: 'Confidence Interval',
+                            data: data.confidence_upper,
+                            borderColor: 'rgba(59, 130, 246, 0.3)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            tension: 0.4,
+                            fill: '+1',
+                            pointRadius: 0,
+                            borderWidth: 1,
+                            borderDash: [5, 5]
+                        },
+                        {
+                            label: 'Lower Bound',
+                            data: data.confidence_lower,
+                            borderColor: 'rgba(59, 130, 246, 0.3)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            tension: 0.4,
+                            fill: false,
+                            pointRadius: 0,
+                            borderWidth: 1,
+                            borderDash: [5, 5]
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'bottom',
+                            labels: {
+                                filter: (item) => item.text !== 'Lower Bound',
+                                boxWidth: 12,
+                                padding: 8,
+                                font: { size: 10 }
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    label += context.parsed.y.toFixed(0);
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0,
+                                font: { size: 10 }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                                font: { size: 9 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Populate pattern detection cards
+        function populatePatternsGrid(patterns) {
+            const grid = document.getElementById('patterns-grid');
+
+            if (!patterns || patterns.length === 0) {
+                grid.innerHTML = '<div class="col-span-full text-center text-gray-500 py-8">No patterns detected</div>';
+                return;
+            }
+
+            grid.innerHTML = patterns.map(pattern => {
+                const typeColors = {
+                    sequence: 'blue',
+                    temporal_hour: 'green',
+                    temporal_day: 'purple'
+                };
+                const color = typeColors[pattern.pattern_type] || 'gray';
+                const confidence = pattern.confidence != null ? `${(pattern.confidence * 100).toFixed(1)}%` : 'N/A';
+
+                return `
+                    <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-${color}-100 text-${color}-800">
+                                ${pattern.pattern_type}
+                            </span>
+                            <span class="text-xs text-gray-500">${pattern.support}x</span>
+                        </div>
+                        <h4 class="text-sm font-medium text-gray-900 mb-1">${pattern.pattern}</h4>
+                        <div class="mt-3 text-xs text-gray-500">
+                            Confidence: <span class="font-medium text-gray-900">${confidence}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Populate benchmarks table
+        function populateBenchmarksTable(benchmarks) {
+            const tbody = document.getElementById('benchmarks-table');
+
+            if (!benchmarks || benchmarks.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-8 text-center text-gray-500">No benchmark data available</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = benchmarks.map(bm => {
+                const trendColors = { improving: 'green', stable: 'gray', declining: 'red' };
+                const trendColor = trendColors[bm.trend] || 'gray';
+                const trendIcons = {
+                    improving: '<svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd"></path></svg>',
+                    declining: '<svg class="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M12 13a1 1 0 100 2h5a1 1 0 001-1V9a1 1 0 10-2 0v2.586l-4.293-4.293a1 1 0 00-1.414 0L8 9.586 3.707 5.293a1 1 0 00-1.414 1.414l5 5a1 1 0 001.414 0L11 9.414 14.586 13H12z" clip-rule="evenodd"></path></svg>',
+                    stable: '<svg class="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"></path></svg>'
+                };
+                const statusColors = { above_baseline: 'text-green-600', at_baseline: 'text-gray-600', below_baseline: 'text-red-600' };
+
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${bm.metric}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${bm.current_value.toFixed(1)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${bm.baseline.toFixed(1)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${bm.percentile.toFixed(0)}th</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <div class="flex items-center gap-1">
+                                ${trendIcons[bm.trend] || trendIcons.stable}
+                                <span class="${statusColors[bm.status] || 'text-gray-500'}">${bm.trend}</span>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // ========================================
+        // Anomalies Tab Implementation
+        // ========================================
+
+        async function initAnomaliesTab() {
+            console.log('Initializing Anomalies tab...');
+
+            try {
+                // Fetch anomaly data from all relevant analyzers
+                const [anomalyData, trendData, performanceData] = await Promise.all([
+                    fetch('/api/v1/analytics/anomalies').then(r => r.ok ? r.json() : null),
+                    fetch('/api/v1/analytics/trends').then(r => r.ok ? r.json() : null),
+                    fetch('/api/v1/analytics/performance').then(r => r.ok ? r.json() : null)
+                ]);
+
+                // Update summary stats
+                updateAnomalySummary(anomalyData);
+
+                // Initialize all visualizations
+                await Promise.all([
+                    initAnomalyScatterPlot(anomalyData),
+                    initTrendAnalysisChart(trendData),
+                    initSessionFlowDiagram(performanceData),
+                    initDayOfWeekHeatmap(performanceData),
+                    initHourlyHeatmap(performanceData)
+                ]);
+
+                console.log('Anomalies tab initialized successfully');
+            } catch (error) {
+                console.error('Error initializing Anomalies tab:', error);
+            }
+        }
+
+        function updateAnomalySummary(data) {
+            if (!data) {
+                console.warn('No anomaly data available');
+                return;
+            }
+
+            const anomalyCount = data.anomalies?.length || 0;
+            const lastDetected = data.last_detected || 'Never';
+            const detectionRate = data.detection_rate || 0;
+            const avgSeverity = data.avg_severity || 'Low';
+
+            document.getElementById('anomaly-count').textContent = anomalyCount;
+            document.getElementById('anomaly-last-detected').textContent =
+                typeof lastDetected === 'string' ? lastDetected : new Date(lastDetected).toLocaleString();
+            document.getElementById('anomaly-detection-rate').textContent = `${(detectionRate * 100).toFixed(1)}%`;
+            document.getElementById('anomaly-severity').textContent = avgSeverity;
+        }
+
+        async function initAnomalyScatterPlot(data) {
+            if (!data || !data.scatter_data) {
+                console.warn('No scatter plot data available');
+                return;
+            }
+
+            const ctx = document.getElementById('anomaly-scatter-chart');
+            if (!ctx) return;
+
+            // Destroy existing chart
+            if (charts.anomalyScatter) {
+                charts.anomalyScatter.destroy();
+            }
+
+            // Separate normal points from anomalies
+            const normalPoints = data.scatter_data.filter(d => !d.is_anomaly);
+            const anomalyPoints = data.scatter_data.filter(d => d.is_anomaly);
+
+            charts.anomalyScatter = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Normal Sessions',
+                            data: normalPoints.map(d => ({ x: d.duration, y: d.tokens })),
+                            backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                            borderColor: '#3b82f6',
+                            pointRadius: 4,
+                            pointHoverRadius: 6
+                        },
+                        {
+                            label: 'Anomalies',
+                            data: anomalyPoints.map(d => ({ x: d.duration, y: d.tokens })),
+                            backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                            borderColor: '#ef4444',
+                            pointRadius: 6,
+                            pointHoverRadius: 8,
+                            pointStyle: 'triangle'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const point = context.raw;
+                                    return `Duration: ${point.x}s, Tokens: ${point.y}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Session Duration (seconds)'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Token Count'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        async function initTrendAnalysisChart(data) {
+            if (!data || !data.trends) {
+                console.warn('No trend data available');
+                return;
+            }
+
+            const ctx = document.getElementById('trend-analysis-chart');
+            if (!ctx) return;
+
+            // Destroy existing chart
+            if (charts.trendAnalysis) {
+                charts.trendAnalysis.destroy();
+            }
+
+            const datasets = [];
+            // Route returns keys: sessions, tokens, reportable_cost (not 'cost').
+            // Display labels are human-friendly; internal keys match the API response.
+            const metricDefs = [
+                { key: 'sessions', label: 'Sessions', color: '#3b82f6' },
+                { key: 'tokens', label: 'Tokens', color: '#10b981' },
+                { key: 'reportable_cost', label: 'Cost', color: '#f59e0b' },
+            ];
+
+            metricDefs.forEach(({ key, label, color }) => {
+                if (data.trends[key]) {
+                    // Actual data
+                    datasets.push({
+                        label: `${label} (Actual)`,
+                        data: data.trends[key].actual,
+                        borderColor: color,
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        tension: 0.4
+                    });
+
+                    // Regression line
+                    datasets.push({
+                        label: `${label} (Trend)`,
+                        data: data.trends[key].regression,
+                        borderColor: color,
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        tension: 0
+                    });
+                }
+            });
+
+            charts.trendAnalysis = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.dates || [],
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Date'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Value'
+                            },
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        async function initSessionFlowDiagram(data) {
+            const container = document.getElementById('session-flow-diagram');
+            if (!container) return;
+
+            const svg = container.querySelector('svg');
+            if (!svg) return;
+
+            // Use only real data; never fall back to fabricated counts.
+            const flowData = data?.session_flow;
+            const total = flowData?.started || 0;
+
+            if (!flowData || total === 0) {
+                svg.innerHTML = '<text x="280" y="190" text-anchor="middle" fill="#9ca3af" font-size="14">No session data yet — outcomes populate as sessions run.</text>';
+                return;
+            }
+
+            // Calculate percentages from real outcomes.
+            // "timeout" = genuine timeouts; "other" = unknown/in_progress (separate state).
+            const completedPct = (flowData.completed / total) * 100;
+            const failedPct = (flowData.failed / total) * 100;
+            const timeoutPct = (flowData.timeout / total) * 100;
+            const otherPct = ((flowData.other || 0) / total) * 100;
+
+            const completedPctStr = completedPct.toFixed(1);
+            const failedPctStr = failedPct.toFixed(1);
+            const timeoutPctStr = timeoutPct.toFixed(1);
+            const otherPctStr = otherPct.toFixed(1);
+            const completedW = (completedPct * 0.8).toFixed(1);
+            const failedW = (failedPct * 0.8).toFixed(1);
+            const timeoutW = (timeoutPct * 0.8).toFixed(1);
+            const otherW = (otherPct * 0.8).toFixed(1);
+
+            // Build Sankey-style flow diagram with SVG (4 real outcome buckets)
+            svg.innerHTML = `
+                <!-- Start Node -->
+                <rect x="30" y="162" width="110" height="80" fill="#3b82f6" rx="8"/>
+                <text x="85" y="197" text-anchor="middle" fill="white" font-size="12" font-weight="bold">Started</text>
+                <text x="85" y="215" text-anchor="middle" fill="white" font-size="16">${total}</text>
+
+                <!-- Flow to Completed -->
+                <path d="M 140 202 Q 360 202 360 90" stroke="#10b981" stroke-width="${completedW}" fill="none" opacity="0.6"/>
+                <rect x="360" y="50" width="120" height="80" fill="#10b981" rx="8"/>
+                <text x="420" y="83" text-anchor="middle" fill="white" font-size="11" font-weight="bold">Completed</text>
+                <text x="420" y="100" text-anchor="middle" fill="white" font-size="14">${flowData.completed}</text>
+                <text x="420" y="118" text-anchor="middle" fill="white" font-size="10">${completedPctStr}%</text>
+
+                <!-- Flow to Failed -->
+                <path d="M 140 202 Q 360 202 360 162" stroke="#ef4444" stroke-width="${failedW}" fill="none" opacity="0.6"/>
+                <rect x="360" y="142" width="120" height="80" fill="#ef4444" rx="8"/>
+                <text x="420" y="176" text-anchor="middle" fill="white" font-size="11" font-weight="bold">Failed</text>
+                <text x="420" y="193" text-anchor="middle" fill="white" font-size="14">${flowData.failed}</text>
+                <text x="420" y="211" text-anchor="middle" fill="white" font-size="10">${failedPctStr}%</text>
+
+                <!-- Flow to Timeout -->
+                <path d="M 140 202 Q 360 202 360 234" stroke="#f59e0b" stroke-width="${timeoutW}" fill="none" opacity="0.6"/>
+                <rect x="360" y="234" width="120" height="80" fill="#f59e0b" rx="8"/>
+                <text x="420" y="267" text-anchor="middle" fill="white" font-size="11" font-weight="bold">Timeout</text>
+                <text x="420" y="284" text-anchor="middle" fill="white" font-size="14">${flowData.timeout}</text>
+                <text x="420" y="302" text-anchor="middle" fill="white" font-size="10">${timeoutPctStr}%</text>
+
+                <!-- Flow to Other/Unknown -->
+                <path d="M 140 202 Q 360 202 360 324" stroke="#6b7280" stroke-width="${otherW}" fill="none" opacity="0.6"/>
+                <rect x="360" y="324" width="120" height="80" fill="#6b7280" rx="8"/>
+                <text x="420" y="357" text-anchor="middle" fill="white" font-size="11" font-weight="bold">Other/Unknown</text>
+                <text x="420" y="374" text-anchor="middle" fill="white" font-size="14">${flowData.other || 0}</text>
+                <text x="420" y="392" text-anchor="middle" fill="white" font-size="10">${otherPctStr}%</text>
+            `;
+        }
+
+        async function initDayOfWeekHeatmap(data) {
+            const container = document.getElementById('day-of-week-heatmap');
+            if (!container) return;
+
+            const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+            const activityData = Array.isArray(data?.day_of_week) && data.day_of_week.length === 7
+                ? data.day_of_week
+                : [0, 0, 0, 0, 0, 0, 0];
+
+            // Find min/max for color scaling
+            const max = Math.max(...activityData);
+            const min = Math.min(...activityData);
+
+            // Generate heatmap cells
+            container.innerHTML = days.map((day, idx) => {
+                const value = activityData[idx];
+                const intensity = max === min ? 0 : (value - min) / (max - min);
+                const bgColor = `rgba(59, 130, 246, ${0.2 + intensity * 0.8})`;
+
+                return `
+                    <div class="text-center p-4 rounded-lg border border-gray-200 transition-all hover:scale-105"
+                         style="background-color: ${bgColor}">
+                        <div class="text-xs font-medium text-gray-700 mb-1">${day}</div>
+                        <div class="text-lg font-bold text-gray-900">${value}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function initHourlyHeatmap(data) {
+            const container = document.getElementById('hourly-grid');
+            if (!container) return;
+
+            const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+            const hours = Array.from({ length: 24 }, (_, i) => i);
+
+            // Use current hourly activity or an honest zero-state grid.
+            const hourlyData = Array.isArray(data?.hourly_activity) && data.hourly_activity.length === 7
+                ? data.hourly_activity
+                : Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => 0));
+
+            // Flatten to find min/max
+            const allValues = hourlyData.flat();
+            const max = Math.max(...allValues);
+            const min = Math.min(...allValues);
+
+            // Generate grid
+            container.innerHTML = days.map((day, dayIdx) => {
+                const rowCells = hours.map((hour, hourIdx) => {
+                    const value = hourlyData[dayIdx][hourIdx];
+                    const intensity = max === min ? 0 : (value - min) / (max - min);
+                    const bgColor = `rgba(59, 130, 246, ${0.1 + intensity * 0.9})`;
+
+                    return `
+                        <div class="w-6 h-6 rounded-sm border border-gray-100 flex items-center justify-center text-[8px] font-medium text-gray-700 hover:scale-125 transition-transform cursor-pointer"
+                             style="background-color: ${bgColor}"
+                             title="${day} ${hour}:00 - ${value} sessions">
+                        </div>
+                    `;
+                }).join('');
+
+                return `
+                    <div class="flex items-center gap-1">
+                        <div class="w-8 text-xs font-medium text-gray-600 flex-shrink-0">${day}</div>
+                        <div class="flex gap-1 flex-1">${rowCells}</div>
+                    </div>
+                `;
+            }).join('');
+
+            // Add hour labels at the top
+            const hourLabels = hours.filter(h => h % 3 === 0).map(h =>
+                `<div class="text-[8px] text-gray-500" style="position: absolute; left: ${32 + h * 24 + 8}px; top: -16px">${h}</div>`
+            ).join('');
+
+            container.style.position = 'relative';
+            container.style.paddingTop = '20px';
+            container.insertAdjacentHTML('beforebegin', `<div style="position: relative; height: 20px; width: 100%">${hourLabels}</div>`);
+        }
+
+        // Touch swipe support for mobile tab navigation
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        const tabs = ['overview', 'skills', 'models', 'workflows', 'alerts', 'ml', 'anomalies'];
+        let currentTabIndex = 0;
+
+        document.body.addEventListener('touchstart', (e) => {
+            touchStartX = e.changedTouches[0].screenX;
+        }, { passive: true });
+
+        document.body.addEventListener('touchend', (e) => {
+            touchEndX = e.changedTouches[0].screenX;
+            handleSwipe();
+        }, { passive: true });
+
+        function handleSwipe() {
+            const swipeThreshold = 100; // Minimum distance for swipe
+            const swipeDistance = touchEndX - touchStartX;
+
+            if (Math.abs(swipeDistance) < swipeThreshold) {
+                return; // Not a swipe, ignore
+            }
+
+            // Get current tab index
+            const activeTab = document.querySelector('.tab-button.tab-active');
+            if (!activeTab) return;
+
+            const currentTab = activeTab.getAttribute('data-tab');
+            currentTabIndex = tabs.indexOf(currentTab);
+
+            if (swipeDistance > 0 && currentTabIndex > 0) {
+                // Swipe right - go to previous tab
+                switchTab(tabs[currentTabIndex - 1]);
+            } else if (swipeDistance < 0 && currentTabIndex < tabs.length - 1) {
+                // Swipe left - go to next tab
+                switchTab(tabs[currentTabIndex + 1]);
+            }
+        }
+
+        // Window resize handler for responsive charts
+        window.addEventListener('resize', () => {
+            // Chart.js handles resize automatically with responsive: true
+            // This is just a placeholder for any custom resize logic
+        });
+
+        // ========================================
+        // Projects Tab Implementation
+        // ========================================
+
+        async function initProjectsTab() {
+            console.log('Initializing Projects tab...');
+
+            try {
+                // Fetch projects data
+                const projectsData = await fetch('/api/v1/projects?limit=50').then(r => r.ok ? r.json() : null);
+
+                if (!projectsData) {
+                    console.warn('No projects data available');
+                    document.getElementById('projects-list').innerHTML =
+                        '<div class="text-center text-gray-500 py-8">No projects analyzed yet.</div>';
+                    return;
+                }
+
+                // Update summary stats
+                updateProjectsSummary(projectsData);
+
+                // Render projects list
+                renderProjectsList(projectsData.projects || []);
+
+                console.log('Projects tab initialized successfully');
+            } catch (error) {
+                console.error('Error initializing Projects tab:', error);
+                document.getElementById('projects-list').innerHTML =
+                    '<div class="text-center text-red-500 py-8">Error loading projects.</div>';
+            }
+        }
+
+        function updateProjectsSummary(data) {
+            const projects = data.projects || [];
+            const totalProjects = data.total || projects.length;
+
+            // Health is derived from current authority signals and exposed on a 0-10 compatibility scale.
+            const healthScores = projects.filter(p => p.health_score != null).map(p => Number(p.health_score));
+            const avgHealth = healthScores.length > 0
+                ? (healthScores.reduce((a, b) => a + b, 0) / healthScores.length).toFixed(1)
+                : 'N/A';
+
+            const securityFindings = projects.reduce((total, project) => {
+                const status = project.security_package_status || {};
+                return total + Number(status.open_findings || project.security_open_count || 0);
+            }, 0);
+            const attentionItems = projects.reduce((total, project) => {
+                const status = project.work_order_status || {};
+                return total + Number(status.attention_open || project.attention_open_count || 0);
+            }, 0);
+
+            document.getElementById('projects-total').textContent = totalProjects;
+            document.getElementById('projects-avg-health').textContent = avgHealth !== 'N/A' ? `${avgHealth}/10` : avgHealth;
+            document.getElementById('projects-critical-bugs').textContent = telemetryNumber(securityFindings);
+            document.getElementById('projects-open-violations').textContent = telemetryNumber(attentionItems);
+        }
+
+        function renderProjectsList(projects) {
+            const container = document.getElementById('projects-list');
+
+            if (projects.length === 0) {
+                container.innerHTML = '<div class="text-center text-gray-500 py-8">No projects analyzed yet.</div>';
+                return;
+            }
+
+            // Change container to grid layout
+            container.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6';
+
+            container.innerHTML = projects.map(project => {
+                const healthModel = project.health_model || {};
+                const healthScore = project.health_score != null ? Number(project.health_score).toFixed(1) : 'Unavailable';
+                const securityScore = project.security_score != null ? Number(project.security_score).toFixed(1) : '--';
+                const securityStatus = project.security_package_status || {};
+                const workOrderStatus = project.work_order_status || {};
+                const prdStatus = project.prd_status || {};
+                const telemetryStatus = project.telemetry_status || {};
+                const prdCount = project.prd_count || 0;
+                const stackEvidence = project.stack_evidence || {};
+                const dependencyStatus = project.dependency_source_status || {};
+                const dependencyCount = Number(project.dependency_count || 0);
+                const pathStatus = project.path_status || 'unverified';
+                const scoreValue = Number(project.health_score);
+                const statusClass = Number.isFinite(scoreValue)
+                    ? (scoreValue >= 8.5 ? 'text-green-600' : scoreValue >= 6.5 ? 'text-yellow-600' : 'text-red-600')
+                    : 'text-gray-500';
+                const statusDot = '&bull;';
+
+                return `
+                    <div class="bg-white border-2 border-gray-200 rounded-lg p-6 hover:shadow-lg hover:border-blue-300 transition-all cursor-pointer"
+                         onclick="showProjectDetail('${project.project_id}')">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-bold text-gray-900 truncate">${telemetryEscapeHtml(project.project_name || project.project_id)}</h3>
+                            <span class="${statusClass} text-2xl">${statusDot}</span>
+                        </div>
+
+                        <div class="space-y-3 mb-4">
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-600">Health Score:</span>
+                                <span class="text-xl font-bold ${statusClass}">${project.health_score != null ? healthScore + '/10' : healthScore}</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-600">Open Findings:</span>
+                                <span class="text-xl font-bold text-gray-900">${telemetryNumber(securityStatus.open_findings || 0)}</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-600">Security Score:</span>
+                                <span class="text-xl font-bold text-gray-900">${securityScore}/10</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-600">PRD:</span>
+                                <span class="text-xl font-bold text-blue-600">${telemetryEscapeHtml(prdStatus.latest_status || (prdCount ? 'linked' : 'none'))}</span>
+                            </div>
+                        </div>
+
+                        <div class="text-xs text-gray-500 mb-3 truncate" title="${project.project_path}">
+                            ${telemetryEscapeHtml(project.project_path)}
+                        </div>
+
+                        <div class="project-stack-evidence mb-3 rounded-md border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700">
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="font-semibold text-gray-900">${telemetryEscapeHtml(stackEvidence.framework || project.stack_detected || 'Stack not analyzed')}</span>
+                                <span class="source-chip">${telemetryEscapeHtml(stackEvidence.classification || 'unknown')}</span>
+                            </div>
+                            <div class="mt-1">Dependencies from stack evidence: ${telemetryNumber(stackEvidence.dependency_count || 0)}</div>
+                            <div class="mt-1">Path: ${telemetryEscapeHtml(pathStatus)}</div>
+                        </div>
+
+                        <div class="dependency-source-status mb-3 flex flex-wrap gap-2 text-xs">
+                            <span class="source-chip">${dependencyCount ? telemetryNumber(dependencyCount) + ' confirmed edges' : 'No confirmed dependency edges'}</span>
+                            <span class="source-chip">${telemetryEscapeHtml(dependencyStatus.classification || 'empty by design')}</span>
+                            <span class="source-chip">${telemetryEscapeHtml(healthModel.label || 'Health unavailable')}</span>
+                            <span class="source-chip">${telemetryNumber(telemetryStatus.event_count || 0)} telemetry events</span>
+                            <span class="source-chip">${telemetryNumber(workOrderStatus.attention_open || 0)} attention items</span>
+                        </div>
+
+                        <div class="pt-3 border-t border-gray-200">
+                            <button onclick="event.stopPropagation(); showProjectDetail('${project.project_id}')" class="text-blue-600 text-sm font-medium hover:text-blue-700 flex items-center">
+                                View Details
+                                <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function showProjectDetail(projectId) {
+            try {
+                // Fetch project health details
+                const healthData = await fetch(`/api/v1/projects/${projectId}/health`).then(r => r.ok ? r.json() : null);
+                const detailsData = await fetch(`/api/v1/projects/${projectId}/details`).then(r => r.ok ? r.json() : null);
+
+                if (!healthData) {
+                    console.error('Failed to fetch project details');
+                    return;
+                }
+
+                // Store project ID on modal for tab switching
+                const modal = document.getElementById('project-detail-modal');
+                modal.setAttribute('data-project-id', projectId);
+
+                // Populate modal with data
+                const project = healthData.project;
+                const health = healthData.health || {};
+                const healthModel = project.health_model || {};
+                const securityStatus = project.security_package_status || {};
+                const violations = healthData.violations || {};
+                const bugs = healthData.bugs || {};
+                const availableSurfaces = healthData.available_surfaces || {};
+                updateProjectModalAvailability(availableSurfaces);
+
+                document.getElementById('modal-project-name').textContent = project.project_name;
+                document.getElementById('modal-project-path').textContent = project.project_path;
+
+                document.getElementById('modal-health-score').textContent = health.overall_score != null ? `${Number(health.overall_score).toFixed(1)}/10` : 'Unavailable';
+                const readinessScore = detailsData?.readiness_score || healthData.readiness || {};
+                document.getElementById('modal-readiness-score').textContent = readinessScore.score != null ? `${Number(readinessScore.score).toFixed(1)}/100` : telemetryEscapeHtml(readinessScore.status || 'Unavailable');
+                document.getElementById('modal-prd-status').textContent = project.prd_status?.status || project.prd_status?.latest_status || 'unknown';
+
+                // Bugs
+                const totalBugs = availableSurfaces.bugs_summary
+                    ? Object.values(bugs).reduce((a, b) => a + b, 0)
+                    : 0;
+                document.getElementById('modal-bugs').textContent = totalBugs;
+
+                // Violations
+                const totalViolations = availableSurfaces.violations_summary
+                    ? Object.values(violations).reduce((a, b) => a + b, 0)
+                    : 0;
+                document.getElementById('modal-violations').textContent = totalViolations;
+
+                // Components
+                document.getElementById('modal-components').textContent = project.total_files || 0;
+                renderProjectStackEvidence(project, detailsData);
+                renderProjectAuthorityEvidence(project, detailsData);
+                const stackEvidence = document.getElementById('modal-stack-evidence');
+                if (stackEvidence && healthModel.reason) {
+                    stackEvidence.insertAdjacentHTML(
+                        'beforeend',
+                        `<div class="mt-3 rounded-md border border-gray-200 bg-white p-3"><div class="font-semibold text-gray-900">Evidence-backed health</div><div class="mt-1">${telemetryEscapeHtml(healthModel.label || 'Health unavailable')}: ${telemetryEscapeHtml(healthModel.reason)}</div><div class="mt-1">Open security findings: ${telemetryNumber(securityStatus.open_findings || 0)}</div></div>`
+                    );
+                }
+
+                // Fetch and render health trend chart
+                const historyData = availableSurfaces.health_trend
+                    ? await fetch(`/api/v1/projects/${projectId}/history?limit=10`).then(r => r.ok ? r.json() : null)
+                    : null;
+                if (historyData && historyData.runs) {
+                    renderHealthTrendChart(historyData.runs);
+                }
+
+                // Reset to overview tab
+                switchProjectTab('overview');
+
+                // Show modal
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            } catch (error) {
+                console.error('Error showing project details:', error);
+            }
+        }
+
+        function updateProjectModalAvailability(availableSurfaces) {
+            const toggle = (selector, isAvailable) => {
+                const element = document.querySelector(selector);
+                if (!element) return;
+                element.classList.toggle('hidden', !isAvailable);
+            };
+
+            toggle('[data-project-tab="prds"]', availableSurfaces.prds !== false);
+            toggle('[data-project-tab="security"]', availableSurfaces.security !== false);
+            toggle('[data-project-tab="dependencies"]', availableSurfaces.dependencies !== false);
+            toggle('[data-project-tab="activity"]', availableSurfaces.activity !== false);
+            toggle('#project-tab-prds', availableSurfaces.prds !== false);
+            toggle('#project-tab-security', availableSurfaces.security !== false);
+            toggle('#project-tab-dependencies', availableSurfaces.dependencies !== false);
+            toggle('#project-tab-activity', availableSurfaces.activity !== false);
+            toggle('#modal-bugs-card', availableSurfaces.bugs_summary !== false);
+            toggle('#modal-violations-card', availableSurfaces.violations_summary !== false);
+            toggle('#modal-health-trend-title', availableSurfaces.health_trend !== false);
+            const chart = document.getElementById('modal-health-trend-chart');
+            if (chart?.parentElement) {
+                chart.parentElement.classList.toggle('hidden', availableSurfaces.health_trend === false);
+            }
+        }
+
+        function renderProjectStackEvidence(project, details) {
+            const container = document.getElementById('modal-stack-evidence');
+            if (!container) return;
+            const stack = project.stack_evidence || {};
+            const detailStack = details?.stack_evidence || {};
+            const repoScan = detailStack.repo_scan || {};
+            const confirmedDeps = details?.confirmed_dependencies || {};
+            const inferredDeps = details?.inferred_or_unverified_dependencies || {};
+            const dependencies = project.dependency_source_status || {};
+            const configFiles = (repoScan.config_files || stack.config_files || []).slice(0, 5);
+            const entryPoints = (stack.entry_points || []).slice(0, 5);
+            const manifests = (repoScan.package_manifests || []).slice(0, 4);
+            const apiRoutes = (repoScan.api_route_files || []).slice(0, 5);
+            const workflows = (repoScan.workflow_files || []).slice(0, 5);
+            container.innerHTML = `
+                <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                        <div class="text-sm font-semibold text-gray-900">Confirmed Stack Evidence</div>
+                        <div class="mt-1 text-gray-700">${telemetryEscapeHtml(stack.framework || project.stack_detected || 'Stack not analyzed')}</div>
+                        <div class="mt-1 text-xs text-gray-500">Registry: ${telemetryEscapeHtml(stack.classification || 'unknown')} / repo scan: ${telemetryEscapeHtml(repoScan.classification || 'unavailable')} / path=${telemetryEscapeHtml(project.path_status || 'unverified')}</div>
+                    </div>
+                    <div class="text-xs text-gray-600 md:text-right">
+                        <div>Confirmed edges: ${telemetryNumber(confirmedDeps.edge_count || project.dependency_count || 0)}</div>
+                        <div>Inferred/unverified hidden: ${telemetryNumber(inferredDeps.edge_count || 0)}</div>
+                        <div>${telemetryEscapeHtml(dependencies.reason || 'No dependency source status reported.')}</div>
+                    </div>
+                </div>
+                <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div>
+                        <div class="text-xs font-semibold uppercase text-gray-500">Config files</div>
+                        <div class="mt-1">${configFiles.length ? configFiles.map(item => `<span class="source-chip mr-1 mb-1">${telemetryEscapeHtml(item)}</span>`).join('') : '<span class="text-gray-500">No confirmed config files recorded.</span>'}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold uppercase text-gray-500">Entry points</div>
+                        <div class="mt-1">${entryPoints.length ? entryPoints.map(item => `<span class="source-chip mr-1 mb-1">${telemetryEscapeHtml(item)}</span>`).join('') : '<span class="text-gray-500">No confirmed entry points recorded.</span>'}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold uppercase text-gray-500">Package manifests</div>
+                        <div class="mt-1">${manifests.length ? manifests.map(item => `<span class="source-chip mr-1 mb-1">${telemetryEscapeHtml(item.path)} (${telemetryNumber(item.dependency_count || 0)})</span>`).join('') : '<span class="text-gray-500">No safe package manifests detected.</span>'}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold uppercase text-gray-500">Routes and CI</div>
+                        <div class="mt-1">${[...apiRoutes, ...workflows].length ? [...apiRoutes, ...workflows].map(item => `<span class="source-chip mr-1 mb-1">${telemetryEscapeHtml(item)}</span>`).join('') : '<span class="text-gray-500">No route or CI evidence detected.</span>'}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderProjectAuthorityEvidence(project, details) {
+            const container = document.getElementById('modal-project-authority-evidence');
+            if (!container) return;
+            const authority = project.project_authority_status || {};
+            const prdAuthority = project.prd_status?.authority || {};
+            const readiness = details?.readiness_score || {};
+            const controls = details?.readiness_control_coverage || {};
+            const securityControls = details?.enterprise_security_controls || {};
+            const moduleFit = details?.module_runtime_profile_fit || {};
+            const validation = details?.validation_state?.recent || {};
+            const attention = details?.attention_items || {};
+            const gaps = details?.known_gaps || [];
+            const nextAction = details?.current_next_action || 'No current next action recorded.';
+            container.innerHTML = `
+                <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                    <div>
+                        <div class="text-sm font-semibold text-gray-900">Project Authority</div>
+                        <div class="mt-1">${telemetryEscapeHtml(authority.classification || 'unknown')} / ${telemetryEscapeHtml(authority.operational_classification || 'unknown')}</div>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <span class="source-chip">${authority.include_in_default_operator_view ? 'default view' : 'not in default view'}</span>
+                            <span class="source-chip">${telemetryEscapeHtml(authority.retention_class || 'unknown')}</span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-sm font-semibold text-gray-900">PRD Authority</div>
+                        <div class="mt-1">${telemetryEscapeHtml(prdAuthority.status || 'unknown')} (${telemetryEscapeHtml(prdAuthority.confidence || 'unknown')} confidence)</div>
+                        <div class="mt-1 text-xs text-gray-600">${telemetryEscapeHtml(prdAuthority.summary || 'No PRD summary available.')}</div>
+                    </div>
+                    <div>
+                        <div class="text-sm font-semibold text-gray-900">Security Controls</div>
+                        <div class="mt-1 text-xs text-gray-600">47-control framework: ${telemetryNumber(securityControls.source_control_count || 0)} controls, manual review ${telemetryNumber(securityControls.manual_review_required || 0)}, unknown ${telemetryNumber(securityControls.unknown || 0)}</div>
+                    </div>
+                    <div>
+                        <div class="text-sm font-semibold text-gray-900">Production Readiness</div>
+                        <div class="mt-1">${telemetryEscapeHtml(readiness.status || 'unavailable')}: ${telemetryEscapeHtml(readiness.reason || 'No persisted readiness assessment exists.')}</div>
+                        <div class="mt-1 text-xs text-gray-600">Controls: ${telemetryNumber(controls.total || 0)} total, manual review ${telemetryNumber(controls.manual_review || 0)}, unknown ${telemetryNumber(controls.unknown || 0)}</div>
+                    </div>
+                    <div>
+                        <div class="text-sm font-semibold text-gray-900">Module/Profile Fit</div>
+                        <div class="mt-1 text-xs text-gray-600">${telemetryEscapeHtml(moduleFit.classification || 'unavailable')}</div>
+                        <div class="mt-2">${(moduleFit.candidate_profiles || []).slice(0, 6).map(profile => `<span class="source-chip mr-1 mb-1">${telemetryEscapeHtml(profile.profile_id)}</span>`).join('') || '<span class="text-gray-500">No profile fit evidence recorded.</span>'}</div>
+                    </div>
+                    <div>
+                        <div class="text-sm font-semibold text-gray-900">Validation And Attention</div>
+                        <div class="mt-1 text-xs text-gray-600">Recent validations: ${telemetryNumber(validation.recent_count || 0)}, failed/incomplete: ${telemetryNumber(validation.failed_recent_count || 0)}</div>
+                        <div class="mt-1 text-xs text-gray-600">Open attention items: ${telemetryNumber(attention.open_count || 0)}</div>
+                    </div>
+                </div>
+                <div class="mt-4 border-t border-gray-200 pt-3">
+                    <div class="text-sm font-semibold text-gray-900">Known gaps</div>
+                    <div class="mt-1">${gaps.length ? gaps.map(gap => `<span class="source-chip mr-1 mb-1">${telemetryEscapeHtml(gap)}</span>`).join('') : '<span class="text-gray-500">No current gaps recorded.</span>'}</div>
+                    <div class="mt-2 text-xs text-gray-600">Next action: ${telemetryEscapeHtml(nextAction)}</div>
+                </div>
+            `;
+        }
+
+        function closeProjectModal() {
+            document.getElementById('project-detail-modal').classList.add('hidden');
+            document.getElementById('project-detail-modal').classList.remove('flex');
+        }
+
+        function switchProjectTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.project-tab-content').forEach(tab => {
+                tab.classList.add('hidden');
+            });
+
+            // Remove active styling from all tab buttons
+            document.querySelectorAll('.project-tab-btn').forEach(btn => {
+                btn.classList.remove('project-tab-active', 'border-blue-500', 'text-blue-600');
+                btn.classList.add('border-transparent', 'text-gray-500');
+            });
+
+            // Show selected tab content
+            const tabContent = document.getElementById(`project-tab-${tabName}`);
+            if (tabContent) {
+                tabContent.classList.remove('hidden');
+            }
+
+            // Activate selected button
+            const btn = document.querySelector(`[data-project-tab="${tabName}"]`);
+            if (btn) {
+                btn.classList.remove('border-transparent', 'text-gray-500');
+                btn.classList.add('project-tab-active', 'border-blue-500', 'text-blue-600');
+            }
+
+            // Load tab-specific data if needed
+            const currentProjectId = document.getElementById('project-detail-modal').getAttribute('data-project-id');
+            const selectedTabButton = document.querySelector(`[data-project-tab="${tabName}"]`);
+            if (selectedTabButton?.classList.contains('hidden')) {
+                switchProjectTab('overview');
+                return;
+            }
+            if (currentProjectId && tabName === 'prds') {
+                loadProjectPRDs(currentProjectId);
+            } else if (currentProjectId && tabName === 'security') {
+                loadProjectSecurity(currentProjectId);
+            } else if (currentProjectId && tabName === 'dependencies') {
+                loadProjectDependencies(currentProjectId);
+            } else if (currentProjectId && tabName === 'activity') {
+                loadProjectActivity(currentProjectId);
+            }
+        }
+
+        function renderHealthTrendChart(runs) {
+            const ctx = document.getElementById('modal-health-trend-chart');
+            if (!ctx) return;
+
+            // Destroy existing chart
+            if (charts.projectHealthTrend) {
+                charts.projectHealthTrend.destroy();
+            }
+
+            // Prepare data (reverse to show oldest first)
+            const reversedRuns = [...runs].reverse();
+            const labels = reversedRuns.map(r => new Date(r.started_at).toLocaleDateString());
+
+            // Note: we don't have health_score in runs, so we'll use violations/bugs as proxy
+            const violationsData = reversedRuns.map(r => r.violations_found || 0);
+            const bugsData = reversedRuns.map(r => r.bugs_found || 0);
+
+            charts.projectHealthTrend = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Violations',
+                            data: violationsData,
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Bugs',
+                            data: bugsData,
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Count'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        async function loadProjectPRDs(projectId) {
+            try {
+                const container = document.getElementById('modal-prds-content');
+                container.innerHTML = '<p class="text-gray-500 text-center py-8">Loading PRDs...</p>';
+
+                const response = await fetch(`/api/v1/projects/${projectId}/prds`);
+                if (!response.ok) {
+                    container.innerHTML = '<p class="text-red-500 text-center py-8">Failed to load PRDs</p>';
+                    return;
+                }
+
+                const data = await response.json();
+                const prds = data.prds || [];
+                const authority = data.prd_authority || {};
+
+                if (prds.length === 0) {
+                    container.innerHTML = `
+                        <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                            <div class="font-semibold text-gray-900">PRD authority: ${telemetryEscapeHtml(authority.status || 'draft_generated')}</div>
+                            <div class="mt-1">${telemetryEscapeHtml(authority.reason || 'No current PRD authority row is linked for this project.')}</div>
+                            <div class="mt-2">${(authority.manual_review_flags || []).map(flag => `<span class="source-chip mr-1">${telemetryEscapeHtml(flag)}</span>`).join('')}</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = prds.map(prd => `
+                    <div class="border border-gray-200 rounded-lg p-4 mb-3 hover:bg-gray-50">
+                        <h4 class="font-semibold text-gray-900">${prd.title || 'Untitled'}</h4>
+                        <p class="text-sm text-gray-600 mt-1">${telemetryEscapeHtml(authority.summary || 'No PRD summary available.')}</p>
+                        <div class="text-xs text-gray-500 mt-2">
+                            Authority: <span class="font-medium">${telemetryEscapeHtml(authority.status || 'unknown')}</span> |
+                            Lifecycle: <span class="font-medium">${telemetryEscapeHtml(prd.status || 'Unknown')}</span> |
+                            Created: ${prd.created_at ? new Date(prd.created_at).toLocaleDateString() : 'Unknown'}
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading PRDs:', error);
+                document.getElementById('modal-prds-content').innerHTML =
+                    '<p class="text-red-500 text-center py-8">Error loading PRDs</p>';
+            }
+        }
+
+        async function loadProjectSecurity(projectId) {
+            try {
+                const container = document.getElementById('modal-security-content');
+                container.innerHTML = '<p class="text-gray-500 text-center py-8">Loading security data...</p>';
+
+                const response = await fetch(`/api/v1/projects/${projectId}/security`);
+                if (!response.ok) {
+                    container.innerHTML = '<p class="text-red-500 text-center py-8">Failed to load security data</p>';
+                    return;
+                }
+
+                const data = await response.json();
+                const findings = data.findings || [];
+
+                if (findings.length === 0) {
+                    container.innerHTML = '<p class="text-gray-500 text-center py-8">No security findings</p>';
+                    return;
+                }
+
+                container.innerHTML = `
+                    <div class="space-y-3">
+                        ${findings.map(finding => `
+                            <div class="border-l-4 ${finding.severity === 'critical' ? 'border-red-600' : finding.severity === 'high' ? 'border-orange-600' : 'border-yellow-600'} bg-gray-50 p-4 rounded">
+                                <div class="flex justify-between items-start mb-2">
+                                    <h4 class="font-semibold text-gray-900">${finding.title}</h4>
+                                    <span class="px-2 py-1 text-xs font-medium rounded ${finding.severity === 'critical' ? 'bg-red-100 text-red-800' : finding.severity === 'high' ? 'bg-orange-100 text-orange-800' : 'bg-yellow-100 text-yellow-800'}">
+                                        ${finding.severity.toUpperCase()}
+                                    </span>
+                                </div>
+                                <p class="text-sm text-gray-700">${finding.description}</p>
+                                <div class="text-xs text-gray-500 mt-2">
+                                    Location: ${finding.location || 'Unknown'}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading security data:', error);
+                document.getElementById('modal-security-content').innerHTML =
+                    '<p class="text-red-500 text-center py-8">Error loading security data</p>';
+            }
+        }
+
+        async function loadProjectDependencies(projectId) {
+            try {
+                const container = document.getElementById('modal-dependencies-content');
+                container.innerHTML = '<p class="text-gray-500 text-center py-8">Loading dependencies...</p>';
+
+                const response = await fetch(`/api/v1/projects/${projectId}/dependencies?limit=200`);
+                if (!response.ok) {
+                    container.innerHTML = '<p class="text-red-500 text-center py-8">Failed to load dependencies</p>';
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (!data.edges || data.edges.length === 0) {
+                    container.innerHTML = `
+                        <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                            <div class="font-semibold text-gray-900">No confirmed dependencies found</div>
+                            <div class="mt-1">This is an honest empty state from the dependency authority route. The dashboard does not draw inferred or placeholder edges.</div>
+                            <div class="mt-2"><span class="source-chip">Source confidence: project dependency authority</span></div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Build summary
+                const typeCounts = data.type_counts || {};
+                const typeList = Object.entries(typeCounts)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([type, count]) => `<span class="source-chip">${telemetryEscapeHtml(type)}: ${telemetryNumber(count)}</span>`)
+                    .join(' ');
+
+                // Build dependency list (top 50)
+                const topDeps = data.edges.slice(0, 50);
+                const depList = topDeps.map(edge => {
+                    const fromName = edge.from.split(':').pop();
+                    const toName = edge.to.split(':').pop();
+                    const refs = (edge.source_refs || edge.evidence_refs || []).slice(0, 2);
+                    return `
+                        <div class="py-2 border-b border-gray-100 text-sm">
+                            <div class="flex items-center gap-2">
+                                <div class="flex-1 truncate text-gray-700">${telemetryEscapeHtml(fromName)}</div>
+                                <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+                                </svg>
+                                <div class="flex-1 truncate text-gray-700">${telemetryEscapeHtml(toName)}</div>
+                                <span class="text-xs text-gray-500 flex-shrink-0">${telemetryEscapeHtml(edge.type)}</span>
+                                <span class="source-chip">${telemetryEscapeHtml(edge.confirmation_status || 'confirmed')}</span>
+                            </div>
+                            <div class="mt-1 text-xs text-gray-500">${refs.length ? refs.map(ref => telemetryEscapeHtml(ref)).join(' / ') : 'No file-level evidence ref recorded.'}</div>
+                        </div>
+                    `;
+                }).join('');
+
+                container.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <div class="text-sm font-medium text-blue-900 mb-2">Confirmed Dependency Summary</div>
+                            <div class="mb-3 text-xs text-blue-800">Only persisted dependency edges are rendered. Inferred or unverified edges are not shown by default.</div>
+                            <div class="mb-3 text-xs text-blue-800">Inferred edges available but hidden: ${telemetryNumber((data.inferred_edge_count || 0) + (data.unverified_edge_count || 0))}</div>
+                            <div class="grid grid-cols-2 gap-3 mb-3">
+                                <div class="text-center">
+                                    <div class="text-2xl font-bold text-blue-600">${data.node_count}</div>
+                                    <div class="text-xs text-blue-700">Components</div>
+                                </div>
+                                <div class="text-center">
+                                    <div class="text-2xl font-bold text-blue-600">${data.edge_count}</div>
+                                    <div class="text-xs text-blue-700">Dependencies</div>
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                ${typeList}
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 class="text-sm font-semibold text-gray-900 mb-3">Top Dependencies (${Math.min(50, data.edge_count)} of ${data.edge_count})</h4>
+                            <div class="max-h-96 overflow-y-auto">
+                                ${depList}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading dependencies:', error);
+                document.getElementById('modal-dependencies-content').innerHTML =
+                    '<p class="text-red-500 text-center py-8">Error loading dependencies</p>';
+            }
+        }
+
+        async function loadProjectActivity(projectId) {
+            try {
+                const container = document.getElementById('modal-activity-content');
+                container.innerHTML = '<p class="text-gray-500 text-center py-8">Loading activity...</p>';
+
+                const response = await fetch(`/api/v1/projects/${projectId}/activity`);
+                if (!response.ok) {
+                    container.innerHTML = '<p class="text-red-500 text-center py-8">Failed to load activity</p>';
+                    return;
+                }
+
+                const data = await response.json();
+                const activities = data.activities || [];
+
+                if (activities.length === 0) {
+                    container.innerHTML = '<p class="text-gray-500 text-center py-8">No recent activity</p>';
+                    return;
+                }
+
+                container.innerHTML = `
+                    <div class="space-y-3">
+                        ${activities.map(activity => `
+                            <div class="flex items-start gap-3 pb-3 border-b border-gray-200">
+                                <div class="mt-1">
+                                    <div class="w-3 h-3 bg-blue-600 rounded-full"></div>
+                                </div>
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-gray-900">${activity.message}</p>
+                                    <p class="text-xs text-gray-500">${new Date(activity.timestamp).toLocaleString()}</p>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading activity:', error);
+                document.getElementById('modal-activity-content').innerHTML =
+                    '<p class="text-red-500 text-center py-8">Error loading activity</p>';
+            }
+        }
+
+        function getHealthColor(score) {
+            if (score == null) return '#9ca3af';
+            if (score >= 7) return '#10b981';
+            if (score >= 5) return '#f59e0b';
+            return '#ef4444';
+        }
+
+        function getHealthInterpretation(score) {
+            if (score == null) return 'Not scored';
+            if (score >= 9) return 'Excellent';
+            if (score >= 7) return 'Good';
+            if (score >= 5) return 'Fair';
+            if (score >= 3) return 'Poor';
+            return 'Critical';
+        }
+
+        // Learning Tab Functions
+        async function initLearningTab() {
+            console.log('Initializing Learning tab...');
+
+            // learning_event_records has 0 rows — no pipeline wires data yet.
+            // Show honest empty-state rather than flat-zero charts that look broken.
+            const emptyMsg = 'No data yet — populates once the learning pipeline lands.';
+            const emptyChartIds = [
+                'cache-hit-rate-chart',
+                'trust-score-dist-chart',
+                'fp-rate-trends-chart',
+                'token-efficiency-chart',
+            ];
+            emptyChartIds.forEach(id => {
+                const canvas = document.getElementById(id);
+                if (canvas) {
+                    const parent = canvas.parentElement;
+                    if (parent) {
+                        canvas.style.display = 'none';
+                        if (!parent.querySelector('.ds-empty-state-overlay')) {
+                            const overlay = document.createElement('div');
+                            overlay.className = 'ds-empty-state-overlay flex items-center justify-center h-full text-gray-400 text-sm py-8';
+                            overlay.textContent = emptyMsg;
+                            parent.appendChild(overlay);
+                        }
+                    }
+                }
+            });
+
+            // Summary stats: show 0 rather than '--' so it's clear the data is absent
+            document.getElementById('learning-cache-hit-rate').textContent = '0%';
+            document.getElementById('learning-avg-trust').textContent = '0.00';
+            document.getElementById('learning-fp-rate').textContent = '0%';
+            document.getElementById('learning-token-efficiency').textContent = '0';
+
+            // Insights panel: show honest empty-state message
+            updateLearningInsights([
+                { type: 'info', message: 'No learning_event_records yet — 0 rows. Charts will populate once the learning pipeline lands.' },
+                { type: 'info', message: 'This is an honest empty state, not a display bug.' }
+            ]);
+
+            console.log('Learning tab: honest empty-state rendered');
+        }
+
+        function buildLearningEmptyState() {
+            const days = 30;
+            const cacheHitRate = [];
+            const fpRates = [];
+            const tokenEfficiency = [];
+
+            for (let i = 0; i < days; i++) {
+                const date = new Date();
+                date.setDate(date.getDate() - (days - i - 1));
+
+                cacheHitRate.push({
+                    date: date.toISOString().split('T')[0],
+                    rate: 0
+                });
+
+                fpRates.push({
+                    date: date.toISOString().split('T')[0],
+                    rate: 0
+                });
+
+                tokenEfficiency.push({
+                    date: date.toISOString().split('T')[0],
+                    tokens: 0
+                });
+            }
+
+            const trustScores = [];
+            for (let score = 0; score <= 1; score += 0.1) {
+                trustScores.push({ score: score.toFixed(1), count: 0 });
+            }
+
+            return {
+                cacheHitRate,
+                fpRates,
+                tokenEfficiency,
+                trustScores,
+                insights: [
+                    { type: 'info', message: 'Learning analytics have no current authority rows yet.' },
+                    { type: 'info', message: 'This panel is showing an honest empty state, not synthetic trend data.' }
+                ]
+            };
+        }
+
+        function updateLearningSummary(data) {
+            // Current cache hit rate (last data point)
+            const latestCacheHit = data.cacheHitRate[data.cacheHitRate.length - 1]?.rate || 0;
+            document.getElementById('learning-cache-hit-rate').textContent = `${latestCacheHit.toFixed(1)}%`;
+
+            // Average trust score
+            const trustTotal = data.trustScores.reduce((sum, item) => sum + item.count, 0);
+            const avgTrust = trustTotal > 0
+                ? data.trustScores.reduce((sum, item) => sum + (parseFloat(item.score) * item.count), 0) / trustTotal
+                : 0;
+            document.getElementById('learning-avg-trust').textContent = avgTrust.toFixed(2);
+
+            // Current FP rate (last data point)
+            const latestFPRate = data.fpRates[data.fpRates.length - 1]?.rate || 0;
+            document.getElementById('learning-fp-rate').textContent = `${latestFPRate.toFixed(1)}%`;
+
+            // Current token efficiency (last data point)
+            const latestTokens = data.tokenEfficiency[data.tokenEfficiency.length - 1]?.tokens || 0;
+            document.getElementById('learning-token-efficiency').textContent = `${Math.round(latestTokens).toLocaleString()}`;
+        }
+
+        function initCacheHitRateChart(data) {
+            const ctx = document.getElementById('cache-hit-rate-chart').getContext('2d');
+
+            if (charts.cacheHitRate) {
+                charts.cacheHitRate.destroy();
+            }
+
+            charts.cacheHitRate = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.map(d => d.date),
+                    datasets: [{
+                        label: 'Cache Hit Rate (%)',
+                        data: data.map(d => d.rate),
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `Hit Rate: ${context.parsed.y.toFixed(1)}%`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                                maxTicksLimit: 10
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function initTrustScoreDistChart(data) {
+            const ctx = document.getElementById('trust-score-dist-chart').getContext('2d');
+
+            if (charts.trustScoreDist) {
+                charts.trustScoreDist.destroy();
+            }
+
+            charts.trustScoreDist = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.map(d => d.score),
+                    datasets: [{
+                        label: 'Source Count',
+                        data: data.map(d => d.count),
+                        backgroundColor: '#3b82f6',
+                        borderColor: '#2563eb',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `Sources: ${context.parsed.y}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Trust Score'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function initFPRateTrendsChart(data) {
+            const ctx = document.getElementById('fp-rate-trends-chart').getContext('2d');
+
+            if (charts.fpRateTrends) {
+                charts.fpRateTrends.destroy();
+            }
+
+            charts.fpRateTrends = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.map(d => d.date),
+                    datasets: [{
+                        label: 'False Positive Rate (%)',
+                        data: data.map(d => d.rate),
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `FP Rate: ${context.parsed.y.toFixed(1)}%`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 50,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                                maxTicksLimit: 10
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function initTokenEfficiencyChart(data) {
+            const ctx = document.getElementById('token-efficiency-chart').getContext('2d');
+
+            if (charts.tokenEfficiency) {
+                charts.tokenEfficiency.destroy();
+            }
+
+            charts.tokenEfficiency = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.map(d => d.date),
+                    datasets: [{
+                        label: 'Tokens per Task',
+                        data: data.map(d => d.tokens),
+                        borderColor: '#8b5cf6',
+                        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `Tokens: ${Math.round(context.parsed.y).toLocaleString()}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            ticks: {
+                                callback: function(value) {
+                                    return (value / 1000).toFixed(1) + 'k';
+                                }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                                maxTicksLimit: 10
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateLearningInsights(insights) {
+            const container = document.getElementById('learning-insights');
+
+            if (!insights || insights.length === 0) {
+                container.innerHTML = '<div class="text-center text-gray-500 py-8">No insights available yet.</div>';
+                return;
+            }
+
+            const insightColors = {
+                success: 'bg-green-50 border-green-200 text-green-800',
+                warning: 'bg-yellow-50 border-yellow-200 text-yellow-800',
+                error: 'bg-red-50 border-red-200 text-red-800',
+                info: 'bg-blue-50 border-blue-200 text-blue-800'
+            };
+
+            const insightIcons = {
+                success: '✓',
+                warning: '⚠',
+                error: '✗',
+                info: 'ℹ'
+            };
+
+            container.innerHTML = insights.map(insight => `
+                <div class="border rounded-lg p-4 ${insightColors[insight.type] || insightColors.info}">
+                    <div class="flex items-start">
+                        <span class="text-xl mr-3">${insightIcons[insight.type] || insightIcons.info}</span>
+                        <p class="text-sm">${insight.message}</p>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // PRD Tab Functions
+        async function initPRDTab() {
+            console.log('Initializing PRD tab...');
+            await loadPRDData();
+        }
+
+        async function loadPRDData() {
+            try {
+                const response = await fetch('/api/prd/list');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+
+                // Update summary stats
+                updatePRDSummary(data.prds);
+
+                // Update PRD list table
+                updatePRDTable(data.prds);
+
+                console.log('PRD data loaded successfully');
+            } catch (error) {
+                console.error('Failed to load PRD data:', error);
+                document.getElementById('prd-list').innerHTML = `
+                    <tr>
+                        <td colspan="7" class="px-6 py-8 text-center text-red-500">
+                            Failed to load PRD data. Error: ${error.message}
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        function updatePRDSummary(prds) {
+            const totalCount = prds.length;
+            const inProgressCount = prds.filter(p => p.status === 'in_progress' || p.status === 'approved').length;
+            const completedCount = prds.filter(p => p.status === 'completed').length;
+            const avgCompletion = prds.length > 0
+                ? prds.reduce((sum, p) => sum + (p.pct_complete || 0), 0) / prds.length
+                : 0;
+
+            document.getElementById('prd-total-count').textContent = totalCount;
+            document.getElementById('prd-in-progress-count').textContent = inProgressCount;
+            document.getElementById('prd-completed-count').textContent = completedCount;
+            document.getElementById('prd-avg-completion').textContent = `${avgCompletion.toFixed(1)}%`;
+        }
+
+        function updatePRDTable(prds) {
+            const tbody = document.getElementById('prd-list');
+
+            if (prds.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                            No PRDs found. Create your first PRD to get started.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = prds.map(prd => {
+                const statusColors = {
+                    'draft': 'bg-gray-100 text-gray-800',
+                    'approved': 'bg-blue-100 text-blue-800',
+                    'in_progress': 'bg-yellow-100 text-yellow-800',
+                    'completed': 'bg-green-100 text-green-800',
+                    'archived': 'bg-gray-100 text-gray-600'
+                };
+
+                const statusColor = statusColors[prd.status] || 'bg-gray-100 text-gray-800';
+                const createdDate = prd.created_at ? new Date(prd.created_at).toLocaleDateString() : 'N/A';
+                const completionPct = prd.pct_complete || 0;
+
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            ${prd.prd_id}
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-900">
+                            ${prd.title || 'Untitled'}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor}">
+                                ${prd.status}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="w-24 bg-gray-200 rounded-full h-2.5 mr-2">
+                                    <div class="bg-blue-600 h-2.5 rounded-full" style="width: ${completionPct}%"></div>
+                                </div>
+                                <span class="text-sm text-gray-600">${completionPct.toFixed(1)}%</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            ${prd.completed_tasks || 0} / ${prd.total_tasks || 0}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            ${createdDate}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button onclick="viewPRDDetails('${prd.prd_id}')"
+                                    class="text-blue-600 hover:text-blue-900">
+                                View Details
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function viewPRDDetails(prdId) {
+            try {
+                const response = await fetch(`/api/prd/${prdId}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+
+                // Update modal title
+                document.getElementById('prd-modal-title').textContent = data.prd.title || prdId;
+
+                // Build modal content
+                const content = `
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <span class="font-semibold">Status:</span>
+                                <span class="px-2 py-1 text-xs rounded-full ${getStatusColor(data.prd.status)}">
+                                    ${data.prd.status}
+                                </span>
+                            </div>
+                            <div>
+                                <span class="font-semibold">Progress:</span>
+                                ${data.stats.completed} / ${data.stats.total} tasks (${data.prd.pct_complete?.toFixed(1) || 0}%)
+                            </div>
+                        </div>
+
+                        <div class="border-t pt-4">
+                            <h4 class="font-semibold mb-2">Tasks Breakdown</h4>
+                            <div class="space-y-1">
+                                <div class="flex justify-between text-sm">
+                                    <span>Completed:</span>
+                                    <span class="font-medium">${data.stats.completed}</span>
+                                </div>
+                                <div class="flex justify-between text-sm">
+                                    <span>In Progress:</span>
+                                    <span class="font-medium">${data.stats.in_progress}</span>
+                                </div>
+                                <div class="flex justify-between text-sm">
+                                    <span>Pending:</span>
+                                    <span class="font-medium">${data.stats.pending}</span>
+                                </div>
+                                ${data.stats.blocked > 0 ? `
+                                <div class="flex justify-between text-sm">
+                                    <span>Blocked:</span>
+                                    <span class="font-medium text-red-600">${data.stats.blocked}</span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+
+                        <div class="border-t pt-4">
+                            <h4 class="font-semibold mb-2">Task List</h4>
+                            <div class="max-h-64 overflow-y-auto">
+                                <table class="min-w-full text-sm">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-4 py-2 text-left">Task ID</th>
+                                            <th class="px-4 py-2 text-left">Name</th>
+                                            <th class="px-4 py-2 text-left">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${data.tasks.map(task => `
+                                            <tr class="border-t">
+                                                <td class="px-4 py-2">${task.task_id}</td>
+                                                <td class="px-4 py-2">${task.task_name || 'Unnamed task'}</td>
+                                                <td class="px-4 py-2">
+                                                    <span class="px-2 py-1 text-xs rounded-full ${getTaskStatusColor(task.status)}">
+                                                        ${task.status}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                document.getElementById('prd-modal-content').innerHTML = content;
+                document.getElementById('prd-details-modal').classList.remove('hidden');
+            } catch (error) {
+                console.error('Failed to load PRD details:', error);
+                alert('Failed to load PRD details: ' + error.message);
+            }
+        }
+
+        function closePRDModal() {
+            document.getElementById('prd-details-modal').classList.add('hidden');
+        }
+
+        function getStatusColor(status) {
+            const colors = {
+                'draft': 'bg-gray-100 text-gray-800',
+                'approved': 'bg-blue-100 text-blue-800',
+                'in_progress': 'bg-yellow-100 text-yellow-800',
+                'completed': 'bg-green-100 text-green-800',
+                'archived': 'bg-gray-100 text-gray-600'
+            };
+            return colors[status] || 'bg-gray-100 text-gray-800';
+        }
+
+        function getTaskStatusColor(status) {
+            const colors = {
+                'pending': 'bg-gray-100 text-gray-800',
+                'in_progress': 'bg-yellow-100 text-yellow-800',
+                'completed': 'bg-green-100 text-green-800',
+                'blocked': 'bg-red-100 text-red-800',
+                'skipped': 'bg-gray-100 text-gray-600'
+            };
+            return colors[status] || 'bg-gray-100 text-gray-800';
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // Project Graph Tab
+        // ═══════════════════════════════════════════════════════════════════════
+
+        let graphInstance = null;
+        let graphData = { nodes: [], edges: [] };
+        let selectedProjectId = null;
+
+        async function initGraphTab() {
+            console.log('Initializing Project Graph tab...');
+
+            // Load projects for selector
+            await loadProjectsForGraph();
+
+            // Set up event listeners
+            document.getElementById('graph-project-selector').addEventListener('change', handleProjectChange);
+            document.getElementById('graph-type-filter').addEventListener('change', applyGraphFilters);
+            document.getElementById('graph-layout').addEventListener('change', applyGraphLayout);
+        }
+
+        async function loadProjectsForGraph() {
+            try {
+                const response = await fetch('/api/v1/projects?limit=100');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+
+                const selector = document.getElementById('graph-project-selector');
+
+                if (data.projects.length === 0) {
+                    selector.innerHTML = '<option value="">No projects found</option>';
+                    return;
+                }
+
+                // Populate dropdown with projects
+                selector.innerHTML = '<option value="">Select a project...</option>' +
+                    data.projects.map(p =>
+                        `<option value="${p.project_id}">${p.project_name || p.project_id}</option>`
+                    ).join('');
+
+                console.log(`Loaded ${data.projects.length} projects for graph selector`);
+
+                // Auto-select first project and load its graph
+                if (data.projects.length > 0) {
+                    const firstProjectId = data.projects[0].project_id;
+                    selector.value = firstProjectId;
+                    await loadAndRenderGraph(firstProjectId);
+                }
+            } catch (error) {
+                console.error('Failed to load projects for graph:', error);
+                document.getElementById('graph-project-selector').innerHTML =
+                    '<option value="">Error loading projects</option>';
+            }
+        }
+
+        async function handleProjectChange(event) {
+            const projectId = event.target.value;
+            if (!projectId) {
+                // Clear graph
+                if (graphInstance) {
+                    graphInstance.destroy();
+                    graphInstance = null;
+                }
+                updateGraphStats(0, 0, 0, 0);
+                return;
+            }
+
+            selectedProjectId = projectId;
+            await loadAndRenderGraph(projectId);
+        }
+
+        async function loadAndRenderGraph(projectId) {
+            try {
+                const startTime = performance.now();
+
+                // Fetch graph data from API
+                const response = await fetch(`/api/discovery/internal/graph/${projectId}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                graphData = await response.json();
+                const fetchTime = performance.now() - startTime;
+                const sourceStatus = document.getElementById('graph-source-status');
+                if (sourceStatus) {
+                    sourceStatus.textContent = `${graphData.node_count || 0} confirmed nodes and ${graphData.edge_count || 0} confirmed edges from current dependency authority. Placeholder graph data is not rendered.`;
+                }
+
+                console.log(`Fetched graph: ${graphData.node_count} nodes, ${graphData.edge_count} edges in ${fetchTime.toFixed(0)}ms`);
+
+                // Render graph
+                const renderStartTime = performance.now();
+                renderGraph(graphData);
+                const renderTime = performance.now() - renderStartTime;
+
+                // Update stats
+                updateGraphStats(
+                    graphData.node_count,
+                    graphData.edge_count,
+                    graphData.node_count,
+                    renderTime
+                );
+
+                console.log(`Graph rendered in ${renderTime.toFixed(0)}ms`);
+
+            } catch (error) {
+                console.error('Failed to load graph:', error);
+                const sourceStatus = document.getElementById('graph-source-status');
+                if (sourceStatus) {
+                    sourceStatus.textContent = `Dependency graph unavailable for this project: ${error.message}`;
+                }
+                document.getElementById('graph-canvas').innerHTML =
+                    `<div class="flex items-center justify-center h-full text-red-500">
+                        Failed to load graph: ${error.message}
+                    </div>`;
+            }
+        }
+
+        function renderGraph(data) {
+            // Clear existing graph
+            const container = document.getElementById('graph-canvas');
+            container.innerHTML = '';
+
+            // Get actual container dimensions
+            const containerWidth = container.clientWidth;
+            const containerHeight = container.clientHeight;
+            console.log(`Graph container size: ${containerWidth}x${containerHeight}`);
+
+            // Prepare nodes for 3D force graph
+            const nodes = data.nodes.map(node => ({
+                id: node.id,
+                name: node.name,
+                type: node.component_type,
+                path: node.path,
+                lines: node.lines,
+                complexity: node.complexity_score,
+                incoming: node.incoming_edges,
+                outgoing: node.outgoing_edges,
+                centrality: node.centrality_score,
+                // Store original node for filtering
+                __data: node
+            }));
+
+            // Prepare edges - limit for performance
+            const edgeLimit = 5000;
+            let edgesToRender = data.edges;
+
+            if (data.edges.length > edgeLimit) {
+                edgesToRender = data.edges
+                    .sort((a, b) => (b.strength || 0) - (a.strength || 0))
+                    .slice(0, edgeLimit);
+                console.log(`Graph has ${data.edges.length} edges, showing top ${edgeLimit} by strength`);
+            }
+
+            const links = edgesToRender.map(edge => ({
+                source: edge.source,
+                target: edge.target,
+                type: edge.dependency_type,
+                strength: edge.strength || 1
+            }));
+
+            // Color mapping by type
+            const typeColors = {
+                'module': '#8b5cf6',    // violet
+                'class': '#10b981',     // green
+                'function': '#3b82f6',  // blue
+                'component': '#f59e0b', // amber
+                'route': '#ec4899',     // pink
+                'api': '#14b8a6'        // teal
+            };
+
+            // Initialize 3D Force Graph with explicit dimensions
+            graphInstance = ForceGraph3D()(container)
+                .width(containerWidth)
+                .height(containerHeight)
+                .graphData({ nodes, links })
+                .nodeLabel(node => `
+                    <div style="background: rgba(0,0,0,0.8); color: white; padding: 8px; border-radius: 4px; font-size: 12px;">
+                        <strong>${node.name}</strong><br/>
+                        Type: ${node.type}<br/>
+                        Lines: ${node.lines || 'N/A'}<br/>
+                        Centrality: ${(node.centrality || 0).toFixed(2)}<br/>
+                        Dependencies: ${node.incoming} in, ${node.outgoing} out
+                    </div>
+                `)
+                .nodeColor(node => typeColors[node.type] || '#6b7280')
+                .nodeVal(node => {
+                    // Node size based on centrality
+                    const centrality = node.centrality || 0;
+                    return Math.max(1, Math.min(10, 1 + centrality * 5));
+                })
+                .nodeOpacity(0.9)
+                .linkWidth(link => Math.max(0.5, (link.strength || 1) * 0.5))
+                .linkOpacity(0.8)
+                .linkDirectionalArrowLength(4)
+                .linkDirectionalArrowRelPos(1)
+                .linkColor(() => 'rgba(150, 200, 255, 0.6)')  // Light blue, more visible
+                .linkDirectionalParticles(2)
+                .linkDirectionalParticleWidth(2)
+                .onNodeClick(node => {
+                    // Show node details panel
+                    showNodeDetails({
+                        id: node.id,
+                        label: node.name,
+                        type: node.type,
+                        path: node.path,
+                        lines: node.lines,
+                        complexity: node.complexity,
+                        incoming: node.incoming,
+                        outgoing: node.outgoing,
+                        centrality: node.centrality
+                    });
+
+                    // Center camera on node
+                    const distance = 200;
+                    const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
+                    graphInstance.cameraPosition(
+                        { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
+                        node,
+                        1000
+                    );
+                })
+                .onBackgroundClick(() => {
+                    clearNodeDetails();
+                })
+                // Performance optimizations
+                .warmupTicks(100)
+                .cooldownTicks(200)
+                .cooldownTime(5000);
+
+            // Configure force parameters for better spread
+            graphInstance.d3Force('charge').strength(-120);
+            graphInstance.d3Force('link').distance(50);
+
+            // Reduce orbit controls sensitivity - access controls after a short delay to ensure they're initialized
+            setTimeout(() => {
+                const controls = graphInstance.controls();
+                if (controls) {
+                    controls.rotateSpeed = 0.25;      // Default is 1.0 - make rotation much slower
+                    controls.zoomSpeed = 0.8;         // Default is 1.0 - slightly slower zoom
+                    controls.panSpeed = 0.25;         // Default is 1.0 - make panning slower
+                    controls.enableDamping = true;    // Smooth movement
+                    controls.dampingFactor = 0.15;    // More damping = smoother, slower
+                    controls.minDistance = 10;        // Minimum zoom distance - allow closer zoom
+                    controls.maxDistance = 8000;      // Maximum zoom distance - allow much further zoom out
+                    controls.enableZoom = true;       // Explicitly enable zoom
+                    controls.enableRotate = true;     // Explicitly enable rotation
+                    controls.enablePan = true;        // Explicitly enable panning
+                    controls.mouseButtons = {
+                        LEFT: 0,   // Rotate
+                        MIDDLE: 1, // Zoom
+                        RIGHT: 2   // Pan
+                    };
+                    console.log('Graph controls configured:', {
+                        rotateSpeed: controls.rotateSpeed,
+                        zoomSpeed: controls.zoomSpeed,
+                        panSpeed: controls.panSpeed,
+                        minDistance: controls.minDistance,
+                        maxDistance: controls.maxDistance,
+                        enableZoom: controls.enableZoom
+                    });
+                } else {
+                    console.error('Failed to get graph controls');
+                }
+            }, 100);
+
+            // Store graph data for filtering
+            window.currentGraphData = { nodes, links };
+
+            // Auto-fit to view after initial layout settles - wait longer for force simulation
+            setTimeout(() => {
+                if (graphInstance) {
+                    fitGraphToView();
+                }
+            }, 4000);  // Increased from 2500ms to 4000ms to let force simulation complete
+
+            console.log(`3D graph rendered: ${nodes.length} nodes, ${links.length} edges`);
+        }
+
+        function applyGraphFilters() {
+            if (!graphInstance || !graphData || !window.currentGraphData) return;
+
+            const typeFilter = document.getElementById('graph-type-filter').value;
+            const { nodes, links } = window.currentGraphData;
+
+            if (!typeFilter) {
+                // Show all nodes and edges
+                graphInstance.graphData({ nodes, links });
+                updateGraphStats(
+                    graphData.node_count,
+                    graphData.edge_count,
+                    nodes.length,
+                    null
+                );
+                return;
+            }
+
+            // Filter nodes by type
+            const filteredNodes = nodes.filter(node => node.type === typeFilter);
+            const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
+
+            // Filter edges to only show connections between visible nodes
+            const filteredLinks = links.filter(link =>
+                filteredNodeIds.has(link.source.id || link.source) &&
+                filteredNodeIds.has(link.target.id || link.target)
+            );
+
+            // Update graph with filtered data
+            graphInstance.graphData({
+                nodes: filteredNodes,
+                links: filteredLinks
+            });
+
+            // Update stats
+            updateGraphStats(
+                graphData.node_count,
+                graphData.edge_count,
+                filteredNodes.length,
+                null
+            );
+
+            console.log(`Filtered to ${filteredNodes.length} ${typeFilter} nodes`);
+        }
+
+        function applyGraphLayout() {
+            if (!graphInstance) return;
+
+            const layoutMode = document.getElementById('graph-layout').value;
+
+            // Adjust force simulation parameters based on mode
+            switch(layoutMode) {
+                case 'tight':
+                    graphInstance
+                        .d3Force('charge').strength(-30)
+                        .d3Force('link').distance(20);
+                    break;
+                case 'loose':
+                    graphInstance
+                        .d3Force('charge').strength(-300)
+                        .d3Force('link').distance(100);
+                    break;
+                case 'hierarchical':
+                    graphInstance
+                        .d3Force('charge').strength(-150)
+                        .d3Force('link').distance(50)
+                        .d3Force('center').strength(0.5);
+                    break;
+                default: // normal
+                    graphInstance
+                        .d3Force('charge').strength(-120)
+                        .d3Force('link').distance(50);
+            }
+
+            // Reheat simulation to apply changes
+            graphInstance.d3ReheatSimulation();
+
+            console.log(`Applied ${layoutMode} force layout`);
+        }
+
+        function fitGraphToView() {
+            if (graphInstance && window.currentGraphData) {
+                const nodes = window.currentGraphData.nodes;
+
+                // Check if nodes have positions (force simulation has run)
+                const validNodes = nodes.filter(n => n.x !== undefined && n.y !== undefined && n.z !== undefined);
+
+                if (validNodes.length === 0) {
+                    // Nodes haven't been positioned yet, just use zoomToFit
+                    console.log('Nodes not positioned yet, using basic zoomToFit');
+                    graphInstance.zoomToFit(1000, 100);
+                    return;
+                }
+
+                // Calculate center of mass and bounding box from positioned nodes
+                const centerX = validNodes.reduce((sum, n) => sum + n.x, 0) / validNodes.length;
+                const centerY = validNodes.reduce((sum, n) => sum + n.y, 0) / validNodes.length;
+                const centerZ = validNodes.reduce((sum, n) => sum + n.z, 0) / validNodes.length;
+
+                // Calculate max distance from center to determine zoom distance
+                let maxDist = 0;
+                validNodes.forEach(n => {
+                    const dist = Math.sqrt(
+                        Math.pow(n.x - centerX, 2) +
+                        Math.pow(n.y - centerY, 2) +
+                        Math.pow(n.z - centerZ, 2)
+                    );
+                    if (dist > maxDist) maxDist = dist;
+                });
+
+                const cameraDistance = Math.max(600, maxDist * 3.5);  // Increased multiplier for better view
+
+                console.log(`Centering graph at (${centerX.toFixed(1)}, ${centerY.toFixed(1)}, ${centerZ.toFixed(1)}), distance: ${cameraDistance.toFixed(1)}, maxDist: ${maxDist.toFixed(1)}`);
+
+                // Center camera on the center of mass at appropriate distance
+                graphInstance.cameraPosition(
+                    { x: centerX, y: centerY, z: centerZ + cameraDistance },
+                    { x: centerX, y: centerY, z: centerZ },
+                    1500  // Slower animation for smoother transition
+                );
+            }
+        }
+
+        function resetGraphZoom() {
+            if (graphInstance) {
+                // Reset to centered view
+                fitGraphToView();
+            }
+        }
+
+        let savedCameraState = null;
+
+        function toggleGraphFullscreen() {
+            const canvas = document.getElementById('graph-canvas');
+            const parent = canvas.parentElement;
+            const expandIcon = document.getElementById('fullscreen-icon-expand');
+            const collapseIcon = document.getElementById('fullscreen-icon-collapse');
+            const text = document.getElementById('fullscreen-text');
+
+            if (!canvas.classList.contains('graph-fullscreen')) {
+                // Save current camera position and target
+                if (graphInstance) {
+                    const controls = graphInstance.controls();
+                    savedCameraState = {
+                        position: graphInstance.camera().position.clone(),
+                        target: controls.target.clone(),
+                        distance: graphInstance.camera().position.distanceTo(controls.target)
+                    };
+                    console.log('Saved camera state:', savedCameraState);
+                }
+
+                // Enter fullscreen
+                canvas.classList.add('graph-fullscreen');
+                parent.classList.add('graph-fullscreen-container');
+                canvas.style.height = '100vh';
+                expandIcon.classList.add('hidden');
+                collapseIcon.classList.remove('hidden');
+                text.textContent = 'Exit Fullscreen';
+
+                // Add ESC key handler
+                document.addEventListener('keydown', handleFullscreenEscape);
+
+                // Resize graph renderer to fullscreen
+                if (graphInstance) {
+                    const width = window.innerWidth;
+                    const height = window.innerHeight;
+                    graphInstance.width(width).height(height);
+                    console.log(`Resized graph to fullscreen: ${width}x${height}`);
+                }
+            } else {
+                exitGraphFullscreen();
+            }
+        }
+
+        function exitGraphFullscreen() {
+            const canvas = document.getElementById('graph-canvas');
+            const parent = canvas.parentElement;
+            const expandIcon = document.getElementById('fullscreen-icon-expand');
+            const collapseIcon = document.getElementById('fullscreen-icon-collapse');
+            const text = document.getElementById('fullscreen-text');
+
+            canvas.classList.remove('graph-fullscreen');
+            parent.classList.remove('graph-fullscreen-container');
+            canvas.style.height = '600px';
+            expandIcon.classList.remove('hidden');
+            collapseIcon.classList.add('hidden');
+            text.textContent = 'Fullscreen';
+
+            // Remove ESC key handler
+            document.removeEventListener('keydown', handleFullscreenEscape);
+
+            // Resize graph renderer back to normal container size
+            if (graphInstance) {
+                const containerWidth = canvas.clientWidth;
+                const containerHeight = 600;  // Match the CSS height
+                graphInstance.width(containerWidth).height(containerHeight);
+                console.log(`Resized graph to normal: ${containerWidth}x${containerHeight}`);
+
+                // Restore saved camera state if available
+                if (savedCameraState) {
+                    setTimeout(() => {
+                        // Restore camera position and target
+                        graphInstance.cameraPosition(
+                            savedCameraState.position,
+                            savedCameraState.target,
+                            1000   // Smooth transition
+                        );
+                        console.log('Restored camera state');
+                    }, 150);
+                    savedCameraState = null;
+                }
+            }
+        }
+
+        function handleFullscreenEscape(e) {
+            if (e.key === 'Escape') {
+                exitGraphFullscreen();
+            }
+        }
+
+        function toggleGraphHelp() {
+            const overlay = document.getElementById('graph-help-overlay');
+            overlay.classList.toggle('hidden');
+        }
+
+        function showNodeDetails(nodeData) {
+            const detailsPanel = document.getElementById('graph-node-details');
+
+            const html = `
+                <div class="space-y-4">
+                    <div>
+                        <h4 class="font-semibold text-lg text-gray-900 mb-2">${nodeData.label}</h4>
+                        <div class="text-xs text-gray-500 font-mono">${nodeData.id}</div>
+                    </div>
+
+                    <div class="border-t pt-3">
+                        <div class="text-sm font-medium text-gray-700 mb-2">Type</div>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-800">
+                            ${nodeData.type}
+                        </span>
+                    </div>
+
+                    <div class="border-t pt-3">
+                        <div class="text-sm font-medium text-gray-700 mb-2">File Path</div>
+                        <div class="text-xs text-gray-600 font-mono break-all">${nodeData.path || 'N/A'}</div>
+                    </div>
+
+                    <div class="border-t pt-3">
+                        <div class="text-sm font-medium text-gray-700 mb-2">Metrics</div>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Lines of Code:</span>
+                                <span class="font-medium">${nodeData.lines || 'N/A'}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Complexity Score:</span>
+                                <span class="font-medium">${nodeData.complexity?.toFixed(2) || 'N/A'}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Centrality Score:</span>
+                                <span class="font-medium">${nodeData.centrality || 0}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border-t pt-3">
+                        <div class="text-sm font-medium text-gray-700 mb-2">Dependencies</div>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Incoming:</span>
+                                <span class="font-medium text-green-600">${nodeData.incoming}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Outgoing:</span>
+                                <span class="font-medium text-blue-600">${nodeData.outgoing}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            detailsPanel.innerHTML = html;
+        }
+
+        function clearNodeDetails() {
+            const detailsPanel = document.getElementById('graph-node-details');
+            detailsPanel.innerHTML = `
+                <div class="text-center text-gray-500 py-12">
+                    Click on a node to see details
+                </div>
+            `;
+        }
+
+        function updateGraphStats(totalNodes, totalEdges, visibleNodes, renderTime) {
+            document.getElementById('graph-node-count').textContent = totalNodes || '--';
+            document.getElementById('graph-edge-count').textContent = totalEdges || '--';
+            document.getElementById('graph-visible-count').textContent = visibleNodes || '--';
+
+            if (renderTime !== null) {
+                document.getElementById('graph-render-time').textContent =
+                    renderTime ? `${renderTime.toFixed(0)}ms` : '--';
+            }
+        }
+
+        // Security Tab Functions
+        let allSecurityFindings = [];
+
+        async function initSecurityTab() {
+            console.log('Initializing Security tab...');
+            await loadSecurityData();
+        }
+
+        async function loadSecurityData() {
+            try {
+                // Fetch findings
+                const findingsResponse = await fetch('/api/v1/security/findings?limit=50');
+                if (!findingsResponse.ok) {
+                    throw new Error(`HTTP ${findingsResponse.status}: ${findingsResponse.statusText}`);
+                }
+                const findingsData = await findingsResponse.json();
+                allSecurityFindings = findingsData.findings || [];
+
+                // Fetch stats
+                const statsResponse = await fetch('/api/v1/security/stats');
+                if (!statsResponse.ok) {
+                    throw new Error(`HTTP ${statsResponse.status}: ${statsResponse.statusText}`);
+                }
+                const statsData = await statsResponse.json();
+
+                // Update summary cards
+                updateSecuritySummary(statsData);
+
+                // Update charts
+                initSecuritySeverityChart(statsData);
+                initSecurityTrendChart(statsData);
+
+                // Update table
+                displaySecurityFindings(allSecurityFindings);
+
+                console.log('Security tab loaded successfully');
+            } catch (error) {
+                console.error('Error loading security data:', error);
+                document.getElementById('security-total-findings').textContent = 'Error';
+                document.getElementById('security-critical-count').textContent = 'Error';
+                document.getElementById('security-high-count').textContent = 'Error';
+                document.getElementById('security-mitigation-rate').textContent = 'Error';
+            }
+        }
+
+        function updateSecuritySummary(stats) {
+            // Total findings — sum all sources from findings_by_source
+            // API returns: { telemetry_security, sarif, cve, manual_review, hook_check }
+            const src = stats.findings_by_source || {};
+            const total = Object.values(src).reduce((a, b) => a + (b || 0), 0);
+            document.getElementById('security-total-findings').textContent = total.toLocaleString();
+
+            // Severity — API returns findings_by_severity not by_severity
+            const sev = stats.findings_by_severity || stats.by_severity || {};
+            const critical = sev.critical || 0;
+            document.getElementById('security-critical-count').textContent = critical.toLocaleString();
+            const high = sev.high || 0;
+            document.getElementById('security-high-count').textContent = high.toLocaleString();
+
+            // Mitigation rate — API returns findings_by_status not by_status
+            const st = stats.findings_by_status || stats.by_status || {};
+            const open = st.open || 0;
+            const mitigated = st.mitigated || 0;
+            const totalStatus = open + mitigated;
+            const rate = totalStatus > 0 ? ((mitigated / totalStatus) * 100).toFixed(1) : 0;
+            document.getElementById('security-mitigation-rate').textContent = `${rate}%`;
+            document.getElementById('security-mitigation-ratio').textContent =
+                `${mitigated} of ${totalStatus} mitigated`;
+        }
+
+        function initSecuritySeverityChart(stats) {
+            const ctx = document.getElementById('securitySeverityChart').getContext('2d');
+
+            if (charts.securitySeverity) {
+                charts.securitySeverity.destroy();
+            }
+
+            const severityData = stats.findings_by_severity || stats.by_severity || {};
+            const labels = ['Critical', 'High', 'Medium', 'Low', 'Info'];
+            const data = [
+                severityData.critical || 0,
+                severityData.high || 0,
+                severityData.medium || 0,
+                severityData.low || 0,
+                severityData.info || 0
+            ];
+            const colors = ['#dc2626', '#f97316', '#f59e0b', '#3b82f6', '#6b7280'];
+
+            charts.securitySeverity = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                    return `${label}: ${value} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function initSecurityTrendChart(stats) {
+            const ctx = document.getElementById('securityTrendChart').getContext('2d');
+
+            if (charts.securityTrend) {
+                charts.securityTrend.destroy();
+            }
+
+            const trend = Array.isArray(stats?.trend_last_30_days) ? stats.trend_last_30_days : [];
+            const labels = trend.map(item => {
+                const date = new Date(`${item.date}T00:00:00`);
+                return Number.isNaN(date.getTime())
+                    ? item.date
+                    : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            });
+            const data = trend.map(item => Number(item.count || 0));
+
+            if (labels.length === 0) {
+                labels.push('No data');
+                data.push(0);
+            }
+
+            charts.securityTrend = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'New Findings',
+                        data: data,
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 5
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                                maxTicksLimit: 10
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function displaySecurityFindings(findings) {
+            const tbody = document.getElementById('security-findings-table');
+
+            if (!findings || findings.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-sm text-gray-500">No security findings found.</td></tr>';
+                return;
+            }
+
+            const severityColors = {
+                critical: 'bg-red-100 text-red-800',
+                high: 'bg-orange-100 text-orange-800',
+                medium: 'bg-yellow-100 text-yellow-800',
+                low: 'bg-blue-100 text-blue-800',
+                info: 'bg-gray-100 text-gray-800'
+            };
+
+            const statusColors = {
+                open: 'bg-red-100 text-red-800',
+                mitigated: 'bg-green-100 text-green-800',
+                accepted_risk: 'bg-yellow-100 text-yellow-800',
+                false_positive: 'bg-gray-100 text-gray-800'
+            };
+
+            tbody.innerHTML = findings.map(finding => {
+                const createdDate = new Date(finding.created_at).toLocaleDateString();
+                const location = finding.file_path || finding.package_name || finding.component || '-';
+                const message = (finding.message || finding.description || '').substring(0, 100);
+
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            ${finding.source_type || 'Unknown'}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <span class="px-2 py-1 rounded-full text-xs font-semibold ${severityColors[finding.severity] || severityColors.info}">
+                                ${(finding.severity || 'info').toUpperCase()}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <span class="px-2 py-1 rounded-full text-xs font-semibold ${statusColors[finding.status] || statusColors.open}">
+                                ${(finding.status || 'open').replace('_', ' ').toUpperCase()}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-900 max-w-xs truncate" title="${location}">
+                            ${location}
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-500 max-w-md truncate" title="${message}">
+                            ${message}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            ${createdDate}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function filterSecurityFindings() {
+            const typeFilter = document.getElementById('security-type-filter').value;
+            const severityFilter = document.getElementById('security-severity-filter').value;
+            const statusFilter = document.getElementById('security-status-filter').value;
+
+            const filtered = allSecurityFindings.filter(finding => {
+                const typeMatch = !typeFilter || finding.source_type === typeFilter;
+                const severityMatch = !severityFilter || finding.severity === severityFilter;
+                const statusMatch = !statusFilter || finding.status === statusFilter;
+                return typeMatch && severityMatch && statusMatch;
+            });
+
+            displaySecurityFindings(filtered);
+        }
+
+        async function uploadSarifFile() {
+            const fileInput = document.getElementById('sarif-file-input');
+            const messageDiv = document.getElementById('sarif-upload-message');
+
+            if (!fileInput.files || fileInput.files.length === 0) {
+                messageDiv.innerHTML = '<span class="text-red-600">Please select a SARIF file to upload.</span>';
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                messageDiv.innerHTML = '<span class="text-blue-600">Uploading...</span>';
+
+                const response = await fetch('/api/v1/security/sarif/import', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || `HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                messageDiv.innerHTML = `<span class="text-green-600">Success! Imported ${result.findings_count || 0} findings.</span>`;
+
+                // Clear file input
+                fileInput.value = '';
+
+                // Reload security data
+                await loadSecurityData();
+
+            } catch (error) {
+                console.error('Error uploading SARIF file:', error);
+                messageDiv.innerHTML = `<span class="text-red-600">Error: ${error.message}</span>`;
+            }
+        }
+
+        async function initAuditHistoryTab() {
+            console.log('Initializing Audit History tab...');
+            await loadAuditHistory();
+            await updateAuditHistoryStats();
+        }
+
+        async function loadAuditHistory() {
+            try {
+                const response = await fetch('/api/v1/audits/runs');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const data = await response.json();
+                allAuditRuns = data.runs || [];
+
+                renderAuditTimeline(allAuditRuns);
+                renderAuditCharts(allAuditRuns);
+
+            } catch (error) {
+                console.error('Error loading audit history:', error);
+                document.getElementById('audit-timeline').innerHTML =
+                    '<p class="text-center text-red-500 py-8">Error loading audit history</p>';
+            }
+        }
+
+        async function updateAuditHistoryStats() {
+            try {
+                const response = await fetch('/api/v1/audits/stats');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const stats = await response.json();
+
+                document.getElementById('audit-total-count').textContent = stats.total_audits || 0;
+                document.getElementById('audit-month-count').textContent = stats.audits_this_month || 0;
+                document.getElementById('audit-pass-rate').textContent =
+                    (stats.pass_rate !== undefined ? stats.pass_rate.toFixed(1) : 0) + '%';
+                document.getElementById('audit-avg-duration').textContent =
+                    stats.avg_duration !== undefined ? stats.avg_duration.toFixed(1) : '--';
+
+            } catch (error) {
+                console.error('Error loading audit stats:', error);
+            }
+        }
+
+        function renderAuditTimeline(audits) {
+            const timeline = document.getElementById('audit-timeline');
+
+            if (!audits || audits.length === 0) {
+                timeline.innerHTML = '<p class="text-center text-gray-500 py-8">No audit runs found.</p>';
+                return;
+            }
+
+            // Group audits by date
+            const auditsByDate = {};
+            audits.forEach(audit => {
+                const date = new Date(audit.created_at).toLocaleDateString();
+                if (!auditsByDate[date]) {
+                    auditsByDate[date] = [];
+                }
+                auditsByDate[date].push(audit);
+            });
+
+            // Sort dates descending (newest first)
+            const sortedDates = Object.keys(auditsByDate).sort((a, b) =>
+                new Date(b) - new Date(a)
+            );
+
+            const auditTypeIcons = {
+                security: 'SEC',
+                performance: 'PERF',
+                architecture: 'ARCH',
+                code_quality: 'QUAL'
+            };
+
+            const statusColors = {
+                completed: 'bg-green-100 text-green-800',
+                failed: 'bg-red-100 text-red-800',
+                running: 'bg-blue-100 text-blue-800'
+            };
+
+            let html = '';
+            sortedDates.forEach(date => {
+                html += `
+                    <div class="mb-6">
+                        <h4 class="text-sm font-semibold text-gray-700 mb-3">${date}</h4>
+                        <div class="space-y-2">
+                `;
+
+                auditsByDate[date].forEach(audit => {
+                    const icon = auditTypeIcons[audit.audit_type] || 'AUD';
+                    const statusColor = statusColors[audit.status] || 'bg-gray-100 text-gray-800';
+                    const time = new Date(audit.created_at).toLocaleTimeString();
+                    const duration = audit.duration ? `${audit.duration.toFixed(1)}s` : 'N/A';
+
+                    html += `
+                        <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors"
+                             onclick="showAuditDetailsModal('${audit.id}')">
+                            <div class="flex items-center space-x-4">
+                                <span class="text-2xl">${icon}</span>
+                                <div>
+                                    <div class="font-medium text-gray-900">${audit.audit_type}</div>
+                                    <div class="text-sm text-gray-500">${time} • ${duration}</div>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                ${audit.findings_count !== undefined ?
+                                    `<span class="text-sm text-gray-600">${audit.findings_count} findings</span>` : ''}
+                                <span class="px-3 py-1 rounded-full text-xs font-medium ${statusColor}">
+                                    ${audit.status}
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                html += `
+                        </div>
+                    </div>
+                `;
+            });
+
+            timeline.innerHTML = html;
+        }
+
+        function renderAuditCharts(audits) {
+            // Calculate findings by severity across all completed audits
+            const severityCounts = {
+                critical: 0,
+                high: 0,
+                medium: 0,
+                low: 0
+            };
+
+            const typeCounts = {};
+
+            audits.forEach(audit => {
+                // Count by type
+                if (audit.audit_type) {
+                    typeCounts[audit.audit_type] = (typeCounts[audit.audit_type] || 0) + 1;
+                }
+            });
+
+            // Render pie chart (will show severity breakdown once we fetch findings)
+            renderFindingsPieChart(severityCounts);
+
+            // Render bar chart for audit types
+            renderAuditTypeBarChart(typeCounts);
+
+            // Fetch findings data for pie chart
+            updateFindingsPieChart();
+        }
+
+        async function updateFindingsPieChart() {
+            try {
+                // Aggregate findings from all completed audits
+                const severityCounts = {
+                    critical: 0,
+                    high: 0,
+                    medium: 0,
+                    low: 0
+                };
+
+                // Fetch findings for each completed audit
+                for (const audit of allAuditRuns.filter(a => a.status === 'completed')) {
+                    try {
+                        const response = await fetch(`/api/v1/audits/findings/${audit.id}`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            const findings = data.findings || [];
+                            findings.forEach(finding => {
+                                if (severityCounts.hasOwnProperty(finding.severity)) {
+                                    severityCounts[finding.severity]++;
+                                }
+                            });
+                        }
+                    } catch (err) {
+                        console.error(`Error fetching findings for audit ${audit.id}:`, err);
+                    }
+                }
+
+                renderFindingsPieChart(severityCounts);
+
+            } catch (error) {
+                console.error('Error updating findings pie chart:', error);
+            }
+        }
+
+        function renderFindingsPieChart(severityCounts) {
+            const ctx = document.getElementById('auditFindingsPieChart');
+            if (!ctx) return;
+
+            if (auditFindingsPieChart) {
+                auditFindingsPieChart.destroy();
+            }
+
+            const total = Object.values(severityCounts).reduce((a, b) => a + b, 0);
+
+            auditFindingsPieChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: ['Critical', 'High', 'Medium', 'Low'],
+                    datasets: [{
+                        data: [
+                            severityCounts.critical,
+                            severityCounts.high,
+                            severityCounts.medium,
+                            severityCounts.low
+                        ],
+                        backgroundColor: [
+                            'rgba(239, 68, 68, 0.8)',
+                            'rgba(249, 115, 22, 0.8)',
+                            'rgba(234, 179, 8, 0.8)',
+                            'rgba(59, 130, 246, 0.8)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.parsed;
+                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                    return `${context.label}: ${value} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderAuditTypeBarChart(typeCounts) {
+            const ctx = document.getElementById('auditTypeBarChart');
+            if (!ctx) return;
+
+            if (auditTypeBarChart) {
+                auditTypeBarChart.destroy();
+            }
+
+            const labels = Object.keys(typeCounts);
+            const data = Object.values(typeCounts);
+
+            auditTypeBarChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Audit Runs',
+                        data: data,
+                        backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        async function showAuditDetailsModal(auditId) {
+            try {
+                // Fetch audit findings
+                const response = await fetch(`/api/v1/audits/findings/${auditId}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const data = await response.json();
+                const findings = data.findings || [];
+                const audit = allAuditRuns.find(a => a.id === auditId);
+
+                // Build modal content
+                const modalHtml = `
+                    <div class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center"
+                         id="audit-details-modal" onclick="closeAuditDetailsModal()">
+                        <div class="relative mx-auto p-8 border w-full max-w-4xl shadow-lg rounded-lg bg-white"
+                             onclick="event.stopPropagation()">
+                            <div class="flex justify-between items-center mb-6">
+                                <h3 class="text-2xl font-bold text-gray-900">Audit Details</h3>
+                                <button onclick="closeAuditDetailsModal()" class="text-gray-400 hover:text-gray-600 text-2xl font-bold">
+                                    &times;
+                                </button>
+                            </div>
+
+                            ${audit ? `
+                            <div class="mb-6 grid grid-cols-2 gap-4">
+                                <div>
+                                    <div class="text-sm text-gray-600">Audit Type</div>
+                                    <div class="font-medium">${audit.audit_type}</div>
+                                </div>
+                                <div>
+                                    <div class="text-sm text-gray-600">Status</div>
+                                    <div class="font-medium">${audit.status}</div>
+                                </div>
+                                <div>
+                                    <div class="text-sm text-gray-600">Created At</div>
+                                    <div class="font-medium">${new Date(audit.created_at).toLocaleString()}</div>
+                                </div>
+                                <div>
+                                    <div class="text-sm text-gray-600">Duration</div>
+                                    <div class="font-medium">${audit.duration ? audit.duration.toFixed(2) + 's' : 'N/A'}</div>
+                                </div>
+                            </div>
+                            ` : ''}
+
+                            <h4 class="font-semibold text-lg mb-4">Findings (${findings.length})</h4>
+
+                            ${findings.length === 0 ?
+                                '<p class="text-center text-gray-500 py-8">No findings for this audit.</p>' :
+                                `<div class="space-y-3 max-h-96 overflow-y-auto">
+                                    ${findings.map(finding => {
+                                        const severityColors = {
+                                            critical: 'bg-red-100 text-red-800',
+                                            high: 'bg-orange-100 text-orange-800',
+                                            medium: 'bg-yellow-100 text-yellow-800',
+                                            low: 'bg-blue-100 text-blue-800'
+                                        };
+                                        const color = severityColors[finding.severity] || 'bg-gray-100 text-gray-800';
+
+                                        return `
+                                            <div class="p-4 bg-gray-50 rounded-lg">
+                                                <div class="flex items-start justify-between mb-2">
+                                                    <span class="px-3 py-1 rounded-full text-xs font-medium ${color}">
+                                                        ${finding.severity}
+                                                    </span>
+                                                    ${finding.file_path ?
+                                                        `<span class="text-xs text-gray-500">${finding.file_path}${finding.line_number ? ':' + finding.line_number : ''}</span>`
+                                                        : ''}
+                                                </div>
+                                                <div class="text-sm text-gray-900 font-medium mb-1">${finding.title || finding.message || 'No title'}</div>
+                                                ${finding.description ?
+                                                    `<div class="text-sm text-gray-600">${finding.description}</div>`
+                                                    : ''}
+                                            </div>
+                                        `;
+                                    }).join('')}
+                                </div>`
+                            }
+
+                            <div class="mt-6 flex justify-end">
+                                <button onclick="closeAuditDetailsModal()"
+                                        class="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Remove existing modal if any
+                const existingModal = document.getElementById('audit-details-modal');
+                if (existingModal) {
+                    existingModal.remove();
+                }
+
+                // Add modal to body
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+            } catch (error) {
+                console.error('Error showing audit details:', error);
+                alert('Error loading audit details: ' + error.message);
+            }
+        }
+
+        function closeAuditDetailsModal() {
+            const modal = document.getElementById('audit-details-modal');
+            if (modal) {
+                modal.remove();
+            }
+        }
+
+        // ==================== Security Audits Subtab Functions ====================
+
+        let allAudits = [];
+        let auditStatsData = null;
+
+        function switchSecuritySubtab(subtabName) {
+            // Hide all subtab contents
+            document.querySelectorAll('#security .subtab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+
+            // Remove active state from all subtab buttons
+            document.querySelectorAll('#security .subtab-button').forEach(button => {
+                button.classList.remove('active', 'text-blue-500');
+                button.classList.add('text-gray-500', 'hover:text-gray-700');
+            });
+
+            // Show selected subtab content
+            if (subtabName === 'findings') {
+                document.getElementById('security-findings-subtab').classList.add('active');
+            } else if (subtabName === 'audits') {
+                document.getElementById('security-audits-subtab').classList.add('active');
+                // Initialize audits subtab if not already loaded
+                if (allAudits.length === 0) {
+                    initSecurityAuditsSubtab();
+                }
+            }
+
+            // Add active state to selected subtab button
+            const activeButton = document.querySelector(`#security .subtab-button[data-subtab="${subtabName}"]`);
+            if (activeButton) {
+                activeButton.classList.add('active', 'text-blue-500');
+                activeButton.classList.remove('text-gray-500', 'hover:text-gray-700');
+            }
+        }
+
+        async function initSecurityAuditsSubtab() {
+            console.log('Initializing Security Audits subtab...');
+            await loadAuditsData();
+        }
+
+        async function loadAuditsData() {
+            try {
+                // Fetch audit runs
+                const runsResponse = await fetch('/api/v1/audits/runs?limit=20');
+                if (!runsResponse.ok) {
+                    throw new Error(`HTTP ${runsResponse.status}: ${runsResponse.statusText}`);
+                }
+                const runsData = await runsResponse.json();
+                allAudits = runsData.runs || [];
+
+                // Fetch audit stats
+                const statsResponse = await fetch('/api/v1/audits/stats');
+                if (!statsResponse.ok) {
+                    throw new Error(`HTTP ${statsResponse.status}: ${statsResponse.statusText}`);
+                }
+                auditStatsData = await statsResponse.json();
+
+                // Update summary cards
+                updateAuditsSummary(auditStatsData);
+
+                // Update charts
+                initAuditFrequencyChart(auditStatsData);
+                initAuditFindingsTrendChart(auditStatsData);
+
+                // Update table
+                displayAuditRuns(allAudits);
+
+                console.log('Security Audits subtab loaded successfully');
+            } catch (error) {
+                console.error('Error loading audits data:', error);
+                document.getElementById('audits-total').textContent = 'Error';
+                document.getElementById('audits-latest-status').textContent = 'Error';
+            }
+        }
+
+        function updateAuditsSummary(stats) {
+            // Total audits
+            const total = stats.total_runs || 0;
+            document.getElementById('audits-total').textContent = total.toLocaleString();
+
+            // Latest audit status
+            if (allAudits.length > 0) {
+                const latest = allAudits[0];
+                const statusBadge = document.getElementById('audits-latest-status');
+                const statusTime = document.getElementById('audits-latest-time');
+
+                // Status badge styling
+                statusBadge.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium';
+                if (latest.status === 'completed') {
+                    statusBadge.classList.add('bg-green-100', 'text-green-800');
+                    statusBadge.textContent = 'Completed';
+                } else if (latest.status === 'running') {
+                    statusBadge.classList.add('bg-blue-100', 'text-blue-800');
+                    statusBadge.textContent = 'Running';
+                } else if (latest.status === 'failed') {
+                    statusBadge.classList.add('bg-red-100', 'text-red-800');
+                    statusBadge.textContent = 'Failed';
+                } else {
+                    statusBadge.classList.add('bg-gray-100', 'text-gray-800');
+                    statusBadge.textContent = latest.status || 'Unknown';
+                }
+
+                // Time
+                const startTime = new Date(latest.started_at);
+                statusTime.textContent = formatRelativeTime(startTime);
+
+                // Latest findings breakdown
+                const breakdown = latest.findings_summary || {};
+                document.getElementById('audits-latest-critical').textContent = breakdown.critical || 0;
+                document.getElementById('audits-latest-high').textContent = breakdown.high || 0;
+                document.getElementById('audits-latest-medium').textContent = breakdown.medium || 0;
+                document.getElementById('audits-latest-low').textContent = breakdown.low || 0;
+            } else {
+                document.getElementById('audits-latest-status').textContent = 'No audits';
+                document.getElementById('audits-latest-time').textContent = '--';
+                document.getElementById('audits-latest-critical').textContent = '0';
+                document.getElementById('audits-latest-high').textContent = '0';
+                document.getElementById('audits-latest-medium').textContent = '0';
+                document.getElementById('audits-latest-low').textContent = '0';
+            }
+        }
+
+        function initAuditFrequencyChart(stats) {
+            const ctx = document.getElementById('auditFrequencyChart').getContext('2d');
+
+            if (charts.auditFrequency) {
+                charts.auditFrequency.destroy();
+            }
+
+            const byType = stats.by_type || {};
+            const labels = ['Code Quality', 'Security', 'Performance', 'Architecture'];
+            const data = [
+                byType.code_quality || 0,
+                byType.security || 0,
+                byType.performance || 0,
+                byType.architecture || 0
+            ];
+
+            charts.auditFrequency = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Audit Count',
+                        data: data,
+                        backgroundColor: [
+                            'rgba(59, 130, 246, 0.8)',
+                            'rgba(239, 68, 68, 0.8)',
+                            'rgba(251, 146, 60, 0.8)',
+                            'rgba(34, 197, 94, 0.8)'
+                        ],
+                        borderColor: [
+                            'rgb(59, 130, 246)',
+                            'rgb(239, 68, 68)',
+                            'rgb(251, 146, 60)',
+                            'rgb(34, 197, 94)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function initAuditFindingsTrendChart(stats) {
+            const ctx = document.getElementById('auditFindingsTrendChart').getContext('2d');
+
+            if (charts.auditFindingsTrend) {
+                charts.auditFindingsTrend.destroy();
+            }
+
+            // Generate last 30 days trend data (would come from API)
+            const trend = stats.findings_trend_30d || {};
+            const labels = trend.dates || [];
+            const criticalData = trend.critical || [];
+            const highData = trend.high || [];
+
+            charts.auditFindingsTrend = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Critical',
+                            data: criticalData,
+                            borderColor: 'rgb(239, 68, 68)',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            tension: 0.3
+                        },
+                        {
+                            label: 'High',
+                            data: highData,
+                            borderColor: 'rgb(251, 146, 60)',
+                            backgroundColor: 'rgba(251, 146, 60, 0.1)',
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function displayAuditRuns(audits) {
+            const tbody = document.getElementById('audits-table');
+
+            if (!audits || audits.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-4 text-center text-sm text-gray-500">No audits found.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = audits.map(audit => {
+                // Status badge
+                let statusClass = 'bg-gray-100 text-gray-800';
+                if (audit.status === 'completed') {
+                    statusClass = 'bg-green-100 text-green-800';
+                } else if (audit.status === 'running') {
+                    statusClass = 'bg-blue-100 text-blue-800';
+                } else if (audit.status === 'failed') {
+                    statusClass = 'bg-red-100 text-red-800';
+                }
+
+                // Findings count
+                const breakdown = audit.findings_summary || {};
+                const totalFindings = (breakdown.critical || 0) + (breakdown.high || 0) +
+                                     (breakdown.medium || 0) + (breakdown.low || 0);
+                const findingsText = totalFindings > 0
+                    ? `<span class="font-medium">${totalFindings}</span>
+                       <span class="text-xs text-gray-500">(${breakdown.critical || 0}C, ${breakdown.high || 0}H)</span>`
+                    : '<span class="text-gray-500">0</span>';
+
+                // Duration
+                let duration = '--';
+                if (audit.completed_at && audit.started_at) {
+                    const start = new Date(audit.started_at);
+                    const end = new Date(audit.completed_at);
+                    const diffMs = end - start;
+                    const diffMins = Math.floor(diffMs / 60000);
+                    const diffSecs = Math.floor((diffMs % 60000) / 1000);
+                    duration = diffMins > 0 ? `${diffMins}m ${diffSecs}s` : `${diffSecs}s`;
+                } else if (audit.status === 'running') {
+                    duration = '<span class="text-blue-600">Running...</span>';
+                }
+
+                // Format audit type
+                const auditTypeFormatted = (audit.audit_type || 'unknown')
+                    .replace(/_/g, ' ')
+                    .split(' ')
+                    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+                    .join(' ');
+
+                // Started at
+                const startedAt = new Date(audit.started_at);
+                const startedAtFormatted = formatRelativeTime(startedAt);
+
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            ${auditTypeFormatted}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            ${audit.target_path || audit.target_scope || 'N/A'}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusClass}">
+                                ${audit.status || 'unknown'}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            ${findingsText}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            ${duration}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            ${startedAtFormatted}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            ${totalFindings > 0 ? `<button onclick="expandAuditFindings('${audit.audit_id}')" class="text-blue-600 hover:text-blue-800 font-medium">View Findings</button>` : '<span class="text-gray-400">--</span>'}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function expandAuditFindings(auditId) {
+            try {
+                const response = await fetch(`/api/v1/audits/findings/${auditId}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const data = await response.json();
+                const findings = data.findings || [];
+
+                const detailsDiv = document.getElementById('audit-findings-details');
+                const contentDiv = document.getElementById('audit-findings-content');
+
+                if (findings.length === 0) {
+                    contentDiv.innerHTML = '<p class="text-sm text-gray-500">No findings for this audit.</p>';
+                } else {
+                    contentDiv.innerHTML = findings.map(finding => {
+                        // Severity color
+                        let severityClass = 'text-gray-600';
+                        if (finding.severity === 'critical') severityClass = 'text-red-600';
+                        else if (finding.severity === 'high') severityClass = 'text-orange-600';
+                        else if (finding.severity === 'medium') severityClass = 'text-yellow-600';
+                        else if (finding.severity === 'low') severityClass = 'text-blue-600';
+
+                        return `
+                            <div class="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                <div class="flex items-start justify-between">
+                                    <div class="flex-1">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs font-semibold uppercase ${severityClass}">
+                                                ${finding.severity || 'unknown'}
+                                            </span>
+                                            <span class="text-sm font-medium text-gray-900">
+                                                ${finding.title || 'Untitled Finding'}
+                                            </span>
+                                        </div>
+                                        <p class="mt-1 text-sm text-gray-700">${finding.description || 'No description provided.'}</p>
+                                        ${finding.location ? `<p class="mt-1 text-xs text-gray-500">Location: ${finding.location}</p>` : ''}
+                                        ${finding.recommendation ? `<p class="mt-2 text-xs text-gray-600"><strong>Recommendation:</strong> ${finding.recommendation}</p>` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+
+                // Show the details section
+                detailsDiv.classList.remove('hidden');
+
+                // Scroll to it
+                detailsDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } catch (error) {
+                console.error('Error fetching audit findings:', error);
+                alert(`Failed to load findings: ${error.message}`);
+            }
+        }
+
+        function formatRelativeTime(date) {
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+            const diffDays = Math.floor(diffMs / 86400000);
+
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return `${diffMins}m ago`;
+            if (diffHours < 24) return `${diffHours}h ago`;
+            if (diffDays < 7) return `${diffDays}d ago`;
+            return date.toLocaleDateString();
+        }
+
+        // ==================== AUDIT HISTORY TAB ====================
+
+        let allAuditRuns = [];
+        let auditFindingsPieChart = null;
+        let auditTypeBarChart = null;
+

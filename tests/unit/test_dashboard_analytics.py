@@ -29,6 +29,8 @@ Six tasks validated:
 
 from __future__ import annotations
 
+from tests.dashboard_source import dashboard_source
+
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parents[2]
@@ -44,7 +46,7 @@ ANALYTICS_PY = REPO_ROOT / "projections/api/routes/analytics.py"
 
 def test_anomalies_outcomes_and_trend_real():
     """T1: session-outcome-flow uses real data; trend chart uses reportable_cost key."""
-    text = DASHBOARD_HTML.read_text(encoding="utf-8")
+    text = dashboard_source()
 
     # The old hardcoded fallback must be gone (it fabricated 1000/750/150/100 counts).
     assert "started: 1000," not in text, (
@@ -100,7 +102,7 @@ def test_anomalies_outcomes_and_trend_real():
 
 def test_learning_charts_render_or_emptystate():
     """T2: Learning tab shows honest empty-state, not flat-zero chart lines."""
-    text = DASHBOARD_HTML.read_text(encoding="utf-8")
+    text = dashboard_source()
 
     # The old implementation built fake zero-series and passed them to Chart.js.
     # The charts rendered as flat lines at 0 — not blank, not honest, but confusing.
@@ -142,7 +144,7 @@ def test_learning_charts_render_or_emptystate():
 
 def test_adaptation_renders_or_emptystate():
     """T3: Adaptation tab summary shows 0 on error/empty, not --."""
-    text = DASHBOARD_HTML.read_text(encoding="utf-8")
+    text = dashboard_source()
 
     # Helper function that sets all stats to '0' must be present.
     assert "_setAdaptationZeros" in text, (
@@ -177,7 +179,7 @@ def test_adaptation_renders_or_emptystate():
 
 def test_token_attribution_breakouts_present():
     """T4: Token attribution breakout tables and JS wiring are present."""
-    text = DASHBOARD_HTML.read_text(encoding="utf-8")
+    text = dashboard_source()
 
     # JS function must be present.
     assert (
@@ -238,7 +240,7 @@ def test_token_attribution_breakouts_present():
 
 def test_config_and_memory_explain_or_removed():
     """T5: Config and Memory-Surface tabs have clear operator descriptions; neither is removed."""
-    text = DASHBOARD_HTML.read_text(encoding="utf-8")
+    text = dashboard_source()
 
     # Config tab must still exist.
     assert (
@@ -288,7 +290,7 @@ def test_config_and_memory_explain_or_removed():
 
 def test_end_to_end():
     """T6: No stuck Loading text in analytics tabs; fake-cost strings absent."""
-    text = DASHBOARD_HTML.read_text(encoding="utf-8")
+    text = dashboard_source()
 
     # --- Fake cost gate (mirrors test_ai_usage_fake_cost_regression_gate) ---
     banned = [

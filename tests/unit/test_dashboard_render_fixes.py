@@ -12,6 +12,8 @@ Seven fixes validated:
 
 from __future__ import annotations
 
+from tests.dashboard_source import dashboard_source
+
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parents[2]
@@ -24,7 +26,7 @@ DASHBOARD_HTML = REPO_ROOT / "projections/frontend/dashboard.html"
 class TestT1HooksNullRefAndRenders:
     def test_hooks_no_null_ref_and_renders(self):
         """T1: hooks-total-anomalies write is null-guarded; card container gets honest empty-state."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
 
         # The direct un-guarded write must be gone
         assert "document.getElementById('hooks-total-anomalies').textContent" not in text, (
@@ -51,7 +53,7 @@ class TestT1HooksNullRefAndRenders:
 
     def test_hooks_cards_else_branch_present(self):
         """T1: The if/else structure on byHook replaces the old unconditional 'if only' guard."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
         # Confirm the old simple guard (single 'if' with no else) is replaced
         # by looking for the else that provides honest empty-state
         # The old code: if (cardsContainer && Object.keys(byHook).length > 0)
@@ -68,7 +70,7 @@ class TestT1HooksNullRefAndRenders:
 class TestT2WorkflowsHonestEmptystate:
     def test_workflows_honest_emptystate(self):
         """T2: initWorkflowsTab early-return shows honest empty-state; promotedVsDraft has overlay."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
 
         # Early return path must update cards to honest empty values, not leave '--'
         assert "No workflow data yet" in text, (
@@ -84,7 +86,7 @@ class TestT2WorkflowsHonestEmptystate:
 
     def test_promoted_vs_draft_no_silent_return(self):
         """T2: initPromotedVsDraftChart must not silently return — it must set an empty-state."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
         fn_start = text.find("async function initPromotedVsDraftChart")
         fn_end = text.find("\n        async function ", fn_start + 1)
         if fn_end < 0:
@@ -107,7 +109,7 @@ class TestT2WorkflowsHonestEmptystate:
 class TestT3SkillsAndCostEmptystates:
     def test_skills_and_cost_emptystates(self):
         """T3: Skills leaderboard never stuck 'Loading...'; Cost Over Time shows overlay."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
 
         # initSkillsTab error path and no-data path must call populateSkillsLeaderboard([])
         # so the table body is never left as 'Loading skills data...'
@@ -131,7 +133,7 @@ class TestT3SkillsAndCostEmptystates:
 
     def test_skills_leaderboard_no_data_path_covered(self):
         """T3: The no-data path in initSkillsTab calls populateSkillsLeaderboard([]) explicitly."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
         # Locate the 'if (!data)' block inside initSkillsTab
         fn_start = text.find("async function initSkillsTab")
         no_data_idx = text.find("No skills data available", fn_start)
@@ -151,7 +153,7 @@ class TestT3SkillsAndCostEmptystates:
 class TestT4ChartsShowEmptystateNotBlank:
     def test_charts_show_emptystate_not_blank(self):
         """T4: Models, workflow-success, skill-success all have user-facing empty-states."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
 
         # Model distribution chart
         assert "No model usage data yet" in text, (
@@ -173,7 +175,7 @@ class TestT4ChartsShowEmptystateNotBlank:
 
     def test_model_chart_empty_state_wired_to_wrapper(self):
         """T4: Model distribution empty-state is written to the canvas wrapper element."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
         fn_start = text.find("async function initModelDistributionChart")
         fn_end = text.find("\n        async function ", fn_start + 1)
         if fn_end < 0:
@@ -194,7 +196,7 @@ class TestT4ChartsShowEmptystateNotBlank:
 class TestT6SkillsDurationAndHeatmap:
     def test_skills_duration_and_heatmap(self):
         """T6: Skill execution-time-distribution shows empty-state when leaderboard is empty."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
 
         # Execution time distribution must have empty-state
         assert "No execution time data yet" in text, (
@@ -204,7 +206,7 @@ class TestT6SkillsDurationAndHeatmap:
 
     def test_execution_time_chart_empty_branch_wired(self):
         """T6: initSkillExecutionTimeChart empty branch writes to the canvas wrapper."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
         fn_start = text.find("async function initSkillExecutionTimeChart")
         fn_end = text.find("\n        // Initialize", fn_start + 1)
         if fn_end < 0:
@@ -221,7 +223,7 @@ class TestT6SkillsDurationAndHeatmap:
 
     def test_skill_heatmap_already_has_empty_state(self):
         """T6: initSkillHeatmap already shows a CSS-based empty-state (pre-existing, verify preserved)."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
         assert "No heatmap data available" in text, (
             "initSkillHeatmap must still show 'No heatmap data available' empty-state — "
             "this was pre-existing and must not have been removed."
@@ -234,7 +236,7 @@ class TestT6SkillsDurationAndHeatmap:
 class TestT7HooksChartsRender:
     def test_hooks_charts_render(self):
         """T7: Hook performance chart shows honest empty-state when byHook is empty."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
 
         # Performance chart empty-state
         assert "No per-hook performance data yet" in text, (
@@ -244,7 +246,7 @@ class TestT7HooksChartsRender:
 
     def test_hooks_timeline_chart_always_renders(self):
         """T7: The hooks timeline chart renders regardless (uses executions array, not byHook)."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
         # The timeline chart creation is unconditional on byHook — it uses dayBuckets
         # which are built from executions. Verify the timeline ctx block has no byHook guard.
         fn_start = text.find("async function loadHooksData")
@@ -260,7 +262,7 @@ class TestT7HooksChartsRender:
 
     def test_hooks_performance_chart_empty_state_in_loadhooksdata(self):
         """T7: The empty-state for performance chart is written inside loadHooksData."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
         fn_start = text.find("async function loadHooksData")
         fn_end = text.find("\n        // Update last updated", fn_start + 1)
         fn_body = text[fn_start:fn_end] if fn_start >= 0 else ""
@@ -277,7 +279,7 @@ class TestT7HooksChartsRender:
 class TestT5EndToEnd:
     def test_end_to_end(self):
         """T5: No data-backed tabs have unguarded 'Loading...' that can never be replaced."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
 
         # Verify core sections still present (regression guard)
         for section_id in ["hooks", "security", "memory-surface", "adaptation"]:

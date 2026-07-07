@@ -20,6 +20,8 @@ ACs verified:
 
 from __future__ import annotations
 
+from tests.dashboard_source import dashboard_source
+
 import sqlite3
 import tempfile
 from pathlib import Path
@@ -35,7 +37,7 @@ DASHBOARD_HTML = REPO_ROOT / "projections/frontend/dashboard.html"
 
 def test_plan_vs_api_cost_panel_present():
     """T2: dashboard.html has panel markup, fetch, empty-state; no forbidden substrings."""
-    text = DASHBOARD_HTML.read_text(encoding="utf-8")
+    text = dashboard_source()
 
     # Panel container must exist
     assert "plan-vs-api-cost-panel" in text, (
@@ -81,7 +83,7 @@ def test_plan_vs_api_cost_panel_present():
 def test_models_cost_charts_render_or_emptystate():
     """T3: costByModelChart, costBySkillChart, tokenEfficiencyChart, cacheHitRateGaugeChart
     each have either a data render path or an honest empty-state."""
-    text = DASHBOARD_HTML.read_text(encoding="utf-8")
+    text = dashboard_source()
 
     chart_ids = [
         "costByModelChart",

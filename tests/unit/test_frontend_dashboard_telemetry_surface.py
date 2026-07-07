@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from tests.dashboard_source import dashboard_source
+
 from pathlib import Path
 
 DASHBOARD = Path(__file__).resolve().parents[2] / "projections" / "frontend" / "dashboard.html"
 
 
 def _html() -> str:
-    return DASHBOARD.read_text(encoding="utf-8")
+    return dashboard_source()
 
 
 def test_dashboard_contains_telemetry_surface_containers() -> None:

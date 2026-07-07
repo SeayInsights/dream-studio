@@ -6,13 +6,15 @@ explained (what it does), or the tab removed.
 
 from __future__ import annotations
 
+from tests.dashboard_source import dashboard_source
+
 from pathlib import Path
 
 DASHBOARD = Path(__file__).resolve().parents[2] / "projections/frontend/dashboard.html"
 
 
 def _html() -> str:
-    return DASHBOARD.read_text(encoding="utf-8")
+    return dashboard_source()
 
 
 def test_config_explains_or_removed():

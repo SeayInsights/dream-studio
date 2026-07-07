@@ -11,6 +11,8 @@ Six fixes validated:
 
 from __future__ import annotations
 
+from tests.dashboard_source import dashboard_source
+
 import inspect
 import sqlite3
 from pathlib import Path
@@ -71,14 +73,14 @@ class TestFix1SkillsCanonicalEvents:
 
 class TestFix2SecurityKPI:
     def _get_dashboard_js_section(self, start_marker: str, end_marker: str) -> str:
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
         start = text.find(start_marker)
         end = text.find(end_marker, start + len(start_marker))
         return text[start:end] if start >= 0 and end >= 0 else ""
 
     def test_update_security_summary_reads_findings_by_source(self):
         """updateSecuritySummary must read from findings_by_source, not total_sarif etc."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
         fn_start = text.find("function updateSecuritySummary")
         fn_end = text.find("\n        function ", fn_start + 1)
         fn_body = text[fn_start:fn_end]
@@ -93,7 +95,7 @@ class TestFix2SecurityKPI:
 
     def test_update_security_summary_reads_findings_by_severity(self):
         """updateSecuritySummary must read from findings_by_severity."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
         fn_start = text.find("function updateSecuritySummary")
         fn_end = text.find("\n        function ", fn_start + 1)
         fn_body = text[fn_start:fn_end]
@@ -157,7 +159,7 @@ class TestFix5InvisibleTables:
 
     def test_frontend_has_invisible_tables_panel(self):
         """Frontend must have panel for previously-invisible tables."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
         assert "tool-activity-list" in text, "Tool activity panel missing from dashboard"
         assert (
             "validation-failures-list" in text
@@ -172,7 +174,7 @@ class TestFix5InvisibleTables:
         out of the Hooks tab into the dedicated Developer Diagnostics tab, so the
         load now fires on that tab instead of hooks.
         """
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
         assert (
             "tabName === 'developer-diagnostics'" in text and "loadInvisibleTables()" in text
         ), "loadInvisibleTables() must be called when navigating to the Developer Diagnostics tab"
@@ -218,7 +220,7 @@ class TestFix5InvisibleTables:
 class TestFix6TokenAttributionHonest:
     def test_attribution_coverage_no_infinite_loading(self):
         """loadAttributionCoverage must clear the 'loading...' state on any response."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
         fn_start = text.find("async function loadAttributionCoverage")
         fn_end = text.find("\n    async function ", fn_start + 1)
         fn_body = text[fn_start:fn_end]
@@ -237,7 +239,7 @@ class TestFix6TokenAttributionHonest:
 
     def test_attribution_coverage_error_path_clears_state(self):
         """On error, loadAttributionCoverage must not leave 'loading...' state."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
         fn_start = text.find("async function loadAttributionCoverage")
         fn_end = text.find("\n    async function ", fn_start + 1)
         fn_body = text[fn_start:fn_end]
@@ -256,7 +258,7 @@ class TestFix6TokenAttributionHonest:
 class TestNoRegression:
     def test_existing_dashboard_sections_still_present(self):
         """Core dashboard sections must not be removed by the fix pack."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
         required_ids = [
             "hooks",
             "security",
@@ -270,7 +272,7 @@ class TestNoRegression:
 
     def test_security_chart_reads_findings_by_severity(self):
         """Security severity chart must use findings_by_severity field."""
-        text = DASHBOARD_HTML.read_text(encoding="utf-8")
+        text = dashboard_source()
         fn_start = text.find("function initSecuritySeverityChart")
         fn_end = text.find("\n        function ", fn_start + 1)
         fn_body = text[fn_start:fn_end]

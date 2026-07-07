@@ -71,8 +71,25 @@ def run_dashboard_smoke(db_path: Path | str | None = None) -> dict[str, Any]:
                 }
             )
         dashboard = client.get("/dashboard")
-        html = dashboard.text
-        markers = {marker: (marker in html) for marker in FRONTEND_MARKERS}
+        # WO-SPLIT-DASHBOARD: the inline CSS/JS was extracted to /static/*, so the
+        # frontend markers (JS constants/calls) now live in the served dashboard.js.
+        # Check markers across the shell HTML + the mounted static assets, and treat
+        # the static assets as smoke endpoints so a missing/unmounted asset fails.
+        dashboard_js = client.get("/static/dashboard.js")
+        dashboard_css = client.get("/static/dashboard.css")
+        for asset_path, resp in (
+            ("/static/dashboard.js", dashboard_js),
+            ("/static/dashboard.css", dashboard_css),
+        ):
+            endpoints.append(
+                {
+                    "path": asset_path,
+                    "status_code": resp.status_code,
+                    "ok": resp.status_code == 200,
+                }
+            )
+        combined = "\n".join([dashboard.text, dashboard_js.text, dashboard_css.text])
+        markers = {marker: (marker in combined) for marker in FRONTEND_MARKERS}
         passed = all(item["ok"] for item in endpoints) and all(markers.values())
         return {
             "result": "passed" if passed else "failed",

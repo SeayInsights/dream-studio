@@ -13,6 +13,8 @@ Proving gate:
 
 from __future__ import annotations
 
+from tests.dashboard_source import dashboard_source
+
 import json
 import sqlite3
 import uuid
@@ -604,12 +606,12 @@ class TestRevertEndpoint:
 class TestFrontendAdaptationTab:
     def test_adaptation_tab_content_exists(self):
         """The Adaptation tab content div must be present in dashboard.html."""
-        source = (REPO_ROOT / "projections/frontend/dashboard.html").read_text(encoding="utf-8")
+        source = dashboard_source()
         assert 'id="adaptation"' in source, "Adaptation tab content div missing"
 
     def test_four_panels_present(self):
         """All four roadmap-specified panels must be present."""
-        source = (REPO_ROOT / "projections/frontend/dashboard.html").read_text(encoding="utf-8")
+        source = dashboard_source()
         assert "ad-personalization-list" in source
         assert "ad-patterns-list" in source
         assert "ad-health-list" in source
@@ -617,21 +619,21 @@ class TestFrontendAdaptationTab:
 
     def test_revert_modal_present(self):
         """The revert modal is the most important UX element — must be present."""
-        source = (REPO_ROOT / "projections/frontend/dashboard.html").read_text(encoding="utf-8")
+        source = dashboard_source()
         assert "ad-revert-modal" in source
         assert "confirmRevert" in source
         assert "openRevertModal" in source
 
     def test_operator_framing_language(self):
         """Operator-facing language must be present; technical jargon must not be in UI labels."""
-        source = (REPO_ROOT / "projections/frontend/dashboard.html").read_text(encoding="utf-8")
+        source = dashboard_source()
         assert "Changes Applied to Your Builds" in source
         assert "Things Dream Studio Has Noticed" in source
         assert "Awaiting More Data" in source
 
     def test_no_jargon_in_panel_labels(self):
         """Technical terms must not appear as visible panel headings."""
-        source = (REPO_ROOT / "projections/frontend/dashboard.html").read_text(encoding="utf-8")
+        source = dashboard_source()
         # These should only appear inside JS/code, not as panel h3 headings
         # The adaptation section should use operator language
         adapt_start = source.find('id="adaptation"')
