@@ -33,6 +33,11 @@ SMOKE_ENDPOINTS: tuple[str, ...] = (
     "/api/v1/insights/?days=7",
     "/api/v1/hooks/executions?limit=50",
     "/api/v1/hooks/stats",
+    # WO-SPLIT-DASHBOARD: the inline CSS/JS was extracted to /static/*; the harness
+    # fetches them so a missing/unmounted asset fails the smoke, and the frontend
+    # markers (now in dashboard.js) are checked against the served assets.
+    "/static/dashboard.js",
+    "/static/dashboard.css",
 )
 
 FRONTEND_MARKERS: tuple[str, ...] = (
@@ -61,8 +66,10 @@ def run_dashboard_smoke(db_path: Path | str | None = None) -> dict[str, Any]:
     try:
         client = TestClient(app)
         endpoints = []
+        responses = {}
         for endpoint in SMOKE_ENDPOINTS:
             response = client.get(endpoint)
+            responses[endpoint] = response
             endpoints.append(
                 {
                     "path": endpoint,
@@ -70,25 +77,12 @@ def run_dashboard_smoke(db_path: Path | str | None = None) -> dict[str, Any]:
                     "ok": response.status_code == 200,
                 }
             )
-        dashboard = client.get("/dashboard")
-        # WO-SPLIT-DASHBOARD: the inline CSS/JS was extracted to /static/*, so the
-        # frontend markers (JS constants/calls) now live in the served dashboard.js.
-        # Check markers across the shell HTML + the mounted static assets, and treat
-        # the static assets as smoke endpoints so a missing/unmounted asset fails.
-        dashboard_js = client.get("/static/dashboard.js")
-        dashboard_css = client.get("/static/dashboard.css")
-        for asset_path, resp in (
-            ("/static/dashboard.js", dashboard_js),
-            ("/static/dashboard.css", dashboard_css),
-        ):
-            endpoints.append(
-                {
-                    "path": asset_path,
-                    "status_code": resp.status_code,
-                    "ok": resp.status_code == 200,
-                }
-            )
-        combined = "\n".join([dashboard.text, dashboard_js.text, dashboard_css.text])
+        # Frontend markers now live in the extracted /static assets (WO-SPLIT-DASHBOARD);
+        # check them across the shell HTML + the served static JS/CSS.
+        combined = "\n".join(
+            responses[p].text
+            for p in ("/dashboard", "/static/dashboard.js", "/static/dashboard.css")
+        )
         markers = {marker: (marker in combined) for marker in FRONTEND_MARKERS}
         passed = all(item["ok"] for item in endpoints) and all(markers.values())
         return {
