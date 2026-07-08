@@ -57,6 +57,24 @@ def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
     return paths.sqlite_path
 
 
+def _artifact_text(work_order_id: str, wo_dir: Path, kind: str, db_path: Path | None) -> str | None:
+    """WO ceremony artifact content — authority table first, .planning disk fallback.
+
+    WO-FILESDB-P1: artifacts moved into business_work_order_artifacts. The disk
+    fallback keeps historical WOs (and the live authority DB before the migration
+    is activated) gate-satisfiable during the transition.
+    """
+    from core.work_orders.artifacts import KIND_TO_FILENAME, get_wo_artifact
+
+    content = get_wo_artifact(work_order_id, kind, db_path=db_path)
+    if content is not None:
+        return content
+    fpath = wo_dir / KIND_TO_FILENAME[kind]
+    if fpath.is_file():
+        return fpath.read_text(encoding="utf-8")
+    return None
+
+
 def run_gate_check(
     gate_name: str | None,
     *,
@@ -99,14 +117,14 @@ def run_gate_check(
         return True, ""
 
     if gate_name == "api_contract_exists":
-        if not (wo_dir / "api-contract.md").is_file():
+        if _artifact_text(work_order_id, wo_dir, "api_contract", db_path) is None:
             return False, "api_contract_exists: api-contract.md not found"
         return True, ""
 
     if gate_name == "api_contract_and_security_review":
-        if not (wo_dir / "api-contract.md").is_file():
+        if _artifact_text(work_order_id, wo_dir, "api_contract", db_path) is None:
             return False, "api_contract_and_security_review: api-contract.md not found"
-        if not (wo_dir / "security-scan.md").is_file():
+        if _artifact_text(work_order_id, wo_dir, "security_scan", db_path) is None:
             return False, "api_contract_and_security_review: security-scan.md not found"
         return True, ""
 
@@ -160,10 +178,9 @@ def run_gate_check(
         return True, ""
 
     if gate_name == "security_scan":
-        scan_path = wo_dir / "security-scan.md"
-        if not scan_path.is_file():
+        content = _artifact_text(work_order_id, wo_dir, "security_scan", db_path)
+        if content is None:
             return False, "security_scan: security-scan.md not found"
-        content = scan_path.read_text(encoding="utf-8")
         if "BLOCKED" in content.upper():
             return False, "security_scan: security-scan.md contains BLOCKED"
         return True, ""
