@@ -117,3 +117,39 @@ def test_graceful_degradation_without_table(tmp_path):
     assert get_wo_artifact("wo-5", "api_contract", db_path=db) is None
     assert has_wo_artifact("wo-5", "api_contract", db_path=db) is False
     assert set_wo_artifact("wo-5", "api_contract", "x", db_path=db) is False
+
+
+def test_independent_review_gate_reads_db_verdict(tmp_path):
+    """The independent_review gate passes from a DB-stored review_verdict (no disk file)."""
+    db = _db_with_table(tmp_path)
+    set_wo_artifact("wo-6", "review_verdict", '{"passed": true}', db_path=db)
+    conn = sqlite3.connect(str(db))
+    try:
+        ok, _ = run_gate_check(
+            "independent_review",
+            planning_root=tmp_path / "planning",
+            work_order_id="wo-6",
+            project_id="p",
+            conn=conn,
+            db_path=db,
+        )
+    finally:
+        conn.close()
+    assert ok is True
+
+
+def test_backfill_migrates_planning_artifacts(tmp_path):
+    from core.work_orders.artifacts import backfill_wo_artifacts
+
+    db = _db_with_table(tmp_path)
+    planning_root = tmp_path / "planning"
+    wo_dir = planning_root / "work-orders" / "wo-7"
+    wo_dir.mkdir(parents=True)
+    (wo_dir / "api-contract.md").write_text("# contract", encoding="utf-8")
+    (wo_dir / "security-scan.md").write_text("clean", encoding="utf-8")
+    (wo_dir / "review-verdict.json").write_text('{"passed": true}', encoding="utf-8")
+
+    written = backfill_wo_artifacts(planning_root, db_path=db)
+    assert written == 3
+    assert get_wo_artifact("wo-7", "api_contract", db_path=db) == "# contract"
+    assert get_wo_artifact("wo-7", "review_verdict", db_path=db) == '{"passed": true}'

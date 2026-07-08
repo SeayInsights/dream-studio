@@ -227,14 +227,14 @@ def run_gate_check(
     if gate_name == "independent_review":
         import json as _json
 
-        verdict_path = wo_dir / "review-verdict.json"
-        if not verdict_path.is_file():
+        verdict_raw = _artifact_text(work_order_id, wo_dir, "review_verdict", db_path)
+        if verdict_raw is None:
             return False, (
                 f"independent_review: review-verdict.json not found. "
                 f"Run: py -m interfaces.cli.ds work-order verify {work_order_id}"
             )
         try:
-            verdict = _json.loads(verdict_path.read_text(encoding="utf-8"))
+            verdict = _json.loads(verdict_raw)
         except Exception as exc:
             return False, f"independent_review: review-verdict.json is not valid JSON: {exc}"
         if not verdict.get("passed"):

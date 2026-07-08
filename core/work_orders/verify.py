@@ -1790,7 +1790,14 @@ def verify_work_order(
         }
         if migration is not None:
             full_verdict["migration"] = migration
-        verdict_path.write_text(json.dumps(full_verdict, indent=2), encoding="utf-8")
+        _verdict_json = json.dumps(full_verdict, indent=2)
+        verdict_path.write_text(_verdict_json, encoding="utf-8")
+        # WO-FILESDB-P1: mirror the authoritative verdict into the authority so the
+        # independent_review gate can read it from the DB. No-op when the artifact
+        # table is absent (migration 144 unreleased on the live authority DB).
+        from core.work_orders.artifacts import set_wo_artifact
+
+        set_wo_artifact(work_order_id, "review_verdict", _verdict_json)
 
     return {
         "ok": True,

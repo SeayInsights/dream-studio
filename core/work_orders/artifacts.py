@@ -78,3 +78,28 @@ def get_wo_artifact(work_order_id: str, kind: str, *, db_path: Path | None = Non
 
 def has_wo_artifact(work_order_id: str, kind: str, *, db_path: Path | None = None) -> bool:
     return get_wo_artifact(work_order_id, kind, db_path=db_path) is not None
+
+
+def backfill_wo_artifacts(planning_root: Path, *, db_path: Path | None = None) -> int:
+    """One-time migration: copy existing .planning/work-orders/<id>/*.{md,json}
+    ceremony artifacts into the authority table. Returns the number written.
+
+    Idempotent (upsert). A no-op on a DB where the table is absent (returns 0) —
+    run it after ``ds migrate activate`` releases migration 144. Files are left in
+    place (gitignored) until Phase 3 retires them.
+    """
+    wo_root = planning_root / "work-orders"
+    if not wo_root.is_dir():
+        return 0
+    filename_to_kind = {fname: kind for kind, fname in KIND_TO_FILENAME.items()}
+    written = 0
+    for wo_dir in sorted(wo_root.iterdir()):
+        if not wo_dir.is_dir():
+            continue
+        for fname, kind in filename_to_kind.items():
+            fpath = wo_dir / fname
+            if fpath.is_file():
+                content = fpath.read_text(encoding="utf-8", errors="replace")
+                if set_wo_artifact(wo_dir.name, kind, content, db_path=db_path):
+                    written += 1
+    return written
