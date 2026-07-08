@@ -65,6 +65,17 @@ def normalize_stop(
     # per-session accumulator written by token_capture after each tool call.
     if not token_payload and session_id:
         token_payload = _read_session_accumulator(session_id)
+    # Stamp the model so the cost view can price this turn (estimated_cost is
+    # NULL for modelless rows — never fabricated). Prefer the model captured in
+    # the accumulator (persisted by token_capture), else recover it from the
+    # Stop payload's transcript_path via the same resolver token_capture uses.
+    if token_payload and "model" not in token_payload:
+        from core.telemetry.token_capture import _resolve_model
+
+        acc = _read_session_accumulator(session_id) if session_id else {}
+        model = acc.get("model") or _resolve_model(payload)
+        if model:
+            token_payload["model"] = model
     return [
         CanonicalEventEnvelope(
             event_type=EventType.TOKEN_CONSUMPTION_RECORDED.value,

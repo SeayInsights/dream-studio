@@ -294,6 +294,13 @@ def _update_session_accumulator(session_id: str, token_payload: dict[str, Any]) 
             "cache_read_input_tokens",
         ):
             existing[key] = int(existing.get(key) or 0) + int(token_payload.get(key) or 0)
+        # Persist the model (last real value wins) so normalize_stop can stamp it
+        # onto the token.consumption.recorded event. Without it the DuckDB
+        # token_usage_records view cannot price the session turn (estimated_cost
+        # stays NULL and dashboard cost never moves). Model is recovered truth
+        # (SDK payload / transcript), never fabricated.
+        if token_payload.get("model"):
+            existing["model"] = token_payload["model"]
         acc_path.parent.mkdir(parents=True, exist_ok=True)
         acc_path.write_text(json.dumps(existing), encoding="utf-8")
     except Exception:
