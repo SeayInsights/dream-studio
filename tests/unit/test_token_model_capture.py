@@ -48,9 +48,7 @@ def test_stop_event_carries_model(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
-    with patch(
-        "emitters.claude_code.emitter.get_or_create_session_id", return_value=session_id
-    ):
+    with patch("emitters.claude_code.emitter.get_or_create_session_id", return_value=session_id):
         from emitters.claude_code.emitter import normalize_stop
 
         envelopes = normalize_stop({})
@@ -76,9 +74,7 @@ def test_stop_event_recovers_model_from_transcript(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
-    with patch(
-        "emitters.claude_code.emitter.get_or_create_session_id", return_value=session_id
-    ):
+    with patch("emitters.claude_code.emitter.get_or_create_session_id", return_value=session_id):
         from emitters.claude_code.emitter import normalize_stop
 
         envelopes = normalize_stop({"transcript_path": str(transcript)})
@@ -95,9 +91,7 @@ def test_stop_event_has_no_model_when_none_available(tmp_path, monkeypatch):
         json.dumps({"input_tokens": 10, "output_tokens": 5}), encoding="utf-8"
     )
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
-    with patch(
-        "emitters.claude_code.emitter.get_or_create_session_id", return_value=session_id
-    ):
+    with patch("emitters.claude_code.emitter.get_or_create_session_id", return_value=session_id):
         from emitters.claude_code.emitter import normalize_stop
 
         envelopes = normalize_stop({})
