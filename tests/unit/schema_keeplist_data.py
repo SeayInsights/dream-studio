@@ -38,6 +38,7 @@ CLASSIFICATION: dict[str, str] = {
     "business_milestones": "KEEP",
     "business_projects": "KEEP",
     "business_tasks": "KEEP",
+    "business_work_order_artifacts": "KEEP",  # Added migration 144 (WO-FILESDB-P1): WO ceremony artifacts moved off .planning disk into the authority
     "business_work_order_preflights": "KEEP",
     "business_work_order_types": "KEEP",
     "business_work_orders": "KEEP",

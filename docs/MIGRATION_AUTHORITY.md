@@ -513,3 +513,6 @@ Migration 067 (067_dual_canonical.sql): Adds business_canonical_events and ai_ca
 
 
 <!-- Reviewed 2026-07-07 — WO-SPLIT-STUDIO-DB (a1217e95): core/event_store/studio_db.py (1,851 lines) was split into connection.py / event_writer.py / event_reader.py / migration_runner.py behind a facade (studio_db.py) that re-exports the full public API plus the private helpers external callers imported (_connect, _db_path, _run_migrations, _split_statements, _migrations_dir, get_connection). Pure structural split — no schema, migration, table, or DDL change; the migration runner still delegates to core.config.sqlite_bootstrap. -->
+
+<!-- Last reviewed 2026-07-08 — WO-FILESDB-P1: migration 144 (144_wo_artifacts.sql) is additive DDL — CREATE TABLE business_work_order_artifacts + one index, no existing table touched. Picked up by the standard *.sql glob. .released_version is NOT bumped: 144 is unreleased, so it is skipped on the live authority DB (per the WO-MS live-safety gate) until the operator runs `ds migrate activate`; fresh installs and CI apply it on next bootstrap. The close/verify gates read DB-or-disk so nothing breaks while 144 is dormant. -->
+
