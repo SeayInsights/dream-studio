@@ -35,8 +35,21 @@ def normalize_user_prompt_submit(
 
 
 def _read_session_accumulator(session_id: str) -> dict[str, Any]:
-    """Read per-session token totals written by token_capture after each tool call."""
+    """Read per-session token totals written by token_capture after each tool call.
+
+    WO-FILESDB-P2: prefer the authority table; fall back to the legacy JSON file
+    when raw_session_token_accumulators is absent (migration 145 unreleased).
+    """
     import json as _json
+
+    try:
+        from core.telemetry.session_accumulator import db_read_accumulator
+
+        acc = db_read_accumulator(session_id)
+        if acc is not None:
+            return acc
+    except Exception:
+        pass
 
     acc_path = Path.home() / ".dream-studio" / "state" / f"session-tokens-{session_id}.json"
     try:
