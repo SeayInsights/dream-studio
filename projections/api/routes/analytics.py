@@ -194,12 +194,16 @@ async def get_trends(days: int = Query(default=30, ge=1, le=365)) -> dict[str, A
     cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
     try:
-        # Sessions from DuckDB raw_sessions view
+        # Sessions from DuckDB raw_sessions view. started_at is stored as a
+        # VARCHAR ISO string in the view, so slice the date with substr() to
+        # yield a *string* date — the token query below also produces string
+        # dates, and mixing a DATE() (datetime.date) with a str breaks the
+        # sorted(set(...)) merge below with a TypeError.
         sess_rows = duck_conn.execute(
             """
-            SELECT DATE(started_at) as date, COUNT(*) as count
+            SELECT substr(started_at, 1, 10) as date, COUNT(*) as count
             FROM raw_sessions WHERE started_at >= ?
-            GROUP BY DATE(started_at) ORDER BY date
+            GROUP BY substr(started_at, 1, 10) ORDER BY date
         """,
             [cutoff],
         ).fetchall()
@@ -317,10 +321,12 @@ async def get_performance(days: int = Query(default=30, ge=1, le=365)) -> dict[s
             "other": outcome_map.get("unknown", 0) + outcome_map.get("in_progress", 0),
         }
 
+        # started_at is a VARCHAR ISO string in the DuckDB view; strftime()
+        # requires a TIMESTAMP, so cast before extracting the weekday/hour.
         dow_rows = conn.execute(
             """
             SELECT
-                CAST(strftime(started_at, '%w') AS INTEGER) as dow,
+                CAST(strftime(CAST(started_at AS TIMESTAMP), '%w') AS INTEGER) as dow,
                 COUNT(*) as count
             FROM raw_sessions WHERE started_at >= ?
             GROUP BY dow
@@ -334,8 +340,8 @@ async def get_performance(days: int = Query(default=30, ge=1, le=365)) -> dict[s
         hourly_rows = conn.execute(
             """
             SELECT
-                CAST(strftime(started_at, '%w') AS INTEGER) as dow,
-                CAST(strftime(started_at, '%H') AS INTEGER) as hour,
+                CAST(strftime(CAST(started_at AS TIMESTAMP), '%w') AS INTEGER) as dow,
+                CAST(strftime(CAST(started_at AS TIMESTAMP), '%H') AS INTEGER) as hour,
                 COUNT(*) as count
             FROM raw_sessions WHERE started_at >= ?
             GROUP BY dow, hour
