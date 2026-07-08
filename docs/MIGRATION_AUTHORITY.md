@@ -516,3 +516,5 @@ Migration 067 (067_dual_canonical.sql): Adds business_canonical_events and ai_ca
 
 <!-- Last reviewed 2026-07-08 — WO-FILESDB-P1: migration 144 (144_wo_artifacts.sql) is additive DDL — CREATE TABLE business_work_order_artifacts + one index, no existing table touched. Picked up by the standard *.sql glob. .released_version is NOT bumped: 144 is unreleased, so it is skipped on the live authority DB (per the WO-MS live-safety gate) until the operator runs `ds migrate activate`; fresh installs and CI apply it on next bootstrap. The close/verify gates read DB-or-disk so nothing breaks while 144 is dormant. -->
 
+<!-- Last reviewed 2026-07-08 — WO-FILESDB-P2: migration 145 (145_session_token_accumulators.sql) is additive DDL — CREATE TABLE raw_session_token_accumulators, no existing table touched. Picked up by the standard *.sql glob. .released_version is NOT bumped: 145 is unreleased, skipped on the live authority DB (WO-MS live-safety gate) until `ds migrate activate`; fresh installs and CI apply it on next bootstrap. token_capture (writer) and the Claude Code emitter (reader) fall back to the legacy session-tokens-<sid>.json files while 145 is dormant. -->
+

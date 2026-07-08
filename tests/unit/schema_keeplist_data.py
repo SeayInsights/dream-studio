@@ -121,6 +121,7 @@ CLASSIFICATION: dict[str, str] = {
     "raw_planning_specs": "DROP",
     "raw_pulse_snapshots": "DROP",
     "raw_research": "DROP",  # Dropped migration 131: dead writers insert_research()/_store_research(), test-only callers
+    "raw_session_token_accumulators": "KEEP",  # Added migration 145 (WO-FILESDB-P2): per-session token running totals moved off session-tokens-<sid>.json disk files
     "raw_sentinels": "KEEP",
     "raw_sessions": "KEEP",  # Read-WRITE session-lifecycle authority, NOT a read-model:
     #                          end_session() UPDATEs ended_at/duration_s/outcome; record_session()

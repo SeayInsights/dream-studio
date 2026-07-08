@@ -281,6 +281,16 @@ def _update_session_accumulator(session_id: str, token_payload: dict[str, Any]) 
     The accumulator lets normalize_stop() reconstruct per-session totals when
     Claude Code's Stop payload carries no usage field.
     """
+    # WO-FILESDB-P2: prefer the authority table; fall back to the legacy JSON file
+    # when raw_session_token_accumulators is absent (migration 145 unreleased).
+    try:
+        from core.telemetry.session_accumulator import db_update_accumulator
+
+        if db_update_accumulator(session_id, token_payload):
+            return
+    except Exception:
+        pass
+
     acc_path = Path.home() / ".dream-studio" / "state" / f"session-tokens-{session_id}.json"
     try:
         try:
