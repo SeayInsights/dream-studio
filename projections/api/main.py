@@ -35,17 +35,20 @@ from .safety import localhost_origins, SAFE_DEFAULT_HOST
 
 
 class CacheControlMiddleware(BaseHTTPMiddleware):
-    """Add Cache-Control headers to all API responses.
+    """Add Cache-Control headers to API responses.
 
-    Events are immutable (append-only), so caching is safe.
-    5-minute cache improves response times for repeated queries.
+    WO-DASH-FRESHNESS: the dashboard reads DERIVED metrics (DuckDB views/rollups
+    over the event spine) that change as new events flow — they are NOT immutable,
+    so the former 5-minute cache made a browser refresh serve stale metrics for up
+    to 5 minutes. Use ``no-cache`` (store allowed, but revalidate before use) so a
+    refresh always reflects the current derived state; the API carries no
+    validators, so this effectively means "always fetch fresh".
     """
 
     async def dispatch(self, request, call_next):
         response = await call_next(request)
-        # Apply caching to all API routes
         if request.url.path.startswith("/api/"):
-            response.headers["Cache-Control"] = "public, max-age=300"
+            response.headers["Cache-Control"] = "no-cache"
         return response
 
 
