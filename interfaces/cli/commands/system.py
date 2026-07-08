@@ -772,6 +772,37 @@ def _dashboard_status(
     }
 
 
+def _refresh_derived_store(sqlite_path: Path) -> None:
+    """WO-DASH-FRESHNESS: rebuild the derived DuckDB store from the authority before
+    serving the dashboard, so a fresh open always reflects current data (the open
+    path never did this, so rollups/events_fact were only as fresh as the last
+    manual ``ds analyze aggregate``). Best-effort — a failure degrades to whatever
+    the store already held. Runs: spool ingest + projections, then the events_fact
+    derivation, then the aggregate rollups."""
+    try:
+        from core.projections.runner import sync_tick
+
+        sync_tick()
+    except Exception:
+        pass
+    try:
+        from core.analytics.duckdb_store import connect_analytics, derive_events_fact
+
+        conn = connect_analytics(read_only=False)
+        try:
+            derive_events_fact(conn, str(sqlite_path))
+        finally:
+            conn.close()
+    except Exception:
+        pass
+    try:
+        from core.analytics.aggregate_metrics import run_aggregation
+
+        run_aggregation()
+    except Exception:
+        pass
+
+
 def _dashboard_serve(
     *,
     source_root: Path,
@@ -785,6 +816,7 @@ def _dashboard_serve(
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
+    _refresh_derived_store(paths.sqlite_path)
     if host == "0.0.0.0":
         print(
             "[dashboard] WARNING: binding to 0.0.0.0 exposes the dashboard to the network.",
@@ -831,6 +863,7 @@ def _dashboard_open(
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
+    _refresh_derived_store(paths.sqlite_path)
     client_host = _dashboard_client_host(host)
     url = f"http://{client_host}:{port}/dashboard"
     process_id = None

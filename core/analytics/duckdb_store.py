@@ -329,9 +329,13 @@ def derive_events_fact(conn, studio_db_path, *, full_rebuild: bool = False) -> i
     try:
         if full_rebuild:
             conn.execute("DELETE FROM events_fact")
-        last = conn.execute(
-            "SELECT COALESCE(MAX(event_timestamp), '') FROM events_fact"
-        ).fetchone()[0]
+        # WO-DASH-FRESHNESS: incremental by an event_id anti-join, NOT a
+        # MAX(event_timestamp) high-water. The timestamp high-water permanently
+        # skipped late-arriving canonical events whose event_timestamp is older
+        # than the current max (ingested after the high-water was set), leaving
+        # events_fact behind the authority. The anti-join inserts exactly the
+        # not-yet-present events — no skip, no duplicate — and works unchanged
+        # after a full_rebuild DELETE (empty fact → inserts all).
         before = conn.execute("SELECT COUNT(*) FROM events_fact").fetchone()[0]
         for table, src in (
             ("ai_canonical_events", "ai"),
@@ -344,8 +348,7 @@ def derive_events_fact(conn, studio_db_path, *, full_rebuild: bool = False) -> i
             def d(n, cols=cols):
                 return f"e.{n}" if n in cols else "NULL"
 
-            conn.execute(
-                f"""
+            conn.execute(f"""
                 INSERT INTO events_fact SELECT e.event_id, '{src}', e.event_type, e.event_timestamp,
                   {', '.join(d(c) for c in _FACT_DIMS[:13])}, {d('severity')},
                   TRY_CAST(json_extract_string(e.payload,'$.input_tokens') AS BIGINT),
@@ -354,10 +357,9 @@ def derive_events_fact(conn, studio_db_path, *, full_rebuild: bool = False) -> i
                   TRY_CAST(json_extract_string(e.payload,'$.exit_code') AS BIGINT),
                   json_extract_string(e.payload,'$.status'),
                   json_extract_string(e.payload,'$.outcome_status'), e.payload
-                FROM s.{table} e WHERE e.event_timestamp > ?
-            """,
-                [last],
-            )
+                FROM s.{table} e
+                WHERE NOT EXISTS (SELECT 1 FROM events_fact f WHERE f.event_id = e.event_id)
+            """)
         return conn.execute("SELECT COUNT(*) FROM events_fact").fetchone()[0] - before
     finally:
         conn.execute("DETACH s")
