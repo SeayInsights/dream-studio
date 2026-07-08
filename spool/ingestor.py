@@ -222,7 +222,11 @@ def _extract_correlation_ids(envelope: dict[str, Any]) -> dict[str, Any]:
     agent_id = _first(trace.get("agent_id"), payload.get("agent_id"))
     hook_id = trace.get("hook_id")
     tool_id = trace.get("tool_id")
-    model_id = trace.get("model_id")
+    # Emitters write the model to payload.model (token_capture, the Claude Code
+    # emitter), not trace.model_id — fall back to it so the denormalized
+    # model_id column is populated. Without this the column is NULL for every
+    # event and token cost can only be derived via the view's payload workaround.
+    model_id = _first(trace.get("model_id"), payload.get("model"))
     adapter_id = trace.get("adapter_id")
 
     # Delegate composition to the canonical composer (Phase 18.1.3 formalized rules).

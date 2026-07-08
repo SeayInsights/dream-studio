@@ -633,3 +633,40 @@ class TestCorrelationValidate:
 
         rc = main(["--db-path", str(tmp_db), "--limit", "10"])
         assert rc == 1
+
+
+# ---------------------------------------------------------------------------
+# 7. model_id extraction (WO-TOKEN-MODEL-CAPTURE ingestor fix)
+# ---------------------------------------------------------------------------
+
+
+class TestExtractModelId:
+    """Emitters write the model to payload.model, not trace.model_id — the
+    denormalized model_id column must be populated from that payload fallback."""
+
+    def test_model_id_from_payload_fallback(self):
+        from spool.ingestor import _extract_correlation_ids
+
+        env = _mk_envelope(
+            event_type="token.consumption.recorded",
+            payload={"model": "claude-opus-4-8", "input_tokens": 10},
+        )
+        ids = _extract_correlation_ids(env)
+        assert ids["model_id"] == "claude-opus-4-8"
+
+    def test_trace_model_id_takes_precedence(self):
+        from spool.ingestor import _extract_correlation_ids
+
+        env = _mk_envelope(
+            trace={"model_id": "claude-sonnet-4-6"},
+            payload={"model": "claude-opus-4-8"},
+        )
+        ids = _extract_correlation_ids(env)
+        assert ids["model_id"] == "claude-sonnet-4-6"
+
+    def test_model_id_none_when_absent(self):
+        from spool.ingestor import _extract_correlation_ids
+
+        env = _mk_envelope(payload={"input_tokens": 10})
+        ids = _extract_correlation_ids(env)
+        assert ids["model_id"] is None
