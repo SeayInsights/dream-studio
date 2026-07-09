@@ -97,6 +97,53 @@ def _seed_token_consumed_event(
         conn.close()
 
 
+def _seed_events_fact_event(
+    analytics_db: Path,
+    *,
+    event_id: str,
+    event_type: str,
+    project_id: str | None = None,
+    milestone_id: str | None = None,
+    task_id: str | None = None,
+    workflow_id: str | None = None,
+    status: str | None = None,
+    outcome: str | None = None,
+    payload: dict | None = None,
+    event_timestamp: str = "2026-07-03T00:00:00Z",
+) -> None:
+    """Seed one generic canonical event into the DuckDB events_fact projection.
+
+    WO-DASH-DUCKDB-PROJECTION: workflow + validation component reads now derive
+    from events_fact (all-DuckDB dashboard reads), so read-model tests seed the
+    workflow.completed / validation.result_recorded events here instead of the
+    SQLite execution_events spine.
+    """
+    from core.analytics import duckdb_store
+
+    conn = duckdb_store.connect_analytics(analytics_db, read_only=False)
+    try:
+        duckdb_store.ensure_analytics_schema(conn)
+        conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp, project_id,"
+            " milestone_id, task_id, workflow_id, status, outcome, payload)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                event_id,
+                event_type,
+                event_timestamp,
+                project_id,
+                milestone_id,
+                task_id,
+                workflow_id,
+                status,
+                outcome,
+                json.dumps(payload or {}),
+            ],
+        )
+    finally:
+        conn.close()
+
+
 def _seed_read_model_dbs(db_path: Path, analytics_db: Path) -> None:
     scope = {
         "project_id": "dream-studio",
@@ -338,6 +385,30 @@ def _seed_read_model_dbs(db_path: Path, analytics_db: Path) -> None:
         input_tokens=150,
         output_tokens=75,
         cache_creation_input_tokens=25,
+    )
+    # WO-DASH-DUCKDB-PROJECTION: workflow usage + validation outcomes read the
+    # DuckDB events_fact projection, so seed them there (component_id "route-first"
+    # / validation_type "focused_test", status "passed" — matching the retired
+    # SQLite spine seeds above that other derived views still consume).
+    _seed_events_fact_event(
+        analytics_db,
+        event_id="workflow-completed-read-model-test",
+        event_type="workflow.completed",
+        project_id=scope["project_id"],
+        milestone_id=scope["milestone_id"],
+        task_id=scope["task_id"],
+        workflow_id="route-first",
+        status="completed",
+    )
+    _seed_events_fact_event(
+        analytics_db,
+        event_id="validation-result-read-model-test",
+        event_type="validation.result_recorded",
+        project_id=scope["project_id"],
+        milestone_id=scope["milestone_id"],
+        task_id=scope["task_id"],
+        status="passed",
+        payload={"validation_type": "focused_test"},
     )
 
 

@@ -304,7 +304,7 @@ def global_telemetry_summary(db_path: Path | str | None = None) -> dict[str, Any
                 "entity_counts": _entity_counts(conn),
                 "table_counts": _table_counts(conn, source_tables),
                 "component_usage": {
-                    component: _component_usage(conn, table, column)
+                    component: _component_usage_rows(conn, component, table, column)
                     for component, (table, column, _label) in COMPONENT_TABLES.items()
                 },
                 "token_usage": _token_rollup(conn),
@@ -609,7 +609,7 @@ def component_usage_summary(
         )
         usage: dict[str, Any] = {}
         for component, (table, column, _label) in components.items():
-            rows = _component_usage(conn, table, column, component_id=component_id)
+            rows = _component_usage_rows(conn, component, table, column, component_id=component_id)
             usage[component] = {
                 "rows": rows,
                 "empty_state": f"No {component} usage recorded for the selected scope.",
@@ -689,7 +689,7 @@ def _scoped_summary(
                 conn, "execution_events", scope, order_by="created_at DESC, event_id"
             ),
             "component_usage": {
-                component: _component_usage(conn, table, column, scope=scope)
+                component: _component_usage_rows(conn, component, table, column, scope=scope)
                 for component, (table, column, _label) in COMPONENT_TABLES.items()
             },
             "tokens": _token_rollup(conn, scope=scope),
@@ -858,6 +858,126 @@ def _component_usage(
     )
 
 
+# ---------------------------------------------------------------------------
+# WO-DASH-DUCKDB-PROJECTION: all-DuckDB dashboard reads. Component usage, token,
+# and validation reads move off the SQLite execution_events spine and onto the
+# DuckDB analytics store (aggregate_metrics.db) — the wide events_fact projection
+# derived from canonical events (see core/analytics/duckdb_store.py). events_fact
+# is NEVER-AUTHORITY and rebuildable; reads are read-only and fail-open to an
+# empty result so a fresh install (no store yet) never 500s a dashboard route.
+# ---------------------------------------------------------------------------
+
+# Components whose usage reads the DuckDB events_fact projection. The value is the
+# events_fact event_type set that represents one invocation of that component.
+# Components not listed here still read the SQLite execution_events spine until
+# their capture lands in canonical → events_fact (WO-HOOK-EXEC-STATS emits hook
+# execution events; WO-AGENT-TELEMETRY emits agent-identified events).
+_DUCKDB_COMPONENT_EVENT_TYPES: Mapping[str, tuple[str, ...]] = {
+    "workflow": ("workflow.completed", "workflow.node.completed"),
+}
+
+
+def _analytics_rows(sql: str, params: Sequence[Any] = ()) -> list[dict[str, Any]]:
+    """Read rows from the DuckDB analytics store (events_fact + views), read-only.
+
+    Fail-open: returns [] if the store, schema, or view is unavailable (fresh
+    install with no aggregate_metrics.db yet, or DuckDB not importable) so a
+    dashboard read never raises. The analytics store is NEVER-AUTHORITY.
+    """
+    try:
+        from core.analytics.duckdb_store import connect_analytics
+    except Exception:
+        return []
+    conn = None
+    try:
+        conn = connect_analytics(read_only=True)
+        cur = conn.execute(sql, list(params))
+        columns = [desc[0] for desc in cur.description]
+        return [dict(zip(columns, row)) for row in cur.fetchall()]
+    except Exception:
+        return []
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _component_usage_from_events_fact(
+    component_column: str,
+    event_types: Sequence[str],
+    *,
+    scope: ScopeFilter | None = None,
+    component_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Component usage rows from the DuckDB events_fact projection.
+
+    Mirrors _component_usage's output shape (SQLite spine) so callers are
+    source-agnostic. events_fact carries no process_run_id (canonical events do
+    not), so it is reported as 'unknown' — the same honest sentinel the DuckDB
+    token rollup uses.
+    """
+    et_placeholders = ",".join("?" for _ in event_types)
+    clauses = [f"event_type IN ({et_placeholders})", f"{component_column} IS NOT NULL"]
+    params: list[Any] = list(event_types)
+    if scope is not None:
+        for col, value in (
+            ("project_id", scope.project_id),
+            ("milestone_id", scope.milestone_id),
+            ("task_id", scope.task_id),
+        ):
+            if value is not None:
+                clauses.append(f"{col} = ?")
+                params.append(value)
+    if component_id:
+        clauses.append(f"{component_column} = ?")
+        params.append(component_id)
+    where = "WHERE " + " AND ".join(clauses)
+    return _analytics_rows(
+        f"""
+        SELECT
+            COALESCE(project_id, 'unknown') AS project_id,
+            COALESCE(milestone_id, 'unknown') AS milestone_id,
+            COALESCE(task_id, 'unknown') AS task_id,
+            'unknown' AS process_run_id,
+            {component_column} AS component_id,
+            COUNT(*) AS invocation_count,
+            COUNT(DISTINCT project_id) AS project_count,
+            COUNT(DISTINCT milestone_id) AS milestone_count,
+            COUNT(DISTINCT task_id) AS task_count,
+            SUM(CASE WHEN COALESCE(outcome, status) IN ('completed', 'passed', 'recorded')
+                THEN 1 ELSE 0 END) AS success_count,
+            SUM(CASE WHEN COALESCE(outcome, status) IN ('failed', 'error', 'aborted')
+                THEN 1 ELSE 0 END) AS failure_count
+        FROM events_fact
+        {where}
+        GROUP BY ALL
+        ORDER BY invocation_count DESC, component_id
+        """,
+        params,
+    )
+
+
+def _component_usage_rows(
+    conn: sqlite3.Connection,
+    component_type: str,
+    table: str,
+    component_column: str,
+    *,
+    scope: ScopeFilter | None = None,
+    component_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Dispatch component usage to the DuckDB events_fact projection for repointed
+    components (see _DUCKDB_COMPONENT_EVENT_TYPES), else the SQLite spine."""
+    event_types = _DUCKDB_COMPONENT_EVENT_TYPES.get(component_type)
+    if event_types:
+        return _component_usage_from_events_fact(
+            component_column, event_types, scope=scope, component_id=component_id
+        )
+    return _component_usage(conn, table, component_column, scope=scope, component_id=component_id)
+
+
 def _drilldown_entry_points(conn: sqlite3.Connection) -> dict[str, list[dict[str, Any]]]:
     return {
         "projects": _entity_drilldowns(
@@ -975,7 +1095,7 @@ def _process_run_drilldowns(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 def _component_drilldowns(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     for component_type, (table, column, _label) in COMPONENT_TABLES.items():
-        for row in _component_usage(conn, table, column)[:3]:
+        for row in _component_usage_rows(conn, component_type, table, column)[:3]:
             component_id = str(row["component_id"])
             entries.append(
                 {
@@ -1008,7 +1128,7 @@ def _component_hardening_intelligence(
     intelligence: dict[str, list[dict[str, Any]]] = {}
     for component_type, (table, column, _label) in components.items():
         rows: list[dict[str, Any]] = []
-        for usage in _component_usage(conn, table, column)[:10]:
+        for usage in _component_usage_rows(conn, component_type, table, column)[:10]:
             scope = _scope_from_rollup_row(usage)
             token_total = sum(
                 int(row.get("total_tokens") or 0)
@@ -1583,22 +1703,39 @@ def _security_attribution(
 def _validation_rollup(
     conn: sqlite3.Connection, scope: ScopeFilter | None = None
 ) -> list[dict[str, Any]]:
-    where, params = _where_scope(scope)
-    return _rows(
-        conn,
+    # WO-DASH-DUCKDB-PROJECTION: validation outcomes read from the DuckDB
+    # events_fact projection (validation.result_recorded), not the SQLite
+    # validation_results table — the all-DuckDB dashboard read path. Honestly
+    # empty until WO-VALIDATION-CAPTURE lands the capture into canonical events.
+    # This is NOT the validation_failures view (event.validation.failed —
+    # schema-rejected events, a different metric that must not be conflated with
+    # validation outcomes). conn is unused (kept for a stable call signature).
+    clauses = ["event_type = 'validation.result_recorded'"]
+    params: list[Any] = []
+    if scope is not None:
+        for col, value in (
+            ("project_id", scope.project_id),
+            ("milestone_id", scope.milestone_id),
+            ("task_id", scope.task_id),
+        ):
+            if value is not None:
+                clauses.append(f"{col} = ?")
+                params.append(value)
+    where = "WHERE " + " AND ".join(clauses)
+    return _analytics_rows(
         f"""
         SELECT
             COALESCE(project_id, 'unknown') AS project_id,
             COALESCE(milestone_id, 'unknown') AS milestone_id,
             COALESCE(task_id, 'unknown') AS task_id,
-            COALESCE(process_run_id, 'unknown') AS process_run_id,
-            validation_type AS component_id,
-            status,
+            'unknown' AS process_run_id,
+            json_extract_string(payload, '$.validation_type') AS component_id,
+            COALESCE(status, outcome) AS status,
             COUNT(*) AS validation_count
-        FROM validation_results
+        FROM events_fact
         {where}
-        GROUP BY project_id, milestone_id, task_id, process_run_id, validation_type, status
-        ORDER BY validation_count DESC, validation_type
+        GROUP BY ALL
+        ORDER BY validation_count DESC, component_id
         """,
         params,
     )
@@ -1953,18 +2090,21 @@ def _none_if_unknown(value: Any) -> str | None:
 
 
 def _source_tables_for_components(components: Mapping[str, tuple[str, str, str]]) -> list[str]:
+    # WO-DASH-DUCKDB-PROJECTION: component usage, token, and validation reads come
+    # from the DuckDB analytics store (aggregate_metrics.db) — the wide events_fact
+    # projection and its views — not the SQLite execution_events spine. The source
+    # names reflect that DuckDB read surface so the dashboard reports its true
+    # provenance. security_events stays SQLite: findings have no DuckDB projection
+    # yet (a known follow-up), and are honestly named as such.
     tables = [
-        "execution_events",
-        "token_usage_records",
-        "validation_results",
-        # findings_current_status (findings retired in migration 112) dropped
-        # migration 140 (WO dff23cb0) — findings are derived from
-        # security_events at read time, which is the required table now.
-        "security_events",
-        # outcome_records: dropped migration 139 (WO-AI-SPINE, AD-5) — outcomes are
-        # derived from execution_events, already listed above.
+        "events_fact",  # DuckDB wide fact over canonical events (aggregate_metrics.db)
+        "token_usage_records",  # DuckDB view over events_fact
+        "security_events",  # SQLite — findings not yet DuckDB-projected
     ]
-    tables.extend(table for table, _column, _label in components.values())
+    # Components repointed to DuckDB report events_fact; any still on the SQLite
+    # spine report their spine table honestly.
+    for component_type, (table, _column, _label) in components.items():
+        tables.append("events_fact" if component_type in _DUCKDB_COMPONENT_EVENT_TYPES else table)
     return list(dict.fromkeys(tables))
 
 
