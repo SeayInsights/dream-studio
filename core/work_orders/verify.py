@@ -587,6 +587,46 @@ def _run_one_api_check(expr: str) -> dict[str, Any]:
     return check
 
 
+def _emit_validation_result_event(check: dict[str, Any]) -> None:
+    """WO-VALIDATION-CAPTURE: emit one validation.result_recorded canonical event
+    to the spool for an executable check outcome, so the validations dashboard
+    component (WO-DASH-DUCKDB-PROJECTION read over events_fact
+    validation.result_recorded) finally has a source.
+
+    Best-effort and non-fatal — a telemetry failure must never break a check run
+    or a work-order close. payload carries validation_type + status/outcome_status
+    (events_fact derives status from $.status and outcome from $.outcome_status;
+    the validations rollup reads $.validation_type). Distinct from
+    event.validation.failed (schema-rejected events — ingestion health).
+    """
+    try:
+        from canonical.events.envelope import CanonicalEventEnvelope
+        import emitters.shared.spool_writer as _sw
+
+        status = "passed" if check.get("passed") else "failed"
+        summary = check.get("error") or (str(check.get("result") or "")[:500]) or None
+        _sw.write_envelopes(
+            [
+                CanonicalEventEnvelope(
+                    event_type="validation.result_recorded",
+                    session_id=None,
+                    payload={
+                        "validation_type": check.get("kind"),
+                        "status": status,
+                        "outcome_status": status,
+                        "command": check.get("expr"),
+                        "summary": summary,
+                    },
+                    project_id=None,
+                    trace={"domain": "telemetry"},
+                    confidence="exact",
+                )
+            ]
+        )
+    except Exception:
+        pass
+
+
 def run_executable_checks(
     tasks: list[dict[str, Any]],
     db_path: Path,
@@ -647,6 +687,12 @@ def run_executable_checks(
 
         if checks:
             results[task["title"]] = checks
+
+    # WO-VALIDATION-CAPTURE: capture each check outcome as a validation.result_recorded
+    # canonical event (best-effort) so the validations analytics have a real source.
+    for task_checks in results.values():
+        for check in task_checks:
+            _emit_validation_result_event(check)
 
     return results
 

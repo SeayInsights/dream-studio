@@ -286,6 +286,17 @@ _ENTRIES: tuple[RegistryEntry, ...] = (
     ),
     RegistryEntry("agent.execution.started", _AI, "meaningful-unit", "Subagent invocation started"),
     RegistryEntry("agent.execution.failed", _AI, "meaningful-unit", "Subagent invocation failed"),
+    # WO-VALIDATION-CAPTURE: validation/eval check outcomes (SQL/TEST/API-CHECK)
+    # emitted by core/work_orders/verify.py::run_executable_checks. Routed to
+    # ai_canonical_events so the validations dashboard component (WO-1 read repoint
+    # over events_fact validation.result_recorded) finally has a source. Distinct
+    # from event.validation.failed (schema-rejected events — ingestion health).
+    RegistryEntry(
+        "validation.result_recorded",
+        _AI,
+        "meaningful-unit",
+        "Validation/eval check result recorded",
+    ),
     # WO 9f47a1a0: control/execution/workflow/state.py now reliably reaches
     # core/telemetry/emitters.py::emit_workflow_invocation on every terminal
     # workflow run (previously gated behind the write-orphaned
