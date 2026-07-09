@@ -871,9 +871,13 @@ def _component_usage(
 # events_fact event_type set that represents one invocation of that component.
 # Components not listed here still read the SQLite execution_events spine until
 # their capture lands in canonical → events_fact (WO-HOOK-EXEC-STATS emits hook
-# execution events; WO-AGENT-TELEMETRY emits agent-identified events).
+# execution events for the hook component).
 _DUCKDB_COMPONENT_EVENT_TYPES: Mapping[str, tuple[str, ...]] = {
     "workflow": ("workflow.completed", "workflow.node.completed"),
+    # WO-AGENT-TELEMETRY: subagent (Task tool) invocations now emit agent.execution.*
+    # carrying agent_id, so the agent component reads them from events_fact (the
+    # SQLite spine never carried agent_id — it was always NULL).
+    "agent": ("agent.execution.completed", "agent.execution.started", "agent.execution.failed"),
 }
 
 

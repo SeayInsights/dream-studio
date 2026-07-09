@@ -101,6 +101,27 @@ def normalize_stop(
     ]
 
 
+# WO-AGENT-TELEMETRY: a Task tool call IS a subagent invocation. Claude Code's
+# PostToolUse payload for the Task tool exposes the agent identity in
+# tool_input.subagent_type — the one place the hook surface names the subagent.
+# This is declared in docs/canonical/event_taxonomy_v1.json (agent family); the
+# EventType enum is a deliberate subset of the taxonomy, so it is emitted by its
+# taxonomy string. Emitting it stamps trace.agent_id, which the ingestor maps to
+# the agent_id column (spool/ingestor.py: _first(trace.agent_id, payload.agent_id)),
+# so the agent_id dimension — designed for this and previously always NULL —
+# finally populates.
+_AGENT_EXECUTION_COMPLETED = "agent.execution.completed"
+
+
+def _subagent_type(tool_name: str, tool_input: Any) -> str | None:
+    """Return the subagent identity for a Task tool call, else None."""
+    if tool_name != "Task" or not isinstance(tool_input, dict):
+        return None
+    subagent = tool_input.get("subagent_type") or tool_input.get("subagentType")
+    subagent = str(subagent).strip() if subagent else ""
+    return subagent or None
+
+
 def normalize_post_tool_use(
     payload: dict[str, Any], root: Path | None = None
 ) -> list[CanonicalEventEnvelope]:
@@ -112,7 +133,8 @@ def normalize_post_tool_use(
     is_error = bool(payload.get("is_error", False))
     output_summary = redact_tool_output(tool_name, tool_response, is_error=is_error)
     input_summary = _redact_tool_input(tool_name, tool_input)
-    return [
+    project_id = get_active_project_id(_get_db_path())
+    envelopes = [
         CanonicalEventEnvelope(
             event_type=EventType.TOOL_EXECUTION_COMPLETED.value,
             session_id=session_id,
@@ -122,10 +144,29 @@ def normalize_post_tool_use(
                 "input_summary": input_summary,
                 "output_summary": output_summary,
             },
-            project_id=get_active_project_id(_get_db_path()),
+            project_id=project_id,
             trace={"domain": "telemetry"},
         )
     ]
+    subagent = _subagent_type(tool_name, tool_input)
+    if subagent is not None:
+        # subagent_type is a safe agent-kind label (e.g. "Explore", "Plan"), not
+        # free text — recorded verbatim as the agent identity. The Task prompt /
+        # description are NOT included (they carry user content).
+        envelopes.append(
+            CanonicalEventEnvelope(
+                event_type=_AGENT_EXECUTION_COMPLETED,
+                session_id=session_id,
+                confidence=confidence,
+                payload={
+                    "agent_type": subagent,
+                    "outcome_status": "failed" if is_error else "completed",
+                },
+                project_id=project_id,
+                trace={"domain": "telemetry", "agent_id": subagent, "agent_type": subagent},
+            )
+        )
+    return envelopes
 
 
 def normalize_post_compact(

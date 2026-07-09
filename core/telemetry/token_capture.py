@@ -423,6 +423,17 @@ def handle_post_tool_use(payload: dict[str, Any]) -> None:
         # Step 6: Build trace (clean copy, no internal keys).
         trace = {k: v for k, v in attr.items() if not k.startswith("_")}
 
+        # WO-AGENT-TELEMETRY: a Task tool call is a subagent invocation — attribute
+        # its tokens to the invoked agent so the agent_id dimension (previously
+        # always NULL) carries token cost. subagent_type is the hook surface's
+        # agent identity (see emitters/claude_code/emitter.py).
+        tool_input = payload.get("tool_input", payload.get("input", {}))
+        if tool_name == "Task" and isinstance(tool_input, dict):
+            subagent = tool_input.get("subagent_type") or tool_input.get("subagentType")
+            if subagent:
+                trace["agent_id"] = str(subagent).strip()
+                trace["agent_type"] = str(subagent).strip()
+
         # Step 7: Write to spool.
         envelope = CanonicalEventEnvelope(
             event_type=EventType.TOKEN_CONSUMED.value,
