@@ -276,6 +276,16 @@ _ENTRIES: tuple[RegistryEntry, ...] = (
         "workflow.node.completed", _AI, "meaningful-unit", "Workflow DAG node completed execution"
     ),
     RegistryEntry("workflow.completed", _AI, "meaningful-unit", "Workflow run completed"),
+    # WO-AGENT-TELEMETRY: subagent (Task tool) invocations. Emitted by
+    # emitters/claude_code/emitter.py with trace.agent_id=subagent_type, routed to
+    # ai_canonical_events (where the agent_id dimension lives) so the agent
+    # dashboard component finally has source data. Previously unregistered →
+    # noisy per-invocation dual-write warning on the hot path.
+    RegistryEntry(
+        "agent.execution.completed", _AI, "meaningful-unit", "Subagent invocation completed"
+    ),
+    RegistryEntry("agent.execution.started", _AI, "meaningful-unit", "Subagent invocation started"),
+    RegistryEntry("agent.execution.failed", _AI, "meaningful-unit", "Subagent invocation failed"),
     # WO 9f47a1a0: control/execution/workflow/state.py now reliably reaches
     # core/telemetry/emitters.py::emit_workflow_invocation on every terminal
     # workflow run (previously gated behind the write-orphaned
