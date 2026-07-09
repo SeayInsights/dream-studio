@@ -78,7 +78,8 @@
       "usage.cost"
     ],
     "validation": [
-      "event.validation.failed"
+      "event.validation.failed",
+      "validation.result_recorded"
     ],
     "execution": [
       "execution.started",
