@@ -597,77 +597,77 @@ def production_readiness_dashboard_summary(
 ) -> dict[str, Any]:
     """Read the latest SQLite-backed production readiness summary for a project."""
 
-    if not _table_exists(conn, "production_readiness_assessment_runs"):
-        return _empty_summary(project_id, ["production_readiness_assessment_runs"])
+    # WO-SCHEMALEAN: the normalized production_readiness_* tables were dropped in
+    # migration 112; `ds analytics-ingest` now writes the readiness_events spine
+    # (assessment.started + control_result.recorded events). This reader was
+    # repointed to it — the summary is reconstructed from the latest assessment
+    # event plus its child control events for the project.
+    if not _table_exists(conn, "readiness_events"):
+        return _empty_summary(project_id, ["readiness_events"])
     latest = conn.execute(
         """
-        SELECT * FROM production_readiness_assessment_runs
-        WHERE project_id = ?
-        ORDER BY created_at DESC
+        SELECT event_id, body, created_at FROM readiness_events
+        WHERE project_id = ? AND event_kind = 'assessment.started'
+        ORDER BY created_at DESC, event_id DESC
         LIMIT 1
         """,
         (project_id,),
     ).fetchone()
     if latest is None:
         return _empty_summary(project_id, [])
-    assessment_id = latest["assessment_id"]
-    controls = [
-        dict(row)
-        for row in conn.execute(
-            """
-            SELECT * FROM production_readiness_control_results
-            WHERE assessment_id = ?
-            ORDER BY control_family, control_id
-            """,
-            (assessment_id,),
-        ).fetchall()
-    ]
-    findings = [
-        dict(row)
-        for row in conn.execute(
-            """
-            SELECT * FROM production_readiness_findings
-            WHERE assessment_id = ?
-            ORDER BY blocking DESC, severity, control_id
-            """,
-            (assessment_id,),
-        ).fetchall()
-    ]
-    remediation = [
-        dict(row)
-        for row in conn.execute(
-            """
-            SELECT * FROM production_readiness_remediation_work_orders
-            WHERE assessment_id = ?
-            ORDER BY created_at DESC
-            """,
-            (assessment_id,),
-        ).fetchall()
-    ]
-    # compliance_review_flags: dropped in migration 133 — query removed.
-    # (This code path is already unreachable: production_readiness_assessment_runs
-    # was dropped in migration 112, so the early return at line 601 fires first.)
-    compliance_flags: list[dict] = []
-    summary = Counter(row["status"] for row in controls)
+    assessment_id = latest["event_id"]
+    body = json.loads(latest["body"] or "{}")
+    status = body.get("status") or "partial"
+    confidence = body.get("confidence") or "medium"
+    missing_evidence = body.get("missing_evidence") or []
+    blocking_factors = body.get("blocking_factors") or []
+    controls = []
+    for row in conn.execute(
+        """
+        SELECT control_id, result, body FROM readiness_events
+        WHERE parent_event_id = ? AND event_kind = 'control_result.recorded'
+        ORDER BY control_id
+        """,
+        (assessment_id,),
+    ).fetchall():
+        cbody = json.loads(row["body"] or "{}")
+        controls.append(
+            {
+                "control_id": row["control_id"],
+                "status": row["result"],
+                "control_family": cbody.get("control_family"),
+                "severity": cbody.get("severity"),
+                "applicability": cbody.get("applicability"),
+            }
+        )
+    summary = Counter(control["status"] for control in controls)
+
+    def _score_dict(raw: Any) -> dict[str, Any]:
+        # readiness_events stores the health/readiness score as whatever the
+        # analytics payload provided (a scalar in practice); wrap a scalar into
+        # the dashboard's expected {score,status,confidence,...} shape.
+        if isinstance(raw, dict):
+            return raw
+        return {
+            "score": raw,
+            "status": status,
+            "confidence": confidence,
+            "missing_evidence": missing_evidence,
+            "blocking_factors": blocking_factors,
+        }
+
     return {
         "model_name": "production_readiness_dashboard_summary",
         "project_id": project_id,
         "assessment_id": assessment_id,
         "derived_view": True,
         "primary_authority": False,
-        "source_tables": [
-            "production_readiness_assessment_runs",
-            "production_readiness_control_results",
-            "production_readiness_findings",
-            "production_readiness_remediation_work_orders",
-            # release_readiness_records: dropped migration 133
-            # compliance_review_flags: dropped migration 133
-        ],
-        "readiness_score": json.loads(latest["readiness_score_json"]),
-        "health_score": json.loads(latest["health_score_json"]),
-        "release_readiness_effect": latest["release_readiness_effect"],
-        "status": latest["status"],
-        "confidence": latest["confidence"],
+        "source_tables": ["readiness_events"],
+        "readiness_score": _score_dict(body.get("readiness_score")),
+        "health_score": _score_dict(body.get("health_score")),
+        "release_readiness_effect": body.get("release_readiness_effect"),
+        "status": status,
+        "confidence": confidence,
         "control_summary": {
             "total": len(controls),
             "pass": summary["pass"],
@@ -677,10 +677,13 @@ def production_readiness_dashboard_summary(
             "manual_review": summary["manual_review"],
             "unknown": summary["unknown"],
         },
-        "controls": [_decode_json_fields(row) for row in controls],
-        "findings": [_decode_json_fields(row) for row in findings],
-        "remediation_work_orders": [_decode_json_fields(row) for row in remediation],
-        "compliance_review_flags": [_decode_json_fields(row) for row in compliance_flags],
+        "controls": controls,
+        # The retired normalized findings / remediation / compliance tables are not
+        # part of the readiness_events spine; blocking_factors + missing_evidence on
+        # the score dicts carry the equivalent signal. Honestly empty, not fabricated.
+        "findings": [],
+        "remediation_work_orders": [],
+        "compliance_review_flags": [],
         "empty_state": None,
     }
 
