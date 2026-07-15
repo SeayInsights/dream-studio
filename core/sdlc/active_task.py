@@ -28,6 +28,12 @@ def _active_task_path() -> Path:
     return Path.home() / ".dream-studio" / "state" / "active_task.json"
 
 
+def _use_authority() -> bool:
+    """WO-FILESDB-P2: use the authority raw_runtime_state row only for the pure
+    default — a DS_ACTIVE_TASK_PATH override means the caller wants that file."""
+    return not os.environ.get(ACTIVE_TASK_PATH_ENV)
+
+
 def set_active_task(task_id: str) -> ActiveTaskContext:
     """Resolves the full SDLC chain from task_id and persists to disk.
 
@@ -66,6 +72,15 @@ def set_active_task(task_id: str) -> ActiveTaskContext:
         set_at=datetime.now(UTC).isoformat(),
     )
 
+    # WO-FILESDB-P2: persist to the authority row first (pure default); the legacy
+    # JSON file when a DS_ACTIVE_TASK_PATH override is set or the raw_runtime_state
+    # table is absent (migration 146 unreleased).
+    if _use_authority():
+        from core.runtime_state import db_write_runtime_state
+
+        if db_write_runtime_state("active_task", asdict(ctx)):
+            return ctx
+
     path = _active_task_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(asdict(ctx)), encoding="utf-8")
@@ -77,22 +92,39 @@ def get_active_task() -> ActiveTaskContext | None:
     """Returns the current active task context, or None if none set
     or the file is missing/corrupt.
     """
-    path = _active_task_path()
-    if not path.exists():
-        return None
+    # WO-FILESDB-P2: authority row first (pure default); the legacy JSON file when
+    # a DS_ACTIVE_TASK_PATH override is set or the table/row is absent.
+    data: dict | None = None
+    if _use_authority():
+        from core.runtime_state import db_read_runtime_state
+
+        data = db_read_runtime_state("active_task")
+    if data is None:
+        path = _active_task_path()
+        if not path.exists():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
         return ActiveTaskContext(**data)
-    except Exception:
+    except (TypeError, ValueError):
         return None
 
 
 def clear_active_task() -> bool:
-    """Removes the active task file. Returns True if a file was
-    removed, False if no file existed.
+    """Removes the active task pointer. Returns True if one existed and was
+    removed, False if none existed.
     """
+    # WO-FILESDB-P2: clear the authority row (pure default) and/or the legacy JSON.
+    removed = False
+    if _use_authority():
+        from core.runtime_state import db_clear_runtime_state
+
+        removed = db_clear_runtime_state("active_task")
     path = _active_task_path()
     if path.exists():
         path.unlink()
-        return True
-    return False
+        removed = True
+    return removed
