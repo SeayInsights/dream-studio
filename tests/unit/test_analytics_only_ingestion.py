@@ -137,9 +137,10 @@ def test_analytics_only_dashboard_routes_consume_imported_state(
 
         project_ids = {project["project_id"] for project in projects.json()["projects"]}
         assert "analytics-project" in project_ids
-        # production_readiness_dashboard_summary reads dropped tables (migration 112);
-        # returns "unavailable" until updated to read readiness_events.
-        assert details.json()["readiness_score"]["status"] == "unavailable"
+        # WO-SCHEMALEAN: production_readiness_dashboard_summary now reads the
+        # readiness_events spine, so the ingested assessment (status "partial")
+        # surfaces on the dashboard instead of the old "unavailable".
+        assert details.json()["readiness_score"]["status"] == "partial"
         assert details.json()["security_status"]["open_findings"] == 1
         assert analytics.json()["hooks_required"] is False
         assert analytics.json()["docker_required"] is False
