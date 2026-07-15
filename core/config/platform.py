@@ -98,6 +98,13 @@ def _default_profile_path() -> Path:
     return Path.home() / ".dream-studio" / "state" / "platform.json"
 
 
+def _use_authority(profile_path: Path | None) -> bool:
+    """WO-FILESDB-P2: use the authority raw_runtime_state row only for the pure
+    default (no explicit profile_path and no DS_PLATFORM_PROFILE_PATH override) —
+    an explicit path or the env override always means the caller wants that file."""
+    return profile_path is None and not os.environ.get(PLATFORM_PROFILE_ENV)
+
+
 def ensure_platform_recorded(profile_path: Path | None = None) -> PlatformProfile:
     """Detect and persist platform profile. Idempotent. Returns the profile.
 
@@ -105,6 +112,16 @@ def ensure_platform_recorded(profile_path: Path | None = None) -> PlatformProfil
     stays current (shell switches, OS upgrades, etc.).
     """
     profile = detect_platform()
+    if _use_authority(profile_path):
+        # WO-FILESDB-P2: authority row first; legacy JSON only when the
+        # raw_runtime_state table is absent (migration 146 unreleased).
+        from core.runtime_state import db_write_runtime_state
+
+        if db_write_runtime_state("platform", profile.to_dict()):
+            logger.info(
+                f"Platform profile recorded in authority: {profile.os_name} / {profile.shell}"
+            )
+            return profile
     path = profile_path if profile_path is not None else _default_profile_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(profile.to_dict(), indent=2), encoding="utf-8")
@@ -114,15 +131,26 @@ def ensure_platform_recorded(profile_path: Path | None = None) -> PlatformProfil
 
 def get_platform_profile(profile_path: Path | None = None) -> PlatformProfile:
     """Read recorded platform profile. If not present, detect and record."""
+    if _use_authority(profile_path):
+        # WO-FILESDB-P2: authority row first; fall through to the legacy JSON
+        # file when the table/row is absent.
+        from core.runtime_state import db_read_runtime_state
+
+        data = db_read_runtime_state("platform")
+        if data is not None:
+            try:
+                return PlatformProfile(**data)
+            except (TypeError, ValueError):
+                pass
     path = profile_path if profile_path is not None else _default_profile_path()
     if not path.is_file():
-        return ensure_platform_recorded(path)
+        return ensure_platform_recorded(profile_path)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         return PlatformProfile(**data)
     except (json.JSONDecodeError, TypeError, OSError) as e:
         logger.warning(f"Failed to read platform profile at {path}: {e}; redetecting")
-        return ensure_platform_recorded(path)
+        return ensure_platform_recorded(profile_path)
 
 
 def is_windows() -> bool:

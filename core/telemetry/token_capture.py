@@ -117,10 +117,19 @@ def _resolve_attribution(
 ) -> dict[str, Any]:
     """Resolve attribution trace: active_task → CWD marker → orphan."""
     # Read active skill written by record_skill_invocation() (best-effort).
+    # WO-FILESDB-P2: authority row first; the legacy JSON file when it is absent.
     active_skill_id: str | None = None
     try:
-        _skill_path = Path.home() / ".dream-studio" / "state" / "active_skill.json"
-        _skill_data = json.loads(_skill_path.read_text(encoding="utf-8"))
+        _skill_data: dict | None = None
+        try:
+            from core.runtime_state import db_read_runtime_state
+
+            _skill_data = db_read_runtime_state("active_skill")
+        except Exception:
+            _skill_data = None
+        if _skill_data is None:
+            _skill_path = Path.home() / ".dream-studio" / "state" / "active_skill.json"
+            _skill_data = json.loads(_skill_path.read_text(encoding="utf-8"))
         active_skill_id = _skill_data.get("skill_id") or None
     except Exception:
         pass

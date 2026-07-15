@@ -264,13 +264,18 @@ def record_skill_invocation(
         event_emitted = True
 
         # Persist active skill so token_capture can stamp skill_id on token.consumed.
+        # WO-FILESDB-P2: authority row first; the legacy JSON file only when the
+        # raw_runtime_state table is absent (migration 146 unreleased).
         try:
-            _state_dir = Path.home() / ".dream-studio" / "state"
-            _state_dir.mkdir(parents=True, exist_ok=True)
-            (_state_dir / "active_skill.json").write_text(
-                json.dumps({"skill_id": skill_id, "set_at": now}),
-                encoding="utf-8",
-            )
+            _active_skill = {"skill_id": skill_id, "set_at": now}
+            from core.runtime_state import db_write_runtime_state
+
+            if not db_write_runtime_state("active_skill", _active_skill):
+                _state_dir = Path.home() / ".dream-studio" / "state"
+                _state_dir.mkdir(parents=True, exist_ok=True)
+                (_state_dir / "active_skill.json").write_text(
+                    json.dumps(_active_skill), encoding="utf-8"
+                )
         except Exception:
             pass
     except Exception:
