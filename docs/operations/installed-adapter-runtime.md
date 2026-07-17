@@ -347,3 +347,5 @@ and stop-gate context from SQLite authority to supported tools.
 <!-- Last reviewed 2026-07-04 — migration 139 (WO-AI-SPINE, AD-5): core/module_contracts.py telemetry module owned_tables list updated — outcome_records removed (dropped migration 139; pure duplication of execution_events dual-write, 0/2/0 production rows). No installed adapter runtime behavior, state, routing, or productization change. -->
 
 <!-- Reviewed 2026-07-05 — WO 6d978483 (PEP 585/604 modernization [2/2]): source files in this domain received mechanical type-annotation modernization only (PEP 585 builtin generics, PEP 604 unions, datetime.UTC) via ruff UP safe autofixes. No contract, behavior, schema, routing, API-shape, or CLI-surface change — reviewed, no doc content change needed. -->
+
+<!-- Last reviewed 2026-07-15 — WO-SCHEMALEAN (migration 147): the installed_adapter_router read model (core/installed_runtime.py) drops its capability_routes section — it summarized capability_route_records, a dead persist=False table now dropped. No other installed-runtime behavior change; adapter authority (adapter_authority_profiles) untouched. -->

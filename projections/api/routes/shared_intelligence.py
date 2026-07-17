@@ -29,7 +29,6 @@ from core.shared_intelligence.adapter_config_projection import (
 )
 from core.shared_intelligence.adapter_staleness import adapter_staleness_report
 from core.shared_intelligence.capability_routing import (
-    capability_route_summary,
     recommend_capability_route,
 )
 from core.shared_intelligence.capability_center import capability_center_summary
@@ -118,11 +117,6 @@ async def get_shared_intelligence_status(
                         "learning_event_records",
                         "adapter_authority_profiles",
                     ],
-                },
-                {
-                    "surface_id": "capability-routes",
-                    "api_path": "/api/shared-intelligence/capability-routes",
-                    "source_tables": ["capability_route_records"],
                 },
                 {
                     "surface_id": "model-providers",
@@ -563,16 +557,9 @@ async def preview_context_packet(
     )
 
 
-@router.get("/capability-routes")
-async def get_capability_routes(
-    project_id: str | None = Query(default=None),
-    limit: int = Query(default=20, ge=1, le=100),
-) -> dict[str, Any]:
-    """Return recorded capability-route recommendations."""
-
-    return _with_connection(
-        lambda conn: capability_route_summary(conn, project_id=project_id, limit=limit)
-    )
+# GET /capability-routes (get_capability_routes / capability_route_summary): removed
+# migration 147 (WO-SCHEMALEAN) — it read the dropped capability_route_records table and
+# was permanently empty. The recommendation preview below is kept (persist-free).
 
 
 @router.get("/capability-routes/recommendation")

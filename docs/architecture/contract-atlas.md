@@ -448,3 +448,5 @@ and boundary report without inventing new dependency data.
 
 
 <!-- Reviewed 2026-07-05 — WO 6d978483 (PEP 585/604 modernization [2/2]): source files in this domain received mechanical type-annotation modernization only (PEP 585 builtin generics, PEP 604 unions, datetime.UTC) via ruff UP safe autofixes. No contract, behavior, schema, routing, API-shape, or CLI-surface change — reviewed, no doc content change needed. -->
+
+<!-- Last reviewed 2026-07-15 — core/shared_intelligence/* + core/installed_runtime.py: migration 147 (WO-SCHEMALEAN) dropped capability_route_records (dead persist=False writer) and removed record_capability_route, capability_route_summary, the GET /capability-routes route+surface, and the installed_adapter_router read model's capability_routes section. The recommendation preview (persist=False) is kept. Contract atlas surface: the capability-routes read surface is removed; no other contract shape changed. -->

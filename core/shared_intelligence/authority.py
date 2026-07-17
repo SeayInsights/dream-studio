@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Mapping, Sequence
 from typing import Any
 
 REQUIRED_SHARED_INTELLIGENCE_TABLES: frozenset[str] = frozenset(
     {
         "adapter_authority_profiles",
-        "capability_route_records",
+        # capability_route_records: dropped migration 147 (WO-SCHEMALEAN) — dead
+        # persist=False writer; the recommendation preview is kept and does not
+        # require the table.
         # artifact_authority_records: dropped migration 131
         # learning_event_records: dropped migration 131
         # hardening_candidate_records: dropped migration 131
@@ -72,44 +73,9 @@ def record_adapter_authority_profile(conn: sqlite3.Connection, **values: Any) ->
     )
 
 
-def record_capability_route(conn: sqlite3.Connection, **values: Any) -> None:
-    require_shared_intelligence_tables(conn)
-    conn.execute(
-        """
-        INSERT OR REPLACE INTO capability_route_records (
-            capability_route_id, project_id, milestone_id, task_id,
-            process_run_id, task_class, selected_adapter_id,
-            selected_model_profile_id, route_basis_json, risk_level,
-            cost_sensitivity, validation_required, operator_approval_required,
-            source_refs_json, evidence_refs_json
-        ) VALUES (
-            :capability_route_id, :project_id, :milestone_id, :task_id,
-            :process_run_id, :task_class, :selected_adapter_id,
-            :selected_model_profile_id, :route_basis_json, :risk_level,
-            :cost_sensitivity, :validation_required,
-            :operator_approval_required, :source_refs_json, :evidence_refs_json
-        )
-        """,
-        {
-            "capability_route_id": values["capability_route_id"],
-            "project_id": values.get("project_id"),
-            "milestone_id": values.get("milestone_id"),
-            "task_id": values.get("task_id"),
-            "process_run_id": values.get("process_run_id"),
-            "task_class": values["task_class"],
-            "selected_adapter_id": values.get("selected_adapter_id"),
-            "selected_model_profile_id": values.get("selected_model_profile_id"),
-            "route_basis_json": _json(values.get("route_basis"), {}),
-            "risk_level": values.get("risk_level", "medium"),
-            "cost_sensitivity": values.get("cost_sensitivity", "medium"),
-            "validation_required": _int_bool(values.get("validation_required", True)),
-            "operator_approval_required": _int_bool(
-                values.get("operator_approval_required", False)
-            ),
-            "source_refs_json": _json(values.get("source_refs"), []),
-            "evidence_refs_json": _json(values.get("evidence_refs"), []),
-        },
-    )
+# record_capability_route: removed migration 147 (WO-SCHEMALEAN) — dead persist=False
+# writer for the dropped capability_route_records table (recommend_capability_route only
+# ever ran with persist=False in production).
 
 
 def build_adapter_context_packet(
@@ -146,38 +112,11 @@ def build_adapter_context_packet(
     }
 
 
-def _select_records(
-    conn: sqlite3.Connection,
-    table: str,
-    *,
-    project_id: str | None,
-    order_by: str,
-    limit: int,
-) -> list[dict[str, Any]]:
-    where = ""
-    params: list[Any] = []
-    if project_id is not None and _table_has_column(conn, table, "project_id"):
-        where = "WHERE project_id = ?"
-        params.append(project_id)
-    params.append(max(1, min(int(limit), 100)))
-    return [
-        dict(row)
-        for row in conn.execute(
-            f"SELECT * FROM {table} {where} ORDER BY {order_by} DESC LIMIT ?",
-            params,
-        ).fetchall()
-    ]
-
-
-def _table_has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
-    return any(str(row[1]) == column for row in conn.execute(f"PRAGMA table_info({table})"))
+# _select_records / _table_has_column / _int_bool: removed migration 147
+# (WO-SCHEMALEAN) — only record_capability_route (removed) used them.
 
 
 def _json(value: Any, default: Any) -> str:
     if value is None:
         value = default
     return json.dumps(value, sort_keys=True)
-
-
-def _int_bool(value: Any) -> int:
-    return 1 if bool(value) else 0

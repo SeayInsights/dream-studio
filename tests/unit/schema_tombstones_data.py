@@ -43,6 +43,7 @@ TOMBSTONED_TABLES: frozenset[str] = frozenset(
         "blocker_resolution_records",
         "canonical_events_legacy_backup",
         "capability_center_records",
+        "capability_route_records",
         "career_application_events",
         "career_application_field_mappings",
         "career_applications",

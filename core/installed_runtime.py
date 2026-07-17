@@ -16,7 +16,6 @@ from core.release.adapter_workspace_hygiene import adapter_workspace_policy
 from core.shared_intelligence.adapter_alignment import register_default_adapter_authority_profiles
 from core.shared_intelligence.adapter_config_projection import adapter_config_projection_report
 from core.shared_intelligence.adapter_staleness import adapter_staleness_report
-from core.shared_intelligence.capability_routing import capability_route_summary
 from core.shared_intelligence.context_packets import generate_shared_context_packet
 from core.shared_intelligence.usage_accounting import (
     adapter_usage_accounting_summary,
@@ -255,7 +254,6 @@ def adapter_router_status(
     )
     projection_report = adapter_config_projection_report(conn, project_id=project_id)
     staleness = adapter_staleness_report(conn, config_root=paths.source_root, project_id=project_id)
-    routes = capability_route_summary(conn, project_id=project_id)
     usage_accounting = adapter_usage_accounting_summary(conn, project_id=project_id)
     return {
         "model_name": "dream_studio_installed_adapter_router",
@@ -281,10 +279,8 @@ def adapter_router_status(
             "repair_candidate_count": len(staleness["repair_work_order_candidates"]),
             "live_execution_proven": staleness["live_execution_proven"],
         },
-        "capability_routes": {
-            "route_count": routes["route_count"],
-            "routing_policy_mutation_authorized": False,
-        },
+        # capability_routes section removed migration 147 (WO-SCHEMALEAN) — the
+        # capability_route_records summary it read was a dead persist=False surface.
         "usage_accounting": {
             "profile_count": usage_accounting["profile_count"],
             "token_record_count": usage_accounting["token_record_count"],

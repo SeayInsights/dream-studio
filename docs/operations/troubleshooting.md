@@ -304,3 +304,5 @@ authority before continuing implementation.
 <!-- Last reviewed 2026-07-04 — migration 139 (WO-AI-SPINE, AD-5): no troubleshooting-guidance change. migration 139 drops decision_records, outcome_records, and dashboard_attention_items (0/2/0 production rows; pure duplication of the execution_events row their writers in core/telemetry/emitters.py already wrote) — none had operator-facing diagnostic paths. -->
 
 <!-- Reviewed 2026-07-05 — WO 6d978483 (PEP 585/604 modernization [2/2]): source files in this domain received mechanical type-annotation modernization only (PEP 585 builtin generics, PEP 604 unions, datetime.UTC) via ruff UP safe autofixes. No contract, behavior, schema, routing, API-shape, or CLI-surface change — reviewed, no doc content change needed. -->
+
+<!-- Last reviewed 2026-07-15 — WO-SCHEMALEAN (migration 147): capability_route_records dropped; the removed GET /api/shared-intelligence/capability-routes route (permanently empty) is no longer a surface. No troubleshooting-flow behavior change. -->

@@ -4,7 +4,6 @@ from core.shared_intelligence.authority import (
     REQUIRED_SHARED_INTELLIGENCE_TABLES,
     build_adapter_context_packet,
     record_adapter_authority_profile,
-    record_capability_route,
     require_shared_intelligence_tables,
 )
 from core.shared_intelligence.adapter_alignment import (
@@ -23,7 +22,6 @@ from core.shared_intelligence.adapter_staleness import (
     validate_adapter_staleness_report,
 )
 from core.shared_intelligence.capability_routing import (
-    capability_route_summary,
     recommend_capability_route,
 )
 from core.shared_intelligence.capability_center import (
@@ -86,9 +84,7 @@ __all__ = [
     "REQUIRED_SHARED_INTELLIGENCE_TABLES",
     "build_adapter_context_packet",
     "record_adapter_authority_profile",
-    "record_capability_route",
     "require_shared_intelligence_tables",
-    "capability_route_summary",
     "recommend_capability_route",
     "capability_center_summary",
     "validate_capability_center_summary",

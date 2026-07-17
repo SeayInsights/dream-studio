@@ -177,3 +177,5 @@ authority.
 <!-- Last reviewed 2026-06-28 — Batch 1 canonical-first migration (migration 133): shared_intelligence route source_tables list cleaned of dropped-table references. Expert workflow system (expert_workflow_catalog, ds system, capability routes) unchanged. -->
 
 <!-- Reviewed 2026-07-05 — WO 6d978483 (PEP 585/604 modernization [2/2]): source files in this domain received mechanical type-annotation modernization only (PEP 585 builtin generics, PEP 604 unions, datetime.UTC) via ruff UP safe autofixes. No contract, behavior, schema, routing, API-shape, or CLI-surface change — reviewed, no doc content change needed. -->
+
+<!-- Last reviewed 2026-07-15 — WO-SCHEMALEAN (migration 147): capability_route_records dropped. No expert-workflow-system behavior change — touched only via a shared-intelligence source file in this domain's glob. -->
