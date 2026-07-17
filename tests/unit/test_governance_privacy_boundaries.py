@@ -406,14 +406,13 @@ def test_guardrail_custom_query_rejects_legacy_activity_log_fields():
 
 
 def test_security_and_audit_routes_keep_named_write_exceptions_only():
+    # audits.py removed migration 149 (WO-SCHEMALEAN) — audit_runs dropped; security.py
+    # is read-only (its writes go through named security-finding helpers, not direct SQL).
     writes = _sql_writes_under(
         REPO_ROOT / "projections" / "api" / "routes" / "security.py",
-        REPO_ROOT / "projections" / "api" / "routes" / "audits.py",
     )
 
-    assert writes == [
-        ("projections/api/routes/audits.py", "INSERT INTO", "audit_runs"),
-    ]
+    assert writes == []
 
     canonical_offenders = [
         f"{rel_path}: {operation} {table}"

@@ -30,7 +30,7 @@ CLASSIFICATION: dict[str, str] = {
     "alert_rules": "KEEP",
     "artifact_authority_records": "DROP",  # Dropped migration 131: dead writer record_artifact_authority(), test-only callers
     "artifact_records": "DROP",  # Dropped migration 130: 0 rows, no production writer, aspirational telemetry
-    "audit_runs": "KEEP",
+    "audit_runs": "DROP",  # Dropped migration 149 (WO-SCHEMALEAN): 0 rows, no internal writer since the initial commit (external-write API endpoint nothing in-repo ever calls); routes referenced already-dropped sec_sarif_findings/sec_cve_matches. Superseded by the live /api/v1/security/* surface (security_events + scan_runs).
     "authority_projection_records": "DROP",  # Dropped migration 130: 0 rows, no live writer, aspirational telemetry
     "blocker_resolution_records": "DROP",  # Dropped migration 130: 0 rows, no live writer, aspirational telemetry
     "business_canonical_events": "KEEP",

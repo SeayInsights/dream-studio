@@ -16,7 +16,6 @@ from .routes import (
     discovery_research,
     hooks,
     security,
-    audits,
     intelligence,
     telemetry,
     shared_intelligence,
@@ -88,7 +87,8 @@ app.include_router(discovery_internal.router, prefix="/api/discovery/internal", 
 app.include_router(discovery_research.router, prefix="/api/discovery/research", tags=["discovery"])
 app.include_router(hooks.router, prefix="/api/v1", tags=["hooks"])
 app.include_router(security.router, prefix="/api/v1", tags=["security"])
-app.include_router(audits.router, prefix="/api/v1", tags=["audits"])
+# audits router removed migration 149 (WO-SCHEMALEAN): audit_runs dropped — superseded
+# by the live /api/v1/security/* surface (security_events + scan_runs).
 app.include_router(intelligence.router, prefix="/api/v1/intelligence", tags=["intelligence"])
 app.include_router(telemetry.router, prefix="/api/telemetry", tags=["telemetry"])
 app.include_router(
