@@ -427,8 +427,9 @@ class TestEventTypeRegistration:
 
 
 class TestMigration143StaleFk:
-    """Migration 143 rebuilds audit_runs + capability_route_records without the
-    FK clauses that referenced dropped tables (activity_log, model_provider_profiles)."""
+    """Migration 143 rebuilds audit_runs without the FK clause that referenced a
+    dropped table (activity_log). (capability_route_records was dropped in migration
+    147 — WO-SCHEMALEAN — so only the audit_runs half of the 143 fix remains testable.)"""
 
     def test_dead_fk_clauses_removed_and_inserts_work(self, migrated_db):
         conn, _ = migrated_db
@@ -436,22 +437,11 @@ class TestMigration143StaleFk:
 
         # audit_runs: no FK parents remain (activity_log FK dropped).
         assert [f[2] for f in conn.execute("PRAGMA foreign_key_list(audit_runs)")] == []
-        # capability_route_records: only the still-valid adapter FK remains.
-        cr_parents = {
-            f[2] for f in conn.execute("PRAGMA foreign_key_list(capability_route_records)")
-        }
-        assert cr_parents == {"adapter_authority_profiles"}
-        assert "model_provider_profiles" not in cr_parents
 
         # The latent bug: inserts used to raise "no such table" at DML time. Now they succeed.
         conn.execute(
             "INSERT INTO audit_runs (audit_id, audit_type, audit_scope, target_id, target_type)"
             " VALUES ('A-143', 'security', 'project', 'p', 'project')"
         )
-        conn.execute(
-            "INSERT INTO capability_route_records (capability_route_id, task_class)"
-            " VALUES ('C-143', 'build')"
-        )
         conn.commit()
         assert conn.execute("SELECT COUNT(*) FROM audit_runs").fetchone()[0] == 1
-        assert conn.execute("SELECT COUNT(*) FROM capability_route_records").fetchone()[0] == 1

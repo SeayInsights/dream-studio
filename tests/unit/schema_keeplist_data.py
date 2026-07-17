@@ -43,7 +43,7 @@ CLASSIFICATION: dict[str, str] = {
     "business_work_order_types": "KEEP",
     "business_work_orders": "KEEP",
     "canonical_events_legacy_backup": "DROP",
-    "capability_route_records": "KEEP",
+    "capability_route_records": "DROP",  # Dropped migration 147 (WO-SCHEMALEAN): persist=False dead gate — record_capability_route only reachable when recommend_capability_route(persist=True), which no production caller passes (same pattern as compliance_review_flags); recommendation preview kept
     "compliance_review_flags": "DROP",  # Dropped migration 133: persist=False dead gate — _record_compliance_flags() only reachable when persist=True, which no production caller passes
     "connector_ingestion_runs": "DROP",  # Dropped migration 131: dead writer ingest_connector_payload(), test-only callers
     "cor_skill_corrections": "DROP",  # Dropped migration 131: dead writer skill_correct(), only reachable via unregistered __main__

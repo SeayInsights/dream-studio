@@ -521,3 +521,5 @@ Migration 067 (067_dual_canonical.sql): Adds business_canonical_events and ai_ca
 <!-- Last reviewed 2026-07-15 — WO-FILESDB-P2 task 2: migration 146 (146_runtime_state.sql) is additive DDL — CREATE TABLE raw_runtime_state (key PK, value TEXT JSON, updated_at), no existing table touched. Picked up by the standard *.sql glob. .released_version is NOT bumped: 146 is unreleased, skipped on the live authority DB (WO-MS live-safety gate) until `ds migrate activate`; fresh installs and CI apply it on next bootstrap. The repointed callers — core/skills/invocation.py + core/telemetry/token_capture.py (active_skill), core/sdlc/active_task.py (active_task), core/config/platform.py (platform) via core/runtime_state.py — fall back to the legacy ~/.dream-studio/state/{active_skill,active_task,platform}.json files while 146 is dormant. Sibling of 145 under the same files-in-database directive. -->
 
 
+
+<!-- Last reviewed 2026-07-15 — migration 147 (WO-SCHEMALEAN): DROP TABLE capability_route_records — dead persist=False writer table. Forward migration after 146; additive-safe (no other table references it). .released_version unchanged until activate. -->

@@ -21,7 +21,7 @@ CAPABILITY_SOURCE_TABLES: tuple[str, ...] = (
     "workflow_invocations",
     "agent_invocations",
     "hardening_candidate_records",
-    "capability_route_records",
+    # capability_route_records: dropped migration 147 (WO-SCHEMALEAN)
     "production_readiness_control_results",
     "task_attribution_records",
 )

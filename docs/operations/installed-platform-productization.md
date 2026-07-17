@@ -405,3 +405,5 @@ the source repo.
 <!-- Last reviewed 2026-07-04 — migration 139 (WO-AI-SPINE, AD-5): core/module_contracts.py telemetry module owned_tables list updated — outcome_records removed (dropped migration 139; pure duplication of execution_events dual-write, 0/2/0 production rows). No installed adapter runtime behavior, state, routing, or productization change. -->
 
 <!-- Reviewed 2026-07-05 — WO 6d978483 (PEP 585/604 modernization [2/2]): source files in this domain received mechanical type-annotation modernization only (PEP 585 builtin generics, PEP 604 unions, datetime.UTC) via ruff UP safe autofixes. No contract, behavior, schema, routing, API-shape, or CLI-surface change — reviewed, no doc content change needed. -->
+
+<!-- Last reviewed 2026-07-15 — WO-SCHEMALEAN (migration 147): capability_route_records dropped (dead persist=False table); the productization surface loses the always-empty capability-routes read. Live productization authority (adapter_authority_profiles) unchanged. -->
