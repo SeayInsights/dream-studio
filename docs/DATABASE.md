@@ -457,3 +457,5 @@ Migration 067 adds business_canonical_events and ai_canonical_events (L2a/L2b du
 
 
 <!-- Last reviewed 2026-07-15 — migration 147 (WO-SCHEMALEAN) drops capability_route_records (0 rows, dead persist=False writer — same pattern as compliance_review_flags/mig 133). No other table touched; .released_version not bumped (unreleased until `ds migrate activate`). -->
+
+<!-- Last reviewed 2026-07-17 — WO-SCHEMALEAN (migration 148): drops preflight_events + business_work_order_preflights (both 0 rows) — the unwired preflight stack (no live writer; start-gate reader was a permanent no-op). Duplicative of the live CI blast-radius gate. .released_version unchanged until `ds migrate activate`. -->
