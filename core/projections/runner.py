@@ -484,12 +484,9 @@ def main() -> None:
     except ImportError:
         logger.warning("ProjectProjection not found — skipping registration.")
 
-    try:
-        from core.projections.preflight_projection import PreflightProjection
-
-        runner.register_spine(PreflightProjection())
-    except ImportError:
-        logger.warning("PreflightProjection not found — skipping spine registration.")
+    # PreflightProjection: removed migration 148 (WO-SCHEMALEAN) — the preflight_events /
+    # business_work_order_preflights stack was an unwired aspirational loop (no writer);
+    # dropped as duplicative of the live CI blast-radius gate.
 
     # FindingsProjection removed WO dff23cb0 (migration 140 drops
     # findings_current_status); security/lifecycle-status readers now derive

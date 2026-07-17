@@ -136,7 +136,6 @@ class TestStartWorkOrderSequenceGuard:
         # Don't patch _connect — _check_sequence_order must read from the real tmp db.
         # Only stub out side effects that would fail outside the db fixture.
         with (
-            patch("core.work_orders.start._check_preflight_gate", return_value=None),
             patch(
                 "core.work_orders.start.write_work_order_context", return_value=tmp_path / "ctx.md"
             ),
@@ -216,7 +215,6 @@ class TestStartWorkOrderSequenceGuard:
         from core.work_orders.start import start_work_order
 
         with (
-            patch("core.work_orders.start._check_preflight_gate", return_value=None),
             patch(
                 "core.work_orders.start.write_work_order_context", return_value=tmp_path / "ctx.md"
             ),
@@ -256,38 +254,6 @@ class TestStartWorkOrderSequenceGuard:
         assert "sequence_blockers" not in result
 
 
-class TestGatesReadResolvedDbPath:
-    """WO c68f9e14: `_check_preflight_gate` reads the caller-resolved `db_path`
-    (the DB the work order lives in), not an ambient/singleton connection. It
-    takes an explicit `db_path` like `_check_sequence_order`.
-
-    (`_get_pending_audits_for_project` retired with migration 131 — pending_audits
-    table + its dead writer defer_project_audit() removed.)
-    """
-
-    def test_preflight_gate_reads_the_passed_db(self, db_path):
-        from core.work_orders.start import _check_preflight_gate
-
-        # Clean DB → gate passes.
-        assert _check_preflight_gate(WO_FIRST, db_path) is None
-
-        # An open critical finding written to THIS db must be seen by the gate —
-        # proving it reads the passed db_path, not an ambient connection.
-        conn = sqlite3.connect(str(db_path))
-        try:
-            conn.execute(
-                "INSERT INTO business_work_order_preflights"
-                " (finding_id, work_order_id, finding_type, source, severity, summary,"
-                "  author_type, status, created_at, updated_at)"
-                " VALUES ('f-c68f9e14', ?, 'security', 'scanner', 'critical', 'boom',"
-                "         'agent', 'open', ?, ?)",
-                (WO_FIRST, NOW, NOW),
-            )
-            conn.commit()
-        finally:
-            conn.close()
-
-        blocked = _check_preflight_gate(WO_FIRST, db_path)
-        assert blocked is not None
-        assert blocked["preflight_blocked"] is True
-        assert blocked["finding_count"] == 1
+# TestGatesReadResolvedDbPath / test_preflight_gate_reads_the_passed_db: removed
+# migration 148 (WO-SCHEMALEAN) — the preflight gate + business_work_order_preflights
+# it exercised were dropped (unwired stack, duplicative of the CI blast-radius gate).

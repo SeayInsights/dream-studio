@@ -39,7 +39,7 @@ CLASSIFICATION: dict[str, str] = {
     "business_projects": "KEEP",
     "business_tasks": "KEEP",
     "business_work_order_artifacts": "KEEP",  # Added migration 144 (WO-FILESDB-P1): WO ceremony artifacts moved off .planning disk into the authority
-    "business_work_order_preflights": "KEEP",
+    "business_work_order_preflights": "DROP",  # Dropped migration 148 (WO-SCHEMALEAN): read model of the unwired preflight stack (0 rows, no live writer — PreflightProjection folds the empty preflight_events); start-gate reader removed. Duplicative of the live CI blast-radius gate.
     "business_work_order_types": "KEEP",
     "business_work_orders": "KEEP",
     "canonical_events_legacy_backup": "DROP",
@@ -106,7 +106,7 @@ CLASSIFICATION: dict[str, str] = {
     "outcome_records": "DROP",  # Dropped migration 139 (WO-AI-SPINE, AD-5): 2 stale rows (retired studio-onboard runs); _record_outcome() writer removed — pure duplication of the execution_events row each caller already wrote
     "pending_audits": "DROP",  # Dropped migration 131: dead writer defer_project_audit(), never called from any production path
     "policy_decision_records": "DROP",  # Dropped migration 133: test-only writer record_policy_decision(); no production CLI/hook/route calls it
-    "preflight_events": "KEEP",
+    "preflight_events": "DROP",  # Dropped migration 148 (WO-SCHEMALEAN): spine of the unwired preflight stack (0 rows); only writer create_preflight is called solely by the never-wired spec_ingestor.ingest_specs. Duplicative of the live CI blast-radius gate.
     "privacy_redaction_export_records": "DROP",
     "process_runs": "DROP",  # Dropped migration 131: dead writer record_process_run(), test-only callers
     "projection_checkpoints": "KEEP",

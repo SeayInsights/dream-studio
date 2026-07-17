@@ -46,40 +46,8 @@ _BLOCKING_SEVERITIES: frozenset[str] = frozenset({"critical", "high"})
 _BLOCKING_STATUSES: frozenset[str] = frozenset({"open"})
 
 
-def _check_preflight_gate(work_order_id: str, db_path: Path) -> dict[str, Any] | None:
-    """Return an error dict if there are unresolved critical/high preflight findings.
-
-    Reads the same authority DB the work order lives in (``db_path``), not an
-    ambient/singleton connection — otherwise the gate can inspect a different
-    database than the one the caller resolved via ``dream_studio_home``.
-
-    Returns None (gate passes) if the table doesn't exist yet (WO-O not landed)
-    or if no blocking findings are present.  Stub behind the gate-registry
-    interface — full integration lands in WO-O.
-    """
-    try:
-        with _connect(db_path) as conn:
-            rows = conn.execute(
-                "SELECT finding_id, severity, summary FROM business_work_order_preflights"
-                " WHERE work_order_id = ? AND severity IN ('critical', 'high') AND status = 'open'",
-                (work_order_id,),
-            ).fetchall()
-    except Exception:
-        return None
-
-    if not rows:
-        return None
-
-    summaries = "; ".join(r[2] or r[0] for r in rows[:3])
-    return {
-        "ok": False,
-        "error": (
-            f"Cannot start — {len(rows)} unresolved critical/high preflight finding(s): "
-            f"{summaries}. Acknowledge, mitigate, or accept risk before starting."
-        ),
-        "preflight_blocked": True,
-        "finding_count": len(rows),
-    }
+# _check_preflight_gate: removed migration 148 (WO-SCHEMALEAN) — read the dropped
+# business_work_order_preflights table (unwired, permanent no-op).
 
 
 def _check_sequence_order(
@@ -538,12 +506,9 @@ def start_work_order(
         # Soft warning — callers receive the list and can surface it.
         # Execution continues: Proceeding.
 
-    # Preflight gate stub (WO-S): block on unresolved critical/high findings.
-    # This stub queries business_work_order_preflights if the table exists.
-    # Full gate-registry integration lands in WO-O.
-    _preflight_block = _check_preflight_gate(work_order_id, _db_path_for_seq)
-    if _preflight_block:
-        return _preflight_block
+    # Preflight gate removed migration 148 (WO-SCHEMALEAN): the
+    # business_work_order_preflights stack was unwired (no writer, permanent no-op)
+    # and duplicative of the live CI blast-radius gate.
 
     p_root = planning_root or Path.cwd() / ".planning"
     now = datetime.now(UTC).isoformat()
