@@ -164,7 +164,7 @@ def test_dashboard_write_like_calls_stay_on_named_api_exceptions():
 
 def test_projection_api_direct_writes_stay_named_and_noncanonical():
     allowed_route_writes = {
-        ("projections/api/routes/audits.py", "INSERT INTO", "audit_runs"),
+        # audits.py removed migration 149 (WO-SCHEMALEAN) — audit_runs dropped.
         ("projections/api/routes/extensions_api.py", "UPDATE", "ds_user_extensions"),
     }
     route_writes = set(_sql_writes_under(REPO_ROOT / "projections" / "api" / "routes"))
@@ -188,9 +188,8 @@ def test_projection_api_write_helpers_stay_explicitly_scoped():
             if token in source:
                 helper_users.append((_rel(path), token))
 
-    assert sorted(helper_users) == [
-        ("projections/api/routes/audits.py", "transaction("),
-    ]
+    # audits.py (the only route using transaction()) removed migration 149 (WO-SCHEMALEAN).
+    assert sorted(helper_users) == []
 
 
 def test_projection_api_event_emission_stays_absent_or_classified():

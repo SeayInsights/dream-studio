@@ -270,3 +270,5 @@ Static checks for this contract should verify:
 
 
 <!-- Last reviewed 2026-07-15 — WO-SCHEMALEAN (migration 147): removed GET /api/shared-intelligence/capability-routes (get_capability_routes/capability_route_summary) + its dashboard surface entry — it read the dropped, permanently-empty capability_route_records. No projection response-shape change to any populated surface; the recommendation-preview route is kept. -->
+
+<!-- Last reviewed 2026-07-17 — WO-SCHEMALEAN (migration 149): removed the entire /api/v1/audits/* route module (projections/api/routes/audits.py) + its main.py registration — it read the dropped, permanently-empty audit_runs (and already-dropped sec_sarif_findings/sec_cve_matches). No projection response-shape change to any populated surface; the live security surface (/api/v1/security/* over security_events + scan_runs) is the equivalent. The dead dashboard "Security Audits" subtab / audit-history tab degrade gracefully (existing try/catch → empty/error) and are removed in a follow-up dead-UI cleanup WO. -->

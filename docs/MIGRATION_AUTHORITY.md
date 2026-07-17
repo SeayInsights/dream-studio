@@ -525,3 +525,5 @@ Migration 067 (067_dual_canonical.sql): Adds business_canonical_events and ai_ca
 <!-- Last reviewed 2026-07-15 — migration 147 (WO-SCHEMALEAN): DROP TABLE capability_route_records — dead persist=False writer table. Forward migration after 146; additive-safe (no other table references it). .released_version unchanged until activate. -->
 
 <!-- Last reviewed 2026-07-17 — WO-SCHEMALEAN (migration 148): DROP TABLE business_work_order_preflights + preflight_events — unwired aspirational stack (closed loop, no external writer). Forward migration after 147; additive-safe. .released_version unchanged until activate. -->
+
+<!-- Last reviewed 2026-07-17 — WO-SCHEMALEAN (migration 149): DROP TABLE audit_runs — superseded external-write surface (0 rows, no internal writer since initial commit; routes read already-dropped sec_sarif_findings/sec_cve_matches). Live equivalent is /api/v1/security/* over security_events + scan_runs. Forward migration after 148; additive-safe (no other table references it). .released_version unchanged until activate. -->

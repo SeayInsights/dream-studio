@@ -140,7 +140,7 @@ def test_projection_api_route_write_exceptions_stay_explicit():
     writes = _sql_writes_under(REPO_ROOT / "projections" / "api" / "routes")
 
     assert sorted(writes) == [
-        ("projections/api/routes/audits.py", "INSERT INTO", "audit_runs"),
+        # audits.py removed migration 149 (WO-SCHEMALEAN) — audit_runs dropped.
         ("projections/api/routes/extensions_api.py", "UPDATE", "ds_user_extensions"),
     ]
 

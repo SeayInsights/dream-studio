@@ -37,6 +37,7 @@ TOMBSTONED_TABLES: frozenset[str] = frozenset(
         "alert_history",
         "artifact_authority_records",
         "artifact_records",
+        "audit_runs",
         "authority_projection_records",
         "automation_checkpoints",
         "automation_log",
