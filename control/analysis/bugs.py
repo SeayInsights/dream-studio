@@ -1,7 +1,6 @@
 from pathlib import Path
 from typing import Any
 import re
-from datetime import UTC
 
 
 def analyze_bugs(path: Path, project_data: dict[str, Any], stack: dict[str, Any]) -> dict[str, Any]:
