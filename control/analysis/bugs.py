@@ -220,64 +220,31 @@ def _should_skip(file_path: Path) -> bool:
 
 
 def _store_bugs(bugs: list[dict]) -> None:
-    """Store bugs in pi_bugs table."""
-    try:
-        import sys
-        from pathlib import Path as SysPath
+    """Persist analysis findings to the canonical findings store.
 
-        sys.path.insert(0, str(SysPath(__file__).resolve().parents[1] / "hooks"))
-
-        from core.event_store.studio_db import _connect
-        from datetime import datetime
-
-        conn = _connect()
-        for bug in bugs:
-            # Create unique ID from file + line + pattern
-            file_path = bug.get("file", "")
-            line_num = bug.get("line", 0)
-            pattern = bug.get("pattern", bug.get("type", ""))
-            bug_id = f"bug-{abs(hash(f'{file_path}:{line_num}:{pattern}'))}"
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO pi_bugs (
-                    bug_id, project_id, bug_type, category, severity,
-                    file, line, issue, description, proof,
-                    impact, fix_recommendation, effort_estimate,
-                    likelihood, risk_score, status, detected_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    bug_id,
-                    "dream-studio",
-                    bug.get("type"),
-                    bug.get("category"),
-                    bug.get("severity"),
-                    bug.get("file"),
-                    bug.get("line"),
-                    bug.get("issue"),
-                    bug.get("description"),
-                    bug.get("proof"),
-                    bug.get("impact"),
-                    bug.get("fix_recommendation"),
-                    bug.get("effort_estimate"),
-                    bug.get("likelihood"),
-                    bug.get("risk_score"),
-                    "open",
-                    datetime.now(UTC).isoformat(),
-                ),
-            )
-            if bug.get("category") == "security" or bug.get("type") == "security_flaw":
-                _emit_security_bug_telemetry(bug, bug_id)
-        conn.commit()
-    except Exception as e:
-        # Silent fail but print to stderr for debugging
-        import sys
-
-        print(f"Warning: Failed to store bugs in database: {e}", file=sys.stderr)
+    pi_bugs was dropped (migration 084) and superseded by the security_events
+    findings store. Every finding — not just security — is emitted via
+    emit_security_finding so it lands in the authority (queryable) and
+    non-security bugs are no longer silently dropped (WO-PI-BUGS-REPOINT). There
+    is no direct write to the removed pi_bugs table.
+    """
+    for bug in bugs:
+        # Unique ID from file + line + pattern (metadata only; the finding's
+        # dedup key is rule_id/pattern).
+        file_path = bug.get("file", "")
+        line_num = bug.get("line", 0)
+        pattern = bug.get("pattern", bug.get("type", ""))
+        bug_id = f"bug-{abs(hash(f'{file_path}:{line_num}:{pattern}'))}"
+        _emit_security_bug_telemetry(bug, bug_id)
 
 
 def _emit_security_bug_telemetry(bug: dict[str, Any], bug_id: str) -> None:
-    """Best-effort dual-write from legacy pi_bugs security findings."""
+    """Persist one analysis finding to the canonical findings store.
+
+    Emits a finding via emit_security_finding (→ security_events) for ANY
+    category, not just security — the real category is preserved in the
+    ``category`` field (WO-PI-BUGS-REPOINT). Best-effort; never raises.
+    """
 
     try:
         from core.telemetry.emitters import TelemetryContext, emit_security_finding
@@ -289,7 +256,7 @@ def _emit_security_bug_telemetry(bug: dict[str, Any], bug_id: str) -> None:
             file_path=str(bug.get("file") or ""),
             start_line=bug.get("line"),
             end_line=bug.get("line"),
-            description=str(bug.get("issue") or bug.get("description") or "Security finding"),
+            description=str(bug.get("issue") or bug.get("description") or "Analysis finding"),
             recommendation=str(bug.get("fix_recommendation") or ""),
             status="open",
             scan_id="control-analysis-bugs",
@@ -297,7 +264,7 @@ def _emit_security_bug_telemetry(bug: dict[str, Any], bug_id: str) -> None:
             context=TelemetryContext(
                 project_id="dream-studio",
                 source_refs=("control/analysis/bugs.py",),
-                evidence_refs=(f"pi_bugs:{bug_id}",),
+                evidence_refs=(f"analysis-bug:{bug_id}",),
             ),
             metadata={"legacy_bug_id": bug_id, "legacy_type": bug.get("type")},
         )
