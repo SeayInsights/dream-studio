@@ -87,21 +87,39 @@ _SQLITE_INVARIANTS: list[tuple[str, str]] = [
     ),
 ]
 
+#: Token attribution became reliable when the model-capture fix (#488/#489)
+#: landed on 2026-07-01: token_capture now recovers the model from the SDK
+#: payload / session transcript for every LLM tool call (token.consumed). Two
+#: classes of row must be excluded from the attribution invariants so the gate
+#: measures *current capture health* honestly rather than being pinned by
+#: un-fixable history (WO 6712c8a0):
+#:   1. Pre-epoch rows — token.consumed emitted before the fix, when the model
+#:      was genuinely unrecoverable. Windowing to the epoch excludes them
+#:      without fabricating a model id for unattributable history.
+#:   2. Empty session-rollup events — token.consumption.recorded rows carry no
+#:      per-inference model and (total_tokens = 0) no usage; they are aggregate
+#:      artifacts, not priced inference events. total_tokens > 0 excludes them.
+#: The scope is applied uniformly to all three token invariants so a fresh/empty
+#: authority still passes vacuously (COUNT(*) = 0 over the scoped set).
+_TOKEN_ATTRIBUTION_EPOCH = "2026-07-01"
+_ATTRIBUTED_SCOPE = f"created_at >= '{_TOKEN_ATTRIBUTION_EPOCH}' AND total_tokens > 0"
+
 #: DuckDB-backed token invariants (WO-DBA-DROP) — run against the
 #: aggregate_metrics.db token_usage_records view. Same SQL shape as the
 #: retired SQLite invariants: the view carries the same column names
-#: (model_id, skill_id), so the clause text is unchanged.
+#: (model_id, skill_id), so the clause text is unchanged apart from the
+#: attribution-scope filter (WO 6712c8a0).
 _DUCKDB_TOKEN_INVARIANTS: list[tuple[str, str]] = [
     (
         "token_model_null_fraction",
         (
             "SELECT 1 WHERE"
-            " (SELECT COUNT(*) FROM token_usage_records) = 0"
+            f" (SELECT COUNT(*) FROM token_usage_records WHERE {_ATTRIBUTED_SCOPE}) = 0"
             " OR"
             " (SELECT CAST("
             "    SUM(CASE WHEN model_id IS NULL THEN 1 ELSE 0 END) AS DOUBLE"
             "  ) / COUNT(*)"
-            "  FROM token_usage_records"
+            f"  FROM token_usage_records WHERE {_ATTRIBUTED_SCOPE}"
             " ) < 0.2"
         ),
     ),
@@ -109,18 +127,20 @@ _DUCKDB_TOKEN_INVARIANTS: list[tuple[str, str]] = [
         "token_skill_attributed",
         (
             "SELECT 1 WHERE"
-            " (SELECT COUNT(*) FROM token_usage_records) = 0"
+            f" (SELECT COUNT(*) FROM token_usage_records WHERE {_ATTRIBUTED_SCOPE}) = 0"
             " OR"
-            " EXISTS (SELECT 1 FROM token_usage_records WHERE skill_id IS NOT NULL)"
+            f" EXISTS (SELECT 1 FROM token_usage_records WHERE {_ATTRIBUTED_SCOPE}"
+            "         AND skill_id IS NOT NULL)"
         ),
     ),
     (
         "priceable_cost_present",
         (
             "SELECT 1 WHERE"
-            " (SELECT COUNT(*) FROM token_usage_records) = 0"
+            f" (SELECT COUNT(*) FROM token_usage_records WHERE {_ATTRIBUTED_SCOPE}) = 0"
             " OR"
-            " EXISTS (SELECT 1 FROM token_usage_records WHERE model_id IS NOT NULL)"
+            f" EXISTS (SELECT 1 FROM token_usage_records WHERE {_ATTRIBUTED_SCOPE}"
+            "         AND model_id IS NOT NULL)"
         ),
     ),
 ]
