@@ -34,6 +34,10 @@ from core.gates.dashboard_truth import run_dashboard_truth
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NOW = "2026-01-01T00:00:00.000000Z"
+# In-scope for the token attribution epoch (WO 6712c8a0: invariants measure real
+# per-inference usage on/after 2026-07-01). Violating token rows must be stamped
+# on/after the epoch to be counted — a pre-epoch violation is excluded by design.
+_POST_EPOCH_TS = "2026-07-15T00:00:00.000000Z"
 
 
 # ---------------------------------------------------------------------------
@@ -150,7 +154,7 @@ def _seed_violating_tokens(analytics_db: Path) -> None:
                 "INSERT INTO events_fact (event_id, event_type, event_timestamp,"
                 " input_tokens, output_tokens, payload)"
                 " VALUES (?, 'token.consumed', ?, 100, 50, '{}')",
-                [str(uuid.uuid4()), NOW],
+                [str(uuid.uuid4()), _POST_EPOCH_TS],
             )
     finally:
         conn.close()
@@ -356,3 +360,55 @@ def test_missing_authority_file_vacuously_passes(
     with _patch_db(missing):
         exit_code = ds_main(["doctor", "dashboard-truth"])
     assert exit_code == 0, f"Expected exit 0 when authority absent; got {exit_code}"
+
+
+# ---------------------------------------------------------------------------
+# test_attribution_scope_excludes_pre_epoch_and_empty_rows  (WO 6712c8a0)
+# ---------------------------------------------------------------------------
+
+
+def test_attribution_scope_excludes_pre_epoch_and_empty_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """WO 6712c8a0: the token invariants measure real per-inference usage on/after
+    the attribution epoch (2026-07-01). Rows that predate the model-capture fix
+    (unrecoverable NULL model) and empty session-rollup events (total_tokens = 0)
+    must NOT trip the gate — they are excluded from the attribution denominator so
+    the invariant reflects current capture health, never fabricating a model id.
+
+    Fails on main (no scope filter → the pre-epoch NULL-model rows fail
+    token_model_null_fraction); passes with the WO 6712c8a0 fix.
+    """
+    from core.analytics import duckdb_store
+
+    db = _make_db(tmp_path)
+    analytics = _isolate_analytics_store(monkeypatch, tmp_path)
+    conn = duckdb_store.connect_analytics(analytics, read_only=False)
+    try:
+        duckdb_store.ensure_analytics_schema(conn)
+        # Pre-epoch real usage with unrecoverable NULL model (before the fix landed).
+        for _ in range(3):
+            conn.execute(
+                "INSERT INTO events_fact (event_id, event_type, event_timestamp,"
+                " input_tokens, output_tokens, payload)"
+                " VALUES (?, 'token.consumed', '2026-01-15T00:00:00.000000Z', 100, 50, '{}')",
+                [str(uuid.uuid4())],
+            )
+        # Post-epoch empty session-rollup events (no model, no usage → total_tokens=0).
+        for _ in range(2):
+            conn.execute(
+                "INSERT INTO events_fact (event_id, event_type, event_timestamp,"
+                " input_tokens, output_tokens, payload)"
+                " VALUES (?, 'token.consumption.recorded', ?, 0, 0, '{}')",
+                [str(uuid.uuid4()), _POST_EPOCH_TS],
+            )
+    finally:
+        conn.close()
+
+    result = run_dashboard_truth(db)
+    by_name = {r["name"]: r["passed"] for r in result["results"]}
+    assert by_name["token_model_null_fraction"] is True, (
+        "pre-epoch NULL-model rows and empty rollup rows must be excluded from the "
+        f"attribution invariant; got {result}"
+    )
+    assert result["ok"] is True, f"gate must pass when only excluded rows exist; got {result}"
