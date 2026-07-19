@@ -302,6 +302,20 @@ This returns everything in one call: active project, current milestone, next wor
 order, gate status, design brief status, task count, and the recommended
 `next_action`.
 
+**Step 1.5 — Current-repo check (WO-BROWNFIELD-DETECT):**
+
+Look at `cwd_registered` in the state response before you narrate anything.
+
+- If `cwd_registered` is **false**, the repo you are standing in is NOT a registered
+  Dream Studio project. Do **not** present the globally-active project (from
+  `projects[]`) as if it were this repo — that conflates two different projects.
+  Answer plainly instead:
+  > "This repo isn't registered as a Dream Studio project. You've clearly done work
+  > here — want to register it as a brownfield project? I can run `ds-project:brownfield`."
+  Then STOP and wait. Only fall through to the active-project briefing if the user
+  explicitly says they want the other (active) project rather than this repo.
+- If `cwd_registered` is **true**, continue to Step 2.
+
 **Step 2 — Present briefing:**
 
 Parse the first project in `projects[]`. Compose a plain English briefing:
@@ -386,3 +400,6 @@ A scope session that produces "TBD" in any field has failed the quality bar. Ask
 <!-- Last reviewed 2026-07-04 — migration 140 (WO dff23cb0-950f-4607-bb30-e1a353a6f8ba): core/projects/delta.py::_get_scan_findings() and core/projects/intake.py::get_scan_summary() repointed from findings_current_status (dropped — pure derived state, FindingsProjection.fold_spine() upsert over security_events) to core/findings/current_status.py::FINDINGS_CURRENT_STATUS_SQL, deriving current_status from security_events at read time. Return shapes are unchanged. No ds-project skill mode, routing keyword, or behavior change; the project-scoping/registration contract is unchanged. -->
 
 <!-- Reviewed 2026-07-05 — WO 6d978483 (PEP 585/604 modernization [2/2]): source files in this domain received mechanical type-annotation modernization only (PEP 585 builtin generics, PEP 604 unions, datetime.UTC) via ruff UP safe autofixes. No contract, behavior, schema, routing, API-shape, or CLI-surface change — reviewed, no doc content change needed. -->
+
+<!-- Last reviewed 2026-07-19 — WO-BROWNFIELD-DETECT: get_project_state() now returns cwd_registered + cwd_project (core/projects/queries.py::_match_cwd_project, mirroring runtime.lib.enforcement.match_registered_project against the resolved connection). Resume Mode gains Step 1.5: when cwd_registered is false, answer "this repo isn't registered" and offer ds-project:brownfield instead of narrating the globally-active project. No new routing keyword or mode; resume stays read-only. -->
+

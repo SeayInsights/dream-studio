@@ -137,6 +137,37 @@ def test_get_project_state_returns_empty_projects_when_none_active(
     assert "No active projects" in result["next_action"]
 
 
+def test_get_project_state_reports_cwd_registration(
+    patched_paths, db_path: Path, tmp_path: Path
+) -> None:
+    # WO-BROWNFIELD-DETECT: state reports whether the current repo (source_root) is
+    # a registered project, independent of the globally-active project — so resume
+    # can answer "this repo isn't registered" and offer brownfield.
+    from core.projects.queries import get_project_state
+
+    repo = tmp_path / "myrepo"
+    repo.mkdir()
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, project_path, created_at, updated_at)"
+        " VALUES ('p-reg', 'My Repo', '', 'active', ?, ?, ?)",
+        (str(repo.resolve()), NOW, NOW),
+    )
+    conn.commit()
+    conn.close()
+
+    reg = get_project_state(source_root=repo, dream_studio_home=tmp_path)
+    assert reg["cwd_registered"] is True
+    assert reg["cwd_project"]["project_id"] == "p-reg"
+
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    unreg = get_project_state(source_root=other, dream_studio_home=tmp_path)
+    assert unreg["cwd_registered"] is False
+    assert unreg["cwd_project"] is None
+
+
 # ── core.projects.mutations ───────────────────────────────────────────────────
 
 
