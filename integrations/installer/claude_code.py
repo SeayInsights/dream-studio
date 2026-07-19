@@ -301,6 +301,10 @@ def _collect_skill_dir_ops(
             _fm = synthesize_skill_frontmatter(skill_id)
             if _fm:
                 source_content = _fm + source_content
+                # Re-hash the prepended content so change-detection rewrites an
+                # already-installed SKILL.md (whose stored hash is the canonical,
+                # frontmatter-less file) instead of skipping it (WO-AUTOACT-A-FIX).
+                file_hash = hashlib.sha256(source_content.encode("utf-8")).hexdigest()
         ops.append(
             FileOp(
                 target=target,
