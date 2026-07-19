@@ -96,3 +96,37 @@ def test_collect_skill_dir_ops_prepends_frontmatter_top_level_only(tmp_path: Pat
             assert not content.lstrip().startswith(
                 "---\nname: ds-"
             ), f"{rel} unexpectedly received pack frontmatter"
+
+
+def test_description_does_not_duplicate_display_name():
+    # WO-AUTOACT-A-FIX: the description used to be "{display} — {pack_desc}",
+    # but pack_desc already leads with the display name → "Build lifecycle —
+    # Build lifecycle — ...". It must now use pack_desc directly (appears once).
+    for skill_id, phrase in [("ds-core", "Build lifecycle"), ("ds-quality", "Code quality")]:
+        fm = synthesize_skill_frontmatter(
+            skill_id, canonical_root=CANONICAL, packs_yaml_path=PACKS_YAML
+        )
+        desc = yaml.safe_load(fm.split("---\n", 2)[1])["description"]
+        assert desc.count(phrase) == 1, f"{skill_id} repeats {phrase!r}: {desc}"
+
+
+def test_collect_skill_dir_ops_rehashes_frontmatter_skill(tmp_path):
+    # WO-AUTOACT-A-FIX: the top-level SKILL.md FileOp must carry the hash of the
+    # FINAL (frontmatter-prepended) content, not the canonical file hash — else
+    # change-detection skips the rewrite and an existing install never gets the
+    # frontmatter.
+    import hashlib
+
+    skill_dir = CANONICAL / "skills" / "core"
+    canonical_hash = hashlib.sha256((skill_dir / "SKILL.md").read_bytes()).hexdigest()
+
+    target_dir = tmp_path / "ds-core"
+    ops = _collect_skill_dir_ops(skill_dir, target_dir, "ds-core", tmp_path / "backup")
+    top = next(op for op in ops if op.target.relative_to(target_dir).as_posix() == "SKILL.md")
+
+    assert (
+        top.source_hash != canonical_hash
+    ), "SKILL.md hash must change so the rewrite is not skipped"
+    assert (
+        top.source_hash == hashlib.sha256(top.source_content.encode("utf-8")).hexdigest()
+    ), "source_hash must match the frontmatter-prepended content"

@@ -327,7 +327,9 @@ def synthesize_skill_frontmatter(
             ]:
                 _add_one(t)
 
-        description = f"{display} — {pack_desc}." if pack_desc else f"{display}."
+        # Use the packs.yaml description directly — it already leads with the
+        # display name, so prefixing `display` again duplicated it (WO-AUTOACT-A-FIX).
+        description = f"{pack_desc}." if pack_desc else f"{display}."
         if triggers:
             trig_str = ", ".join(f"{t}:" for t in triggers)
             description += f" Use for: {trig_str}"
