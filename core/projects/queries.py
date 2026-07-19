@@ -45,6 +45,13 @@ def get_project_list(
                 "SELECT project_id, name, description, status, created_at FROM business_projects"
                 " ORDER BY created_at DESC",
             ).fetchall()
+        elif status_filter == "all":
+            # WO-PROJECT-REG-HARDENING: 'all' means every non-deleted status
+            # (active/paused/archived); --include-deleted adds the deleted rows.
+            rows = conn.execute(
+                "SELECT project_id, name, description, status, created_at FROM business_projects"
+                " WHERE status != 'deleted' ORDER BY created_at DESC",
+            ).fetchall()
         else:
             rows = conn.execute(
                 "SELECT project_id, name, description, status, created_at FROM business_projects"
@@ -219,7 +226,26 @@ def get_project_state(
         cwd_project = _match_cwd_project(conn, source_root)
         cwd_fields = {"cwd_registered": cwd_project is not None, "cwd_project": cwd_project}
 
-        if not projects_raw:
+        # cwd-first ordering (WO-PROJECT-REG-HARDENING task 3): the project resolved
+        # from the current repo comes first — even if it is paused — so working repo
+        # B surfaces B's state rather than the globally-active project A. Then the
+        # active projects in their existing order.
+        to_process: list[Any] = []
+        seen_ids: set[str] = set()
+        if cwd_project is not None:
+            cwd_row = conn.execute(
+                "SELECT project_id, name, status FROM business_projects WHERE project_id = ?",
+                (cwd_project["project_id"],),
+            ).fetchone()
+            if cwd_row is not None:
+                to_process.append(cwd_row)
+                seen_ids.add(cwd_row["project_id"])
+        for proj in projects_raw:
+            if proj["project_id"] not in seen_ids:
+                to_process.append(proj)
+                seen_ids.add(proj["project_id"])
+
+        if not to_process:
             return {
                 "ok": True,
                 "projects": [],
@@ -228,7 +254,7 @@ def get_project_state(
             }
 
         result_projects: list[dict[str, Any]] = []
-        for proj in projects_raw:
+        for proj in to_process:
             pid = proj["project_id"]
 
             wo_row = conn.execute(

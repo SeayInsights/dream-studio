@@ -87,7 +87,13 @@ def analyze_project(path: Path, run_type: str = "full") -> dict[str, Any]:
     with transaction() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT project_id FROM business_projects WHERE project_path = ? LIMIT 1",
+            # WO-PROJECT-REG-HARDENING: deterministic lookup when duplicate rows
+            # share a project_path — prefer active, then paused, exclude deleted,
+            # most-recent first — instead of an arbitrary LIMIT 1.
+            "SELECT project_id FROM business_projects"
+            " WHERE project_path = ? AND status != 'deleted'"
+            " ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END,"
+            " updated_at DESC LIMIT 1",
             (str(path),),
         )
         existing_project = cursor.fetchone()
