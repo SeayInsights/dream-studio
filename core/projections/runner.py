@@ -414,6 +414,7 @@ def sync_tick() -> None:
         logger.debug("sync_tick: spool ingest failed (non-fatal)", exc_info=True)
 
     try:
+        from core.projections.design_brief_projection import DesignBriefProjection
         from core.projections.milestone_projection import MilestoneProjection
         from core.projections.project_projection import ProjectProjection
         from core.projections.task_projection import TaskProjection
@@ -424,6 +425,12 @@ def sync_tick() -> None:
         runner.register(TaskProjection())
         runner.register(MilestoneProjection())
         runner.register(ProjectProjection())
+        # DesignBriefProjection MUST be registered here too: the synchronous
+        # Pattern C tick is the only projection pass in a one-shot CLI process
+        # (create_design_brief -> update_design_brief_field in the same run).
+        # Without it the brief row is never materialized and the update fails
+        # with "Brief not found" until the daemon's next cycle (WO 2325f95d).
+        runner.register(DesignBriefProjection())
         # TokenConsumptionProjection (token.consumed -> token_usage_records) was
         # removed WO-DBA-DROP (migration 137 drops token_usage_records); the
         # DuckDB aggregate_metrics.db token_usage_records view over events_fact
