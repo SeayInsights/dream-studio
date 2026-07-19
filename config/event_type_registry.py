@@ -126,6 +126,28 @@ _ENTRIES: tuple[RegistryEntry, ...] = (
         "Work order deleted via cascade from project deletion",
         payload_required_keys=frozenset({"work_order_id", "project_id"}),
     ),
+    # Ordering/dependency mutations (core/work_orders/ordering.py). Emitted for
+    # audit via AD-6 emit-then-SQL; not consumed by any projection, so no
+    # payload_required_keys enforcement. Registered so the ingestor does not
+    # warn "event_type ... not in registry" on set_sequence_order/add_dependency.
+    RegistryEntry(
+        "work_order.reordered",
+        _BUSINESS,
+        "meaningful-unit",
+        "Work order sequence_order changed (sparse 10/20/30 convention)",
+    ),
+    RegistryEntry(
+        "work_order.dependency_added",
+        _BUSINESS,
+        "meaningful-unit",
+        "Dependency edge added: work order waits for another to close",
+    ),
+    RegistryEntry(
+        "work_order.dependency_removed",
+        _BUSINESS,
+        "meaningful-unit",
+        "Dependency edge removed between two work orders",
+    ),
     RegistryEntry(
         "design_brief.created",
         _BUSINESS,
