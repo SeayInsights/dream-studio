@@ -40,8 +40,14 @@ def _extract_usage(payload: dict[str, Any]) -> dict[str, Any] | None:
     return usage
 
 
+# WO-e2c30936: explicit sentinel stamped when a token event's real model cannot be
+# recovered — an auditable "we tried and could not" marker, never a fabricated real
+# model. Kept in _PLACEHOLDER_MODELS so _resolve_model never echoes it back as a real
+# model (it resolves to None, and the emission site substitutes this sentinel).
+MODEL_UNRESOLVED = "unknown"
+
 # Synthetic / placeholder model labels that must never be recorded as a real model.
-_PLACEHOLDER_MODELS = {"<synthetic>", "synthetic", "unspecified", "unknown", ""}
+_PLACEHOLDER_MODELS = {"<synthetic>", "synthetic", "unspecified", MODEL_UNRESOLVED, ""}
 
 
 def _model_from_transcript(transcript_path: str) -> str | None:
@@ -414,9 +420,12 @@ def handle_post_tool_use(payload: dict[str, Any]) -> None:
             "cache_read_input_tokens": int(usage.get("cache_read_input_tokens") or 0),
             "granularity": "tool_invocation",
         }
-        model = _resolve_model(payload)
-        if model:
-            token_payload["model"] = model
+        # WO-e2c30936: always stamp model — the recovered real id for LLM usage, else
+        # the explicit MODEL_UNRESOLVED sentinel — so no token.consumed row is emitted
+        # with an absent/NULL model_id. A post-epoch NULL-model row lands inside the
+        # dashboard_truth attribution window and breaks the null-fraction invariant;
+        # the sentinel is honest ("unresolved"), never a fabricated real model.
+        token_payload["model"] = _resolve_model(payload) or MODEL_UNRESOLVED
 
         # project_name only from JSON markers (denormalized cache).
         if cwd_ctx is not None and cwd_ctx.marker_format == "json" and cwd_ctx.project_name:

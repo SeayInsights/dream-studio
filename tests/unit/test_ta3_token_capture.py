@@ -416,6 +416,42 @@ def test_handle_post_tool_use_cache_tokens_preserved(db_home, tmp_path, monkeypa
     assert p["cache_read_input_tokens"] == 150
 
 
+def test_handle_post_tool_use_stamps_sentinel_when_model_unresolvable(tmp_path, monkeypatch):
+    """WO-e2c30936: a token.consumed event whose model cannot be recovered stamps the
+    explicit MODEL_UNRESOLVED sentinel instead of omitting the key — so no post-epoch
+    row is emitted with a NULL model_id inside the dashboard_truth attribution window.
+    The sentinel is honest ("unresolved"), never a fabricated real model."""
+    monkeypatch.setenv("DS_ACTIVE_TASK_PATH", str(tmp_path / "no_active_task.json"))
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
+    monkeypatch.chdir(tmp_path)
+
+    from core.telemetry.token_capture import MODEL_UNRESOLVED, handle_post_tool_use
+
+    # No model in the payload and no transcript_path → _resolve_model returns None.
+    handle_post_tool_use(_make_payload(model=None))
+
+    events = _events_of_type(tmp_path / "spool-root", "token.consumed")
+    assert len(events) == 1
+    assert events[0]["payload"]["model"] == MODEL_UNRESOLVED
+
+
+def test_handle_post_tool_use_preserves_real_model(tmp_path, monkeypatch):
+    """A resolvable real model is stamped as-is; the sentinel only fills the unresolvable
+    case (never overwrites a real model)."""
+    monkeypatch.setenv("DS_ACTIVE_TASK_PATH", str(tmp_path / "no_active_task.json"))
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
+    monkeypatch.chdir(tmp_path)
+
+    from core.telemetry.token_capture import MODEL_UNRESOLVED, handle_post_tool_use
+
+    handle_post_tool_use(_make_payload(model="claude-opus-4-8"))
+
+    events = _events_of_type(tmp_path / "spool-root", "token.consumed")
+    assert len(events) == 1
+    assert events[0]["payload"]["model"] == "claude-opus-4-8"
+    assert events[0]["payload"]["model"] != MODEL_UNRESOLVED
+
+
 # ── machine_id unit tests ──────────────────────────────────────────────────────
 
 

@@ -83,12 +83,13 @@ def normalize_stop(
     # the accumulator (persisted by token_capture), else recover it from the
     # Stop payload's transcript_path via the same resolver token_capture uses.
     if token_payload and "model" not in token_payload:
-        from core.telemetry.token_capture import _resolve_model
+        from core.telemetry.token_capture import _resolve_model, MODEL_UNRESOLVED
 
         acc = _read_session_accumulator(session_id) if session_id else {}
-        model = acc.get("model") or _resolve_model(payload)
-        if model:
-            token_payload["model"] = model
+        # WO-e2c30936: stamp the sentinel rather than omit the key when the model is
+        # unresolvable, so a token.consumption.recorded rollup that carries usage never
+        # records a NULL model inside the dashboard_truth attribution window.
+        token_payload["model"] = acc.get("model") or _resolve_model(payload) or MODEL_UNRESOLVED
     return [
         CanonicalEventEnvelope(
             event_type=EventType.TOKEN_CONSUMPTION_RECORDED.value,
