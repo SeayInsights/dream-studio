@@ -127,6 +127,7 @@ class WorkOrderProjection(Projection):
             "project_id": project_id,
             "milestone_id": milestone_id,
             "title": payload.get("title"),
+            "work_order_type": payload.get("type"),
             "status": "created",
             "created_at": ts,
             "source_event_id": event_id,
@@ -140,24 +141,27 @@ class WorkOrderProjection(Projection):
         conn.execute(
             f"""
             INSERT OR IGNORE INTO {_TABLE}
-                (work_order_id, project_id, milestone_id, title, status,
-                 created_at, source_event_id, last_event_id, last_updated_at,
+                (work_order_id, project_id, milestone_id, title, work_order_type,
+                 status, created_at, source_event_id, last_event_id, last_updated_at,
                  originating_symptom)
             VALUES
-                (:work_order_id, :project_id, :milestone_id, :title, :status,
-                 :created_at, :source_event_id, :last_event_id, :last_updated_at,
+                (:work_order_id, :project_id, :milestone_id, :title, :work_order_type,
+                 :status, :created_at, :source_event_id, :last_event_id, :last_updated_at,
                  :originating_symptom)
             """,
             row,
         )
         # If the row already existed (skeleton from out-of-order event), fill
-        # in the fields that only the created event carries.
+        # in the fields that only the created event carries.  work_order_type is
+        # patched via COALESCE so a skeleton row that arrived without a type is
+        # backfilled from the created event — the WorkOrderProjection type-drop fix.
         conn.execute(
             f"""
             UPDATE {_TABLE}
             SET project_id           = COALESCE(project_id, :project_id),
                 milestone_id         = COALESCE(milestone_id, :milestone_id),
                 title                = COALESCE(title, :title),
+                work_order_type      = COALESCE(work_order_type, :work_order_type),
                 created_at           = COALESCE(created_at, :created_at),
                 source_event_id      = COALESCE(source_event_id, :source_event_id),
                 originating_symptom  = COALESCE(originating_symptom, :originating_symptom),

@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS business_work_orders (
     project_id TEXT,
     milestone_id TEXT,
     title TEXT,
+    work_order_type TEXT,
     status TEXT NOT NULL DEFAULT 'created',
     created_at TEXT,
     started_at TEXT,
@@ -898,3 +899,60 @@ class TestWorkOrderRebuildFromCanonical:
         assert row["status"] == "closed"
         assert row["title"] == "Multi Events WO"
         assert row["block_reason"] is None
+
+
+# ---------------------------------------------------------------------------
+# 7. Type survival through the projection (WO 50a2cfeb)
+# ---------------------------------------------------------------------------
+
+
+class TestWorkOrderTypeSurvival:
+    """Regression for the WorkOrderProjection type-drop.
+
+    create_work_order() emits work_order.created with a `type` in its payload;
+    that type must land in business_work_orders.work_order_type so that
+    `ds work-order start` does not fail with 'Work order has no type assigned'.
+
+    Fails on pre-fix main: _handle_created omitted work_order_type from the
+    INSERT and the skeleton-patch UPDATE, so the column stayed NULL and both
+    assertions below fail.
+    """
+
+    def test_created_materializes_work_order_type(self, tmp_db):
+        proj = _setup_projection(tmp_db)
+        event = _mk_wo_event("work_order.created", "wo-type-1", title="Typed WO", type="ui_page")
+        _call_handle(proj, event, tmp_db)
+
+        row = _fetch_wo(tmp_db, "wo-type-1")
+        assert row is not None
+        assert row["work_order_type"] == "ui_page"
+
+    def test_skeleton_then_created_backfills_type_via_coalesce(self, tmp_db):
+        """A started event arriving first creates a type-less skeleton; the late
+        created event must backfill work_order_type via the COALESCE patch while
+        leaving the already-advanced status untouched."""
+        proj = _setup_projection(tmp_db)
+        wo_id = "wo-type-2"
+
+        # started arrives first → skeleton row with NULL work_order_type
+        _call_handle(
+            proj,
+            _mk_wo_event("work_order.started", wo_id, event_timestamp="2026-05-22T11:00:00+00:00"),
+            tmp_db,
+        )
+        # created arrives after, carrying the type
+        _call_handle(
+            proj,
+            _mk_wo_event(
+                "work_order.created",
+                wo_id,
+                event_timestamp="2026-05-22T10:00:00+00:00",
+                title="Late Typed WO",
+                type="api_endpoint",
+            ),
+            tmp_db,
+        )
+
+        row = _fetch_wo(tmp_db, wo_id)
+        assert row["work_order_type"] == "api_endpoint"
+        assert row["status"] == "in_progress"
