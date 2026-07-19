@@ -273,6 +273,8 @@ def _collect_skill_dir_ops(
     backup_base: Path,
 ) -> list[FileOp]:
     """Return one FileOp per file in skill_dir, preserving subdirectory structure."""
+    from integrations.compiler.claude_code import synthesize_skill_frontmatter
+
     ops: list[FileOp] = []
     for file_path in sorted(skill_dir.rglob("*")):
         if not file_path.is_file():
@@ -286,6 +288,19 @@ def _collect_skill_dir_ops(
         except (UnicodeDecodeError, ValueError):
             source_content = None
             source_path = file_path
+        # WO-AUTOACT-A: prepend synthesized description frontmatter to the
+        # top-level SKILL.md so Claude Code's native skill auto-invoker has a
+        # when-to-use description + trigger anchors to match. Canonical SKILL.md
+        # ships frontmatter-less (single source = packs.yaml + metadata.yml);
+        # mode SKILL.md files are left untouched (only the pack skill auto-invokes).
+        if (
+            source_content is not None
+            and rel.as_posix() == "SKILL.md"
+            and not source_content.lstrip().startswith("---")
+        ):
+            _fm = synthesize_skill_frontmatter(skill_id)
+            if _fm:
+                source_content = _fm + source_content
         ops.append(
             FileOp(
                 target=target,

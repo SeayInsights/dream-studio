@@ -51,6 +51,7 @@ packs:
       - on-first-run
       - on-memory-retrieve
       - on-context-inject
+      - on-prompt-route
       - on-prompt-validate
       - on-session-start
       - on-session-end

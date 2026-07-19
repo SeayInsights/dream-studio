@@ -253,6 +253,97 @@ def _build_mode_keywords(
     return " · ".join(parts)
 
 
+def synthesize_skill_frontmatter(
+    skill_id: str,
+    *,
+    canonical_root: Path | None = None,
+    packs_yaml_path: Path | None = None,
+) -> str | None:
+    """Build a YAML frontmatter block for a pack's top-level SKILL.md.
+
+    Claude Code's native skill auto-invoker matches a skill's ``description``
+    field against the user's request. The canonical SKILL.md files ship without
+    frontmatter (only an H1 title), so the installer prepends this synthesized
+    block — name + a description that states when-to-use (the pack description)
+    and embeds every mode trigger keyword — so the skill can auto-invoke
+    (WO-AUTOACT-A). Returns None when the skill_id is not a routable pack (e.g.
+    ds-bootstrap) or packs.yaml is unreadable, so those skills are left as-is.
+
+    The frontmatter is derived from packs.yaml (``description`` + ``modes``) and
+    the mode-level ``metadata.yml`` ``triggers`` — the same single source the
+    routing table is built from, so there is no duplicated trigger text.
+    """
+    try:
+        import yaml as _yaml
+    except ImportError:
+        return None
+
+    canonical_root = canonical_root or (_REPO_ROOT / "canonical")
+    packs_yaml_path = packs_yaml_path or _PACKS_YAML
+
+    try:
+        data = _yaml.safe_load(packs_yaml_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    packs = (data or {}).get("packs", {})
+
+    for pack_key, cfg in packs.items():
+        if not isinstance(cfg, dict):
+            continue
+        resolved = cfg.get("skill", pack_key)
+        if not resolved.startswith("ds-"):
+            resolved = f"ds-{resolved}"
+        if resolved != skill_id:
+            continue
+
+        display = _PACK_DISPLAY_NAMES.get(pack_key, pack_key.replace("-", " ").title())
+        pack_desc = (cfg.get("description") or "").strip().rstrip(".")
+        modes: list[str] = cfg.get("modes", [])
+        skill_path_override = cfg.get("skill_path")
+
+        # One canonical trigger per mode — NOT every alias. The description is
+        # loaded into Claude Code's always-on skill-discovery context, so an
+        # exhaustive alias dump both bloats that context and dilutes the semantic
+        # match signal (and risks truncation). The pack description carries the
+        # "when to use"; one representative trigger per mode anchors the phrasing.
+        triggers: list[str] = []
+        seen: set[str] = set()
+
+        def _add_one(t: str) -> None:
+            key = t.strip().lower()
+            if key and key not in seen:
+                seen.add(key)
+                triggers.append(t.strip())
+
+        if modes:
+            for mode in modes:
+                mode_trigs = _read_mode_triggers(
+                    mode, pack_key, skill_path_override, canonical_root
+                )
+                _add_one(mode_trigs[0] if mode_trigs else mode)
+        else:
+            for t in _read_pack_triggers(pack_key, skill_path_override, canonical_root) or [
+                pack_key
+            ]:
+                _add_one(t)
+
+        description = f"{display} — {pack_desc}." if pack_desc else f"{display}."
+        if triggers:
+            trig_str = ", ".join(f"{t}:" for t in triggers)
+            description += f" Use for: {trig_str}"
+
+        block = _yaml.safe_dump(
+            {"name": skill_id, "description": description},
+            default_flow_style=False,
+            sort_keys=False,
+            allow_unicode=True,
+            width=100000,
+        )
+        return f"---\n{block}---\n\n"
+
+    return None
+
+
 def _empty_routing_table() -> str:
     return (
         "### Pack-Based Routing\n\n"
