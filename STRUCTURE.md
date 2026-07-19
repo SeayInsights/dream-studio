@@ -58,5 +58,6 @@ Operator-local runtime state is never committed:
 
 <!-- Last reviewed 2026-06-13 — WO 20ead828: idea-validation mode removed from ds-domains (packs.yaml line 29); it correctly lives under ds-analyze. No directory-tree layout change. -->
 <!-- Last reviewed 2026-07-03 — WO-CI-442-FOLLOWUP (79f56243, #443): packs.yaml meta pack hook list gains on-edit-enforce and on-stop-enforce (the blocking SQLite-enforcement hooks under runtime/hooks/meta/, added by #442). No directory-tree layout change. -->
+<!-- Last reviewed 2026-07-19 — WO-AUTOACT-B: packs.yaml meta pack hook list gains on-prompt-route (the UserPromptSubmit routing handler under runtime/hooks/meta/). No directory-tree layout change. -->
 
 <!-- Reviewed 2026-07-05 — WO 6d978483 (PEP 585/604 modernization [2/2]): source files in this domain received mechanical type-annotation modernization only (PEP 585 builtin generics, PEP 604 unions, datetime.UTC) via ruff UP safe autofixes. No contract, behavior, schema, routing, API-shape, or CLI-surface change — reviewed, no doc content change needed. -->

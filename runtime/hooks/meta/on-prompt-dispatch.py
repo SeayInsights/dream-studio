@@ -52,6 +52,10 @@ HANDLERS: list[tuple[str, Path]] = [
     # Chain 7 — SQLite memory_entries injection (18.4.4).
     # Runs after file-based on-memory-retrieve; both write independent <xml> blocks.
     ("on-context-inject", PLUGIN_ROOT / "runtime" / "hooks" / "meta" / "on-context-inject.py"),
+    # WO-AUTOACT-B — deterministic ds-* dispatch: when the prompt carries an
+    # explicit pack trigger, inject a <dream-studio-routing> directive naming the
+    # skill to invoke (the "push" half of auto-activation).
+    ("on-prompt-route", PLUGIN_ROOT / "runtime" / "hooks" / "meta" / "on-prompt-route.py"),
     ("on-milestone-start", PLUGIN_ROOT / "runtime" / "hooks" / "core" / "on-milestone-start.py"),
     (
         "on-context-threshold",

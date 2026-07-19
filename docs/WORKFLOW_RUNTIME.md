@@ -189,6 +189,8 @@ These are **not abstracted** — they're passed directly to the orchestrating ag
 
 <!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: on-context-threshold.py hook updated (see HOOK_RUNTIME.md for details). No workflow YAML, engine, state, validator, gate, or retry contract change. -->
 
+<!-- Last reviewed 2026-07-19 — WO-AUTOACT-B: on-prompt-route added to the UserPromptSubmit HANDLERS list (hook addition only, see HOOK_RUNTIME.md). It is UserPromptSubmit-only and injects a routing directive; it does not interact with the workflow engine, execution graph, state, validator, or gate policy. No workflow YAML, engine, state, validator, gate, or retry contract change. -->
+
 <!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->
 
 <!-- reviewed: 2026-06-06, WO-C orphan rot sweep. control/execution/workflow/learning.py deleted (zero importers confirmed). Removed its row from Runtime Integration table. sibling tracking.py is live and retained. No workflow YAML, engine, state, validator, gate, or retry contract change. -->
