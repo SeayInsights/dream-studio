@@ -1,11 +1,13 @@
-"""Authority-backed singleton runtime state (WO-FILESDB-P2).
+"""Authority-backed singleton runtime state (WO-FILESDB-P2; consolidated WO-FILESDB-REVET).
 
-Moves the loose ``~/.dream-studio/state/{active_skill,active_task,platform}.json``
-files into the authority as ``key -> JSON-value`` rows in ``raw_runtime_state``.
-Degrades to None/False when the table is absent (migration 146 stays unreleased on
-the live authority DB until ``ds migrate activate``) so callers fall back to the
-legacy JSON files during the transition. Sibling of
-``core.telemetry.session_accumulator`` under the same files-in-database directive.
+Stores the singleton ``active_skill`` / ``active_task`` / ``platform`` runtime state
+that used to live in loose ``~/.dream-studio/state/*.json`` files. These are keyed
+JSON singletons — structurally identical to the pre-existing ``ds_config`` table
+``(key, value, updated_at)`` — so they are stored there under a ``runtime.`` key
+namespace rather than in a dedicated ``raw_runtime_state`` table (dropped in
+migration 150 as a ds_config duplicate). Callers pass a bare key
+(``active_skill``); this module namespaces it. Degrades to None/False when
+``ds_config`` is absent so callers fall back to the legacy JSON files.
 """
 
 from __future__ import annotations
@@ -15,7 +17,13 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-_TABLE = "raw_runtime_state"
+_TABLE = "ds_config"
+_KEY_PREFIX = "runtime."
+
+
+def _k(key: str) -> str:
+    """Namespace a bare runtime-state key into the ds_config key space."""
+    return f"{_KEY_PREFIX}{key}"
 
 
 def _resolve_db(db_path: Path | None) -> Path:
@@ -45,7 +53,7 @@ def db_write_runtime_state(key: str, value: dict, *, db_path: Path | None = None
             f"INSERT INTO {_TABLE} (key, value, updated_at) VALUES (?, ?, ?)"
             " ON CONFLICT(key) DO UPDATE SET value = excluded.value,"
             " updated_at = excluded.updated_at",
-            (key, json.dumps(value), now),
+            (_k(key), json.dumps(value), now),
         )
         conn.commit()
         return True
@@ -63,7 +71,7 @@ def db_read_runtime_state(key: str, *, db_path: Path | None = None) -> dict | No
     except sqlite3.Error:
         return None
     try:
-        row = conn.execute(f"SELECT value FROM {_TABLE} WHERE key = ?", (key,)).fetchone()
+        row = conn.execute(f"SELECT value FROM {_TABLE} WHERE key = ?", (_k(key),)).fetchone()
         if not row:
             return None
         try:
@@ -85,7 +93,7 @@ def db_clear_runtime_state(key: str, *, db_path: Path | None = None) -> bool:
     except sqlite3.Error:
         return False
     try:
-        cur = conn.execute(f"DELETE FROM {_TABLE} WHERE key = ?", (key,))
+        cur = conn.execute(f"DELETE FROM {_TABLE} WHERE key = ?", (_k(key),))
         conn.commit()
         return cur.rowcount > 0
     except sqlite3.OperationalError:
