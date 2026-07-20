@@ -104,6 +104,24 @@ def env(tmp_path, monkeypatch):
     return {"tmp": tmp_path, "project": project_dir, "authority": authority, "files": files_db}
 
 
+@pytest.fixture(autouse=True)
+def captured_hook_executions(monkeypatch):
+    """Capture — never really emit — enforce-hook telemetry.
+
+    WO-HOOK-ENFORCE-EXEC-STATS wraps both enforce hooks to emit
+    system.hook.execution.logged. Patching the emitter keeps every enforce-hook
+    test hermetic (no writes to the real authority DB) and lets the telemetry test
+    assert on what was logged. Patched at the module attribute because
+    enforcement.log_hook_execution imports insert_hook_execution lazily at call time.
+    """
+    calls: list[dict] = []
+    monkeypatch.setattr(
+        "core.event_store.event_writer.insert_hook_execution",
+        lambda **kw: calls.append(kw),
+    )
+    return calls
+
+
 def _set_wo_in_progress(authority: Path) -> None:
     con = sqlite3.connect(authority)
     con.execute(
@@ -318,3 +336,39 @@ class TestFilesCliDocstoreWritePath:
         assert ds.main(["files", "add", "does/not/exist.md"]) == 1
         out = json.loads(capsys.readouterr().out)
         assert out["ok"] is False and "not a file" in out["error"]
+
+
+class TestHookExecutionTelemetry:
+    """WO-HOOK-ENFORCE-EXEC-STATS: the two directly-wired enforce hooks emit
+    system.hook.execution.logged so they surface in the DuckDB hook_executions
+    view, without changing their deny/block/allow decision or stdout."""
+
+    def test_edit_hook_logs_execution(self, env, captured_hook_executions):
+        # No in-progress WO → deny; the hook still records its own execution.
+        out = _run_hook(EDIT_HOOK, _edit_payload(env["project"] / "src" / "main.py"))
+        assert json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+        logged = [c for c in captured_hook_executions if c["hook_name"] == "on_edit_enforce"]
+        assert len(logged) == 1
+        assert logged[0]["hook_type"] == "PreToolUse"
+        assert logged[0]["trigger_context"]["decision"] == "deny"
+
+    def test_stop_hook_logs_execution(self, env, captured_hook_executions):
+        # Unknown session → noop decision; the hook still records its execution.
+        _run_hook(STOP_HOOK, _stop_payload("never-seen"))
+        logged = [c for c in captured_hook_executions if c["hook_name"] == "on_stop_enforce"]
+        assert len(logged) == 1
+        assert logged[0]["hook_type"] == "Stop"
+
+    def test_both_enforce_hooks_are_distinct_hook_names(self, env, captured_hook_executions):
+        _set_wo_in_progress(env["authority"])
+        _run_hook(EDIT_HOOK, _edit_payload(env["project"] / "src" / "main.py"))
+        _run_hook(STOP_HOOK, _stop_payload())
+        names = {c["hook_name"] for c in captured_hook_executions}
+        assert names == {"on_edit_enforce", "on_stop_enforce"}
+
+    def test_ds_enforce_zero_skips_telemetry(self, env, monkeypatch, captured_hook_executions):
+        # DS_ENFORCE=0 is a total escape hatch — no enforcement AND no telemetry.
+        monkeypatch.setenv("DS_ENFORCE", "0")
+        _run_hook(EDIT_HOOK, _edit_payload(env["project"] / "src" / "main.py"))
+        _run_hook(STOP_HOOK, _stop_payload())
+        assert captured_hook_executions == []

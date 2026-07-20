@@ -58,6 +58,51 @@ def now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def log_hook_execution(
+    *,
+    hook_name: str,
+    hook_type: str,
+    started_at: str,
+    duration_ms: int,
+    decision: str,
+    status: str = "success",
+    error_message: str | None = None,
+    session_id: str | None = None,
+) -> None:
+    """Best-effort emit of HOOK_EXECUTION_LOGGED for a directly-wired enforce hook.
+
+    on-edit-enforce (PreToolUse) and on-stop-enforce (Stop) are wired straight into
+    hooks.json rather than through the dispatcher, so — unlike the dispatched hooks,
+    which control.execution.dispatch_tracking logs uniformly — their execution was
+    never recorded and the DuckDB hook_executions view under-counted the two
+    safety-critical hooks (WO-HOOK-ENFORCE-EXEC-STATS).
+
+    Mirrors on-pulse / dispatch_tracking: fire-and-forget to the spool. Never raises
+    and never writes stdout — a blocking hook owns its stdout for the deny/allow
+    decision, so telemetry must stay silent (lesson edb8525f). The decision is
+    carried in trigger_context so the stats surface can distinguish allow/deny.
+    """
+    try:
+        from core.event_store.event_writer import insert_hook_execution
+
+        insert_hook_execution(
+            hook_name=hook_name,
+            hook_type=hook_type,
+            trigger_context={"decision": decision},
+            started_at=started_at,
+            completed_at=now_iso(),
+            duration_ms=duration_ms,
+            exit_code=0,
+            status=status,
+            error_message=error_message,
+            session_id=session_id,
+        )
+    except Exception:
+        # Telemetry is best-effort: never let a broken emit path affect enforcement.
+        # Narrow to Exception so KeyboardInterrupt/SystemExit still propagate.
+        pass
+
+
 def parse_ts(value: str | None) -> datetime | None:
     if not value:
         return None

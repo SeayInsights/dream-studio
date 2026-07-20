@@ -23,6 +23,8 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 _PLUGIN_ROOT = Path(__file__).resolve().parents[3]
@@ -82,33 +84,38 @@ def _docstore_violations(enforcement, session: dict) -> list[str]:
     return violations
 
 
-def main() -> None:
-    if os.environ.get("DS_ENFORCE", "").strip() == "0":
-        return
+def _enforce() -> tuple[str, str | None]:
+    """Run the Stop enforcement decision.
 
+    Returns ``(decision, session_id)``: ``block`` (stop blocked with violations),
+    ``allow`` (session clean, state cleared), ``noop`` (re-entrant / no session /
+    unparseable payload), or ``error`` (fail-open). Prints the block JSON to stdout
+    on the block path — callers must not write stdout.
+    """
+    session_id: str | None = None
     try:
         raw = sys.stdin.read().lstrip("﻿")
         payload = json.loads(raw) if raw.strip() else {}
     except Exception:
-        return
+        return ("noop", None)
 
     if payload.get("stop_hook_active"):
-        return
+        return ("noop", None)
     session_id = payload.get("session_id", "")
     if not session_id:
-        return
+        return ("noop", None)
 
     try:
         from runtime.lib import enforcement  # noqa: PLC0415
     except Exception:
-        return
+        return ("noop", session_id)
 
     try:
         session = enforcement.load_session(session_id)
         if not session:
-            return
+            return ("noop", session_id)
         if session.get("stop_blocked_at"):
-            return
+            return ("noop", session_id)
 
         violations = _authority_violations(enforcement, session)
         violations += _docstore_violations(enforcement, session)
@@ -116,7 +123,7 @@ def main() -> None:
         if not violations:
             enforcement.delete_session(session_id)
             enforcement.gc_session_files()
-            return
+            return ("allow", session_id)
 
         shown = violations[:_MAX_LISTED_VIOLATIONS]
         if len(violations) > len(shown):
@@ -129,8 +136,50 @@ def main() -> None:
             + "\nResolve the items above (or set DS_ENFORCE=0), then stop again."
         )
         print(json.dumps({"decision": "block", "reason": reason}), flush=True)
+        return ("block", session_id)
     except Exception:
+        return ("error", session_id)
+
+
+def main() -> None:
+    # DS_ENFORCE=0 disables enforcement AND its telemetry — the escape hatch is total.
+    if os.environ.get("DS_ENFORCE", "").strip() == "0":
         return
+
+    started_at = datetime.now(timezone.utc).isoformat()
+    start = time.monotonic()
+    decision = "allow"
+    status = "success"
+    error_msg: str | None = None
+    session_id: str | None = None
+    try:
+        decision, session_id = _enforce()
+        if decision == "error":
+            # _enforce's internal fail-open swallowed an exception — record the run
+            # as failed so the stats view does not report it as a clean success.
+            status = "failed"
+    except Exception as exc:  # pragma: no cover - _enforce is already guarded
+        status = "failed"
+        error_msg = str(exc)
+    finally:
+        # WO-HOOK-ENFORCE-EXEC-STATS: record this directly-wired hook's execution so
+        # it appears in the DuckDB hook_executions view. Best-effort; never affects
+        # the block/allow decision or the process stdout.
+        try:
+            from runtime.lib import enforcement  # noqa: PLC0415
+
+            enforcement.log_hook_execution(
+                hook_name="on_stop_enforce",
+                hook_type="Stop",
+                started_at=started_at,
+                duration_ms=int((time.monotonic() - start) * 1000),
+                decision=decision,
+                status=status,
+                error_message=error_msg,
+                session_id=session_id or None,
+            )
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
