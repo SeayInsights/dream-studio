@@ -54,11 +54,58 @@ def allowed_decisions_for_phase(phase_type: str) -> tuple[str, ...]:
     return allowed
 
 
-def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.parent / f".{path.name}.tmp"
-    tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    tmp_path.replace(path)
+def _set_decision_artifact(
+    work_order_id: str,
+    kind: str,
+    payload: dict[str, Any],
+    *,
+    storage_root: Path | str | None = None,
+) -> None:
+    """WO-FILESDB-C4: persist a decision artifact into the authority-free packet store.
+
+    Decisions are file-backed PACKET-system artifacts (created in the report flow), not
+    Dream Studio authority state — stored in packets.db (kind=decision_request /
+    operator_decision), never in loose decisions/*.json files and never in studio.db.
+    """
+    from core.work_orders.packet_store import set_packet_artifact
+
+    set_packet_artifact(
+        work_order_id,
+        kind,
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        storage_root=storage_root,
+    )
+
+
+def _load_decision_artifact(
+    work_order_id: str,
+    kind: str,
+    label: str,
+    *,
+    storage_root: Path | str | None = None,
+) -> tuple[dict[str, Any] | None, Path]:
+    """Load a decision artifact from the packet store (WO-FILESDB-C4).
+
+    The returned Path is the logical location (used as an evidence ref); the content
+    comes from packets.db.
+    """
+    from core.work_orders.packet_store import get_packet_artifact
+
+    path = (
+        decision_request_path(work_order_id, storage_root=storage_root)
+        if kind == "decision_request"
+        else operator_decision_path(work_order_id, storage_root=storage_root)
+    )
+    content = get_packet_artifact(work_order_id, kind, storage_root=storage_root)
+    if content is None:
+        return None, path
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        return {"_invalid": f"{label} could not be parsed."}, path
+    if not isinstance(data, dict):
+        return {"_invalid": f"{label} must be a mapping."}, path
+    return data, path
 
 
 def load_decision_request(
@@ -66,16 +113,9 @@ def load_decision_request(
     *,
     storage_root: Path | str | None = None,
 ) -> tuple[dict[str, Any] | None, Path]:
-    path = decision_request_path(work_order_id, storage_root=storage_root)
-    if not path.is_file():
-        return None, path
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {"_invalid": "decision request could not be parsed."}, path
-    if not isinstance(data, dict):
-        return {"_invalid": "decision request must be a mapping."}, path
-    return data, path
+    return _load_decision_artifact(
+        work_order_id, "decision_request", "decision request", storage_root=storage_root
+    )
 
 
 def load_operator_decision(
@@ -83,16 +123,9 @@ def load_operator_decision(
     *,
     storage_root: Path | str | None = None,
 ) -> tuple[dict[str, Any] | None, Path]:
-    path = operator_decision_path(work_order_id, storage_root=storage_root)
-    if not path.is_file():
-        return None, path
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {"_invalid": "operator decision could not be parsed."}, path
-    if not isinstance(data, dict):
-        return {"_invalid": "operator decision must be a mapping."}, path
-    return data, path
+    return _load_decision_artifact(
+        work_order_id, "operator_decision", "operator decision", storage_root=storage_root
+    )
 
 
 def create_decision_request(
@@ -137,7 +170,7 @@ def create_decision_request(
         "created_at": _now(),
         "privacy_export_classification": PRIVACY_EXPORT_CLASSIFICATION,
     }
-    _write_json(decision_request_path(canonical_id, storage_root=storage_root), request)
+    _set_decision_artifact(canonical_id, "decision_request", request, storage_root=storage_root)
     return request
 
 
@@ -200,7 +233,7 @@ def record_operator_decision(
         ],
         "privacy_export_classification": PRIVACY_EXPORT_CLASSIFICATION,
     }
-    _write_json(operator_decision_path(work_order_id, storage_root=storage_root), artifact)
+    _set_decision_artifact(work_order_id, "operator_decision", artifact, storage_root=storage_root)
     return artifact
 
 
