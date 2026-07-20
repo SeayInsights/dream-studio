@@ -23,6 +23,11 @@ uvicorn>=0.23,<1.0
 httpx>=0.24
 python-multipart>=0.0.6
 
+# click: floor past PYSEC-2026-2132 (fixed in 8.3.3). Transitive via uvicorn / fastapi /
+# typer / rich-toolkit etc; no parent caps it, so pip resolves click-8.4.2 cleanly. Keeps
+# the pip-audit / Full CI security gate green. WO-DEP-CVE-BUMP (7f9085e7).
+click>=8.3.3
+
 # regex: pinned to satisfy dateparser>=1.4.0 transitive requirement
 regex>=2024.9.11
 

@@ -16,3 +16,8 @@ pytest-asyncio>=0.23
 # Security scanning tools (ds-quality:security static passes — brownfield slice 18.x)
 bandit>=1.7
 semgrep>=1.60
+
+# mcp: floor past CVE-2026-52870 / -52869 / -59950 (all fixed by 1.28.1). Transitive via
+# semgrep + fastmcp; pip resolves mcp-1.28.1 cleanly with no parent-cap conflict. Keeps the
+# pip-audit / Full CI security gate green. WO-DEP-CVE-BUMP (7f9085e7).
+mcp>=1.28.1
