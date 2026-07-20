@@ -218,12 +218,14 @@ def create_render_completeness_eval(
     storage_root: Path | str | None = None,
 ) -> tuple[dict[str, Any], Path]:
     """Write a deterministic render completeness eval artifact."""
+    # WO-FILESDB-C5: the packet is stored in the packet store (not a disk file), so
+    # completeness is judged from packet_text content, not packet_path.is_file().
     missing = [term for term in REQUIRED_PACKET_TERMS if term not in packet_text]
-    pass_fail = "pass" if not missing and packet_path.is_file() else "fail"
+    pass_fail = "pass" if not missing else "fail"
     observed = (
         f"{target} packet includes required render fields and prohibitions."
         if pass_fail == "pass"
-        else f"{target} packet missing evidence: {', '.join(missing) or 'packet file unavailable'}."
+        else f"{target} packet missing evidence: {', '.join(missing) or 'unknown'}."
     )
     artifact = _base_artifact(
         work_order=work_order,

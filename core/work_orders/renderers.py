@@ -173,13 +173,17 @@ def render_work_order(
         raise WorkOrderError(result.format())
 
     packet_text = render_packet_text(result.work_order, target)
+    # WO-FILESDB-C5: the rendered packet is a file-backed PACKET-system artifact —
+    # stored in the authority-free packet store (kind='packet', instance_key=target)
+    # instead of a rendered/<target>.md disk cache. It is also derivable on demand via
+    # `ds work-order packet <id> --target <target>`. packet_path stays the logical ref.
+    from core.work_orders.packet_store import set_packet_artifact
+
     target_dir = work_order_dir(work_order_id, storage_root=storage_root)
-    rendered_dir = target_dir / "rendered"
-    rendered_dir.mkdir(parents=True, exist_ok=True)
-    packet_path = rendered_dir / f"{target}.md"
-    tmp_path = rendered_dir / f".{target}.md.tmp"
-    tmp_path.write_text(packet_text, encoding="utf-8")
-    tmp_path.replace(packet_path)
+    packet_path = target_dir / "rendered" / f"{target}.md"
+    set_packet_artifact(
+        work_order_id, "packet", packet_text, instance_key=target, storage_root=storage_root
+    )
 
     updated = dict(result.work_order)
     updated["status"] = "rendered"
