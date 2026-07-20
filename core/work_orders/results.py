@@ -105,10 +105,14 @@ def load_result_metadata(
     *,
     storage_root: Path | str | None = None,
 ) -> tuple[dict[str, Any] | None, Path]:
+    """Load result metadata from the packet store (WO-FILESDB-C5)."""
+    from core.work_orders.packet_store import get_packet_artifact
+
     _, metadata_path = result_paths(work_order_id, storage_root=storage_root)
-    if not metadata_path.is_file():
+    content = get_packet_artifact(work_order_id, "result_meta", storage_root=storage_root)
+    if content is None:
         return None, metadata_path
-    return json.loads(metadata_path.read_text(encoding="utf-8")), metadata_path
+    return json.loads(content), metadata_path
 
 
 def load_result_text(
@@ -116,10 +120,14 @@ def load_result_text(
     *,
     storage_root: Path | str | None = None,
 ) -> tuple[str | None, Path]:
+    """Load raw result text from the packet store (WO-FILESDB-C5)."""
+    from core.work_orders.packet_store import get_packet_artifact
+
     raw_path, _ = result_paths(work_order_id, storage_root=storage_root)
-    if not raw_path.is_file():
+    content = get_packet_artifact(work_order_id, "result", storage_root=storage_root)
+    if content is None:
         return None, raw_path
-    return raw_path.read_text(encoding="utf-8"), raw_path
+    return content, raw_path
 
 
 def record_result(
@@ -140,25 +148,27 @@ def record_result(
 
     raw_text = source.read_text(encoding="utf-8")
     raw_path, metadata_path = result_paths(work_order_id, storage_root=storage_root)
-    raw_path.parent.mkdir(parents=True, exist_ok=True)
-    raw_tmp = raw_path.parent / f".{RESULT_MD}.tmp"
-    raw_tmp.write_text(raw_text, encoding="utf-8")
-    raw_tmp.replace(raw_path)
+    # WO-FILESDB-C5: results are file-backed PACKET-system artifacts, stored in the
+    # authority-free packet store (kind='result' raw text, kind='result_meta' JSON) —
+    # never loose results/*.{md,json} and never the Dream Studio authority. raw_path /
+    # metadata_path remain the logical evidence refs.
+    from core.work_orders.packet_store import set_packet_artifact
+
+    set_packet_artifact(work_order_id, "result", raw_text, storage_root=storage_root)
 
     metadata = extract_result_metadata(
         work_order=validation.work_order,
         raw_text=raw_text,
         raw_output_ref=str(raw_path),
     )
-    meta_tmp = metadata_path.parent / f".{RESULT_JSON}.tmp"
-    meta_tmp.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    meta_tmp.replace(metadata_path)
 
     changed_files = metadata["structured_findings"].get("files_changed")
     updated = dict(validation.work_order)
     updated["status"] = "result_recorded"
     write_existing_work_order(updated, storage_root=storage_root)
 
+    # WO-FILESDB-C3/C5: eval artifacts live in the packet store (kind='eval'); the
+    # per-eval path is None (no disk file), so collect only real disk paths, if any.
     eval_paths: list[str] = []
     evals: list[dict[str, Any]] = []
     if updated.get("approval_mode") == "approval_required":
@@ -167,7 +177,8 @@ def record_result(
             changed_files=changed_files,
             storage_root=storage_root,
         )
-        eval_paths.append(str(approved_path))
+        if approved_path is not None:
+            eval_paths.append(str(approved_path))
         evals.append(approved_eval)
     else:
         observe_eval, observe_path = create_observe_only_compliance_eval(
@@ -176,7 +187,8 @@ def record_result(
             result_metadata=metadata,
             storage_root=storage_root,
         )
-        eval_paths.append(str(observe_path))
+        if observe_path is not None:
+            eval_paths.append(str(observe_path))
         evals.append(observe_eval)
 
     forbidden_eval, forbidden_path = create_forbidden_action_compliance_eval(
@@ -191,11 +203,15 @@ def record_result(
         storage_root=storage_root,
     )
 
-    eval_paths.extend([str(forbidden_path), str(mutation_path)])
+    eval_paths.extend(str(p) for p in (forbidden_path, mutation_path) if p is not None)
     evals.extend([forbidden_eval, mutation_eval])
     metadata["eval_artifacts"] = eval_paths
-    meta_tmp.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    meta_tmp.replace(metadata_path)
+    set_packet_artifact(
+        work_order_id,
+        "result_meta",
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+        storage_root=storage_root,
+    )
 
     return {
         "work_order_id": work_order_id,

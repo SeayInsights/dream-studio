@@ -78,10 +78,17 @@ def _load_eval_artifacts(
 
 
 def _rendered_packets(work_order_id: str, *, storage_root: Path | str | None = None) -> list[str]:
-    rendered_dir = work_order_dir(work_order_id, storage_root=storage_root) / "rendered"
-    if not rendered_dir.is_dir():
-        return []
-    return [str(path) for path in sorted(rendered_dir.glob("*.md"))]
+    """List a WO's rendered packets from the packet store (WO-FILESDB-C5).
+
+    Packets are stored kind='packet' (instance_key=target) in packets.db, not loose
+    rendered/*.md files. Returns logical refs (also derivable via `ds work-order packet`).
+    """
+    from core.work_orders.packet_store import list_packet_artifacts
+
+    return [
+        f"packet:{work_order_id}/rendered/{target}"
+        for target, _ in list_packet_artifacts(work_order_id, "packet", storage_root=storage_root)
+    ]
 
 
 def _eval_summary(artifacts: list[dict[str, Any]]) -> tuple[list[str], list[str], list[str]]:
@@ -449,9 +456,11 @@ def generate_report(
         eval_artifacts=eval_artifacts,
         handoff_sections=handoff_sections,
     )
-    report_tmp = report.parent / f".{REPORT_MD}.tmp"
-    report_tmp.write_text(first_text, encoding="utf-8")
-    report_tmp.replace(report)
+    # WO-FILESDB-C5: the report is a file-backed PACKET-system artifact -> packet_store
+    # (kind='report'), not a loose report.md and not the Dream Studio authority.
+    from core.work_orders.packet_store import set_packet_artifact
+
+    set_packet_artifact(work_order_id, "report", first_text, storage_root=storage_root)
 
     report_eval, report_eval_path = create_result_report_completeness_eval(
         work_order=validation.work_order,
@@ -517,8 +526,7 @@ def generate_report(
         eval_artifacts=final_evals,
         handoff_sections=final_handoff_sections,
     )
-    report_tmp.write_text(final_text, encoding="utf-8")
-    report_tmp.replace(report)
+    set_packet_artifact(work_order_id, "report", final_text, storage_root=storage_root)
 
     if result_metadata is not None:
         updated = dict(validation.work_order)

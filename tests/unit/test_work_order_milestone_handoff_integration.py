@@ -123,8 +123,13 @@ def test_report_marks_internal_continuation_as_no_operator_action(tmp_path) -> N
     result_source = tmp_path / "result.md"
     result_source.write_text("Focused validation complete.\n", encoding="utf-8")
     record_result(work_order["work_order_id"], source_path=result_source, storage_root=storage_root)
-    result_json = storage_root / work_order["work_order_id"] / "results" / "result.json"
-    result_metadata = json.loads(result_json.read_text(encoding="utf-8"))
+    # WO-FILESDB-C5: results + report live in the authority-free packet store.
+    from core.work_orders.packet_store import get_packet_artifact, set_packet_artifact
+
+    wo_id = work_order["work_order_id"]
+    result_metadata = json.loads(
+        get_packet_artifact(wo_id, "result_meta", storage_root=storage_root)
+    )
     result_metadata["milestone_state"] = _milestone_state(
         {"id": "checklist", "type": "checklist_review"}
     )
@@ -132,12 +137,15 @@ def test_report_marks_internal_continuation_as_no_operator_action(tmp_path) -> N
         "Phase 99 - Naive Next Prompt; Next Work Order: wo-naive-001; "
         "Objective: naive handoff routing; Risk: low; Approval: observe_only."
     )
-    result_json.write_text(
-        json.dumps(result_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    set_packet_artifact(
+        wo_id,
+        "result_meta",
+        json.dumps(result_metadata, indent=2, sort_keys=True) + "\n",
+        storage_root=storage_root,
     )
 
-    result = generate_report(work_order["work_order_id"], storage_root=storage_root)
-    report_text = Path(result["report_path"]).read_text(encoding="utf-8")
+    generate_report(wo_id, storage_root=storage_root)
+    report_text = get_packet_artifact(wo_id, "report", storage_root=storage_root)
 
     assert "- route_decision: continue_internal" in report_text
     assert "- handoff_required: false" in report_text

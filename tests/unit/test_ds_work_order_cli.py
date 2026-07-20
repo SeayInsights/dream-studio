@@ -146,11 +146,17 @@ def test_cli_render_writes_packet_and_eval_artifacts_without_target_mutation(tmp
     assert "rendered: wo-render-cli-001" in render.stdout
     assert "target: codex" in render.stdout
     assert "status: rendered" in status.stdout
-    assert (storage_root / "wo-render-cli-001" / "rendered" / "codex.md").is_file()
-    # WO-FILESDB-C3: evals live in the authority-free packet store (packets.db), not
-    # loose evals/*.json files, and never in the Dream Studio authority (studio.db).
+    # WO-FILESDB-C3/C5: the rendered packet + evals live in the authority-free packet
+    # store (packets.db), not loose rendered/*.md or evals/*.json, and never studio.db.
     from core.work_orders.packet_store import get_packet_artifact
 
+    assert not (storage_root / "wo-render-cli-001" / "rendered").exists()
+    assert (
+        get_packet_artifact(
+            "wo-render-cli-001", "packet", instance_key="codex", storage_root=storage_root
+        )
+        is not None
+    )
     assert not (storage_root / "wo-render-cli-001" / "evals").exists()
     assert (
         get_packet_artifact(
@@ -235,12 +241,19 @@ def test_cli_record_result_and_report_write_file_backed_artifacts(tmp_path) -> N
     assert "report: wo-report-cli-001" in report.stdout
     assert "result_present: true" in report.stdout
     assert "status: reported" in status.stdout
-    assert (storage_root / "wo-report-cli-001" / "results" / "result.md").is_file()
-    assert (storage_root / "wo-report-cli-001" / "results" / "result.json").is_file()
-    assert (storage_root / "wo-report-cli-001" / "report.md").is_file()
-    # WO-FILESDB-C3: evals live in the authority-free packet store (packets.db).
+    # WO-FILESDB-C5: results + report live in the packet store, not results/*.{md,json}
+    # or report.md on disk.
     from core.work_orders.packet_store import get_packet_artifact
 
+    assert not (storage_root / "wo-report-cli-001" / "results").exists()
+    assert not (storage_root / "wo-report-cli-001" / "report.md").exists()
+    assert get_packet_artifact("wo-report-cli-001", "result", storage_root=storage_root) is not None
+    assert (
+        get_packet_artifact("wo-report-cli-001", "result_meta", storage_root=storage_root)
+        is not None
+    )
+    assert get_packet_artifact("wo-report-cli-001", "report", storage_root=storage_root) is not None
+    # Evals live in the packet store too.
     assert not (storage_root / "wo-report-cli-001" / "evals").exists()
     assert (
         get_packet_artifact(

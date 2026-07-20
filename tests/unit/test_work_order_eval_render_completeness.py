@@ -39,6 +39,7 @@ def _work_order(target_path: Path) -> dict:
 def test_render_creates_complete_eval_artifact_with_required_fields_for_codex_and_claude(
     tmp_path,
 ) -> None:
+    from core.work_orders.packet_store import get_packet_artifact
     from core.work_orders.renderers import render_work_order
     from core.work_orders.storage import save_work_order
 
@@ -70,8 +71,6 @@ def test_render_creates_complete_eval_artifact_with_required_fields_for_codex_an
             storage_root=storage_root,
         )
 
-        from core.work_orders.packet_store import get_packet_artifact
-
         render_work_order(work_order_id, target=render_target, storage_root=storage_root)
         # WO-FILESDB-C3: evals live in the packet store, not evals/*.json on disk.
         assert not (storage_root / work_order_id / "evals").exists()
@@ -83,8 +82,12 @@ def test_render_creates_complete_eval_artifact_with_required_fields_for_codex_an
                 storage_root=storage_root,
             )
         )
-        packet_path = storage_root / work_order_id / "rendered" / f"{render_target}.md"
-        packet_text = packet_path.read_text(encoding="utf-8")
+        # WO-FILESDB-C5: the rendered packet lives in the packet store, not rendered/*.md.
+        assert not (storage_root / work_order_id / "rendered").exists()
+        packet_text = get_packet_artifact(
+            work_order_id, "packet", instance_key=render_target, storage_root=storage_root
+        )
+        assert packet_text is not None
 
         assert [field for field in required_fields if field not in artifact] == []
         assert "Render-Only Posture" in packet_text
