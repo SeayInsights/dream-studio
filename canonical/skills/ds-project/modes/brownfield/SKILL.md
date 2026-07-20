@@ -114,6 +114,19 @@ Brownfield onboarding complete.
   Audits deferred:  J (run `ds project audit <id>` when ready)
 ```
 
+### Step 7 — Adaptive routing (recommended audits per project)
+
+Each registered project dict carries `recommended_dispatches` (from
+`core.projects.adaptive_routing.recommend_dispatches`, computed off the detected
+stack signals). Surface the fit-for-stack `ds-quality` modes so the operator can
+route to relevant audits instead of a generic prompt — do NOT auto-run them:
+```
+Recommended audits (by detected stack):
+  myapp (fastapi, postgres):  ds-quality: backend-api, database, ops
+  dashboard (react):          ds-quality: frontend-ux
+```
+Present only; the operator chooses which to invoke.
+
 ---
 
 ## Rules
