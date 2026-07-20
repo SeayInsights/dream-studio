@@ -23,10 +23,14 @@ uvicorn>=0.23,<1.0
 httpx>=0.24
 python-multipart>=0.0.6
 
-# click: floor past PYSEC-2026-2132 (fixed in 8.3.3). Transitive via uvicorn / fastapi /
-# typer / rich-toolkit etc; no parent caps it, so pip resolves click-8.4.2 cleanly. Keeps
-# the pip-audit / Full CI security gate green. WO-DEP-CVE-BUMP (7f9085e7).
-click>=8.3.3
+# click / mcp CVEs (PYSEC-2026-2132; CVE-2026-52870 / -52869 / -59950) canNOT be floored:
+# semgrep (dev) pins click~=8.1.8 (caps <8.2) and mcp==1.23.3 (exact), so any floor forces pip
+# to backtrack semgrep to a source-only build with no Windows wheel ("Semgrep does not support
+# Windows yet") — it broke the Windows dev install. Same constraint class as the PyJWT note
+# below. These are dev-only transitive CVEs (via semgrep/fastmcp) and remain flagged by
+# pip-audit until semgrep relaxes its pins; the pip-audit security-gate suppression is handled
+# with the Full-CI recovery in WO ac814dc3 (coupled with the migration release), not here, to
+# keep this change off the release_publication_gate docs surface. WO-DEP-CVE-BUMP (7f9085e7).
 
 # regex: pinned to satisfy dateparser>=1.4.0 transitive requirement
 regex>=2024.9.11

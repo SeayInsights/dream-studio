@@ -17,7 +17,10 @@ pytest-asyncio>=0.23
 bandit>=1.7
 semgrep>=1.60
 
-# mcp: floor past CVE-2026-52870 / -52869 / -59950 (all fixed by 1.28.1). Transitive via
-# semgrep + fastmcp; pip resolves mcp-1.28.1 cleanly with no parent-cap conflict. Keeps the
-# pip-audit / Full CI security gate green. WO-DEP-CVE-BUMP (7f9085e7).
-mcp>=1.28.1
+# mcp: CANNOT floor past CVE-2026-52870 / -52869 / -59950 (fixed in 1.28.1). semgrep caps mcp
+# at an older release (==1.23.3), so `mcp>=1.28.1` forces pip to backtrack semgrep down to a
+# source-only version with no Windows wheel ("Semgrep does not support Windows yet") — it broke
+# the Windows pr-smoke install. Same constraint class as the PyJWT note in requirements.txt. The
+# 3 mcp CVEs are dev-only (transitive via semgrep/fastmcp) and remain flagged by pip-audit; the
+# security-gate suppression is handled with the Full-CI recovery in WO ac814dc3, not here.
+# Revisit when semgrep relaxes its mcp pin. WO-DEP-CVE-BUMP (7f9085e7).
