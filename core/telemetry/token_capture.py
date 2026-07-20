@@ -290,48 +290,6 @@ def _capture_platform_context() -> dict[str, Any]:
     return {}
 
 
-def _update_session_accumulator(session_id: str, token_payload: dict[str, Any]) -> None:
-    """Merge new token counts into the per-session accumulator file.
-
-    The accumulator lets normalize_stop() reconstruct per-session totals when
-    Claude Code's Stop payload carries no usage field.
-    """
-    # WO-FILESDB-P2: prefer the authority table; fall back to the legacy JSON file
-    # when raw_session_token_accumulators is absent (migration 145 unreleased).
-    try:
-        from core.telemetry.session_accumulator import db_update_accumulator
-
-        if db_update_accumulator(session_id, token_payload):
-            return
-    except Exception:
-        pass
-
-    acc_path = Path.home() / ".dream-studio" / "state" / f"session-tokens-{session_id}.json"
-    try:
-        try:
-            existing: dict[str, Any] = json.loads(acc_path.read_text(encoding="utf-8"))
-        except (FileNotFoundError, json.JSONDecodeError, OSError):
-            existing = {}
-        for key in (
-            "input_tokens",
-            "output_tokens",
-            "cache_creation_input_tokens",
-            "cache_read_input_tokens",
-        ):
-            existing[key] = int(existing.get(key) or 0) + int(token_payload.get(key) or 0)
-        # Persist the model (last real value wins) so normalize_stop can stamp it
-        # onto the token.consumption.recorded event. Without it the DuckDB
-        # token_usage_records view cannot price the session turn (estimated_cost
-        # stays NULL and dashboard cost never moves). Model is recovered truth
-        # (SDK payload / transcript), never fabricated.
-        if token_payload.get("model"):
-            existing["model"] = token_payload["model"]
-        acc_path.parent.mkdir(parents=True, exist_ok=True)
-        acc_path.write_text(json.dumps(existing), encoding="utf-8")
-    except Exception:
-        pass
-
-
 def handle_post_tool_use(payload: dict[str, Any]) -> None:
     """Process a PostToolUse hook payload and emit token.consumed to spool.
 
@@ -474,10 +432,6 @@ def handle_post_tool_use(payload: dict[str, Any]) -> None:
                 session_id=session_id,
                 machine_id=machine_id,
             )
-
-        # Step 8: Update per-session accumulator so normalize_stop can source totals.
-        if session_id:
-            _update_session_accumulator(session_id, token_payload)
 
     except Exception as exc:
         log_diagnostic(

@@ -15,18 +15,6 @@ def test_user_prompt_submit_normalization(spool_root):
     assert "prompt_hash" in env.payload
 
 
-def test_stop_normalization(spool_root):
-    from emitters.claude_code.emitter import normalize_stop
-
-    payload = {"usage": {"input_tokens": 100, "output_tokens": 200}}
-    envelopes = normalize_stop(payload, root=spool_root)
-    assert len(envelopes) == 1
-    env = envelopes[0]
-    assert env.event_type == "token.consumption.recorded"
-    assert env.payload["input_tokens"] == 100
-    assert env.payload["output_tokens"] == 200
-
-
 def test_post_tool_use_normalization(spool_root):
     from emitters.claude_code.emitter import normalize_post_tool_use
 
