@@ -103,8 +103,9 @@ def test_start_project_returns_compound_dict_on_success(patched_paths, tmp_path:
     assert result["project_status"] == "active"
     assert result["next_work_order"]["work_order_id"] == WO_OPEN_ID
     assert result["work_order_start"]["ok"] is True
-    assert result["context_path"]
-    assert Path(result["context_path"]).is_file()
+    # WO-FILESDB-C2: context lives in the authority (context_path None), not on disk.
+    assert result["context_in_authority"] is True
+    assert result["context_path"] is None
     assert isinstance(result["tasks_count"], int)
 
 
@@ -146,8 +147,12 @@ def test_start_project_marks_target_work_order_in_progress(
     assert status == "in_progress"
 
 
-def test_start_project_writes_context_md(patched_paths, tmp_path: Path) -> None:
+def test_start_project_stores_context_in_authority(
+    patched_paths, db_path: Path, tmp_path: Path
+) -> None:
+    """WO-FILESDB-C2: context is stored in business_work_order_artifacts, not on disk."""
     from core.projects.start import start_project
+    from core.work_orders.artifacts import get_wo_artifact
 
     planning_root = tmp_path / ".planning"
     result = start_project(
@@ -156,9 +161,14 @@ def test_start_project_writes_context_md(patched_paths, tmp_path: Path) -> None:
         dream_studio_home=tmp_path,
         planning_root=planning_root,
     )
-    context_files = list(planning_root.rglob("context.md"))
-    assert len(context_files) >= 1
-    assert result["context_path"] == str(planning_root / "work-orders" / WO_OPEN_ID / "context.md")
+    # No context.md written to disk.
+    assert list(planning_root.rglob("context.md")) == []
+    assert result["context_path"] is None
+    assert result["context_in_authority"] is True
+    # The rendered context lives in the authority.
+    stored = get_wo_artifact(WO_OPEN_ID, "context", db_path=db_path)
+    assert stored is not None
+    assert "# Work Order:" in stored
 
 
 # ── start_project: no open work orders ────────────────────────────────────────

@@ -165,9 +165,11 @@ def test_eval_build_contract(patched_paths, db_path: Path, tmp_path: Path) -> No
         planning_root=tmp_path / ".planning",
     )
     assert result["ok"] is True
-    assert "context_path" in result
-    context_path = Path(result["context_path"])
-    assert context_path.is_file()
+    # WO-FILESDB-C2: context is stored in the authority (kind='context'), not on disk.
+    from core.work_orders.artifacts import get_wo_artifact
+
+    assert result["context_in_authority"] is True
+    assert get_wo_artifact(WO_ID, "context", db_path=db_path) is not None
 
     conn = sqlite3.connect(str(db_path))
     try:

@@ -279,11 +279,16 @@ def write_work_order_context(
     *,
     planning_root: Path,
     now: str | None = None,
-) -> Path:
-    """Pure markdown generator + file write.
+    db_path: Path | None = None,
+) -> Path | None:
+    """Markdown generator + authority-first store (WO-FILESDB-C2).
 
-    Takes the dict returned by `read_work_order_brief` and writes
-    `<planning_root>/work-orders/<wo_id>/context.md`. Returns the path.
+    Takes the dict returned by `read_work_order_brief` and stores the rendered
+    context in the authority (``business_work_order_artifacts``, kind=``context``).
+    Returns ``None`` when the artifact was stored in the DB; falls back to writing
+    ``<planning_root>/work-orders/<wo_id>/context.md`` and returning that Path only
+    when the artifact table is absent (migration unreleased during the transition —
+    C6 removes the fallback after the artifact-table migration is released).
     """
 
     if not brief_data.get("ok"):
@@ -309,10 +314,6 @@ def write_work_order_context(
     brief_locked = brief_data.get("brief_locked")
     brief_warning = brief_data.get("brief_warning", False)
     gotchas = brief_data.get("gotchas") or []
-
-    context_dir = planning_root / "work-orders" / work_order_id
-    context_dir.mkdir(parents=True, exist_ok=True)
-    context_path = context_dir / "context.md"
 
     lines = [
         f"# Work Order: {title}",
@@ -420,7 +421,21 @@ def write_work_order_context(
                 lines.append(f"  Fix: {g['fix']}")
 
     lines += ["", f"_Generated: {now}_", ""]
-    context_path.write_text("\n".join(lines), encoding="utf-8")
+    content = "\n".join(lines)
+
+    # WO-FILESDB-C2: DB-first. Store the context in the authority; write the
+    # .planning file only when the artifact table is absent (unreleased migration
+    # on the live DB during the transition). Checkboxes reflect task status at
+    # render time; live status comes from business_tasks (`ds work-order tasks`),
+    # not a mutated context.md (the read-modify-write in mutations.py is removed).
+    from core.work_orders.artifacts import set_wo_artifact
+
+    if set_wo_artifact(work_order_id, "context", content, db_path=db_path):
+        return None
+    context_dir = planning_root / "work-orders" / work_order_id
+    context_dir.mkdir(parents=True, exist_ok=True)
+    context_path = context_dir / "context.md"
+    context_path.write_text(content, encoding="utf-8")
     return context_path
 
 
@@ -512,7 +527,9 @@ def start_work_order(
 
     p_root = planning_root or Path.cwd() / ".planning"
     now = datetime.now(UTC).isoformat()
-    context_path = write_work_order_context(brief_data, planning_root=p_root, now=now)
+    context_path = write_work_order_context(
+        brief_data, planning_root=p_root, now=now, db_path=_db_path_for_seq
+    )
 
     try:
         import spool.writer as _spool_writer
@@ -560,7 +577,11 @@ def start_work_order(
         "title": brief_data["title"],
         "type": brief_data["type_id"],
         "project_id": brief_data["project_id"],
-        "context_path": str(context_path),
+        # WO-FILESDB-C2: context lives in the authority (kind='context'); context_path
+        # is None when stored in the DB (read it via `ds work-order artifact <id> context`),
+        # and a .planning path only on the unreleased-migration disk fallback.
+        "context_path": str(context_path) if context_path else None,
+        "context_in_authority": context_path is None,
     }
 
     # WO-ESCALATION-LADDER T5: the manual path honors the escalation capability flag.

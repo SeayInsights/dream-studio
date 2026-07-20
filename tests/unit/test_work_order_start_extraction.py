@@ -122,7 +122,13 @@ def test_write_work_order_context_creates_file_with_enforcement_block(
         dream_studio_home=tmp_path,
     )
     planning_root = tmp_path / ".planning"
-    context_path = write_work_order_context(brief, planning_root=planning_root, now=NOW)
+    # WO-FILESDB-C2: these are rendering-content tests. Force the disk fallback with a
+    # table-less db_path so the rendered string is inspectable on disk; the DB-storage
+    # path is covered by test_project_start_extraction / test_wo_artifact_cli.
+    no_table_db = tmp_path / "no-artifact-table.db"
+    context_path = write_work_order_context(
+        brief, planning_root=planning_root, now=NOW, db_path=no_table_db
+    )
 
     assert context_path == planning_root / "work-orders" / WO_ID / "context.md"
     assert context_path.is_file()
@@ -142,7 +148,9 @@ def test_write_work_order_context_renders_brief_warning_for_ui_no_brief(
         source_root=REPO_ROOT,
         dream_studio_home=tmp_path,
     )
-    context_path = write_work_order_context(brief, planning_root=tmp_path / ".planning", now=NOW)
+    context_path = write_work_order_context(
+        brief, planning_root=tmp_path / ".planning", now=NOW, db_path=tmp_path / "no-table.db"
+    )
     content = context_path.read_text(encoding="utf-8")
     assert "WARNING" in content
     assert "website:discover" in content
@@ -160,7 +168,9 @@ def test_write_work_order_context_enforcement_block_contains_no_cli_commands(
         source_root=REPO_ROOT,
         dream_studio_home=tmp_path,
     )
-    context_path = write_work_order_context(brief, planning_root=tmp_path / ".planning", now=NOW)
+    context_path = write_work_order_context(
+        brief, planning_root=tmp_path / ".planning", now=NOW, db_path=tmp_path / "no-table.db"
+    )
     content = context_path.read_text(encoding="utf-8")
     assert not re.search(
         r"py -m interfaces\.cli\.ds", content
@@ -193,8 +203,10 @@ def test_start_work_order_succeeds_for_non_ui_type(patched_paths, tmp_path: Path
     )
     assert result["ok"] is True
     assert result["work_order_id"] == WO_ID
-    assert "context_path" in result
-    assert Path(result["context_path"]).is_file()
+    # WO-FILESDB-C2: context is stored in the authority (context_path None), not on disk.
+    assert result["context_in_authority"] is True
+    assert result["context_path"] is None
+    assert list((tmp_path / ".planning").rglob("context.md")) == []
 
 
 def test_start_work_order_blocks_ui_without_brief_unless_accepted(

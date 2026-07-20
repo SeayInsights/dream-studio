@@ -548,8 +548,16 @@ def close_work_order(
 
     _post_gate_str = _pre_meta.get("post_gate") or ""
     if "independent_review" in [g.strip() for g in _post_gate_str.split("|") if g.strip()]:
+        # WO-FILESDB-C2: a verdict may live in the authority (DB) or on the .planning
+        # disk fallback — check both before triggering an inline re-verify.
+        from core.work_orders.artifacts import has_wo_artifact as _has_verdict
+
         _verdict_path = p_root / "work-orders" / work_order_id / "review-verdict.json"
-        if not _verdict_path.is_file():
+        _verdict_exists = (
+            _has_verdict(work_order_id, "review_verdict", db_path=db_path)
+            or _verdict_path.is_file()
+        )
+        if not _verdict_exists:
             # Deferred import: verify.py is a sibling module; deferring keeps the
             # import tree symmetrical with the other lazy imports in this module
             # and avoids any future circular-import risk if verify gains a close

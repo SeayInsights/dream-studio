@@ -435,9 +435,11 @@ def test_work_order_start_includes_design_brief_section(db_home, tmp_path, monke
         ]
     )
     assert rc == 0
-    context_path = tmp_path / ".planning" / "work-orders" / WO_UI_ID / "context.md"
-    assert context_path.exists()
-    content = context_path.read_text(encoding="utf-8")
+    # WO-FILESDB-C2: context lives in the authority (kind='context'), not on disk.
+    from core.work_orders.artifacts import get_wo_artifact
+
+    content = get_wo_artifact(WO_UI_ID, "context", db_path=db_home / "state" / "studio.db")
+    assert content is not None
     assert "## Design Brief" in content
     assert "Build a fast UI" in content
 
@@ -460,8 +462,10 @@ def test_work_order_start_includes_design_system_section(db_home, tmp_path, monk
         ]
     )
     assert rc == 0
-    context_path = tmp_path / ".planning" / "work-orders" / WO_UI_ID / "context.md"
-    content = context_path.read_text(encoding="utf-8")
+    from core.work_orders.artifacts import get_wo_artifact
+
+    content = get_wo_artifact(WO_UI_ID, "context", db_path=db_home / "state" / "studio.db")
+    assert content is not None
     assert "## Design System" in content
     assert "tech-minimal" in content
     assert "canonical/skills/domains/design-systems/tech-minimal/" in content
@@ -488,7 +492,8 @@ def test_work_order_start_warns_when_no_brief_for_ui_type(db_home, tmp_path, mon
     assert "WARNING" in err
     assert "No locked design brief" in err
 
-    context_path = tmp_path / ".planning" / "work-orders" / WO_UI_ID / "context.md"
-    assert context_path.exists()
-    content = context_path.read_text(encoding="utf-8")
+    from core.work_orders.artifacts import get_wo_artifact
+
+    content = get_wo_artifact(WO_UI_ID, "context", db_path=db_home / "state" / "studio.db")
+    assert content is not None
     assert "WARNING" in content

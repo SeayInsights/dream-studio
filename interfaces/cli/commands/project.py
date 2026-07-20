@@ -328,7 +328,12 @@ def _project_start(
     wo_title = next_wo.get("title", "")
     wo_type = next_wo.get("work_order_type") or "—"
     milestone_str = next_wo.get("milestone") or "—"
-    context_path = result.get("context_path") or ""
+    # WO-FILESDB-C2: context lives in the authority; show the read command when it
+    # was stored there (context_path is None), else the legacy disk-fallback path.
+    if result.get("context_in_authority"):
+        context_loaded = f"authority — `ds work-order artifact {wo_id} context`"
+    else:
+        context_loaded = result.get("context_path") or ""
     task_count = result.get("tasks_count", 0)
     tasks_str = f"{task_count} tasks queued" if task_count else "tasks queued"
 
@@ -341,7 +346,7 @@ def _project_start(
         f"\nProject activated: {project_name}\n"
         f"Starting: {wo_title}\n"
         f"Type: {wo_type} | Milestone: {milestone_str}\n"
-        f"\nContext loaded: {context_path}\n"
+        f"\nContext loaded: {context_loaded}\n"
         f"Tasks ready: {tasks_str}\n"
         f"\nRun `ds work-order close {wo_id}` when done."
     )

@@ -52,10 +52,23 @@ def _lookup_project_name(db_path: Path, project_id: str) -> str | None:
     return row[0] if row else None
 
 
-def _count_tasks_in_context(context_path: Path) -> int:
-    if not context_path.is_file():
+def _count_open_tasks(db_path: Path, work_order_id: str) -> int:
+    """Count a work order's open tasks from the authority (WO-FILESDB-C2).
+
+    Replaces parsing ``- [ ]`` checkboxes out of the context.md file (the context
+    now lives in the authority, not on disk). Open == not complete/cancelled,
+    matching the previous checkbox semantics.
+    """
+    try:
+        with _connect(db_path) as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM business_tasks"
+                " WHERE work_order_id = ? AND status NOT IN ('complete', 'cancelled')",
+                (work_order_id,),
+            ).fetchone()
+        return int(row[0]) if row else 0
+    except Exception:
         return 0
-    return context_path.read_text(encoding="utf-8").count("- [ ]")
 
 
 def start_project(
@@ -149,9 +162,7 @@ def start_project(
         return start_result
 
     context_path_str = start_result.get("context_path")
-    tasks_count = 0
-    if context_path_str:
-        tasks_count = _count_tasks_in_context(Path(context_path_str))
+    tasks_count = _count_open_tasks(db_path, next_wo["work_order_id"])
 
     return {
         "ok": True,
@@ -161,5 +172,6 @@ def start_project(
         "next_work_order": next_wo,
         "work_order_start": start_result,
         "context_path": context_path_str,
+        "context_in_authority": start_result.get("context_in_authority", False),
         "tasks_count": tasks_count,
     }
