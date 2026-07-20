@@ -403,3 +403,6 @@ A scope session that produces "TBD" in any field has failed the quality bar. Ask
 
 <!-- Last reviewed 2026-07-19 — WO-BROWNFIELD-DETECT: get_project_state() now returns cwd_registered + cwd_project (core/projects/queries.py::_match_cwd_project, mirroring runtime.lib.enforcement.match_registered_project against the resolved connection). Resume Mode gains Step 1.5: when cwd_registered is false, answer "this repo isn't registered" and offer ds-project:brownfield instead of narrating the globally-active project. No new routing keyword or mode; resume stays read-only. -->
 
+<!-- Last reviewed 2026-07-20 — WO-FILESDB-C2 ("Files in Database" milestone): core/projects/start.py::start_project no longer parses '- [ ]' checkboxes out of context.md to count open tasks — the context now lives in the authority (business_work_order_artifacts, kind='context'), not on .planning disk. The new _count_open_tasks(db_path, work_order_id) counts open tasks (status NOT IN complete/cancelled) directly from business_tasks, and the result dict adds context_in_authority (True when the context was stored in the DB; context_path is then None). No ds-project mode, routing keyword, or start_project contract change beyond the additive context_in_authority field; project scoping/registration/resume behavior is unchanged. -->
+
+

@@ -127,9 +127,12 @@ def test_eval_start_wo(patched_paths, tmp_path: Path) -> None:
     )
 
     assert result["ok"] is True, f"start_work_order failed: {result}"
-    context_path = Path(result["context_path"])
-    assert context_path.is_file(), "context.md was not created"
-    content = context_path.read_text(encoding="utf-8")
+    # WO-FILESDB-C2: context lives in the authority (kind='context'), not on disk.
+    from core.work_orders.artifacts import get_wo_artifact
+
+    assert result["context_in_authority"] is True
+    content = get_wo_artifact(WO_DOCS_ID, "context", db_path=tmp_path / "studio.db")
+    assert content is not None, "context was not stored in the authority"
     assert "DREAM STUDIO ENFORCEMENT" in content
     assert "ds-workorder:execute" in content
     assert "ds-workorder:close" in content
@@ -243,7 +246,10 @@ def test_eval_no_cli(patched_paths, tmp_path: Path) -> None:
     )
 
     assert result["ok"] is True
-    content = Path(result["context_path"]).read_text(encoding="utf-8")
+    from core.work_orders.artifacts import get_wo_artifact
+
+    content = get_wo_artifact(WO_DOCS_ID, "context", db_path=tmp_path / "studio.db")
+    assert content is not None
 
     cli_pattern = re.compile(r"py -m interfaces\.cli\.ds")
     assert not cli_pattern.search(content), "context.md must not contain CLI commands"

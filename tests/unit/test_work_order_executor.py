@@ -107,6 +107,14 @@ def _start(db_home, tmp_path, monkeypatch, work_order_id=WORK_ORDER_ID):
     )
 
 
+def _context_text(db_home, work_order_id=WORK_ORDER_ID):
+    """WO-FILESDB-C2: the WO context lives in the authority (kind='context'), not on
+    disk. Read the rendered context content back from business_work_order_artifacts."""
+    from core.work_orders.artifacts import get_wo_artifact
+
+    return get_wo_artifact(work_order_id, "context", db_path=db_home / "state" / "studio.db") or ""
+
+
 def _list(db_home, monkeypatch, extra=None):
     argv = ["--home", str(db_home), "work-order", "list"]
     if extra:
@@ -146,16 +154,17 @@ def test_start_exits_1_when_type_is_unrecognized(db_home, tmp_path, monkeypatch)
 # ── start: success path ───────────────────────────────────────────────────────
 
 
-def test_start_writes_context_md_to_planning_root(db_home, tmp_path, monkeypatch):
+def test_start_stores_context_in_authority(db_home, tmp_path, monkeypatch):
+    """WO-FILESDB-C2: context is stored in the authority, not on .planning disk."""
     rc = _start(db_home, tmp_path, monkeypatch)
     assert rc == 0
-    context_path = tmp_path / ".planning" / "work-orders" / WORK_ORDER_ID / "context.md"
-    assert context_path.is_file()
+    assert not (tmp_path / ".planning" / "work-orders" / WORK_ORDER_ID / "context.md").exists()
+    assert _context_text(db_home) != ""
 
 
 def test_start_context_md_contains_work_order_fields(db_home, tmp_path, monkeypatch):
     _start(db_home, tmp_path, monkeypatch)
-    text = (tmp_path / ".planning" / "work-orders" / WORK_ORDER_ID / "context.md").read_text()
+    text = _context_text(db_home)
     assert WORK_ORDER_ID in text
     assert "Build login form" in text
     assert "ui_component" in text
@@ -165,7 +174,7 @@ def test_start_context_md_contains_work_order_fields(db_home, tmp_path, monkeypa
 
 def test_start_context_md_contains_gates(db_home, tmp_path, monkeypatch):
     _start(db_home, tmp_path, monkeypatch)
-    text = (tmp_path / ".planning" / "work-orders" / WORK_ORDER_ID / "context.md").read_text()
+    text = _context_text(db_home)
     assert "## Gates" in text
     assert "design_brief_locked" in text
     assert "fullstack:frontend" in text
@@ -174,7 +183,7 @@ def test_start_context_md_contains_gates(db_home, tmp_path, monkeypatch):
 
 def test_start_context_md_includes_pending_tasks_only(db_home, tmp_path, monkeypatch):
     _start(db_home, tmp_path, monkeypatch)
-    text = (tmp_path / ".planning" / "work-orders" / WORK_ORDER_ID / "context.md").read_text()
+    text = _context_text(db_home)
     assert "Write HTML" in text
     assert "Already done" not in text
 
@@ -273,20 +282,20 @@ def test_list_filters_by_status(db_home, tmp_path, monkeypatch, capsys):
 
 def test_context_md_contains_enforcement_section(db_home, tmp_path, monkeypatch):
     _start(db_home, tmp_path, monkeypatch)
-    text = (tmp_path / ".planning" / "work-orders" / WORK_ORDER_ID / "context.md").read_text()
+    text = _context_text(db_home)
     assert "## DREAM STUDIO ENFORCEMENT" in text
 
 
 def test_context_md_enforcement_contains_module_boundary(db_home, tmp_path, monkeypatch):
     _start(db_home, tmp_path, monkeypatch)
-    text = (tmp_path / ".planning" / "work-orders" / WORK_ORDER_ID / "context.md").read_text()
+    text = _context_text(db_home)
     # module_boundary is represented by the work order type_id (e.g. "ui_component")
     assert "ui_component" in text
 
 
 def test_context_md_enforcement_contains_work_order_id(db_home, tmp_path, monkeypatch):
     _start(db_home, tmp_path, monkeypatch)
-    text = (tmp_path / ".planning" / "work-orders" / WORK_ORDER_ID / "context.md").read_text()
+    text = _context_text(db_home)
     enforcement_start = text.index("## DREAM STUDIO ENFORCEMENT")
     section = text[enforcement_start:]
     assert WORK_ORDER_ID in section
@@ -294,11 +303,11 @@ def test_context_md_enforcement_contains_work_order_id(db_home, tmp_path, monkey
 
 def test_context_md_enforcement_contains_task_done_skill(db_home, tmp_path, monkeypatch):
     _start(db_home, tmp_path, monkeypatch)
-    text = (tmp_path / ".planning" / "work-orders" / WORK_ORDER_ID / "context.md").read_text()
+    text = _context_text(db_home)
     assert "ds-workorder:execute" in text
 
 
 def test_context_md_enforcement_contains_work_order_close_skill(db_home, tmp_path, monkeypatch):
     _start(db_home, tmp_path, monkeypatch)
-    text = (tmp_path / ".planning" / "work-orders" / WORK_ORDER_ID / "context.md").read_text()
+    text = _context_text(db_home)
     assert "ds-workorder:close" in text

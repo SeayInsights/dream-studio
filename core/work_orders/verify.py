@@ -1466,6 +1466,37 @@ def _insert_gap_work_orders(
     return spawned
 
 
+# ── Review-verdict persistence (WO-FILESDB-C2) ───────────────────────────────────
+
+
+def _persist_review_verdict(
+    work_order_id: str,
+    verdict: dict[str, Any],
+    *,
+    planning_root: Path,
+    db_path: Path | None = None,
+) -> Path | None:
+    """DB-first review-verdict persistence (WO-FILESDB-C2).
+
+    Store the verdict in the authority (``business_work_order_artifacts``,
+    kind=``review_verdict``); write ``.planning/work-orders/<id>/review-verdict.json``
+    only as a fallback when the artifact table is absent (migration unreleased on the
+    live DB during the transition — C6 removes the fallback after release). Returns the
+    disk Path when the fallback was used, else None (stored in the authority). The
+    close ``independent_review`` gate reads the verdict DB-or-disk.
+    """
+    from core.work_orders.artifacts import set_wo_artifact
+
+    payload = json.dumps(verdict, indent=2)
+    if set_wo_artifact(work_order_id, "review_verdict", payload, db_path=db_path):
+        return None
+    verdict_dir = planning_root / "work-orders" / work_order_id
+    verdict_dir.mkdir(parents=True, exist_ok=True)
+    verdict_path = verdict_dir / "review-verdict.json"
+    verdict_path.write_text(payload, encoding="utf-8")
+    return verdict_path
+
+
 # ── Main entry point ────────────────────────────────────────────────────────────
 
 
@@ -1583,28 +1614,24 @@ def verify_work_order(
                 completed_at=completed_at,
                 status="unreviewable",
             )
-            verdict_dir = p_root / "work-orders" / work_order_id
-            verdict_dir.mkdir(parents=True, exist_ok=True)
-            verdict_path = verdict_dir / "review-verdict.json"
-            verdict_path.write_text(
-                json.dumps(
-                    {
-                        "work_order_id": work_order_id,
-                        "passed": False,
-                        "unreviewable": True,
-                        "unreviewable_reason": warning,
-                        "scores": scores,
-                        "auto_continue_warning": warning,
-                        "completion": {},
-                        "correctness": {},
-                        "quality": {},
-                        "gaps": [],
-                        "spawned_work_orders": [],
-                        "verified_at": completed_at,
-                    },
-                    indent=2,
-                ),
-                encoding="utf-8",
+            verdict_path = _persist_review_verdict(
+                work_order_id,
+                {
+                    "work_order_id": work_order_id,
+                    "passed": False,
+                    "unreviewable": True,
+                    "unreviewable_reason": warning,
+                    "scores": scores,
+                    "auto_continue_warning": warning,
+                    "completion": {},
+                    "correctness": {},
+                    "quality": {},
+                    "gaps": [],
+                    "spawned_work_orders": [],
+                    "verified_at": completed_at,
+                },
+                planning_root=p_root,
+                db_path=db_path,
             )
             return {
                 "ok": True,
@@ -1620,7 +1647,7 @@ def verify_work_order(
                 "auto_continue_warning": warning,
                 "gaps": [],
                 "spawned_work_orders": [],
-                "verdict_path": str(verdict_path),
+                "verdict_path": str(verdict_path) if verdict_path else None,
             }
         if git_diff is None:
             git_diff = f"(no commits found referencing {work_order_id[:8]})"
@@ -1691,29 +1718,25 @@ def verify_work_order(
                 completed_at=completed_at,
                 status="unreviewable",
             )
-            verdict_dir = p_root / "work-orders" / work_order_id
-            verdict_dir.mkdir(parents=True, exist_ok=True)
-            verdict_path = verdict_dir / "review-verdict.json"
-            verdict_path.write_text(
-                json.dumps(
-                    {
-                        "work_order_id": work_order_id,
-                        "passed": False,
-                        "unreviewable": True,
-                        "unreviewable_graders": unreviewable_graders,
-                        "unreviewable_reason": warning,
-                        "scores": scores,
-                        "auto_continue_warning": warning,
-                        "completion": completion,
-                        "correctness": correctness,
-                        "quality": quality,
-                        "gaps": [],
-                        "spawned_work_orders": [],
-                        "verified_at": completed_at,
-                    },
-                    indent=2,
-                ),
-                encoding="utf-8",
+            verdict_path = _persist_review_verdict(
+                work_order_id,
+                {
+                    "work_order_id": work_order_id,
+                    "passed": False,
+                    "unreviewable": True,
+                    "unreviewable_graders": unreviewable_graders,
+                    "unreviewable_reason": warning,
+                    "scores": scores,
+                    "auto_continue_warning": warning,
+                    "completion": completion,
+                    "correctness": correctness,
+                    "quality": quality,
+                    "gaps": [],
+                    "spawned_work_orders": [],
+                    "verified_at": completed_at,
+                },
+                planning_root=p_root,
+                db_path=db_path,
             )
             return {
                 "ok": True,
@@ -1730,7 +1753,7 @@ def verify_work_order(
                 "auto_continue_warning": warning,
                 "gaps": [],
                 "spawned_work_orders": [],
-                "verdict_path": str(verdict_path),
+                "verdict_path": str(verdict_path) if verdict_path else None,
             }
 
         # Compute scores.
@@ -1817,10 +1840,9 @@ def verify_work_order(
             completed_at=completed_at,
         )
 
-        # Write verdict JSON.
-        verdict_dir = p_root / "work-orders" / work_order_id
-        verdict_dir.mkdir(parents=True, exist_ok=True)
-        verdict_path = verdict_dir / "review-verdict.json"
+        # WO-FILESDB-C2: DB-first verdict persistence (authority, kind=review_verdict);
+        # .planning disk only as the unreleased-migration fallback. Supersedes the
+        # WO-FILESDB-P1 disk+DB dual-write.
         full_verdict: dict[str, Any] = {
             "work_order_id": work_order_id,
             "passed": passed,
@@ -1836,14 +1858,9 @@ def verify_work_order(
         }
         if migration is not None:
             full_verdict["migration"] = migration
-        _verdict_json = json.dumps(full_verdict, indent=2)
-        verdict_path.write_text(_verdict_json, encoding="utf-8")
-        # WO-FILESDB-P1: mirror the authoritative verdict into the authority so the
-        # independent_review gate can read it from the DB. No-op when the artifact
-        # table is absent (migration 144 unreleased on the live authority DB).
-        from core.work_orders.artifacts import set_wo_artifact
-
-        set_wo_artifact(work_order_id, "review_verdict", _verdict_json)
+        verdict_path = _persist_review_verdict(
+            work_order_id, full_verdict, planning_root=p_root, db_path=db_path
+        )
 
     return {
         "ok": True,
@@ -1859,5 +1876,5 @@ def verify_work_order(
         "gaps": all_gaps,
         "spawned_work_orders": spawned,
         "certification_basis": "authority_evidence" if authority_certified else "git_diff",
-        "verdict_path": str(verdict_path),
+        "verdict_path": str(verdict_path) if verdict_path else None,
     }

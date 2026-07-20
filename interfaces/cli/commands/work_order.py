@@ -580,7 +580,12 @@ def _work_order_verify(
         print(f"\nGap work orders created ({len(spawned)}):")
         for wo in spawned:
             print(f"  [{wo['type']}] {wo['title']}  (id: {wo['work_order_id']})")
-    print(f"\nVerdict: {result['verdict_path']}")
+    # WO-FILESDB-C2: verdict_path is None when the verdict was stored in the authority
+    # (read it via `ds work-order artifact <id> review_verdict`).
+    _vp = result.get("verdict_path")
+    print(
+        f"\nVerdict: {_vp if _vp else f'authority (ds work-order artifact {work_order_id} review_verdict)'}"
+    )
     return 0 if passed else 1
 
 

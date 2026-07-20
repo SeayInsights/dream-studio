@@ -75,12 +75,10 @@ def mark_task_done(
             - 1
         )
 
-    p_root = planning_root or Path.cwd() / ".planning"
-    context_path = p_root / "work-orders" / work_order_id / "context.md"
-    if context_path.is_file():
-        text = context_path.read_text(encoding="utf-8")
-        text = text.replace(f"- [ ] {t_title}", f"- [x] {t_title}", 1)
-        context_path.write_text(text, encoding="utf-8")
+    # WO-FILESDB-C2: the context checkbox is no longer mutated on disk. Task status
+    # lives in business_tasks (the task.completed event below + its projection); the
+    # context artifact is a start-time briefing and live status comes from
+    # `ds work-order tasks <id>`, not a read-modify-write of context.md.
 
     try:
         import spool.writer as _spool_writer

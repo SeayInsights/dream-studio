@@ -229,7 +229,11 @@ def test_project_start_prints_work_order_title(tmp_path):
     ), f"Expected work order title in output. Got: {combined[:500]}"
 
 
-def test_project_start_creates_context_md(tmp_path):
+def test_project_start_stores_context_in_authority(tmp_path):
+    """WO-FILESDB-C2: `ds project start` stores the WO context in the authority
+    (business_work_order_artifacts, kind='context'), not on .planning disk."""
+    import sqlite3
+
     db_path, project_id = _make_db_with_project(tmp_path)
     planning_root = tmp_path / ".planning"
     rc, stdout, stderr = _run_ds(
@@ -242,9 +246,13 @@ def test_project_start_creates_context_md(tmp_path):
         str(planning_root),
     )
     assert rc == 0
-    # context.md should have been written somewhere under planning_root
-    context_files = list(planning_root.rglob("context.md"))
-    assert len(context_files) >= 1, "Expected context.md to be written under planning root"
+    # No context.md written to disk; the context lives in the authority.
+    assert list(planning_root.rglob("context.md")) == []
+    with sqlite3.connect(str(db_path)) as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM business_work_order_artifacts WHERE kind = 'context'"
+        ).fetchone()[0]
+    assert count >= 1, "Expected the WO context stored as a kind='context' authority artifact"
 
 
 # ── project start: no open WOs ────────────────────────────────────────────────

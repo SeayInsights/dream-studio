@@ -122,20 +122,17 @@ def test_task_done_emits_event_not_direct_write(db_home, tmp_path, monkeypatch):
     assert any(e.get("event_type") == "task.completed" for e in events)
 
 
-def test_task_done_updates_context_md_checkbox(db_home, tmp_path, monkeypatch):
+def test_task_done_does_not_touch_context_md(db_home, tmp_path, monkeypatch):
+    """WO-FILESDB-C2: mark_task_done no longer read-modify-writes context.md.
+
+    Task status lives in business_tasks (the task.completed event + projection);
+    the context is an authority artifact and is never mutated on disk by completion.
+    """
     planning_root = tmp_path / ".planning"
-    context_dir = planning_root / "work-orders" / WO_ID
-    context_dir.mkdir(parents=True)
-    context_path = context_dir / "context.md"
-    context_path.write_text(
-        "# Work Order: Test\n\n## Open Tasks\n\n- [ ] Write tests\n- [ ] Deploy\n",
-        encoding="utf-8",
-    )
     rc = _task_done(db_home, tmp_path, monkeypatch, WO_ID, TASK_A, planning_root=planning_root)
     assert rc == 0
-    text = context_path.read_text(encoding="utf-8")
-    assert "- [x] Write tests" in text
-    assert "- [ ] Deploy" in text
+    # No context.md is created or mutated by task completion.
+    assert list(planning_root.rglob("context.md")) == []
 
 
 def test_task_done_emits_task_completed_event(db_home, tmp_path, monkeypatch):
