@@ -172,3 +172,89 @@ def get_readiness(
             "persisting": delta.persisting_count,
         },
     }
+
+
+# Highest-to-lowest ordering for stabilization scope; unknown sorts last.
+_SEVERITY_ORDER = ("critical", "high", "medium", "low", "unknown")
+
+
+def aggregate_findings(
+    findings: list[dict[str, Any]],
+    dispatches: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    """Fold audit findings into a brownfield readiness-report section + stabilization scope.
+
+    WO-BROWNFIELD-OFFER-INVOKE. Pure aggregation over a findings list — no I/O.
+    Operates on findings that operator-approved ``ds-quality`` audits have ALREADY
+    persisted (Rule 2: never triggers a run). ``dispatches`` is the recommended /
+    approved ``[{pack, mode, reason}]`` list from
+    ``core.projects.adaptive_routing.recommend_dispatches`` — used only to annotate
+    which audits back the report.
+
+    Returns ``{"readiness_report": {...}, "stabilization_scope": [...]}`` where the
+    stabilization scope is one ordered item per non-empty severity bucket (critical
+    first), so it reflects the findings the audits surfaced.
+    """
+    dispatches = dispatches or []
+    by_severity: dict[str, list[dict[str, Any]]] = {}
+    for finding in findings:
+        sev = str(finding.get("severity") or "unknown").lower()
+        by_severity.setdefault(sev, []).append(finding)
+
+    stabilization_scope: list[dict[str, Any]] = []
+    ordered = sorted(
+        by_severity,
+        key=lambda s: _SEVERITY_ORDER.index(s) if s in _SEVERITY_ORDER else len(_SEVERITY_ORDER),
+    )
+    for sev in ordered:
+        bucket = by_severity[sev]
+        files = sorted({f.get("file_path") for f in bucket if f.get("file_path")})
+        stabilization_scope.append(
+            {
+                "severity": sev,
+                "count": len(bucket),
+                "files": files,
+                "title": f"Stabilize {len(bucket)} {sev}-severity finding(s)",
+            }
+        )
+
+    return {
+        "readiness_report": {
+            "finding_count": len(findings),
+            "severity_counts": {sev: len(rows) for sev, rows in by_severity.items()},
+            "audits": [f"{d.get('pack')}:{d.get('mode')}" for d in dispatches],
+            "findings": findings,
+        },
+        "stabilization_scope": stabilization_scope,
+    }
+
+
+def aggregate_readiness(
+    project_id: str,
+    *,
+    dispatches: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    """Aggregate a project's persisted audit findings into a readiness report + scope.
+
+    WO-BROWNFIELD-OFFER-INVOKE. The brownfield flow (ds-project:brownfield Step 8)
+    offers to run the ``recommended_dispatches`` audits — confirmation-gated, never
+    auto-run (Rule 2). Once the operator-approved audits have run and persisted their
+    findings to the ``security_events`` spine, this reads them back (reusing
+    ``get_scan_summary``) and folds them into the per-project readiness report and the
+    proposed stabilization scope. It only CONSUMES already-persisted results — it never
+    invokes an audit itself.
+
+    Returns ``{"ok", "project_id", "recommended_dispatches", "readiness_report",
+    "stabilization_scope"}``.
+    """
+    from core.projects.intake import get_scan_summary
+
+    summary = get_scan_summary(project_id)
+    findings = summary.get("findings") or []
+    aggregated = aggregate_findings(findings, dispatches)
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "recommended_dispatches": dispatches or [],
+        **aggregated,
+    }
