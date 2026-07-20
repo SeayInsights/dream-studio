@@ -4,7 +4,8 @@ Proves the forward fix: a PostToolUse payload that omits ``model`` (the main-loo
 case) still produces a token.consumed envelope carrying the real model, recovered
 from the session transcript, and that model materializes into
 token_usage_records.model_id through the projection. Also pins the
-payload-supplied model (subagent case) and the honest NULL when no source exists.
+payload-supplied model (subagent case) and the explicit unresolved sentinel (WO-e2c30936)
+when no source exists.
 
 This is the live-path proof for T2 (model captured) that the rescoped, post-fix
 SQL-CHECK guards going forward.
@@ -88,10 +89,14 @@ def test_payload_model_takes_precedence(tmp_path, monkeypatch):
     assert env.payload.get("model") == "claude-sonnet-4-6"
 
 
-def test_model_null_when_no_source(tmp_path, monkeypatch):
-    """No payload model and no transcript → model stays absent (honest NULL, never a placeholder)."""
+def test_model_sentinel_when_no_source(tmp_path, monkeypatch):
+    """WO-e2c30936: no payload model and no transcript → the explicit MODEL_UNRESOLVED
+    sentinel is stamped (never a fabricated real model, and no longer an absent key), so
+    the token.consumed row is not emitted with a NULL model_id inside the attribution window."""
+    from core.telemetry.token_capture import MODEL_UNRESOLVED
+
     env = _capture_envelope(_base_payload(), monkeypatch)
-    assert "model" not in env.payload
+    assert env.payload["model"] == MODEL_UNRESOLVED
 
 
 def test_end_to_end(tmp_path, monkeypatch):

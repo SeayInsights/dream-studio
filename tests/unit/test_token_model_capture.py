@@ -82,8 +82,11 @@ def test_stop_event_recovers_model_from_transcript(tmp_path, monkeypatch):
     assert envelopes[0].payload["model"] == "claude-sonnet-4-6"
 
 
-def test_stop_event_has_no_model_when_none_available(tmp_path, monkeypatch):
-    """A modelless turn with no transcript emits no model — never fabricated."""
+def test_stop_event_stamps_sentinel_when_no_model_available(tmp_path, monkeypatch):
+    """WO-e2c30936: a modelless turn that still carries usage stamps the explicit
+    MODEL_UNRESOLVED sentinel — not a fabricated real model, and no longer an absent
+    key — so a non-empty token.consumption.recorded rollup never records a NULL model
+    inside the dashboard_truth attribution window."""
     session_id = "model-stop-003"
     acc_dir = tmp_path / ".dream-studio" / "state"
     acc_dir.mkdir(parents=True, exist_ok=True)
@@ -92,8 +95,9 @@ def test_stop_event_has_no_model_when_none_available(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     with patch("emitters.claude_code.emitter.get_or_create_session_id", return_value=session_id):
+        from core.telemetry.token_capture import MODEL_UNRESOLVED
         from emitters.claude_code.emitter import normalize_stop
 
         envelopes = normalize_stop({})
 
-    assert "model" not in envelopes[0].payload
+    assert envelopes[0].payload["model"] == MODEL_UNRESOLVED
