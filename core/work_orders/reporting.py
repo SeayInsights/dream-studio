@@ -48,22 +48,30 @@ def _operator_action_required(decision: dict[str, Any]) -> bool:
 def _load_eval_artifacts(
     work_order_id: str, *, storage_root: Path | str | None = None
 ) -> list[dict[str, Any]]:
-    eval_dir = work_order_dir(work_order_id, storage_root=storage_root) / "evals"
+    """Load a WO's eval artifacts from the packet store (WO-FILESDB-C3).
+
+    Reads kind='eval' rows (one per eval_type) from packets.db co-located with the
+    packet storage root — the authority-free packet system, never the Dream Studio
+    authority and never loose ``evals/<eval_type>.json`` files.
+    """
+    from core.work_orders.packet_store import list_packet_artifacts
+
     artifacts: list[dict[str, Any]] = []
-    if not eval_dir.is_dir():
-        return artifacts
-    for path in sorted(eval_dir.glob("*.json")):
+    for instance_key, content in list_packet_artifacts(
+        work_order_id, "eval", storage_root=storage_root
+    ):
+        ref = f"packet:{work_order_id}/eval/{instance_key}"
         try:
-            artifact = json.loads(path.read_text(encoding="utf-8"))
-            artifact["_path"] = str(path)
+            artifact = json.loads(content)
+            artifact["_path"] = ref
             artifacts.append(artifact)
         except json.JSONDecodeError:
             artifacts.append(
                 {
-                    "eval_type": path.stem,
+                    "eval_type": instance_key,
                     "pass_fail": "incomplete",
                     "observed_behavior": "eval artifact could not be parsed.",
-                    "_path": str(path),
+                    "_path": ref,
                 }
             )
     return artifacts
@@ -522,11 +530,17 @@ def generate_report(
         "report_path": str(report),
         "result_present": result_metadata is not None,
         "status": "reported" if result_metadata else validation.work_order.get("status"),
+        # WO-FILESDB-C3: eval artifacts live in the packet store (kind='eval'); a
+        # per-eval path is None (no disk file). Surface only real disk paths, if any.
         "eval_paths": [
-            str(report_eval_path),
-            *([str(next_eval_path)] if next_eval_path else []),
-            *[str(path) for path in handoff_eval_paths],
-            *[str(path) for path in operator_eval_paths],
+            str(p)
+            for p in [
+                report_eval_path,
+                next_eval_path,
+                *handoff_eval_paths,
+                *operator_eval_paths,
+            ]
+            if p is not None
         ],
         "evals": [
             report_eval,
