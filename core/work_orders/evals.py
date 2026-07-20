@@ -96,10 +96,6 @@ def _legacy_skill_prefixes() -> tuple[str, str]:
     return ("dream" "-studio" + ":", "d" "s" + ":")
 
 
-def _eval_dir(work_order_id: str, *, storage_root: Path | str | None = None) -> Path:
-    return work_order_dir(work_order_id, storage_root=storage_root) / "evals"
-
-
 def _approval_path(work_order_id: str, *, storage_root: Path | str | None = None) -> Path:
     return work_order_dir(work_order_id, storage_root=storage_root) / "approvals" / "approval.json"
 
@@ -128,20 +124,28 @@ def _write_eval(
     artifact: dict[str, Any],
     *,
     storage_root: Path | str | None = None,
-) -> Path:
+) -> None:
+    """Persist an eval artifact into the packet store (WO-FILESDB-C3).
+
+    The file-backed WO packet system is authority-free; its multi-instance evals are
+    stored in the packet store (``packets.db``, kind='eval', instance_key=<eval_type>)
+    co-located with the packet storage root — never in loose ``evals/<eval_type>.json``
+    files and never in the Dream Studio authority. Returns None (no disk path).
+    """
+    from core.work_orders.packet_store import set_packet_artifact
+
     work_order_id = str(artifact["linked_work_order_id"])
-    target_dir = _eval_dir(work_order_id, storage_root=storage_root)
-    target_dir.mkdir(parents=True, exist_ok=True)
-    target_path = target_dir / f"{artifact['eval_type']}.json"
-    tmp_path = target_dir / f".{artifact['eval_type']}.json.tmp"
-    tmp_path.write_text(json.dumps(artifact, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    tmp_path.replace(target_path)
-    _emit_eval_telemetry(artifact, target_path)
-    return target_path
+    eval_type = str(artifact["eval_type"])
+    payload = json.dumps(artifact, indent=2, sort_keys=True) + "\n"
+    set_packet_artifact(
+        work_order_id, "eval", payload, instance_key=eval_type, storage_root=storage_root
+    )
+    _emit_eval_telemetry(artifact, f"packet:{work_order_id}/eval/{eval_type}")
+    return None
 
 
-def _emit_eval_telemetry(artifact: dict[str, Any], target_path: Path) -> None:
-    """Best-effort dual-write for file-backed eval artifacts."""
+def _emit_eval_telemetry(artifact: dict[str, Any], target_ref: str) -> None:
+    """Best-effort dual-write telemetry for eval artifacts (ref: packet-store row)."""
 
     if os.environ.get(
         "DREAM_STUDIO_ENABLE_WORK_ORDER_EVAL_TELEMETRY"
@@ -151,7 +155,7 @@ def _emit_eval_telemetry(artifact: dict[str, Any], target_path: Path) -> None:
         from core.telemetry.emitters import TelemetryContext, emit_validation_result
 
         pass_fail = str(artifact.get("pass_fail", "unknown"))
-        evidence = [str(target_path), *[str(item) for item in artifact.get("evidence", [])]]
+        evidence = [target_ref, *[str(item) for item in artifact.get("evidence", [])]]
         emit_validation_result(
             validation_type=str(artifact.get("eval_type", "work_order_eval")),
             status=pass_fail,

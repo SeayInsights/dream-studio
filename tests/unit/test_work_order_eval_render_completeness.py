@@ -70,9 +70,19 @@ def test_render_creates_complete_eval_artifact_with_required_fields_for_codex_an
             storage_root=storage_root,
         )
 
+        from core.work_orders.packet_store import get_packet_artifact
+
         render_work_order(work_order_id, target=render_target, storage_root=storage_root)
-        eval_path = storage_root / work_order_id / "evals" / "work_order_render_completeness.json"
-        artifact = json.loads(eval_path.read_text(encoding="utf-8"))
+        # WO-FILESDB-C3: evals live in the packet store, not evals/*.json on disk.
+        assert not (storage_root / work_order_id / "evals").exists()
+        artifact = json.loads(
+            get_packet_artifact(
+                work_order_id,
+                "eval",
+                instance_key="work_order_render_completeness",
+                storage_root=storage_root,
+            )
+        )
         packet_path = storage_root / work_order_id / "rendered" / f"{render_target}.md"
         packet_text = packet_path.read_text(encoding="utf-8")
 
@@ -94,6 +104,8 @@ def test_render_completeness_eval_fails_with_explicit_missing_evidence(tmp_path)
     target.mkdir()
     storage_root = tmp_path / "store"
     packet_path = storage_root / "wo-eval-render-001" / "rendered" / "codex.md"
+    from core.work_orders.packet_store import get_packet_artifact
+
     artifact, path = create_render_completeness_eval(
         work_order=_work_order(target),
         target="codex",
@@ -101,7 +113,16 @@ def test_render_completeness_eval_fails_with_explicit_missing_evidence(tmp_path)
         packet_text="incomplete",
         storage_root=storage_root,
     )
-    stored = json.loads(path.read_text(encoding="utf-8"))
+    # WO-FILESDB-C3: stored in the packet store (path is None, no disk file).
+    assert path is None
+    stored = json.loads(
+        get_packet_artifact(
+            "wo-eval-render-001",
+            "eval",
+            instance_key="work_order_render_completeness",
+            storage_root=storage_root,
+        )
+    )
 
     assert artifact["pass_fail"] == "fail"
     assert stored["pass_fail"] == "fail"

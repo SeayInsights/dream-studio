@@ -197,11 +197,15 @@ def render_work_order(
         storage_root=storage_root,
     )
 
+    # WO-FILESDB-C3: eval artifacts live in the packet store (kind='eval'); the
+    # per-eval path is None (no disk file). Surface only real disk paths, if any.
+    eval_paths = [str(p) for p in (render_eval_path, skill_eval_path) if p is not None]
+
     return {
         "work_order_id": work_order_id,
         "target": target,
         "packet_path": str(packet_path),
-        "eval_paths": [str(render_eval_path), str(skill_eval_path)],
+        "eval_paths": eval_paths,
         "evals": [render_eval, skill_eval],
         "status": "rendered",
     }

@@ -147,10 +147,29 @@ def test_cli_render_writes_packet_and_eval_artifacts_without_target_mutation(tmp
     assert "target: codex" in render.stdout
     assert "status: rendered" in status.stdout
     assert (storage_root / "wo-render-cli-001" / "rendered" / "codex.md").is_file()
+    # WO-FILESDB-C3: evals live in the authority-free packet store (packets.db), not
+    # loose evals/*.json files, and never in the Dream Studio authority (studio.db).
+    from core.work_orders.packet_store import get_packet_artifact
+
+    assert not (storage_root / "wo-render-cli-001" / "evals").exists()
     assert (
-        storage_root / "wo-render-cli-001" / "evals" / "work_order_render_completeness.json"
-    ).is_file()
-    assert (storage_root / "wo-render-cli-001" / "evals" / "skill_identifier_safety.json").is_file()
+        get_packet_artifact(
+            "wo-render-cli-001",
+            "eval",
+            instance_key="work_order_render_completeness",
+            storage_root=storage_root,
+        )
+        is not None
+    )
+    assert (
+        get_packet_artifact(
+            "wo-render-cli-001",
+            "eval",
+            instance_key="skill_identifier_safety",
+            storage_root=storage_root,
+        )
+        is not None
+    )
     assert _snapshot(target) == before
     assert not (fake_home / ".dream-studio" / "state" / "studio.db").exists()
 
@@ -219,10 +238,28 @@ def test_cli_record_result_and_report_write_file_backed_artifacts(tmp_path) -> N
     assert (storage_root / "wo-report-cli-001" / "results" / "result.md").is_file()
     assert (storage_root / "wo-report-cli-001" / "results" / "result.json").is_file()
     assert (storage_root / "wo-report-cli-001" / "report.md").is_file()
-    assert (storage_root / "wo-report-cli-001" / "evals" / "observe_only_compliance.json").is_file()
+    # WO-FILESDB-C3: evals live in the authority-free packet store (packets.db).
+    from core.work_orders.packet_store import get_packet_artifact
+
+    assert not (storage_root / "wo-report-cli-001" / "evals").exists()
     assert (
-        storage_root / "wo-report-cli-001" / "evals" / "result_report_completeness.json"
-    ).is_file()
+        get_packet_artifact(
+            "wo-report-cli-001",
+            "eval",
+            instance_key="observe_only_compliance",
+            storage_root=storage_root,
+        )
+        is not None
+    )
+    assert (
+        get_packet_artifact(
+            "wo-report-cli-001",
+            "eval",
+            instance_key="result_report_completeness",
+            storage_root=storage_root,
+        )
+        is not None
+    )
     assert _snapshot(target) == before
     assert not (fake_home / ".dream-studio" / "state" / "studio.db").exists()
 
