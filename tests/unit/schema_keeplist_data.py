@@ -121,8 +121,8 @@ CLASSIFICATION: dict[str, str] = {
     "raw_planning_specs": "DROP",
     "raw_pulse_snapshots": "DROP",
     "raw_research": "DROP",  # Dropped migration 131: dead writers insert_research()/_store_research(), test-only callers
-    "raw_runtime_state": "KEEP",  # Added migration 146 (WO-FILESDB-P2): active_skill/active_task/platform singleton JSON moved off ~/.dream-studio/state/*.json into key->JSON rows
-    "raw_session_token_accumulators": "KEEP",  # Added migration 145 (WO-FILESDB-P2): per-session token running totals moved off session-tokens-<sid>.json disk files
+    "raw_runtime_state": "DROP",  # Created migration 146, DROPPED migration 150 (WO-FILESDB-REVET): ds_config duplicate (identical key/value/updated_at); runtime.* singletons live in ds_config
+    "raw_session_token_accumulators": "DROP",  # Created migration 145, DROPPED migration 151 (WO-FILESDB-REVET): denormalized SUM of token.consumed (verified noise); session totals derive from token.consumed via DuckDB
     "raw_sentinels": "KEEP",
     "raw_sessions": "KEEP",  # Read-WRITE session-lifecycle authority, NOT a read-model:
     #                          end_session() UPDATEs ended_at/duration_s/outcome; record_session()

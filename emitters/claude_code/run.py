@@ -158,14 +158,14 @@ def main() -> int:
         from emitters.claude_code.emitter import (
             normalize_post_compact,
             normalize_post_tool_use,
-            normalize_stop,
             normalize_user_prompt_submit,
         )
         from emitters.shared.spool_writer import write_envelopes
 
+        # Stop no longer emits a token rollup (WO-FILESDB-REVET retired the
+        # token.consumption.recorded accumulator; session totals derive from token.consumed).
         event_map = {
             "UserPromptSubmit": normalize_user_prompt_submit,
-            "Stop": normalize_stop,
             "PostToolUse": normalize_post_tool_use,
             "PostCompact": normalize_post_compact,
         }

@@ -34,72 +34,13 @@ def normalize_user_prompt_submit(
     ]
 
 
-def _read_session_accumulator(session_id: str) -> dict[str, Any]:
-    """Read per-session token totals written by token_capture after each tool call.
-
-    WO-FILESDB-P2: prefer the authority table; fall back to the legacy JSON file
-    when raw_session_token_accumulators is absent (migration 145 unreleased).
-    """
-    import json as _json
-
-    try:
-        from core.telemetry.session_accumulator import db_read_accumulator
-
-        acc = db_read_accumulator(session_id)
-        if acc is not None:
-            return acc
-    except Exception:
-        pass
-
-    acc_path = Path.home() / ".dream-studio" / "state" / f"session-tokens-{session_id}.json"
-    try:
-        return _json.loads(acc_path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, ValueError, OSError):
-        return {}
-
-
-def normalize_stop(
-    payload: dict[str, Any], root: Path | None = None
-) -> list[CanonicalEventEnvelope]:
-    session_id = get_or_create_session_id(root)
-    confidence = "exact" if session_id is not None else "unavailable"
-    usage = payload.get("usage", {})
-    token_payload: dict[str, Any] = {}
-    for key in (
-        "input_tokens",
-        "output_tokens",
-        "cache_creation_input_tokens",
-        "cache_read_input_tokens",
-    ):
-        val = usage.get(key) if usage else payload.get(key)
-        if val is not None:
-            token_payload[key] = val
-    # Claude Code's Stop payload carries no usage field — fall back to the
-    # per-session accumulator written by token_capture after each tool call.
-    if not token_payload and session_id:
-        token_payload = _read_session_accumulator(session_id)
-    # Stamp the model so the cost view can price this turn (estimated_cost is
-    # NULL for modelless rows — never fabricated). Prefer the model captured in
-    # the accumulator (persisted by token_capture), else recover it from the
-    # Stop payload's transcript_path via the same resolver token_capture uses.
-    if token_payload and "model" not in token_payload:
-        from core.telemetry.token_capture import _resolve_model, MODEL_UNRESOLVED
-
-        acc = _read_session_accumulator(session_id) if session_id else {}
-        # WO-e2c30936: stamp the sentinel rather than omit the key when the model is
-        # unresolvable, so a token.consumption.recorded rollup that carries usage never
-        # records a NULL model inside the dashboard_truth attribution window.
-        token_payload["model"] = acc.get("model") or _resolve_model(payload) or MODEL_UNRESOLVED
-    return [
-        CanonicalEventEnvelope(
-            event_type=EventType.TOKEN_CONSUMPTION_RECORDED.value,
-            session_id=session_id,
-            confidence=confidence,
-            payload=token_payload,
-            project_id=get_active_project_id(_get_db_path()),
-            trace={"domain": "telemetry"},
-        )
-    ]
+# WO-FILESDB-REVET: the Stop-event token rollup (normalize_stop -> token.consumption.recorded)
+# and its raw_session_token_accumulators backing were RETIRED. They were a denormalized
+# per-session total of the per-tool token.consumed events — verified noise (~2,300 near-empty
+# rollup events carrying ~4k tokens, vs the real 9.2M-token cost already in token.consumed).
+# Session totals now derive from token.consumed via the DuckDB token_usage_records view; there
+# is no accumulator table, no session-tokens-*.json disk fallback, and no Stop token event.
+# (token.consumption.recorded stays in the EventType enum for the historical rows only.)
 
 
 # WO-AGENT-TELEMETRY: a Task tool call IS a subagent invocation. Claude Code's

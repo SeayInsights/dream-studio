@@ -1,8 +1,12 @@
-"""WO-FILESDB-P2 task 2: singleton runtime-state JSON moved into raw_runtime_state.
+"""WO-FILESDB-P2 / WO-FILESDB-REVET: singleton runtime-state JSON in ds_config.
 
-Covers the authority store (db_write/read/clear_runtime_state) and proves a
-repointed caller (platform) uses the authority row for the pure default, while
-still falling back to the legacy JSON file when the table is absent.
+Runtime-state singletons (active_skill/active_task/platform) are stored in the
+pre-existing ds_config table under a `runtime.` key namespace (the dedicated
+raw_runtime_state table was a ds_config duplicate, dropped in migration 150).
+
+Covers the store (db_write/read/clear_runtime_state) and proves a repointed caller
+(platform) uses the authority row for the pure default, while still falling back to
+the legacy JSON file when ds_config is absent.
 """
 
 from __future__ import annotations
@@ -18,9 +22,9 @@ from core.runtime_state import (
     db_write_runtime_state,
 )
 
-# Mirrors core/event_store/migrations/146_runtime_state.sql
+# runtime-state singletons live in the pre-existing ds_config (key, value, updated_at).
 _CREATE = (
-    "CREATE TABLE IF NOT EXISTS raw_runtime_state ("
+    "CREATE TABLE IF NOT EXISTS ds_config ("
     " key TEXT PRIMARY KEY, value TEXT NOT NULL,"
     " updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')))"
 )
@@ -57,10 +61,10 @@ def test_runtime_state_roundtrip_and_clear(tmp_path: Path) -> None:
 
 
 def test_absent_table_is_falsey_fallback(tmp_path: Path) -> None:
-    """With the table absent (migration 146 unreleased), the store degrades so the
-    caller falls back to the legacy JSON file."""
+    """With ds_config absent, the store degrades so the caller falls back to the
+    legacy JSON file."""
     db = tmp_path / "studio.db"
-    sqlite3.connect(str(db)).close()  # empty DB, no raw_runtime_state
+    sqlite3.connect(str(db)).close()  # empty DB, no ds_config
 
     assert db_write_runtime_state("platform", {"os_name": "Linux"}, db_path=db) is False
     assert db_read_runtime_state("platform", db_path=db) is None
