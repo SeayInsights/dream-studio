@@ -135,8 +135,19 @@ def test_decision_cli_creates_shows_and_records_decision(tmp_path) -> None:
     assert "operator_decision_recorded: wo-decision-cli-001" in decide.stdout
     assert "decision_status: decided" in show_decided.stdout
     assert "decision: RUN_BROADER_VALIDATION_FIRST" in show_decided.stdout
-    assert (storage_root / "wo-decision-cli-001" / "decisions" / "request.json").is_file()
-    assert (storage_root / "wo-decision-cli-001" / "decisions" / "operator_decision.json").is_file()
+    # WO-FILESDB-C4: decisions live in the authority-free packet store (packets.db),
+    # not loose decisions/*.json, and never in the Dream Studio authority (studio.db).
+    from core.work_orders.packet_store import get_packet_artifact
+
+    assert not (storage_root / "wo-decision-cli-001" / "decisions").exists()
+    assert (
+        get_packet_artifact("wo-decision-cli-001", "decision_request", storage_root=storage_root)
+        is not None
+    )
+    assert (
+        get_packet_artifact("wo-decision-cli-001", "operator_decision", storage_root=storage_root)
+        is not None
+    )
     assert _snapshot(target) == before
     assert not (fake_home / ".dream-studio" / "state" / "studio.db").exists()
 

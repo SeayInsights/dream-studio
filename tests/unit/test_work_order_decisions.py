@@ -65,7 +65,11 @@ def test_create_decision_request_for_push_planning(tmp_path) -> None:
         "FAIL",
     ]
     assert status["status"] == "pending_operator_decision"
-    assert (storage_root / "wo-decision-001" / "decisions" / "request.json").is_file()
+    # WO-FILESDB-C4: decisions live in the authority-free packet store, not decisions/*.json.
+    from core.work_orders.packet_store import get_packet_artifact
+
+    assert not (storage_root / "wo-decision-001" / "decisions").exists()
+    assert get_packet_artifact("wo-decision-001", "decision_request", storage_root=storage_root)
     assert _snapshot(target) == before
     assert not (tmp_path / "home" / ".dream-studio" / "state" / "studio.db").exists()
 
@@ -102,7 +106,10 @@ def test_valid_operator_decision_records_file_backed_artifact(tmp_path) -> None:
     assert decision["decision"] == "RUN_BROADER_VALIDATION_FIRST"
     assert decision["approved_next_handoff_type"] == "normal_next_work_order"
     assert status["status"] == "decided"
-    assert (storage_root / "wo-decision-001" / "decisions" / "operator_decision.json").is_file()
+    # WO-FILESDB-C4: operator decision lives in the packet store, not on disk.
+    from core.work_orders.packet_store import get_packet_artifact
+
+    assert get_packet_artifact("wo-decision-001", "operator_decision", storage_root=storage_root)
 
 
 def test_invalid_decision_fails(tmp_path) -> None:
