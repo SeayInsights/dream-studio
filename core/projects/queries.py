@@ -45,6 +45,13 @@ def get_project_list(
                 "SELECT project_id, name, description, status, created_at FROM business_projects"
                 " ORDER BY created_at DESC",
             ).fetchall()
+        elif status_filter == "all":
+            # WO-PROJECT-REG-HARDENING: 'all' means every non-deleted status
+            # (active/paused/archived); --include-deleted adds the deleted rows.
+            rows = conn.execute(
+                "SELECT project_id, name, description, status, created_at FROM business_projects"
+                " WHERE status != 'deleted' ORDER BY created_at DESC",
+            ).fetchall()
         else:
             rows = conn.execute(
                 "SELECT project_id, name, description, status, created_at FROM business_projects"
@@ -155,6 +162,45 @@ def get_next_work_order(
     }
 
 
+def _match_cwd_project(conn: Any, cwd: Path) -> dict[str, Any] | None:
+    """Return {project_id, name, project_path} for the registered project whose
+    project_path contains ``cwd`` (longest match, active preferred), else None.
+
+    Mirrors runtime.lib.enforcement.match_registered_project but runs against the
+    passed connection so it honors the resolved (possibly test) authority DB. This
+    lets project-state/resume tell whether the current repo is a registered project
+    or an unregistered brownfield candidate (WO-BROWNFIELD-DETECT).
+    """
+    try:
+        cwd_res = Path(cwd).resolve()
+    except Exception:
+        return None
+    try:
+        rows = conn.execute(
+            "SELECT project_id, name, status, project_path FROM business_projects"
+            " WHERE status IN ('active', 'paused') AND project_path IS NOT NULL"
+        ).fetchall()
+    except Exception:
+        return None
+    candidates: list[tuple[bool, int, int, Any]] = []
+    for i, row in enumerate(rows):
+        try:
+            root = Path(row["project_path"]).resolve()
+            cwd_res.relative_to(root)  # ValueError if cwd is not under root
+        except (ValueError, OSError):
+            continue
+        # active preferred (False sorts first), then longest project_path; i breaks ties.
+        candidates.append((row["status"] != "active", -len(str(root)), i, row))
+    if not candidates:
+        return None
+    best = min(candidates)[3]
+    return {
+        "project_id": best["project_id"],
+        "name": best["name"],
+        "project_path": best["project_path"],
+    }
+
+
 def get_project_state(
     *,
     source_root: Path,
@@ -174,15 +220,41 @@ def get_project_state(
             " ORDER BY updated_at DESC"
         ).fetchall()
 
-        if not projects_raw:
+        # Is the current repo a registered project, or an unregistered brownfield
+        # candidate? (WO-BROWNFIELD-DETECT) — lets resume answer directly instead
+        # of narrating the globally-active project.
+        cwd_project = _match_cwd_project(conn, source_root)
+        cwd_fields = {"cwd_registered": cwd_project is not None, "cwd_project": cwd_project}
+
+        # cwd-first ordering (WO-PROJECT-REG-HARDENING task 3): the project resolved
+        # from the current repo comes first — even if it is paused — so working repo
+        # B surfaces B's state rather than the globally-active project A. Then the
+        # active projects in their existing order.
+        to_process: list[Any] = []
+        seen_ids: set[str] = set()
+        if cwd_project is not None:
+            cwd_row = conn.execute(
+                "SELECT project_id, name, status FROM business_projects WHERE project_id = ?",
+                (cwd_project["project_id"],),
+            ).fetchone()
+            if cwd_row is not None:
+                to_process.append(cwd_row)
+                seen_ids.add(cwd_row["project_id"])
+        for proj in projects_raw:
+            if proj["project_id"] not in seen_ids:
+                to_process.append(proj)
+                seen_ids.add(proj["project_id"])
+
+        if not to_process:
             return {
                 "ok": True,
                 "projects": [],
                 "next_action": "No active projects. Run `ds-project scope` to scope a new one.",
+                **cwd_fields,
             }
 
         result_projects: list[dict[str, Any]] = []
-        for proj in projects_raw:
+        for proj in to_process:
             pid = proj["project_id"]
 
             wo_row = conn.execute(
@@ -337,4 +409,4 @@ def get_project_state(
                 }
             )
 
-    return {"ok": True, "projects": result_projects}
+    return {"ok": True, "projects": result_projects, **cwd_fields}

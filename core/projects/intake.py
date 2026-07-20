@@ -104,7 +104,42 @@ def register_project_for_intake(
     resolved = Path(target_path).resolve()
     name = project_name or resolved.name
 
-    result = register_project(
+    # WO-PROJECT-REG-HARDENING: idempotency — reuse an existing non-deleted
+    # registration for this path instead of minting a duplicate project (prefer
+    # active over paused, most-recent first). Re-running intake on an already
+    # registered/marked repo must not create a new business_projects row.
+    from core.projects.mutations import _write_project_marker
+    from core.projects.queries import _require_db
+
+    db_path = _require_db(source_root, dream_studio_home)
+    with _connect(db_path) as conn:
+        existing = conn.execute(
+            "SELECT project_id, name, status, created_at FROM business_projects"
+            " WHERE project_path = ? AND status != 'deleted'"
+            " ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END,"
+            " updated_at DESC LIMIT 1",
+            (str(resolved),),
+        ).fetchone()
+    if existing is not None:
+        if write_marker:
+            _write_project_marker(
+                resolved,
+                existing["project_id"],
+                existing["name"],
+                existing["created_at"],
+                db_path=db_path,
+            )
+        return {
+            "ok": True,
+            "project_id": existing["project_id"],
+            "name": existing["name"],
+            "status": existing["status"],
+            "project_path": str(resolved),
+            "reused": True,
+            "message": f"Reused existing registration for {resolved}",
+        }
+
+    return register_project(
         name=name,
         description=f"Brownfield intake: {resolved}",
         project_path=resolved,
@@ -112,7 +147,6 @@ def register_project_for_intake(
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
-    return result
 
 
 # ── Phase 3: Stack detection ──────────────────────────────────────────────────

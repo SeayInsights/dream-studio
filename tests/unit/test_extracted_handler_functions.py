@@ -137,6 +137,107 @@ def test_get_project_state_returns_empty_projects_when_none_active(
     assert "No active projects" in result["next_action"]
 
 
+def test_get_project_state_reports_cwd_registration(
+    patched_paths, db_path: Path, tmp_path: Path
+) -> None:
+    # WO-BROWNFIELD-DETECT: state reports whether the current repo (source_root) is
+    # a registered project, independent of the globally-active project — so resume
+    # can answer "this repo isn't registered" and offer brownfield.
+    from core.projects.queries import get_project_state
+
+    repo = tmp_path / "myrepo"
+    repo.mkdir()
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, project_path, created_at, updated_at)"
+        " VALUES ('p-reg', 'My Repo', '', 'active', ?, ?, ?)",
+        (str(repo.resolve()), NOW, NOW),
+    )
+    conn.commit()
+    conn.close()
+
+    reg = get_project_state(source_root=repo, dream_studio_home=tmp_path)
+    assert reg["cwd_registered"] is True
+    assert reg["cwd_project"]["project_id"] == "p-reg"
+
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    unreg = get_project_state(source_root=other, dream_studio_home=tmp_path)
+    assert unreg["cwd_registered"] is False
+    assert unreg["cwd_project"] is None
+
+
+def test_get_project_list_status_all_returns_non_deleted(
+    patched_paths, db_path: Path, tmp_path: Path
+) -> None:
+    # WO-PROJECT-REG-HARDENING: `--status all` returns every non-deleted status,
+    # not [] (the old `WHERE status = 'all'` matched nothing).
+    from core.projects.queries import get_project_list
+
+    for pid, st in [("a", "active"), ("p", "paused"), ("ar", "archived"), ("d", "deleted")]:
+        _seed_project(db_path, project_id=pid, status=st)
+
+    result = get_project_list(
+        status_filter="all", source_root=REPO_ROOT, dream_studio_home=tmp_path
+    )
+    ids = {p["project_id"] for p in result["projects"]}
+    assert ids == {"a", "p", "ar"}, ids  # excludes deleted
+
+
+def test_get_project_state_cwd_first_prefers_current_repo(
+    patched_paths, db_path: Path, tmp_path: Path
+) -> None:
+    # WO-PROJECT-REG-HARDENING task 3: working repo B surfaces B's state even when a
+    # different project A is the globally-active pointer and B itself is paused.
+    from core.projects.queries import get_project_state
+
+    _seed_project(db_path, project_id="A", name="Active A", status="active")
+    repo_b = tmp_path / "repo_b"
+    repo_b.mkdir()
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, project_path, created_at, updated_at)"
+        " VALUES ('B', 'Repo B', '', 'paused', ?, ?, ?)",
+        (str(repo_b.resolve()), NOW, NOW),
+    )
+    conn.commit()
+    conn.close()
+
+    result = get_project_state(source_root=repo_b, dream_studio_home=tmp_path)
+    assert result["projects"][0]["project_id"] == "B"
+    assert result["cwd_project"]["project_id"] == "B"
+
+
+def test_register_project_for_intake_is_idempotent_by_path(
+    patched_paths, db_path: Path, tmp_path: Path
+) -> None:
+    # WO-PROJECT-REG-HARDENING: re-running intake on the same path reuses the
+    # existing registration instead of minting a duplicate business_projects row.
+    from core.projects.intake import register_project_for_intake
+
+    repo = tmp_path / "brownfield_repo"
+    repo.mkdir()
+
+    first = register_project_for_intake(repo, source_root=REPO_ROOT, dream_studio_home=tmp_path)
+    second = register_project_for_intake(repo, source_root=REPO_ROOT, dream_studio_home=tmp_path)
+
+    assert first["ok"] and second["ok"]
+    assert second["project_id"] == first["project_id"]
+    assert second.get("reused") is True
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM business_projects WHERE project_path = ?",
+            (str(repo.resolve()),),
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert count == 1, f"expected exactly one registration, got {count}"
+
+
 # ── core.projects.mutations ───────────────────────────────────────────────────
 
 

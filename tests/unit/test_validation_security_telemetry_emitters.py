@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from control.analysis.bugs import _emit_security_bug_telemetry
+from control.analysis.bugs import _emit_security_bug_telemetry, _store_bugs
 from core.event_store.studio_db import _connect
 from core.telemetry.emitters import (
     MODE_STRICT,
@@ -194,6 +194,52 @@ def test_legacy_security_bug_bridge_dual_writes_finding(tmp_path: Path, monkeypa
         assert row["line_number"] == 44
     finally:
         conn.close()
+
+
+def test_store_bugs_persists_all_categories_not_just_security(tmp_path: Path, monkeypatch) -> None:
+    # WO-PI-BUGS-REPOINT: _store_bugs no longer writes the removed pi_bugs table;
+    # every finding (security AND non-security) is persisted to security_events,
+    # so non-security bugs are not dropped.
+    db_path = _db(tmp_path)
+    monkeypatch.setenv("DREAM_STUDIO_TELEMETRY_DB", str(db_path))
+
+    _store_bugs(
+        [
+            {
+                "type": "security_flaw",
+                "pattern": "sql_injection",
+                "category": "security",
+                "severity": "critical",
+                "file": "a.py",
+                "line": 1,
+                "issue": "SQLi",
+            },
+            {
+                "type": "logic_error",
+                "pattern": "null_deref",
+                "category": "logic",
+                "severity": "high",
+                "file": "b.py",
+                "line": 2,
+                "issue": "Null deref",
+            },
+        ]
+    )
+
+    conn = _connect(db_path)
+    try:
+        vuln_classes = {
+            r["vuln_class"]
+            for r in conn.execute(
+                "SELECT vuln_class FROM security_events WHERE event_kind = 'finding.recorded'"
+            ).fetchall()
+        }
+    finally:
+        conn.close()
+    assert vuln_classes == {
+        "sql_injection",
+        "null_deref",
+    }, f"both findings must persist (non-security not dropped); got {vuln_classes}"
 
 
 def test_validation_and_security_emitters_best_effort_failure_does_not_raise(
