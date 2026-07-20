@@ -171,6 +171,8 @@ These are **not abstracted** — they're passed directly to the orchestrating ag
 
 <!-- Last reviewed 2026-05-28 — Phase 18.4.5: on-memory-ingest added to Stop HANDLERS (position 10). No workflow engine change — this is a hook addition, not a workflow template or execution graph change. Hook doc updates in docs/HOOK_RUNTIME.md. -->
 
+<!-- Last reviewed 2026-07-19 — WO-HOOK-ENFORCE-EXEC-STATS (d1150c16): the on-edit-enforce (PreToolUse) and on-stop-enforce (Stop) hooks now best-effort emit system.hook.execution.logged so they appear in the DuckDB hook_executions view. No workflow engine, template, or execution-graph change — this is a hook-telemetry addition; full detail in docs/HOOK_RUNTIME.md. -->
+
 
 <!-- Last reviewed 2026-05-20 — repo-wide `py -m black .` formatting applied; no behavior or policy change required here. -->
 
