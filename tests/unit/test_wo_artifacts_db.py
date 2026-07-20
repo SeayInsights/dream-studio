@@ -14,13 +14,16 @@ from core.work_orders.artifacts import get_wo_artifact, has_wo_artifact, set_wo_
 from core.work_orders.close import run_gate_check
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-_MIGRATION = REPO_ROOT / "core" / "event_store" / "migrations" / "144_wo_artifacts.sql"
+_MIG_DIR = REPO_ROOT / "core" / "event_store" / "migrations"
+_MIG_144 = _MIG_DIR / "144_wo_artifacts.sql"
+_MIG_152 = _MIG_DIR / "152_wo_artifacts_instance_key.sql"
 
 
 def _db_with_table(tmp_path: Path) -> Path:
     db = tmp_path / "studio.db"
     conn = sqlite3.connect(str(db))
-    conn.executescript(_MIGRATION.read_text(encoding="utf-8"))  # exercises the real DDL
+    conn.executescript(_MIG_144.read_text(encoding="utf-8"))  # exercises the real DDL
+    conn.executescript(_MIG_152.read_text(encoding="utf-8"))  # instance_key + extended kinds
     conn.close()
     return db
 
@@ -153,3 +156,53 @@ def test_backfill_migrates_planning_artifacts(tmp_path):
     assert written == 3
     assert get_wo_artifact("wo-7", "api_contract", db_path=db) == "# contract"
     assert get_wo_artifact("wo-7", "review_verdict", db_path=db) == '{"passed": true}'
+
+
+# ── WO-FILESDB-C1: instance_key (multi-instance) + extended kinds ──────────────
+
+
+def test_multi_instance_evals_coexist_by_instance_key(tmp_path):
+    """kind='eval' rows are keyed by instance_key (eval_type) and coexist per WO."""
+    from core.work_orders.artifacts import list_wo_artifacts
+
+    db = _db_with_table(tmp_path)
+    assert set_wo_artifact(
+        "wo-e", "eval", '{"a":1}', instance_key="render_completeness", db_path=db
+    )
+    assert set_wo_artifact(
+        "wo-e", "eval", '{"b":2}', instance_key="skill_identifier_safety", db_path=db
+    )
+    # Distinct instance_keys are distinct rows.
+    assert (
+        get_wo_artifact("wo-e", "eval", instance_key="render_completeness", db_path=db) == '{"a":1}'
+    )
+    assert (
+        get_wo_artifact("wo-e", "eval", instance_key="skill_identifier_safety", db_path=db)
+        == '{"b":2}'
+    )
+    # Upsert replaces same (kind, instance_key).
+    set_wo_artifact("wo-e", "eval", '{"a":9}', instance_key="render_completeness", db_path=db)
+    listed = list_wo_artifacts("wo-e", "eval", db_path=db)
+    assert listed == [("render_completeness", '{"a":9}'), ("skill_identifier_safety", '{"b":2}')]
+
+
+def test_singleton_uses_default_empty_instance_key(tmp_path):
+    db = _db_with_table(tmp_path)
+    set_wo_artifact("wo-s", "context", "ctx", db_path=db)
+    assert get_wo_artifact("wo-s", "context", db_path=db) == "ctx"
+    assert get_wo_artifact("wo-s", "context", instance_key="", db_path=db) == "ctx"
+
+
+def test_extended_kinds_accepted(tmp_path):
+    db = _db_with_table(tmp_path)
+    for kind in ("operator_decision", "decision_request", "escalation", "report", "eval"):
+        assert set_wo_artifact("wo-k", kind, "x", db_path=db) is True
+        assert get_wo_artifact("wo-k", kind, db_path=db) == "x"
+
+
+def test_unknown_kind_rejected(tmp_path):
+    import pytest
+
+    db = _db_with_table(tmp_path)
+    with pytest.raises(ValueError):
+        set_wo_artifact("wo-x", "bogus_kind", "x", db_path=db)

@@ -18,6 +18,8 @@ from core.config import paths
 _TABLE = "business_work_order_artifacts"
 
 # Artifact kind -> legacy .planning filename (disk fallback + backfill mapping).
+# Only the WO-FILESDB-P1 ceremony kinds have a single-file .planning mapping; the
+# newer kinds (WO-FILESDB-C*) are authority-only.
 KIND_TO_FILENAME: dict[str, str] = {
     "api_contract": "api-contract.md",
     "security_scan": "security-scan.md",
@@ -26,16 +28,43 @@ KIND_TO_FILENAME: dict[str, str] = {
     "context": "context.md",
 }
 
+# All kinds accepted by the table's CHECK constraint (migration 152). Singleton kinds
+# use the default instance_key=''; multi-instance kinds (eval) key each row by
+# instance_key (e.g. the eval_type). Keep in sync with 152's CHECK.
+VALID_KINDS: frozenset[str] = frozenset(
+    {
+        "api_contract",
+        "security_scan",
+        "design_audit",
+        "review_verdict",
+        "context",
+        "operator_decision",
+        "decision_request",
+        "escalation",
+        "report",
+        "eval",
+    }
+)
+
 
 def _resolve_db(db_path: Path | None) -> Path:
     return db_path or (paths.state_dir() / "studio.db")
 
 
 def set_wo_artifact(
-    work_order_id: str, kind: str, content: str, *, db_path: Path | None = None
+    work_order_id: str,
+    kind: str,
+    content: str,
+    *,
+    instance_key: str = "",
+    db_path: Path | None = None,
 ) -> bool:
-    """Upsert an artifact. Returns False (no-op) when the table is absent."""
-    if kind not in KIND_TO_FILENAME:
+    """Upsert an artifact. Returns False (no-op) when the table is absent.
+
+    Singleton artifacts use the default instance_key=''; multi-instance kinds
+    (e.g. ``eval``) pass instance_key (e.g. the eval_type) so each coexists.
+    """
+    if kind not in VALID_KINDS:
         raise ValueError(f"unknown artifact kind: {kind!r}")
     now = datetime.now(UTC).isoformat()
     try:
@@ -44,11 +73,12 @@ def set_wo_artifact(
         return False
     try:
         conn.execute(
-            f"INSERT INTO {_TABLE} (work_order_id, kind, content, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, ?)"
-            " ON CONFLICT(work_order_id, kind) DO UPDATE SET"
+            f"INSERT INTO {_TABLE}"
+            " (work_order_id, kind, instance_key, content, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)"
+            " ON CONFLICT(work_order_id, kind, instance_key) DO UPDATE SET"
             " content=excluded.content, updated_at=excluded.updated_at",
-            (work_order_id, kind, content, now, now),
+            (work_order_id, kind, instance_key, content, now, now),
         )
         conn.commit()
         return True
@@ -58,7 +88,9 @@ def set_wo_artifact(
         conn.close()
 
 
-def get_wo_artifact(work_order_id: str, kind: str, *, db_path: Path | None = None) -> str | None:
+def get_wo_artifact(
+    work_order_id: str, kind: str, *, instance_key: str = "", db_path: Path | None = None
+) -> str | None:
     """Return the stored artifact content, or None if absent / table missing."""
     try:
         conn = sqlite3.connect(str(_resolve_db(db_path)))
@@ -66,8 +98,8 @@ def get_wo_artifact(work_order_id: str, kind: str, *, db_path: Path | None = Non
         return None
     try:
         row = conn.execute(
-            f"SELECT content FROM {_TABLE} WHERE work_order_id=? AND kind=?",
-            (work_order_id, kind),
+            f"SELECT content FROM {_TABLE} WHERE work_order_id=? AND kind=? AND instance_key=?",
+            (work_order_id, kind, instance_key),
         ).fetchone()
         return row[0] if row else None
     except sqlite3.OperationalError:
@@ -76,8 +108,34 @@ def get_wo_artifact(work_order_id: str, kind: str, *, db_path: Path | None = Non
         conn.close()
 
 
-def has_wo_artifact(work_order_id: str, kind: str, *, db_path: Path | None = None) -> bool:
-    return get_wo_artifact(work_order_id, kind, db_path=db_path) is not None
+def has_wo_artifact(
+    work_order_id: str, kind: str, *, instance_key: str = "", db_path: Path | None = None
+) -> bool:
+    return (
+        get_wo_artifact(work_order_id, kind, instance_key=instance_key, db_path=db_path) is not None
+    )
+
+
+def list_wo_artifacts(
+    work_order_id: str, kind: str, *, db_path: Path | None = None
+) -> list[tuple[str, str]]:
+    """Return ``[(instance_key, content), ...]`` for all rows of a kind (e.g. every
+    eval stage for a WO), ordered by instance_key. Empty when absent / table missing."""
+    try:
+        conn = sqlite3.connect(str(_resolve_db(db_path)))
+    except sqlite3.Error:
+        return []
+    try:
+        rows = conn.execute(
+            f"SELECT instance_key, content FROM {_TABLE}"
+            " WHERE work_order_id=? AND kind=? ORDER BY instance_key",
+            (work_order_id, kind),
+        ).fetchall()
+        return [(r[0], r[1]) for r in rows]
+    except sqlite3.OperationalError:
+        return []
+    finally:
+        conn.close()
 
 
 def backfill_wo_artifacts(planning_root: Path, *, db_path: Path | None = None) -> int:

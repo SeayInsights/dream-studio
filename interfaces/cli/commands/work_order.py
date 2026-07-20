@@ -104,6 +104,29 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
     )
     wo_executor.add_argument("work_order_id", help="Work order UUID")
 
+    wo_artifact = work_order_sub.add_parser(
+        "artifact", help="Print a stored WO artifact from the authority (no disk read)"
+    )
+    wo_artifact.add_argument("work_order_id", help="Work order UUID")
+    wo_artifact.add_argument("kind", help="Artifact kind (e.g. api_contract, review_verdict, eval)")
+    wo_artifact.add_argument(
+        "--instance",
+        dest="instance_key",
+        default="",
+        help="instance_key for multi-instance kinds (e.g. the eval_type); default '' (singleton)",
+    )
+
+    wo_packet = work_order_sub.add_parser(
+        "packet", help="Render a WO execution packet on demand (prints to stdout, no disk cache)"
+    )
+    wo_packet.add_argument("work_order_id", help="Work order UUID")
+    wo_packet.add_argument(
+        "--target", required=True, choices=("claude", "codex"), help="Render target adapter"
+    )
+    wo_packet.add_argument(
+        "--storage-root", dest="storage_root", default=None, help="File-backed WO storage root"
+    )
+
 
 # ---------------------------------------------------------------------------
 # Dispatch
@@ -209,6 +232,21 @@ def dispatch(
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )
+    if args.work_order_command == "artifact":
+        return _work_order_artifact(
+            work_order_id=args.work_order_id,
+            kind=args.kind,
+            instance_key=getattr(args, "instance_key", ""),
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+    if args.work_order_command == "packet":
+        storage_root = Path(args.storage_root).resolve() if args.storage_root else None
+        return _work_order_packet(
+            work_order_id=args.work_order_id,
+            target=args.target,
+            storage_root=storage_root,
+        )
     print(f"Unknown work-order command: {args.work_order_command}", file=sys.stderr)
     return 1
 
@@ -247,6 +285,71 @@ def _work_order_executor(
         "escalation_level": (esc or {}).get("escalation_level", 0),
     }
     print(json.dumps(result, indent=2))
+    return 0
+
+
+def _work_order_artifact(
+    *,
+    work_order_id: str,
+    kind: str,
+    instance_key: str,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """Print a WO ceremony/eval artifact stored in the authority (WO-FILESDB-C1).
+
+    The operator/terminal read surface that replaces reading
+    ``.planning/work-orders/<id>/*`` files — artifacts live in
+    ``business_work_order_artifacts``, keyed by (work_order_id, kind, instance_key).
+    """
+    from core.installed_runtime import resolve_installed_runtime_paths
+    from core.work_orders.artifacts import VALID_KINDS, get_wo_artifact
+
+    if kind not in VALID_KINDS:
+        print(
+            f"Unknown artifact kind: {kind!r}. Valid: {', '.join(sorted(VALID_KINDS))}",
+            file=sys.stderr,
+        )
+        return 1
+    db_path = resolve_installed_runtime_paths(
+        source_root=source_root, dream_studio_home=dream_studio_home
+    ).sqlite_path
+    content = get_wo_artifact(work_order_id, kind, instance_key=instance_key, db_path=db_path)
+    if content is None:
+        label = f"{kind}" + (f" (instance={instance_key})" if instance_key else "")
+        print(f"No {label} artifact stored for work order {work_order_id}", file=sys.stderr)
+        return 1
+    print(content)
+    return 0
+
+
+def _work_order_packet(
+    *,
+    work_order_id: str,
+    target: str,
+    storage_root: Path | None,
+) -> int:
+    """Render a WO execution packet on demand and print it (WO-FILESDB-C1).
+
+    Derive-on-demand: the packet is rendered from the WO and printed to stdout —
+    no ``rendered/<target>.md`` disk cache is written (that write path is retired
+    in WO-FILESDB-C5). Reading the file-backed WO is a read, not a write.
+    """
+    from core.work_orders.models import WorkOrderError
+    from core.work_orders.renderers import render_packet_text
+    from core.work_orders.storage import load_work_order
+    from core.work_orders.validation import validate_work_order
+
+    try:
+        work_order, _ = load_work_order(work_order_id, storage_root=storage_root)
+    except WorkOrderError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    result = validate_work_order(work_order)
+    if not result.ok:
+        print(result.format(), file=sys.stderr)
+        return 1
+    print(render_packet_text(result.work_order, target))
     return 0
 
 
