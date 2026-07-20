@@ -175,6 +175,23 @@ def detect_and_persist_stack(
         "signals": [
             {"name": s.name, "confidence": s.confidence, "source": s.source} for s in result.signals
         ],
+        # WO-BROWNFIELD-ADAPTIVE: persist the detector's skill-dispatch signals so
+        # adaptive routing (core.projects.adaptive_routing) can recommend relevant
+        # ds-quality modes per repo.
+        "web_framework": result.web_framework,
+        "frontend_framework": result.frontend_framework,
+        "database_type": result.database_type,
+        "test_framework": result.test_framework,
+        "architecture_framework": result.architecture_framework,
+        "monorepo_type": result.monorepo_type,
+        "has_dockerfile": result.has_dockerfile,
+        "has_docker_compose": result.has_docker_compose,
+        "has_k8s_manifest": result.has_k8s_manifest,
+        "deployment_type": result.deployment_type,
+        "has_pii_schema": result.has_pii_schema,
+        "compliance_hints": result.compliance_hints,
+        "service_type": result.service_type,
+        "release_tooling": result.release_tooling,
     }
 
     db_path = _require_db()
