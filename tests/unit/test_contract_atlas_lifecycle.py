@@ -88,6 +88,36 @@ def test_contract_atlas_lifecycle_manifest_flags_missing_prd_or_readme_docs(
     assert "release_publication_gate" in impact["docs_update_required_domains"]
 
 
+def test_contract_atlas_lifecycle_manifest_honors_reviewed_no_change(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """WO-DOCS-DRIFT-REVIEWED-ESCAPE: the lifecycle manifest (the SECOND blocking
+    gate, alongside the docs-drift gate) must honor a reviewed-no-change decision
+    for an impacted domain. Without this the two gates diverge — a green pre-push
+    push failed CI's lifecycle step because only the docs-drift gate honored the
+    escape."""
+    home = tmp_path / "home"
+    repo_root = tmp_path / "repo"
+    _write_current_hook_surfaces(home)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    with _connect(_db(tmp_path)) as conn:
+        register_default_adapter_authority_profiles(conn)
+        projection_report = adapter_config_projection_report(conn, project_id="dream-studio")
+        _write_projection_files(repo_root, projection_report)
+        manifest = build_contract_atlas_freshness_manifest(
+            conn,
+            repo_root=repo_root,
+            project_id="dream-studio",
+            changed_files=["interfaces/cli/contract_docs_drift_gate.py"],
+            reviewed_no_change_domains=["release_publication_gate"],
+        )
+
+    impact = manifest["docs_prd_readme_impact"]
+    assert "release_publication_gate" not in impact["docs_update_required_domains"]
+    assert impact["status"] != "attention_required"
+
+
 def test_contract_atlas_export_refresh_is_dry_run_by_default_and_writes_explicitly(
     tmp_path: Path, monkeypatch
 ) -> None:

@@ -19,6 +19,9 @@ from core.shared_intelligence.contract_registry import (  # noqa: E402
     contract_registry,
     validate_contract_registry,
 )
+from interfaces.cli._gate_review_context import (  # noqa: E402
+    reviewed_no_change_domains as _gather_reviewed_no_change,
+)
 
 
 def main() -> None:
@@ -52,7 +55,11 @@ def main() -> None:
     args = parser.parse_args()
 
     changed_files = _changed_files(args)
-    reviewed_no_change = _reviewed_no_change_domains(args)
+    reviewed_no_change = _gather_reviewed_no_change(
+        cli_domains=args.docs_reviewed_no_change,
+        repo_root=REPO_ROOT,
+        base_ref=args.base_ref,
+    )
     registry_errors = validate_contract_registry(contract_registry())
     report = change_impact_report(
         changed_files,
@@ -91,62 +98,6 @@ def _changed_files(args: argparse.Namespace) -> list[str]:
 def _split_changed_files(raw: str) -> list[str]:
     normalized = raw.replace(";", "\n").replace(",", "\n")
     return [item.strip() for item in normalized.splitlines() if item.strip()]
-
-
-def _reviewed_no_change_domains(args: argparse.Namespace) -> list[str]:
-    """Collect reviewed-no-change domain ids from every evidence source.
-
-    Merges the ``--docs-reviewed-no-change`` CLI flag, the
-    ``DREAM_STUDIO_DOCS_REVIEWED_NO_CHANGE`` env var (local convenience), and
-    ``Docs-Reviewed-No-Change: <domain_id>`` commit trailers in the diff range.
-    The commit trailer is the primary signal in the blocking lane: it travels
-    with the change set through push and CI (which both invoke this script with
-    no flag) and is reviewable in the PR.
-
-    Only an explicit per-domain declaration is honored, and
-    ``change_impact_report`` applies it solely to domains that are actually
-    impacted — so declaring a non-impacted or unknown domain never rescues a
-    different impacted-but-undeclared domain. A behavior change still requires a
-    real doc refresh; this path is for evidence-backed code-only reviews.
-    """
-
-    domains: list[str] = list(args.docs_reviewed_no_change or [])
-    env_value = os.environ.get("DREAM_STUDIO_DOCS_REVIEWED_NO_CHANGE")
-    if env_value:
-        domains.extend(_split_changed_files(env_value))
-    domains.extend(_trailer_reviewed_domains(args))
-    return sorted({item for item in domains if item})
-
-
-def _trailer_reviewed_domains(args: argparse.Namespace) -> list[str]:
-    base_ref = args.base_ref or os.environ.get("DREAM_STUDIO_BASE_REF")
-    github_base = os.environ.get("GITHUB_BASE_REF")
-    if github_base and not base_ref:
-        base_ref = f"origin/{github_base}"
-    log_range = [f"{base_ref}..HEAD"] if base_ref else ["-1", "HEAD"]
-    domains: list[str] = []
-    for message in _git_log_messages(log_range):
-        for line in message.splitlines():
-            stripped = line.strip()
-            if stripped.lower().startswith("docs-reviewed-no-change:"):
-                domains.extend(_split_changed_files(stripped.split(":", 1)[1]))
-    return domains
-
-
-def _git_log_messages(range_args: list[str]) -> list[str]:
-    try:
-        result = subprocess.run(
-            ["git", "log", "--format=%B%x00", *range_args],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError:
-        return []
-    if result.returncode != 0:
-        return []
-    return [chunk for chunk in result.stdout.split("\x00") if chunk.strip()]
 
 
 def _git_changed(args: list[str]) -> list[str]:

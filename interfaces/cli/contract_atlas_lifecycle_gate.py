@@ -23,6 +23,9 @@ from core.shared_intelligence.contract_atlas_lifecycle import (  # noqa: E402
     build_contract_atlas_freshness_manifest,
     validate_contract_atlas_lifecycle_manifest,
 )
+from interfaces.cli._gate_review_context import (  # noqa: E402
+    reviewed_no_change_domains as _gather_reviewed_no_change,
+)
 
 
 def main() -> None:
@@ -33,6 +36,10 @@ def main() -> None:
     args = parser.parse_args()
 
     changed_files = _changed_files(args)
+    reviewed_no_change = _gather_reviewed_no_change(
+        cli_domains=args.docs_reviewed_no_change,
+        repo_root=REPO_ROOT,
+    )
     with tempfile.TemporaryDirectory(prefix="dream-studio-contract-atlas-gate-") as tmp:
         temp_root = Path(tmp)
         temp_home = temp_root / "home"
@@ -48,7 +55,7 @@ def main() -> None:
                 repo_root=REPO_ROOT,
                 project_id="dream-studio",
                 changed_files=changed_files,
-                reviewed_no_change_domains=args.docs_reviewed_no_change,
+                reviewed_no_change_domains=reviewed_no_change,
             )
         finally:
             conn.close()

@@ -335,6 +335,7 @@ def test_commit_trailer_reviewed_no_change_reaches_blocking_lane(tmp_path, monke
     import argparse
 
     import interfaces.cli.contract_docs_drift_gate as gate_mod
+    from interfaces.cli import _gate_review_context as review_ctx
 
     repo = _init_repo_with_trailer(tmp_path, "sqlite_schema_authority")
     monkeypatch.setattr(gate_mod, "REPO_ROOT", repo)
@@ -346,7 +347,9 @@ def test_commit_trailer_reviewed_no_change_reaches_blocking_lane(tmp_path, monke
         changed_file=[], changed_files=None, base_ref="main", docs_reviewed_no_change=[]
     )
 
-    reviewed = gate_mod._reviewed_no_change_domains(args)
+    reviewed = review_ctx.reviewed_no_change_domains(
+        cli_domains=[], repo_root=repo, base_ref="main"
+    )
     assert "sqlite_schema_authority" in reviewed
 
     report = change_impact_report(
@@ -369,6 +372,7 @@ def test_trailer_for_other_domain_does_not_false_pass_impacted_domain(
     import argparse
 
     import interfaces.cli.contract_docs_drift_gate as gate_mod
+    from interfaces.cli import _gate_review_context as review_ctx
 
     repo = _init_repo_with_trailer(tmp_path, "some_unrelated_domain")
     monkeypatch.setattr(gate_mod, "REPO_ROOT", repo)
@@ -380,7 +384,9 @@ def test_trailer_for_other_domain_does_not_false_pass_impacted_domain(
         changed_file=[], changed_files=None, base_ref="main", docs_reviewed_no_change=[]
     )
 
-    reviewed = gate_mod._reviewed_no_change_domains(args)
+    reviewed = review_ctx.reviewed_no_change_domains(
+        cli_domains=[], repo_root=repo, base_ref="main"
+    )
     assert reviewed == ["some_unrelated_domain"]
 
     report = change_impact_report(
