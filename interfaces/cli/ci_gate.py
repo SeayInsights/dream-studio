@@ -22,6 +22,22 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 _PYTHON = sys.executable
 
+# Accepted, unfixable-in-place dev-only transitive CVEs, suppressed in the
+# blocking security gate (the "Full-CI recovery" the requirements comments defer
+# here — WO-DEP-CVE-BUMP 7f9085e7 / ac814dc3). All reach us only through semgrep
+# (dev), which hard-pins click~=8.1.8 (<8.2) and mcp==1.23.3, so flooring past
+# them forces pip to backtrack semgrep to a source-only build with no Windows
+# wheel and breaks the install. Not production dependencies. Revisit when semgrep
+# relaxes its pins; see requirements-dev.txt / requirements.txt for the rationale.
+_ACCEPTED_DEV_CVES = (
+    "CVE-2026-52870",  # mcp (fixed 1.27.2) — via semgrep
+    "CVE-2026-52869",  # mcp (fixed 1.27.2) — via semgrep
+    "CVE-2026-59950",  # mcp (fixed 1.28.1) — via semgrep
+    "PYSEC-2026-2132",  # click (fixed 8.3.3) — via semgrep
+)
+
+_PIP_AUDIT_IGNORES = [arg for cve in _ACCEPTED_DEV_CVES for arg in ("--ignore-vuln", cve)]
+
 CHECKS = [
     ("test", [_PYTHON, "-m", "pytest", "tests/", "-q"]),
     ("format", [_PYTHON, "-m", "black", "--check", "."]),
@@ -44,7 +60,8 @@ CHECKS = [
     ),
     (
         "security",
-        [_PYTHON, "-m", "pip_audit", "-r", "requirements-dev.txt", "-r", "requirements.txt"],
+        [_PYTHON, "-m", "pip_audit", "-r", "requirements-dev.txt", "-r", "requirements.txt"]
+        + _PIP_AUDIT_IGNORES,
     ),
 ]
 
