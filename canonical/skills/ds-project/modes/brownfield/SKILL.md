@@ -127,6 +127,35 @@ Recommended audits (by detected stack):
 ```
 Present only; the operator chooses which to invoke.
 
+### Step 8 — Offer to run recommended audits + aggregate findings (confirmation-gated)
+
+After surfacing the recommendations (Step 7), OFFER to run them — this is
+confirmation-gated and never auto-runs (Rule 2 / Rule 5):
+```
+Run any of the recommended audits now? Enter the modes to run
+(e.g. 'backend-api database'), or 'none' to skip.
+```
+For each mode the operator picks, invoke the corresponding `ds-quality` mode for
+that project. Do NOT invoke any mode the operator did not pick.
+
+Once the approved audits have run — their findings are persisted to the
+`security_events` spine — fold the results into the per-project readiness report
+and the proposed stabilization scope:
+```python
+from core.projects.acquisition import aggregate_readiness
+
+report = aggregate_readiness(project_id, dispatches=project["recommended_dispatches"])
+```
+Present a per-project readiness section from `report["readiness_report"]` (finding
+count, severity breakdown, the findings sourced from those audits) and the
+proposed `report["stabilization_scope"]` — the severity-ordered items to tackle
+first. If the operator then scopes the project, the stabilization scope becomes
+the basis for its stabilization milestone.
+
+`aggregate_readiness` only READS findings the approved audits already persisted —
+it never triggers a run. If the operator ran no audits, the readiness section
+reports zero findings and the stabilization scope is empty.
+
 ---
 
 ## Rules
@@ -135,3 +164,5 @@ Present only; the operator chooses which to invoke.
 2. Default audit action is deferred — never schedule automatically without user confirmation.
 3. GitHub-only entries (no local path) are listed but not registered — inform user to clone first.
 4. Respect max_depth=3 for folder discovery — do not recurse indefinitely.
+5. Recommended audits (Step 7/8) are present-only — offer, never auto-run. Findings
+   aggregation (`aggregate_readiness`) consumes operator-approved audit results only.
