@@ -107,6 +107,10 @@ handoff-*.json
 
 # Phase completion reports and session artifacts
 PHASE*_*.md
+# Internal dev methodology note (WO-DOC-RESIDUE): token-overhead measurement
+# methodology for benchmark_tokens.py — not end-user-facing, untracked per the
+# push principle (its sibling token-reduction-summary.md was already removed).
+docs/token-overhead.md
 SESSION_SUMMARY.md
 PROJECT_COMPLETE.md
 CODEx_*.md
