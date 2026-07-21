@@ -361,15 +361,16 @@ def test_auto_verify_skipped_when_verdict_exists(patched_paths) -> None:
 # ── Scenario 2: pass path auto-starts next WO ────────────────────────────────
 
 
-def test_pass_path_auto_starts_next_wo(patched_paths) -> None:
-    """When verify passes, close succeeds and the next WO is auto-started."""
+def test_pass_path_reports_next_wo_without_starting(patched_paths) -> None:
+    """When verify passes, close succeeds and REPORTS the ready-set next WO but does
+    NOT start it (report-only — WO-CLOSE-REPORT-ONLY killed the auto-start pile-up)."""
     _fake, db_path, tmp_path = patched_paths
     planning = _planning(tmp_path, WO_INFRA)
 
     with (
         patch("core.work_orders.verify.verify_work_order", side_effect=_mock_verify_pass),
         patch("core.projects.queries.get_next_work_order", return_value=_MOCK_NEXT_WO),
-        patch("core.work_orders.start.start_work_order", return_value=_MOCK_START_OK) as mock_start,
+        patch("core.work_orders.start.start_work_order") as mock_start,
     ):
         from core.work_orders.close import close_work_order
 
@@ -382,26 +383,25 @@ def test_pass_path_auto_starts_next_wo(patched_paths) -> None:
 
     assert result["ok"] is True
     assert result["status"] == "closed"
-    assert "auto_started" in result, "auto_started key should be present on pass path"
-    assert result["auto_started"]["work_order_id"] == WO_NEXT
-    assert mock_start.called
-    assert mock_start.call_args.kwargs.get("work_order_id") == WO_NEXT
+    assert "auto_started" not in result, "close must be report-only — no auto_started"
+    assert not mock_start.called, "close must not start the next WO"
+    # It still advertises the ready-set next WO + how to start it.
+    assert result["next_work_order"]["work_order_id"] == WO_NEXT
+    assert WO_NEXT in result["next_command"]
 
 
 # ── Scenario 3: gap path closes original and auto-starts gap WO ──────────────
 
 
-def test_gap_path_closes_original_and_auto_starts_gap_wo(patched_paths) -> None:
-    """When verify returns gaps, the original WO still closes and the first
-    spawned gap WO is auto-started."""
+def test_gap_path_reports_remediation_without_starting(patched_paths) -> None:
+    """When verify returns gaps, the original WO still closes and the remediation WO
+    is REPORTED (gaps_block + spawned_work_orders + next_command) but NOT started."""
     _fake, db_path, tmp_path = patched_paths
     planning = _planning(tmp_path, WO_INFRA)
 
     with (
         patch("core.work_orders.verify.verify_work_order", side_effect=_mock_verify_gap),
-        patch(
-            "core.work_orders.start.start_work_order", return_value=_MOCK_START_GAP_OK
-        ) as mock_start,
+        patch("core.work_orders.start.start_work_order") as mock_start,
     ):
         from core.work_orders.close import close_work_order
 
@@ -417,10 +417,10 @@ def test_gap_path_closes_original_and_auto_starts_gap_wo(patched_paths) -> None:
     assert "gaps_block" in result, "gaps_block should be present when gaps are found"
     assert "GAPS FOUND" in result["gaps_block"]
     assert "REMEDIATION WO" in result["gaps_block"]
-    assert "auto_started" in result
-    assert result["auto_started"]["work_order_id"] == GAP_WO_ID
-    assert mock_start.called
-    assert mock_start.call_args.kwargs.get("work_order_id") == GAP_WO_ID
+    assert result["spawned_work_orders"], "remediation WOs should be reported"
+    assert "auto_started" not in result, "close must be report-only — no auto_started"
+    assert not mock_start.called, "close must not start the remediation WO"
+    assert GAP_WO_ID in result["next_command"]
 
 
 # ── T4c: correctness fail registers remediation WO ──────────────────────────────
@@ -454,10 +454,9 @@ def test_correctness_fail_registers_remediation_wo_and_closes_original(patched_p
     assert result["status"] == "closed"
     assert "gaps_block" in result, "gaps_block must surface correctness violation gaps"
     assert "GAPS FOUND" in result["gaps_block"]
-    assert "auto_started" in result
-    assert result["auto_started"]["work_order_id"] == GAP_WO_ID
-    assert mock_start.called
-    assert mock_start.call_args.kwargs.get("work_order_id") == GAP_WO_ID
+    assert "auto_started" not in result, "close must be report-only — no auto_started"
+    assert not mock_start.called, "close must not start the remediation WO"
+    assert GAP_WO_ID in result["next_command"]
 
 
 # ── T4d: composite below threshold triggers gap ──────────────────────────────────
@@ -491,9 +490,9 @@ def test_composite_below_threshold_triggers_gap(patched_paths) -> None:
     assert result["status"] == "closed"
     assert "gaps_block" in result
     assert "GAPS FOUND" in result["gaps_block"]
-    assert "auto_started" in result
-    assert result["auto_started"]["work_order_id"] == GAP_WO_ID
-    assert mock_start.called
+    assert "auto_started" not in result, "close must be report-only — no auto_started"
+    assert not mock_start.called, "close must not start the remediation WO"
+    assert GAP_WO_ID in result["next_command"]
 
 
 # ── T4d: _compute_scores unit test ───────────────────────────────────────────────
