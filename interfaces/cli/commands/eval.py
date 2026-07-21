@@ -34,7 +34,9 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         "--live",
         action="store_true",
         default=False,
-        help="Live mode: spawn a fresh claude subprocess and score its events (requires claude CLI in PATH)",
+        help="Developer-only opt-in: spawn a fresh claude subprocess to generate events, "
+        "then score them deterministically (requires claude CLI in PATH). Default is fixture "
+        "mode; CI never uses --live.",
     )
 
     eval_baseline_cmd = eval_sub.add_parser("baseline", help="Print current baseline scores")
@@ -42,7 +44,8 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         "--live",
         action="store_true",
         default=False,
-        help="Run eval in live mode and capture the result as the live baseline (requires --eval-id)",
+        help="Developer-only opt-in: capture a live baseline by running the eval against a fresh "
+        "claude subprocess (requires --eval-id and the claude CLI). Default is fixture mode; CI never uses --live.",
     )
     eval_baseline_cmd.add_argument(
         "--eval-id",
