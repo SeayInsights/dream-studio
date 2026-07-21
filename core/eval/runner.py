@@ -48,7 +48,10 @@ class EvalRunner:
 
     Scores eval cases by matching expected event patterns against fixture events
     (unit/regression tests) or recorded session events from the canonical-event
-    substrate. Never invokes a live Claude session.
+    substrate. The default path never invokes a live Claude session; the opt-in
+    ``run_case(case, live=True)`` escape hatch (developer-only, CLI ``--live``) is
+    the sole exception and only *generates* events to score — scoring stays
+    deterministic.
     """
 
     def __init__(
@@ -64,8 +67,15 @@ class EvalRunner:
 
         Args:
             case: The eval case to run.
-            live: If True, spawn a fresh claude subprocess and score its events.
-                  If False (default), use case.fixture_events (deterministic).
+            live: Developer-only opt-in escape hatch. If True, spawn a fresh
+                  ``claude`` subprocess (see ``_run_case_live``) to *generate* the
+                  events, then score them the same deterministic way. If False
+                  (the default) use ``case.fixture_events`` — no subprocess, no
+                  network. CI never sets this: the pre-push eval gate runs
+                  ``pytest tests/evals/`` (fixture mode), never ``ds eval --live``.
+                  ``live`` only changes how events are *produced*; scoring is
+                  deterministic (``match_events``) either way — it is NOT the LLM
+                  judge that WO-N2 removed.
         """
         if live:
             return self._run_case_live(case)
@@ -145,9 +155,14 @@ class EvalRunner:
     def _run_case_live(self, case: EvalCase) -> EvalResult:
         """Live mode: spawn a fresh claude subprocess, synthesize events, score.
 
-        Requires 'claude' CLI in PATH. Events are synthesized from the subprocess
-        JSON output (tool_use calls for Skill invocations). No spool ingestor
-        dependency — synthesis happens inline from subprocess stdout.
+        Reached only via the opt-in ``run_case(case, live=True)`` escape hatch —
+        never on the default path and never in CI. Requires the ``claude`` CLI in
+        PATH (raises ``NotImplementedError`` otherwise, so it fails closed where the
+        CLI is absent). Events are synthesized from the subprocess JSON output
+        (tool_use calls for Skill invocations) and then scored by the SAME
+        deterministic matcher used in fixture mode — the subprocess only produces
+        the events, it does not judge them. No spool ingestor dependency —
+        synthesis happens inline from subprocess stdout.
         """
         start = time.monotonic()
 
