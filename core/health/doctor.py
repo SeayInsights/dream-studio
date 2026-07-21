@@ -14,6 +14,7 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -64,11 +65,20 @@ def _get_expected_skill_ids(source_root: Path) -> list[str]:
     return ids or ["ds-bootstrap"]
 
 
-def _compute_directory_hash(path: Path) -> str:
+def _compute_directory_hash(
+    path: Path,
+    *,
+    transform: Callable[[str, bytes], bytes] | None = None,
+) -> str:
     """SHA-256 over the relative paths and bytes of every regular file under ``path``.
 
     Hidden directories (``.git``, ``.pytest_cache``, ``__pycache__``) are skipped
     so caches and editor scratch files do not flip the hash.
+
+    ``transform`` (when given) is applied to each file's already-CRLF-normalized
+    bytes, keyed by its POSIX relative path, before hashing. The skill-freshness
+    check uses it to mirror the installer's top-level ``SKILL.md`` frontmatter
+    synthesis so a correctly-installed skill is not reported as drifted.
     """
     if not path.is_dir():
         return ""
@@ -86,9 +96,14 @@ def _compute_directory_hash(path: Path) -> str:
         digest.update(b"\x00")
         try:
             # Normalize line endings so CRLF (Windows install) == LF (repo source).
-            digest.update(file_path.read_bytes().replace(b"\r\n", b"\n"))
+            data = file_path.read_bytes().replace(b"\r\n", b"\n")
         except OSError:
             digest.update(b"<unreadable>")
+            digest.update(b"\x01")
+            continue
+        if transform is not None:
+            data = transform(rel, data)
+        digest.update(data)
         digest.update(b"\x01")
     return digest.hexdigest()
 
@@ -106,19 +121,74 @@ def _resolve_canonical_skill_dir(canonical_skills_dir: Path, skill_id: str) -> P
     return None
 
 
+def _synthesized_skill_transform(
+    skill_id: str,
+    canonical_root: Path,
+    packs_yaml_path: Path,
+) -> Callable[[str, bytes], bytes]:
+    """Per-file transform mirroring the installer's top-level SKILL.md synthesis.
+
+    The installer (``integrations.installer.claude_code._collect_skill_dir_ops``)
+    prepends ``synthesize_skill_frontmatter(skill_id)`` to a routable pack's
+    top-level ``SKILL.md`` (only that file, and only when it has no ``---`` block).
+    A raw canonical-vs-installed hash therefore always diverges for those skills —
+    a permanent false "stale". Applying the same synthesis to the canonical side
+    before hashing makes a correctly-installed skill compare equal, while genuine
+    body drift, orphan files, or a stale synthesized description still diverge.
+    """
+
+    def _transform(rel_posix: str, data: bytes) -> bytes:
+        if rel_posix != "SKILL.md":
+            return data
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            return data
+        # The installer only synthesizes when the canonical file is frontmatter-less.
+        if text.lstrip().startswith("---"):
+            return data
+        try:
+            from integrations.compiler.claude_code import synthesize_skill_frontmatter
+
+            frontmatter = synthesize_skill_frontmatter(
+                skill_id,
+                canonical_root=canonical_root,
+                packs_yaml_path=packs_yaml_path,
+            )
+        except Exception:
+            return data
+        if not frontmatter:
+            return data
+        return (frontmatter + text).encode("utf-8")
+
+    return _transform
+
+
 def _check_skill_freshness(
     canonical_skills_dir: Path,
     installed_skills_dir: Path,
     expected_skill_ids: list[str],
 ) -> list[str]:
-    """Return skill ids whose installed copy hashes differently from the canonical copy."""
+    """Return skill ids whose installed copy differs from the expected install.
+
+    "Expected install" is the canonical source with the installer's top-level
+    SKILL.md frontmatter synthesis applied (see ``_synthesized_skill_transform``),
+    NOT the raw canonical bytes — otherwise every routable pack reads as stale
+    because the installer prepends synthesized frontmatter the canonical file lacks.
+    """
+    canonical_root = canonical_skills_dir.parent
+    packs_yaml_path = canonical_skills_dir.parent.parent / "packs.yaml"
     stale: list[str] = []
     for sid in expected_skill_ids:
         source_dir = _resolve_canonical_skill_dir(canonical_skills_dir, sid)
         installed_dir = installed_skills_dir / sid
         if source_dir is None or not installed_dir.is_dir():
             continue
-        if _compute_directory_hash(source_dir) != _compute_directory_hash(installed_dir):
+        expected_hash = _compute_directory_hash(
+            source_dir,
+            transform=_synthesized_skill_transform(sid, canonical_root, packs_yaml_path),
+        )
+        if expected_hash != _compute_directory_hash(installed_dir):
             stale.append(sid)
     return stale
 
@@ -143,11 +213,36 @@ def _check_pack_mode_coverage(
         skill_id = pack_cfg.get("skill", pack_key)
         if not skill_id.startswith("ds-"):
             skill_id = f"ds-{skill_id}"
-        modes_dir = installed_skills_dir / skill_id / "modes"
+        modes_dir = _installed_modes_dir(installed_skills_dir, skill_id, pack_cfg.get("skill_path"))
         for mode in pack_cfg.get("modes", []) or []:
             if not (modes_dir / mode).is_dir():
                 missing.append(f"{pack_key}:{mode}")
     return missing
+
+
+def _installed_modes_dir(
+    installed_skills_dir: Path,
+    skill_id: str,
+    skill_path: str | None,
+) -> Path:
+    """Resolve where a pack's modes are installed, honoring packs.yaml ``skill_path``.
+
+    Most packs install at ``<skills>/ds-<pack>/modes``. Packs that declare a
+    ``skill_path`` (e.g. website/fullstack → ``canonical/skills/domains/modes/website``)
+    are NOT installed as their own top-level skill; their modes live nested under the
+    owning pack's install tree (``<skills>/ds-domains/modes/website/modes``). Resolving
+    that from the skill_path is what keeps website:*/fullstack:* from reading as missing.
+    """
+    if skill_path:
+        rel = skill_path.replace("\\", "/")
+        marker = "canonical/skills/"
+        if marker in rel:
+            rel = rel.split(marker, 1)[1]
+        parts = [p for p in rel.strip("/").split("/") if p]
+        if parts:
+            parts[0] = parts[0] if parts[0].startswith("ds-") else f"ds-{parts[0]}"
+            return installed_skills_dir.joinpath(*parts, "modes")
+    return installed_skills_dir / skill_id / "modes"
 
 
 def _check_routing_trigger_coverage(

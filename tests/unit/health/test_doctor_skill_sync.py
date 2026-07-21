@@ -104,6 +104,40 @@ def test_skill_freshness_resolves_bare_pack_key(tmp_path: Path) -> None:
     assert _check_skill_freshness(canonical, installed, ["ds-core"]) == []
 
 
+def test_skill_freshness_ignores_synthesized_frontmatter(tmp_path: Path) -> None:
+    """WO-DOCTOR-DRIFT: the installer prepends synthesized frontmatter to a routable
+    pack's top-level SKILL.md, so a raw canonical-vs-installed hash always diverges —
+    a permanent false 'stale'. The freshness check must apply the same synthesis to
+    the canonical side, so a correctly-installed skill compares equal while genuine
+    body drift still flags."""
+    from integrations.compiler.claude_code import synthesize_skill_frontmatter
+
+    # doctor derives canonical_root = <skills>/.. and packs = <skills>/../../packs.yaml
+    (tmp_path / "packs.yaml").write_text(
+        "packs:\n  foo:\n    skill: ds-foo\n    description: Foo pack for tests\n    modes: []\n",
+        encoding="utf-8",
+    )
+    canonical = tmp_path / "canonical" / "skills"
+    installed = tmp_path / "installed" / "skills"
+    body = "# Foo\n\nCanonical body, no frontmatter.\n"
+    _make_skill(canonical, "foo", body)  # canonical dir is the bare pack key
+
+    frontmatter = synthesize_skill_frontmatter(
+        "ds-foo", canonical_root=tmp_path / "canonical", packs_yaml_path=tmp_path / "packs.yaml"
+    )
+    assert frontmatter, "test precondition: ds-foo must be a routable pack that synthesizes"
+    _make_skill(installed, "ds-foo", frontmatter + body)  # what the installer writes
+
+    # Not stale: installed == canonical-with-synthesized-frontmatter.
+    assert _check_skill_freshness(canonical, installed, ["ds-foo"]) == []
+
+    # Genuine body drift is still caught.
+    (installed / "ds-foo" / "SKILL.md").write_text(
+        frontmatter + body + "\nDrifted extra line.\n", encoding="utf-8"
+    )
+    assert _check_skill_freshness(canonical, installed, ["ds-foo"]) == ["ds-foo"]
+
+
 # ── _check_pack_mode_coverage ─────────────────────────────────────────────────
 
 
@@ -127,6 +161,40 @@ def test_pack_mode_coverage_flags_missing(tmp_path: Path) -> None:
     installed = tmp_path / "skills"
     (installed / "ds-alpha" / "modes" / "foo").mkdir(parents=True)
     assert sorted(_check_pack_mode_coverage(packs, installed)) == ["alpha:bar", "alpha:baz"]
+
+
+def test_pack_mode_coverage_skill_path_aware(tmp_path: Path) -> None:
+    """WO-DOCTOR-DRIFT: a pack with skill_path (website/fullstack) installs its modes
+    nested under the owning pack (ds-domains/modes/<sub>/modes/<mode>), NOT under
+    ds-<pack>/modes. The coverage check must resolve that from skill_path or it
+    false-flags every such mode as missing."""
+    packs = tmp_path / "packs.yaml"
+    packs.write_text(
+        "packs:\n"
+        "  web:\n"
+        "    skill: ds-web\n"
+        "    skill_path: canonical/skills/domains/modes/web\n"
+        "    modes: [discover, page]\n",
+        encoding="utf-8",
+    )
+    installed = tmp_path / "skills"
+    # Modes live under the skill_path-derived location, not ds-web/modes.
+    for mode in ("discover", "page"):
+        (installed / "ds-domains" / "modes" / "web" / "modes" / mode).mkdir(parents=True)
+    # The naive ds-web/modes location does not exist at all.
+    assert not (installed / "ds-web").exists()
+    assert _check_pack_mode_coverage(packs, installed) == []
+
+    # A genuinely-absent mode is still flagged.
+    packs.write_text(
+        "packs:\n"
+        "  web:\n"
+        "    skill: ds-web\n"
+        "    skill_path: canonical/skills/domains/modes/web\n"
+        "    modes: [discover, page, missing]\n",
+        encoding="utf-8",
+    )
+    assert _check_pack_mode_coverage(packs, installed) == ["web:missing"]
 
 
 # ── _check_routing_trigger_coverage ───────────────────────────────────────────
