@@ -19,6 +19,9 @@ from core.shared_intelligence.contract_registry import (  # noqa: E402
     contract_registry,
     validate_contract_registry,
 )
+from interfaces.cli._gate_review_context import (  # noqa: E402
+    reviewed_no_change_domains as _gather_reviewed_no_change,
+)
 
 
 def main() -> None:
@@ -43,15 +46,24 @@ def main() -> None:
         "--docs-reviewed-no-change",
         action="append",
         default=[],
-        help="Domain id whose impacted docs/contracts were reviewed and need no change.",
+        help=(
+            "Domain id whose impacted docs/contracts were reviewed and need no change. "
+            "Also readable from the DREAM_STUDIO_DOCS_REVIEWED_NO_CHANGE env var and from "
+            "`Docs-Reviewed-No-Change: <domain_id>` commit trailers in the diff range."
+        ),
     )
     args = parser.parse_args()
 
     changed_files = _changed_files(args)
+    reviewed_no_change = _gather_reviewed_no_change(
+        cli_domains=args.docs_reviewed_no_change,
+        repo_root=REPO_ROOT,
+        base_ref=args.base_ref,
+    )
     registry_errors = validate_contract_registry(contract_registry())
     report = change_impact_report(
         changed_files,
-        reviewed_no_change_domains=args.docs_reviewed_no_change,
+        reviewed_no_change_domains=reviewed_no_change,
     )
     report["registry_validation_errors"] = registry_errors
     if registry_errors:
