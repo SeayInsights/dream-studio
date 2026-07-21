@@ -83,12 +83,26 @@ def test_eval_artifact_path_dual_writes_validation_without_breaking_file_output(
     db_path = _db(tmp_path)
     monkeypatch.setenv("DREAM_STUDIO_TELEMETRY_DB", str(db_path))
 
+    from core.work_orders.packet_store import get_packet_artifact
+
     artifact, path = create_skill_identifier_safety_eval(
         work_order={"work_order_id": "wo-telemetry-eval-test", "allowed_skills": ["ds-core"]},
         storage_root=tmp_path / "work-orders",
     )
 
-    assert path.is_file()
+    # WO-FILESDB-C3: the eval artifact is persisted to the packet store (kind='eval'),
+    # not an on-disk file — path is None. The validation telemetry dual-write below is
+    # the behavior under test and is unaffected.
+    assert path is None
+    assert (
+        get_packet_artifact(
+            "wo-telemetry-eval-test",
+            "eval",
+            instance_key="skill_identifier_safety",
+            storage_root=tmp_path / "work-orders",
+        )
+        is not None
+    )
     assert artifact["pass_fail"] == "pass"
     conn = _connect(db_path)
     try:

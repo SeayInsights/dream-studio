@@ -38,14 +38,25 @@ def _work_order(target_path: Path, allowed_skills: list[str]) -> dict:
 
 def test_skill_identifier_safety_eval_passes_for_ds_slug(tmp_path) -> None:
     from core.work_orders.evals import create_skill_identifier_safety_eval
+    from core.work_orders.packet_store import get_packet_artifact
 
     target = tmp_path / "target"
     target.mkdir()
+    storage_root = tmp_path / "store"
     artifact, path = create_skill_identifier_safety_eval(
         work_order=_work_order(target, ["ds-core", "ds-quality"]),
-        storage_root=tmp_path / "store",
+        storage_root=storage_root,
     )
-    stored = json.loads(path.read_text(encoding="utf-8"))
+    # WO-FILESDB-C3: eval lives in the packet store (kind='eval'), path is None.
+    assert path is None
+    stored = json.loads(
+        get_packet_artifact(
+            "wo-eval-skill-001",
+            "eval",
+            instance_key="skill_identifier_safety",
+            storage_root=storage_root,
+        )
+    )
 
     assert artifact["eval_type"] == "skill_identifier_safety"
     assert artifact["pass_fail"] == "pass"
@@ -55,16 +66,26 @@ def test_skill_identifier_safety_eval_passes_for_ds_slug(tmp_path) -> None:
 
 def test_skill_identifier_safety_eval_fails_for_legacy_forms(tmp_path) -> None:
     from core.work_orders.evals import create_skill_identifier_safety_eval
+    from core.work_orders.packet_store import get_packet_artifact
 
     target = tmp_path / "target"
     target.mkdir()
+    storage_root = tmp_path / "store"
     legacy_product = "dream" "-studio" + ":core"
     legacy_ds = "d" "s" + ":core"
     _, path = create_skill_identifier_safety_eval(
         work_order=_work_order(target, [legacy_product, legacy_ds, "core"]),
-        storage_root=tmp_path / "store",
+        storage_root=storage_root,
     )
-    stored = json.loads(path.read_text(encoding="utf-8"))
+    assert path is None
+    stored = json.loads(
+        get_packet_artifact(
+            "wo-eval-skill-001",
+            "eval",
+            instance_key="skill_identifier_safety",
+            storage_root=storage_root,
+        )
+    )
 
     assert stored["pass_fail"] == "fail"
     assert stored["score"] == 0

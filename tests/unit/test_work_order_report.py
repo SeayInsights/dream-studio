@@ -61,6 +61,7 @@ def _snapshot(path: Path) -> dict[str, str]:
 
 
 def test_generate_report_includes_result_eval_summary_and_marks_reported(tmp_path) -> None:
+    from core.work_orders.packet_store import get_packet_artifact
     from core.work_orders.renderers import render_work_order
     from core.work_orders.reporting import generate_report
     from core.work_orders.results import record_result
@@ -78,8 +79,9 @@ def test_generate_report_includes_result_eval_summary_and_marks_reported(tmp_pat
     record_result("wo-report-001", source_path=source, storage_root=storage_root)
 
     result = generate_report("wo-report-001", storage_root=storage_root)
-    report_path = Path(result["report_path"])
-    report_text = report_path.read_text(encoding="utf-8")
+    # WO-FILESDB-C5: report body lives in the packet store (kind='report'), not report.md.
+    report_text = get_packet_artifact("wo-report-001", "report", storage_root=storage_root)
+    assert report_text is not None
     stored, _ = load_work_order("wo-report-001", storage_root=storage_root)
 
     assert result["result_present"] is True
@@ -95,14 +97,30 @@ def test_generate_report_includes_result_eval_summary_and_marks_reported(tmp_pat
     assert "work_order_render_completeness" in report_text
     assert "result_report_completeness" in report_text
     assert "recommended_next_work_order: none" in report_text
-    assert (storage_root / "wo-report-001" / "evals" / "result_report_completeness.json").is_file()
-    assert not (
-        storage_root / "wo-report-001" / "evals" / "next_work_order_recommendation.json"
-    ).exists()
+    # WO-FILESDB-C3: eval artifacts live in the packet store (kind='eval', instance_key=eval_type).
+    assert (
+        get_packet_artifact(
+            "wo-report-001",
+            "eval",
+            instance_key="result_report_completeness",
+            storage_root=storage_root,
+        )
+        is not None
+    )
+    assert (
+        get_packet_artifact(
+            "wo-report-001",
+            "eval",
+            instance_key="next_work_order_recommendation",
+            storage_root=storage_root,
+        )
+        is None
+    )
     assert _snapshot(target) == before
 
 
 def test_generate_report_without_result_is_incomplete_and_does_not_mark_reported(tmp_path) -> None:
+    from core.work_orders.packet_store import get_packet_artifact
     from core.work_orders.reporting import generate_report
     from core.work_orders.storage import load_work_order, save_work_order
 
@@ -114,7 +132,9 @@ def test_generate_report_without_result_is_incomplete_and_does_not_mark_reported
     )
 
     result = generate_report("wo-report-missing-001", storage_root=storage_root)
-    report_text = Path(result["report_path"]).read_text(encoding="utf-8")
+    # WO-FILESDB-C5: report body lives in the packet store (kind='report'), not report.md.
+    report_text = get_packet_artifact("wo-report-missing-001", "report", storage_root=storage_root)
+    assert report_text is not None
     stored, _ = load_work_order("wo-report-missing-001", storage_root=storage_root)
 
     assert result["result_present"] is False

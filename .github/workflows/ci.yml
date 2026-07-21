@@ -62,7 +62,13 @@ jobs:
 
       - name: Dependency vulnerability scan
         continue-on-error: true
-        run: python -m pip_audit -r requirements-dev.txt -r requirements.txt
+        # Accepted dev-only transitive CVEs (via semgrep's click~=8.1.8 / mcp==1.23.3 pins;
+        # unfloorable without breaking the Windows install). Kept in sync with the blocking
+        # Full-CI security gate in interfaces/cli/ci_gate.py (_ACCEPTED_DEV_CVES).
+        run: >
+          python -m pip_audit -r requirements-dev.txt -r requirements.txt
+          --ignore-vuln CVE-2026-52870 --ignore-vuln CVE-2026-52869
+          --ignore-vuln CVE-2026-59950 --ignore-vuln PYSEC-2026-2132
 
       - name: Focused smoke tests
         run: >

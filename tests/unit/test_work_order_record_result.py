@@ -80,6 +80,7 @@ def test_importing_result_report_eval_modules_has_no_fake_home_side_effects(
 
 
 def test_record_result_preserves_raw_text_and_creates_metadata_and_evals(tmp_path) -> None:
+    from core.work_orders.packet_store import get_packet_artifact, list_packet_artifacts
     from core.work_orders.results import record_result
     from core.work_orders.storage import load_work_order, save_work_order
 
@@ -93,26 +94,40 @@ def test_record_result_preserves_raw_text_and_creates_metadata_and_evals(tmp_pat
     source.write_text(_result_text(), encoding="utf-8")
 
     recorded = record_result("wo-result-001", source_path=source, storage_root=storage_root)
+    # WO-FILESDB-C5: raw result (kind='result') and metadata (kind='result_meta') live in the
+    # packet store; result_path/metadata_path are logical refs only.
     raw_path = Path(recorded["result_path"])
-    metadata_path = Path(recorded["metadata_path"])
-    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    raw_text = get_packet_artifact("wo-result-001", "result", storage_root=storage_root)
+    metadata_json = get_packet_artifact("wo-result-001", "result_meta", storage_root=storage_root)
+    assert metadata_json is not None
+    metadata = json.loads(metadata_json)
     stored, _ = load_work_order("wo-result-001", storage_root=storage_root)
 
     assert raw_path == storage_root / "wo-result-001" / "results" / "result.md"
-    assert raw_path.read_text(encoding="utf-8") == _result_text()
+    assert raw_text == _result_text()
     assert metadata["summary"] == "Observe-only evidence was recorded."
     assert metadata["raw_output_ref"] == str(raw_path)
     assert metadata["structured_findings"]["files_inspected"] == ["README.md"]
     assert metadata["structured_findings"]["files_changed"] == ["none"]
     assert metadata["next_work_order_recommendation"].startswith("Objective:")
     assert stored["status"] == "result_recorded"
-    assert len(recorded["eval_paths"]) == 3
-    assert (storage_root / "wo-result-001" / "evals" / "observe_only_compliance.json").is_file()
-    assert (storage_root / "wo-result-001" / "evals" / "forbidden_action_compliance.json").is_file()
-    assert (storage_root / "wo-result-001" / "evals" / "target_repo_mutation.json").is_file()
+    # WO-FILESDB-C3: the 3 evals live in the packet store (kind='eval'), not on disk.
+    assert recorded["eval_paths"] == []
+    assert len(list_packet_artifacts("wo-result-001", "eval", storage_root=storage_root)) == 3
+    for eval_type in (
+        "observe_only_compliance",
+        "forbidden_action_compliance",
+        "target_repo_mutation",
+    ):
+        assert (
+            get_packet_artifact(
+                "wo-result-001", "eval", instance_key=eval_type, storage_root=storage_root
+            )
+            is not None
+        )
     mutation_eval = json.loads(
-        (storage_root / "wo-result-001" / "evals" / "target_repo_mutation.json").read_text(
-            encoding="utf-8"
+        get_packet_artifact(
+            "wo-result-001", "eval", instance_key="target_repo_mutation", storage_root=storage_root
         )
     )
     assert mutation_eval["pass_fail"] == "incomplete"

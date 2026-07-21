@@ -53,6 +53,14 @@ The release gate does not block:
 - unavailable or disabled GitHub Actions for ordinary development, provided
   the remote-confidence gap is recorded and local release-gate evidence remains
   available before merge/release approval.
+- accepted dev-only transitive CVEs explicitly suppressed in the security gate's
+  `pip-audit` ignore list (`_ACCEPTED_DEV_CVES` in `interfaces/cli/ci_gate.py`,
+  mirrored in the PR-smoke scan in `.github/workflows/ci.yml`). These reach the
+  repo only through a dev tool (`semgrep`) whose hard version pins cannot be
+  floored past the fix without breaking the install; they are not production
+  dependencies. Each suppressed CVE is enumerated with its fix version and
+  source, and the list is revisited when the pinning dev tool relaxes. A
+  production-dependency CVE is never suppressed — it blocks.
 
 ## Contract And Docs Drift Gate
 
