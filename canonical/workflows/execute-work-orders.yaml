@@ -257,6 +257,10 @@ nodes:
 
       If next_work_order exists:
         Print: NEXT_WO: <work_order_id> — <title>
+        Run: py -m interfaces.cli.ds work-order start <work_order_id>
+          (close is report-only and no longer auto-starts the next WO, so the loop
+           starts it explicitly here — otherwise the re-invoked workflow's
+           implement-tasks node would find no in_progress WO.)
         Instruction: Re-invoke `workflow: execute-work-orders` to continue the loop.
       If no next_work_order or milestone complete:
         Print: LOOP_DONE: milestone complete or no unblocked work orders remain.

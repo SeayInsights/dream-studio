@@ -867,10 +867,15 @@ def close_work_order(
     else:
         result["next_block"] = "NO NEXT WORK ORDER FOUND"
 
-    # T2/T4: Auto-start after close when verify ran inline.
+    # Report-only continuation (WO-CLOSE-REPORT-ONLY): advertise the next ready WO
+    # (or the registered remediation WOs) so the operator — or the execute-work-orders
+    # workflow's next-iteration node — can start it. Close deliberately does NOT
+    # auto-start anything: the old auto-start piled up dangling in_progress WOs on
+    # every directed close. The autonomous loop now starts the next WO explicitly in
+    # its next-iteration node, so nothing depends on this being a side effect.
     if _verify_ran and _verify_result is not None and _project_id_for_autostart:
         if _has_gaps:
-            # T4: Print GAPS FOUND block; T2: auto-start the first spawned gap WO.
+            # Report the registered remediation WO(s); do not start them.
             spawned = _verify_result.get("spawned_work_orders", [])
             if spawned:
                 first_gap = spawned[0]
@@ -884,41 +889,24 @@ def close_work_order(
                     f"=== GAPS FOUND IN {title} ===\n"
                     f"Registered: REMEDIATION WO {gap_wo_id} with {len(gaps_list)} tasks\n"
                     f"Tasks:\n{tasks_str}\n"
-                    f"AUTO-STARTING remediation WO next.\n"
+                    f"Run: py -m interfaces.cli.ds work-order start {gap_wo_id} to begin remediation.\n"
                     f"Main session: review "
                     f".planning/work-orders/{work_order_id}/review-verdict.json for full detail.\n"
                     f"{_sep}\n"
                 )
                 result["spawned_work_orders"] = spawned
-                from core.work_orders.start import start_work_order as _start_wo
-
-                _started = _start_wo(
-                    work_order_id=gap_wo_id,
-                    source_root=source_root,
-                    dream_studio_home=dream_studio_home,
-                    planning_root=p_root,
-                    accept_no_brief=True,
+                result["next_command"] = f"ds work-order start {gap_wo_id}"
+                result["next_block"] = (
+                    f"NEXT WORK ORDER (remediation): {gap_wo_title}"
+                    f" / ID: {gap_wo_id}"
+                    f" / Run: py -m interfaces.cli.ds work-order start {gap_wo_id}"
                 )
-                if _started.get("ok"):
-                    result["auto_started"] = {
-                        "work_order_id": gap_wo_id,
-                        "title": gap_wo_title,
-                        "message": f"AUTO-STARTING: {gap_wo_title} / ID: {gap_wo_id}",
-                    }
-                else:
-                    result["auto_start_error"] = _started.get("error", "unknown error")
         else:
-            # T2: Verify passed — find and auto-start the next WO in the project.
-            # WO-CLOSE-AUTOSTART-PARITY: the project-wide ready-set selector
-            # (get_next_work_order) is authoritative — it respects cross-milestone
-            # ordering, dependencies, and startability, whereas the same-milestone
-            # next_wo computed above is a naive status='created' query that can point
-            # at a WO start_work_order would refuse (e.g. an earlier milestone is still
-            # open). We auto-start the ready-set pick AND overwrite the advertised
-            # next_work_order/next_command/next_block to that same WO, so the WO we tell
-            # the operator is next is exactly the one we auto-start.
+            # Verify passed — advertise the authoritative project-wide ready-set pick
+            # (get_next_work_order respects cross-milestone ordering, dependencies, and
+            # startability, unlike the naive same-milestone next_wo computed above), but
+            # do NOT start it. Starting is an explicit operator / workflow action.
             from core.projects.queries import get_next_work_order as _get_next
-            from core.work_orders.start import start_work_order as _start_wo
 
             _next_result = _get_next(
                 project_id=_project_id_for_autostart,
@@ -929,37 +917,21 @@ def close_work_order(
             if _next_wo:
                 _next_id = _next_wo["work_order_id"]
                 _next_title = _next_wo["title"]
-                _started = _start_wo(
-                    work_order_id=_next_id,
-                    source_root=source_root,
-                    dream_studio_home=dream_studio_home,
-                    planning_root=p_root,
-                    accept_no_brief=True,
+                result["next_work_order"] = {
+                    "work_order_id": _next_id,
+                    "title": _next_title,
+                    "type": _next_wo.get("type") or _next_wo.get("work_order_type"),
+                    "sequence_order": _next_wo.get("sequence_order"),
+                    "next_command": f"ds work-order start {_next_id}",
+                }
+                result["next_command"] = f"ds work-order start {_next_id}"
+                result["next_block"] = (
+                    f"NEXT WORK ORDER: {_next_title}"
+                    f" / ID: {_next_id}"
+                    f" / Run: py -m interfaces.cli.ds work-order start {_next_id}"
                 )
-                if _started.get("ok"):
-                    result["auto_started"] = {
-                        "work_order_id": _next_id,
-                        "title": _next_title,
-                        "message": f"AUTO-STARTING: {_next_title} / ID: {_next_id}",
-                    }
-                    # Parity: advertise exactly what we started.
-                    result["next_work_order"] = {
-                        "work_order_id": _next_id,
-                        "title": _next_title,
-                        "type": _next_wo.get("type") or _next_wo.get("work_order_type"),
-                        "sequence_order": _next_wo.get("sequence_order"),
-                        "next_command": f"ds work-order start {_next_id}",
-                    }
-                    result["next_command"] = f"ds work-order start {_next_id}"
-                    result["next_block"] = (
-                        f"NEXT WORK ORDER: {_next_title}"
-                        f" / ID: {_next_id}"
-                        f" / Run: py -m interfaces.cli.ds work-order start {_next_id}"
-                    )
-                else:
-                    result["auto_start_error"] = _started.get("error", "unknown error")
             else:
-                result["auto_start_message"] = "MILESTONE COMPLETE"
+                result["next_block"] = "NO NEXT WORK ORDER FOUND / MILESTONE COMPLETE"
 
     # Flush the work_order.closed spool event through the projection pipeline so
     # callers see status='closed' in the read model without a manual sync_tick.

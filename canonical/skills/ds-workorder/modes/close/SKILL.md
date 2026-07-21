@@ -27,24 +27,20 @@ believe the WO is done but close reports a `tasks_done` failure, mark the remain
    - **Fix the gates** (preferred): suggest the skill that addresses each failure. For example, `tasks_done` → invoke `ds-workorder:execute` and mark the remaining tasks done (do NOT force past hanging tasks); `design_brief_locked` → invoke `ds-project:brief` to fill and then `ds-project:brief` lock mode; `design_critique` → invoke `website:critique`; `security_scan` → invoke `security:scan`; `api_contract_exists` → write the contract artifact.
    - **Force close** (requires explicit user approval — this is a stop condition): explain that `force=True` will bypass the failed gates and emit `gate.bypassed` spool events. Confirm: *"Bypass these gates? This is recorded for audit. (yes/no)"* — only on explicit yes, call `close_work_order(work_order_id=<wo>, force=True, ...)`.
 
-4. **Surface the close result and continue.**
-   - If `gaps_block` is present, print it verbatim — the independent review found gaps and registered a remediation WO (`spawned_work_orders`).
-   - If `auto_started` is present, announce it in one line — *"AUTO-STARTED: {auto_started.title}"* — then complete/clear the native todo list for the closed WO, mirror the new WO's task list into a fresh todo list, and IMMEDIATELY continue executing the new WO's tasks without waiting for operator input.
-   - If `auto_start_error` is present, surface it and stop — this is a stop condition.
-   - If `auto_start_message` or `milestone_complete` is present, the milestone is done: surface `next_command` (milestone close) and stop — this is a stop condition.
-   - Otherwise surface `next_block` / `next_command` so the user knows what's next.
+4. **Surface the close result.** Close is **report-only** — it never auto-starts the next work order (that side effect used to pile up dangling in-progress WOs on every close).
+   - If `gaps_block` is present, print it verbatim — the independent review found gaps and registered a remediation WO (`spawned_work_orders`). Surface its `next_command` so the operator can start it when ready.
+   - If `milestone_complete` is present, the milestone is done: surface `next_command` (milestone close) and stop.
+   - Otherwise surface `next_block` / `next_command` (the ready-set next WO) so the user knows what's next, then **stop** — starting the next WO is an explicit operator decision on the interactive path.
+   - **Autonomous execute-work-orders loop only:** the workflow's `next-iteration` node starts the advertised next WO and re-invokes the loop. The interactive close path does not chain.
 
 ## Stop conditions
 
-The ONLY places the agent waits for the operator across start → execute → close:
+Close is report-only: after a clean close on the interactive path, surface `next_command` and **stop** — the operator decides what to start next. Only the autonomous execute-work-orders workflow chains (its `next-iteration` node starts the advertised next WO and re-invokes). Places the agent waits for the operator:
 - Force-close approval (gate bypass).
 - `requires_brief_confirmation` on start.
-- `auto_start_error` on close.
-- `milestone_complete` / `auto_start_message` (milestone done — milestone close is an operator decision).
+- `milestone_complete` (milestone done — milestone close is an operator decision).
 - A blocked WO.
 - A genuine blocking question the agent cannot resolve from the WO, the code, or sensible defaults.
-
-Everything else flows continuously: start → execute each task → close → auto-started next WO.
 
 ## Surface contract
 
@@ -84,10 +80,12 @@ Everything else flows continuously: start → execute each task → close → au
         "milestone_id": str | absent,
         "gaps_block": str | absent,            # printable GAPS FOUND block when independent review failed
         "spawned_work_orders": [{...}] | absent,  # remediation WOs registered from review gaps
-        "auto_started": {"work_order_id": str, "title": str, "message": str} | absent,  # next/remediation WO already started
-        "auto_start_error": str | absent,      # auto-start attempted and failed — stop condition
-        "auto_start_message": str | absent,    # "MILESTONE COMPLETE" — no next WO to start
       }
+
+    # Close is REPORT-ONLY: it advertises the next WO (`next_work_order` = the ready-set
+    # pick) and how to start it (`next_command`/`next_block`) but never starts it — there
+    # is no `auto_started`/`auto_start_error` key. Starting the next WO is an explicit
+    # operator action (or the execute-work-orders workflow's next-iteration node).
 
 ## Side effects
 
@@ -97,5 +95,5 @@ Everything else flows continuously: start → execute each task → close → au
 - Sets the WO row's `status` to `closed`.
 - Emits a `work_order.closed` spool event.
 - When `force=True` with failures, emits one `gate.bypassed` event per failure for audit.
-- When the post-build gate is `independent_review`, runs the fresh-context verify inline; review gaps register remediation WOs and the first one is auto-started.
-- When verify passes, the next WO in the project is auto-started (`auto_started`).
+- When the post-build gate is `independent_review`, runs the fresh-context verify inline; review gaps register remediation WOs, reported via `gaps_block` + `spawned_work_orders` (not started — run the reported `next_command` to begin remediation).
+- When verify passes, advertises the project-wide ready-set next WO via `next_work_order` / `next_command` / `next_block` — **report-only, the WO is not started** (the autonomous execute-work-orders workflow starts it in its next-iteration node).

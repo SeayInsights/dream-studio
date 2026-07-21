@@ -130,13 +130,13 @@ def _seed_wo(
 # ---------------------------------------------------------------------------
 
 
-def test_autostart_matches_next_work_order(tmp_path: Path) -> None:
-    """The WO advertised as next_work_order is exactly the WO auto-started — the
-    startable project-wide ready-set pick (wo_c). A naive same-milestone selector would
-    have advertised wo_a, which start_work_order refuses because an earlier milestone is
-    still open; the fix makes both fields agree on the startable next.
+def test_advertised_next_is_readyset_pick(tmp_path: Path) -> None:
+    """Close is REPORT-ONLY (WO-CLOSE-REPORT-ONLY): the WO advertised as
+    next_work_order is the startable project-wide ready-set pick (wo_c), NOT the naive
+    same-milestone wo_a that start_work_order would refuse (earlier milestone still
+    open). Close advertises it but does not start it (no auto_started key).
 
-    AC: tests/integration/test_close_autostart_parity.py::test_autostart_matches_next_work_order
+    AC: tests/integration/test_close_autostart_parity.py::test_advertised_next_is_readyset_pick
     """
     from core.work_orders.close import close_work_order
 
@@ -168,12 +168,11 @@ def test_autostart_matches_next_work_order(tmp_path: Path) -> None:
         )
 
     assert result["ok"] is True, f"expected clean close; got {result}"
-    # Parity: advertised next == auto-started, and it's the startable project-wide pick
-    # (wo_c), NOT the same-milestone wo_a that start_work_order would refuse.
-    assert result["auto_started"]["work_order_id"] == result["next_work_order"]["work_order_id"]
-    assert result["auto_started"]["work_order_id"] == wo_c
-    assert result["auto_started"]["work_order_id"] != wo_a
-    assert "auto_start_error" not in result
+    # Report-only: advertised next is the startable project-wide pick (wo_c), NOT the
+    # same-milestone wo_a that start_work_order would refuse — and nothing is started.
+    assert "auto_started" not in result, "close must be report-only"
+    assert result["next_work_order"]["work_order_id"] == wo_c
+    assert result["next_work_order"]["work_order_id"] != wo_a
 
 
 # ---------------------------------------------------------------------------
@@ -182,8 +181,9 @@ def test_autostart_matches_next_work_order(tmp_path: Path) -> None:
 
 
 def test_end_to_end(tmp_path: Path) -> None:
-    """When the closed WO's milestone has no further open WO, auto-start falls back
-    to the project-wide next WO (an earlier milestone's ready WO).
+    """When the closed WO's milestone has no further open WO, the advertised
+    next_work_order falls back to the project-wide ready-set pick (an earlier
+    milestone's ready WO). Report-only — advertised, not started.
 
     AC: tests/integration/test_close_autostart_parity.py::test_end_to_end
     """
@@ -215,8 +215,7 @@ def test_end_to_end(tmp_path: Path) -> None:
         )
 
     assert result["ok"] is True, f"expected clean close; got {result}"
-    # The closed WO's milestone (m2) is exhausted, and the project-wide next is wo_c in
-    # the earlier milestone. Parity holds: advertised next == auto-started == wo_c.
-    assert result["auto_started"]["work_order_id"] == wo_c
+    # The closed WO's milestone (m2) is exhausted; the project-wide next is wo_c in the
+    # earlier milestone. Report-only: advertised next == wo_c, and nothing is started.
+    assert "auto_started" not in result, "close must be report-only"
     assert result["next_work_order"]["work_order_id"] == wo_c
-    assert result["auto_started"]["work_order_id"] == result["next_work_order"]["work_order_id"]
