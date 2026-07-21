@@ -86,6 +86,33 @@ _FILES_DB_TABLES: frozenset[str] = frozenset(
     }
 )
 
+# Tables that live in the packet store's own SQLite DB (packets.db), created on
+# demand by core/work_orders/packet_store.py (WO-FILESDB-C3, PR #517). Like the
+# files.db tables above, they are a separate database from studio.db, so the
+# staleness guard must not flag them as unregistered studio.db tables.
+_PACKETS_DB_TABLES: frozenset[str] = frozenset(
+    {
+        "packet_artifacts",
+    }
+)
+
+# SQL keywords that the CREATE-TABLE regex can spuriously capture as a "table
+# name" when the real name is an f-string interpolation (e.g.
+# ``CREATE TABLE IF NOT EXISTS {_TABLE}``): the optional IF-NOT-EXISTS group fails
+# to complete before the ``{`` and the pattern backtracks onto ``IF``. These are
+# never real table names, so the staleness guard skips them.
+_DDL_KEYWORD_FALSE_POSITIVES: frozenset[str] = frozenset(
+    {
+        "if",
+        "not",
+        "exists",
+        "table",
+        "virtual",
+        "temp",
+        "temporary",
+    }
+)
+
 # Files excluded from the staleness-guard scan.
 # The guard's own source and its test file contain DDL-pattern text for
 # illustrative/test purposes; scanning them would produce false positives.
@@ -405,7 +432,7 @@ def _staleness_guard(
     )
     # Include files.db tables so the staleness guard does not flag them as
     # unregistered studio.db tables (they live in a separate database).
-    known = set(_PYTHON_OWNED_TABLES.keys()) | _FILES_DB_TABLES
+    known = set(_PYTHON_OWNED_TABLES.keys()) | _FILES_DB_TABLES | _PACKETS_DB_TABLES
     findings: list[dict[str, Any]] = []
 
     if _override_python_files is not None:
@@ -433,6 +460,10 @@ def _staleness_guard(
             for match in create_table_re.finditer(stripped):
                 table = match.group(1).lower()
                 if table.startswith("_"):
+                    continue
+                if table in _DDL_KEYWORD_FALSE_POSITIVES:
+                    # Regex backtracking artifact on an f-string-interpolated name
+                    # (e.g. "CREATE TABLE IF NOT EXISTS {_TABLE}") — not a real table.
                     continue
                 if table in known:
                     continue

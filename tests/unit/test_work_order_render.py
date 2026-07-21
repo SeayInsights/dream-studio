@@ -66,6 +66,7 @@ def test_importing_renderer_and_eval_modules_has_no_fake_home_side_effects(
 
 @pytest.mark.parametrize("target", ["codex", "claude"])
 def test_render_writes_packet_and_evals_under_storage_only(tmp_path, target: str) -> None:
+    from core.work_orders.packet_store import get_packet_artifact, list_packet_artifacts
     from core.work_orders.renderers import render_work_order
     from core.work_orders.storage import load_work_order, save_work_order
 
@@ -77,8 +78,14 @@ def test_render_writes_packet_and_evals_under_storage_only(tmp_path, target: str
     save_work_order(_work_order(target_repo), storage_root=storage_root)
 
     result = render_work_order("wo-render-001", target=target, storage_root=storage_root)
+    # WO-FILESDB-C5: the rendered packet lives in the packet store (kind='packet',
+    # instance_key=target), not a rendered/<target>.md disk file. packet_path is the
+    # logical ref only.
     packet_path = Path(result["packet_path"])
-    packet_text = packet_path.read_text(encoding="utf-8")
+    packet_text = get_packet_artifact(
+        "wo-render-001", "packet", instance_key=target, storage_root=storage_root
+    )
+    assert packet_text is not None
     stored, _ = load_work_order("wo-render-001", storage_root=storage_root)
 
     assert packet_path == storage_root / "wo-render-001" / "rendered" / f"{target}.md"
@@ -100,8 +107,11 @@ def test_render_writes_packet_and_evals_under_storage_only(tmp_path, target: str
     assert "Do not change dependencies" in packet_text
     assert "Do not change schema" in packet_text
     assert stored["status"] == "rendered"
-    assert len(result["eval_paths"]) == 2
-    assert all(Path(path).is_file() for path in result["eval_paths"])
+    # WO-FILESDB-C3: eval artifacts live in the packet store (kind='eval'), so there are
+    # no on-disk eval files — eval_paths is empty and the two evals are in the store.
+    assert result["eval_paths"] == []
+    assert len(result["evals"]) == 2
+    assert len(list_packet_artifacts("wo-render-001", "eval", storage_root=storage_root)) == 2
     assert _snapshot(target_repo) == before
     assert not (tmp_path / ".dream-studio" / "state" / "studio.db").exists()
 

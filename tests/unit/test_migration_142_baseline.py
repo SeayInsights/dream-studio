@@ -102,21 +102,31 @@ def test_baseline_reapply_preserves_seeded_keep_table_rows(baseline_db: sqlite3.
     assert row == ("Preserve me", "in_progress")
 
 
-def test_baseline_reapply_does_not_change_schema_object_count(
-    baseline_db: sqlite3.Connection,
-) -> None:
-    """Re-applying the baseline a second time must not create duplicate or
-    drifted schema objects (tables/indexes/views/triggers)."""
-    conn = baseline_db
+def test_baseline_sql_is_self_idempotent_on_a_fresh_db() -> None:
+    """The baseline's own SQL must be self-idempotent: applying 142 twice to a
+    fresh DB creates no duplicate or drifted schema objects, because every
+    statement is DROP ... IF EXISTS / CREATE ... IF NOT EXISTS.
+
+    This is tested in ISOLATION (a fresh DB with only 142 applied), NOT against a
+    full-chain head DB. Re-applying 142 alone on top of the full chain would
+    resurrect the tables that later forward migrations (147/148/149, WO-SCHEMALEAN)
+    legitimately DROP — that is the sanctioned immutable-baseline + forward-drop
+    pattern (migrations are immutable history; corrections are forward migrations),
+    not a defect. The production path — the version-gated runner never re-applying
+    142 once a DB is at head — is proven a true no-op by
+    test_run_migrations_against_a_db_already_at_head_is_a_true_no_op below.
+    """
+    conn = sqlite3.connect(":memory:")
+    conn.execute("PRAGMA foreign_keys = ON")
+    sql_text = BASELINE_PATH.read_text(encoding="utf-8")
+    conn.executescript(sql_text)
     before = _schema_object_count(conn)
 
-    sql_text = BASELINE_PATH.read_text(encoding="utf-8")
     conn.executescript(sql_text)
 
     after = _schema_object_count(conn)
-    assert (
-        after == before
-    ), f"schema object count changed on re-apply: before={before} after={after}"
+    conn.close()
+    assert after == before, f"142 SQL is not self-idempotent: before={before} after={after}"
 
 
 def test_run_migrations_against_a_db_already_at_head_is_a_true_no_op(

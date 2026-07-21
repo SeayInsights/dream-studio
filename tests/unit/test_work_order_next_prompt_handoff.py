@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from core.config.database import DB_PATH_ENV, DatabaseRuntime
+from core.work_orders.packet_store import get_packet_artifact
 
 
 @pytest.fixture(autouse=True)
@@ -114,16 +115,24 @@ def test_report_generates_fresh_session_handoff_prompt_and_evals(tmp_path) -> No
         storage_root=storage_root,
     )
 
-    result = generate_report("wo-handoff-001", storage_root=storage_root)
-    report_text = Path(result["report_path"]).read_text(encoding="utf-8")
+    generate_report("wo-handoff-001", storage_root=storage_root)
+    # WO-FILESDB-C5/C3: report + evals live in the packet store, not on disk.
+    report_text = get_packet_artifact("wo-handoff-001", "report", storage_root=storage_root)
+    assert report_text is not None
     prompt_eval = json.loads(
-        (storage_root / "wo-handoff-001" / "evals" / "handoff_prompt_completeness.json").read_text(
-            encoding="utf-8"
+        get_packet_artifact(
+            "wo-handoff-001",
+            "eval",
+            instance_key="handoff_prompt_completeness",
+            storage_root=storage_root,
         )
     )
     path_eval = json.loads(
-        (storage_root / "wo-handoff-001" / "evals" / "handoff_path_integrity.json").read_text(
-            encoding="utf-8"
+        get_packet_artifact(
+            "wo-handoff-001",
+            "eval",
+            instance_key="handoff_path_integrity",
+            storage_root=storage_root,
         )
     )
 
@@ -174,12 +183,18 @@ def test_approval_required_handoff_prompt_preserves_approval_requirements(tmp_pa
         storage_root=storage_root,
     )
 
-    result = generate_report("wo-handoff-approved-001", storage_root=storage_root)
-    report_text = Path(result["report_path"]).read_text(encoding="utf-8")
+    generate_report("wo-handoff-approved-001", storage_root=storage_root)
+    report_text = get_packet_artifact(
+        "wo-handoff-approved-001", "report", storage_root=storage_root
+    )
+    assert report_text is not None
     prompt_eval = json.loads(
-        (
-            storage_root / "wo-handoff-approved-001" / "evals" / "handoff_prompt_completeness.json"
-        ).read_text(encoding="utf-8")
+        get_packet_artifact(
+            "wo-handoff-approved-001",
+            "eval",
+            instance_key="handoff_prompt_completeness",
+            storage_root=storage_root,
+        )
     )
 
     assert "next_work_order_mode: approval_required" in report_text
@@ -199,8 +214,9 @@ def test_hold_report_uses_recovery_decision_handoff_not_execution_handoff(tmp_pa
         _work_order(target, work_order_id="wo-handoff-hold-001"), storage_root=storage_root
     )
 
-    result = generate_report("wo-handoff-hold-001", storage_root=storage_root)
-    report_text = Path(result["report_path"]).read_text(encoding="utf-8")
+    generate_report("wo-handoff-hold-001", storage_root=storage_root)
+    report_text = get_packet_artifact("wo-handoff-hold-001", "report", storage_root=storage_root)
+    assert report_text is not None
 
     assert "readiness: HOLD" in report_text
     assert "# Handoff Packet" in report_text
@@ -232,8 +248,11 @@ def test_failed_target_repo_mutation_blocks_sequential_execution(tmp_path) -> No
         storage_root=storage_root,
     )
 
-    result = generate_report("wo-handoff-target-fail-001", storage_root=storage_root)
-    report_text = Path(result["report_path"]).read_text(encoding="utf-8")
+    generate_report("wo-handoff-target-fail-001", storage_root=storage_root)
+    report_text = get_packet_artifact(
+        "wo-handoff-target-fail-001", "report", storage_root=storage_root
+    )
+    assert report_text is not None
 
     assert "readiness: HOLD" in report_text
     assert "target_repo_mutation failed" in report_text
@@ -268,8 +287,11 @@ def test_failed_approved_mutation_blocks_sequential_execution(tmp_path) -> None:
         storage_root=storage_root,
     )
 
-    result = generate_report("wo-handoff-approved-fail-001", storage_root=storage_root)
-    report_text = Path(result["report_path"]).read_text(encoding="utf-8")
+    generate_report("wo-handoff-approved-fail-001", storage_root=storage_root)
+    report_text = get_packet_artifact(
+        "wo-handoff-approved-fail-001", "report", storage_root=storage_root
+    )
+    assert report_text is not None
 
     assert "readiness: HOLD" in report_text
     assert "approved_mutation_compliance failed" in report_text

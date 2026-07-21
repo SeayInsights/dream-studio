@@ -145,6 +145,7 @@ def test_mutation_without_approval_evidence_never_passes(tmp_path) -> None:
 def test_record_result_for_approval_required_emits_approved_mutation_not_observe_only(
     tmp_path,
 ) -> None:
+    from core.work_orders.packet_store import get_packet_artifact, list_packet_artifacts
     from core.work_orders.results import record_result
     from core.work_orders.storage import save_work_order
 
@@ -158,21 +159,41 @@ def test_record_result_for_approval_required_emits_approved_mutation_not_observe
 
     result = record_result("wo-approved-001", source_path=source, storage_root=storage_root)
 
-    assert len(result["eval_paths"]) == 3
+    # WO-FILESDB-C3: the 3 evals live in the packet store (kind='eval'), not on disk.
+    assert result["eval_paths"] == []
+    assert len(list_packet_artifacts("wo-approved-001", "eval", storage_root=storage_root)) == 3
     assert (
-        storage_root / "wo-approved-001" / "evals" / "approved_mutation_compliance.json"
-    ).is_file()
-    assert not (
-        storage_root / "wo-approved-001" / "evals" / "observe_only_compliance.json"
-    ).exists()
+        get_packet_artifact(
+            "wo-approved-001",
+            "eval",
+            instance_key="approved_mutation_compliance",
+            storage_root=storage_root,
+        )
+        is not None
+    )
+    assert (
+        get_packet_artifact(
+            "wo-approved-001",
+            "eval",
+            instance_key="observe_only_compliance",
+            storage_root=storage_root,
+        )
+        is None
+    )
     approved_eval = json.loads(
-        (
-            storage_root / "wo-approved-001" / "evals" / "approved_mutation_compliance.json"
-        ).read_text(encoding="utf-8")
+        get_packet_artifact(
+            "wo-approved-001",
+            "eval",
+            instance_key="approved_mutation_compliance",
+            storage_root=storage_root,
+        )
     )
     target_eval = json.loads(
-        (storage_root / "wo-approved-001" / "evals" / "target_repo_mutation.json").read_text(
-            encoding="utf-8"
+        get_packet_artifact(
+            "wo-approved-001",
+            "eval",
+            instance_key="target_repo_mutation",
+            storage_root=storage_root,
         )
     )
     assert approved_eval["pass_fail"] == "pass"
@@ -207,6 +228,7 @@ def test_historical_observe_only_artifact_remains_readable(tmp_path) -> None:
 
 
 def test_report_includes_approved_mutation_status_without_overclaiming(tmp_path) -> None:
+    from core.work_orders.packet_store import get_packet_artifact
     from core.work_orders.reporting import generate_report
     from core.work_orders.results import record_result
     from core.work_orders.storage import save_work_order
@@ -222,8 +244,9 @@ def test_report_includes_approved_mutation_status_without_overclaiming(tmp_path)
     source.write_text(_result_text("src/app/a.ts"), encoding="utf-8")
     record_result("wo-approved-report-001", source_path=source, storage_root=storage_root)
 
-    result = generate_report("wo-approved-report-001", storage_root=storage_root)
-    report_text = Path(result["report_path"]).read_text(encoding="utf-8")
+    generate_report("wo-approved-report-001", storage_root=storage_root)
+    report_text = get_packet_artifact("wo-approved-report-001", "report", storage_root=storage_root)
+    assert report_text is not None
 
     assert "## Approved Mutation Compliance" in report_text
     assert "status: pass" in report_text

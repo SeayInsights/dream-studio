@@ -14,16 +14,27 @@ def _work_order(target_path: Path) -> dict:
 
 def test_observe_only_eval_passes_with_explicit_clean_evidence(tmp_path) -> None:
     from core.work_orders.evals import create_observe_only_compliance_eval
+    from core.work_orders.packet_store import get_packet_artifact
 
     target = tmp_path / "target"
     target.mkdir()
+    storage_root = tmp_path / "store"
     artifact, path = create_observe_only_compliance_eval(
         work_order=_work_order(target),
         result_text="Files changed: none\nTarget mutation: no\n",
         result_metadata={"raw_output_ref": "result.md"},
-        storage_root=tmp_path / "store",
+        storage_root=storage_root,
     )
-    stored = json.loads(path.read_text(encoding="utf-8"))
+    # WO-FILESDB-C3: eval lives in the packet store (kind='eval'), path is None.
+    assert path is None
+    stored = json.loads(
+        get_packet_artifact(
+            "wo-observe-eval-001",
+            "eval",
+            instance_key="observe_only_compliance",
+            storage_root=storage_root,
+        )
+    )
 
     assert artifact["pass_fail"] == "pass"
     assert stored["privacy_export_classification"] == "local_only"

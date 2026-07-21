@@ -10,9 +10,11 @@ def _work_order(target_path: Path) -> dict:
 
 def test_result_report_completeness_eval_passes_for_required_sections(tmp_path) -> None:
     from core.work_orders.evals import REQUIRED_REPORT_TERMS, create_result_report_completeness_eval
+    from core.work_orders.packet_store import get_packet_artifact
 
     target = tmp_path / "target"
     target.mkdir()
+    storage_root = tmp_path / "store"
     report = tmp_path / "report.md"
     report_text = "\n".join(REQUIRED_REPORT_TERMS) + "\n"
     report.write_text(report_text, encoding="utf-8")
@@ -22,9 +24,18 @@ def test_result_report_completeness_eval_passes_for_required_sections(tmp_path) 
         report_path=report,
         report_text=report_text,
         result_exists=True,
-        storage_root=tmp_path / "store",
+        storage_root=storage_root,
     )
-    stored = json.loads(path.read_text(encoding="utf-8"))
+    # WO-FILESDB-C3: eval lives in the packet store (kind='eval'), path is None.
+    assert path is None
+    stored = json.loads(
+        get_packet_artifact(
+            "wo-report-eval-001",
+            "eval",
+            instance_key="result_report_completeness",
+            storage_root=storage_root,
+        )
+    )
 
     assert artifact["pass_fail"] == "pass"
     assert stored["eval_type"] == "result_report_completeness"
