@@ -127,6 +127,13 @@ def test_optional_modules_do_not_own_forbidden_authority() -> None:
 def test_safe_import_boundaries_for_standalone_modules() -> None:
     standalone_files = {
         "analytics_only": REPO_ROOT / "core" / "analytics_ingestion.py",
+        # WO-GF-READINESS-INSIGHTS: analytics_ingestion.py became a facade; the
+        # ingestion logic (and its import boundary) now lives in these siblings,
+        # so scan them too — otherwise the standalone boundary goes unverified.
+        "analytics_only_shared": REPO_ROOT / "core" / "analytics_ingestion_shared.py",
+        "analytics_only_contract": REPO_ROOT / "core" / "analytics_ingestion_contract.py",
+        "analytics_only_rows": REPO_ROOT / "core" / "analytics_ingestion_rows.py",
+        "analytics_only_core": REPO_ROOT / "core" / "analytics_ingestion_core.py",
         "module_profiles": REPO_ROOT / "core" / "module_profiles.py",
         "module_contracts": REPO_ROOT / "core" / "module_contracts.py",
     }
