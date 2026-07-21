@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -266,3 +267,124 @@ def test_contract_docs_drift_cli_accepts_reviewed_no_change() -> None:
         domain for domain in payload["domains"] if domain["domain_id"] == "sqlite_schema_authority"
     )
     assert sqlite_domain["freshness_status"] == "docs_reviewed_no_change_needed"
+
+
+def test_reviewed_no_change_env_var_reaches_blocking_lane() -> None:
+    """WO-DOCS-DRIFT-REVIEWED-ESCAPE: the blocking lane invokes the gate with no
+    flag, so DREAM_STUDIO_DOCS_REVIEWED_NO_CHANGE must be honored for an
+    impacted domain (local-convenience signal)."""
+    env = dict(os.environ)
+    env["DREAM_STUDIO_DOCS_REVIEWED_NO_CHANGE"] = "sqlite_schema_authority"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "interfaces/cli/contract_docs_drift_gate.py",
+            "--changed-file",
+            "core/config/database.py",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "pass"
+    assert "sqlite_schema_authority" in payload["reviewed_no_change_domains"]
+    sqlite_domain = next(
+        d for d in payload["domains"] if d["domain_id"] == "sqlite_schema_authority"
+    )
+    assert sqlite_domain["freshness_status"] == "docs_reviewed_no_change_needed"
+
+
+def _init_repo_with_trailer(tmp_path: Path, trailer_domain: str) -> Path:
+    """Build a tmp repo: main baseline + a feature commit touching a real
+    contract-domain source file, carrying a Docs-Reviewed-No-Change trailer."""
+    repo = tmp_path / "repo"
+    (repo / "core" / "config").mkdir(parents=True)
+    run = dict(cwd=str(repo), capture_output=True, text=True, check=True)
+    subprocess.run(["git", "init", "-q", "-b", "main"], **run)
+    subprocess.run(["git", "config", "user.email", "t@t"], **run)
+    subprocess.run(["git", "config", "user.name", "t"], **run)
+    (repo / "base.txt").write_text("base", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], **run)
+    subprocess.run(["git", "commit", "-q", "-m", "base"], **run)
+    subprocess.run(["git", "checkout", "-q", "-b", "feature"], **run)
+    # A real sqlite_schema_authority source pattern so the domain is impacted.
+    (repo / "core" / "config" / "database.py").write_text("v1", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], **run)
+    subprocess.run(
+        [
+            "git",
+            "commit",
+            "-q",
+            "-m",
+            f"refactor: no behavior change\n\nDocs-Reviewed-No-Change: {trailer_domain}\n",
+        ],
+        **run,
+    )
+    return repo
+
+
+def test_commit_trailer_reviewed_no_change_reaches_blocking_lane(tmp_path, monkeypatch) -> None:
+    """WO-DOCS-DRIFT-REVIEWED-ESCAPE: a `Docs-Reviewed-No-Change: <domain>` commit
+    trailer in the diff range must satisfy that impacted domain — this is the
+    signal that travels identically through push and CI (both flag-less)."""
+    import argparse
+
+    import interfaces.cli.contract_docs_drift_gate as gate_mod
+
+    repo = _init_repo_with_trailer(tmp_path, "sqlite_schema_authority")
+    monkeypatch.setattr(gate_mod, "REPO_ROOT", repo)
+    monkeypatch.delenv("DREAM_STUDIO_CHANGED_FILES", raising=False)
+    monkeypatch.delenv("DREAM_STUDIO_BASE_REF", raising=False)
+    monkeypatch.delenv("GITHUB_BASE_REF", raising=False)
+    monkeypatch.delenv("DREAM_STUDIO_DOCS_REVIEWED_NO_CHANGE", raising=False)
+    args = argparse.Namespace(
+        changed_file=[], changed_files=None, base_ref="main", docs_reviewed_no_change=[]
+    )
+
+    reviewed = gate_mod._reviewed_no_change_domains(args)
+    assert "sqlite_schema_authority" in reviewed
+
+    report = change_impact_report(
+        gate_mod._changed_files(args), reviewed_no_change_domains=reviewed
+    )
+    assert report["status"] == "pass"
+    sqlite_domain = next(
+        d for d in report["domains"] if d["domain_id"] == "sqlite_schema_authority"
+    )
+    assert sqlite_domain["impacted"] is True
+    assert sqlite_domain["freshness_status"] == "docs_reviewed_no_change_needed"
+
+
+def test_trailer_for_other_domain_does_not_false_pass_impacted_domain(
+    tmp_path, monkeypatch
+) -> None:
+    """A trailer naming a different (or unknown) domain must NOT rescue the
+    actually-impacted-but-undeclared domain — the escape is per-domain, not a
+    blanket skip."""
+    import argparse
+
+    import interfaces.cli.contract_docs_drift_gate as gate_mod
+
+    repo = _init_repo_with_trailer(tmp_path, "some_unrelated_domain")
+    monkeypatch.setattr(gate_mod, "REPO_ROOT", repo)
+    monkeypatch.delenv("DREAM_STUDIO_CHANGED_FILES", raising=False)
+    monkeypatch.delenv("DREAM_STUDIO_BASE_REF", raising=False)
+    monkeypatch.delenv("GITHUB_BASE_REF", raising=False)
+    monkeypatch.delenv("DREAM_STUDIO_DOCS_REVIEWED_NO_CHANGE", raising=False)
+    args = argparse.Namespace(
+        changed_file=[], changed_files=None, base_ref="main", docs_reviewed_no_change=[]
+    )
+
+    reviewed = gate_mod._reviewed_no_change_domains(args)
+    assert reviewed == ["some_unrelated_domain"]
+
+    report = change_impact_report(
+        gate_mod._changed_files(args), reviewed_no_change_domains=reviewed
+    )
+    assert report["status"] == "fail"
+    assert report["blocking_domains"][0]["domain_id"] == "sqlite_schema_authority"

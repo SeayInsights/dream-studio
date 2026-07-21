@@ -74,9 +74,28 @@ are not refreshed in the same change set. CI can provide changed files through
 `DREAM_STUDIO_CHANGED_FILES`, `--changed-file`, or a base ref. Local runs with
 no pending diff pass as an honest empty state.
 
-If a domain is reviewed and no docs need to change, the gate can record that
-explicitly with `--docs-reviewed-no-change <domain_id>`. That path is for
-evidence-backed review decisions, not a shortcut around stale documentation.
+If a domain is reviewed and no docs need to change — for example a
+behavior-preserving refactor such as a facade-split that touches a
+contract-domain source file without changing its documented contract — the gate
+can record that explicitly. That path is for evidence-backed review decisions,
+not a shortcut around stale documentation: a behavior change still requires a
+real doc refresh, and the declaration is honored only for domains actually
+impacted by the change set (declaring a non-impacted or unknown domain never
+rescues a different impacted-but-undeclared domain).
+
+The blocking pre-push and CI lanes both invoke `contract_docs_drift_gate.py`
+with no flag, so the declaration must travel with the change set. Three
+equivalent signals feed it, in order of preference:
+
+- **`Docs-Reviewed-No-Change: <domain_id>` commit trailer** (primary). Placed in
+  a commit in the pushed range, it travels identically through push and CI and
+  is reviewable in the PR. Multiple domains: repeat the trailer or comma-separate
+  the ids.
+- **`DREAM_STUDIO_DOCS_REVIEWED_NO_CHANGE` env var** (local convenience) — a
+  comma/newline/semicolon-separated list of domain ids, for iterating on a push
+  without amending a commit.
+- **`--docs-reviewed-no-change <domain_id>` CLI flag** — for direct invocations
+  and tests.
 
 Contract Atlas behavior changes must refresh the atlas contract doc, this
 operations policy, and the docs index together so the release gate, human docs
