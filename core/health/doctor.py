@@ -456,6 +456,44 @@ def _check_stale_dbs(dream_studio_home: Path) -> dict[str, Any]:
         return {"stale_dbs": [], "ok": True}
 
 
+# Entry hooks wired directly in hooks.json (bypassing the dispatcher) and copied
+# verbatim into the installed tree. Because `ds update` is version-gated, a canonical
+# edit does not auto-propagate — the deployed copy can silently go stale.
+_ENTRY_HOOK_RELPATHS = (
+    "runtime/hooks/meta/on-edit-enforce.py",
+    "runtime/hooks/meta/on-stop-enforce.py",
+)
+
+
+def _check_hook_freshness(source_root: Path, claude_dir: Path) -> dict[str, Any]:
+    """Compare deployed entry-hook copies against their canonical runtime sources.
+
+    The two blocking enforce hooks (on-edit-enforce, on-stop-enforce) are wired
+    directly in hooks.json — not dispatched — and are copied into
+    ``<claude_dir>/hooks/`` at install time. A canonical edit does not auto-propagate
+    (``ds update`` is version-gated), so the deployed copy can silently go stale — as
+    it did after WO-HOOK-ENFORCE-EXEC-STATS, when the telemetry emission never fired
+    from the stale copy. Flags any entry hook whose deployed copy differs from
+    canonical (line endings normalized so a CRLF install still compares equal).
+    """
+    stale: list[str] = []
+    checked = 0
+    for rel in _ENTRY_HOOK_RELPATHS:
+        canonical = source_root / rel
+        deployed = claude_dir / "hooks" / rel
+        if not canonical.is_file() or not deployed.is_file():
+            continue
+        checked += 1
+        try:
+            canon_bytes = canonical.read_bytes().replace(b"\r\n", b"\n")
+            deployed_bytes = deployed.read_bytes().replace(b"\r\n", b"\n")
+        except OSError:
+            continue
+        if canon_bytes != deployed_bytes:
+            stale.append(rel)
+    return {"checked": checked, "stale": stale, "ok": not stale}
+
+
 def run_doctor_checks(
     *,
     source_root: Path,
@@ -478,6 +516,7 @@ def run_doctor_checks(
     version_info = _check_version_current(source_root, paths.dream_studio_home)
     handoff_spawner_info = _check_handoff_spawner(source_root)
     stale_dbs_info = _check_stale_dbs(paths.dream_studio_home)
+    hook_freshness_info = _check_hook_freshness(source_root, claude_dir)
 
     from core.config.schema_coherence import check_schema_coherence
 
@@ -507,7 +546,12 @@ def run_doctor_checks(
 
     fix_actions: list[str] = []
     if fix:
-        if not dispatcher_ok or skills_info["missing"] or agents_info["missing"]:
+        if (
+            not dispatcher_ok
+            or skills_info["missing"]
+            or agents_info["missing"]
+            or hook_freshness_info["stale"]
+        ):
             try:
                 subprocess.run(
                     [
@@ -577,6 +621,7 @@ def run_doctor_checks(
             "overhead": overhead_info,
             "handoff_spawner": handoff_spawner_info,
             "stale_dbs": stale_dbs_info,
+            "hook_freshness": hook_freshness_info,
         },
         "validation": validation,
     }
