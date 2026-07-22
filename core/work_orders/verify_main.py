@@ -48,7 +48,13 @@ from typing import Any
 
 from core.event_store.studio_db import _connect
 
-from .verify_db import _read_tasks, _read_work_order, _require_db, _run_sql_checks, _format_sql_checks
+from .verify_db import (
+    _read_tasks,
+    _read_work_order,
+    _require_db,
+    _run_sql_checks,
+    _format_sql_checks,
+)
 from .verify_executor import run_executable_checks
 from .verify_gaps import (
     _filter_invented_threshold_gaps,
