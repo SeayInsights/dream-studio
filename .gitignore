@@ -157,6 +157,10 @@ drift-*
 # Debug scripts (one-off investigations)
 tmp_*.py
 verify_*.py
+# ...but the WO-lifecycle engine's verify_*.py split siblings are real product source
+# (WO-GF-WO-LIFECYCLE): the broad debug-script pattern above must not swallow them, or
+# the committed verify.py facade imports phantom modules on a fresh checkout.
+!core/work_orders/verify_*.py
 tools/_ta*.md
 tools/_ta*.py
 
