@@ -158,7 +158,7 @@ def test_grader_grades_wo_from_db_identity(tmp_path: Path) -> None:
         # Patch _collect_git_commits to return None — no commits found.
         # This simulates a squash-merge whose subject drops the UUID.
         with patch(
-            "core.work_orders.verify._collect_git_commits",
+            "core.work_orders.verify_git._collect_git_commits",
             return_value=None,
         ):
             # Disable DREAM_STUDIO_VERIFY_MOCK so the unreviewable path executes.
@@ -457,7 +457,7 @@ def test_recent_squash_merges_are_reviewable(tmp_path: Path) -> None:
     with (
         _patch_db(db_path),
         patch(
-            "core.work_orders.verify._collect_git_commits",
+            "core.work_orders.verify_git._collect_git_commits",
             return_value=None,
         ),
     ):
@@ -480,18 +480,21 @@ def test_recent_squash_merges_are_reviewable(tmp_path: Path) -> None:
         result.get("unreviewable") is True
     ), f"Expected unreviewable=True when no commits found; result={result}"
 
-    # Structural assertion: the bypass path in close.py exists (import check)
+    # Structural assertion: the bypass path in close_work_order exists (import check)
     # This confirms unreviewable + passing AC still closes (not hard-blocked).
-    from core.work_orders import close as _close_module
+    # WO-GF-WO-LIFECYCLE split close.py into a facade + close_{shared,gates,
+    # continuation,main}.py siblings; close_work_order (and this bypass logic)
+    # now live in close_main.py, not the facade itself.
+    from core.work_orders import close_main as _close_main_module
 
-    close_src = Path(_close_module.__file__).read_text(encoding="utf-8")
+    close_src = Path(_close_main_module.__file__).read_text(encoding="utf-8")
     assert "_is_unreviewable" in close_src, (
-        "close.py must contain the _is_unreviewable bypass variable "
+        "close_main.py must contain the _is_unreviewable bypass variable "
         "(unreviewable + passing AC → closes)"
     )
     assert (
         "not ac_failures" in close_src
-    ), "close.py must gate the unreviewable bypass on ac_failures being empty"
+    ), "close_main.py must gate the unreviewable bypass on ac_failures being empty"
 
 
 # ---------------------------------------------------------------------------

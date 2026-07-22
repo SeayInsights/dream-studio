@@ -17,10 +17,24 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CLOSE_MODULE = REPO_ROOT / "core" / "work_orders" / "close.py"
+CLOSE_GATES_MODULE = REPO_ROOT / "core" / "work_orders" / "close_gates.py"
+CLOSE_MAIN_MODULE = REPO_ROOT / "core" / "work_orders" / "close_main.py"
 
 
 def _read_close_source() -> str:
-    return CLOSE_MODULE.read_text(encoding="utf-8")
+    """Concatenated source of the close-lifecycle facade and its siblings.
+
+    WO-GF-WO-LIFECYCLE split ``close.py`` into a thin re-export facade plus
+    ``close_{shared,gates,continuation,main}.py`` siblings. The guard below
+    inspects the full call graph — ``close_work_order``/``check_close_gates``
+    now live in ``close_main.py``, while ``_run_ac_gate``/``run_gate_check``
+    live in ``close_gates.py`` — so it reads and concatenates all three
+    defining modules rather than just the facade (which now only contains
+    re-export statements, not the function bodies themselves).
+    """
+    return "\n".join(
+        p.read_text(encoding="utf-8") for p in (CLOSE_MODULE, CLOSE_GATES_MODULE, CLOSE_MAIN_MODULE)
+    )
 
 
 # ---------------------------------------------------------------------------

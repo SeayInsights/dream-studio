@@ -181,7 +181,7 @@ def test_behavioral_ac_warning_gap_creates_work_order(
 
     with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
         with patch(
-            "core.work_orders.verify._run_graders_parallel",
+            "core.work_orders.verify_graders._run_graders_parallel",
             return_value={
                 "completion": completion_result,
                 "correctness": correctness_result,
@@ -189,7 +189,7 @@ def test_behavioral_ac_warning_gap_creates_work_order(
             },
         ):
             with patch(
-                "core.work_orders.verify._collect_git_commits",
+                "core.work_orders.verify_git._collect_git_commits",
                 return_value=fake_diff,
             ):
                 from core.work_orders.verify import verify_work_order

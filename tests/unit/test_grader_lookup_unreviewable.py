@@ -214,6 +214,7 @@ def test_spawn_grader_feeds_prompt_via_stdin_not_argv():
     import io
 
     from core.work_orders import verify as verify_mod
+    from core.work_orders import verify_graders as verify_graders_mod
 
     big_prompt = "x" * 100_000  # far beyond the Windows argv limit
     captured: dict[str, object] = {}
@@ -231,7 +232,7 @@ def test_spawn_grader_feeds_prompt_via_stdin_not_argv():
         captured["stdin_is_pipe"] = kwargs.get("stdin") == subprocess.PIPE
         return _FakeProc()
 
-    with patch.object(verify_mod.subprocess, "Popen", _fake_popen):
+    with patch.object(verify_graders_mod.subprocess, "Popen", _fake_popen):
         proc = verify_mod._spawn_grader(big_prompt)
         proc._ds_feeder.join(timeout=10)
 

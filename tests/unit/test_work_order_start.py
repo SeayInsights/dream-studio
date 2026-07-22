@@ -137,7 +137,8 @@ class TestStartWorkOrderSequenceGuard:
         # Only stub out side effects that would fail outside the db fixture.
         with (
             patch(
-                "core.work_orders.start.write_work_order_context", return_value=tmp_path / "ctx.md"
+                "core.work_orders.start_context.write_work_order_context",
+                return_value=tmp_path / "ctx.md",
             ),
             patch("spool.writer.write_event"),
         ):
@@ -216,7 +217,8 @@ class TestStartWorkOrderSequenceGuard:
 
         with (
             patch(
-                "core.work_orders.start.write_work_order_context", return_value=tmp_path / "ctx.md"
+                "core.work_orders.start_context.write_work_order_context",
+                return_value=tmp_path / "ctx.md",
             ),
             patch("spool.writer.write_event"),
         ):
