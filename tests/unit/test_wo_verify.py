@@ -192,9 +192,9 @@ def test_verify_gap_creates_work_orders(tmp_path: pytest.TempPathFactory) -> Non
 
     planning_root = tmp_path / "planning"
     with _patch_db(db_path):
-        with patch("core.work_orders.verify._run_graders_parallel", return_value=grader_results):
+        with patch("core.work_orders.verify_graders._run_graders_parallel", return_value=grader_results):
             with patch(
-                "core.work_orders.verify._collect_git_commits",
+                "core.work_orders.verify_git._collect_git_commits",
                 return_value="diff --git a/fake.py b/fake.py\n+# change",
             ):
                 from core.work_orders.verify import verify_work_order
@@ -379,9 +379,9 @@ def test_spawned_gap_wos_visible_in_project(tmp_path: pytest.TempPathFactory) ->
 
     planning_root = tmp_path / "planning"
     with _patch_db(db_path):
-        with patch("core.work_orders.verify._run_graders_parallel", return_value=grader_results):
+        with patch("core.work_orders.verify_graders._run_graders_parallel", return_value=grader_results):
             with patch(
-                "core.work_orders.verify._collect_git_commits",
+                "core.work_orders.verify_git._collect_git_commits",
                 return_value="diff --git a/fake.py b/fake.py\n+# change",
             ):
                 from core.work_orders.verify import verify_work_order
@@ -503,15 +503,15 @@ def test_unreviewable_with_passing_ac_proceeds(tmp_path: pytest.TempPathFactory)
     with (
         _patch_db(db_path),
         patch(
-            "core.work_orders.verify._collect_grader",
+            "core.work_orders.verify_graders._collect_grader",
             return_value=mock_no_summary,
         ),
         patch(
-            "core.work_orders.verify._spawn_grader",
+            "core.work_orders.verify_graders._spawn_grader",
             return_value=MagicMock(),
         ),
         patch(
-            "core.work_orders.verify._collect_git_commits",
+            "core.work_orders.verify_git._collect_git_commits",
             return_value="diff --git a/fake.py b/fake.py\n+# change",
         ),
     ):
@@ -578,15 +578,15 @@ def test_unreviewable_without_ac_blocks_close(tmp_path: pytest.TempPathFactory) 
     with (
         _patch_db(db_path),
         patch(
-            "core.work_orders.verify._collect_grader",
+            "core.work_orders.verify_graders._collect_grader",
             return_value=mock_no_summary,
         ),
         patch(
-            "core.work_orders.verify._spawn_grader",
+            "core.work_orders.verify_graders._spawn_grader",
             return_value=MagicMock(),
         ),
         patch(
-            "core.work_orders.verify._collect_git_commits",
+            "core.work_orders.verify_git._collect_git_commits",
             return_value="diff --git a/fake.py b/fake.py\n+# change",
         ),
     ):
@@ -719,8 +719,8 @@ def test_grader_retries_on_non_json_and_recovers() -> None:
     )
     with (
         patch.dict(os.environ, {}, clear=False),
-        patch("core.work_orders.verify._spawn_grader", return_value=MagicMock()),
-        patch("core.work_orders.verify._collect_grader", collect),
+        patch("core.work_orders.verify_graders._spawn_grader", return_value=MagicMock()),
+        patch("core.work_orders.verify_graders._collect_grader", collect),
     ):
         os.environ.pop("DREAM_STUDIO_VERIFY_MOCK", None)
         results = _run_graders_parallel({"completion": "prompt"})
@@ -737,8 +737,8 @@ def test_grader_cli_unavailable_is_not_retried() -> None:
     spawn = MagicMock(side_effect=FileNotFoundError("claude"))
     collect = MagicMock()
     with (
-        patch("core.work_orders.verify._spawn_grader", spawn),
-        patch("core.work_orders.verify._collect_grader", collect),
+        patch("core.work_orders.verify_graders._spawn_grader", spawn),
+        patch("core.work_orders.verify_graders._collect_grader", collect),
     ):
         os.environ.pop("DREAM_STUDIO_VERIFY_MOCK", None)
         results = _run_graders_parallel({"completion": "prompt"})

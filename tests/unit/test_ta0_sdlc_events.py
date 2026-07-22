@@ -305,10 +305,11 @@ class TestForwardEmissionIntegration:
         conn, db_path = _make_db()
 
         with (
-            patch("core.work_orders.start._require_db", return_value=db_path),
-            patch("core.work_orders.start.read_work_order_brief", return_value=brief),
+            patch("core.work_orders.start_shared._require_db", return_value=db_path),
+            patch("core.work_orders.start_brief.read_work_order_brief", return_value=brief),
             patch(
-                "core.work_orders.start.write_work_order_context", return_value=tmp_path / "ctx.md"
+                "core.work_orders.start_context.write_work_order_context",
+                return_value=tmp_path / "ctx.md",
             ),
             patch("spool.writer.write_event", side_effect=fake_write),
         ):

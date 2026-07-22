@@ -118,7 +118,7 @@ class TestAuthorityCertification:
         wo_id = str(uuid.uuid4())
         _seed_wo(db_path, work_order_id=wo_id, title="WO-SQUASHED - x", ac="SQL-CHECK: SELECT 1")
         # Force both git sources empty so only authority evidence remains.
-        monkeypatch.setattr("core.work_orders.verify._collect_git_commits", lambda *a, **k: None)
+        monkeypatch.setattr("core.work_orders.verify_git._collect_git_commits", lambda *a, **k: None)
 
         with _patch_db(db_path):
             from core.work_orders.verify import verify_work_order
@@ -142,7 +142,7 @@ class TestAuthorityCertification:
         db_path = _make_db(tmp_path)
         wo_id = str(uuid.uuid4())
         _seed_wo(db_path, work_order_id=wo_id, title="WO-NOPE - nothing", ac=None)
-        monkeypatch.setattr("core.work_orders.verify._collect_git_commits", lambda *a, **k: None)
+        monkeypatch.setattr("core.work_orders.verify_git._collect_git_commits", lambda *a, **k: None)
 
         with _patch_db(db_path):
             from core.work_orders.verify import verify_work_order
@@ -169,12 +169,12 @@ class TestAuthorityCertification:
             raise FileNotFoundError("[Errno 2] No such file or directory: 'claude'")
 
         monkeypatch.delenv("DREAM_STUDIO_VERIFY_MOCK", raising=False)
-        monkeypatch.setattr("core.work_orders.verify._spawn_grader", _boom)
+        monkeypatch.setattr("core.work_orders.verify_graders._spawn_grader", _boom)
         repo = _make_git_repo(tmp_path, ["chore: unrelated"])
         db_path = _make_db(tmp_path)
         wo_id = str(uuid.uuid4())
         _seed_wo(db_path, work_order_id=wo_id, title="WO-X - y", ac="SQL-CHECK: SELECT 1")
-        monkeypatch.setattr("core.work_orders.verify._collect_git_commits", lambda *a, **k: None)
+        monkeypatch.setattr("core.work_orders.verify_git._collect_git_commits", lambda *a, **k: None)
 
         with _patch_db(db_path):
             from core.work_orders.verify import verify_work_order
