@@ -241,7 +241,7 @@ def test_doctor_includes_overhead_check(tmp_path: Path) -> None:
     """run_doctor_checks() must include an 'overhead' key in checks."""
     source_root = Path(__file__).parent.parent.parent  # repo root
 
-    with patch("core.health.doctor.run_overhead_checks") as mock_overhead:
+    with patch("core.health.doctor_main.run_overhead_checks") as mock_overhead:
         mock_overhead.return_value = {
             "ok": True,
             "status": "pass",

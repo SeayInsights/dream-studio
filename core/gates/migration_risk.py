@@ -36,7 +36,7 @@ _RISK_PATTERNS = (
     "core/event_store/migrations/",  # SQL migration files
     "core/config/sqlite_bootstrap.py",  # migration runner + swallow handler
     "core/event_store/event_store.py",  # EventStore._init_tables() — Python DDL for canonical_events
-    "core/config/schema_coherence.py",  # aspirational-schema audit — if the detector changes, re-watch
+    "core/config/schema_coherence",  # aspirational-schema audit — if the detector changes, re-watch
 )
 
 _MATRIX_PLATFORMS = "ubuntu-latest, macos-latest, windows-latest"

@@ -228,6 +228,7 @@ _CONTRACT_DOMAINS_OPS: tuple[dict[str, Any], ...] = (
         "domain_name": "Schema Coherence Audit",
         "source_patterns": [
             "core/config/schema_coherence.py",
+            "core/config/schema_coherence_*.py",
         ],
         "contract_refs": [
             "docs/architecture/aspirational-schema-debt.md",
