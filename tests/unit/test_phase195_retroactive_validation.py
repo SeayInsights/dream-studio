@@ -720,7 +720,9 @@ class TestSessionEndAutoIncrement:
 
     def test_studio_db_has_validation_hook(self):
         """studio_db.py must include the Phase 19.5 validation hook."""
-        source = (REPO_ROOT / "core/event_store/event_writer.py").read_text(encoding="utf-8")
+        source = (REPO_ROOT / "core/event_store/event_writer_sessions.py").read_text(
+            encoding="utf-8"
+        )
         assert "RetroactiveValidator" in source
         assert "increment_for_session" in source
 

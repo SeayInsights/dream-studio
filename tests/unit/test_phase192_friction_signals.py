@@ -634,7 +634,7 @@ class TestSessionEndHookNonBlocking:
 
     def test_session_end_hook_in_studio_db_is_non_blocking(self):
         """The harvester call in studio_db.end_session() is inside a try/except."""
-        source = Path(__file__).parents[2] / "core" / "event_store" / "event_writer.py"
+        source = Path(__file__).parents[2] / "core" / "event_store" / "event_writer_sessions.py"
         text = source.read_text(encoding="utf-8")
         # Find the harvester import block
         assert "FrictionSignalHarvester" in text, "Hook not found in studio_db.py"
