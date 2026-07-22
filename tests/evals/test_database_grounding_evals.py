@@ -160,7 +160,12 @@ def test_start_work_order_invokes_read_brief(patched_paths, tmp_path: Path) -> N
     """start_work_order() must route through the named read_work_order_brief helper."""
     import core.work_orders.start as start_module
 
-    with InvocationRecorder([(start_module, "read_work_order_brief")]) as rec:
+    # WO-GF-WO-LIFECYCLE: read_work_order_brief now lives in the start_brief sibling and
+    # start_work_order calls it via a lazy `from .start_brief import ...`, so record the
+    # invocation on the DEFINING module (the facade attribute is never the call target).
+    import core.work_orders.start_brief as start_brief_module
+
+    with InvocationRecorder([(start_brief_module, "read_work_order_brief")]) as rec:
         result = start_module.start_work_order(
             work_order_id=WO_DOCS_ID,
             source_root=REPO_ROOT,
@@ -180,7 +185,11 @@ def test_start_work_order_consults_db(patched_paths, tmp_path: Path) -> None:
     """start_work_order() must consult the DB via _connect for its mutation step."""
     import core.work_orders.start as start_module
 
-    with InvocationRecorder([(start_module, "_connect")]) as rec:
+    # WO-GF-WO-LIFECYCLE: start_work_order (and its module-level `_connect` import) now
+    # live in the start_main sibling; record the invocation there, not on the facade.
+    import core.work_orders.start_main as start_main_module
+
+    with InvocationRecorder([(start_main_module, "_connect")]) as rec:
         result = start_module.start_work_order(
             work_order_id=WO_DOCS_ID,
             source_root=REPO_ROOT,
