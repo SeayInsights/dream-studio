@@ -150,9 +150,9 @@ class TestFix3RepoStackEvidenceRefactor:
         health_source = (REPO_ROOT / "projections/api/routes/project_detail_health.py").read_text(
             encoding="utf-8"
         )
-        details_source = (
-            REPO_ROOT / "projections/api/routes/project_detail_details.py"
-        ).read_text(encoding="utf-8")
+        details_source = (REPO_ROOT / "projections/api/routes/project_detail_details.py").read_text(
+            encoding="utf-8"
+        )
         stack_source = (REPO_ROOT / "projections/api/lib/stack_helpers.py").read_text(
             encoding="utf-8"
         )
