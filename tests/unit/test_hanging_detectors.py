@@ -183,6 +183,65 @@ def test_detects_unowned_table_write(tmp_path: Path) -> None:
     assert "sole_owner_table" not in by_symbol, "a table with a single writer must not be flagged"
 
 
+def test_unowned_table_write_skips_relocation_within_diff(tmp_path: Path) -> None:
+    """God File Cleanup: a facade split relocates a write from A to a new sibling B.
+
+    The write is REMOVED from the facade (ds_learn.py) and ADDED to a new sibling
+    (ds_learn_activation.py) in the same diff. Another unchanged module also writes
+    the table (a legitimate multi-writer authority table), but the repo-wide writer
+    set does not grow — so B must NOT be flagged. A genuinely-new write to the same
+    table (added, not removed anywhere) MUST still flag.
+    """
+    repo = tmp_path
+    # Another unchanged runtime writer of the (multi-writer) table.
+    _write(
+        repo / "core" / "expansion" / "capability.py",
+        'def promote():\n    conn.execute("UPDATE ds_user_extensions SET status=? WHERE id=?", (s, i))\n',
+    )
+    # Post-split working tree: the facade no longer writes; the sibling does.
+    _write(
+        repo / "interfaces" / "cli" / "ds_learn.py",
+        "from interfaces.cli.ds_learn_activation import cmd_confirm  # facade\n",
+    )
+    _write(
+        repo / "interfaces" / "cli" / "ds_learn_activation.py",
+        'def cmd_confirm():\n    conn.execute("UPDATE ds_user_extensions SET status=? WHERE id=?", (s, i))\n',
+    )
+    # Diff: write removed from the facade, added to the new sibling (relocation).
+    diff = (
+        "diff --git a/interfaces/cli/ds_learn.py b/interfaces/cli/ds_learn.py\n"
+        "--- a/interfaces/cli/ds_learn.py\n"
+        "+++ b/interfaces/cli/ds_learn.py\n"
+        "@@ -1,2 +1,1 @@\n"
+        '-    conn.execute("UPDATE ds_user_extensions SET status=? WHERE id=?", (s, i))\n'
+        "+from interfaces.cli.ds_learn_activation import cmd_confirm  # facade\n"
+        "diff --git a/interfaces/cli/ds_learn_activation.py b/interfaces/cli/ds_learn_activation.py\n"
+        "--- /dev/null\n"
+        "+++ b/interfaces/cli/ds_learn_activation.py\n"
+        "@@ -0,0 +1,2 @@\n"
+        "+def cmd_confirm():\n"
+        '+    conn.execute("UPDATE ds_user_extensions SET status=? WHERE id=?", (s, i))\n'
+    )
+    findings = detect_unowned_table_writes(diff, repo_root=repo)
+    assert all(
+        f["symbol"] != "ds_user_extensions" for f in findings
+    ), f"relocated write (removed from facade, added to sibling) must not flag; got {findings}"
+
+    # Control: a genuinely-new write, not removed anywhere in the diff, still flags.
+    diff_new = (
+        "diff --git a/interfaces/cli/ds_learn_activation.py b/interfaces/cli/ds_learn_activation.py\n"
+        "--- /dev/null\n"
+        "+++ b/interfaces/cli/ds_learn_activation.py\n"
+        "@@ -0,0 +1,2 @@\n"
+        "+def cmd_confirm():\n"
+        '+    conn.execute("UPDATE ds_user_extensions SET status=? WHERE id=?", (s, i))\n'
+    )
+    findings_new = detect_unowned_table_writes(diff_new, repo_root=repo)
+    assert any(
+        f["symbol"] == "ds_user_extensions" for f in findings_new
+    ), f"a genuinely-new competing write must still flag; got {findings_new}"
+
+
 def test_stale_symbol_ignores_words_still_in_source(tmp_path: Path) -> None:
     """WO-BLAST-FALSEPOS: a removed line's common word still present in source → NO finding.
 
