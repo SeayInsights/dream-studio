@@ -80,9 +80,9 @@ class TestRunCaseLivePath:
 
         with (
             patch.object(runner, "_run_case_live") as mock_live,
-            patch("core.eval.runner.match_events") as mock_match,
-            patch("core.eval.runner.save_run_result", return_value=(True, False)),
-            patch("core.eval.runner.load_baseline", return_value=None),
+            patch("core.eval.runner_process.match_events") as mock_match,
+            patch("core.eval.runner_process.save_run_result", return_value=(True, False)),
+            patch("core.eval.runner_process.load_baseline", return_value=None),
         ):
             mock_match.return_value = MagicMock(
                 score=1.0, missing_events=[], negative_violations=[], out_of_order=[]

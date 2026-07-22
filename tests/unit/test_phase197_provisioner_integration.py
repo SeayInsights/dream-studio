@@ -844,7 +844,7 @@ def full_db_conn():
 class TestDispatcherAdditiveOnly:
     def test_extension_loader_import_in_dispatcher(self):
         """SkillDispatcher.audit() now includes ExtensionLoader snapshot code."""
-        source = (REPO_ROOT / "core/skills/dispatcher.py").read_text(encoding="utf-8")
+        source = (REPO_ROOT / "core/skills/dispatcher_class.py").read_text(encoding="utf-8")
         assert "ExtensionLoader" in source
         assert "_ext_snapshot" in source
         assert "apply_personalization_overrides" in source

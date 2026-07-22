@@ -51,8 +51,8 @@ def _fake_live_result() -> EvalResult:
 def test_default_run_case_never_shells_out(tmp_path: Path) -> None:
     runner = EvalRunner(db_path=tmp_path / "eval.db")
     with (
-        patch("core.eval.runner.subprocess.run") as proc,
-        patch("core.eval.runner.shutil.which") as which,
+        patch("core.eval.runner_process.subprocess.run") as proc,
+        patch("core.eval.runner_process.shutil.which") as which,
     ):
         runner.run_case(_case())  # default: no live flag
         proc.assert_not_called()
