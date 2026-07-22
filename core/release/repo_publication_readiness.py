@@ -318,6 +318,7 @@ def _skip_private_content_scan_path(path: str) -> bool:
         "core/release/repo_publication_readiness.py",
         "core/shared_intelligence/contract_atlas_lifecycle.py",
         "core/shared_intelligence/contract_atlas.py",
+        "core/shared_intelligence/contract_atlas_validate.py",
         "tests/unit/test_repo_publication_readiness.py",
     }
 
