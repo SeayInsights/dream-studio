@@ -115,8 +115,8 @@ def _isolate_db(request):
     shared_conn = _conn_factory()
 
     with (
-        patch("control.research.web.get_connection", side_effect=_conn_factory),
-        patch("control.research.web.transaction", _mock_transaction(shared_conn)),
+        patch("control.research.web_cache.get_connection", side_effect=_conn_factory),
+        patch("control.research.web_cache.transaction", _mock_transaction(shared_conn)),
         patch("core.event_store.studio_db._connect", side_effect=_conn_factory),
     ):
         yield
@@ -212,7 +212,7 @@ def test_research_endpoint(client: TestClient, test_db: Path, mock_websearch_res
     """
     mock_sources = web_research.extract_sources(mock_websearch_results)
 
-    with patch("control.research.web.search_web", return_value=mock_sources):
+    with patch("control.research.web_search.search_web", return_value=mock_sources):
         response = client.post(
             "/api/discovery/research",
             json={"topic": "python async programming", "focus_areas": ["asyncio", "coroutines"]},
@@ -249,7 +249,7 @@ def test_research_cache_hit(client: TestClient, test_db: Path, sample_report):
     """
     web_research.save_to_cache("python async programming", sample_report, ttl_days=30)
 
-    with patch("control.research.web.search_web") as mock_search:
+    with patch("control.research.web_search.search_web") as mock_search:
         mock_search.return_value = []
 
         response = client.post(
@@ -387,7 +387,7 @@ def test_research_endpoint_no_websearch_results(client: TestClient, test_db: Pat
     3. Verify response contains empty sources
     4. Verify confidence = 0.0, triangulation = 0.0
     """
-    with patch("control.research.web.search_web", return_value=[]):
+    with patch("control.research.web_search.search_web", return_value=[]):
         response = client.post(
             "/api/discovery/research", json={"topic": "obscure topic xyz", "focus_areas": []}
         )
@@ -481,7 +481,7 @@ def test_research_endpoint_with_whitespace_topic(
     """
     mock_sources = web_research.extract_sources(mock_websearch_results)
 
-    with patch("control.research.web.search_web", return_value=mock_sources):
+    with patch("control.research.web_search.search_web", return_value=mock_sources):
         response = client.post(
             "/api/discovery/research", json={"topic": "  python async  ", "focus_areas": []}
         )

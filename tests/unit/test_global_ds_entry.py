@@ -141,11 +141,12 @@ def test_install_output_contains_ingest_sessions_pointer(tmp_path):
     """Install output should mention ds memory ingest-sessions."""
     from integrations.installer.claude_code import _write_global_launcher
 
-    # The pointer text should be in the installer's execute path.
-    # We verify it exists in the module source since the execute path
-    # prints it directly.
+    # The pointer text should be in the installer's execute path
+    # (ClaudeCodeInstaller.install(), which lives in claude_code_installer.py
+    # post-split — see WO-GF-CONTROL-INSTALL-split). We verify it exists in
+    # that module's source since the execute path prints it directly.
     import inspect
-    import integrations.installer.claude_code as mod
+    import integrations.installer.claude_code_installer as mod
 
     source = inspect.getsource(mod)
     assert "ingest-sessions" in source
