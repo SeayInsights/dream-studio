@@ -192,7 +192,9 @@ def test_verify_gap_creates_work_orders(tmp_path: pytest.TempPathFactory) -> Non
 
     planning_root = tmp_path / "planning"
     with _patch_db(db_path):
-        with patch("core.work_orders.verify_graders._run_graders_parallel", return_value=grader_results):
+        with patch(
+            "core.work_orders.verify_graders._run_graders_parallel", return_value=grader_results
+        ):
             with patch(
                 "core.work_orders.verify_git._collect_git_commits",
                 return_value="diff --git a/fake.py b/fake.py\n+# change",
@@ -379,7 +381,9 @@ def test_spawned_gap_wos_visible_in_project(tmp_path: pytest.TempPathFactory) ->
 
     planning_root = tmp_path / "planning"
     with _patch_db(db_path):
-        with patch("core.work_orders.verify_graders._run_graders_parallel", return_value=grader_results):
+        with patch(
+            "core.work_orders.verify_graders._run_graders_parallel", return_value=grader_results
+        ):
             with patch(
                 "core.work_orders.verify_git._collect_git_commits",
                 return_value="diff --git a/fake.py b/fake.py\n+# change",
