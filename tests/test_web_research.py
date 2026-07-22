@@ -382,7 +382,7 @@ class TestCalculateTriangulation:
 class TestResearchTopic:
     """Test suite for research_topic() with mocked WebSearch."""
 
-    @patch("control.research.web.search_web")
+    @patch("control.research.web_search.search_web")
     def test_research_topic_returns_report(self, mock_search, mock_search_results):
         """Verify research_topic returns ResearchReport with correct structure."""
         # Mock search_web to return parsed sources
@@ -400,7 +400,7 @@ class TestResearchTopic:
         assert isinstance(report.findings, str)
         assert len(report.findings) > 0
 
-    @patch("control.research.web.search_web")
+    @patch("control.research.web_search.search_web")
     def test_research_topic_calculates_metrics(self, mock_search, mock_search_results):
         """Verify confidence and triangulation are calculated correctly."""
         mock_search.return_value = web_research.extract_sources(mock_search_results)
@@ -413,7 +413,7 @@ class TestResearchTopic:
         # Mixed tier sources should yield reasonable confidence
         assert report.confidence > 0.5
 
-    @patch("control.research.web.search_web")
+    @patch("control.research.web_search.search_web")
     def test_research_topic_no_focus_areas(self, mock_search, mock_search_results):
         """Topic without focus areas should work."""
         mock_search.return_value = web_research.extract_sources(mock_search_results)
@@ -423,7 +423,7 @@ class TestResearchTopic:
         assert report.topic == "machine learning"
         mock_search.assert_called_once_with("machine learning")
 
-    @patch("control.research.web.search_web")
+    @patch("control.research.web_search.search_web")
     def test_research_topic_with_focus_areas(self, mock_search, mock_search_results):
         """Topic with focus areas should combine into query."""
         mock_search.return_value = web_research.extract_sources(mock_search_results)
@@ -433,7 +433,7 @@ class TestResearchTopic:
         assert report.topic == "python"
         mock_search.assert_called_once_with("python asyncio performance")
 
-    @patch("control.research.web.search_web")
+    @patch("control.research.web_search.search_web")
     def test_research_topic_no_sources(self, mock_search):
         """Research with no sources should return valid report."""
         mock_search.return_value = []
@@ -453,8 +453,8 @@ class TestResearchCache:
     @pytest.fixture(autouse=True)
     def _patch_db(self, test_db):
         with (
-            patch("control.research.web.get_connection", return_value=test_db),
-            patch("control.research.web.transaction", _mock_transaction(test_db)),
+            patch("control.research.web_cache.get_connection", return_value=test_db),
+            patch("control.research.web_cache.transaction", _mock_transaction(test_db)),
         ):
             yield
 
@@ -705,8 +705,8 @@ class TestJinaIntegration:
         ]
 
         with patch.dict("os.environ", {}, clear=True):
-            with patch("control.research.web.search_jina") as mock_jina:
-                with patch("control.research.web.search_web") as mock_websearch:
+            with patch("control.research.web_search.search_jina") as mock_jina:
+                with patch("control.research.web_search.search_web") as mock_websearch:
                     # Jina returns empty (no API key), WebSearch should be called
                     mock_jina.return_value = []
                     mock_websearch.return_value = web_research.extract_sources(mock_search_results)

@@ -227,7 +227,7 @@ def test_projection_api_event_emission_stays_absent_or_classified():
         "emit_events=False" in research_route_source
     ), "discovery_research.py must call web_research with emit_events=False"
 
-    research_source = _read(REPO_ROOT / "control" / "research" / "web.py")
+    research_source = _read(REPO_ROOT / "control" / "research" / "web_cache.py")
     assert "emit_events: bool = True" in research_source
     assert "if emit_events:" in research_source
     assert sorted(set(re.findall(r"EventType\.([A-Z_]+)", research_source))) == [

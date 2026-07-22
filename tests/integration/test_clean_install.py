@@ -43,7 +43,7 @@ def test_install_creates_settings_json_when_missing(tmp_path, canonical_root_min
     )
     with pytest.MonkeyPatch().context() as mp:
         mp.setattr(
-            "integrations.installer.claude_code._write_path_to_profile",
+            "integrations.installer.claude_code_launcher._write_path_to_profile",
             lambda *a, **kw: {"action": "skipped", "profile": ""},
         )
         installer.install("execute")

@@ -756,7 +756,7 @@ def test_hook_commands_use_py_on_windows_mock(config_root, canonical_root, ds_ho
             config_root, "user", canonical_root=canonical_root, ds_home=ds_home
         )
         with patch(
-            "integrations.installer.claude_code._write_path_to_profile",
+            "integrations.installer.claude_code_launcher._write_path_to_profile",
             return_value={"action": "skipped", "profile": ""},
         ):
             installer.install("execute")
@@ -780,7 +780,7 @@ def test_hook_commands_use_sys_executable_on_linux_mock(config_root, canonical_r
             config_root, "user", canonical_root=canonical_root, ds_home=ds_home
         )
         with patch(
-            "integrations.installer.claude_code._write_path_to_profile",
+            "integrations.installer.claude_code_launcher._write_path_to_profile",
             return_value={"action": "skipped", "profile": ""},
         ):
             installer.install("execute")
@@ -802,7 +802,7 @@ def test_launcher_cmd_written_on_windows(ds_home):
     with (
         patch("platform.system", return_value="Windows"),
         patch(
-            "integrations.installer.claude_code._write_path_to_profile",
+            "integrations.installer.claude_code_launcher._write_path_to_profile",
             return_value={"action": "skipped", "profile": ""},
         ),
     ):
@@ -816,7 +816,7 @@ def test_launcher_shell_script_written_on_nonwindows(ds_home):
     with (
         patch("platform.system", return_value="Linux"),
         patch(
-            "integrations.installer.claude_code._write_path_to_profile",
+            "integrations.installer.claude_code_launcher._write_path_to_profile",
             return_value={"action": "skipped", "profile": ""},
         ),
     ):
@@ -833,7 +833,7 @@ def test_launcher_shell_script_is_executable_on_nonwindows(ds_home):
     with (
         patch("platform.system", return_value="Linux"),
         patch(
-            "integrations.installer.claude_code._write_path_to_profile",
+            "integrations.installer.claude_code_launcher._write_path_to_profile",
             return_value={"action": "skipped", "profile": ""},
         ),
     ):

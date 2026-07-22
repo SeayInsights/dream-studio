@@ -196,7 +196,7 @@ def test_research_api_routes_do_not_emit_unclassified_canonical_events():
 
     assert offenders == []
 
-    web_source = _read(REPO_ROOT / "control" / "research" / "web.py")
+    web_source = _read(REPO_ROOT / "control" / "research" / "web_cache.py")
     assert "emit_events: bool = True" in web_source
     assert "emit_events: Emit canonical research cache events when True" in web_source
 
@@ -234,7 +234,9 @@ def test_research_cache_cannot_silently_promote_to_semantic_memory():
     assert offenders == []
 
     ingestion_source = _read(REPO_ROOT / "core" / "memory" / "ingestion.py")
-    memory_store_source = _read(REPO_ROOT / "core" / "memory" / "store.py")
+    # WO-GF-CORE-DATA split MemoryStore.upsert_by_provenance into store_main.py (store.py
+    # is now a thin facade); read the defining sibling so this source-contract check holds.
+    memory_store_source = _read(REPO_ROOT / "core" / "memory" / "store_main.py")
     contract = _read(RESEARCH_CONTRACT)
 
     assert "MemoryStore.upsert_by_provenance()" in contract
@@ -243,7 +245,7 @@ def test_research_cache_cannot_silently_promote_to_semantic_memory():
 
 
 def test_external_research_services_are_optional_and_degrade_cleanly():
-    web_source = _read(REPO_ROOT / "control" / "research" / "web.py")
+    web_source = _read(REPO_ROOT / "control" / "research" / "web_search.py")
     contract = _read(RESEARCH_CONTRACT).lower()
 
     assert re.search(r"api_key = os\.environ\.get\([\"']JINA_API_KEY[\"']\)", web_source)
