@@ -263,7 +263,9 @@ def test_projection_service_state_writers_remain_named_tables_only():
 
 
 def test_security_sarif_parser_is_active():
-    source = _read(REPO_ROOT / "projections" / "api" / "routes" / "security.py")
+    # WO-GF-API-ROUTES split: import_sarif_file (and its parse_sarif_file call)
+    # now lives in security_import.py.
+    source = _read(REPO_ROOT / "projections" / "api" / "routes" / "security_import.py")
     assert "from projections.parsers.sarif_parser import parse_sarif_file" in source
     assert "parse_sarif_file(tmp_path)" in source
     assert "SARIF parser not yet implemented" not in source

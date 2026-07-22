@@ -144,13 +144,24 @@ class TestFix3RepoStackEvidenceRefactor:
     def _get_handler_source(self):
         # project_intelligence.py was split; handlers live in project_detail.py,
         # _repo_stack_evidence lives in projections/api/lib/stack_helpers.py.
-        detail_source = (REPO_ROOT / "projections/api/routes/project_detail.py").read_text(
+        # WO-GF-API-ROUTES split project_detail.py further: get_project_health now
+        # lives in project_detail_health.py and get_project_details in
+        # project_detail_details.py (the only two handlers this class inspects).
+        health_source = (REPO_ROOT / "projections/api/routes/project_detail_health.py").read_text(
             encoding="utf-8"
         )
+        details_source = (
+            REPO_ROOT / "projections/api/routes/project_detail_details.py"
+        ).read_text(encoding="utf-8")
         stack_source = (REPO_ROOT / "projections/api/lib/stack_helpers.py").read_text(
             encoding="utf-8"
         )
-        return detail_source + "\n" + stack_source
+        # Sentinel "@router." boundary: get_project_details is the last handler in
+        # this concatenation (no route-decorated sibling follows it here), so
+        # without this the fn_start/fn_end slicing below would bleed into
+        # stack_helpers.py's own body (which legitimately defines
+        # _repo_stack_evidence and calls rglob) and produce false failures.
+        return health_source + "\n" + details_source + "\n@router.\n" + stack_source
 
     def test_repo_stack_evidence_not_called_from_details_handler(self):
         """GET /details must not call _repo_stack_evidence() — filesystem walk removed."""
@@ -239,9 +250,17 @@ class TestDashboardFilesystemCompliance:
     def test_no_rglob_in_handler_functions(self):
         """No dashboard handler function body should contain rglob calls."""
         # project_intelligence.py was split; combine all route files for the scan.
+        # WO-GF-API-ROUTES split project_detail.py further into a thin facade
+        # (zero @router. bodies) + 4 handler siblings — include the siblings so
+        # this scan still covers their handler bodies (facade alone would
+        # silently pass with no coverage).
         route_files = [
             REPO_ROOT / "projections/api/routes/project_list.py",
             REPO_ROOT / "projections/api/routes/project_detail.py",
+            REPO_ROOT / "projections/api/routes/project_detail_health.py",
+            REPO_ROOT / "projections/api/routes/project_detail_details.py",
+            REPO_ROOT / "projections/api/routes/project_detail_history_runs.py",
+            REPO_ROOT / "projections/api/routes/project_detail_activity.py",
             REPO_ROOT / "projections/api/routes/project_artifacts.py",
             REPO_ROOT / "projections/api/routes/project_security.py",
         ]

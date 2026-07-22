@@ -116,7 +116,11 @@ class TestFix4RouteOrdering:
         Otherwise FastAPI matches GET /friction-signals/classifications as if
         signal_id='classifications', returning 404.
         """
-        source = (REPO_ROOT / "projections/api/routes/intelligence.py").read_text(encoding="utf-8")
+        # WO-GF-API-ROUTES split: /friction-signals/classifications and
+        # /friction-signals/{signal_id} now live in intelligence_friction.py.
+        source = (REPO_ROOT / "projections/api/routes/intelligence_friction.py").read_text(
+            encoding="utf-8"
+        )
         lines = source.splitlines()
 
         classifications_line = next(
