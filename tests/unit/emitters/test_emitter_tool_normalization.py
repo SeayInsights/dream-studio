@@ -156,7 +156,7 @@ def test_runtime_hooks_do_not_import_provider_sdks_or_adapters_directly():
 def test_runtime_model_metadata_defaults_are_provider_neutral():
     skill_complete = _read(REPO_ROOT / "runtime" / "hooks" / "meta" / "on-skill-complete.py")
     skill_metrics = _read(REPO_ROOT / "runtime" / "hooks" / "meta" / "on-skill-metrics.py")
-    studio_db_source = _read(REPO_ROOT / "core" / "event_store" / "event_writer.py")
+    studio_db_source = _read(REPO_ROOT / "core" / "event_store" / "event_writer_hooks.py")
 
     assert 'os.environ.get("CLAUDE_MODEL", "claude")' not in skill_complete
     assert 'model = "sonnet"' not in skill_metrics

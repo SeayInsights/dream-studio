@@ -123,7 +123,7 @@ def test_patterns_filter_by_skill(tmp_path):
 
 def test_capture_approach_writes_to_db(tmp_path, monkeypatch):
     db = tmp_path / "test.db"
-    monkeypatch.setattr("core.event_store.event_writer._db_path", lambda: db)
+    monkeypatch.setattr("core.event_store.event_writer_approach._db_path", lambda: db)
     ok = capture_approach("core:build", "test approach", "success", context="test")
     assert ok is True
     conn = _connect(db)
@@ -135,7 +135,7 @@ def test_capture_approach_writes_to_db(tmp_path, monkeypatch):
 
 def test_capture_approach_fallback_on_bad_db(tmp_path, monkeypatch):
     bad_db = tmp_path / "no_dir" / "bad.db"
-    monkeypatch.setattr("core.event_store.event_writer._db_path", lambda: bad_db)
+    monkeypatch.setattr("core.event_store.event_writer_approach._db_path", lambda: bad_db)
     meta = tmp_path / "meta"
     monkeypatch.setattr("core.config.paths.meta_dir", lambda: meta)
     ok = capture_approach("core:build", "fallback test", "success")
