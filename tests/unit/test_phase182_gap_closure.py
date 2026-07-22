@@ -85,11 +85,14 @@ class TestFix2DesignBriefEmits:
 
     def test_design_brief_events_in_registry(self):
         """All design_brief.* event types must be registered."""
-        source = (REPO_ROOT / "config/event_type_registry.py").read_text(encoding="utf-8")
+        source = (REPO_ROOT / "config/event_type_registry_entries_business.py").read_text(
+            encoding="utf-8"
+        )
         for event_type in ("design_brief.created", "design_brief.updated", "design_brief.locked"):
-            assert (
-                event_type in source
-            ), f"Event type {event_type!r} must be registered in config/event_type_registry.py"
+            assert event_type in source, (
+                f"Event type {event_type!r} must be registered in "
+                "config/event_type_registry_entries_business.py"
+            )
 
     def test_lock_design_brief_no_direct_update(self):
         """lock_design_brief() must not do direct UPDATE — projection handles it."""
