@@ -35,7 +35,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).parents[2]
 DASHBOARD_HTML = REPO_ROOT / "projections/frontend/dashboard.html"
-INSIGHTS_PY = REPO_ROOT / "projections/api/routes/insights.py"
+# WO-GF-API-ROUTES split: attribution-breakouts (and the other diagnostic
+# routes this test greps for) now live in insights_diagnostics.py.
+INSIGHTS_PY = REPO_ROOT / "projections/api/routes/insights_diagnostics.py"
 ANALYTICS_PY = REPO_ROOT / "projections/api/routes/analytics.py"
 
 
