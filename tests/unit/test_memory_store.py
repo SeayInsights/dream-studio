@@ -29,8 +29,8 @@ def store(tmp_path: Path, monkeypatch) -> MemoryStore:
     run_migrations(conn)
     conn.close()
 
-    monkeypatch.setattr("core.memory.store.transaction", _make_tx(db_path))
-    monkeypatch.setattr("core.memory.store.get_connection", _make_gc(db_path))
+    monkeypatch.setattr("core.memory.store_main.transaction", _make_tx(db_path))
+    monkeypatch.setattr("core.memory.store_main.get_connection", _make_gc(db_path))
 
     return MemoryStore(db_path)
 
