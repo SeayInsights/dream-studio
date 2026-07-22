@@ -399,6 +399,22 @@ def detect_unowned_table_writes(
 ) -> list[Finding]:
     root = Path(repo_root)
     files = _parse_diff(diff_text)
+
+    # A facade-split / refactor RELOCATES a write from one file to another within
+    # the same diff: the table's write is removed from file A and added to a new
+    # sibling B. The repo-wide writer set does not grow — the write existed at base
+    # (evidenced by its removal here), so any multi-writer condition is pre-existing,
+    # not introduced by this change set. Collecting every table whose write is
+    # removed ANYWHERE in the diff and skipping it below keeps the God File Cleanup
+    # (which moves whole DB-writing command groups into new modules) from tripping
+    # this gate — the same false-positive class the stale-symbol detector already
+    # guards against for dead-code removal (see _symbols_by_kind, WO d3221b4d).
+    relocated: set[str] = set()
+    for f in files:
+        if _is_test_path(_normalize(f["path"])) or _is_non_runtime_writer(_normalize(f["path"])):
+            continue
+        relocated |= _write_targets("\n".join(f["removed"]))
+
     findings: list[Finding] = []
     for f in files:
         path = _normalize(f["path"])
@@ -408,6 +424,10 @@ def detect_unowned_table_writes(
         removed_targets = _write_targets("\n".join(f["removed"]))
         for table in sorted(added_targets - removed_targets):
             if _is_authority_table(table):
+                continue
+            if table in relocated:
+                # Write moved from another runtime file in this same diff; net
+                # writer set unchanged (relocation, not a new competing owner).
                 continue
             other = _table_writers(table, root, exclude=path)
             if other:
