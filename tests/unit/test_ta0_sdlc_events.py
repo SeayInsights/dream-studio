@@ -216,7 +216,7 @@ class TestForwardEmissionIntegration:
             captured.append(d)
 
         with (
-            patch("core.projects.mutations._require_db", return_value=db_path),
+            patch("core.projects.mutations_register._require_db", return_value=db_path),
             patch("spool.writer.write_event", side_effect=fake_write),
         ):
             from core.projects.mutations import register_project

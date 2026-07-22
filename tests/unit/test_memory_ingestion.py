@@ -125,8 +125,8 @@ def setup_db(db_path, monkeypatch):
     conn.commit()
     conn.close()
 
-    monkeypatch.setattr("core.memory.store.transaction", _make_tx(db_path))
-    monkeypatch.setattr("core.memory.store.get_connection", _make_gc(db_path))
+    monkeypatch.setattr("core.memory.store_main.transaction", _make_tx(db_path))
+    monkeypatch.setattr("core.memory.store_main.get_connection", _make_gc(db_path))
     monkeypatch.setattr("core.memory.ingestion.get_connection", _make_gc(db_path))
 
 

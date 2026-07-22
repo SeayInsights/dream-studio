@@ -48,7 +48,7 @@ def doc_store(tmp_path, monkeypatch):
 
     # Stub out event emission so tests don't need a live spool
     monkeypatch.setattr(
-        "core.storage.document_store.write_envelopes", lambda envelopes, **kwargs: None
+        "core.storage.document_store_crud.write_envelopes", lambda envelopes, **kwargs: None
     )
 
     from core.storage.document_store import DocumentStore

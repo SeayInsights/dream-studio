@@ -124,6 +124,7 @@ core/execution/graph.py:13:1: F401 'core.ontology.lifecycles.LIFECYCLE_CATALOG' 
 core/execution/graph.py:8:1: F401 'json' imported but unused
 core/gates/migration_risk.py:96:11: F541 f-string is missing placeholders
 core/graph/query.py:871:49: E203 whitespace before ':'
+core/graph/query_io.py:44:49: E203 whitespace before ':'
 core/learning/correction_patterns.py:58:25: E203 whitespace before ':'
 core/observability/trace_logger.py:177:15: F541 f-string is missing placeholders
 core/observability/trace_logger.py:187:15: F541 f-string is missing placeholders
@@ -173,6 +174,7 @@ core/storage/document_store.py:24:1: E402 module level import not at top of file
 core/storage/document_store.py:25:1: E402 module level import not at top of file
 core/storage/document_store.py:26:1: E402 module level import not at top of file
 core/storage/document_store.py:50:1: E731 do not assign a lambda expression, use a def
+core/storage/document_store_crud.py:32:1: E731 do not assign a lambda expression, use a def
 core/validation/event_validator.py:11:1: F401 'pathlib.Path' imported but unused
 core/validation/event_validator.py:12:1: F401 'typing.Optional' imported but unused
 core/work_orders/evals.py:31:1: F401 '.models.WorkOrderError' imported but unused
