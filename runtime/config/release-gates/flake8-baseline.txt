@@ -195,6 +195,8 @@ interfaces/cli/ds_analytics/harvester.py:14:1: E402 module level import not at t
 interfaces/cli/ds_analytics/renderer.py:10:1: E402 module level import not at top of file
 interfaces/cli/ds_memory.py:161:45: E741 ambiguous variable name 'l'
 interfaces/cli/ds_memory.py:161:65: E203 whitespace before ':'
+interfaces/cli/ds_memory_ingest.py:168:45: E741 ambiguous variable name 'l'
+interfaces/cli/ds_memory_ingest.py:168:65: E203 whitespace before ':'
 interfaces/cli/efficiency_analytics.py:30:1: E402 module level import not at top of file
 interfaces/cli/efficiency_analytics.py:31:1: E402 module level import not at top of file
 interfaces/cli/generate_routing.py:70:46: E203 whitespace before ':'
@@ -213,6 +215,7 @@ interfaces/cli/pulse_collector.py:21:1: E402 module level import not at top of f
 interfaces/cli/pulse_collector.py:22:1: E402 module level import not at top of file
 interfaces/cli/research_cache.py:31:1: E402 module level import not at top of file
 interfaces/cli/setup.py:896:39: E203 whitespace before ':'
+interfaces/cli/setup_main.py:122:39: E203 whitespace before ':'
 interfaces/cli/spec_risk_check.py:17:1: F401 'io' imported but unused
 interfaces/cli/studio_backup.py:34:1: E402 module level import not at top of file
 projections/api/models/insights.py:5:1: F401 'datetime.datetime' imported but unused
