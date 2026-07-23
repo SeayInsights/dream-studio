@@ -33,6 +33,19 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DASHBOARD_CHECK_TIMEOUT_SECONDS = 90
 
 
+def _module_surface(py_path: Path) -> str:
+    """Full source surface of a module: the file itself plus any facade-split
+    ``<stem>_*.py`` siblings beside it. WO-GF-API-ROUTES (#539) reduced
+    ``intelligence.py`` to a thin re-export facade over ``intelligence_*.py``, so a
+    source-text contract check must read the whole surface — otherwise the relocated
+    route bodies (``activity_log_filter_clause``, the ``decision.recorded`` queries)
+    read as missing. Modules with no siblings read as themselves."""
+    parts = [py_path.read_text(encoding="utf-8")]
+    for sib in sorted(py_path.parent.glob(f"{py_path.stem}_*.py")):
+        parts.append(sib.read_text(encoding="utf-8"))
+    return "\n".join(parts)
+
+
 # ── 1. API default host is 127.0.0.1 ────────────────────────────────────────
 
 
@@ -159,9 +172,7 @@ class TestActivityLogFilter:
 
     def test_intelligence_routes_use_filter(self):
         """intelligence.py routes include activity_log_filter_clause."""
-        source = (REPO_ROOT / "projections" / "api" / "routes" / "intelligence.py").read_text(
-            encoding="utf-8"
-        )
+        source = _module_surface(REPO_ROOT / "projections" / "api" / "routes" / "intelligence.py")
         assert "activity_log_filter_clause" in source
 
 
@@ -185,9 +196,7 @@ class TestDecisionLogSafety:
         decision counting now reads business_canonical_events WHERE
         event_type = 'decision.recorded'.
         """
-        source = (REPO_ROOT / "projections" / "api" / "routes" / "intelligence.py").read_text(
-            encoding="utf-8"
-        )
+        source = _module_surface(REPO_ROOT / "projections" / "api" / "routes" / "intelligence.py")
         decision_queries = [
             line for line in source.splitlines() if "decision.recorded" in line.lower()
         ]
