@@ -9,8 +9,9 @@ most once when:
 - product source was edited but no authority write (task.completed /
   work_order.closed event, or a fresh done-task / closed-WO row) landed for
   the work order during the session, or
-- a persistent documentation artifact (docs/**, .planning/** excluding
-  personal/) was written without a matching ds_files record in files.db.
+- a persistent documentation artifact (docs/**) was written without a matching
+  ds_files record in files.db. (.planning/** is docstore-only under WO-FILESDB-P3
+  — denied on disk at edit time, so it never reaches this check.)
 
 The block reason names the exact remediation command for each violation.
 Never blocks twice: respects stop_hook_active from the payload and a

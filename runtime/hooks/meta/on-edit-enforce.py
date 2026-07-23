@@ -96,6 +96,20 @@ def _enforce() -> tuple[str, str | None]:
             return ("noop", None)
 
         session_id = payload.get("session_id", "")
+
+        if kind == "docstore_only":
+            # WO-FILESDB-P3 zero-disk: .planning working state lives in the files.db
+            # docstore, never on disk. Deny the disk write and point at `ds files`.
+            _deny(
+                "[dream-studio] Zero-disk .planning: working notes, specs, plans, and"
+                " reports are authored in the files.db docstore, never on disk. Use:\n"
+                '  py -m interfaces.cli.ds files write "<name>" --category planning'
+                " [--work-order <id>]\n"
+                "  (read: ds files read <name>  ·  list: ds files list --category planning)\n"
+                "Operator escape hatch: set DS_ENFORCE=0."
+            )
+            return ("deny", session_id)
+
         wo = enforcement.in_progress_work_order(project["project_id"])
 
         if wo is None and kind == "source":
