@@ -105,7 +105,7 @@ def test_sql_test_and_api_checks_all_execute_and_fail_closed(tmp_path: Path) -> 
         },
     ]
 
-    results = run_executable_checks(tasks, db_path, source_root=REPO_ROOT)
+    results = run_executable_checks(tasks, db_path, project_root=REPO_ROOT)
 
     # SQL-CHECK pass
     assert "sql-pass" in results

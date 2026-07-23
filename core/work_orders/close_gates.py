@@ -82,9 +82,10 @@ def run_gate_check(
         # TEST-CHECKs are registered across the WO's tasks.
         if db_path is not None:
             _tasks = _read_wo_tasks(conn, work_order_id)
-            from core.work_orders.verify import run_executable_checks
+            from core.work_orders.verify import resolve_project_root, run_executable_checks
 
-            _ac_results = run_executable_checks(_tasks, db_path)
+            _proot = resolve_project_root(work_order_id, db_path)
+            _ac_results = run_executable_checks(_tasks, db_path, project_root=_proot)
             _test_checks: list[dict[str, Any]] = []
             for _task_checks in _ac_results.values():
                 _test_checks.extend(c for c in _task_checks if c.get("kind") == "TEST-CHECK")
@@ -245,10 +246,12 @@ def _run_ac_gate(
     - If any checks fail → returns a failure reason per failing check (up to 5).
     - If all checks pass → returns ``[]``.
     """
-    from core.work_orders.verify import run_executable_checks
+    from core.work_orders.verify import resolve_project_root, run_executable_checks
 
     tasks = _read_wo_tasks(conn, work_order_id)
-    ac_results = run_executable_checks(tasks, db_path)
+    ac_results = run_executable_checks(
+        tasks, db_path, project_root=resolve_project_root(work_order_id, db_path)
+    )
 
     # Flatten all check results.
     all_checks: list[dict[str, Any]] = []

@@ -27,6 +27,7 @@ from .verify_executor import (
     _run_one_api_check,
     _run_one_sql_check,
     _run_one_test_check,
+    resolve_project_root,
     run_executable_checks,
 )
 from .verify_gaps import (
@@ -133,6 +134,7 @@ __all__ = [  # noqa: F822 -- _collect_git_commits/_run_graders_parallel/_spawn_g
     "_spawn_grader",  # noqa: F822 -- resolved dynamically via __getattr__ above
     "_violations_to_gaps",
     "_write_eval_run",
+    "resolve_project_root",
     "run_executable_checks",
     "verify_work_order",
 ]
