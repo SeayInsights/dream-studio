@@ -45,14 +45,14 @@ Use these templates to structure your plan:
 5. **Order** — Dependencies first. Mark [P] for tasks that can run in parallel (different files, no dependencies).
 6. **Acceptance** — Each task gets acceptance criteria that can be verified without judgment.
 7. **Assess traceability need** — See Traceability section below.
-8. **Write plan** — Output to `.planning/specs/<topic>/plan.md`
+8. **Write plan** — Author to the docstore: `ds files write "specs/<topic>/plan.md" --category planning` (zero-disk — `.planning/` disk writes are denied)
 9. **Persist tasks to SQLite** — Tasks live in SQLite (`business_tasks`) only — never in `.planning/` files.
    - If the active work order already has tasks in SQLite, skip this step entirely — do not add duplicates.
    - If no tasks exist yet, present the proposed task list to the user for approval, then write each approved task via `create_task(work_order_id=..., project_id=..., title=..., description=..., source_root=..., dream_studio_home=...)` — one call per task.
    - Never create `.planning/specs/<topic>/tasks.md`. Tasks are read from SQLite via `ds work-order tasks <id>`.
-10. **Write traceability registry** — If traceability is active, output to `.planning/traceability.yaml`
+10. **Write traceability registry** — If traceability is active, author to the docstore: `ds files write "traceability.yaml" --category planning`
 11. **Auto-issues (optional)** — If Director approves, generate GitHub issues from the task list:
-    - Run `gh issue create --title "<task description>" --body "**Acceptance:** <acceptance criteria>\n\n**Spec:** .planning/specs/<topic>/spec.md"` for each task in SQLite
+    - Run `gh issue create --title "<task description>" --body "**Acceptance:** <acceptance criteria>\n\n**Spec:** docstore specs/<topic>/spec.md (ds files read)"` for each task in SQLite
     - This links plan tasks to trackable GitHub issues for visibility outside the session
     - Skip if: prototype work, personal project without a GitHub remote, or Director declines
 
