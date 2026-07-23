@@ -180,10 +180,20 @@ class TestPreToolUseEnforcement:
         assert data["source_edits"][0]["work_order_id"] == WO_IN_PROGRESS
 
     def test_exempt_paths_never_denied(self, env):
-        for rel in (".planning/personal/notes.md", ".git/config", ".venv/pyvenv.cfg"):
+        for rel in (".git/config", ".venv/pyvenv.cfg"):
             out = _run_hook(EDIT_HOOK, _edit_payload(env["project"] / Path(rel)))
             assert out == "", rel
         assert _session_data() is None
+
+    def test_planning_disk_writes_denied_zero_disk(self, env):
+        # WO-FILESDB-P3: .planning/** (incl. personal) is docstore-only — disk writes
+        # are denied and redirected to `ds files write`, regardless of work-order state.
+        for rel in (".planning/personal/notes.md", ".planning/audits/report.md"):
+            out = _run_hook(EDIT_HOOK, _edit_payload(env["project"] / Path(rel)))
+            decision = json.loads(out)["hookSpecificOutput"]
+            assert decision["permissionDecision"] == "deny", rel
+            assert "ds files write" in decision["permissionDecisionReason"], rel
+        assert _session_data() is None  # denied edits are not recorded
 
     def test_doc_artifact_allowed_and_recorded(self, env):
         out = _run_hook(EDIT_HOOK, _edit_payload(env["project"] / "docs" / "guide.md"))
@@ -249,7 +259,7 @@ class TestStopEnforcement:
 
     def test_doc_artifact_blocks_then_passes_after_registration(self, env):
         _set_wo_in_progress(env["authority"])
-        doc = env["project"] / ".planning" / "audits" / "report.md"
+        doc = env["project"] / "docs" / "report.md"
         assert _run_hook(EDIT_HOOK, _edit_payload(doc)) == ""
 
         out = _run_hook(STOP_HOOK, _stop_payload())
@@ -262,7 +272,7 @@ class TestStopEnforcement:
         con = sqlite3.connect(env["files"])
         con.execute(
             "INSERT INTO ds_files VALUES (?, ?, ?)",
-            (str(uuid.uuid4()), ".planning/audits/report.md", enforcement.now_iso()),
+            (str(uuid.uuid4()), "docs/report.md", enforcement.now_iso()),
         )
         con.commit()
         con.close()
@@ -274,11 +284,11 @@ class TestStopEnforcement:
 
     def test_doc_reedit_after_registration_blocks_again(self, env):
         _set_wo_in_progress(env["authority"])
-        doc = env["project"] / ".planning" / "audits" / "report.md"
+        doc = env["project"] / "docs" / "report.md"
         con = sqlite3.connect(env["files"])
         con.execute(
             "INSERT INTO ds_files VALUES (?, ?, ?)",
-            (str(uuid.uuid4()), ".planning/audits/report.md", enforcement.now_iso()),
+            (str(uuid.uuid4()), "docs/report.md", enforcement.now_iso()),
         )
         con.commit()
         con.close()

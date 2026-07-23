@@ -8,9 +8,11 @@ runtime/hooks/meta/on-stop-enforce.py (Stop). Enforces two rules:
    that edited product source must record at least one authority write
    (task.completed / work_order.closed event, or a fresh row update) before
    it may end.
-2. Docstore — persistent documentation artifacts (docs/**, .planning/**
-   excluding .planning/personal/) written during a session must have a
-   matching ds_files record in ~/.dream-studio/state/files.db.
+2. Docstore — persistent documentation artifacts (docs/**) written during a
+   session must have a matching ds_files record in ~/.dream-studio/state/files.db.
+3. Zero-disk .planning — .planning/** (incl. personal) is docstore-only: authored
+   in files.db via `ds files write`, never on disk. Disk writes are denied at edit
+   time (WO-FILESDB-P3).
 
 Every public function fails open: any exception yields the permissive result.
 Enforcement must never brick an adapter — a broken authority DB means no
@@ -190,13 +192,15 @@ def match_registered_project(file_path: str) -> dict | None:
 
 
 def classify_path(file_path: str, project_path: str) -> str:
-    """Classify a file inside a project as 'source', 'doc', or 'exempt'.
+    """Classify a file inside a project as 'source', 'doc', 'docstore_only', or 'exempt'.
 
-    doc    — persistent documentation artifact: docs/** or .planning/**
-             (excluding .planning/personal/); must be registered in files.db.
-    exempt — repo-internal noise (.git, .claude, caches) plus .planning/personal/;
-             never denied, never tracked.
-    source — everything else; requires an in_progress work order.
+    doc           — persistent documentation artifact: docs/**; must be registered in
+                    files.db.
+    docstore_only — .planning/** working state (notes, specs, plans, reports, incl.
+                    personal): authored in the files.db docstore, NEVER on disk
+                    (WO-FILESDB-P3 zero-disk). Disk writes are denied at edit time.
+    exempt        — repo-internal noise (.git, .claude, caches); never denied, tracked.
+    source        — everything else; requires an in_progress work order.
     """
     resolved = _resolve(file_path)
     root = _resolve(project_path)
@@ -214,9 +218,7 @@ def classify_path(file_path: str, project_path: str) -> str:
     if any(part in _EXEMPT_SEGMENTS for part in rel_parts):
         return "exempt"
     if rel_parts[0] == ".planning":
-        if len(rel_parts) > 1 and rel_parts[1] == "personal":
-            return "exempt"
-        return "doc"
+        return "docstore_only"
     if rel_parts[0] == "docs":
         return "doc"
     return "source"

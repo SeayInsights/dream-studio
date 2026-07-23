@@ -98,15 +98,23 @@ Code to parse it.
 - `on-edit-enforce` denies Edit/Write to product source inside a registered
   project (`business_projects.project_path` match) when the project has no
   `in_progress` work order in the authority; the deny reason names the exact
-  `ds work-order start <id>` command. Allowed edits are recorded to
-  `~/.dream-studio/state/enforce/<session_id>.json`.
+  `ds work-order start <id>` command. It also denies **all** disk writes to
+  `.planning/**` (incl. `personal/`) — that working state is `docstore_only`
+  under WO-FILESDB-P3 (zero-disk), authored in files.db via
+  `ds files write --category planning`, never on disk. Allowed edits are
+  recorded to `~/.dream-studio/state/enforce/<session_id>.json`.
 - `on-stop-enforce` blocks the Stop at most once per session when recorded
   product-source edits have no authority write (task.completed /
   work_order.closed event OR fresh done-task / closed-WO row — both directions
   of spool/projection lag are accepted), or when a documentation artifact
-  (docs/**, .planning/** except personal/) lacks a `ds_files` record in
-  files.db at least as fresh as the session's last edit to it (remediation:
-  `ds files add`).
+  (`docs/**`) lacks a `ds_files` record in files.db at least as fresh as the
+  session's last edit to it (remediation: `ds files add`). `.planning/**` is
+  never seen here — it is denied on disk at edit time (above).
+
+`classify_path` returns four kinds: `source` (needs an in_progress WO),
+`doc` (`docs/**`; must be registered in files.db), `docstore_only`
+(`.planning/**`; disk writes denied — docstore is the only home), and `exempt`
+(`.git`/`.claude`/caches; never denied, never tracked).
 
 Shared logic lives in `runtime/lib/enforcement.py`. Both hooks fail open on
 every error path (broken DB disables enforcement, never editing), honor
@@ -285,5 +293,7 @@ These exist in runtime/hooks/ but are not reachable via any registered hook:
 <!-- Last reviewed 2026-07-04 — WO-CI-462-FOLLOWUP (dce86173): no hook change; pre-push gains the unit-collect smoke gate (see WORKFLOW_RUNTIME.md). -->
 
 <!-- Reviewed 2026-07-05 — WO 6d978483 (PEP 585/604 modernization [2/2]): source files in this domain received mechanical type-annotation modernization only (PEP 585 builtin generics, PEP 604 unions, datetime.UTC) via ruff UP safe autofixes. No contract, behavior, schema, routing, API-shape, or CLI-surface change — reviewed, no doc content change needed. -->
+
+<!-- Reviewed 2026-07-23 — WO-FILESDB-P3 S4a (feat/planning-zero-disk-enforce): on-edit-enforce now DENIES disk Edit/Write to .planning/** (incl. personal) and redirects to `ds files write --category planning` — .planning is docstore_only (zero-disk). classify_path gains the 'docstore_only' kind; docs/** stays 'doc' (files.db registration unchanged); the on-stop docstore-registration check is now docs/**-only. Fail-open on all error paths and DS_ENFORCE=0 escape hatch unchanged. No dispatcher/registration change. -->
 
 <!-- Last reviewed 2026-07-21 — WO-CLOSE-REPORT-ONLY (fix/close-report-only-no-autostart): no hook change. close_work_order became report-only and the execute-work-orders workflow's next-iteration node now starts the next WO explicitly (see WORKFLOW_RUNTIME.md). Hook runtime is unaffected. -->
