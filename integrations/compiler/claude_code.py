@@ -56,11 +56,17 @@ Call get_next_work_order(project_id=..., source_root=...) or
 invoke ds-project:resume to orient and start the next work order.
 
 ## Output discipline:
-Write every file to exactly one of three locations. Diagnostic output at the repo root is forbidden.
+Write output to exactly one of three homes. Diagnostic output at the repo root is forbidden,
+and `.planning` on disk is forbidden — the on-edit enforcement hook DENIES disk writes to
+`.planning/**` (zero-disk).
 
 Type 1 — Repo-internal working state. PR drafts, inventories, recovery reports, working notes.
-Location: `<repo>/.planning/`
-Subdirectories: `phases/`, `workstreams/<id>/`, `specs/`, `workflows/`, `work-orders/`, `audits/`, `snapshots/`, `personal/`
+Location: the files.db docstore (NOT disk). Author with:
+  ds files write "<name>" --category planning [--work-order <id>]
+  (read: ds files read "<name>"  ·  list: ds files list --category planning)
+Use the former `.planning/` subdirectory as the logical name prefix:
+`phases/`, `workstreams/<id>/`, `specs/`, `workflows/`, `work-orders/`, `audits/`, `snapshots/`, `personal/`
+— e.g. name `workstreams/<id>/pr-body.md`.
 
 Type 2 — Project workspace. Briefs, milestones, work orders, exports. Spans repos; tied to a Dream Studio project.
 Location: `~/.dream-studio/projects/<project-id>/`
@@ -72,12 +78,12 @@ Location: `~/.dream-studio/diagnostics/<YYYY-MM-DD>/<repo-name>/<session-purpose
 Examples:
 - Wrong: `py -m pytest > pytest-output.txt`
 - Right: `py -m pytest > ~/.dream-studio/diagnostics/2026-05-25/dream-studio-clean/test-run/pytest-output.txt`
-- Wrong: writing `pr-body.md` to repo root
-- Right: writing to `.planning/workstreams/<workstream-id>/pr-body.md`
+- Wrong: Write tool → `.planning/workstreams/<id>/pr-body.md` on disk (DENIED by the enforcement hook)
+- Right: `ds files write "workstreams/<id>/pr-body.md" --category planning`
 
 Rules:
 - NEVER write diagnostic output to the repo root
-- NEVER write working files directly to `.planning/` root — use the right subdirectory
+- NEVER write `.planning` working state to disk — author it in the docstore via `ds files write`
 - If unsure where a file belongs, ask the operator before writing
 """
 

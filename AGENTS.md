@@ -76,7 +76,7 @@ Close is blocked until these pass (preview with `check_close_gates`):
   then `start_work_order(work_order_id=…)`. Working without it is working blind.
 - **Tasks live in SQLite, not docs.** Read the work order's task list and
   acceptance criteria from the authority (`ds work-order tasks <id>`). The
-  `.planning/` files are reference only — never the execution source of truth.
+  `.planning` docstore entries are reference only — never the execution source of truth.
 - **During work:** stay within the work order's `module_boundary`; complete tasks
   in order via `mark_task_done(...)`.
 - **Before finishing:** `close_work_order(...)`. Gates must pass; never
@@ -86,8 +86,11 @@ Close is blocked until these pass (preview with `check_close_gates`):
 
 ## Output Discipline
 
-Write every file to exactly one of three locations — diagnostic output at the
-repo root is forbidden:
-- **Type 1 — repo-internal working state:** `<repo>/.planning/<subdir>/`
+Write output to exactly one of three homes — diagnostic output at the repo root is
+forbidden, and `.planning` on disk is forbidden (denied by the on-edit enforcement hook):
+- **Type 1 — repo-internal working state:** the files.db docstore, NOT disk. Author with
+  `ds files write "<name>" --category planning` (read `ds files read "<name>"`; list
+  `ds files list --category planning`). Use the former `.planning/<subdir>/` path as the
+  logical name prefix, e.g. `workstreams/<id>/pr-body.md`, `audits/<name>.md`.
 - **Type 2 — project workspace:** `~/.dream-studio/projects/<project-id>/`
 - **Type 3 — session diagnostics:** `~/.dream-studio/diagnostics/<YYYY-MM-DD>/<repo>/<purpose>/`

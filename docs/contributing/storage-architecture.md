@@ -12,11 +12,17 @@ Tracked in git. Lives in `<repo>/<path>/` outside of any dotfile or tool-managed
 
 Includes: source code (`core/`, `runtime/`, `integrations/`, `interfaces/`, `projections/`, `emitters/`, `control/`, `spool/`, `hooks/`), canonical content (`canonical/`), tests (`tests/`), documentation (`docs/`), build/install scripts (`install.sh`, `install.ps1`), project meta-files (`README.md`, `LICENSE`, `pyproject.toml`, `requirements.txt`, `.gitignore`, `.pre-commit-config.yaml`), adapter projection files (`CLAUDE.md`, `AGENTS.md` at repo root).
 
-### Scope 2 — Repo-internal working state (gitignored)
+### Scope 2 — Repo-internal working state (docstore, zero-disk)
 
-Lives in `<repo>/.planning/`. Local to operator's clone. Never ships publicly.
+Lives in the **files.db docstore** (category `planning`), NOT on disk. Local to the
+operator's clone, never ships publicly. WO-FILESDB-P3 moved this off loose
+`<repo>/.planning/` files: the on-edit enforcement hook now DENIES disk writes to
+`.planning/**`. Author via `ds files write "<name>" --category planning` (read
+`ds files read`; list `ds files list --category planning`). The subdirectory names
+below are now **logical name prefixes** (e.g. name `workstreams/<id>/pr-body.md`),
+not disk paths.
 
-Subdirectories:
+Subdirectories (logical name prefixes):
 
 - `phases/` — phase-level docs (active roadmap)
 - `phases/archive/` — closed phases moved out of the active doc tree
@@ -57,19 +63,19 @@ Tools that need project-local config write to their own dotfile directories. Eac
 ## What does NOT belong at repo root
 
 - Disposable test/lint/format output (`pytest-*.txt`, `black-*.txt`, `lint-*.txt`, etc.) → belongs in `~/.dream-studio/diagnostics/`
-- PR body drafts → belong in `.planning/workstreams/<id>/`
-- Working notes, inventories, audit reports → belong in `.planning/<subcategory>/`
-- Generated graphify output → belongs in `.planning/audits/graphify-out/`
+- PR body drafts → docstore: `ds files write "workstreams/<id>/pr-body.md" --category planning`
+- Working notes, inventories, audit reports → docstore: `ds files write "<subcategory>/<name>.md" --category planning`
+- Generated graphify output → docstore under name prefix `audits/graphify-out/`
 - Build artifacts, debug scripts → belong in `~/.dream-studio/diagnostics/<date>/<repo>/<purpose>/`
 
-If Claude Code writes a file outside its assigned scope, that's a discipline failure. The Output discipline section in the compiler's `_ENFORCEMENT_BLOCK` — regenerated into `.claude/CLAUDE.md` on every install — is the enforcement mechanism.
+If Claude Code writes a file outside its assigned scope, that's a discipline failure. The Output discipline section in the compiler's `_ENFORCEMENT_BLOCK` — regenerated into `.claude/CLAUDE.md` on every install — documents this; the on-edit enforcement hook denying `.planning/**` disk writes is the enforcement mechanism.
 
 ## Decision tree for new files
 
 When creating a new file, ask in order:
 
 1. Does it ship publicly to anyone who clones this repo? → **Scope 1**
-2. Is it specific to this repo but private to the operator? → **Scope 2** (`.planning/`)
+2. Is it specific to this repo but private to the operator? → **Scope 2** (files.db docstore, `ds files write --category planning` — never `.planning/` on disk)
 3. Is it operator-personal across repos OR tool/installer-managed? → **Scope 3** (`~/.dream-studio/`) or appropriate tool dotfile directory
 4. Is it disposable session output? → **Scope 3 diagnostics**
 
