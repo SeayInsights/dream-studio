@@ -25,6 +25,7 @@ _DDL = """
 CREATE TABLE IF NOT EXISTS ds_files (
     file_id      TEXT    NOT NULL PRIMARY KEY,
     project_id   TEXT,
+    work_order_id TEXT,
     category     TEXT    NOT NULL
                          CHECK (category IN ('handoff','evidence','release','rollback','export','planning')),
     name         TEXT    NOT NULL,
@@ -43,6 +44,16 @@ CREATE INDEX IF NOT EXISTS idx_ds_files_project_category
 CREATE INDEX IF NOT EXISTS idx_ds_files_name_version
     ON ds_files (name, version);
 """
+# NB: the idx_ds_files_work_order index is created in _ensure_work_order_id_column,
+# not here — on a pre-existing DB the work_order_id column is added by ALTER *after*
+# this _DDL runs, so indexing it here would fail with "no such column".
+
+# work_order_id is a SOFT reference to business_work_orders.work_order_id in the
+# separate studio.db authority. SQLite cannot enforce a foreign key across database
+# files, and files.db is NEVER-AUTHORITY, so this is a queryable logical link only —
+# "which docs track to this work order" = WHERE work_order_id = ?. The relationship's
+# truth still lives in the authority; this column just makes the docs discoverable
+# from a work order id without a name convention or a stored query.
 
 
 def files_db_path() -> Path:
@@ -81,25 +92,57 @@ def _ensure_category_check(conn: sqlite3.Connection) -> None:
     live_sql = row[0] or ""
     if all(f"'{category}'" in live_sql for category in _VALID_CATEGORIES):
         return  # CHECK already covers every valid category
-    cols = (
-        "file_id, project_id, category, name, version, content_type, content, "
-        "correlation_id, created_at, created_by, expires_at, checksum"
-    )
     conn.execute("ALTER TABLE ds_files RENAME TO _ds_files_old")
     # The indexes followed the rename onto _ds_files_old; drop them by name so the
     # _DDL below can recreate them on the rebuilt table without a name collision.
     conn.execute("DROP INDEX IF EXISTS idx_ds_files_project_category")
     conn.execute("DROP INDEX IF EXISTS idx_ds_files_name_version")
+    conn.execute("DROP INDEX IF EXISTS idx_ds_files_work_order")
     conn.executescript(_DDL)
-    conn.execute(f"INSERT INTO ds_files ({cols}) SELECT {cols} FROM _ds_files_old")
+    # Copy the columns present in BOTH the old and new tables, so the rebuild is
+    # robust to added columns (new-only columns take their defaults) and never
+    # loses data on a future widening.
+    old_cols = [r[1] for r in conn.execute("PRAGMA table_info(_ds_files_old)")]
+    new_cols = [r[1] for r in conn.execute("PRAGMA table_info(ds_files)")]
+    common = ", ".join(c for c in new_cols if c in set(old_cols))
+    conn.execute(f"INSERT INTO ds_files ({common}) SELECT {common} FROM _ds_files_old")
     conn.execute("DROP TABLE _ds_files_old")
     conn.commit()
 
 
+def _ensure_work_order_id_column(conn: sqlite3.Connection) -> None:
+    """Add the ds_files.work_order_id soft-reference column to a pre-existing table.
+
+    Adding a plain column (unlike changing a CHECK) is a simple ALTER, so this is a
+    cheap idempotent guard: no-op once the column exists. Fresh DBs already have it
+    from _DDL.
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='ds_files'"
+    ).fetchone()
+    if row is None:
+        return
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(ds_files)")}
+    if "work_order_id" not in cols:
+        conn.execute("ALTER TABLE ds_files ADD COLUMN work_order_id TEXT")
+    # Always ensure the index — the column may pre-exist (fresh DB via _DDL, or a
+    # rebuild that dropped/recreated the table) without the index yet.
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ds_files_work_order ON ds_files (work_order_id)")
+    conn.commit()
+
+
 def ensure_files_schema(conn: sqlite3.Connection) -> None:
-    """Create ds_files if absent and widen a stale category CHECK if needed (idempotent)."""
+    """Create ds_files if absent, widen a stale category CHECK, and ensure the
+    work_order_id column + index (all idempotent).
+
+    Order matters: the CHECK-widening rebuild recreates the table from _DDL (which
+    includes the work_order_id column), so it runs before _ensure_work_order_id_column
+    creates the index — that way the index survives a rebuild and is only ever created
+    once the column is guaranteed to exist.
+    """
     conn.executescript(_DDL)
     _ensure_category_check(conn)
+    _ensure_work_order_id_column(conn)
     conn.commit()
 
 
@@ -124,6 +167,7 @@ def write_file(
     category: str,
     *,
     project_id: str | None = None,
+    work_order_id: str | None = None,
     correlation_id: str | None = None,
     created_by: str | None = None,
     expires_at: str | None = None,
@@ -132,6 +176,8 @@ def write_file(
     """Write a versioned artifact to files.db and return its file_id.
 
     A new version is created for every call with the same (name, project_id).
+    ``work_order_id`` is an optional soft reference (see _DDL) so the artifact is
+    discoverable from a work order id.
     """
     if category not in _VALID_CATEGORIES:
         raise ValueError(
@@ -149,12 +195,13 @@ def write_file(
         version = _next_version(conn, name, project_id)
         conn.execute(
             "INSERT INTO ds_files"
-            " (file_id, project_id, category, name, version, content_type,"
+            " (file_id, project_id, work_order_id, category, name, version, content_type,"
             "  content, correlation_id, created_at, created_by, expires_at, checksum)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 file_id,
                 project_id,
+                work_order_id,
                 category,
                 name,
                 version,
@@ -180,7 +227,7 @@ def read_file(file_id: str, *, db_path: Path | None = None) -> dict[str, Any]:
     try:
         ensure_files_schema(conn)
         row = conn.execute(
-            "SELECT file_id, project_id, category, name, version, content_type,"
+            "SELECT file_id, project_id, work_order_id, category, name, version, content_type,"
             " content, correlation_id, created_at, created_by, expires_at, checksum"
             " FROM ds_files WHERE file_id = ?",
             (file_id,),
@@ -211,7 +258,7 @@ def read_file_by_name(
     try:
         ensure_files_schema(conn)
         cols = (
-            "file_id, project_id, category, name, version, content_type,"
+            "file_id, project_id, work_order_id, category, name, version, content_type,"
             " content, correlation_id, created_at, created_by, expires_at, checksum"
         )
         if version is not None:
@@ -239,11 +286,15 @@ def list_files(
     *,
     project_id: str | None = None,
     category: str | None = None,
+    work_order_id: str | None = None,
     db_path: Path | None = None,
 ) -> list[dict[str, Any]]:
-    """Return artifact rows (without content blob) filtered by project_id and/or category.
+    """Return artifact rows (without content blob) filtered by project_id, category,
+    and/or work_order_id.
 
-    Returns the latest version of each (name, project_id) pair first, ordered by created_at desc.
+    ``work_order_id`` answers "which docs track to this work order" — the soft-link
+    lookup (see _DDL). Returns the latest version of each (name, project_id) pair
+    first, ordered by created_at desc.
     """
     if category is not None and category not in _VALID_CATEGORIES:
         raise ValueError(
@@ -262,10 +313,13 @@ def list_files(
         if category is not None:
             clauses.append("category = ?")
             params.append(category)
+        if work_order_id is not None:
+            clauses.append("work_order_id = ?")
+            params.append(work_order_id)
 
         where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
         rows = conn.execute(
-            f"SELECT file_id, project_id, category, name, version, content_type,"
+            f"SELECT file_id, project_id, work_order_id, category, name, version, content_type,"
             f" correlation_id, created_at, created_by, expires_at, checksum"
             f" FROM ds_files {where} ORDER BY created_at DESC",
             params,

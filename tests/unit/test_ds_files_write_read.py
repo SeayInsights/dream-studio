@@ -56,6 +56,7 @@ def _write_args(name: str, content: str | None = None, category: str = "planning
         category=category,
         project_id=None,
         content_type=None,
+        work_order_id=None,
     )
 
 
