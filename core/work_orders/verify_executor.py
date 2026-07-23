@@ -8,6 +8,7 @@ changes — extracted verbatim from the original module.
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -78,14 +79,26 @@ def _run_one_sql_check(expr: str, db_path: Path) -> dict[str, Any]:
     return check
 
 
-def _run_one_test_check(expr: str) -> dict[str, Any]:
-    """Run a TEST-CHECK by executing the given pytest node-id in a subprocess.
+def _run_one_test_check(expr: str, project_root: Path | None = None) -> dict[str, Any]:
+    """Run a TEST-CHECK in the work order's TARGET repo and gate on its exit code.
 
-    Uses ``sys.executable`` so it always resolves to the current interpreter — no
-    ``shell=True``, Windows-safe.  The node-id may optionally be prefixed with
-    ``tests/`` or another path; it is passed verbatim to pytest.
+    The whole point of the gate is to prove the work runs in the repo where it was
+    done, so the check executes with ``cwd=project_root`` (the WO's project's
+    ``project_path``).  When ``project_root`` is None the current process directory is
+    used — for a Dream-Studio-self WO that is the DS repo, so DS behaviour is
+    unchanged.
 
-    Returns {kind, expr, passed, result, error}.
+    Two expression forms:
+
+    - **pytest node-id** (default, e.g. ``tests/unit/test_x.py::test_y``): run via
+      ``sys.executable -m pytest`` — the current interpreter.  Correct for DS-self and
+      for external repos that share this interpreter's environment.
+    - **``cmd: <command>``**: run the target repo's OWN test command verbatim
+      (``cmd: pytest platform/tests``, ``cmd: npm test``, ``cmd: go test ./...``) as an
+      argv list (``shlex``-split, no shell).  This is how a non-pytest / separate-env
+      external repo declares how DS should verify it.
+
+    No ``shell=True`` — Windows-safe.  Returns {kind, expr, passed, result, error}.
     """
     check: dict[str, Any] = {
         "kind": "TEST-CHECK",
@@ -94,22 +107,47 @@ def _run_one_test_check(expr: str) -> dict[str, Any]:
         "result": None,
         "error": None,
     }
+
+    # cwd = the WO's target repo (falls back to the current process dir = DS repo).
+    cwd = str(project_root) if project_root else None
+
+    stripped = expr.strip()
+    if stripped[:4].lower() == "cmd:":
+        raw = stripped[4:].strip()
+        # Split into argv (no shell). Use POSIX rules on every platform: realistic test
+        # commands (`pytest platform/tests`, `npm test`, `go test ./...`) have no
+        # backslash paths or spaced args, so this parses identically everywhere and
+        # strips quotes correctly — unlike non-POSIX mode, which keeps quote chars.
+        try:
+            argv = shlex.split(raw)
+        except ValueError as exc:
+            check["error"] = f"TEST-CHECK cmd: unparseable command {raw!r} — {exc}"
+            return check
+        if not argv:
+            check["error"] = "TEST-CHECK cmd: empty command"
+            return check
+    else:
+        argv = [sys.executable, "-m", "pytest", stripped, "-q", "--tb=short", "--no-header"]
+
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "pytest", expr, "-q", "--tb=short", "--no-header"],
+            argv,
             capture_output=True,
             text=True,
             encoding="utf-8",
             errors="replace",
             timeout=_TEST_CHECK_TIMEOUT,
+            cwd=cwd,
         )
         stdout = (result.stdout or "") + (result.stderr or "")
         check["result"] = stdout[:2000]
         check["passed"] = result.returncode == 0
         if result.returncode != 0:
-            check["error"] = f"pytest exited with code {result.returncode}"
+            check["error"] = f"TEST-CHECK command exited with code {result.returncode}"
     except subprocess.TimeoutExpired:
         check["error"] = f"TEST-CHECK timed out after {_TEST_CHECK_TIMEOUT}s"
+    except FileNotFoundError as exc:
+        check["error"] = f"TEST-CHECK command not found (cwd={cwd or '.'}) — {exc}"
     except Exception as exc:
         check["error"] = str(exc)
     return check
@@ -237,10 +275,42 @@ def _emit_validation_result_event(check: dict[str, Any]) -> None:
         pass
 
 
+def resolve_project_root(work_order_id: str, db_path: Path) -> Path | None:
+    """Resolve the repo a work order's work targets: its project's ``project_path``.
+
+    This is what makes the executable-check gate verify the RIGHT repo — an external
+    project's WO (e.g. Fulcrum) runs its TEST-CHECKs in that project's repo, not the
+    Dream Studio repo.  Returns None when the project has no ``project_path``, the row
+    is missing, or the path does not exist on disk — callers then fall back to the
+    current process directory (the DS repo for a DS-self WO).
+    """
+    import sqlite3 as _sqlite3
+
+    try:
+        conn = _sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    except Exception:
+        return None
+    try:
+        row = conn.execute(
+            "SELECT p.project_path FROM business_work_orders w"
+            " JOIN business_projects p ON w.project_id = p.project_id"
+            " WHERE w.work_order_id = ?",
+            (work_order_id,),
+        ).fetchone()
+    except Exception:
+        return None
+    finally:
+        conn.close()
+    if not row or not row[0]:
+        return None
+    candidate = Path(row[0])
+    return candidate if candidate.is_dir() else None
+
+
 def run_executable_checks(
     tasks: list[dict[str, Any]],
     db_path: Path,
-    source_root: Path | None = None,
+    project_root: Path | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     """Execute all executable checks (SQL-CHECK / TEST-CHECK / API-CHECK) across tasks.
 
@@ -254,7 +324,9 @@ def run_executable_checks(
 
     :param tasks: list of task dicts with ``title`` and ``acceptance_criteria`` keys.
     :param db_path: path to the authority SQLite DB (used by SQL-CHECK).
-    :param source_root: repo root (reserved for future use; currently unused).
+    :param project_root: the WO's target repo — TEST-CHECKs run with this as ``cwd`` so
+        verification happens in the repo where the work was done (resolve it with
+        ``resolve_project_root``).  None runs in the current process dir (the DS repo).
     """
     import re as _re
 
@@ -280,7 +352,7 @@ def run_executable_checks(
             if token == "SQL-CHECK":
                 checks.append(_run_one_sql_check(expr, db_path))
             elif token == "TEST-CHECK":
-                checks.append(_run_one_test_check(expr))
+                checks.append(_run_one_test_check(expr, project_root))
             elif token == "API-CHECK":
                 checks.append(_run_one_api_check(expr))
             else:

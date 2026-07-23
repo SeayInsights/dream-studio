@@ -77,13 +77,13 @@ def evaluate_wo_outcome(
             failures.append(reason)
 
     if tasks:
-        from core.work_orders.verify import run_executable_checks
+        from core.work_orders.verify import resolve_project_root, run_executable_checks
 
-        try:
-            ac_results = run_executable_checks(tasks, db_path, source_root)
-        except TypeError:
-            # Older signature without source_root.
-            ac_results = run_executable_checks(tasks, db_path)
+        # Run the WO's checks in ITS target repo (project_path), falling back to the
+        # passed source_root then the process cwd — same repo-awareness as the close
+        # gate, so a regression is judged against the repo the work actually lives in.
+        project_root = resolve_project_root(work_order_id, db_path) or source_root
+        ac_results = run_executable_checks(tasks, db_path, project_root=project_root)
         for t_title, checks in ac_results.items():
             for c in checks:
                 if not c.get("passed"):

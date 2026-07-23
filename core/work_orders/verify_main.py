@@ -55,7 +55,7 @@ from .verify_db import (
     _run_sql_checks,
     _format_sql_checks,
 )
-from .verify_executor import run_executable_checks
+from .verify_executor import resolve_project_root, run_executable_checks
 from .verify_gaps import (
     _filter_invented_threshold_gaps,
     _insert_gap_work_orders,
@@ -210,7 +210,9 @@ def verify_work_order(
 
         authority_certified = False
         if git_diff is None and not _is_escalated:
-            ac_results = run_executable_checks(tasks, db_path)
+            ac_results = run_executable_checks(
+                tasks, db_path, project_root=resolve_project_root(work_order_id, db_path)
+            )
             evidence_text, has_passing = _authority_evidence(work_order_id, tasks, ac_results)
             if has_passing:
                 git_diff = evidence_text
