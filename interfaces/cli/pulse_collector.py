@@ -577,6 +577,9 @@ def run_pulse_check() -> None:
             stale_branches=stats.get("stale_branches"),
             pending_drafts=stats.get("pending_drafts"),
             open_escalations=stats.get("escalations"),
+            # WO-FILESDB-C4B S4: capture the FULL pulse body in the authority (the disk
+            # pulse-<date>.md write is dropped in C4B-5).
+            report_body=report,
         )
     except Exception:
         pass
