@@ -14,6 +14,8 @@ The user signaled a milestone is done ("close milestone 1", "milestone done", "w
 4. `harden-results.md` must exist and contain `PASSED`.
 5. For UI milestones (any work order with `work_order_type` in `ui_component`, `ui_page`), `cwv-results.md` must also exist and contain `PASSED`.
 
+These artifacts live in the files.db docstore (names `milestones/<milestone_id>/<artifact>.md`), authored via `ds files write --category planning` — never on `.planning/` disk (zero-disk; the on-edit hook denies disk writes). The close gate reads them from the docstore (with a disk fallback during the transition).
+
 ## What to do
 
 1. **Preview gates first.** Call `close_milestone(milestone_id=<ms>, source_root=..., dream_studio_home=..., planning_root=...)` — the function returns the gate status without mutating when checks fail. If the user wants a true non-mutating preview before any close attempt, use `ds-milestone:status` instead.
@@ -26,7 +28,7 @@ The user signaled a milestone is done ("close milestone 1", "milestone done", "w
 3. **If `ok=False` with `open_work_orders`:** the milestone has incomplete work orders. List them by `title` and `status`. Tell the user *"Close each work order via `ds-workorder:close` before closing this milestone."* — do not offer `--force` here.
 
 4. **If `ok=False` with `failures`:** the gate artifacts are missing or failing. Present each failure as a bullet. Offer two paths:
-   - **Fix the gates** (preferred): suggest the skill that writes each artifact. For example, `design_audit_required` → invoke `website:critique` (each UI page) and aggregate into `design-audit.md`; `security_audit_required` → invoke `security:scan`; `harden_results_required` → invoke `quality:harden`; `cwv_results_required` → run a CWV check and write `cwv-results.md`.
+   - **Fix the gates** (preferred): invoke the skill that produces each artifact, then author its result to the docstore (zero-disk — `.planning/` disk writes are denied) as `ds files write "milestones/<milestone_id>/<artifact>.md" --category planning`. For example, `design_audit_required` → `website:critique` (each UI page), aggregate, write `milestones/<id>/design-audit.md`; `security_audit_required` → `security:scan` → `security-audit.md`; `harden_results_required` → `quality:harden` → `harden-results.md`; `cwv_results_required` → run a CWV check → `cwv-results.md`. The close gate reads these from the docstore.
    - **Force close** (requires explicit user approval): explain that `--force` will bypass the failed gates and emit `gate.bypassed` spool events. Confirm: *"Bypass these gates and close the milestone? This is recorded for audit. (yes/no)"* — only on explicit yes, re-call `close_milestone(milestone_id=<ms>, force=True, ...)`. Surface the returned `bypassed_gates` list.
 
 ## Surface contract
