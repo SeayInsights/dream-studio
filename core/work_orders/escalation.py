@@ -18,6 +18,7 @@ escalating to the operator.
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 from datetime import datetime, UTC
 from pathlib import Path
@@ -419,3 +420,106 @@ def resolve_escalation(
         "already_resolved": already_resolved,
         "found": bool(rows),
     }
+
+
+# ── Legacy disk ESC-*.md → store migration (WO-FILESDB-C4B S3) ──────────────────
+# During the transition the pulse's open-escalation count moves from a disk glob
+# (meta/*.md containing "ESC-" + "unresolved") to the authority store. The scan +
+# backfill below let the pulse read the store while guaranteeing the count never
+# drops: any open disk ESC file that predates the S1 dual-write is migrated in first.
+# S5 drops the disk writes; then scan_open_escalation_files simply finds nothing.
+
+# Disk ESC files are named ESC-<TYPE>-<wo8>.md (see escalate_to_operator /
+# runner_outcome ESC-OUTCOME), e.g. ESC-RETRYCAP-1a2b3c4d.
+_ESC_FILENAME_RE = re.compile(r"^ESC-([A-Za-z]+)-([0-9a-fA-F]{6,})$")
+_ESC_REASON_RE = re.compile(r"^Reason:\s*(.+)$", re.MULTILINE)
+
+
+def scan_open_escalation_files(meta_dir: Path | str | None) -> list[Path]:
+    """Return the meta-dir ESC-*.md files still marked unresolved (legacy disk scan).
+
+    This is the exact predicate the pulse used before C4B-3 ("ESC-" + "unresolved");
+    factored out so the store-backed scan can migrate + fall back to it.
+    """
+    if not meta_dir:
+        return []
+    directory = Path(meta_dir)
+    if not directory.is_dir():
+        return []
+    out: list[Path] = []
+    for candidate in sorted(directory.glob("*.md")):
+        try:
+            text = candidate.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        if "ESC-" in text and "unresolved" in text.lower():
+            out.append(candidate)
+    return out
+
+
+def _resolve_wo_by_prefix(wo_prefix: str, db_path: Path) -> str | None:
+    """Resolve a full work_order_id from the 8-char prefix in an ESC filename.
+
+    Returns None when there is no match or the prefix is ambiguous (>1 match) —
+    backfill then skips that file rather than guess.
+    """
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return None
+    try:
+        rows = conn.execute(
+            "SELECT work_order_id FROM business_work_orders WHERE work_order_id LIKE ? LIMIT 2",
+            (wo_prefix + "%",),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return None
+    finally:
+        conn.close()
+    return rows[0][0] if len(rows) == 1 else None
+
+
+def backfill_open_escalations_from_disk(meta_dir: Path | str | None, *, db_path: Path) -> int:
+    """Migrate open disk ESC-*.md files into the authority escalation store (idempotent).
+
+    For each unresolved disk ESC file, resolve its work order + instance_key from the
+    filename and — unless an escalation artifact already exists for that (wo, type) —
+    record one (status='unresolved'). Returns the number newly written. Best-effort:
+    unparseable names, unknown/ambiguous WOs, and store-write failures are skipped, and
+    an already-migrated escalation is never duplicated (the store's unique key holds).
+    """
+    from core.work_orders.artifacts import get_wo_artifact
+
+    written = 0
+    for esc_file in scan_open_escalation_files(meta_dir):
+        match = _ESC_FILENAME_RE.match(esc_file.stem)
+        if not match:
+            continue
+        raw_type = match.group(1).lower()
+        wo_prefix = match.group(2).lower()
+        if "retrycap" in raw_type:
+            instance_key = "retrycap"
+        elif "outcome" in raw_type:
+            instance_key = "outcome"
+        else:
+            instance_key = raw_type
+        work_order_id = _resolve_wo_by_prefix(wo_prefix, db_path)
+        if not work_order_id:
+            continue
+        if (
+            get_wo_artifact(work_order_id, "escalation", instance_key=instance_key, db_path=db_path)
+            is not None
+        ):
+            continue  # already represented in the store
+        try:
+            reason_match = _ESC_REASON_RE.search(
+                esc_file.read_text(encoding="utf-8", errors="ignore")
+            )
+        except OSError:
+            reason_match = None
+        reason = reason_match.group(1).strip() if reason_match else "migrated from disk ESC file"
+        _record_escalation_artifact(
+            work_order_id, instance_key=instance_key, reason=reason, db_path=db_path
+        )
+        written += 1
+    return written
