@@ -8,6 +8,7 @@ from core.config.database import DatabaseRuntime, initialize_database
 from core.config.sqlite_bootstrap import (
     bootstrap_database,
     latest_migration_version,
+    released_migration_version,
     run_migrations,
 )
 from core.event_store.studio_db import _connect, _migrations_dir
@@ -52,7 +53,11 @@ def test_fresh_temp_home_runtime_bootstrap_creates_db_and_applies_latest(
         expected_db = tmp_path / "fresh-home" / ".dream-studio" / "state" / "studio.db"
         assert runtime.db_path == expected_db
         assert expected_db.is_file()
-        assert _schema_version(expected_db) == latest_migration_version()
+        # The runtime bootstraps this DB under ~/.dream-studio, so the live-safety gate
+        # applies migrations up to the RELEASED version and defers any unreleased ones
+        # (latest > released) to `ds migrate activate`. This equals latest only when no
+        # migration is pending release; with one pending (e.g. 153) it is released.
+        assert _schema_version(expected_db) == released_migration_version()
         assert expected_db != LIVE_DB
     finally:
         DatabaseRuntime.reset_instance()

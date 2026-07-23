@@ -80,26 +80,53 @@ def insert_operational_snapshot(
     stale_branches: int | None = None,
     pending_drafts: int | None = None,
     open_escalations: int | None = None,
+    report_body: str | None = None,
     db_path: Path | None = None,
 ) -> bool:
     try:
         with _db_transaction(db_path) as c:
-            c.execute(
-                """INSERT OR REPLACE INTO raw_operational_snapshots
-                   (snapshot_date, project_slug, ci_status, open_prs,
-                    stale_branches, pending_drafts, open_escalations, captured_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    snapshot_date,
-                    project_slug,
-                    ci_status,
-                    open_prs,
-                    stale_branches,
-                    pending_drafts,
-                    open_escalations,
-                    _NOW(),
-                ),
+            # Feature-detect report_body (migration 153, WO-FILESDB-C4B S4). The column
+            # is unreleased, so the live authority DB lacks it until `ds migrate activate`;
+            # in that window we write the snapshot without the body rather than error.
+            has_body = any(
+                row[1] == "report_body"
+                for row in c.execute("PRAGMA table_info(raw_operational_snapshots)")
             )
+            if has_body:
+                c.execute(
+                    """INSERT OR REPLACE INTO raw_operational_snapshots
+                       (snapshot_date, project_slug, ci_status, open_prs,
+                        stale_branches, pending_drafts, open_escalations, report_body, captured_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        snapshot_date,
+                        project_slug,
+                        ci_status,
+                        open_prs,
+                        stale_branches,
+                        pending_drafts,
+                        open_escalations,
+                        report_body,
+                        _NOW(),
+                    ),
+                )
+            else:
+                c.execute(
+                    """INSERT OR REPLACE INTO raw_operational_snapshots
+                       (snapshot_date, project_slug, ci_status, open_prs,
+                        stale_branches, pending_drafts, open_escalations, captured_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        snapshot_date,
+                        project_slug,
+                        ci_status,
+                        open_prs,
+                        stale_branches,
+                        pending_drafts,
+                        open_escalations,
+                        _NOW(),
+                    ),
+                )
         return True
     except Exception as e:
         _reraise_if_busy(e)
