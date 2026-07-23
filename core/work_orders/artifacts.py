@@ -138,6 +138,34 @@ def list_wo_artifacts(
         conn.close()
 
 
+def list_artifacts_by_kind(
+    kind: str, *, db_path: Path | None = None
+) -> list[tuple[str, str, str, str]]:
+    """Return every artifact of a kind across all work orders.
+
+    Yields ``[(work_order_id, instance_key, content, updated_at), ...]`` ordered
+    by ``updated_at`` descending (most-recent first). Complements
+    ``list_wo_artifacts`` (which is scoped to a single WO) for operator-facing
+    cross-WO queries such as ``ds escalation list``. Empty when the artifact
+    table is absent (unreleased migration on the live authority DB).
+    """
+    try:
+        conn = sqlite3.connect(str(_resolve_db(db_path)))
+    except sqlite3.Error:
+        return []
+    try:
+        rows = conn.execute(
+            f"SELECT work_order_id, instance_key, content, updated_at FROM {_TABLE}"
+            " WHERE kind=? ORDER BY updated_at DESC, work_order_id, instance_key",
+            (kind,),
+        ).fetchall()
+        return [(r[0], r[1], r[2], r[3]) for r in rows]
+    except sqlite3.OperationalError:
+        return []
+    finally:
+        conn.close()
+
+
 def backfill_wo_artifacts(planning_root: Path, *, db_path: Path | None = None) -> int:
     """One-time migration: copy existing .planning/work-orders/<id>/*.{md,json}
     ceremony artifacts into the authority table. Returns the number written.
