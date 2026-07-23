@@ -138,6 +138,33 @@ def test_close_milestone_returns_open_wo_list_when_wos_incomplete(
     assert any(w["work_order_id"] == WO_UI_ID for w in result["open_work_orders"])
 
 
+def test_cancelled_wo_is_terminal_and_does_not_block_milestone_close(
+    patched_paths, db_path: Path, tmp_path: Path, spool_root: Path
+) -> None:
+    """A cancelled WO is terminal (intentionally-dropped work), not outstanding work,
+    so it must not strand the milestone at the open-WO precondition."""
+    from core.milestones.close import close_milestone
+
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "UPDATE business_work_orders SET status = 'cancelled' WHERE work_order_id = ?",
+        (WO_UI_ID,),
+    )
+    conn.commit()
+    conn.close()
+    _write_all_passing(tmp_path)
+
+    result = close_milestone(
+        milestone_id=MILESTONE_ID,
+        source_root=REPO_ROOT,
+        dream_studio_home=tmp_path,
+        planning_root=tmp_path / ".planning",
+    )
+    # The cancelled WO must NOT count as open — the close proceeds past the precondition.
+    assert result.get("error") != "Cannot close milestone: open work orders remain"
+    assert all(w["work_order_id"] != WO_UI_ID for w in result.get("open_work_orders", [])), result
+
+
 def test_close_milestone_returns_gate_failures_list(
     patched_paths, tmp_path: Path, spool_root: Path
 ) -> None:

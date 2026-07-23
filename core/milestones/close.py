@@ -149,7 +149,13 @@ def close_milestone(
             (milestone_id,),
         ).fetchall()
 
-        open_wos = [(r[0], r[1], r[2]) for r in wo_rows if r[2] != "closed"]
+        # A milestone can close once no work order is still OPEN. Both "closed" and
+        # "cancelled" are TERMINAL — a cancelled WO is intentionally-dropped work, not
+        # outstanding work, so it must not block the milestone (previously only "closed"
+        # counted as terminal, which stranded milestones whose only non-closed WOs were
+        # cancelled, even under force=True since this is a hard precondition).
+        _TERMINAL_WO_STATUSES = {"closed", "cancelled"}
+        open_wos = [(r[0], r[1], r[2]) for r in wo_rows if r[2] not in _TERMINAL_WO_STATUSES]
         if open_wos:
             # Canonical-events fallback: work_order.closed is terminal — any
             # matching event means the WO is closed regardless of projection lag.
