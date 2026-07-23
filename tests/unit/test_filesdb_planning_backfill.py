@@ -80,7 +80,11 @@ def test_stale_check_db_is_rebuilt_preserving_rows_and_indexes(tmp_path: Path):
 
     assert legacy is not None and legacy["content"] == "legacy"  # row preserved
     assert "'planning'" in table_sql  # CHECK widened
-    assert idxs == {"idx_ds_files_project_category", "idx_ds_files_name_version"}
+    assert idxs == {
+        "idx_ds_files_project_category",
+        "idx_ds_files_name_version",
+        "idx_ds_files_work_order",
+    }
     assert leftover is None  # temp table cleaned up
 
 

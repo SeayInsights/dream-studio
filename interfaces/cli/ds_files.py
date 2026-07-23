@@ -19,9 +19,10 @@ def cmd_files_list(args) -> int:
 
     project_id = getattr(args, "project_id", None)
     category = getattr(args, "category", None)
+    work_order_id = getattr(args, "work_order_id", None)
 
     try:
-        rows = list_files(project_id=project_id, category=category)
+        rows = list_files(project_id=project_id, category=category, work_order_id=work_order_id)
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
@@ -98,6 +99,7 @@ def cmd_files_add(args) -> int:
             content_type,
             args.category,
             project_id=args.project_id,
+            work_order_id=args.work_order_id,
             correlation_id=str(uuid.uuid4()),
             created_by="cli",
         )
@@ -146,6 +148,7 @@ def cmd_files_write(args) -> int:
             content_type,
             args.category,
             project_id=args.project_id,
+            work_order_id=args.work_order_id,
             correlation_id=str(uuid.uuid4()),
             created_by="cli",
         )
@@ -215,6 +218,12 @@ def add_files_subcommand(subparsers) -> None:
         choices=_CATEGORY_CHOICES,
         help="Filter by category",
     )
+    list_parser.add_argument(
+        "--work-order",
+        default=None,
+        dest="work_order_id",
+        help="Filter by work order id (docs that track to this work order)",
+    )
     list_parser.set_defaults(func=cmd_files_list)
 
     add_parser = files_sub.add_parser(
@@ -244,6 +253,12 @@ def add_files_subcommand(subparsers) -> None:
         dest="content_type",
         help="MIME type (default: guessed from the file name)",
     )
+    add_parser.add_argument(
+        "--work-order",
+        default=None,
+        dest="work_order_id",
+        help="Work order id this artifact tracks to (soft reference)",
+    )
     add_parser.set_defaults(func=cmd_files_add)
 
     write_parser = files_sub.add_parser(
@@ -272,6 +287,12 @@ def add_files_subcommand(subparsers) -> None:
         default=None,
         dest="content_type",
         help="MIME type (default: guessed from the name)",
+    )
+    write_parser.add_argument(
+        "--work-order",
+        default=None,
+        dest="work_order_id",
+        help="Work order id this artifact tracks to (soft reference)",
     )
     write_parser.set_defaults(func=cmd_files_write)
 
