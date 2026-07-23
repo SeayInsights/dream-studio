@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -256,4 +257,45 @@ def escalate_to_operator(
         f"Reason: {reason or 'retry cap reached'}\n",
         encoding="utf-8",
     )
+    _record_escalation_artifact(
+        work_order_id,
+        instance_key="retrycap",
+        reason=reason or "retry cap reached",
+        db_path=db_path,
+    )
     return esc_path
+
+
+def _record_escalation_artifact(
+    work_order_id: str,
+    *,
+    instance_key: str,
+    reason: str,
+    db_path: Path,
+) -> None:
+    """WO-FILESDB-C4B: dual-write the escalation to the authority artifact store
+    (business_work_order_artifacts kind='escalation'). The disk ESC-*.md write stays
+    during the transition until the pulse scan reads the store (C4B-3). Best-effort and
+    fully isolated — never affects the escalation ladder's primary behavior."""
+    try:
+        import json as _json
+
+        from core.work_orders.artifacts import set_wo_artifact
+
+        set_wo_artifact(
+            work_order_id,
+            "escalation",
+            _json.dumps(
+                {
+                    "type": instance_key,
+                    "status": "unresolved",
+                    "reason": reason,
+                    "work_order_id": work_order_id,
+                    "created_at": datetime.now(UTC).isoformat(),
+                }
+            ),
+            instance_key=instance_key,
+            db_path=db_path,
+        )
+    except Exception:
+        pass
