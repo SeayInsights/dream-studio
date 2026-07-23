@@ -64,6 +64,26 @@ def run_dashboard_smoke(db_path: Path | str | None = None) -> dict[str, Any]:
     os.environ[DB_PATH_ENV] = str(path)
     DatabaseRuntime.reset_instance()
     try:
+        # Build the derived analytics schema for this DREAM_STUDIO_HOME before serving.
+        # The dashboard's DuckDB-backed endpoints (e.g. /api/v1/hooks/*) read views like
+        # hook_executions that are views over events_fact — created ONLY by the aggregation
+        # pipeline (ensure_analytics_schema), never on connect. Under an isolated home (the
+        # pytest session temp home, or any freshly-supplied smoke DB) that pipeline has never
+        # run, so the views are absent and the reads 500. Building the (idempotent) schema here
+        # makes the views exist; over an empty events_fact they return 0 rows and the endpoints
+        # take their normal empty/fallback path. No rows are seeded — this asserts the real
+        # read contract against a structurally-complete but empty store.
+        from core.analytics.duckdb_store import (
+            connect_analytics as _connect_analytics,
+            ensure_analytics_schema as _ensure_analytics_schema,
+        )
+
+        _analytics = _connect_analytics(read_only=False)
+        try:
+            _ensure_analytics_schema(_analytics)
+        finally:
+            _analytics.close()
+
         client = TestClient(app)
         endpoints = []
         responses = {}
