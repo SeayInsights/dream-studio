@@ -193,6 +193,48 @@ def read_file(file_id: str, *, db_path: Path | None = None) -> dict[str, Any]:
     return dict(row)
 
 
+def read_file_by_name(
+    name: str,
+    *,
+    project_id: str | None = None,
+    version: int | None = None,
+    db_path: Path | None = None,
+) -> dict[str, Any]:
+    """Return an artifact row (with content) by ``name``.
+
+    Returns the latest version for ``(name, project_id)`` unless ``version`` is given.
+    Raises KeyError if no matching row exists. This is the read half of the
+    docstore-as-filesystem surface: callers address content by its logical name
+    (e.g. "personal/notes.md") rather than a file_id.
+    """
+    conn = connect_files(db_path)
+    try:
+        ensure_files_schema(conn)
+        cols = (
+            "file_id, project_id, category, name, version, content_type,"
+            " content, correlation_id, created_at, created_by, expires_at, checksum"
+        )
+        if version is not None:
+            row = conn.execute(
+                f"SELECT {cols} FROM ds_files"
+                " WHERE name = ? AND project_id IS ? AND version = ?",
+                (name, project_id, version),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                f"SELECT {cols} FROM ds_files"
+                " WHERE name = ? AND project_id IS ?"
+                " ORDER BY version DESC LIMIT 1",
+                (name, project_id),
+            ).fetchone()
+    finally:
+        conn.close()
+
+    if row is None:
+        raise KeyError(f"No file found with name={name!r} (project_id={project_id!r})")
+    return dict(row)
+
+
 def list_files(
     *,
     project_id: str | None = None,
