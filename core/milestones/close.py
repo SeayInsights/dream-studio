@@ -51,45 +51,46 @@ def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
 def _evaluate_milestone_artifacts(ms_dir: Path, *, has_ui: bool) -> list[str]:
     """Run all artifact checks under ``ms_dir``. Returns list of failure reasons."""
 
+    from core.milestones.artifacts import read_milestone_artifact
+
     failures: list[str] = []
 
     # CHECK 1 — design audit
-    audit_path = ms_dir / "design-audit.md"
-    if not audit_path.is_file():
+    content = read_milestone_artifact(ms_dir, "design-audit.md")
+    if content is None:
         failures.append(
             "Design audit required. Invoke website:critique across all UI surfaces and"
-            f" write results to .planning/milestones/{ms_dir.name}/design-audit.md"
+            f" write results to the docstore as milestones/{ms_dir.name}/design-audit.md"
         )
     else:
-        content = audit_path.read_text(encoding="utf-8")
         for m in re.finditer(r"Score:\s*(\d+)/(\d+)", content):
             if int(m.group(1)) < 3:
                 failures.append(f"Design audit: score {m.group(1)}/{m.group(2)} is below minimum 3")
                 break
 
     # CHECK 2 — security audit
-    sec_path = ms_dir / "security-audit.md"
-    if not sec_path.is_file():
+    content = read_milestone_artifact(ms_dir, "security-audit.md")
+    if content is None:
         failures.append("Security audit required.")
     else:
-        if "BLOCKED" in sec_path.read_text(encoding="utf-8").upper():
+        if "BLOCKED" in content.upper():
             failures.append("Security audit: security-audit.md contains BLOCKED")
 
     # CHECK 3 — hardening
-    harden_path = ms_dir / "harden-results.md"
-    if not harden_path.is_file():
+    content = read_milestone_artifact(ms_dir, "harden-results.md")
+    if content is None:
         failures.append("Hardening check required. Invoke quality:harden and write results.")
     else:
-        if "PASSED" not in harden_path.read_text(encoding="utf-8").upper():
+        if "PASSED" not in content.upper():
             failures.append("Hardening check: harden-results.md does not contain PASSED")
 
     # CHECK 4 — Core Web Vitals (UI milestones only)
     if has_ui:
-        cwv_path = ms_dir / "cwv-results.md"
-        if not cwv_path.is_file():
+        content = read_milestone_artifact(ms_dir, "cwv-results.md")
+        if content is None:
             failures.append("Core Web Vitals check required.")
         else:
-            if "PASSED" not in cwv_path.read_text(encoding="utf-8").upper():
+            if "PASSED" not in content.upper():
                 failures.append("Core Web Vitals: cwv-results.md does not contain PASSED")
 
     return failures
