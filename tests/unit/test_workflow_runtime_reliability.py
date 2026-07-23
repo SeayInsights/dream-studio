@@ -31,6 +31,19 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS_DIR = REPO_ROOT / "canonical" / "workflows"
 ENGINE_DIR = REPO_ROOT / "control" / "execution" / "workflow"
 
+# WO-GF-CONTROL-INSTALL (#544) split the monolithic state.py into a thin re-export
+# facade over state_{io,telemetry,commands}.py. The source-contract checks below
+# assert about the state *module's* surface (cmd_* handlers, lock helpers, gate
+# fields) — content that now lives in the siblings, not the facade — so they must
+# read the whole module. Order matters: state_commands.py holds every cmd_* handler
+# in its original definition order, and it is a contiguous block here, so the
+# .index()-based section slices (cmd_next→end, cmd_pause→cmd_resume→cmd_abort) below
+# resolve exactly as they did against the pre-split monolith.
+_STATE_MODULE_FILES = ("state.py", "state_io.py", "state_telemetry.py", "state_commands.py")
+_STATE_MODULE_SOURCE = "\n".join(
+    (ENGINE_DIR / _f).read_text(encoding="utf-8") for _f in _STATE_MODULE_FILES
+)
+
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -136,7 +149,7 @@ class TestStateLocking:
     @pytest.fixture(autouse=True)
     def _load(self):
         self.engine_source = (ENGINE_DIR / "engine.py").read_text(encoding="utf-8")
-        self.state_source = (ENGINE_DIR / "state.py").read_text(encoding="utf-8")
+        self.state_source = _STATE_MODULE_SOURCE
 
     def test_file_lock_uses_atomic_creation(self):
         assert "O_CREAT" in self.engine_source
@@ -199,7 +212,7 @@ class TestRetryBehavior:
 
     def test_state_does_not_retry_failed(self):
         """cmd_next does not re-queue failed nodes."""
-        source = (ENGINE_DIR / "state.py").read_text(encoding="utf-8")
+        source = _STATE_MODULE_SOURCE
         next_section = source[source.index("def cmd_next") :]
         assert "retry" not in next_section.lower()
 
@@ -229,7 +242,7 @@ class TestTimeoutBehavior:
 
     def test_state_does_not_enforce_timeout(self):
         """State CLI does not enforce timeout_seconds."""
-        state_source = (ENGINE_DIR / "state.py").read_text(encoding="utf-8")
+        state_source = _STATE_MODULE_SOURCE
         assert "timeout_seconds" not in state_source
 
 
@@ -240,7 +253,7 @@ class TestGateBehavior:
 
     @pytest.fixture(autouse=True)
     def _load(self):
-        self.source = (ENGINE_DIR / "state.py").read_text(encoding="utf-8")
+        self.source = _STATE_MODULE_SOURCE
 
     def test_cmd_pause_exists(self):
         assert "def cmd_pause" in self.source
@@ -346,7 +359,7 @@ class TestStateCLICommands:
 
     @pytest.fixture(autouse=True)
     def _load(self):
-        self.source = (ENGINE_DIR / "state.py").read_text(encoding="utf-8")
+        self.source = _STATE_MODULE_SOURCE
 
     @pytest.mark.parametrize("cmd", EXPECTED_COMMANDS)
     def test_command_handler_exists(self, cmd):
