@@ -84,15 +84,17 @@ def get_milestone_status(
     ui_types = frozenset(["ui_component", "ui_page"])
     has_ui = any(r[3] in ui_types for r in wo_rows)
 
+    from core.milestones.artifacts import read_milestone_artifact
+
     open_checks: list[str] = []
     for filename, label in [
         ("design-audit.md", "design_audit"),
         ("security-audit.md", "security_audit"),
         ("harden-results.md", "harden_results"),
     ]:
-        if not (ms_dir / filename).is_file():
+        if read_milestone_artifact(ms_dir, filename) is None:
             open_checks.append(label)
-    if has_ui and not (ms_dir / "cwv-results.md").is_file():
+    if has_ui and read_milestone_artifact(ms_dir, "cwv-results.md") is None:
         open_checks.append("cwv_results")
 
     return {
