@@ -88,6 +88,11 @@ def main(argv: list[str] | None = None) -> int:
 
     add_files_subcommand(subcommands)
 
+    # escalation subcommand group (WO-FILESDB-C4B S2)
+    from interfaces.cli.ds_escalation import add_escalation_subcommand
+
+    add_escalation_subcommand(subcommands)
+
     # projection subcommand group (Phase 18.1.5)
     from interfaces.cli.projection_cli import add_projection_subcommand
 
@@ -162,6 +167,11 @@ def main(argv: list[str] | None = None) -> int:
             if hasattr(args, "func"):
                 return args.func(args)
             print("Usage: ds files <subcommand>", file=sys.stderr)
+            return 1
+        if args.command == "escalation":
+            if hasattr(args, "func"):
+                return args.func(args)
+            print("Usage: ds escalation <subcommand>", file=sys.stderr)
             return 1
         if args.command == "projection":
             from interfaces.cli.projection_cli import handle_projection_command

@@ -299,3 +299,123 @@ def _record_escalation_artifact(
         )
     except Exception:
         pass
+
+
+# ── Operator escalation surface (business_work_order_artifacts kind='escalation') ──
+# The helpers below read/resolve the operator-facing escalation ARTIFACTS written by
+# _record_escalation_artifact — distinct from the ds_escalations ladder table above
+# (which carries the retry/executor routing state). These back the `ds escalation`
+# command (WO-FILESDB-C4B S2) so the operator can list open escalations and mark them
+# resolved from the authority instead of hand-editing loose ESC-*.md disk files. Store
+# writes are additive: the pulse open-escalation count keeps reading disk until C4B-3
+# repoints it at this store, at which point a 'resolved' status drops out of the count.
+
+
+def _parse_escalation_artifact(
+    work_order_id: str, instance_key: str, content: str, updated_at: str = ""
+) -> dict[str, Any]:
+    """Normalize a stored escalation artifact JSON into a stable dict.
+
+    Tolerates malformed / empty content (returns 'unknown' status) so a single bad
+    row never breaks a list query.
+    """
+    import json
+
+    try:
+        data = json.loads(content) if content else {}
+    except (ValueError, TypeError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    return {
+        "work_order_id": data.get("work_order_id") or work_order_id,
+        "type": data.get("type") or instance_key,
+        "status": data.get("status") or "unknown",
+        "reason": data.get("reason", ""),
+        "created_at": data.get("created_at", ""),
+        "resolved_at": data.get("resolved_at"),
+        "updated_at": updated_at,
+    }
+
+
+def list_escalations(
+    *, db_path: Path | None = None, include_resolved: bool = False
+) -> list[dict[str, Any]]:
+    """List operator escalation artifacts across all work orders.
+
+    Defaults to only ``unresolved`` escalations — the operator-actionable set.
+    Pass ``include_resolved=True`` to see the full history. Most-recent first.
+    """
+    from core.work_orders.artifacts import list_artifacts_by_kind
+
+    out: list[dict[str, Any]] = []
+    for wo_id, instance_key, content, updated_at in list_artifacts_by_kind(
+        "escalation", db_path=db_path
+    ):
+        rec = _parse_escalation_artifact(wo_id, instance_key, content, updated_at)
+        if not include_resolved and rec["status"] != "unresolved":
+            continue
+        out.append(rec)
+    return out
+
+
+def get_escalations(work_order_id: str, *, db_path: Path | None = None) -> list[dict[str, Any]]:
+    """Return every escalation artifact for one WO (retrycap + outcome instances)."""
+    from core.work_orders.artifacts import list_wo_artifacts
+
+    return [
+        _parse_escalation_artifact(work_order_id, instance_key, content)
+        for instance_key, content in list_wo_artifacts(work_order_id, "escalation", db_path=db_path)
+    ]
+
+
+def resolve_escalation(
+    work_order_id: str,
+    *,
+    db_path: Path | None = None,
+    instance_key: str | None = None,
+    note: str = "",
+) -> dict[str, Any]:
+    """Mark a WO's escalation artifact(s) resolved (status → 'resolved', + resolved_at).
+
+    When ``instance_key`` is None every escalation instance for the WO is resolved
+    (both ``retrycap`` and ``outcome``); pass an ``instance_key`` to resolve just one.
+    Idempotent — an already-resolved instance is reported but not rewritten. Returns
+    ``{work_order_id, resolved: [type...], already_resolved: [type...], found: bool}``.
+    """
+    import json
+
+    from core.work_orders.artifacts import list_wo_artifacts, set_wo_artifact
+
+    rows = list_wo_artifacts(work_order_id, "escalation", db_path=db_path)
+    if instance_key is not None:
+        rows = [(ik, content) for ik, content in rows if ik == instance_key]
+
+    resolved: list[str] = []
+    already_resolved: list[str] = []
+    now = datetime.now(UTC).isoformat()
+    for ik, content in rows:
+        try:
+            data = json.loads(content) if content else {}
+        except (ValueError, TypeError):
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+        if data.get("status") == "resolved":
+            already_resolved.append(data.get("type") or ik)
+            continue
+        data["status"] = "resolved"
+        data["resolved_at"] = now
+        if note:
+            data["resolution_note"] = note
+        set_wo_artifact(
+            work_order_id, "escalation", json.dumps(data), instance_key=ik, db_path=db_path
+        )
+        resolved.append(data.get("type") or ik)
+
+    return {
+        "work_order_id": work_order_id,
+        "resolved": resolved,
+        "already_resolved": already_resolved,
+        "found": bool(rows),
+    }
