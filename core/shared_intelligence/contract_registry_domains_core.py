@@ -250,7 +250,7 @@ _CONTRACT_DOMAINS_CORE: tuple[dict[str, Any], ...] = (
         "source_patterns": [
             "projections/api/routes/**",
             "projections/frontend/dashboard.html",
-            "core/telemetry/read_models.py",
+            "core/telemetry/read_models*.py",
             "core/telemetry/dashboard_freshness.py",
         ],
         "contract_refs": [
