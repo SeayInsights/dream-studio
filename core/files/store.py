@@ -19,14 +19,14 @@ from typing import Any
 
 from core.config.paths import state_dir
 
-_VALID_CATEGORIES = frozenset({"handoff", "evidence", "release", "rollback", "export"})
+_VALID_CATEGORIES = frozenset({"handoff", "evidence", "release", "rollback", "export", "planning"})
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS ds_files (
     file_id      TEXT    NOT NULL PRIMARY KEY,
     project_id   TEXT,
     category     TEXT    NOT NULL
-                         CHECK (category IN ('handoff','evidence','release','rollback','export')),
+                         CHECK (category IN ('handoff','evidence','release','rollback','export','planning')),
     name         TEXT    NOT NULL,
     version      INTEGER NOT NULL DEFAULT 1,
     content_type TEXT    NOT NULL,
@@ -63,9 +63,43 @@ def connect_files(db_path: Path | None = None) -> sqlite3.Connection:
     return conn
 
 
-def ensure_files_schema(conn: sqlite3.Connection) -> None:
-    """Create ds_files table and indexes if they do not already exist (idempotent)."""
+def _ensure_category_check(conn: sqlite3.Connection) -> None:
+    """Widen the ds_files.category CHECK to cover every currently-valid category.
+
+    SQLite cannot ALTER a CHECK constraint in place, so a files.db created before a
+    new category was added still carries the old CHECK and would reject inserts of
+    that category. This performs a one-time table rebuild (rename -> recreate from
+    the current _DDL -> copy rows -> drop old). Idempotent: it no-ops once the live
+    CHECK already lists every valid category. files.db is NEVER-AUTHORITY, so the
+    rebuild carries no event/gate risk.
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='ds_files'"
+    ).fetchone()
+    if row is None:
+        return  # fresh DB — _DDL already created the table with the current CHECK
+    live_sql = row[0] or ""
+    if all(f"'{category}'" in live_sql for category in _VALID_CATEGORIES):
+        return  # CHECK already covers every valid category
+    cols = (
+        "file_id, project_id, category, name, version, content_type, content, "
+        "correlation_id, created_at, created_by, expires_at, checksum"
+    )
+    conn.execute("ALTER TABLE ds_files RENAME TO _ds_files_old")
+    # The indexes followed the rename onto _ds_files_old; drop them by name so the
+    # _DDL below can recreate them on the rebuilt table without a name collision.
+    conn.execute("DROP INDEX IF EXISTS idx_ds_files_project_category")
+    conn.execute("DROP INDEX IF EXISTS idx_ds_files_name_version")
     conn.executescript(_DDL)
+    conn.execute(f"INSERT INTO ds_files ({cols}) SELECT {cols} FROM _ds_files_old")
+    conn.execute("DROP TABLE _ds_files_old")
+    conn.commit()
+
+
+def ensure_files_schema(conn: sqlite3.Connection) -> None:
+    """Create ds_files if absent and widen a stale category CHECK if needed (idempotent)."""
+    conn.executescript(_DDL)
+    _ensure_category_check(conn)
     conn.commit()
 
 
