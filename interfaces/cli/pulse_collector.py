@@ -155,18 +155,32 @@ def check_corrections_growth() -> tuple[int, str]:
 
 
 def check_open_escalations() -> list[str]:
+    """Open operator escalations, read from the authority store (WO-FILESDB-C4B S3).
+
+    The count moved off the disk glob onto business_work_order_artifacts
+    (kind='escalation', status='unresolved'). Any legacy open disk ESC-*.md file is
+    migrated into the store first (idempotent) so the count never drops on the switch.
+    Falls back to the legacy disk scan only if the store is unreadable.
+    """
     meta_dir = paths.meta_dir()
-    if not meta_dir.exists():
-        return []
-    escalations = []
-    for f in meta_dir.glob("*.md"):
-        try:
-            text = f.read_text(encoding="utf-8", errors="ignore")
-            if "ESC-" in text and "unresolved" in text.lower():
-                escalations.append(f.name)
-        except Exception:
-            continue
-    return escalations
+    db_path = paths.state_dir() / "studio.db"
+    try:
+        from core.work_orders.escalation import (
+            backfill_open_escalations_from_disk,
+            list_escalations,
+        )
+
+        backfill_open_escalations_from_disk(meta_dir, db_path=db_path)
+        return [
+            f"ESC-{(rec.get('type') or 'esc').upper()}-{str(rec.get('work_order_id', ''))[:8]}"
+            for rec in list_escalations(db_path=db_path, include_resolved=False)
+        ]
+    except Exception:
+        # Defensive: if the store is unreadable, fall back to the legacy disk scan so
+        # the pulse never silently drops open escalations.
+        from core.work_orders.escalation import scan_open_escalation_files
+
+        return [f.name for f in scan_open_escalation_files(meta_dir)]
 
 
 def _run_outcome_eval_safe() -> dict | None:
