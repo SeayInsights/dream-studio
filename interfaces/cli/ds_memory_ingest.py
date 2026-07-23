@@ -240,6 +240,36 @@ def _now_iso() -> str:
 # ── Pass 1: Gotcha extraction ─────────────────────────────────────────────────
 
 
+def _docstore_gotcha_sources(project: str | None) -> list[tuple[Path, str]]:
+    """GOTCHAS.md entries from the files.db docstore as (pseudo-path, content) pairs.
+
+    WO-FILESDB-P3: .planning working state (incl. GOTCHAS.md) lives in the docstore
+    (category 'planning', name = path relative to .planning). The pseudo-path is that
+    relative name, so _discover_date_from_path / .name behave as they did for disk files.
+    """
+    from core.files.store import list_files, read_file_by_name
+
+    out: list[tuple[Path, str]] = []
+    for row in list_files(category="planning"):
+        name = row["name"]
+        if not name.endswith("GOTCHAS.md"):
+            continue
+        if project and not name.startswith(f"{project}/"):
+            continue
+        try:
+            full = read_file_by_name(name)
+        except KeyError:
+            continue
+        content = full["content"]
+        text = (
+            content.decode("utf-8", "replace")
+            if isinstance(content, (bytes, bytearray))
+            else str(content)
+        )
+        out.append((Path(name), text))
+    return out
+
+
 def _pass1_gotchas(
     sessions_dir: Path,
     planning_dir: Path,
@@ -247,27 +277,43 @@ def _pass1_gotchas(
     conn: sqlite3.Connection | None,
     dry_run: bool,
 ) -> dict:
-    files = _collect_handoff_recap_files(sessions_dir, project)
-    # Also pick up GOTCHAS.md from planning_dir tree
+    # (source-label, content) pairs. Session handoff/recap files stay on disk
+    # (sessions_dir is ~/.dream-studio/.sessions, not .planning).
+    sources: list[tuple[Path, str]] = []
+    for f in _collect_handoff_recap_files(sessions_dir, project):
+        try:
+            sources.append((f, f.read_text(encoding="utf-8", errors="replace")))
+        except OSError:
+            continue
+
+    # GOTCHAS.md now lives in the files.db docstore; read from there, then fall back to
+    # any .planning disk files not yet migrated (transition — removed in S4).
+    seen: set[str] = set()
+    for label, content in _docstore_gotcha_sources(project):
+        seen.add(label.as_posix())
+        sources.append((label, content))
     if planning_dir.exists():
-        gotcha_files = (
+        disk_gotchas = (
             (planning_dir / project).glob("**/GOTCHAS.md")
             if project
             else planning_dir.glob("**/GOTCHAS.md")
         )
-        for f in gotcha_files:
-            if f not in files:
-                files.append(f)
+        for f in disk_gotchas:
+            try:
+                rel = f.relative_to(planning_dir).as_posix()
+            except ValueError:
+                rel = f.name
+            if rel in seen:
+                continue
+            try:
+                sources.append((Path(rel), f.read_text(encoding="utf-8", errors="replace")))
+            except OSError:
+                continue
 
     new_count = 0
     skipped_count = 0
 
-    for path in files:
-        try:
-            content = path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-
+    for path, content in sources:
         discovered = _discover_date_from_path(path)
         blocks = _find_gotcha_blocks(content, path.name)
 
