@@ -28,6 +28,18 @@ CANONICAL_MIGRATIONS = REPO_ROOT / "core" / "event_store" / "migrations"
 ROOT_MIGRATIONS = REPO_ROOT / "migrations"
 
 
+def _module_surface(py_path: Path) -> str:
+    """Full source surface of a module: the file itself plus any facade-split
+    ``<stem>_*.py`` siblings beside it. WO-GF-API-ROUTES (#539) reduced
+    ``intelligence.py`` to a thin re-export facade over ``intelligence_*.py``, so the
+    canonical-connection import moved into the siblings; a source-text check must read
+    the whole surface. Route files with no siblings read as themselves."""
+    parts = [py_path.read_text(encoding="utf-8")]
+    for sib in sorted(py_path.parent.glob(f"{py_path.stem}_*.py")):
+        parts.append(sib.read_text(encoding="utf-8"))
+    return "\n".join(parts)
+
+
 # ── 1. MIGRATION_AUTHORITY.md exists ────────────────────────────────────────
 
 
@@ -188,7 +200,7 @@ class TestCanonicalImports:
             f = ROUTES_DIR / name
             if not f.is_file():
                 continue
-            source = f.read_text(encoding="utf-8")
+            source = _module_surface(f)
             assert (
                 "core.config.database" in source
             ), f"{name} does not import from core.config.database"
