@@ -192,6 +192,16 @@ def _reopen_and_escalate(
         f"{reasons}\n",
         encoding="utf-8",
     )
+    # WO-FILESDB-C4B: dual-write to the authority artifact store (kind='escalation',
+    # instance_key='outcome'). Disk write above stays during the transition (C4B-3).
+    from core.work_orders.escalation import _record_escalation_artifact
+
+    _record_escalation_artifact(
+        work_order_id,
+        instance_key="outcome",
+        reason=_reason,
+        db_path=Path(db_path),
+    )
 
 
 def run_outcome_eval(
