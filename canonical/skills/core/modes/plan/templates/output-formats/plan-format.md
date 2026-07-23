@@ -1,6 +1,6 @@
 # Plan Output Format
 
-Save the generated plan to `.planning/plan.md` in this format:
+Author the generated plan to the docstore — `ds files write "specs/<topic>/plan.md" --category planning` (zero-disk; `.planning/` disk writes are denied) — in this format:
 
 ```markdown
 # Plan: [Feature Name]

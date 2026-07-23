@@ -225,7 +225,7 @@ Same `create_work_order(...)` call with sketch content as `description`. These w
 **Step 5 — Create tasks for work order 1 of milestone 1:**
 For each task, call `create_task(work_order_id=..., project_id=..., title="<imperative title>", description="<full acceptance criteria>", source_root=..., dream_studio_home=...)`.
 
-**Step 6 — Write `.planning/PROJECT.md`:**
+**Step 6 — Author `PROJECT.md` to the docstore** (`ds files write "PROJECT.md" --category planning` — zero-disk; `.planning/` disk writes are denied):
 
 ```markdown
 # <Project Name> — Scoped <date>

@@ -48,7 +48,7 @@ Use `skills/think/templates/spec-template.md` for structure:
 
 3. **Recommend** — Pick one approach with rationale.
 
-4. **Spec** — Write to `.planning/specs/<topic>/spec.md` using template.
+4. **Spec** — Author to the docstore using the template: `ds files write "specs/<topic>/spec.md" --category planning` (zero-disk — `.planning/` disk writes are denied).
 
    - **If `--recommend-tools` flag:** Use the maintained Dream Studio tool discovery interface if present. Append top 5 tools (confidence >0.7) with install commands. If no maintained interface exists, state that tool discovery is unavailable.
    
@@ -86,9 +86,9 @@ Use `skills/think/templates/spec-template.md` for structure:
 ```
 
 ## Output
-Spec document at `.planning/specs/<topic>/spec.md`. Director approval in conversation.
+Spec document in the docstore as `specs/<topic>/spec.md` (`ds files read`). Director approval in conversation.
 
-For complex features, also output `.planning/specs/<topic>/design.md` using `templates/design-template.md`.
+For complex features, also author `specs/<topic>/design.md` to the docstore (`ds files write --category planning`) using `templates/design-template.md`.
 
 ## Next in pipeline
 → `plan` (break spec into executable steps)
