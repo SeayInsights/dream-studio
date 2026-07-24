@@ -27,8 +27,8 @@ dream_studio:
 
 | Condition | Action |
 |---|---|
-| `.planning/api-contract.json` exists | Read it, extract endpoint list, pass to page step |
-| `.planning/api-contract.json` missing | Proceed without it — frontend works standalone |
+| `api-contract.json` docstore artifact exists | Read it, extract endpoint list, pass to page step |
+| `api-contract.json` docstore artifact missing | Proceed without it — frontend works standalone |
 | User gives a specific website sub-mode | Invoke `domains:website` with that sub-mode |
 | No sub-mode specified | Invoke `domains:website` with auto-detect |
 | Stack is React SPA | Route to `domains:saas-build` instead of `domains:website` |
@@ -39,7 +39,7 @@ dream_studio:
 ## Execution Steps
 
 1. **Check for API contract**
-   - Look for `.planning/api-contract.json`
+   - Read `api-contract.json` from the docstore (`ds files read "api-contract.json"`)
    - If present: read it and extract every `{ method, path, auth, request, response }` entry
    - If missing: note it and continue — do not block
 
@@ -65,7 +65,7 @@ dream_studio:
 DO delegate all design and build work to `domains:website`.
 DON'T duplicate website pipeline logic (discover, direction, brand, page, prototype, deck, animate, cip, critique) in this file.
 
-DO read `.planning/api-contract.json` before building pages if it exists.
+DO read the `api-contract.json` docstore artifact (`ds files read "api-contract.json"`) before building pages if it exists.
 DON'T fail or block when the API contract is missing — frontend can work standalone.
 
 DO pass the full endpoint list to the page-building step so every fetch call is contract-accurate.

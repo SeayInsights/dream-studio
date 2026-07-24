@@ -37,9 +37,9 @@ DON'T re-implement Workers auth, CORS, or D1 patterns that `saas-build` already 
 Run detection table above. Confirm with user if ambiguous or greenfield.
 
 ### Step 2 — API Contract
-Check for `.planning/api-contract.json`.
+Check the docstore for `api-contract.json` (`ds files read "api-contract.json"`).
 - **Present** → read it; this is the source of truth for every route shape.
-- **Missing** → generate one from user requirements before writing any code.
+- **Missing** → author one from user requirements (`ds files write "api-contract.json" --category planning`) before writing any code.
 
 DO generate the API contract if one doesn't exist — never build blind.
 DON'T modify an existing contract without flagging the change: state the diff and get confirmation before proceeding.
