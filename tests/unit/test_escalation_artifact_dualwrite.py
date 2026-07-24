@@ -1,10 +1,10 @@
-"""WO-FILESDB-C4B S1: escalations dual-write to the authority artifact store.
+"""WO-FILESDB-C4B: escalations recorded in the authority artifact store.
 
-escalate_to_operator (ESC-RETRYCAP) and the outcome-regression path (ESC-OUTCOME) now
-also write a business_work_order_artifacts row (kind='escalation', instance_key
-'retrycap'/'outcome', content = JSON with status='unresolved'). The disk ESC-*.md write
-stays during the transition (the pulse scan reads disk until C4B-3). This slice is
-additive — the escalation-ladder logic is unchanged.
+escalate_to_operator (ESC-RETRYCAP) and the outcome-regression path (ESC-OUTCOME) write a
+business_work_order_artifacts row (kind='escalation', instance_key 'retrycap'/'outcome',
+content = JSON with status='unresolved'). Introduced as a dual-write alongside the disk
+ESC-*.md files in S1; S5 dropped the disk write, so the store is now the sole record. The
+escalation-ladder decision logic is unchanged throughout.
 """
 
 from __future__ import annotations
@@ -72,17 +72,18 @@ def test_outcome_instance_key_coexists_with_retrycap(db: Path):
     )
 
 
-def test_escalate_to_operator_dual_writes(db: Path, tmp_path: Path):
+def test_escalate_to_operator_records_to_store_only(db: Path, tmp_path: Path):
+    # WO-FILESDB-C4B S5: the loose meta/ESC-*.md disk write was dropped — escalate_to_operator
+    # records ONLY to the authority store and returns None (no disk side effect).
     home = tmp_path / "home"
-    esc_path = escalate_to_operator(
+    result = escalate_to_operator(
         WO, db_path=db, reason="retry cap reached", dream_studio_home=home
     )
-    # disk ESC file still written (transition)
-    assert esc_path.exists()
-    assert "unresolved" in esc_path.read_text(encoding="utf-8")
-    # artifact also written
+    assert result is None
     content = get_wo_artifact(WO, "escalation", instance_key="retrycap", db_path=db)
     assert content is not None and json.loads(content)["status"] == "unresolved"
+    # No ESC-*.md file (the meta dir is never even created).
+    assert not (home / "meta").exists()
 
 
 def test_record_escalation_artifact_is_isolated_on_bad_db(tmp_path: Path):

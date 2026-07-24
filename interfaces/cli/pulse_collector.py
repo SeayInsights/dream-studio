@@ -535,12 +535,9 @@ def run_pulse_check() -> None:
     if _cooldown_active():
         # Return cached pulse data instead of re-running checks
         cached = state.read_pulse()
-        date_str = cached.get("timestamp", "")[:10] if cached.get("timestamp") else "unknown"
-        report_path = paths.meta_dir() / f"pulse-{date_str}.md"
 
         print(
             f"\n[dream-studio] Pulse check complete (cached) — {cached.get('health', 'UNKNOWN')}\n"
-            f"  -> Report: {report_path}\n"
             f"  -> Stale branches: {cached.get('stale_branches', 0)}\n"
             f"  -> Overdue milestones: {cached.get('overdue_milestones', 0)}\n"
             f"  -> Open PRs: {cached.get('open_prs', 0)}\n"
@@ -559,10 +556,6 @@ def run_pulse_check() -> None:
     imported = _import_and_rotate_buffer()
     report, stats = generate_pulse()
 
-    date_str = utcnow().strftime("%Y-%m-%d")
-    report_path = paths.meta_dir() / f"pulse-{date_str}.md"
-    report_path.write_text(report, encoding="utf-8")
-
     state.write_pulse({"timestamp": utcnow().isoformat(), **stats})
 
     try:
@@ -577,8 +570,9 @@ def run_pulse_check() -> None:
             stale_branches=stats.get("stale_branches"),
             pending_drafts=stats.get("pending_drafts"),
             open_escalations=stats.get("escalations"),
-            # WO-FILESDB-C4B S4: capture the FULL pulse body in the authority (the disk
-            # pulse-<date>.md write is dropped in C4B-5).
+            # WO-FILESDB-C4B S4: the FULL pulse body is captured in the authority
+            # (raw_operational_snapshots.report_body) — C4B-5 dropped the disk
+            # pulse-<date>.md write, so this is now the sole copy.
             report_body=report,
         )
     except Exception:
@@ -586,7 +580,7 @@ def run_pulse_check() -> None:
 
     print(
         f"\n[dream-studio] Pulse check complete — {stats['health']}\n"
-        f"  -> Report: {report_path}\n"
+        f"  -> Report: stored in the authority (raw_operational_snapshots.report_body)\n"
         f"  -> Stale branches: {stats['stale_branches']}\n"
         f"  -> Overdue milestones: {stats['overdue_milestones']}\n"
         f"  -> Open PRs: {stats['open_prs']}\n"
@@ -601,4 +595,4 @@ def run_pulse_check() -> None:
         flush=True,
     )
 
-    print(json.dumps({"status": "ok", "hook": "on-pulse", **stats, "output": str(report_path)}))
+    print(json.dumps({"status": "ok", "hook": "on-pulse", **stats}))

@@ -3,10 +3,31 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 
 from freezegun import freeze_time
 
 FROZEN = "2026-01-01 12:00:00"
+
+
+def _pulse_body() -> str:
+    """Read the pulse report body from the authority (WO-FILESDB-C4B S5: no disk file).
+
+    The pulse persists via the default connection (DatabaseRuntime), which resolves to the
+    session authority DB — not the Path.home()-based meta dir — so read that same DB.
+    """
+    from core.config.database import DatabaseRuntime
+
+    db_path = DatabaseRuntime.get_instance().db_path
+    conn = sqlite3.connect(str(db_path))
+    try:
+        row = conn.execute(
+            "SELECT report_body FROM raw_operational_snapshots ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    finally:
+        conn.close()
+    assert row is not None and row[0], "pulse report body not stored in the authority"
+    return row[0]
 
 
 @freeze_time(FROZEN)
@@ -16,12 +37,11 @@ def test_generates_healthy_report_without_github(isolated_home, monkeypatch, han
     mod.main()
 
     meta = isolated_home / ".dream-studio" / "meta"
-    report = meta / "pulse-2026-01-01.md"
-    latest = meta / "pulse-latest.json"
+    # WO-FILESDB-C4B S5: the report body lives in the authority, not on disk.
+    assert not (meta / "pulse-2026-01-01.md").exists()
+    assert "HEALTHY" in _pulse_body()
 
-    assert report.exists()
-    assert "HEALTHY" in report.read_text(encoding="utf-8")
-    doc = json.loads(latest.read_text(encoding="utf-8"))
+    doc = json.loads((meta / "pulse-latest.json").read_text(encoding="utf-8"))
     assert doc["health"] == "HEALTHY"
     assert doc["schema_version"] == 1
 
@@ -36,10 +56,7 @@ def test_respects_github_repo_from_config(isolated_home, monkeypatch, handler):
     mod = handler("on-pulse")
     mod.main()
 
-    report = (isolated_home / ".dream-studio" / "meta" / "pulse-2026-01-01.md").read_text(
-        encoding="utf-8"
-    )
-    assert "acme/widgets" in report
+    assert "acme/widgets" in _pulse_body()
 
 
 def test_pending_drafts_are_counted(isolated_home, handler):
