@@ -14,6 +14,8 @@ from typing import Any
 
 from core.event_store.studio_db import _connect
 
+from .models import TERMINAL_WO_STATUSES, terminal_wo_status_placeholders
+
 _UI_WO_TYPES: frozenset[str] = frozenset({"ui_component", "ui_page"})
 
 _BLOCKING_SEVERITIES: frozenset[str] = frozenset({"critical", "high"})
@@ -31,8 +33,9 @@ def _check_sequence_order(
     """Return out-of-sequence predecessors in the same milestone.
 
     A predecessor is any WO in the same milestone with a lower sequence_order
-    that is not yet closed or cancelled. Returns empty list when the table
-    doesn't exist, the WO has no milestone, or no sequence_order is set.
+    that is not yet in a terminal state (TERMINAL_WO_STATUSES — closed, cancelled,
+    or deleted). Returns empty list when the table doesn't exist, the WO has no
+    milestone, or no sequence_order is set.
     """
     try:
         with _connect(db_path) as conn:
@@ -48,9 +51,9 @@ def _check_sequence_order(
                 "SELECT work_order_id, title, sequence_order FROM business_work_orders"
                 " WHERE milestone_id = ? AND work_order_id != ?"
                 " AND sequence_order < ?"
-                " AND status NOT IN ('closed', 'cancelled')"
+                f" AND status NOT IN ({terminal_wo_status_placeholders()})"
                 " ORDER BY sequence_order ASC",
-                (milestone_id, work_order_id, my_seq),
+                (milestone_id, work_order_id, my_seq, *TERMINAL_WO_STATUSES),
             ).fetchall()
     except Exception:
         return []

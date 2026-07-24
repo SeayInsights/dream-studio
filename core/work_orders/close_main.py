@@ -26,6 +26,7 @@ from .close_gates import (
     _run_ac_gate,
 )
 from .close_shared import _lookup_work_order_and_gates, _require_db
+from .models import TERMINAL_WO_STATUSES, terminal_wo_status_placeholders
 
 
 def check_close_gates(
@@ -395,8 +396,8 @@ def close_work_order(
                 remaining = conn.execute(
                     "SELECT COUNT(*) FROM business_work_orders"
                     " WHERE milestone_id = ? AND work_order_id != ?"
-                    " AND status NOT IN ('closed', 'cancelled')",
-                    (wo_milestone_id, work_order_id),
+                    f" AND status NOT IN ({terminal_wo_status_placeholders()})",
+                    (wo_milestone_id, work_order_id, *TERMINAL_WO_STATUSES),
                 ).fetchone()[0]
                 if remaining == 0:
                     milestone_complete = True
