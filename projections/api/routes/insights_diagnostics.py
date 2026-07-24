@@ -181,7 +181,7 @@ async def get_attribution_breakouts() -> dict:
     never a 500.
     """
     import sqlite3 as _sqlite3
-    from core.analytics.duckdb_store import connect_analytics
+    from core.analytics.duckdb_store import AnalyticsStoreMissingError, connect_analytics
     from core.config.database import get_connection
     from projections.api.routes.sqlite_schema import object_exists
 
@@ -288,5 +288,8 @@ async def get_attribution_breakouts() -> dict:
             "data_status": "ok" if total_records > 0 else "empty",
             "generated_at": datetime.now().isoformat(),
         }
+    except AnalyticsStoreMissingError:
+        # Analytics store not built yet — honest empty shape, never a fabricated store.
+        return _EMPTY
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Error computing attribution breakouts: {exc}")

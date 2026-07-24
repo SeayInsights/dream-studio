@@ -6,7 +6,7 @@ from fastapi import APIRouter, Query
 from typing import Any
 
 from core.config.database import get_connection
-from core.analytics.duckdb_store import connect_analytics
+from core.analytics.duckdb_store import AnalyticsStoreMissingError, connect_analytics
 from projections.core.collectors.authority_sources import token_usage_sql
 
 router = APIRouter()
@@ -62,7 +62,11 @@ async def get_anomalies(days: int = Query(default=30, ge=1, le=365)) -> dict[str
     ended_at derived from system.session.closed events). Token join stays on SQLite
     since token_usage_sql() targets the SQLite authority source.
     """
-    duck_conn = _connect_analytics()
+    try:
+        duck_conn = _connect_analytics()
+    except AnalyticsStoreMissingError:
+        # Analytics store not built yet — honest empty shape, never a fabricated store.
+        return _empty_anomalies()
     cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
     try:
@@ -190,7 +194,15 @@ async def get_trends(days: int = Query(default=30, ge=1, le=365)) -> dict[str, A
     already carries model-priced estimated_cost, so cost trends read from the
     same connection already open for sessions.
     """
-    duck_conn = _connect_analytics()
+    try:
+        duck_conn = _connect_analytics()
+    except AnalyticsStoreMissingError:
+        # Analytics store not built yet — honest empty shape, never a fabricated store.
+        return {
+            "trends": {},
+            "dates": [],
+            "summary": {"upward_trends": 0, "downward_trends": 0, "stable_metrics": 0},
+        }
     cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
     try:
@@ -291,7 +303,11 @@ async def get_performance(days: int = Query(default=30, ge=1, le=365)) -> dict[s
 
     Reads from DuckDB aggregate_metrics.db (raw_sessions view over events_fact).
     """
-    conn = _connect_analytics()
+    try:
+        conn = _connect_analytics()
+    except AnalyticsStoreMissingError:
+        # Analytics store not built yet — honest empty shape, never a fabricated store.
+        return _empty_performance()
     cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
     try:
