@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from core.event_store.studio_db import _connect
+from core.work_orders.models import TERMINAL_WO_STATUSES
 
 _UI_WO_TYPES: frozenset[str] = frozenset({"ui_component", "ui_page"})
 
@@ -150,14 +151,13 @@ def close_milestone(
             (milestone_id,),
         ).fetchall()
 
-        # A milestone can close once no work order is still OPEN. "closed", "cancelled",
-        # and "deleted" are all TERMINAL — none is outstanding work, so none must block the
-        # milestone (previously only "closed" counted, which stranded milestones whose only
-        # non-closed WOs were cancelled; "deleted" is added for the same reason — a
-        # work_order.deleted WO is removed, not outstanding). This is a hard precondition
-        # (not force-bypassable), so the terminal set must be complete.
-        _TERMINAL_WO_STATUSES = {"closed", "cancelled", "deleted"}
-        open_wos = [(r[0], r[1], r[2]) for r in wo_rows if r[2] not in _TERMINAL_WO_STATUSES]
+        # A milestone can close once no work order is still OPEN. The terminal set
+        # (closed / cancelled / deleted — none is outstanding work) is the shared
+        # TERMINAL_WO_STATUSES so this hard, non-force-bypassable precondition stays
+        # in lockstep with the WO start/sequence/close-signal checks that read the
+        # same set (they diverged once — deleted was terminal here but not there —
+        # and stranded an entire milestone).
+        open_wos = [(r[0], r[1], r[2]) for r in wo_rows if r[2] not in TERMINAL_WO_STATUSES]
         if open_wos:
             # Canonical-events fallback: work_order.closed is terminal — any
             # matching event means the WO is closed regardless of projection lag.

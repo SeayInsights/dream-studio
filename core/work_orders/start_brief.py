@@ -15,6 +15,7 @@ from typing import Any
 
 from core.event_store.studio_db import _connect
 
+from .models import TERMINAL_WO_STATUSES, terminal_wo_status_placeholders
 from .start_shared import _UI_WO_TYPES
 
 
@@ -178,8 +179,8 @@ def read_work_order_brief(
                     "SELECT COUNT(*) FROM business_work_orders wo"
                     " LEFT JOIN business_milestones m ON wo.milestone_id = m.milestone_id"
                     " WHERE wo.project_id = ? AND m.order_index < ?"
-                    " AND wo.status NOT IN ('closed', 'cancelled')",
-                    (project_id, ms_order_row[0]),
+                    f" AND wo.status NOT IN ({terminal_wo_status_placeholders()})",
+                    (project_id, ms_order_row[0], *TERMINAL_WO_STATUSES),
                 ).fetchone()[0]
 
     return {

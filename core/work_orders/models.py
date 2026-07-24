@@ -38,6 +38,26 @@ STATUSES = frozenset(
     }
 )
 
+# business_work_orders lifecycle terminal statuses (distinct from the file-backed
+# document STATUSES above). A WO in one of these states is retired, not outstanding,
+# so it must never count as a blocker in a precondition/completeness check. This is
+# the single source of truth for every such check — start (blocking_milestone_count),
+# sequence predecessors, WO-close milestone-complete signal, and milestone close.
+# It exists because ac6d3a53 fixed only milestone close and left the other three
+# sites reading `NOT IN ('closed', 'cancelled')` (missing 'deleted'), which blocked
+# an entire milestone. Add a new terminal status here once; every check inherits it.
+TERMINAL_WO_STATUSES: tuple[str, ...] = ("closed", "cancelled", "deleted")
+
+
+def terminal_wo_status_placeholders() -> str:
+    """SQL placeholder list matching TERMINAL_WO_STATUSES, e.g. ``'?,?,?'``.
+
+    Pair the returned fragment with ``*TERMINAL_WO_STATUSES`` in the params so a
+    ``status NOT IN (...)`` clause stays bound to the single terminal-status set.
+    """
+    return ",".join("?" * len(TERMINAL_WO_STATUSES))
+
+
 PRIVACY_EXPORT_CLASSES = frozenset(
     {
         "local_only",
