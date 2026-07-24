@@ -53,7 +53,7 @@ Use parallel when both sides are built fresh. Use sequential when one side exist
 
 When invoked without an argument:
 
-1. Check for `.planning/api-contract.json`
+1. Check the docstore for `api-contract.json` (`ds files read "api-contract.json"`)
    - Missing → run `spec` first
    - Present but no frontend source → `frontend`
    - Present but no backend source → `backend`
@@ -63,14 +63,14 @@ When invoked without an argument:
 
 ## Spec Mode (inline — no separate file)
 
-Write `.planning/api-contract.json` before any code. See `templates/api-contract.md` for format.
+Author `api-contract.json` to the docstore before any code: `ds files write "api-contract.json" --category planning` (zero-disk — `.planning/` disk writes are denied by the on-edit hook). See `templates/api-contract.md` for format.
 
 DO write the contract before touching code.
 DON'T guess at endpoint shapes during build — stop and create the contract.
 
 ## Shared State: API Contract
 
-`.planning/api-contract.json` is the single source of truth for the frontend-backend interface.
+The `api-contract.json` docstore artifact (`ds files read "api-contract.json"`) is the single source of truth for the frontend-backend interface.
 
 | Pipeline stage | Contract usage |
 |---|---|

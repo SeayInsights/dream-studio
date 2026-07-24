@@ -7,7 +7,7 @@ model_preference: sonnet
 
 # Integrate Mode
 
-Wires frontend to backend after both are built. The API contract (`.planning/api-contract.json`) is the single source of truth. All mismatches are reported before any fix is applied.
+Wires frontend to backend after both are built. The API contract (the `api-contract.json` docstore artifact, `ds files read "api-contract.json"`) is the single source of truth. All mismatches are reported before any fix is applied.
 
 ## Verification Checklist
 
@@ -22,7 +22,7 @@ Wires frontend to backend after both are built. The API contract (`.planning/api
 
 ## Integration Steps
 
-1. Read `.planning/api-contract.json` — establish ground truth for all endpoints, methods, schemas, and auth requirements
+1. Read the `api-contract.json` docstore artifact (`ds files read "api-contract.json"`) — establish ground truth for all endpoints, methods, schemas, and auth requirements
 2. Scan frontend HTML/JS for all `fetch`, `axios`, and API call patterns — collect URL, method, request body, and response destructuring per call
 3. Scan backend for all route definitions — collect path, method, handler signature, and middleware
 4. Run verification checklist — compare each check against both sides
@@ -96,7 +96,7 @@ Integration may reveal that the API contract has evolved since the last backend 
 - Check whether the frontend consumes the affected fields
 - If yes: frontend and backend must coordinate the change atomically — deploy backend with a compatibility shim first, then update frontend, then remove the shim
 - If no: backend schema change can proceed independently without frontend impact
-- Document the decision and rationale in `.planning/api-contract.json` as a migration note
+- Document the decision and rationale in the `api-contract.json` docstore artifact (`ds files write "api-contract.json" --category planning`) as a migration note
 
 **Rollback protocol if integration test fails after migration:**
 - Write a rollback migration before applying the forward migration — commit both in the same PR, rollback clearly labeled `rollback_<version>`

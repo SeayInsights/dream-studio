@@ -23,7 +23,7 @@ Extract brand identity, generate 3-layer design tokens, and score compliance aga
 
 **Mode B — Extract from Guidelines:** Parse document for hex/RGB/Pantone values, font families, spacing scales, logo usage rules, and do/don'ts. Proceed to 5-Step Protocol.
 
-**Mode C — Build from Direction Lock:** Read `.planning/direction-lock.json`. Use locked palette as primitive layer and locked typography as font stack — do not override. Skip Steps 1–2 of protocol; proceed from Step 3.
+**Mode C — Build from Direction Lock:** Read the `direction-lock.json` docstore artifact (`ds files read "direction-lock.json"`). Use locked palette as primitive layer and locked typography as font stack — do not override. Skip Steps 1–2 of protocol; proceed from Step 3.
 
 ---
 
@@ -68,7 +68,7 @@ py scripts/generate-tokens.py \
   --text "$text_color" \
   --display-font "$display_font" \
   --body-font "$body_font" \
-  --output .planning/brand/
+  --output brand/
 ```
 
 Outputs three files (see Token Output section below). Token structure follows the 3-layer W3C DTCG format defined in `skills/domains/modes/design/references/token-architecture.md`.
@@ -78,9 +78,9 @@ If HTML artifacts exist in the project, run:
 
 ```bash
 py scripts/brand-compliance.py \
-  --tokens .planning/brand/brand-tokens.json \
+  --tokens brand/brand-tokens.json \
   --artifacts dist/ \
-  --output .planning/brand/compliance-report.json
+  --output brand/compliance-report.json
 ```
 
 Score 0–100. Report how many color/font violations were found. Flag critical violations (colors outside palette, unlisted fonts).
@@ -89,7 +89,7 @@ Score 0–100. Report how many color/font violations were found. Flag critical v
 
 ## Token Output Format
 
-Three files written to `.planning/brand/`:
+Three files written to `brand/`:
 
 **brand-tokens.json** — W3C DTCG 3-layer structure:
 - Layer 1: Primitives (raw hex values, font names, numeric scales)
@@ -119,7 +119,7 @@ Changes flow ONE DIRECTION only. Never edit `brand.css` directly — update the 
 
 | Connects to | How |
 |---|---|
-| Direction Lock | Palette + typography inherit from `.planning/direction-lock.json` (Mode C) |
+| Direction Lock | Palette + typography inherit from the `direction-lock.json` docstore artifact (`ds files read "direction-lock.json"`, Mode C) |
 | Token Architecture | 3-layer structure in `skills/domains/modes/design/references/token-architecture.md` |
 | Page / Prototype / Deck | All downstream modes consume `brand.css` — no inline color/font values |
 | Brand Compliance | `brand-compliance.py` scores HTML artifacts against generated tokens |

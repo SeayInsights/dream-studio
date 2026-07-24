@@ -1,6 +1,6 @@
 # API Contract Template
 
-This file defines the interface between frontend and backend. Place it at `.planning/api-contract.json` before writing any code. Frontend reads it to build fetch calls; backend reads it to implement routes; integrate mode reads it to verify both sides match.
+This file defines the interface between frontend and backend. Author it to the docstore as `api-contract.json` (`ds files write "api-contract.json" --category planning`) before writing any code — `.planning/` disk writes are denied. Frontend reads it (`ds files read "api-contract.json"`) to build fetch calls; backend reads it to implement routes; integrate mode reads it to verify both sides match.
 
 ---
 

@@ -80,7 +80,7 @@ Do not suggest a preferred option. Do not offer a fourth.
 
 When user responds with A, B, or C:
 
-1. Write the direction lock JSON to `.planning/direction-lock.json`
+1. Author the direction lock JSON to the docstore as `direction-lock.json`: `ds files write "direction-lock.json" --category planning` (zero-disk — `.planning/` disk writes are denied)
 2. Output: `Direction locked: [Direction Name]. All subsequent builds will use this palette and typography.`
 3. Output: `To change direction, start a new pipeline with discover:`
 
