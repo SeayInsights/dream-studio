@@ -49,6 +49,19 @@ class AnalyticsStoreFormatError(RuntimeError):
     """
 
 
+class AnalyticsStoreMissingError(RuntimeError):
+    """A read-only analytics connection was requested but the store does not exist.
+
+    connect_analytics(read_only=True) raises this instead of fabricating an empty
+    store: an empty DuckDB would silently serve zero-row analytics as if they were
+    real (the read path would report "no findings / no cost" instead of "analytics
+    not built yet"). The store is NEVER-AUTHORITY and built solely by the projection
+    runner (read_only=False); a missing store means the aggregation pipeline has not
+    run. Read callers catch this and surface a "not built yet" empty state — they
+    never manufacture one.
+    """
+
+
 def _ensure_native_duckdb(path: Path) -> None:
     """Guarantee the file at ``path`` is a native DuckDB store, or fail loud.
 
@@ -377,16 +390,29 @@ def connect_analytics(
 ) -> duckdb.DuckDBPyConnection:
     """Open a DuckDB connection to the analytics store.
 
-    API routes and CLI reads must use read_only=True (the default).
-    Only the aggregation pipeline and projection runners use read_only=False.
+    API routes and CLI reads must use read_only=True (the default). A read-only
+    connection to a store that does not exist raises AnalyticsStoreMissingError
+    rather than fabricating an empty store — an empty store would serve zero-row
+    analytics as if they were real (the dashboard would show "no cost / no
+    findings" instead of "analytics not built yet"). Read callers degrade
+    gracefully on that typed error; they never manufacture data.
+
+    Only the aggregation pipeline and projection runners use read_only=False —
+    that path (and only that path) creates the store.
     """
     path = db_path or analytics_db_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
     _ensure_native_duckdb(path)
-    if read_only and not path.exists():
-        # read-only cannot create the file; make an empty native store first
-        duckdb.connect(str(path)).close()
-    return duckdb.connect(str(path), read_only=read_only)
+    if read_only:
+        if not path.exists():
+            raise AnalyticsStoreMissingError(
+                f"analytics store does not exist at {path}: the aggregation "
+                f"pipeline (core/projections/runner.py) has not built it yet. "
+                f"Refusing to fabricate an empty store on a read-only connection."
+            )
+        return duckdb.connect(str(path), read_only=True)
+    # Write path (aggregation pipeline / projection runner): create the store.
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return duckdb.connect(str(path), read_only=False)
 
 
 def _refresh_pricing_table(conn: duckdb.DuckDBPyConnection) -> None:

@@ -16,6 +16,7 @@ import pytest
 
 from core.analytics.duckdb_store import (
     AnalyticsStoreFormatError,
+    AnalyticsStoreMissingError,
     _ensure_native_duckdb,
     connect_analytics,
     ensure_analytics_schema,
@@ -39,10 +40,21 @@ class TestNativeDuckDB:
         assert b"DUCK" in head, f"analytics store is not native DuckDB: header={head!r}"
         assert not head.startswith(b"SQLite format 3"), "analytics store is a SQLite file"
 
-    def test_read_only_open_creates_native_store(self, tmp_path):
-        """read_only=True on an absent path still yields a native DuckDB file."""
+    def test_read_only_missing_store_raises_and_creates_no_file(self, tmp_path):
+        """read_only=True on an absent store raises AnalyticsStoreMissingError and
+        fabricates NO file. A read path must never manufacture an empty store — an
+        empty DuckDB would serve zero-row analytics as if they were real ("no cost /
+        no findings" instead of "analytics not built yet"). Only the write path
+        (read_only=False, the projection runner) creates the store."""
         db = tmp_path / "ro.db"
-        connect_analytics(db, read_only=True).close()
+        with pytest.raises(AnalyticsStoreMissingError):
+            connect_analytics(db, read_only=True)
+        assert not db.exists(), "read-only connect must not create the store file"
+
+    def test_write_open_creates_native_store(self, tmp_path):
+        """read_only=False (the sole store-creating path) yields a native DuckDB file."""
+        db = tmp_path / "rw.db"
+        connect_analytics(db, read_only=False).close()
         assert b"DUCK" in _magic(db)
 
 

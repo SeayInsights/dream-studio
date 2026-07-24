@@ -141,8 +141,9 @@ def get_performance_alerts(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     Reads hook_executions from DuckDB (derived from canonical events via events_fact).
     The conn parameter is unused; kept for API compatibility with get_critical_issues().
     """
-    duck_conn = connect_analytics(read_only=True)
+    duck_conn = None
     try:
+        duck_conn = connect_analytics(read_only=True)
         query = """
             SELECT
                 hook_name,
@@ -182,9 +183,11 @@ def get_performance_alerts(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 
         return alerts
     except Exception:
+        # Includes AnalyticsStoreMissingError (store not built yet) — no alerts.
         return []
     finally:
-        duck_conn.close()
+        if duck_conn is not None:
+            duck_conn.close()
 
 
 def get_critical_issues() -> list[dict[str, Any]]:
@@ -255,8 +258,9 @@ def get_health_snapshot() -> dict[str, Any]:
         cost_status = "high" if tokens_30d > 100_000_000 else "ok"
 
         # 3. Performance (avg hook duration in past 7 days) — reads DuckDB hook_executions view
-        duck_conn = connect_analytics(read_only=True)
+        duck_conn = None
         try:
+            duck_conn = connect_analytics(read_only=True)
             hook_row = duck_conn.execute("""
                 SELECT AVG(duration_ms) as avg_duration
                 FROM hook_executions
@@ -265,9 +269,11 @@ def get_health_snapshot() -> dict[str, Any]:
             """).fetchone()
             avg_duration = hook_row[0] if hook_row and hook_row[0] else 0
         except Exception:
+            # Includes AnalyticsStoreMissingError (store not built yet).
             avg_duration = 0
         finally:
-            duck_conn.close()
+            if duck_conn is not None:
+                duck_conn.close()
         perf_status = "slow" if avg_duration > 5000 else "ok"
 
         # 4. Activity Level (events in past 7 days, excluding private)
@@ -370,8 +376,9 @@ def get_whats_working() -> list[dict[str, Any]]:
             )
 
         # Win 3: Hook reliability (if very high) — reads DuckDB hook_executions view
-        duck_conn_wins = connect_analytics(read_only=True)
+        duck_conn_wins = None
         try:
+            duck_conn_wins = connect_analytics(read_only=True)
             hook_row = duck_conn_wins.execute("""
                 SELECT
                     COUNT(*) as total,
@@ -390,9 +397,11 @@ def get_whats_working() -> list[dict[str, Any]]:
                         }
                     )
         except Exception:
+            # Includes AnalyticsStoreMissingError (store not built yet) — skip this win.
             pass
         finally:
-            duck_conn_wins.close()
+            if duck_conn_wins is not None:
+                duck_conn_wins.close()
 
         # Win 4: Active event tracking (excluding private)
         _af = activity_log_filter_clause("ce", col="event_type")
