@@ -50,7 +50,8 @@ def _read_tasks(conn: Any, work_order_id: str) -> list[dict[str, str]]:
 
 def _read_work_order(conn: Any, work_order_id: str) -> dict[str, Any] | None:
     row = conn.execute(
-        "SELECT work_order_id, title, project_id, milestone_id, sequence_order, work_order_type"
+        "SELECT work_order_id, title, project_id, milestone_id, sequence_order, work_order_type,"
+        " description"
         " FROM business_work_orders WHERE work_order_id = ?",
         (work_order_id,),
     ).fetchone()
@@ -63,6 +64,9 @@ def _read_work_order(conn: Any, work_order_id: str) -> dict[str, Any] | None:
         "milestone_id": row[3],
         "sequence_order": row[4],
         "work_order_type": row[5],
+        # description carries the [gap-key: <originating-wo-id>::<category>] marker for
+        # gap-spawned WOs (WO cef6ddaa: originating-WO traceability + recursion guard).
+        "description": row[6] or "",
     }
 
 
