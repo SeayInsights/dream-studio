@@ -125,14 +125,22 @@ def test_retry_cap_escalates_to_operator(tmp_path: Path) -> None:
     assert r2["retry_cap"] == 2
     assert r2["capped"] is True
 
-    # Escalate to operator: writes an unresolved operator escalation file (no reopen).
-    esc_path = escalate_to_operator(
+    # Escalate to operator: records an unresolved operator escalation in the authority
+    # store (no reopen). WO-FILESDB-C4B S5: store-only, no disk ESC file, returns None.
+    import json as _json
+
+    from core.work_orders.artifacts import get_wo_artifact
+
+    result = escalate_to_operator(
         wo, db_path=db, dream_studio_home=tmp_path, reason="retry cap reached (2/2)"
     )
-    assert esc_path.is_file()
-    body = esc_path.read_text(encoding="utf-8")
-    assert "unresolved" in body
-    assert "OPERATOR" in body.upper()
+    assert result is None
+    content = get_wo_artifact(wo, "escalation", instance_key="retrycap", db_path=db)
+    assert content is not None
+    data = _json.loads(content)
+    assert data["status"] == "unresolved"
+    assert "retry cap" in data["reason"].lower()
+    assert not (tmp_path / "meta").exists()  # store-only, no disk ESC file
 
 
 def test_default_retry_cap_when_unset(tmp_path: Path) -> None:

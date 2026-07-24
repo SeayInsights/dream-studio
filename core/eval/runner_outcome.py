@@ -178,22 +178,10 @@ def _reopen_and_escalate(
     # surfaces read this via escalation.resolve_executor.
     mark_escalated(work_order_id, db_path=Path(db_path), reason=_reason)
 
-    # Escalation file — counted by the pulse open-escalations scan
-    # (meta_dir/*.md containing "ESC-" and "unresolved").
-    home = Path(dream_studio_home) if dream_studio_home else Path.home() / ".dream-studio"
-    meta_dir = home / "meta"
-    meta_dir.mkdir(parents=True, exist_ok=True)
-    esc_path = meta_dir / f"ESC-OUTCOME-{work_order_id[:8]}.md"
-    reasons = "\n".join(f"- {r}" for r in outcome["failures"])
-    esc_path.write_text(
-        f"# ESC-OUTCOME-{work_order_id[:8]} — status: unresolved\n\n"
-        f"Outcome eval re-opened work order `{work_order_id}` "
-        f"({outcome.get('title', '')}). The symptom/ACs regressed after close:\n\n"
-        f"{reasons}\n",
-        encoding="utf-8",
-    )
-    # WO-FILESDB-C4B: dual-write to the authority artifact store (kind='escalation',
-    # instance_key='outcome'). Disk write above stays during the transition (C4B-3).
+    # Record the unresolved operator escalation in the authority store
+    # (business_work_order_artifacts kind='escalation', instance_key='outcome') — surfaced
+    # by the pulse open-escalation count + `ds escalation list`. WO-FILESDB-C4B S5 dropped
+    # the loose meta/ESC-OUTCOME-*.md disk write; the store is the sole record.
     from core.work_orders.escalation import _record_escalation_artifact
 
     _record_escalation_artifact(

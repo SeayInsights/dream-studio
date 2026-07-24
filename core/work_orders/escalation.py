@@ -239,32 +239,25 @@ def escalate_to_operator(
     db_path: Path,
     reason: str = "",
     dream_studio_home: Path | None = None,
-) -> Path:
+) -> None:
     """Hand a WO back to the operator when the retry cap is reached — no silent loop.
 
-    Writes an unresolved operator escalation file (counted by the pulse
-    open-escalations scan, which looks for ``ESC-`` + ``unresolved``). Returns the
-    file path. Does NOT reopen the WO: the ladder stops auto-retrying here and waits
-    for the operator.
+    Records an unresolved operator escalation in the authority store
+    (business_work_order_artifacts kind='escalation', instance_key='retrycap'). Surfaced
+    by the pulse open-escalation count and `ds escalation list`, resolvable via
+    `ds escalation resolve`. Does NOT reopen the WO: the ladder stops auto-retrying here
+    and waits for the operator.
+
+    WO-FILESDB-C4B S5: the loose meta/ESC-RETRYCAP-*.md disk write was dropped — the
+    store is the sole record. ``dream_studio_home`` is retained for call-site
+    compatibility but no longer used.
     """
-    home = Path(dream_studio_home) if dream_studio_home else Path.home() / ".dream-studio"
-    meta_dir = home / "meta"
-    meta_dir.mkdir(parents=True, exist_ok=True)
-    esc_path = meta_dir / f"ESC-RETRYCAP-{work_order_id[:8]}.md"
-    esc_path.write_text(
-        f"# ESC-RETRYCAP-{work_order_id[:8]} — status: unresolved\n\n"
-        f"Work order `{work_order_id}` hit the escalation retry cap and now requires "
-        f"OPERATOR intervention — the ladder has stopped auto-retrying (no silent loop).\n\n"
-        f"Reason: {reason or 'retry cap reached'}\n",
-        encoding="utf-8",
-    )
     _record_escalation_artifact(
         work_order_id,
         instance_key="retrycap",
         reason=reason or "retry cap reached",
         db_path=db_path,
     )
-    return esc_path
 
 
 def _record_escalation_artifact(

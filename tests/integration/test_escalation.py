@@ -337,8 +337,11 @@ def test_end_to_end(tmp_path: Path) -> None:
 
     AC: tests/integration/test_escalation.py::test_end_to_end
     """
+    import json as _json
+
     from core.config.authority import set_config_value
     from core.eval.runner import run_outcome_eval
+    from core.work_orders.artifacts import get_wo_artifact
     from core.work_orders.escalation import (
         RETRY_CAP_CONFIG_KEY,
         read_escalation,
@@ -352,7 +355,12 @@ def test_end_to_end(tmp_path: Path) -> None:
         symptom="SQL-CHECK: SELECT 1 WHERE EXISTS (SELECT 1 FROM no_such_table_zzz)",  # always fails
         ac="SQL-CHECK: SELECT 1",
     )
-    op_file = tmp_path / "meta" / f"ESC-RETRYCAP-{wo[:8]}.md"
+
+    def _operator_escalation():
+        # WO-FILESDB-C4B S5: the operator (retry-cap) escalation is recorded in the
+        # authority store, not a disk ESC-*.md file.
+        content = get_wo_artifact(wo, "escalation", instance_key="retrycap", db_path=db)
+        return _json.loads(content) if content else None
 
     def _eval() -> None:
         run_outcome_eval(
@@ -368,7 +376,7 @@ def test_end_to_end(tmp_path: Path) -> None:
     assert _wo_status(db, wo) == "in_progress"
     assert resolve_executor(wo, db_path=db) == "opus"
     assert read_escalation(wo, db_path=db)["retry_count"] == 1
-    assert not op_file.exists(), "operator escalation must not fire under the cap"
+    assert _operator_escalation() is None, "operator escalation must not fire under the cap"
 
     # The AI's Opus retry re-closes the WO; assume the symptom regresses again.
     _set_status(db, wo, "closed")
@@ -377,6 +385,8 @@ def test_end_to_end(tmp_path: Path) -> None:
     _eval()
     esc = read_escalation(wo, db_path=db)
     assert esc["retry_count"] == 2
-    assert op_file.is_file(), "expected an operator escalation file at the cap"
-    assert "OPERATOR" in op_file.read_text(encoding="utf-8").upper()
+    operator_esc = _operator_escalation()
+    assert operator_esc is not None, "expected an operator escalation in the store at the cap"
+    assert operator_esc["status"] == "unresolved"
+    assert "retry cap" in operator_esc["reason"].lower()
     assert _wo_status(db, wo) == "closed", "capped WO must not be silently reopened again"
