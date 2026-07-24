@@ -165,6 +165,31 @@ def _work_order_verify(
     return 0 if passed else 1
 
 
+def _work_order_attest(
+    *,
+    work_order_id: str,
+    reason: str,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """WO cef6ddaa residual (ii): record an operator attestation as a passing review verdict.
+
+    For done work with no machine-traceable evidence — an auditable human certification that
+    satisfies the independent_review gate. NOT force; the attestation + reason are persisted.
+    """
+    from core.work_orders.verify import attest_work_order
+
+    result = attest_work_order(
+        work_order_id=work_order_id,
+        reason=reason,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+        planning_root=source_root / ".planning",
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
+
+
 def _work_order_next(
     *,
     project_id: str,

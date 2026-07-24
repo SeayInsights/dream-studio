@@ -26,6 +26,7 @@ from interfaces.cli.commands.work_order_query import (
     _work_order_list,
     _work_order_next,
     _work_order_packet,
+    _work_order_attest,
     _work_order_verify,
 )
 from interfaces.cli.commands.work_order_tasks import (
@@ -127,6 +128,16 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         "verify", help="Run independent fresh-context review; gaps become new work orders"
     )
     wo_verify.add_argument("work_order_id", help="Work order UUID")
+
+    wo_attest = work_order_sub.add_parser(
+        "attest",
+        help="Operator-attest a WO complete (recorded review verdict) when done work has no "
+        "machine-traceable evidence — auditable, not force",
+    )
+    wo_attest.add_argument("work_order_id", help="Work order UUID")
+    wo_attest.add_argument(
+        "--reason", required=True, help="Why the work is done (persisted as the attestation)"
+    )
 
     wo_executor = work_order_sub.add_parser(
         "executor", help="Resolve which model should execute this WO (escalation-aware)"
@@ -252,6 +263,13 @@ def dispatch(
     if args.work_order_command == "verify":
         return _work_order_verify(
             work_order_id=args.work_order_id,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+    if args.work_order_command == "attest":
+        return _work_order_attest(
+            work_order_id=args.work_order_id,
+            reason=args.reason,
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )

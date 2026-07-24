@@ -187,7 +187,25 @@ def verify_work_order(
         # verify_main import time and silently bypass the patch.
         from .verify_git import _collect_git_commits
 
-        git_diff = _collect_git_commits(source_root, work_order_id, title=wo["title"])
+        # WO cef6ddaa — evidence model fixes:
+        # (A) Search the WO's TARGET repo (its project's project_path), not always the DS
+        #     source_root, so external-repo work (e.g. Fulcrum) is findable — parallels the
+        #     executable_ac repo-aware fix (WO 2c751184). Falls back to source_root.
+        # (B) A gap-spawned WO carries a "[gap-key: <originating-wo-id>::<category>]" marker;
+        #     its work was committed under that ORIGINATING id, so when the WO's own id finds
+        #     no commits, fall back to the originating id. This is why the per-gap-id review
+        #     could never trace already-committed work and re-spawned endlessly.
+        import re as _re
+
+        # The originating id is the token before "::" in the marker — match any id shape
+        # (UUIDs in production, but do not assume hex), up to the "::category" separator.
+        _gap_marker = _re.search(r"\[gap-key:\s*([^\s:\]]+)::", wo.get("description") or "")
+        originating_wo_id = _gap_marker.group(1) if _gap_marker else None
+
+        _search_root = resolve_project_root(work_order_id, db_path) or source_root
+        git_diff = _collect_git_commits(_search_root, work_order_id, title=wo["title"])
+        if git_diff is None and originating_wo_id:
+            git_diff = _collect_git_commits(_search_root, originating_wo_id)
 
         # WO-FIX-VERIFY-GATE: commit-grep by WO id/title fails for every
         # squash-merged WO (the id never survives the squash), forcing force=True
@@ -447,8 +465,15 @@ def verify_work_order(
 
         # Register gap WOs. milestone_id is no longer required (T3): null-milestone
         # gaps still spawn and dedup, scoped by project_id.
+        #
+        # WO cef6ddaa (C) — break the gap-spawn recursion: a WO that is ITSELF a
+        # gap-spawned remediation WO must not breed further gap WOs. Previously the
+        # re-review keyed new gaps by the gap WO's own id (dedup key
+        # reviewed_wo_id::category), so each generation escaped the parent's dedup and
+        # spawned a fresh WO — the 17->28 cascade. A remediation WO's findings now
+        # surface advisory-only in the verdict (all_gaps) but spawn nothing.
         spawned: list[dict[str, Any]] = []
-        if all_gaps and wo.get("project_id"):
+        if all_gaps and wo.get("project_id") and originating_wo_id is None:
             spawned = _insert_gap_work_orders(
                 conn,
                 gaps=all_gaps,
@@ -508,5 +533,59 @@ def verify_work_order(
         "gaps": all_gaps,
         "spawned_work_orders": spawned,
         "certification_basis": "authority_evidence" if authority_certified else "git_diff",
+        "verdict_path": str(verdict_path) if verdict_path else None,
+    }
+
+
+def attest_work_order(
+    *,
+    work_order_id: str,
+    reason: str,
+    source_root: Path,
+    dream_studio_home: Path | None = None,
+    planning_root: Path | None = None,
+) -> dict[str, Any]:
+    """Record an operator attestation as a PASSING review verdict (WO cef6ddaa, residual (ii)).
+
+    The residual path for a work order whose done work has NO machine-traceable evidence —
+    no commit under its own or its originating id (repo-aware search A/B exhausted) and no
+    executable AC for the authority-evidence fallback. Rather than fabricate a WO-id-referenced
+    artifact just to satisfy the gate, the operator attests completion; that attestation is
+    persisted as the review_verdict (certification_basis='operator_attested', passed=True,
+    with the reason + timestamp) so the independent_review close gate is satisfied.
+
+    This is NOT force: force bypasses a gate silently; this records an auditable human
+    certification. It is the operator's explicit "this is done" — categorically distinct from
+    forcing UNdone work, which no-false-done forbids.
+    """
+    if not (reason and reason.strip()):
+        return {"ok": False, "error": "attestation reason is required (record why it is done)"}
+    now = datetime.now(UTC).isoformat()
+    p_root = planning_root or Path.cwd() / ".planning"
+    db_path = _require_db(source_root, dream_studio_home)
+    with _connect(db_path) as conn:
+        wo = _read_work_order(conn, work_order_id)
+        if wo is None:
+            return {"ok": False, "error": f"Work order not found: {work_order_id}"}
+        verdict: dict[str, Any] = {
+            "work_order_id": work_order_id,
+            "passed": True,
+            "certification_basis": "operator_attested",
+            "attestation": reason.strip(),
+            "attested_at": now,
+            "summary": f"Operator-attested complete: {reason.strip()}",
+            "scores": {},
+            "gaps": [],
+            "spawned_work_orders": [],
+            "verified_at": now,
+        }
+        verdict_path = _persist_review_verdict(
+            work_order_id, verdict, planning_root=p_root, db_path=db_path
+        )
+    return {
+        "ok": True,
+        "work_order_id": work_order_id,
+        "certification_basis": "operator_attested",
+        "attestation": reason.strip(),
         "verdict_path": str(verdict_path) if verdict_path else None,
     }

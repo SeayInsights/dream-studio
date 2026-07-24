@@ -44,7 +44,7 @@ from .verify_gaps import (
 )
 from .verify_git import _authority_evidence, _find_migration_files
 from .verify_graders import _extract_first_json_object
-from .verify_main import _compute_scores, verify_work_order
+from .verify_main import _compute_scores, attest_work_order, verify_work_order
 from .verify_persist import _persist_review_verdict, _write_eval_run
 from .verify_prompts import (
     _COMPLETION_PROMPT_TEMPLATE,
@@ -136,5 +136,6 @@ __all__ = [  # noqa: F822 -- _collect_git_commits/_run_graders_parallel/_spawn_g
     "_write_eval_run",
     "resolve_project_root",
     "run_executable_checks",
+    "attest_work_order",
     "verify_work_order",
 ]
