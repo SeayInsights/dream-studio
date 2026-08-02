@@ -164,3 +164,39 @@ def test_missing_reason_fails_when_required(tmp_path) -> None:
             decided_by="operator",
             storage_root=storage_root,
         )
+
+
+def test_create_decision_request_links_adr(tmp_path) -> None:
+    """The optional adr_id (R1/T3) is persisted on the decision packet and defaults
+    to None. The ADR is the human-readable projection; the packet stays canonical."""
+    from core.work_orders.decisions import create_decision_request, load_decision_request
+    from core.work_orders.storage import save_work_order
+
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "README.md").write_text("x\n", encoding="utf-8")
+    storage_root = tmp_path / "store"
+    save_work_order(_work_order(target, work_order_id="wo-adr-001"), storage_root=storage_root)
+
+    linked = create_decision_request(
+        "wo-adr-001",
+        phase_type="push_planning",
+        question="Adopt the new pattern?",
+        recommended_decision="RUN_BROADER_VALIDATION_FIRST",
+        adr_id="ADR-0007",
+        storage_root=storage_root,
+    )
+    assert linked["adr_id"] == "ADR-0007"
+    # Persisted on the packet, not just returned.
+    persisted, _ = load_decision_request("wo-adr-001", storage_root=storage_root)
+    assert persisted is not None and persisted["adr_id"] == "ADR-0007"
+
+    # Defaults to None when a decision is not linked to an ADR.
+    unlinked = create_decision_request(
+        "wo-adr-001",
+        phase_type="push_planning",
+        question="Adopt the new pattern?",
+        recommended_decision="RUN_BROADER_VALIDATION_FIRST",
+        storage_root=storage_root,
+    )
+    assert unlinked["adr_id"] is None

@@ -1,5 +1,13 @@
 # think — Changelog
 
+## [1.1.0] - 2026-07-24
+
+### Added
+- Design decisions are recorded as ADRs (`docs/adr/`, WO R1): step 3 (Recommend)
+  and a new "Design decisions → ADR" subsection instruct authoring an ADR from the
+  template and linking it from the decision packet (`adr_id`) on significant design
+  decisions.
+
 ## [1.0.0] - 2026-04-28
 
 ### Added

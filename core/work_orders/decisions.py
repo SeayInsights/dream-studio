@@ -137,9 +137,16 @@ def create_decision_request(
     risk_summary: str = "operator decision required before execution handoff",
     required_evidence: list[str] | None = None,
     requires_reason: bool = True,
+    adr_id: str | None = None,
     storage_root: Path | str | None = None,
 ) -> dict[str, Any]:
-    """Create or replace the decision request artifact for a Work Order."""
+    """Create or replace the decision request artifact for a Work Order.
+
+    ``adr_id`` optionally links this decision to an Architecture Decision Record
+    (``docs/adr/ADR-NNNN-*.md``). The ADR is the human-readable rationale
+    *projection* of the decision; this packet (in the authority-free packet store)
+    remains the source of truth for the decision itself. See docs/adr/README.md.
+    """
     work_order, _ = load_work_order(work_order_id, storage_root=storage_root)
     canonical_id = str(work_order["work_order_id"])
     allowed = allowed_decisions_for_phase(phase_type)
@@ -167,6 +174,7 @@ def create_decision_request(
             "operator-selected decision reason",
         ],
         "requires_reason": bool(requires_reason),
+        "adr_id": adr_id,
         "created_at": _now(),
         "privacy_export_classification": PRIVACY_EXPORT_CLASSIFICATION,
     }

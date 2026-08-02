@@ -46,7 +46,7 @@ Use `skills/think/templates/spec-template.md` for structure:
 
 2. **Explore** — 2-3 approaches with trade-offs (pros, cons, complexity, risk).
 
-3. **Recommend** — Pick one approach with rationale.
+3. **Recommend** — Pick one approach with rationale. If this is a significant design/architecture decision, record it as an ADR (see *Design decisions → ADR* below).
 
 4. **Spec** — Author to the docstore using the template: `ds files write "specs/<topic>/spec.md" --category planning` (zero-disk — `.planning/` disk writes are denied).
 
@@ -84,6 +84,14 @@ Use `skills/think/templates/spec-template.md` for structure:
 
 **Summary:** bcrypt is industry standard with wide support. Argon2 is newer and more resistant to GPU attacks but has fewer implementations. For most applications, bcrypt is recommended.
 ```
+
+## Design decisions → ADR
+When `think` reaches a significant architecture/design decision — a new system, a cross-cutting pattern, an irreversible or hard-to-reverse choice (**not** a config tweak or bug fix) — record it as an Architecture Decision Record:
+1. Copy `docs/adr/ADR-000-template.md` to `docs/adr/ADR-NNNN-kebab-title.md` (next sequential number), fill every section, set Status `Proposed` (→ `Accepted` on Director approval).
+2. Add the ADR to the index in `docs/adr/README.md`.
+3. Link it from the decision: pass `adr_id="ADR-NNNN"` when the decision packet is created. The ADR is the human-readable rationale **projection**; the packet-store decision record stays canonical.
+
+The ADR drift check (`tests/unit/test_adr_system.py`) enforces the index + required sections. See `docs/adr/README.md`.
 
 ## Output
 Spec document in the docstore as `specs/<topic>/spec.md` (`ds files read`). Director approval in conversation.
