@@ -2,6 +2,8 @@
 
 > **Baseline:** migrations 001–141 were squashed into `142_lean_baseline`; forward migrations are 143+. See [docs/architecture/three-store-data-architecture.md](architecture/three-store-data-architecture.md) for the store model.
 
+> **Reversibility (R3):** forward migrations `>= 154` must ship a paired reverse under `core/event_store/migrations/rollback/`; the `migration-risk` pre-push gate (`core/gates/migration_rollback_pairing.py`) fails a migration-touching push that adds one without a reverse. Migrations `<= 153` are grandfathered. Full convention + grandfather rationale: [docs/migrations.md](migrations.md).
+
 ## Dev vs Live Migration Workflow
 
 **Problem:** Migrations auto-apply on every `_connect()` call. Without a guard, adding a migration file on a feature branch would silently mutate the live authority DB (`~/.dream-studio/state/studio.db`) the next time any `ds` command runs — before the PR is reviewed or merged.

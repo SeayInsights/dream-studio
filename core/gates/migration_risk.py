@@ -82,6 +82,30 @@ def main() -> int:
     if not risk_files:
         return 0
 
+    # Rollback-pairing escalation (R3): every forward migration >= the cutover must
+    # ship a paired reverse. This is a hard failure — a real reversibility defect,
+    # not the matrix-watch reminder — so MIGRATION_RISK_ACKNOWLEDGED does NOT bypass
+    # it. Runs here because a migration-touching push is exactly when it matters.
+    from core.gates.migration_rollback_pairing import (
+        ROLLBACK_ENFORCED_FROM,
+        find_unpaired_migrations,
+    )
+
+    unpaired = find_unpaired_migrations()
+    if unpaired:
+        print()
+        print("=" * 70)
+        print("MIGRATION ROLLBACK PAIRING: unpaired forward migration(s)")
+        print("=" * 70)
+        print(f"Every forward migration >= {ROLLBACK_ENFORCED_FROM} must ship a paired")
+        print("reverse under core/event_store/migrations/rollback/<same NNN_>*.sql")
+        print("(reversible authority migrations — see docs/migrations.md).")
+        for name in unpaired:
+            print(f"  MISSING rollback for: {name}")
+        print("=" * 70)
+        print()
+        return 1
+
     pr_number_hint = os.environ.get("PR_NUMBER", "<PR-NUMBER>")
 
     print()
@@ -93,7 +117,7 @@ def main() -> int:
     print()
     print("This change class has historically produced regressions that pass")
     print("local tests and the pre-push gate but fail on the remote matrix")
-    print(f"(see migrations 081, 082 — both required post-merge hotfixes).")
+    print("(see migrations 081, 082 — both required post-merge hotfixes).")
     print()
     print("MATRIX-WATCH IS REQUIRED before you merge this PR.")
     print(f"Platforms: {_MATRIX_PLATFORMS}")
