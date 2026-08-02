@@ -36,3 +36,4 @@ for them.
 4. Prefer `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS` for idempotent DDL.
 5. `ALTER TABLE ... ADD COLUMN` is safe; SQLite does not support `IF NOT EXISTS` for it, but the runner skips `duplicate column name` errors.
 6. Run the full migration regression test before pushing: `py -m pytest tests/integration/migrations/test_full_migration_sequence.py -v`
+7. **Ship a paired rollback** (enforced from migration 154): add `rollback/NNN_short_description.sql` reversing the forward change. The `migration-risk` pre-push gate fails a push that adds a forward migration `>= 154` without one. Migrations `<= 153` are grandfathered. See [`docs/migrations.md`](../../../docs/migrations.md).
