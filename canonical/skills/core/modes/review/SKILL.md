@@ -64,6 +64,7 @@ Spec compliance BEFORE code quality. Always. Catching "built the wrong thing" ma
 4. **Test coverage** — Are critical paths tested? Edge cases covered?
 5. **Code quality** — Readability, naming, duplication, complexity.
 6. **File responsibility** — Each file has one clear job with a well-defined interface?
+7. **Change discipline** — Commit subjects are conventional (`feat/fix/revert(scope):`), never the GitHub-UI `Revert "..."` (the revert-format guard rejects it). For a change touching auth, an API/route/schema contract, or a migration, a change-impact affirmation is recorded (`ds work-order affirm-impact`). Both are enforced at close — flag gaps here so they are not a surprise then.
 
 ## Fast scan mode
 When invoked with Haiku for fast scan:

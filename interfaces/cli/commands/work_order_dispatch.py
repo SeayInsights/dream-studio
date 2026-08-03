@@ -27,6 +27,7 @@ from interfaces.cli.commands.work_order_query import (
     _work_order_next,
     _work_order_packet,
     _work_order_attest,
+    _work_order_affirm_impact,
     _work_order_verify,
 )
 from interfaces.cli.commands.work_order_tasks import (
@@ -138,6 +139,24 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
     wo_attest.add_argument(
         "--reason", required=True, help="Why the work is done (persisted as the attestation)"
     )
+
+    wo_affirm = work_order_sub.add_parser(
+        "affirm-impact",
+        help="Record a change-impact affirmation (auth/contract/migration/changelog) — "
+        "satisfies the change_impact_affirmed close gate",
+    )
+    wo_affirm.add_argument("work_order_id", help="Work order UUID")
+    wo_affirm.add_argument(
+        "--auth", action="store_true", help="Change touches auth / session / token handling"
+    )
+    wo_affirm.add_argument(
+        "--contract", action="store_true", help="Change alters an API / route / schema contract"
+    )
+    wo_affirm.add_argument(
+        "--migration", action="store_true", help="Change touches a migration / DDL site"
+    )
+    wo_affirm.add_argument("--changelog", action="store_true", help="Change is changelog-worthy")
+    wo_affirm.add_argument("--note", default="", help="Optional context for the affirmation")
 
     wo_executor = work_order_sub.add_parser(
         "executor", help="Resolve which model should execute this WO (escalation-aware)"
@@ -270,6 +289,17 @@ def dispatch(
         return _work_order_attest(
             work_order_id=args.work_order_id,
             reason=args.reason,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+    if args.work_order_command == "affirm-impact":
+        _touched = [
+            c for c in ("auth", "contract", "migration", "changelog") if getattr(args, c, False)
+        ]
+        return _work_order_affirm_impact(
+            work_order_id=args.work_order_id,
+            touched=_touched,
+            note=args.note,
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )

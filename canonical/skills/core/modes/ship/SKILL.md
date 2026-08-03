@@ -68,6 +68,8 @@ All three must exit 0. If any fail, fix locally — do not push a broken state.
 - Director can override a FAIL with explicit approval (logged)
 - After fix, re-run the failed check — don't skip re-verification
 - This gate runs in the main session, not in a sub-agent
+- **Affirm change impact before close.** For a work order touching auth, an API/route/schema contract, a migration, or anything changelog-worthy, record its affirmation: `ds work-order affirm-impact <id> [--auth] [--contract] [--migration] [--changelog] [--note ...]`. The `change_impact_affirmed` close gate requires it (WOs created before the cutover are grandfathered). This is CLAUDE.md's Code History & Impact Guardrail made enforceable.
+- **Conventional commits + reverts.** Use conventional-commit subjects (`feat(scope):`, `fix(scope):`, `revert(scope):`). Reverts MUST use `revert(scope): ...`, never the GitHub-UI `Revert "..."` — the revert-format guard rejects it because it breaks the generated changelog (the reverted feature would linger as if it shipped).
 - **Never downgrade lint/TS rules to pass CI (L2).** If lint has errors, fix the errors.
   Downgrading `"error"` → `"warn"` is only acceptable with an inline comment explaining why
   and an immediate follow-up task. CI green ≠ code healthy.
