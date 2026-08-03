@@ -26,11 +26,12 @@ KIND_TO_FILENAME: dict[str, str] = {
     "design_audit": "design-audit.md",
     "review_verdict": "review-verdict.json",
     "context": "context.md",
+    "impact_affirmation": "impact-affirmation.md",
 }
 
-# All kinds accepted by the table's CHECK constraint (migration 152). Singleton kinds
-# use the default instance_key=''; multi-instance kinds (eval) key each row by
-# instance_key (e.g. the eval_type). Keep in sync with 152's CHECK.
+# All kinds accepted by the table's CHECK constraint (migration 152, extended by 154).
+# Singleton kinds use the default instance_key=''; multi-instance kinds (eval) key each
+# row by instance_key (e.g. the eval_type). Keep in sync with the latest migration's CHECK.
 VALID_KINDS: frozenset[str] = frozenset(
     {
         "api_contract",
@@ -43,6 +44,7 @@ VALID_KINDS: frozenset[str] = frozenset(
         "escalation",
         "report",
         "eval",
+        "impact_affirmation",
     }
 )
 

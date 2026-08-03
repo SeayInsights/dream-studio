@@ -190,6 +190,32 @@ def _work_order_attest(
     return 0 if result.get("ok") else 1
 
 
+def _work_order_affirm_impact(
+    *,
+    work_order_id: str,
+    touched: list[str],
+    note: str,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """R5 T1: record a change-impact affirmation for a work order — an explicit statement
+    of which impact classes (auth/contract/migration/changelog) the change touches, per
+    CLAUDE.md's Code History & Impact Guardrail. Satisfies the change_impact_affirmed
+    close gate; stored in the authority as an impact_affirmation artifact."""
+    from core.gates.change_impact import affirm_change_impact
+    from core.installed_runtime import resolve_installed_runtime_paths
+
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root, dream_studio_home=dream_studio_home
+    )
+    ok = affirm_change_impact(work_order_id, touched=touched, note=note, db_path=paths.sqlite_path)
+    result = {"ok": bool(ok), "work_order_id": work_order_id, "touched": touched, "note": note}
+    if not ok:
+        result["error"] = "impact affirmation not stored (artifact table absent?)"
+    print(json.dumps(result, indent=2))
+    return 0 if ok else 1
+
+
 def _work_order_next(
     *,
     project_id: str,

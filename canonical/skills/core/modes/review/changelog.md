@@ -1,5 +1,11 @@
 # review — Changelog
 
+## [1.1.0] - 2026-08-02
+
+### Added
+- Stage 2 gains a "Change discipline" check (WO R5): flag GitHub-UI `Revert "..."`
+  subjects and missing change-impact affirmations before they surface at close.
+
 ## [1.0.0] - 2026-04-28
 
 ### Added

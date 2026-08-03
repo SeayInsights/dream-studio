@@ -129,6 +129,20 @@ gates:
       all three platforms (ubuntu, macos, windows) are green before merging.
       To bypass: MIGRATION_RISK_ACKNOWLEDGED=1 git push
 
+  - id: revert-format
+    tier: blocking
+    description: >
+      Conventional-revert guard (R5). Rejects GitHub-UI `Revert "..."` commit
+      subjects over origin/main..HEAD so a reverted feature does not linger in the
+      generated changelog as if it shipped. Reverts must use `revert(scope): ...`.
+    command: [py, -m, core.gates.revert_commit_format]
+    env:
+      DREAM_STUDIO_BASE_REF: origin/main
+    fail_hint: >
+      A GitHub-UI `Revert "..."` commit subject was found. Rewrite it as a
+      conventional `revert(scope): ...` (or `revert: ...`) so release-please can
+      pair it with the original.
+
   - id: authority-boundary
     tier: advisory
     description: >

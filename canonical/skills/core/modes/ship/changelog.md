@@ -1,5 +1,12 @@
 # ship — Changelog
 
+## [1.1.0] - 2026-08-02
+
+### Added
+- Change discipline rules (WO R5): affirm change impact before close
+  (`ds work-order affirm-impact`, enforced by the change_impact_affirmed gate) and use
+  conventional commits/reverts (`revert(scope):`, never GitHub-UI `Revert "..."`).
+
 ## [1.0.0] - 2026-04-28
 
 ### Added

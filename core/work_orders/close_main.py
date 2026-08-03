@@ -77,6 +77,11 @@ def check_close_gates(
         # Always-on AC gate preview.
         failures.extend(_run_ac_gate(conn, work_order_id=work_order_id, db_path=db_path))
 
+        # R5 T1: change-impact affirmation preview (universal; pre-cutover WOs grandfathered).
+        from core.gates.change_impact import check_change_impact_affirmed
+
+        failures.extend(check_change_impact_affirmed(conn, work_order_id, db_path))
+
     meta["gate_failures"] = failures
     meta["gates_pass"] = not failures
     return meta
@@ -255,6 +260,15 @@ def close_work_order(
         # bypass below — it always blocks unless forced, and a forced close records
         # it via the gate.bypassed path.
         gate_failures.extend(_check_tasks_done(conn, work_order_id))
+
+        # R5 T1: change-impact affirmation — a WO created on/after the cutover must record
+        # an impact affirmation (auth/contract/migration/changelog) before close. Universal
+        # and WO-type agnostic; pre-cutover WOs are grandfathered. Like tasks_done it is not
+        # subject to the independent_review bypass; a forced close records a gate.bypassed.
+        # See CLAUDE.md's Code History & Impact Guardrail.
+        from core.gates.change_impact import check_change_impact_affirmed
+
+        gate_failures.extend(check_change_impact_affirmed(conn, work_order_id, db_path))
 
         # WO-ESCALATION-LADDER T3: an escalated WO (reopened because the deterministic
         # verifier said NOT FIXED) must re-close through a PASSING independent review.
