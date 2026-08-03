@@ -11,7 +11,7 @@
 
 PRAGMA foreign_keys=OFF;
 
-CREATE TABLE business_work_order_artifacts_new (
+CREATE TABLE business_work_order_artifacts_m154 (
     work_order_id TEXT NOT NULL,
     kind TEXT NOT NULL CHECK(kind IN (
         'api_contract', 'security_scan', 'design_audit', 'review_verdict', 'context',
@@ -25,13 +25,13 @@ CREATE TABLE business_work_order_artifacts_new (
     PRIMARY KEY (work_order_id, kind, instance_key)
 );
 
-INSERT INTO business_work_order_artifacts_new
+INSERT INTO business_work_order_artifacts_m154
     (work_order_id, kind, instance_key, content, created_at, updated_at)
     SELECT work_order_id, kind, instance_key, content, created_at, updated_at
     FROM business_work_order_artifacts;
 
 DROP TABLE business_work_order_artifacts;
-ALTER TABLE business_work_order_artifacts_new RENAME TO business_work_order_artifacts;
+ALTER TABLE business_work_order_artifacts_m154 RENAME TO business_work_order_artifacts;
 
 CREATE INDEX IF NOT EXISTS idx_wo_artifacts_wo
     ON business_work_order_artifacts(work_order_id);
