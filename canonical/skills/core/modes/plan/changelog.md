@@ -1,5 +1,12 @@
 # plan — Changelog
 
+## [1.1.0] - 2026-07-24
+
+### Added
+- A plan that encodes or depends on a design decision must reference the governing
+  ADR id (`ADR-NNNN` from `docs/adr/`, WO R1): step 2 (Plan architecture) requires it,
+  with a matching anti-pattern.
+
 ## [1.0.0] - 2026-04-28
 
 ### Added

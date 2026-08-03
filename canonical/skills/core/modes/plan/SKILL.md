@@ -39,7 +39,7 @@ Use these templates to structure your plan:
 
 ## Steps
 1. **Read spec** — Reference the approved spec from `think`. Confirm scope, user stories, and requirements.
-2. **Plan architecture** — Use `plan-template.md` to document technical decisions, structure, and approach.
+2. **Plan architecture** — Use `plan-template.md` to document technical decisions, structure, and approach. If the plan encodes or depends on a design decision, reference the governing ADR id (`ADR-NNNN` from `docs/adr/`); if that decision is not recorded yet, author the ADR first (see `think` mode → *Design decisions → ADR*).
 3. **Decompose** — Use `tasks-template.md` to break into atomic tasks. Each task = one logical commit.
 4. **Organize by user story** — Group tasks so each user story (P1, P2, P3) can be implemented and tested independently.
 5. **Order** — Dependencies first. Mark [P] for tasks that can run in parallel (different files, no dependencies).
@@ -112,3 +112,4 @@ Tasks persisted to business_tasks with [P] markers for parallelization:
 - Traceability active but requirements lack TR-IDs (breaks the chain)
 - Traceability active but tasks not tagged with TR-IDs (orphaned work)
 - Activating traceability for a 2-task bug fix (overhead without value)
+- Plan encodes a design decision with no governing ADR referenced
