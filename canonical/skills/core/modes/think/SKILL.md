@@ -93,6 +93,11 @@ When `think` reaches a significant architecture/design decision — a new system
 
 The ADR drift check (`tests/unit/test_adr_system.py`) enforces the index + required sections. See `docs/adr/README.md`.
 
+## Contract-bearing work → normative spec
+For work that defines or changes a **contract** (an API endpoint, a schema, an event, a route family — anything a `api_endpoint`/`saas_feature` work order owns), write the contract **spec-first**, before the code:
+1. Author a normative spec from `docs/specs/SPEC-000-template.md` — RFC-2119 requirements (MUST/SHOULD/MAY), a Canonical-source block, and the lifecycle header.
+2. Store it as the work order's `api_contract` artifact and drive its Status through **Draft → Reviewed → Ratified**. **Ratify before build/close** — the `api_contract_exists` close gate blocks a contract-bearing WO whose spec is not `Ratified` (WOs created before the cutover are grandfathered). See `docs/specs/README.md`.
+
 ## Output
 Spec document in the docstore as `specs/<topic>/spec.md` (`ds files read`). Director approval in conversation.
 

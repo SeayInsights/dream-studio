@@ -1,5 +1,13 @@
 # think — Changelog
 
+## [1.2.0] - 2026-07-24
+
+### Added
+- Contract-bearing work is spec-first (WO R2): a new "Contract-bearing work → normative
+  spec" subsection instructs authoring a normative RFC-2119 spec from the template and
+  ratifying it (Draft→Reviewed→Ratified) before build/close, since the
+  `api_contract_exists` gate now requires a Ratified spec.
+
 ## [1.1.0] - 2026-07-24
 
 ### Added

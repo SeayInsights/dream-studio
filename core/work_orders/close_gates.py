@@ -60,13 +60,19 @@ def run_gate_check(
         return True, ""
 
     if gate_name == "api_contract_exists":
-        if _artifact_text(work_order_id, wo_dir, "api_contract", db_path) is None:
-            return False, "api_contract_exists: api-contract.md not found"
-        return True, ""
+        from core.gates.spec_ratification import evaluate_api_contract
+
+        contract = _artifact_text(work_order_id, wo_dir, "api_contract", db_path)
+        ok, reason = evaluate_api_contract(contract, _wo_created_at(conn, work_order_id))
+        return (True, "") if ok else (False, f"api_contract_exists: {reason}")
 
     if gate_name == "api_contract_and_security_review":
-        if _artifact_text(work_order_id, wo_dir, "api_contract", db_path) is None:
-            return False, "api_contract_and_security_review: api-contract.md not found"
+        from core.gates.spec_ratification import evaluate_api_contract
+
+        contract = _artifact_text(work_order_id, wo_dir, "api_contract", db_path)
+        ok, reason = evaluate_api_contract(contract, _wo_created_at(conn, work_order_id))
+        if not ok:
+            return False, f"api_contract_and_security_review: {reason}"
         if _artifact_text(work_order_id, wo_dir, "security_scan", db_path) is None:
             return False, "api_contract_and_security_review: security-scan.md not found"
         return True, ""
@@ -204,6 +210,22 @@ def run_gate_check(
         return True, ""
 
     return True, ""
+
+
+def _wo_created_at(conn: Any, work_order_id: str) -> str | None:
+    """Return a work order's ISO created_at, or None if unavailable.
+
+    None → the ratified-contract gate treats the WO as grandfathered (never falsely
+    blocks close when the row/column is missing, e.g. in a minimal test DB).
+    """
+    try:
+        row = conn.execute(
+            "SELECT created_at FROM business_work_orders WHERE work_order_id = ?",
+            (work_order_id,),
+        ).fetchone()
+    except Exception:
+        return None
+    return row[0] if row else None
 
 
 def _read_wo_tasks(conn: Any, work_order_id: str) -> list[dict[str, Any]]:

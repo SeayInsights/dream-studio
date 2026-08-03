@@ -1,5 +1,11 @@
 # plan — Changelog
 
+## [1.2.0] - 2026-07-24
+
+### Added
+- Contract-bearing plans reference a governing normative spec on a path to Ratified
+  (WO R2): step 1 (Read spec) and a matching anti-pattern.
+
 ## [1.1.0] - 2026-07-24
 
 ### Added
