@@ -4,6 +4,6 @@ A derived, evidence-scored view over existing authority + docstore state — no 
 tables. Governed by SPEC-0001 (docstore: specs/SPEC-0001-prd-sow-scoring.md) and ADR-0003.
 """
 
-from core.prd.rescore import rescore_prd
+from core.prd.rescore import compute_prd_sow, rescore_prd
 
-__all__ = ["rescore_prd"]
+__all__ = ["compute_prd_sow", "rescore_prd"]

@@ -19,6 +19,7 @@ from .routes import (
     intelligence,
     telemetry,
     shared_intelligence,
+    prd_sow,
 )
 from .routes.project_list import router as project_list_router
 from .routes.project_detail import router as project_detail_router
@@ -78,6 +79,7 @@ app.include_router(metrics.router, prefix="/api/v1/metrics", tags=["metrics"])
 app.include_router(insights.router, prefix="/api/v1/insights", tags=["insights"])
 app.include_router(alerts.router, prefix="/api/v1/alerts", tags=["alerts"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytics"])
+app.include_router(prd_sow.router, prefix="/api/v1/prd-sow", tags=["prd-sow"])
 app.include_router(project_list_router, prefix="/api/v1/projects", tags=["projects"])
 app.include_router(project_detail_router, prefix="/api/v1/projects", tags=["projects"])
 app.include_router(project_artifacts_router, prefix="/api/v1/projects", tags=["projects"])
