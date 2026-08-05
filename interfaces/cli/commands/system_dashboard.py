@@ -172,22 +172,21 @@ def _refresh_derived_store(sqlite_path: Path) -> None:
     serving the dashboard, so a fresh open always reflects current data (the open
     path never did this, so rollups/events_fact were only as fresh as the last
     manual ``ds analyze aggregate``). Best-effort — a failure degrades to whatever
-    the store already held. Runs: spool ingest + projections, then the events_fact
-    derivation, then the aggregate rollups."""
+    the store already held.
+
+    WO deb9ccb3 (authority boundary): the events_fact derivation is owned by the
+    projection runner — the SOLE read-write DuckDB holder — so this CLI path must
+    NOT open its own read-write analytics connection. ``sync_tick()`` runs spool
+    ingest + the projection cycle, and ``runner.tick()`` refreshes events_fact
+    through the runner's own connection. The aggregate rollup (``run_aggregation``,
+    in ``core/analytics``) is a separate concern and stays. ``sqlite_path`` is
+    retained for interface/call-site stability and the best-effort contract; the
+    runner resolves the authority path itself.
+    """
     try:
         from core.projections.runner import sync_tick
 
         sync_tick()
-    except Exception:
-        pass
-    try:
-        from core.analytics.duckdb_store import connect_analytics, derive_events_fact
-
-        conn = connect_analytics(read_only=False)
-        try:
-            derive_events_fact(conn, str(sqlite_path))
-        finally:
-            conn.close()
     except Exception:
         pass
     try:
