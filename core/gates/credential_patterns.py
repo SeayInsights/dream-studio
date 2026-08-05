@@ -83,8 +83,10 @@ CREDENTIAL_PREFIXES: tuple[str, ...] = (
 _TOKEN_SHAPED_PREFIXES: tuple[str, ...] = tuple(
     p for p in CREDENTIAL_PREFIXES if not p.startswith("-----")
 )
+# The leading \b anchors the prefix to a word boundary so a prefix embedded mid-word does
+# not match — e.g. "task-completion" must NOT trip on the "sk-" inside "ta[sk-]".
 TOKEN_SHAPED_PATTERN: re.Pattern[str] = re.compile(
-    "(?:" + "|".join(re.escape(p) for p in _TOKEN_SHAPED_PREFIXES) + r")[A-Za-z0-9/_-]{8,}"
+    r"\b(?:" + "|".join(re.escape(p) for p in _TOKEN_SHAPED_PREFIXES) + r")[A-Za-z0-9/_-]{8,}"
 )
 
 

@@ -35,6 +35,11 @@ def test_control_analysis_scanners_use_single_source():
     assert TOKEN_SHAPED_PATTERN.search("AKIA" + "A" * 16)
     assert CREDENTIAL_PATTERNS["private_key_block"].search("-----BEGIN RSA PRIVATE KEY-----")
 
+    # ...but a prefix embedded mid-word is not a token (the \b boundary): ordinary hyphenated
+    # prose like "task-completion" must not trip the "sk-" inside "ta[sk-]".
+    assert not TOKEN_SHAPED_PATTERN.search("task-completion")
+    assert not TOKEN_SHAPED_PATTERN.search("a risky-business decision")
+
     # 4. The name-based / code-smell heuristics stay local (not moved into the credential
     #    source — they are not credential formats).
     assert any(label == "eval()" for _p, label in security_patterns.PATTERNS)
