@@ -80,6 +80,41 @@ def _seed_closeable(tmp_path: Path) -> Path:
     return tmp_path
 
 
+def test_prd_cli_handlers_resolve_project_and_render(tmp_path, monkeypatch, capsys):
+    """The `ds prd` CLI handlers: rescore resolves the active project and reports the score;
+    show prints the rendered document; --project overrides the active-project default."""
+    from interfaces.cli.commands import prd
+
+    home = _seed_closeable(tmp_path)  # active project 'p'
+
+    # rescore: resolves the active project (no --project) and prints the engine's score.
+    monkeypatch.setattr(
+        "core.prd.rescore.rescore_prd",
+        lambda pid, **kw: {
+            "ok": True,
+            "overall_score": 42.0,
+            "coverage": 0.5,
+            "document_ref": "prd/prd-sow.md",
+        },
+    )
+    rc = prd._prd_rescore(project_id=None, source_root=REPO_ROOT, dream_studio_home=home)
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "42.0/100" in out and "p" in out  # resolved active project + reported score
+
+    # _resolve_project: explicit id wins; else the active project.
+    assert prd._resolve_project("explicit", REPO_ROOT, home) == "explicit"
+    assert prd._resolve_project(None, REPO_ROOT, home) == "p"
+
+    # show: prints the docstore document (monkeypatched read).
+    monkeypatch.setattr(
+        "core.files.store.read_file_by_name", lambda name, **kw: {"content": "RENDERED PRD+SOW"}
+    )
+    rc2 = prd._prd_show(project_id="p", source_root=REPO_ROOT, dream_studio_home=home)
+    assert rc2 == 0
+    assert "RENDERED PRD+SOW" in capsys.readouterr().out
+
+
 def test_prd_show_and_milestone_close_autorefresh(tmp_path, monkeypatch):
     """close_milestone auto-refreshes the PRD on its success path, and NEVER lets a refresh
     failure block the close (SPEC-0001 R12) — driven through close_milestone itself."""
