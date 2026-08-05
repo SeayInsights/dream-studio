@@ -1,0 +1,60 @@
+"""WO P5 (62aa33b1) — the dashboard PRD+SOW panel read-model (SPEC-0001; read-only).
+
+build_prd_sow_panel returns the PRD+SOW shape (overall score, per-capability coverage,
+per-milestone SOW entries) derived read-only from authority + docstore — it must NOT write
+the living document (that is rescore_prd's job, not the dashboard read path).
+"""
+
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+
+from core.config.sqlite_bootstrap import bootstrap_database
+from core.files.store import read_file_by_name, write_file
+from projections.api.lib.prd_sow_panel import PANEL_SCHEMA, build_prd_sow_panel
+
+CAP_MAP = "capabilities:\n  - capability_id: cap-a\n    title: Cap A\n    weight: 1.0\nmilestone_capabilities:\n  m1: [cap-a]\n"
+
+
+def test_dashboard_prd_sow_shape(tmp_path: Path):
+    studio = tmp_path / "studio.db"
+    bootstrap_database(studio)
+    conn = sqlite3.connect(str(studio))
+    try:
+        conn.execute(
+            "INSERT INTO business_milestones"
+            " (milestone_id,project_id,title,description,status,order_index,created_at,updated_at)"
+            " VALUES ('m1','p','Milestone One','ship A','complete',10,'t','t')"
+        )
+        conn.execute(
+            "INSERT INTO business_work_orders"
+            " (work_order_id,project_id,milestone_id,title,status,verify_score,created_at,updated_at)"
+            " VALUES ('w1','p','m1','WO one','closed',0.9,'t','t')"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    files = tmp_path / "files.db"
+    write_file("prd/capability-map.yaml", CAP_MAP, "application/yaml", "planning", db_path=files)
+
+    panel = build_prd_sow_panel("p", db_path=studio, files_db_path=files)
+
+    # Shape contract.
+    assert panel["schema"] == PANEL_SCHEMA and panel["ok"] is True
+    assert panel["project_id"] == "p"
+    assert panel["overall_score"] == 90.0  # single WO composite 0.9 -> 90; cap-a delivered
+    assert panel["coverage"] == 1.0
+    caps = {c["capability_id"]: c for c in panel["capabilities"]}
+    assert caps["cap-a"]["status"] == "scored" and caps["cap-a"]["score"] == 90.0
+    m1 = next(m for m in panel["milestones"] if m["milestone_id"] == "m1")
+    assert m1["set_out_to"] == "ship A" and "Delivered" in m1["accomplished"]
+
+    # READ-ONLY: building the panel must not render/persist the living document.
+    try:
+        read_file_by_name("prd/prd-sow.md", project_id="p", db_path=files)
+        wrote = True
+    except KeyError:
+        wrote = False
+    assert wrote is False, "the dashboard panel read path must not write the PRD+SOW document"

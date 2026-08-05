@@ -39,7 +39,7 @@ def _auto_accomplished(closed_count: int, closed_titles: list[str]) -> str:
     return f"Delivered {closed_count} work order(s): {head}{more}."
 
 
-def rescore_prd(
+def compute_prd_sow(
     project_id: str,
     *,
     source_root: Path | None = None,
@@ -49,11 +49,12 @@ def rescore_prd(
     files_db_path: Path | None = None,
     now: str | None = None,
 ) -> dict[str, Any]:
-    """Recompute the PRD+SOW score + render the living document to the docstore.
+    """Compute the PRD+SOW view WITHOUT writing anything — the read-only derivation.
 
     Pure function of authority (studio.db) + docstore (files.db capability map) state at call
-    time; see SPEC-0001. Pass ``source_root`` (production) or an explicit ``db_path`` /
-    ``files_db_path`` (isolated tests); ``now`` fixes the refresh timestamp for determinism.
+    time; see SPEC-0001. The dashboard read surface calls this; ``rescore_prd`` wraps it to
+    also render + persist the living document. Pass ``source_root`` (production) or an explicit
+    ``db_path`` / ``files_db_path`` (isolated tests); ``now`` fixes the timestamp.
     """
     if db_path is None:
         if source_root is None:
@@ -138,8 +139,55 @@ def rescore_prd(
     confidence = round(sum(completed_confs) / len(completed_confs), 3) if completed_confs else 0.0
 
     refreshed_at = now or datetime.now(UTC).isoformat()
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "overall_score": overall,
+        "coverage": coverage,
+        "confidence": confidence,
+        "capabilities": cap_entries,
+        "milestones": ms_entries,
+        "document_ref": DOC_NAME,
+        "refreshed_at": refreshed_at,
+    }
+
+
+def rescore_prd(
+    project_id: str,
+    *,
+    source_root: Path | None = None,
+    dream_studio_home: Path | None = None,
+    db_path: Path | None = None,
+    planning_root: Path | None = None,
+    files_db_path: Path | None = None,
+    now: str | None = None,
+) -> dict[str, Any]:
+    """Compute the PRD+SOW view AND render + persist the living document to the docstore.
+
+    Thin wrapper over ``compute_prd_sow``: it adds the side effect (render + write
+    ``prd/prd-sow.md``) that the CLI and the milestone-close auto-refresh want, while the
+    dashboard read surface calls ``compute_prd_sow`` (no write). See SPEC-0001 R9.
+    """
+    result = compute_prd_sow(
+        project_id,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+        db_path=db_path,
+        planning_root=planning_root,
+        files_db_path=files_db_path,
+        now=now,
+    )
+    if not result.get("ok"):
+        return result
+
     document = _render(
-        project_id, overall, coverage, confidence, cap_entries, ms_entries, refreshed_at
+        project_id,
+        result["overall_score"],
+        result["coverage"],
+        result["confidence"],
+        result["capabilities"],
+        result["milestones"],
+        result["refreshed_at"],
     )
 
     from core.files.store import write_file
@@ -152,18 +200,7 @@ def rescore_prd(
         project_id=project_id,
         db_path=files_db_path,
     )
-
-    return {
-        "ok": True,
-        "project_id": project_id,
-        "overall_score": overall,
-        "coverage": coverage,
-        "confidence": confidence,
-        "capabilities": cap_entries,
-        "milestones": ms_entries,
-        "document_ref": DOC_NAME,
-        "refreshed_at": refreshed_at,
-    }
+    return result
 
 
 def _render(
