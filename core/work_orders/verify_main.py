@@ -115,6 +115,34 @@ def _compute_scores(
     }
 
 
+# ── Protocol resolution ─────────────────────────────────────────────────────────
+
+
+def _resolve_protocol(protocol_dir: Path, name: str) -> Path | None:
+    """Resolve a named verification protocol to its file.
+
+    Accepts either the full filename stem
+    (``PROTOCOL-0001-three-store-architecture``) or the short protocol id
+    (``PROTOCOL-0001``) — the id matches the file whose stem is exactly the id or
+    begins with ``<id>-``. This is what the skill text and the protocols themselves
+    document (``--protocol PROTOCOL-0001``), where the on-disk file carries a
+    descriptive suffix. Returns None when nothing matches; raises ValueError only
+    when a short id is ambiguous (matches more than one file).
+    """
+    exact = protocol_dir / f"{name}.md"
+    if exact.is_file():
+        return exact
+    matches = sorted(p for p in protocol_dir.glob(f"{name}-*.md") if p.is_file())
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise ValueError(
+            f"Ambiguous verification protocol id {name!r}: matches "
+            + ", ".join(m.name for m in matches)
+        )
+    return None
+
+
 # ── Main entry point ────────────────────────────────────────────────────────────
 
 
@@ -124,6 +152,7 @@ def verify_work_order(
     source_root: Path,
     dream_studio_home: Path | None = None,
     planning_root: Path | None = None,
+    protocol: str | None = None,
 ) -> dict[str, Any]:
     """Run parallel independent verification for a work order.
 
@@ -162,6 +191,33 @@ def verify_work_order(
         tasks = _read_tasks(conn, work_order_id)
         if not tasks:
             return {"ok": False, "error": f"No tasks found for work order: {work_order_id}"}
+
+        # R7: a named verification protocol constrains HOW the fresh-context review looks
+        # (scope, anti-bias, conflict rule) — its text is prepended to every grader prompt
+        # below. Gap→WO behavior is unchanged. A named-but-missing protocol fails fast.
+        protocol_preamble = ""
+        if protocol:
+            proto_dir = source_root / "docs" / "verification-protocols"
+            try:
+                proto_path = _resolve_protocol(proto_dir, protocol)
+            except ValueError as exc:
+                return {"ok": False, "error": str(exc)}
+            if proto_path is None:
+                return {
+                    "ok": False,
+                    "error": (
+                        f"Verification protocol not found: {protocol} "
+                        f"(expected docs/verification-protocols/{protocol}.md "
+                        f"or {protocol}-*.md)"
+                    ),
+                }
+            protocol_preamble = (
+                f"## VERIFICATION PROTOCOL: {protocol}\n"
+                "Conduct this review strictly under the protocol below: inspect ONLY the "
+                "sources it names, reconstruct the intended shape BEFORE comparing to the "
+                "code, and let spec/intent win on conflict.\n\n"
+                f"{proto_path.read_text(encoding='utf-8')}\n\n---\n\n"
+            )
 
         sql_check_results = _run_sql_checks(tasks, db_path)
 
@@ -322,6 +378,10 @@ def verify_work_order(
                 migration_file=mf.name,
                 migration_sql=migration_sql,
             )
+
+        # R7: run every grader under the named protocol's scope constraints.
+        if protocol_preamble:
+            prompts = {name: protocol_preamble + body for name, body in prompts.items()}
 
         # Run all graders in parallel.
         # Lazy import (not module-level) — see the `_collect_git_commits` note above;

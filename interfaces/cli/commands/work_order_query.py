@@ -134,6 +134,7 @@ def _work_order_verify(
     work_order_id: str,
     source_root: Path,
     dream_studio_home: Path | None,
+    protocol: str | None = None,
 ) -> int:
     from core.work_orders.verify import verify_work_order
 
@@ -142,6 +143,7 @@ def _work_order_verify(
         source_root=source_root,
         dream_studio_home=dream_studio_home,
         planning_root=source_root / ".planning",
+        protocol=protocol,
     )
     if not result.get("ok"):
         print(f"Error: {result.get('error', 'unknown error')}", file=sys.stderr)

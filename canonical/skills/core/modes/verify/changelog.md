@@ -1,5 +1,13 @@
 # verify — Changelog
 
+## [1.1.0] - 2026-08-03
+
+### Added
+- Protocol-driven verify for high-risk / escalated WOs (WO R7): review under a named
+  verification protocol (`ds work-order verify <wo> --protocol PROTOCOL-NNNN`) whose four
+  rule blocks (scope / anti-bias / conflict / re-runnable) make the verdict deterministic.
+  Gap→WO behavior preserved.
+
 ## [1.0.0] - 2026-04-28
 
 ### Added

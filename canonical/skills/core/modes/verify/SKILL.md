@@ -73,6 +73,12 @@ BEFORE claiming any status:
 6. **Regression** — Does existing functionality still work?
 7. **Update traceability** — See: core/traceability.md — Update TR-ID with test
 
+## Protocol-driven verify (high-risk / escalated WOs) — WO R7
+
+For **escalated** or **high-risk** work orders (event substrate, store boundaries, migrations, authority-integrity), do **not** review ad-hoc — run the independent review under a named **verification protocol**: a re-runnable, scope-constrained script with four rule blocks (hard scope: inspect only X / never open Y; shape-not-current-behavior; spec/intent wins on conflict; re-runnable by fresh context). Protocols live in `docs/verification-protocols/` (template `PROTOCOL-000-template.md`, worked example `PROTOCOL-0001`).
+
+Run: `ds work-order verify <wo> --protocol PROTOCOL-NNNN`. The protocol's constraints are applied to every grader; **gap→WO behavior is preserved** (findings still become work orders). A named-but-missing protocol fails fast. This makes a high-risk verdict deterministic — the same review, run by any fresh context, reaches the same conclusion.
+
 ## Browser Testing
 
 **When to use:** UI verification, interactive workflows, visual regression, screenshot evidence

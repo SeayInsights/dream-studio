@@ -129,6 +129,11 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         "verify", help="Run independent fresh-context review; gaps become new work orders"
     )
     wo_verify.add_argument("work_order_id", help="Work order UUID")
+    wo_verify.add_argument(
+        "--protocol",
+        default=None,
+        help="Verification protocol name (docs/verification-protocols/<name>.md) to review under",
+    )
 
     wo_attest = work_order_sub.add_parser(
         "attest",
@@ -284,6 +289,7 @@ def dispatch(
             work_order_id=args.work_order_id,
             source_root=source_root,
             dream_studio_home=dream_studio_home,
+            protocol=args.protocol,
         )
     if args.work_order_command == "attest":
         return _work_order_attest(
