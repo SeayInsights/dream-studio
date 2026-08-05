@@ -51,13 +51,19 @@ def _resolve_project(
     db_path = resolve_installed_runtime_paths(
         source_root=source_root, dream_studio_home=dream_studio_home
     ).sqlite_path
-    conn = sqlite3.connect(str(db_path))
     try:
-        row = conn.execute(
-            "SELECT project_id FROM business_projects WHERE status = 'active'"
-        ).fetchone()
-    finally:
-        conn.close()
+        conn = sqlite3.connect(str(db_path))
+        try:
+            row = conn.execute(
+                "SELECT project_id FROM business_projects WHERE status = 'active'"
+                " ORDER BY updated_at DESC LIMIT 1"
+            ).fetchone()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        # Missing / corrupt authority, or no business_projects table — resolve to "no active
+        # project" so the caller prints an actionable message instead of a raw traceback.
+        return None
     return row[0] if row else None
 
 

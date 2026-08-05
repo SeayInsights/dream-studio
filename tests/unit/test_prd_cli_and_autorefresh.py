@@ -115,6 +115,34 @@ def test_prd_cli_handlers_resolve_project_and_render(tmp_path, monkeypatch, caps
     assert "RENDERED PRD+SOW" in capsys.readouterr().out
 
 
+def test_prd_dispatch_routes_and_registers(tmp_path, monkeypatch):
+    """register() wires a `prd` subparser with rescore/show; dispatch routes to the handlers
+    and returns 1 for an unknown subcommand."""
+    import argparse
+
+    from interfaces.cli.commands import prd
+
+    # register() attaches a parseable `prd rescore/show` tree.
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="command")
+    prd.register(sub)
+    ns = parser.parse_args(["prd", "rescore", "--project", "xyz"])
+    assert ns.prd_command == "rescore" and ns.project == "xyz"
+
+    routed: list[str] = []
+    monkeypatch.setattr(prd, "_prd_rescore", lambda **kw: routed.append("rescore") or 0)
+    monkeypatch.setattr(prd, "_prd_show", lambda **kw: routed.append("show") or 0)
+
+    assert prd.dispatch(ns, source_root=REPO_ROOT, dream_studio_home=tmp_path) == 0
+    show_ns = argparse.Namespace(prd_command="show", project=None)
+    assert prd.dispatch(show_ns, source_root=REPO_ROOT, dream_studio_home=tmp_path) == 0
+    assert routed == ["rescore", "show"]
+
+    # Unknown subcommand → non-zero, no handler.
+    bad = argparse.Namespace(prd_command="bogus", project=None)
+    assert prd.dispatch(bad, source_root=REPO_ROOT, dream_studio_home=tmp_path) == 1
+
+
 def test_prd_show_and_milestone_close_autorefresh(tmp_path, monkeypatch):
     """close_milestone auto-refreshes the PRD on its success path, and NEVER lets a refresh
     failure block the close (SPEC-0001 R12) — driven through close_milestone itself."""
