@@ -1,5 +1,12 @@
 # Security Mode — Changelog
 
+## [1.1.0] — 2026-08-02
+
+### Added
+- Note that credential scanning has an **automated baseline** (WO R4): the scheduled
+  `security-baseline` workflow runs the native full-history secret scanner
+  (`core/gates/secret_scan.py`); `audit` is for on-demand deep scans, not the baseline.
+
 ## [1.0.0] — 2026-05-27
 
 ### Added

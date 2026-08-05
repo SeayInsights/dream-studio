@@ -21,6 +21,8 @@
 
 `build` — pre-generation enforcement. Runs static-only checks on code about to be generated. Blocks generation on critical/high findings. Warns on medium. Static only (no LLM call in build mode — synchronous, no subprocess).
 
+**Automated baseline (R4):** credential scanning is **automatic**, not on-demand-only. The scheduled `security-baseline` workflow (`.github/workflows/security-baseline.yml`) runs the native full-history secret scanner (`core/gates/secret_scan.py`) on a weekly cron and uploads results — exposure is caught without invoking this skill. Invoke `audit` for **on-demand deep scans** (broader static + LLM semantic passes over a chosen scope), *not* for the baseline. See `docs/operations/lint-format-baseline-policy.md`.
+
 ## Source Authority
 
 Rules are defined in `rules.yml` in this directory. Both modes read from the same rule set. Rules with `action.build_mode: null` apply to audit only.

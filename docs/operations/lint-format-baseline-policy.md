@@ -26,6 +26,33 @@ The baseline stores normalized flake8 findings for known historical debt. The ga
 
 Phase 18.1.14b enterprise bring-back (2026-05-25): ported code from the enterprise repo (`core/org_intelligence/`, `projections/ml/`) introduced F401 unused-import findings that were present in the source code as-is. These were added to the baseline as tracked debt rather than being removed from the ported code, which preserves fidelity with the original implementation. The two stub entries (`core/org_intelligence.py`, `projections/ml.py`) were removed from the baseline since those files no longer exist.
 
+## Single source (R4)
+
+The linter/format pin has **exactly one definition, read by both the local pre-push gate
+and CI** — no duplicate to drift out of sync:
+
+- **Lint pin:** `runtime/config/release-gates/flake8-baseline.txt` is the sole baseline.
+  Both the pre-push `lint-check` gate and the CI `Lint baseline check` step invoke
+  `interfaces/cli/lint_baseline.py check`, which reads that one file.
+- **Format pin:** `[tool.black]` in `pyproject.toml` is the sole Black config; both surfaces
+  run `python -m black --check .` against it.
+
+`tests/unit/test_security_baseline.py::test_scheduled_scan_and_single_source_config` fails
+if a second baseline pin appears or either surface stops reading the single source. (The
+pre-push test-subset vs CI-full-suite difference is a deliberate performance tradeoff and
+is out of scope here — see `docs/operations/lightweight-github-ci-strategy.md`.)
+
+## Automated security baseline (R4)
+
+Credential scanning runs automatically, not only on demand: the `security-baseline`
+workflow (`.github/workflows/security-baseline.yml`) runs the native full-history secret
+scanner (`core/gates/secret_scan.py`) on a weekly cron and uploads the result. This is the
+headless baseline; the `quality:security` / `ds-security` skills are for on-demand deep
+scans. The scanner is native (no external dependency) and matches only structurally
+self-verifying credential formats, so it is high-confidence without any provider round-trip.
+It does **not** overlap the `atlas-leak` gate, which is the Contract Atlas *lifecycle* gate
+(PRD/contract leakage into projection surfaces) — not a credential scanner.
+
 ## Blocking Rules
 
 The release gate blocks:

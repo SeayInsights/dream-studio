@@ -43,12 +43,6 @@ exclude = ["tests*", "docs*", ".planning*", ".audit*"]
 [tool.black]
 line-length = 100
 
-[tool.flake8]
-max-line-length = 100
-per-file-ignores = [
-    "tests/*:E501,F401",
-]
-
 [tool.pytest.ini_options]
 testpaths = ["tests", "analytics/tests"]
 asyncio_mode = "auto"
