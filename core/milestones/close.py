@@ -25,6 +25,7 @@ spool events (one per failure), and still completes the milestone.
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime, UTC
 from pathlib import Path
@@ -32,6 +33,8 @@ from typing import Any
 
 from core.event_store.studio_db import _connect
 from core.work_orders.models import TERMINAL_WO_STATUSES
+
+logger = logging.getLogger(__name__)
 
 _UI_WO_TYPES: frozenset[str] = frozenset({"ui_component", "ui_page"})
 
@@ -249,6 +252,30 @@ def close_milestone(
         _sync_tick()
     except Exception:
         pass
+
+    # PRD+SOW auto-refresh (SPEC-0001 R12): recompute the derived PRD+Statement-of-Work view
+    # now that this milestone is complete, so the living document reflects it. Best-effort —
+    # any failure is swallowed; it MUST never block or fail a milestone close.
+    try:
+        from core.prd.rescore import rescore_prd
+
+        rescore_prd(
+            project_id,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+            planning_root=planning_root,
+        )
+    except Exception:
+        # Best-effort, but NOT silent (ADR-0002): a persistently failing refresh leaves the
+        # derived PRD+SOW document stale, so leave a diagnostic trace rather than swallowing
+        # blind. The close still succeeds regardless.
+        logger.warning(
+            "PRD+SOW auto-refresh failed after closing milestone %s (project %s); the "
+            "derived document may be stale until the next `ds prd rescore`.",
+            milestone_id,
+            project_id,
+            exc_info=True,
+        )
 
     return {
         "ok": True,
