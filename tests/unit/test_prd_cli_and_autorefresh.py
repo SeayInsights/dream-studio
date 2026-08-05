@@ -1,8 +1,7 @@
 """WO P4 (742c84f8) — `ds prd` surface + milestone-close auto-refresh (SPEC-0001 R11-R12).
 
 `ds prd show` renders the PRD+SOW living document; closing a milestone best-effort
-auto-refreshes it (never blocking the close). This test drives the ENGINE path both surfaces
-use, and proves milestone close calls the refresh and never raises when the refresh fails.
+auto-refreshes it and never blocks the close on a refresh failure.
 """
 
 from __future__ import annotations
@@ -14,6 +13,7 @@ from core.config.sqlite_bootstrap import bootstrap_database
 from core.files.store import read_file_by_name, write_file
 from core.prd.rescore import DOC_NAME, rescore_prd
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
 _TS = "2026-08-05T00:00:00+00:00"
 CAP_MAP = "capabilities:\n  - capability_id: cap-a\n    title: Cap A\n    weight: 1.0\nmilestone_capabilities:\n  m1: [cap-a]\n"
 
@@ -52,36 +52,72 @@ def test_prd_show_renders_document_from_engine(tmp_path: Path):
     assert "PRD + Statement of Work" in doc and "Milestone One" in doc
 
 
-def test_prd_show_and_milestone_close_autorefresh(tmp_path: Path, monkeypatch):
-    """Closing a milestone best-effort auto-refreshes the PRD+SOW and NEVER raises, even when
-    the refresh fails (SPEC-0001 R12)."""
+def _seed_closeable(tmp_path: Path) -> Path:
+    """A temp home (tmp_path/state/studio.db) with a project, one milestone, and only a CLOSED
+    work order — so close_milestone's open-WO precondition passes and force reaches success."""
+    db = tmp_path / "state" / "studio.db"
+    db.parent.mkdir(parents=True)
+    bootstrap_database(db)
+    conn = sqlite3.connect(str(db))
+    try:
+        conn.execute(
+            "INSERT INTO business_projects (project_id,name,description,status,created_at,updated_at)"
+            " VALUES ('p','P','d','active','t','t')"
+        )
+        conn.execute(
+            "INSERT INTO business_milestones"
+            " (milestone_id,project_id,title,description,status,created_at,updated_at)"
+            " VALUES ('m','p','M',NULL,'active','t','t')"
+        )
+        conn.execute(
+            "INSERT INTO business_work_orders"
+            " (work_order_id,project_id,milestone_id,title,status,work_order_type,created_at,updated_at)"
+            " VALUES ('w','p','m','W','closed','infrastructure','t','t')"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return tmp_path
+
+
+def test_prd_show_and_milestone_close_autorefresh(tmp_path, monkeypatch):
+    """close_milestone auto-refreshes the PRD on its success path, and NEVER lets a refresh
+    failure block the close (SPEC-0001 R12) — driven through close_milestone itself."""
+    from core.milestones.close import close_milestone
+
+    # 1. A successful close invokes rescore_prd for the milestone's project.
+    home = _seed_closeable(tmp_path / "ok")
     calls: list[str] = []
 
-    def _boom(project_id, **kwargs):
+    def _spy(project_id, **kwargs):
         calls.append(project_id)
+        return {"ok": True}
+
+    monkeypatch.setattr("core.prd.rescore.rescore_prd", _spy)
+    res = close_milestone(
+        milestone_id="m",
+        force=True,
+        source_root=REPO_ROOT,
+        dream_studio_home=home,
+        planning_root=home / ".planning",
+    )
+    assert res["ok"] is True and res["status"] == "complete"
+    assert calls == ["p"], "close success path must auto-refresh the PRD for the project"
+
+    # 2. A rescore that RAISES must be swallowed — the close still succeeds.
+    home2 = _seed_closeable(tmp_path / "boom")
+
+    def _boom(project_id, **kwargs):
         raise RuntimeError("rescore blew up")
 
-    # Patch the symbol close.py imports lazily.
     monkeypatch.setattr("core.prd.rescore.rescore_prd", _boom)
-
-    from core.milestones import close as close_mod
-
-    # A close that reaches the success tail must swallow the rescore failure. Drive the tail
-    # directly is awkward (it needs a full WO-clean milestone); instead assert the hook is
-    # wrapped: calling the imported symbol raises, but the close body catches Exception.
-    # We simulate the exact guarded block:
-    try:
-        from core.prd.rescore import rescore_prd as _rp
-
-        _rp("p", source_root=tmp_path)
-    except Exception:
-        caught = True
-    else:
-        caught = False
-    assert calls == ["p"], "the rescore hook target was invoked"
-    assert caught, "the raising rescore is catchable — close wraps it in try/except"
-
-    # And confirm close.py's success path contains the guarded best-effort call.
-    src = Path(close_mod.__file__).read_text(encoding="utf-8")
-    assert "rescore_prd(" in src
-    assert "MUST never block or fail a milestone close" in src
+    res2 = close_milestone(
+        milestone_id="m",
+        force=True,
+        source_root=REPO_ROOT,
+        dream_studio_home=home2,
+        planning_root=home2 / ".planning",
+    )
+    assert (
+        res2["ok"] is True and res2["status"] == "complete"
+    ), "a PRD auto-refresh failure must never block or fail a milestone close"
