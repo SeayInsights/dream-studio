@@ -32,8 +32,13 @@ def test_protocol_template_and_worked_example_exist():
         assert block in template, f"template missing rule block: {block}"
 
     # A worked protocol (a numbered PROTOCOL-NNNN, not the template) exists and is complete.
-    worked = [p for p in PROTO_DIR.glob("PROTOCOL-[0-9]*.md")]
-    assert worked, "no worked protocol found under docs/verification-protocols/"
+    # The glob PROTOCOL-[0-9]*.md also matches PROTOCOL-000-template.md, so the template must be
+    # excluded by name — otherwise this assertion would pass on the template alone (a worked
+    # example could be deleted without failing the suite).
+    worked = [p for p in PROTO_DIR.glob("PROTOCOL-[0-9]*.md") if "template" not in p.name.lower()]
+    assert (
+        worked
+    ), "no worked protocol (non-template PROTOCOL-NNNN) under docs/verification-protocols/"
     body = worked[0].read_text(encoding="utf-8")
     for block in REQUIRED_BLOCKS:
         assert block in body, f"worked protocol {worked[0].name} missing block: {block}"
