@@ -124,6 +124,7 @@ def verify_work_order(
     source_root: Path,
     dream_studio_home: Path | None = None,
     planning_root: Path | None = None,
+    protocol: str | None = None,
 ) -> dict[str, Any]:
     """Run parallel independent verification for a work order.
 
@@ -162,6 +163,28 @@ def verify_work_order(
         tasks = _read_tasks(conn, work_order_id)
         if not tasks:
             return {"ok": False, "error": f"No tasks found for work order: {work_order_id}"}
+
+        # R7: a named verification protocol constrains HOW the fresh-context review looks
+        # (scope, anti-bias, conflict rule) — its text is prepended to every grader prompt
+        # below. Gap→WO behavior is unchanged. A named-but-missing protocol fails fast.
+        protocol_preamble = ""
+        if protocol:
+            proto_path = source_root / "docs" / "verification-protocols" / f"{protocol}.md"
+            if not proto_path.is_file():
+                return {
+                    "ok": False,
+                    "error": (
+                        f"Verification protocol not found: {protocol} "
+                        f"(expected docs/verification-protocols/{protocol}.md)"
+                    ),
+                }
+            protocol_preamble = (
+                f"## VERIFICATION PROTOCOL: {protocol}\n"
+                "Conduct this review strictly under the protocol below: inspect ONLY the "
+                "sources it names, reconstruct the intended shape BEFORE comparing to the "
+                "code, and let spec/intent win on conflict.\n\n"
+                f"{proto_path.read_text(encoding='utf-8')}\n\n---\n\n"
+            )
 
         sql_check_results = _run_sql_checks(tasks, db_path)
 
@@ -322,6 +345,10 @@ def verify_work_order(
                 migration_file=mf.name,
                 migration_sql=migration_sql,
             )
+
+        # R7: run every grader under the named protocol's scope constraints.
+        if protocol_preamble:
+            prompts = {name: protocol_preamble + body for name, body in prompts.items()}
 
         # Run all graders in parallel.
         # Lazy import (not module-level) — see the `_collect_git_commits` note above;
