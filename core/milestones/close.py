@@ -250,6 +250,21 @@ def close_milestone(
     except Exception:
         pass
 
+    # PRD+SOW auto-refresh (SPEC-0001 R12): recompute the derived PRD+Statement-of-Work view
+    # now that this milestone is complete, so the living document reflects it. Best-effort —
+    # any failure is swallowed; it MUST never block or fail a milestone close.
+    try:
+        from core.prd.rescore import rescore_prd
+
+        rescore_prd(
+            project_id,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+            planning_root=planning_root,
+        )
+    except Exception:
+        pass
+
     return {
         "ok": True,
         "milestone_id": milestone_id,

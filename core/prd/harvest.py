@@ -67,7 +67,11 @@ def harvest_milestone(
         " WHERE milestone_id = ? ORDER BY created_at",
         (milestone_id,),
     ).fetchall()
-    closed_titles = [r[1] for r in wo_rows if r[2] == "closed"]
+    # A titleless WO (some SQL-registered / gap WOs carry none) counts as delivered but
+    # contributes no text to the accomplished summary.
+    closed = [r for r in wo_rows if r[2] == "closed"]
+    closed_titles = [r[1] for r in closed if r[1]]
+    closed_count = len(closed)
     wo_composites = [float(r[3]) * 100.0 for r in wo_rows if r[3] is not None]
 
     design = _milestone_artifact(planning_root, milestone_id, "design-audit.md", files_db_path)
@@ -84,6 +88,7 @@ def harvest_milestone(
 
     return {
         "work_order_count": len(wo_rows),
+        "closed_count": closed_count,
         "closed_titles": closed_titles,
         "wo_composites": wo_composites,
         "design_score": design_score,

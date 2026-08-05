@@ -29,12 +29,14 @@ def _mean(xs: list[float]) -> float:
     return round(sum(xs) / len(xs), 1) if xs else 0.0
 
 
-def _auto_accomplished(closed_titles: list[str]) -> str:
-    if not closed_titles:
+def _auto_accomplished(closed_count: int, closed_titles: list[str]) -> str:
+    if closed_count == 0:
         return "No closed work orders recorded."
+    if not closed_titles:
+        return f"Delivered {closed_count} work order(s)."
     head = "; ".join(closed_titles[:6])
     more = f" (+{len(closed_titles) - 6} more)" if len(closed_titles) > 6 else ""
-    return f"Delivered {len(closed_titles)} work order(s): {head}{more}."
+    return f"Delivered {closed_count} work order(s): {head}{more}."
 
 
 def rescore_prd(
@@ -81,7 +83,9 @@ def rescore_prd(
             confidence = round(min(1.0, len(signals) / denom), 3)
             complete = status == "complete"
             if complete:
-                accomplished = overrides.get(mid) or _auto_accomplished(ev["closed_titles"])
+                accomplished = overrides.get(mid) or _auto_accomplished(
+                    ev["closed_count"], ev["closed_titles"]
+                )
             else:
                 accomplished = "In progress -- not yet delivered."
             ms_entries.append(
