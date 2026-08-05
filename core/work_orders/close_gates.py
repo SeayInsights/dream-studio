@@ -254,6 +254,28 @@ def _read_wo_tasks(conn: Any, work_order_id: str) -> list[dict[str, Any]]:
     ]
 
 
+def _is_operator_attested(work_order_id: str, db_path: Path) -> bool:
+    """True if the WO carries a passing OPERATOR attestation.
+
+    ``ds work-order attest`` records a review verdict with
+    ``certification_basis == "operator_attested"`` and ``passed == True`` — an explicit,
+    audited human certification. Used to exempt attested design-only WOs (no executable
+    check by nature) from the executable_ac force requirement.
+    """
+    import json as _json
+
+    from core.work_orders.artifacts import get_wo_artifact
+
+    raw = get_wo_artifact(work_order_id, "review_verdict", db_path=db_path)
+    if not raw:
+        return False
+    try:
+        verdict = _json.loads(raw)
+    except Exception:
+        return False
+    return bool(verdict.get("passed")) and verdict.get("certification_basis") == "operator_attested"
+
+
 def _run_ac_gate(
     conn: Any,
     *,
@@ -281,9 +303,18 @@ def _run_ac_gate(
         all_checks.extend(task_checks)
 
     if not all_checks:
+        # Design-only WOs whose deliverable is an operator-local docstore artifact (a spec, an
+        # ADR, a capability map) have no code to executably check. An OPERATOR ATTESTATION
+        # (ds work-order attest) is the human certification for such work — an explicit, audited
+        # action recorded as a passing operator-attested review verdict. When present, it
+        # satisfies executable_ac without force. Un-attested zero-check WOs still require a check
+        # or force, preserving the no-false-done guard for code work orders.
+        if _is_operator_attested(work_order_id, db_path):
+            return []
         return [
             "executable_ac: no executable checks (SQL-CHECK / TEST-CHECK / API-CHECK) found "
-            "across all tasks — at least one is required to close without force=True"
+            "across all tasks — at least one is required to close without force=True "
+            "(or attest the WO if its deliverable is operator-local and has no code to check)"
         ]
 
     failed = [c for c in all_checks if not c.get("passed")]
