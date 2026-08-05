@@ -58,3 +58,41 @@ def test_dashboard_prd_sow_shape(tmp_path: Path):
     except KeyError:
         wrote = False
     assert wrote is False, "the dashboard panel read path must not write the PRD+SOW document"
+
+
+def test_prd_sow_route_serves_panel_and_is_wired(monkeypatch):
+    """The API route exposes the panel (named + active project) and is wired into the app."""
+    import asyncio
+
+    from projections.api.routes import prd_sow
+
+    # The route delegates to the read-model for a named project.
+    monkeypatch.setattr(
+        prd_sow, "build_prd_sow_panel", lambda pid, **kw: {"ok": True, "project_id": pid}
+    )
+    got = asyncio.run(prd_sow.prd_sow_for_project("proj-x"))
+    assert got == {"ok": True, "project_id": "proj-x"}
+
+    # /active resolves the active project then serves its panel.
+    monkeypatch.setattr(prd_sow, "_active_project_id", lambda: "active-proj")
+    active = asyncio.run(prd_sow.prd_sow_active())
+    assert active["project_id"] == "active-proj"
+
+    # No active project → 404, not a raw error.
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(prd_sow, "_active_project_id", lambda: None)
+    try:
+        asyncio.run(prd_sow.prd_sow_active())
+        raised = False
+    except HTTPException as exc:
+        raised = exc.status_code == 404
+    assert raised, "/active must 404 when there is no active project"
+
+    # The router is mounted in the app under /api/v1/prd-sow.
+    from projections.api.main import app
+
+    paths = {r.path for r in app.routes}
+    assert any(
+        p.startswith("/api/v1/prd-sow") for p in paths
+    ), "prd-sow router not wired in main.py"

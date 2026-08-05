@@ -57,9 +57,14 @@ def compute_prd_sow(
     ``db_path`` / ``files_db_path`` (isolated tests); ``now`` fixes the timestamp.
     """
     if db_path is None:
-        if source_root is None:
-            raise ValueError("rescore_prd requires source_root or an explicit db_path")
-        db_path = _require_db(source_root, dream_studio_home)
+        if source_root is not None:
+            db_path = _require_db(source_root, dream_studio_home)
+        else:
+            # Default to the live authority (the API / dashboard read path passes neither
+            # source_root nor db_path).
+            from core.config.database import get_db_path
+
+            db_path = get_db_path()
     p_root = planning_root or (Path.cwd() / ".planning")
 
     cap_map = read_capability_map(db_path=files_db_path)
