@@ -1,0 +1,46 @@
+name: security-baseline
+
+# Automated security baseline (R4). Runs on a schedule (independent of any skill
+# invocation) so credential exposure is caught continuously, not only when someone runs a
+# scan by hand. The native full-history secret scanner (core/gates/secret_scan.py) is the
+# headless security check; on-demand deep scans stay in the ds-security / quality:security
+# skills. Results are uploaded as durable artifacts. Also dispatchable on demand.
+on:
+  schedule:
+    - cron: "0 6 * * 1" # every Monday 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history — the scanner reads git log --all
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Full-history secret scan
+        id: scan
+        run: |
+          python -m core.gates.secret_scan --history | tee secret-scan.txt
+          echo "exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload secret-scan result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-baseline-secret-scan
+          path: secret-scan.txt
+          retention-days: 90
+
+      - name: Fail if credentials were found
+        if: steps.scan.outputs.exit != '0'
+        run: |
+          echo "::error::Full-history secret scan found high-confidence credential(s) — see the uploaded artifact."
+          exit 1
