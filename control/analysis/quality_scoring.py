@@ -8,6 +8,8 @@ import subprocess
 from datetime import datetime, UTC
 from pathlib import Path
 
+from core.gates.credential_patterns import TOKEN_SHAPED_PATTERN
+
 DEBUG_PATTERNS = [
     re.compile(r"console\.log\(", re.IGNORECASE),
     re.compile(r"print\s*\(\s*['\"]debug", re.IGNORECASE),
@@ -16,12 +18,15 @@ DEBUG_PATTERNS = [
     re.compile(r"#\s*(TODO|FIXME|HACK|XXX)\b", re.IGNORECASE),
 ]
 
+# Name-based assignment heuristics stay local (they are variable-name patterns, not
+# credential FORMATS). The structured token-shape check comes from the single source
+# (core/gates/credential_patterns.py) so it cannot drift — WO d84efdc4.
 SECRET_PATTERNS = [
     re.compile(
         r"(api[_-]?key|api[_-]?secret|auth[_-]?token)\s*[:=]\s*['\"][^'\"]{8,}", re.IGNORECASE
     ),
     re.compile(r"(password|passwd|pwd)\s*[:=]\s*['\"][^'\"]{4,}", re.IGNORECASE),
-    re.compile(r"(sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{36,}|AKIA[A-Z0-9]{16})"),
+    TOKEN_SHAPED_PATTERN,
 ]
 
 TEST_FILE_PATTERNS = [

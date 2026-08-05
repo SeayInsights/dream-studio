@@ -10,6 +10,11 @@ import json
 import re
 from pathlib import Path
 
+from core.gates.credential_patterns import CREDENTIAL_PATTERNS, TOKEN_SHAPED_PATTERN
+
+# Name-based assignment + code-smell heuristics stay local (they are not credential
+# FORMATS). The PEM and token-shape checks come from the single source
+# (core/gates/credential_patterns.py) so credential detection cannot drift — WO d84efdc4.
 PATTERNS = [
     (
         re.compile(
@@ -20,8 +25,8 @@ PATTERNS = [
     (re.compile(r"\beval\s*\("), "eval()"),
     (re.compile(r"\bos\.system\s*\("), "os.system()"),
     (re.compile(r"subprocess[^\n]+shell\s*=\s*True"), "shell=True in subprocess"),
-    (re.compile(r"(?i)-----BEGIN\s+(RSA|EC|DSA|PRIVATE)\s+KEY-----"), "private key in source"),
-    (re.compile(r"(?i)(ghp_|sk-|AKIA)[A-Za-z0-9]{10,}"), "token-shaped string"),
+    (CREDENTIAL_PATTERNS["private_key_block"], "private key in source"),
+    (TOKEN_SHAPED_PATTERN, "token-shaped string"),
 ]
 
 SCAN_EXTS = {".py", ".ts", ".js", ".tsx", ".jsx", ".sh", ".yaml", ".yml", ".env"}

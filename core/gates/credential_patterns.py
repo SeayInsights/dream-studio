@@ -74,6 +74,20 @@ CREDENTIAL_PREFIXES: tuple[str, ...] = (
     "-----BEGIN",
 )
 
+# A loose "token-shaped string" detector derived from CREDENTIAL_PREFIXES — for HEURISTIC
+# scanners (the quality/security scoring passes, hook warnings) that flag any literal
+# beginning with a known credential prefix, distinct from the strict, fixed-length
+# CREDENTIAL_PATTERNS the fail-closed secret-scan gate uses. The PEM prefix is excluded here:
+# a PEM block is not a prefix+alnum shape, so those scanners match it via
+# CREDENTIAL_PATTERNS["private_key_block"] instead.
+_TOKEN_SHAPED_PREFIXES: tuple[str, ...] = tuple(
+    p for p in CREDENTIAL_PREFIXES if not p.startswith("-----")
+)
+TOKEN_SHAPED_PATTERN: re.Pattern[str] = re.compile(
+    "(?:" + "|".join(re.escape(p) for p in _TOKEN_SHAPED_PREFIXES) + r")[A-Za-z0-9/_-]{8,}"
+)
+
+
 # Paths that legitimately contain credential *patterns* (rule definitions, the scanners,
 # their tests, semgrep rules, security templates) rather than real credentials — shared by
 # every scanner so a pattern-definition file is never mistaken for a leak, and the two
