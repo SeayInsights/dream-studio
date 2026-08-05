@@ -115,6 +115,34 @@ def _compute_scores(
     }
 
 
+# ── Protocol resolution ─────────────────────────────────────────────────────────
+
+
+def _resolve_protocol(protocol_dir: Path, name: str) -> Path | None:
+    """Resolve a named verification protocol to its file.
+
+    Accepts either the full filename stem
+    (``PROTOCOL-0001-three-store-architecture``) or the short protocol id
+    (``PROTOCOL-0001``) — the id matches the file whose stem is exactly the id or
+    begins with ``<id>-``. This is what the skill text and the protocols themselves
+    document (``--protocol PROTOCOL-0001``), where the on-disk file carries a
+    descriptive suffix. Returns None when nothing matches; raises ValueError only
+    when a short id is ambiguous (matches more than one file).
+    """
+    exact = protocol_dir / f"{name}.md"
+    if exact.is_file():
+        return exact
+    matches = sorted(p for p in protocol_dir.glob(f"{name}-*.md") if p.is_file())
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise ValueError(
+            f"Ambiguous verification protocol id {name!r}: matches "
+            + ", ".join(m.name for m in matches)
+        )
+    return None
+
+
 # ── Main entry point ────────────────────────────────────────────────────────────
 
 
@@ -169,13 +197,18 @@ def verify_work_order(
         # below. Gap→WO behavior is unchanged. A named-but-missing protocol fails fast.
         protocol_preamble = ""
         if protocol:
-            proto_path = source_root / "docs" / "verification-protocols" / f"{protocol}.md"
-            if not proto_path.is_file():
+            proto_dir = source_root / "docs" / "verification-protocols"
+            try:
+                proto_path = _resolve_protocol(proto_dir, protocol)
+            except ValueError as exc:
+                return {"ok": False, "error": str(exc)}
+            if proto_path is None:
                 return {
                     "ok": False,
                     "error": (
                         f"Verification protocol not found: {protocol} "
-                        f"(expected docs/verification-protocols/{protocol}.md)"
+                        f"(expected docs/verification-protocols/{protocol}.md "
+                        f"or {protocol}-*.md)"
                     ),
                 }
             protocol_preamble = (

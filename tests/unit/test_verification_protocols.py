@@ -75,3 +75,40 @@ def test_verify_resolves_named_protocol(tmp_path: Path):
     )
     assert result["ok"] is False, result
     assert "protocol not found" in result["error"].lower(), result
+
+
+def test_resolve_protocol_by_short_id_full_stem_and_unknown(tmp_path: Path):
+    """A short id (PROTOCOL-0001) must resolve to the descriptively-named file, the full
+    stem must resolve exactly, an unknown id returns None, and an ambiguous id raises —
+    covering the success path the CLI documents (`--protocol PROTOCOL-0001`)."""
+    from core.work_orders.verify_main import _resolve_protocol
+
+    d = tmp_path / "docs" / "verification-protocols"
+    d.mkdir(parents=True)
+    (d / "PROTOCOL-0001-three-store-architecture.md").write_text("x", encoding="utf-8")
+
+    assert _resolve_protocol(d, "PROTOCOL-0001").name == "PROTOCOL-0001-three-store-architecture.md"
+    assert (
+        _resolve_protocol(d, "PROTOCOL-0001-three-store-architecture").name
+        == "PROTOCOL-0001-three-store-architecture.md"
+    )
+    assert _resolve_protocol(d, "PROTOCOL-9999") is None
+
+    # Ambiguous short id → ValueError (never a silent wrong pick).
+    (d / "PROTOCOL-0001-second-file.md").write_text("y", encoding="utf-8")
+    try:
+        _resolve_protocol(d, "PROTOCOL-0001")
+        raise AssertionError("ambiguous short id should have raised")
+    except ValueError as exc:
+        assert "ambiguous" in str(exc).lower(), exc
+
+
+def test_shipped_worked_protocol_resolves_under_documented_short_id():
+    """The shipped worked protocol must be reachable by the short id the skill text and the
+    protocol itself document — this is the exact defect the CLI-flag review caught."""
+    from core.work_orders.verify_main import _resolve_protocol
+
+    d = REPO / "docs" / "verification-protocols"
+    resolved = _resolve_protocol(d, "PROTOCOL-0001")
+    assert resolved is not None, "documented `--protocol PROTOCOL-0001` does not resolve"
+    assert resolved.name.startswith("PROTOCOL-0001-"), resolved
