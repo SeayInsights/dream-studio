@@ -13,17 +13,20 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def read_milestone_artifact(ms_dir: Path, filename: str) -> str | None:
+def read_milestone_artifact(
+    ms_dir: Path, filename: str, *, db_path: Path | None = None
+) -> str | None:
     """Return a milestone gate artifact's text content, or None if it does not exist.
 
     ``ms_dir.name`` is the milestone id, so the docstore name is
     ``milestones/<milestone_id>/<filename>``. Reads the docstore first, then falls back
-    to the legacy disk path ``ms_dir / filename``.
+    to the legacy disk path ``ms_dir / filename``. ``db_path`` selects a non-default
+    docstore (used by the PRD rescore engine and isolated tests); None = default docstore.
     """
     from core.files.store import read_file_by_name
 
     try:
-        row = read_file_by_name(f"milestones/{ms_dir.name}/{filename}")
+        row = read_file_by_name(f"milestones/{ms_dir.name}/{filename}", db_path=db_path)
     except KeyError:
         row = None
     if row is not None:
