@@ -279,7 +279,7 @@ def resolve_project_root(work_order_id: str, db_path: Path) -> Path | None:
     """Resolve the repo a work order's work targets: its project's ``project_path``.
 
     This is what makes the executable-check gate verify the RIGHT repo — an external
-    project's WO (e.g. Fulcrum) runs its TEST-CHECKs in that project's repo, not the
+    project's WO runs its TEST-CHECKs in that project's own repo, not the
     Dream Studio repo.  Returns None when the project has no ``project_path``, the row
     is missing, or the path does not exist on disk — callers then fall back to the
     current process directory (the DS repo for a DS-self WO).

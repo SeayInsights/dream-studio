@@ -21,3 +21,4 @@ decision record) remains the source of truth for the decision itself. See
 | ADR | Title | Status | Date |
 | --- | --- | --- | --- |
 | [0001](ADR-0001-record-architecture-decisions.md) | Record architecture decisions in ADRs | Accepted | 2026-07-24 |
+| [0002](ADR-0002-silent-default-review-lens.md) | Hunt silent defaults (negative-space / fail-quiet) as a review lens | Accepted | 2026-08-05 |

@@ -3,10 +3,10 @@
 ## [1.1.0] - 2026-08-04
 
 ### Added
-- Phase 4: silent-default hunting lens (negative-space / fail-quiet), from Fulcrum
-  ADR-004 (WO R6). Hunt code that resolves identity/authority/state by elimination and
-  silently defaults on the miss path — the fix is affirmative: verify and refuse what you
-  cannot verify (fail loud) rather than defaulting. Carries the ADR-004 worked example.
+- Phase 4: silent-default hunting lens (negative-space / fail-quiet), per ADR-0002
+  (WO R6). Hunt code that resolves identity/authority/state by elimination and silently
+  defaults on the miss path — the fix is affirmative: verify and refuse what you cannot
+  verify (fail loud) rather than defaulting. Carries a Dream Studio worked example.
 
 ## [1.0.0] - 2026-04-28
 
