@@ -86,6 +86,12 @@ def set_wo_artifact(
         return True
     except sqlite3.OperationalError:
         return False  # table absent (unreleased migration on the live authority DB)
+    except sqlite3.IntegrityError:
+        # The table exists but its ``kind`` CHECK does not yet accept this kind — a stale
+        # schema from an unreleased migration (e.g. impact_affirmation before migration 154
+        # is released). Same no-op contract as table-absent: never raise a raw CHECK error
+        # at the caller. Once the backing migration is released, the write succeeds.
+        return False
     finally:
         conn.close()
 
