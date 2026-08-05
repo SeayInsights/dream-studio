@@ -3,10 +3,10 @@
 ## [1.2.0] - 2026-08-04
 
 ### Added
-- Stage-2 checklist item 8: silent-default / fail-quiet (negative-space lens), from
-  Fulcrum ADR-004 (WO R6). Flag identity/authority/state resolved by elimination or a
-  swallowed correctness-changing failure that yields a plausible-but-wrong result with no
-  alert; the remedy is to verify and refuse what cannot be verified rather than defaulting.
+- Stage-2 checklist item 8: silent-default / fail-quiet (negative-space lens), per
+  ADR-0002 (WO R6). Flag identity/authority/state resolved by elimination or a swallowed
+  correctness-changing failure that yields a plausible-but-wrong result with no alert; the
+  remedy is to verify and refuse what cannot be verified rather than defaulting.
 
 ## [1.1.0] - 2026-08-02
 

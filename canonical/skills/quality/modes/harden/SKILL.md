@@ -152,7 +152,7 @@ Flag any of:
 - `except Exception: pass` (or a bare `return None` / `""` / `[]`) around an operation whose failure changes correctness — the caller cannot tell "genuinely empty" from "broken."
 - Auth / attribution / routing that infers identity by elimination rather than verifying it affirmatively.
 
-**ADR-004 example (Fulcrum).** Message attribution chose between agent and user by negative space: if the token's `agent_id` resolved against the (in-memory) agent registry, attribute to the agent; *anything else* fell through to the sponsoring human. After a platform restart the registry was empty, so **all** agent traffic was silently persisted and rendered as authored by the human. Nothing threw, so nothing alerted.
+**Worked example (see ADR-0002).** Dream Studio's own native secret scanner once returned an empty finding list when its underlying `git` call failed — reporting *all-clear* precisely when it was blind. A caller could not tell "no secrets" from "scan never ran." The fix was to fail **closed**: the git helper raises `SecretScanError` and the gate exits non-zero on a scan error, so "could not scan" is never silently "nothing found."
 
 **The fix is affirmative:** verify the actor/state and **refuse what you cannot verify** (fail loud — 403 / raise) rather than reassigning it to a default. A rejected write gives repair logic an explicit signal to act on; a silent default gives it nothing.
 

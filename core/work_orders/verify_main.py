@@ -245,7 +245,7 @@ def verify_work_order(
 
         # WO cef6ddaa — evidence model fixes:
         # (A) Search the WO's TARGET repo (its project's project_path), not always the DS
-        #     source_root, so external-repo work (e.g. Fulcrum) is findable — parallels the
+        #     source_root, so external-repo work is findable — parallels the
         #     executable_ac repo-aware fix (WO 2c751184). Falls back to source_root.
         # (B) A gap-spawned WO carries a "[gap-key: <originating-wo-id>::<category>]" marker;
         #     its work was committed under that ORIGINATING id, so when the WO's own id finds

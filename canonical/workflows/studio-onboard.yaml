@@ -55,9 +55,9 @@ nodes:
         - Result: the encoded directory name under ~/.claude/projects/
         - Full path: ~/.claude/projects/<encoded-name>/memory
 
-      Example: C:\Users\Example User\builds\dream-studio
-           →   C--Users-Dannis-Seay-builds-dream-studio
-           →   ~/.claude/projects/C--Users-Dannis-Seay-builds-dream-studio/memory
+      Example: C:\Users\Example\builds\dream-studio
+           →   C--Users-Example-builds-dream-studio
+           →   ~/.claude/projects/C--Users-Example-builds-dream-studio/memory
 
       Verify the computed path exists on disk. If it does not exist:
         - Note "memory path not found at computed location"

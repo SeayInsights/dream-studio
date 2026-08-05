@@ -2,7 +2,7 @@
 
 The close/verify executable_ac gate must run a work order's TEST-CHECKs in the repo
 where the work was done — the WO's project's ``project_path`` — so an external-repo WO
-(e.g. Fulcrum) is actually verified, not the Dream Studio repo. These tests prove:
+is actually verified in its own repo, not the Dream Studio repo. These tests prove:
 
 - ``resolve_project_root`` maps a WO to its project's repo (or None to fall back).
 - ``_run_one_test_check`` runs with ``cwd=project_root`` (real pytest execution proof).
