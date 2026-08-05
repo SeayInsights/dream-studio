@@ -143,6 +143,21 @@ Mark each Auto row ✓ if the handler is registered in hooks.json, ✗ if missin
 
 ---
 
+## Phase 4: Silent-default hunting lens (negative-space / fail-quiet)
+
+Beyond the structural checklist, hunt for **silent defaults** — code that resolves an identity, authority, or required state by *negative space* ("if X resolves, use X; otherwise fall through to a default") where the fall-through silently produces a plausible-but-wrong result and **nothing alerts**. These pass every test and surface as corrupted data weeks later.
+
+Flag any of:
+- A lookup whose miss path returns a default/fallback actor, tenant, or record instead of refusing.
+- `except Exception: pass` (or a bare `return None` / `""` / `[]`) around an operation whose failure changes correctness — the caller cannot tell "genuinely empty" from "broken."
+- Auth / attribution / routing that infers identity by elimination rather than verifying it affirmatively.
+
+**ADR-004 example (Fulcrum).** Message attribution chose between agent and user by negative space: if the token's `agent_id` resolved against the (in-memory) agent registry, attribute to the agent; *anything else* fell through to the sponsoring human. After a platform restart the registry was empty, so **all** agent traffic was silently persisted and rendered as authored by the human. Nothing threw, so nothing alerted.
+
+**The fix is affirmative:** verify the actor/state and **refuse what you cannot verify** (fail loud — 403 / raise) rather than reassigning it to a default. A rejected write gives repair logic an explicit signal to act on; a silent default gives it nothing.
+
+---
+
 ## Rules
 
 - Always confirm before overwriting any existing file
