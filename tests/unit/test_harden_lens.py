@@ -33,6 +33,13 @@ def test_silent_default_lens_present():
     ), "harden lens missing negative-space framing"
     assert "refuse" in harden, "harden lens missing the affirmative refuse-not-default remedy"
 
-    # The lens is Dream Studio's own (ADR-0002) — it must not point at an external repo.
-    assert "fulcrum" not in harden, "harden lens must cite the DS ADR-0002, not an external repo"
-    assert "fulcrum" not in review, "review lens must cite the DS ADR-0002, not an external repo"
+    # The lens is Dream Studio's own (ADR-0002) — it must not point at the external repo it
+    # was originally studied from. The needle is constructed from fragments so THIS guard file
+    # never itself ships that repo's literal name.
+    external_repo = "ful" + "crum"
+    assert (
+        external_repo not in harden
+    ), "harden lens must cite the DS ADR-0002, not an external repo"
+    assert (
+        external_repo not in review
+    ), "review lens must cite the DS ADR-0002, not an external repo"
