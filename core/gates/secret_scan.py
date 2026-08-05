@@ -30,34 +30,16 @@ import subprocess
 import sys
 from pathlib import Path
 
+from core.gates.credential_patterns import (
+    CREDENTIAL_PATTERNS as _PATTERNS,
+    SCANNER_EXCLUDED_PATH_SUBSTRINGS as _EXCLUDED_PATH_SUBSTRINGS,
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# High-confidence, structurally self-verifying credential formats. Each is specific enough
-# (fixed prefix + charset + length) that a match is a real credential shape, not noise.
-_PATTERNS: dict[str, re.Pattern[str]] = {
-    "aws_access_key_id": re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),
-    "github_token": re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[0-9A-Za-z]{36}\b"),
-    "github_pat": re.compile(r"\bgithub_pat_[0-9A-Za-z_]{82}\b"),
-    "slack_token": re.compile(r"\bxox[baprs]-[0-9A-Za-z-]{10,72}\b"),
-    "google_api_key": re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"),
-    "stripe_secret_key": re.compile(r"\b(?:sk|rk)_live_[0-9A-Za-z]{24,}\b"),
-    "openai_api_key": re.compile(r"\bsk-(?:proj-)?[0-9A-Za-z_\-]{32,}\b"),
-    "private_key_block": re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----"),
-    "aws_secret_access_key": re.compile(
-        r"(?i)aws_secret_access_key\s*[=:]\s*['\"]?([0-9A-Za-z/+]{40})['\"]?"
-    ),
-}
-
-
-# Paths that legitimately contain credential *patterns* (rule definitions, this scanner,
-# its tests) rather than real credentials — excluded so the scanner is not self-tripping.
-_EXCLUDED_PATH_SUBSTRINGS: tuple[str, ...] = (
-    "semgrep-rules",
-    "core/gates/secret_scan.py",
-    "test_secret_scan",
-    "test_security_baseline",  # this scanner's own test — contains pattern literals
-    "templates/security",
-)
+# Patterns and the scan-exclusion policy come from the single source (WO ed3aa5db):
+# core/gates/credential_patterns.py — shared with repo_publication_readiness and the
+# generated-code linter so credential detection cannot drift across surfaces.
 
 # A line carrying this pragma is skipped — the escape hatch for an unavoidable literal.
 _ALLOWLIST_PRAGMA = "allowlist secret"

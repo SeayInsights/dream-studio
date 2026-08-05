@@ -12,29 +12,67 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from core.gates.credential_patterns import CREDENTIAL_PREFIXES
+
 TIER_T1 = "T1"
 TIER_T2 = "T2"
 TIER_T3 = "T3"
 
 # Credential-suggestive variable name suffixes
 _CRED_SUFFIXES = (
-    "_key", "_secret", "_password", "_token", "_credential",
-    "_api_key", "_auth_token", "_private_key",
+    "_key",
+    "_secret",
+    "_password",
+    "_token",
+    "_credential",
+    "_api_key",
+    "_auth_token",
+    "_private_key",
 )
 _CRED_EXACT = {
-    "API_KEY", "SECRET", "SECRET_KEY", "PASSWORD", "TOKEN",
-    "AUTH_TOKEN", "PRIVATE_KEY", "ACCESS_KEY", "ACCESS_TOKEN",
+    "API_KEY",
+    "SECRET",
+    "SECRET_KEY",
+    "PASSWORD",
+    "TOKEN",
+    "AUTH_TOKEN",
+    "PRIVATE_KEY",
+    "ACCESS_KEY",
+    "ACCESS_TOKEN",
 }
-# Known leaked credential prefixes in string literals
-_LEAKED_PREFIXES = ("sk-", "ghp_", "AKIA", "xoxb-", "xoxp-", "-----BEGIN")
+# Known leaked credential prefixes in string literals — sourced from the single
+# credential-pattern module (WO ed3aa5db) so this fast prefix heuristic cannot drift from
+# the structured scanners. A superset of the prefixes formerly hardcoded here.
+_LEAKED_PREFIXES = CREDENTIAL_PREFIXES
 
 # PII-suggestive variable names for logging check
-_PII_NAMES = ("email", "password", "ssn", "dob", "phone", "credit_card", "token",
-              "full_name", "birth", "national_id", "passport")
+_PII_NAMES = (
+    "email",
+    "password",
+    "ssn",
+    "dob",
+    "phone",
+    "credit_card",
+    "token",
+    "full_name",
+    "birth",
+    "national_id",
+    "passport",
+)
 
 # SQL keywords that indicate injection risk in formatted strings
-_SQL_KEYWORDS = ("SELECT", "INSERT", "UPDATE", "DELETE", "WHERE", "FROM",
-                 "DROP", "EXEC", "UNION", "JOIN")
+_SQL_KEYWORDS = (
+    "SELECT",
+    "INSERT",
+    "UPDATE",
+    "DELETE",
+    "WHERE",
+    "FROM",
+    "DROP",
+    "EXEC",
+    "UNION",
+    "JOIN",
+)
 
 
 def audit_generated_python(code_block: str, context: dict[str, Any]) -> list[dict[str, Any]]:
@@ -75,6 +113,7 @@ def audit_generated_python(code_block: str, context: dict[str, Any]) -> list[dic
 
 # ── Checkers ──────────────────────────────────────────────────────────────
 
+
 def _check_hardcoded_cred(line: str, lineno: int, findings: list) -> None:
     """sec-001: detect hardcoded credential string literals."""
     # Pattern: VARNAME = "literal" where VARNAME suggests a credential
@@ -87,57 +126,65 @@ def _check_hardcoded_cred(line: str, lineno: int, findings: list) -> None:
     # Check for known leaked prefixes in value
     for prefix in _LEAKED_PREFIXES:
         if value.startswith(prefix):
-            findings.append({
-                "rule_id": "sec-001",
-                "severity": "critical",
-                "tier": TIER_T1,
-                "excerpt": f"{varname} = \"{value[:8]}...\"",
-                "explanation": f"Hardcoded credential: `{varname}` contains a string matching known API key pattern `{prefix}...`",
-                "line": lineno,
-            })
+            findings.append(
+                {
+                    "rule_id": "sec-001",
+                    "severity": "critical",
+                    "tier": TIER_T1,
+                    "excerpt": f'{varname} = "{value[:8]}..."',
+                    "explanation": f"Hardcoded credential: `{varname}` contains a string matching known API key pattern `{prefix}...`",
+                    "line": lineno,
+                }
+            )
             return
     # Check for credential-suggestive variable names with non-trivial values
     varname_lower = varname.lower()
     if varname in _CRED_EXACT or any(varname_lower.endswith(suf) for suf in _CRED_SUFFIXES):
         # Only flag if value looks like a real credential (not a placeholder)
-        if not re.match(r'^(your[-_]|<|{|\[|TODO|CHANGEME|XXX|placeholder)', value, re.I):
-            findings.append({
-                "rule_id": "sec-001",
-                "severity": "critical",
-                "tier": TIER_T1,
-                "excerpt": f"{varname} = \"{value[:8]}...\"",
-                "explanation": f"Hardcoded credential: `{varname}` assigned a string literal. Use os.environ.get('{varname}') instead.",
-                "line": lineno,
-            })
+        if not re.match(r"^(your[-_]|<|{|\[|TODO|CHANGEME|XXX|placeholder)", value, re.I):
+            findings.append(
+                {
+                    "rule_id": "sec-001",
+                    "severity": "critical",
+                    "tier": TIER_T1,
+                    "excerpt": f'{varname} = "{value[:8]}..."',
+                    "explanation": f"Hardcoded credential: `{varname}` assigned a string literal. Use os.environ.get('{varname}') instead.",
+                    "line": lineno,
+                }
+            )
 
 
 def _check_sql_injection(line: str, lineno: int, findings: list) -> None:
     """sec-002: detect SQL injection via f-string or % formatting."""
     # Check for f-string with SQL keyword + variable interpolation
-    if ('f"' in line or "f'" in line) and '{' in line:
+    if ('f"' in line or "f'" in line) and "{" in line:
         upper_line = line.upper()
         if any(kw in upper_line for kw in _SQL_KEYWORDS):
-            findings.append({
-                "rule_id": "sec-002",
-                "severity": "critical",
-                "tier": TIER_T1,
-                "excerpt": line[:80],
-                "explanation": "SQL injection risk: f-string with SQL keywords interpolates variables. Use parameterized queries.",
-                "line": lineno,
-            })
+            findings.append(
+                {
+                    "rule_id": "sec-002",
+                    "severity": "critical",
+                    "tier": TIER_T1,
+                    "excerpt": line[:80],
+                    "explanation": "SQL injection risk: f-string with SQL keywords interpolates variables. Use parameterized queries.",
+                    "line": lineno,
+                }
+            )
             return
     # Check for %-format with SQL keyword
-    if ' % ' in line or '.format(' in line:
+    if " % " in line or ".format(" in line:
         upper_line = line.upper()
         if any(kw in upper_line for kw in _SQL_KEYWORDS):
-            findings.append({
-                "rule_id": "sec-002",
-                "severity": "critical",
-                "tier": TIER_T1,
-                "excerpt": line[:80],
-                "explanation": "SQL injection risk: string formatting with SQL keywords. Use parameterized queries.",
-                "line": lineno,
-            })
+            findings.append(
+                {
+                    "rule_id": "sec-002",
+                    "severity": "critical",
+                    "tier": TIER_T1,
+                    "excerpt": line[:80],
+                    "explanation": "SQL injection risk: string formatting with SQL keywords. Use parameterized queries.",
+                    "line": lineno,
+                }
+            )
 
 
 def _check_weak_password_hash(line: str, lineno: int, findings: list) -> None:
@@ -145,14 +192,16 @@ def _check_weak_password_hash(line: str, lineno: int, findings: list) -> None:
     # Check for password variable passed to weak hash
     if re.search(r"(password|passwd|pwd)\b", line, re.I):
         if re.search(r"(md5|sha1|sha256)\s*\(", line, re.I):
-            findings.append({
-                "rule_id": "sec-005",
-                "severity": "critical",
-                "tier": TIER_T1,
-                "excerpt": line.strip(),
-                "explanation": "Weak password hashing: MD5/SHA1/SHA256 are cryptographically weak for passwords. Use bcrypt, argon2, or scrypt.",
-                "line": lineno,
-            })
+            findings.append(
+                {
+                    "rule_id": "sec-005",
+                    "severity": "critical",
+                    "tier": TIER_T1,
+                    "excerpt": line.strip(),
+                    "explanation": "Weak password hashing: MD5/SHA1/SHA256 are cryptographically weak for passwords. Use bcrypt, argon2, or scrypt.",
+                    "line": lineno,
+                }
+            )
 
 
 def _check_weak_crypto(line: str, lineno: int, findings: list) -> None:
@@ -163,18 +212,23 @@ def _check_weak_crypto(line: str, lineno: int, findings: list) -> None:
         (r"\bDES\b", "DES is a weak cipher"),
         (r"ECB\b", "ECB mode is insecure (no IV, reveals patterns)"),
         (r"\bRC4\b", "RC4 is a broken stream cipher"),
-        (r"random\.(random|randint|choice|randrange)\s*\(", "random module is not cryptographically secure; use secrets module"),
+        (
+            r"random\.(random|randint|choice|randrange)\s*\(",
+            "random module is not cryptographically secure; use secrets module",
+        ),
     ]
     for pattern, explanation in weak_patterns:
         if re.search(pattern, line, re.I):
-            findings.append({
-                "rule_id": "sec-021",
-                "severity": "high",
-                "tier": TIER_T1,
-                "excerpt": line.strip(),
-                "explanation": f"Weak crypto: {explanation}",
-                "line": lineno,
-            })
+            findings.append(
+                {
+                    "rule_id": "sec-021",
+                    "severity": "high",
+                    "tier": TIER_T1,
+                    "excerpt": line.strip(),
+                    "explanation": f"Weak crypto: {explanation}",
+                    "line": lineno,
+                }
+            )
             break  # one finding per line
 
 
@@ -189,14 +243,16 @@ def _check_insecure_cookie(line: str, lineno: int, findings: list) -> None:
                 missing.append("secure=True")
             if not has_httponly:
                 missing.append("httponly=True")
-            findings.append({
-                "rule_id": "sec-007",
-                "severity": "high",
-                "tier": TIER_T1,
-                "excerpt": line.strip(),
-                "explanation": f"Insecure cookie: missing {' and '.join(missing)}. Session cookies need both flags.",
-                "line": lineno,
-            })
+            findings.append(
+                {
+                    "rule_id": "sec-007",
+                    "severity": "high",
+                    "tier": TIER_T1,
+                    "excerpt": line.strip(),
+                    "explanation": f"Insecure cookie: missing {' and '.join(missing)}. Session cookies need both flags.",
+                    "line": lineno,
+                }
+            )
 
 
 def _check_pii_in_logs(line: str, lineno: int, findings: list) -> None:
@@ -208,12 +264,14 @@ def _check_pii_in_logs(line: str, lineno: int, findings: list) -> None:
     # Check for PII-suggestive variable names in the call
     for pii in _PII_NAMES:
         if re.search(r"\b" + pii + r"\b", line, re.I):
-            findings.append({
-                "rule_id": "sec-013",
-                "severity": "critical",
-                "tier": TIER_T1,
-                "excerpt": line.strip(),
-                "explanation": f"PII in log: `{pii}` variable passed to a log/print call. Log an opaque ID instead.",
-                "line": lineno,
-            })
+            findings.append(
+                {
+                    "rule_id": "sec-013",
+                    "severity": "critical",
+                    "tier": TIER_T1,
+                    "excerpt": line.strip(),
+                    "explanation": f"PII in log: `{pii}` variable passed to a log/print call. Log an opaque ID instead.",
+                    "line": lineno,
+                }
+            )
             return  # one finding per line

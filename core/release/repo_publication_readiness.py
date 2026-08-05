@@ -17,6 +17,11 @@ from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
+from core.gates.credential_patterns import (
+    CREDENTIAL_PATTERNS,
+    SCANNER_EXCLUDED_PATH_SUBSTRINGS,
+)
+
 PUBLICATION_READINESS_SCHEMA = "dream_studio.repo_publication.readiness.v1"
 
 PRIVATE_TREE_PATH_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -53,12 +58,12 @@ PRIVATE_CONTENT_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("appdata_absolute_path", re.compile(r"C:[\\/]+Users[\\/]+[^\\/:\r\n]+[\\/]+AppData", re.I)),
 )
 
-SECRET_CONTENT_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("openai_api_key", re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b")),
-    ("github_token", re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b")),
-    ("aws_access_key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
-    ("private_key_block", re.compile(r"-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----")),
-)
+# WO ed3aa5db: derived from the single credential-pattern source rather than a local looser
+# subset. Upgrades the pre-publication scan from 4 loose rules to the 9 strict+comprehensive
+# structured patterns — it now also catches Slack/Google/Stripe/GitHub-PAT/aws-secret leaks
+# and stops over-matching short non-secrets. Real credentials exceed the thresholds, so live
+# coverage only grows.
+SECRET_CONTENT_RULES: tuple[tuple[str, re.Pattern[str]], ...] = tuple(CREDENTIAL_PATTERNS.items())
 
 TEXT_SUFFIXES = frozenset(
     {
@@ -306,6 +311,12 @@ def _content_findings(repo_root: Path, tracked_files: Sequence[str]) -> list[dic
 
 
 def _skip_secret_scan_path(path: str) -> bool:
+    # Shared exclusion policy (WO ed3aa5db): skip pattern-definition files and the scanners'
+    # own test fixtures — the SAME set core/gates/secret_scan.py skips — so the two content
+    # scanners cannot drift on WHAT they skip and neither self-trips on a pattern literal
+    # (e.g. the PEM header fixture in tests/unit/test_security_baseline.py).
+    if any(sub in path for sub in SCANNER_EXCLUDED_PATH_SUBSTRINGS):
+        return True
     return (
         path.startswith("templates/security/")
         or path.startswith("docs/security")

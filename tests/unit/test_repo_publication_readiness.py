@@ -85,7 +85,10 @@ def test_publication_readiness_reports_secret_rule_without_value(tmp_path: Path)
         encoding="utf-8",
     )
     secret_file = repo / "example.env"
-    secret_file.write_text("OPENAI_API_KEY=sk-" + ("a" * 24), encoding="utf-8")
+    # WO ed3aa5db: the pub scan now uses the canonical strict openai pattern (sk- + 32+),
+    # matching real key length; a realistic-length fixture key exercises it (24 chars was an
+    # artificially short key the former looser rule caught).
+    secret_file.write_text("OPENAI_API_KEY=sk-" + ("a" * 40), encoding="utf-8")
 
     packet = build_repo_publication_readiness(
         repo,
