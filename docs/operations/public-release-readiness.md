@@ -24,14 +24,18 @@ operator records an explicit go.
 
 ## Full-CI baseline
 
-- **Before 2026-08-06:** `main`'s `full-ci` was **red** — most recently on exactly two
-  failures out of the full suite (5071 passing): a fragile dashboard-route test that touched
-  `.path` on non-path route objects, and a stale outcome-eval test asserting a retired disk
-  `ESC-*.md` escalation file (escalations moved to the authority store). Both fixed in
-  `WO-REL-CI-BASELINE`.
-- **Baseline start:** the sustained-green streak begins at the commit that lands those fixes.
-  Record the consecutive-green run count here as it accrues; a release requires a sustained
-  streak, not the first green run.
+- **Before 2026-08-06:** `main`'s `full-ci` was **red** on every run this session — a
+  documented pr-smoke-vs-full-suite gap surfacing three failures in total (out of ~5073
+  passing): a fragile dashboard-route test that touched `.path` on non-path route objects, a
+  stale outcome-eval test asserting a retired disk `ESC-*.md` escalation file (escalations
+  moved to the authority store), and a version-fragile prd-sow wiring assertion that scanned
+  `app.routes` for a `.path` some FastAPI versions do not expose on wrapped included routers.
+  All three fixed in `WO-REL-CI-BASELINE` (#589 fixed the first two; #590 fixed the wiring
+  assertion via `app.openapi()`).
+- **Baseline start — first green:** `full-ci` run `31110598731` at commit `9654946e`
+  (2026-08-06) is the first green full-suite run on `main`. The sustained-green streak begins
+  here (streak: 1). Record the consecutive-green run count as it accrues; a public release
+  requires a sustained streak (a `WO-REL-SHIP-CLOSEOUT` concern), **not** the first green run.
 
 ## How this is enforced
 
