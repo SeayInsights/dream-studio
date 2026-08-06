@@ -18,10 +18,15 @@ _THIS = Path(__file__).resolve()
 _REPO_ROOT = _THIS.parent.parent.parent
 _PACKS_YAML = _REPO_ROOT / "packs.yaml"
 _PLUGIN_MANIFEST = _REPO_ROOT / ".claude-plugin" / "plugin.json"
+_MARKETPLACE_MANIFEST = _REPO_ROOT / ".claude-plugin" / "marketplace.json"
 
 PLUGIN_NAME = "dream-studio"
 #: Component directories a Claude plugin may provide.
 PLUGIN_COMPONENTS: tuple[str, ...] = ("commands", "agents", "skills", ".mcp.json")
+#: The public canonical source a marketplace install resolves the plugin from.
+#: For public distribution this must be a hosted repo, never a "local" path.
+MARKETPLACE_REPO = "SeayInsights/dream-studio"
+MARKETPLACE_SCHEMA_VERSION = 1
 
 
 def _version() -> str:
@@ -96,4 +101,55 @@ def write_plugin_manifest(output_path: Path | None = None) -> Path:
     out = output_path or _PLUGIN_MANIFEST
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(build_plugin_manifest(), indent=2) + "\n", encoding="utf-8")
+    return out
+
+
+def build_marketplace_manifest(packs_yaml_path: Path | None = None) -> dict:
+    """Return the `.claude-plugin/marketplace.json` manifest dict (deterministic).
+
+    Name + description are drawn from the same source as the plugin manifest so the
+    two distribution channels stay at parity. The ``source`` resolves the plugin
+    from the public canonical repo (``MARKETPLACE_REPO``) — a marketplace entry for
+    public distribution must never point at a ``local`` path.
+    """
+    plugin = build_plugin_manifest(packs_yaml_path)
+    return {
+        "schema_version": MARKETPLACE_SCHEMA_VERSION,
+        "plugins": [
+            {
+                "name": plugin["name"],
+                "description": plugin["description"],
+                "source": {"source": "github", "repo": MARKETPLACE_REPO},
+            }
+        ],
+    }
+
+
+def validate_marketplace_manifest(manifest: dict) -> list[str]:
+    """Return a list of problems with *manifest*; empty list means valid."""
+    problems: list[str] = []
+    if manifest.get("schema_version") != MARKETPLACE_SCHEMA_VERSION:
+        problems.append(f"schema_version must be {MARKETPLACE_SCHEMA_VERSION}")
+    plugins = manifest.get("plugins")
+    if not isinstance(plugins, list) or not plugins:
+        problems.append("plugins must be a non-empty list")
+        return problems
+    entry = plugins[0]
+    if entry.get("name") != PLUGIN_NAME:
+        problems.append(f"plugin name must be {PLUGIN_NAME!r}")
+    if not entry.get("description"):
+        problems.append("plugin description must be non-empty")
+    source = entry.get("source") or {}
+    if source.get("source") == "local" or "path" in source:
+        problems.append("source must not be a local path for public distribution")
+    elif source.get("source") != "github" or not source.get("repo"):
+        problems.append("source must be a public github repo ({'source':'github','repo':...})")
+    return problems
+
+
+def write_marketplace_manifest(output_path: Path | None = None) -> Path:
+    """Generate and write `.claude-plugin/marketplace.json`. Returns the path."""
+    out = output_path or _MARKETPLACE_MANIFEST
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(build_marketplace_manifest(), indent=2) + "\n", encoding="utf-8")
     return out

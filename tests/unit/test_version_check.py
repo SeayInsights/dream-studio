@@ -44,14 +44,16 @@ def test_version_file_is_nonempty():
 
 
 def test_version_file_format():
-    """VERSION must be a YYYY-MM-DD date string."""
+    """VERSION must be a semver string (WO-REL-PACKAGING: switched from date-based
+    CalVer to semver for public distribution — the release-readiness gate requires a
+    valid semver and the plugin-marketplace update check parses it as a version tuple)."""
     import re
 
     version_file = REPO_ROOT / "VERSION"
     content = version_file.read_text(encoding="utf-8").strip()
     assert re.match(
-        r"^\d{4}-\d{2}-\d{2}$", content
-    ), f"VERSION must be YYYY-MM-DD format, got: {content!r}"
+        r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$", content
+    ), f"VERSION must be semver (MAJOR.MINOR.PATCH), got: {content!r}"
 
 
 # ── _version_check logic ──────────────────────────────────────────────────────

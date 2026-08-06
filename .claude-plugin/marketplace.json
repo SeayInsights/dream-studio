@@ -3,8 +3,11 @@
   "plugins": [
     {
       "name": "dream-studio",
-      "description": "Dream Studio — local-first AI orchestration and operational intelligence platform",
-      "source": {"source": "local", "path": "."}
+      "description": "Dream Studio \u2014 local-first AI orchestration and operational intelligence platform.",
+      "source": {
+        "source": "github",
+        "repo": "SeayInsights/dream-studio"
+      }
     }
   ]
 }
