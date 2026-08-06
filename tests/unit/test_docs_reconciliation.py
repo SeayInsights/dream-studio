@@ -14,6 +14,17 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_public_release_readiness_doc_lists_blockers() -> None:
+    """WO-REL-CI-BASELINE T2: the release-readiness doc exists and lists every release
+    blocker, so the ship gate has a single checklist to consult."""
+    doc = REPO_ROOT / "docs" / "operations" / "public-release-readiness.md"
+    assert doc.is_file(), "docs/operations/public-release-readiness.md must exist"
+    text = doc.read_text(encoding="utf-8").lower()
+    for blocker in ("full-ci", "publication boundary", "packaging", "ship-closeout", "go/no-go"):
+        assert blocker in text, f"release-readiness doc missing blocker: {blocker}"
+    assert "ship gate" in text, "doc must reference the ship gate that consults it"
+
+
 def test_artifacts_keep_verdict_documented() -> None:
     text = (REPO_ROOT / "docs" / "architecture" / "aspirational-schema-debt.md").read_text(
         encoding="utf-8"

@@ -89,12 +89,17 @@ def test_failed_outcome_reopens_wo(tmp_path: Path) -> None:
     assert wo in {f["work_order_id"] for f in result["failed"]}
     assert _status(db, wo) == "in_progress", "regressed WO must be reopened"
 
-    # An unresolved escalation file was written where the pulse scan looks.
-    esc_files = list((home / "meta").glob("ESC-*.md"))
-    assert esc_files, "no escalation file written"
-    text = esc_files[0].read_text(encoding="utf-8")
-    assert "unresolved" in text.lower() and "ESC-" in text
-    assert wo[:8] in esc_files[0].name
+    # An unresolved operator escalation was recorded in the AUTHORITY store — the loose
+    # meta/ESC-*.md disk file was retired when escalations moved to
+    # business_work_order_artifacts kind='escalation' (WO-FILESDB-C4B). The pulse
+    # open-escalations counter now reads the authority, not a disk glob.
+    from core.work_orders.escalation import get_escalations
+
+    escalations = get_escalations(wo, db_path=db)
+    outcome = [e for e in escalations if e["type"] == "outcome"]
+    assert outcome, f"no outcome escalation recorded in the authority: {escalations}"
+    assert outcome[0]["status"] == "unresolved", f"escalation must be unresolved: {outcome[0]}"
+    assert outcome[0]["work_order_id"] == wo
 
 
 def test_no_reopen_when_auto_reopen_false(tmp_path: Path) -> None:
