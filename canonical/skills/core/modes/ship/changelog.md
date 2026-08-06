@@ -1,5 +1,13 @@
 # ship — Changelog
 
+## [1.2.0] - 2026-08-06
+
+### Added
+- Public-release path: the gate consults `docs/operations/public-release-readiness.md` (the
+  release-blocker checklist — sustained-green full-ci, zero open release-blocking WOs, clean
+  publication boundary, finalized packaging, ship-closeout + operator GO) for a public
+  Dream Studio marketplace/plugin release (WO-REL-CI-BASELINE).
+
 ## [1.1.0] - 2026-08-02
 
 ### Added
