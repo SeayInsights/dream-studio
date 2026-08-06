@@ -39,6 +39,8 @@ Repo-owned canonical files belong in the Dream Studio repository when they defin
 
 Do not create duplicate contract roots such as `contracts/`, `contract/`, `docs/policies/`, or `docs/specs/contracts/` unless a later Work Order updates this policy and explains the authority split.
 
+Architecture Decision Records (ADRs) and pre-implementation spec contracts record the *reasoning behind* the design and are operator-local (WO 2c60ce5f): their bodies live in the file DB docstore (`ds files ... adr/…`, `specs/…`), **not** the repo. The repo hosts only their *descriptive system* — the `docs/adr/` and `docs/specs/` format templates + convention READMEs — plus the docstore-based ratified-spec close gate. This keeps the repo to "how the product is designed and each piece's role" while the decision thought-process stays private.
+
 ## Generated Local Meta Locations
 
 Generated local Work Order artifacts belong under the user's Dream Studio meta root. They are local evidence/projection artifacts by default and are not repo-owned source unless a later Work Order intentionally promotes a redacted fixture or contract example into the repo.
