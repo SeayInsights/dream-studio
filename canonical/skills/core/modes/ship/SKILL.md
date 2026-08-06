@@ -27,6 +27,13 @@ Read `gotchas.yml` in this directory before every invocation.
 ## Purpose
 Blocks deployment until all checks pass. No exceptions.
 
+## Public release (Dream Studio marketplace/plugin)
+For a **public release of Dream Studio itself**, the gate additionally consults the
+release-blocker checklist in `docs/operations/public-release-readiness.md` — sustained-green
+`full-ci` on main, zero open release-blocking WOs, a clean publication boundary, finalized
+packaging, and a passing `WO-REL-SHIP-CLOSEOUT` with the operator's explicit GO. A release is
+**NO-GO** until every blocker there is cleared.
+
 ## Gate checklist
 
 **See:** core/quality.md — Quality gate checklist

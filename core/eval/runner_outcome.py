@@ -4,8 +4,9 @@ The process eval runner (runner_process.py) measures PROCESS (rail adherence
 from traces). The outcome eval measures OUTCOME: for a recently-closed WO,
 re-run its originating_symptom + task acceptance-criteria against live/seeded
 state and report whether the symptom actually stayed resolved. On FAIL with
-auto_reopen=True the WO is set back to in_progress and an escalation file is
-written (consumed by the pulse open-escalations counter). This is the safety
+auto_reopen=True the WO is set back to in_progress and an unresolved escalation is
+recorded in the authority store (business_work_order_artifacts kind='escalation';
+consumed by the pulse open-escalations counter). This is the safety
 net behind the close gate — a WO can close green and still regress later.
 
 Split out of runner.py (WO-GF-CORE-HEALTH-SKILLS).
@@ -134,7 +135,7 @@ def _reopen_and_escalate(
     source_root: Path | None = None,
     dream_studio_home: Path | None = None,
 ) -> None:
-    """Set a regressed WO back to in_progress and write an unresolved escalation file.
+    """Set a regressed WO back to in_progress and record an unresolved escalation in the authority.
 
     The business_work_orders status write goes through the work-order mutation
     layer (reopen_work_order) — never a direct write from the eval layer — to
