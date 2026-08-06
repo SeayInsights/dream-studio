@@ -89,11 +89,13 @@ def test_prd_sow_route_serves_panel_and_is_wired(monkeypatch):
         raised = exc.status_code == 404
     assert raised, "/active must 404 when there is no active project"
 
-    # The router is mounted in the app under /api/v1/prd-sow. Not every entry in app.routes is
-    # a path route (mounts / included routers lack `.path`), so read path attrs defensively.
+    # The router is mounted in the app under /api/v1/prd-sow. Read the wiring from the OpenAPI
+    # schema, which flattens every registered path regardless of the FastAPI/starlette route
+    # object model — `app.routes` entries vary across versions (APIRoute vs a wrapped
+    # _IncludedRouter that lacks `.path`), so scanning them directly is version-fragile.
     from projections.api.main import app
 
-    paths = {getattr(r, "path", "") for r in app.routes}
+    paths = app.openapi().get("paths", {})
     assert any(
         p.startswith("/api/v1/prd-sow") for p in paths
     ), "prd-sow router not wired in main.py"
