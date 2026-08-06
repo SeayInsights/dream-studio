@@ -1,5 +1,11 @@
 # plan — Changelog
 
+## [1.2.1] - 2026-08-06
+
+### Changed
+- Point the governing-ADR reference at the file DB docstore, not `docs/adr/` (WO 2c60ce5f) —
+  ADR decision bodies are operator-local now.
+
 ## [1.2.0] - 2026-07-24
 
 ### Added

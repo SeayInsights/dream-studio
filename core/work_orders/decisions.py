@@ -143,9 +143,10 @@ def create_decision_request(
     """Create or replace the decision request artifact for a Work Order.
 
     ``adr_id`` optionally links this decision to an Architecture Decision Record
-    (``docs/adr/ADR-NNNN-*.md``). The ADR is the human-readable rationale
-    *projection* of the decision; this packet (in the authority-free packet store)
-    remains the source of truth for the decision itself. See docs/adr/README.md.
+    (docstore ``adr/ADR-NNNN-*.md`` in the file DB — decision bodies are operator-local,
+    not the repo; WO 2c60ce5f). The ADR is the human-readable rationale *projection* of
+    the decision; this packet (in the authority-free packet store) remains the source of
+    truth for the decision itself. See docs/adr/README.md.
     """
     work_order, _ = load_work_order(work_order_id, storage_root=storage_root)
     canonical_id = str(work_order["work_order_id"])

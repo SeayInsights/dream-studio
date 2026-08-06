@@ -1,5 +1,13 @@
 # think — Changelog
 
+## [1.3.0] - 2026-08-06
+
+### Changed
+- ADR-authoring targets the file DB, not the repo (WO 2c60ce5f). Design decisions are now
+  authored to the docstore (`ds files write "adr/ADR-NNNN-…" --category planning`) since ADR
+  decision bodies are operator-local; the repo keeps only the template + README. Removed the
+  stale "copy into docs/adr/ + update the README index" steps.
+
 ## [1.2.0] - 2026-07-24
 
 ### Added
