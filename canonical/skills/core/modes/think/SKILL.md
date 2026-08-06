@@ -86,12 +86,12 @@ Use `skills/think/templates/spec-template.md` for structure:
 ```
 
 ## Design decisions → ADR
-When `think` reaches a significant architecture/design decision — a new system, a cross-cutting pattern, an irreversible or hard-to-reverse choice (**not** a config tweak or bug fix) — record it as an Architecture Decision Record:
-1. Copy `docs/adr/ADR-000-template.md` to `docs/adr/ADR-NNNN-kebab-title.md` (next sequential number), fill every section, set Status `Proposed` (→ `Accepted` on Director approval).
-2. Add the ADR to the index in `docs/adr/README.md`.
+When `think` reaches a significant architecture/design decision — a new system, a cross-cutting pattern, an irreversible or hard-to-reverse choice (**not** a config tweak or bug fix) — record it as an Architecture Decision Record. ADR decision bodies are the reasoning behind the design, so they are **operator-local — authored to the file DB docstore, not the repo** (WO 2c60ce5f):
+1. Follow the format in `docs/adr/ADR-000-template.md`, fill every section, set Status `Proposed` (→ `Accepted` on Director approval).
+2. Author it to the docstore: `ds files write "adr/ADR-NNNN-kebab-title.md" --category planning` (read back with `ds files read`, list with `ds files list --category planning`). **Do not** commit a numbered `ADR-NNNN-*.md` under `docs/adr/` — `tests/unit/test_adr_system.py` guards against that.
 3. Link it from the decision: pass `adr_id="ADR-NNNN"` when the decision packet is created. The ADR is the human-readable rationale **projection**; the packet-store decision record stays canonical.
 
-The ADR drift check (`tests/unit/test_adr_system.py`) enforces the index + required sections. See `docs/adr/README.md`.
+See `docs/adr/README.md` for the convention (repo keeps only the template + README; decision bodies live in the file DB).
 
 ## Contract-bearing work → normative spec
 For work that defines or changes a **contract** (an API endpoint, a schema, an event, a route family — anything a `api_endpoint`/`saas_feature` work order owns), write the contract **spec-first**, before the code:
