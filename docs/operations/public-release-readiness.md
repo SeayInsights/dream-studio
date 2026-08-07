@@ -51,8 +51,12 @@ that is not valid semver.
 - **`1.0.0`** is reserved for the first release that commits to a stable skill/CLI/route surface.
 - The plugin and marketplace manifests are **generated** (`build_plugin_manifest` /
   `build_marketplace_manifest`) and parity-checked in `tests/unit/test_plugin_manifest.py`, so
-  the version and the public source never drift from the manifests on disk. Regenerate with
-  `write_plugin_manifest()` / `write_marketplace_manifest()` after a `VERSION` bump.
+  the version and the public source never drift from the manifests on disk.
+- **Releases are cut by the `release` workflow** (manual `workflow_dispatch` with a semver
+  version). It runs `core/release/changelog.py --apply`, which bumps the `VERSION` file and
+  `pyproject.toml`, prepends the CHANGELOG section from the conventional commits since the last
+  release, and regenerates both manifests — then opens a release PR. There is no manual
+  "regenerate the manifests" step; the version bump and manifest regen are one automated action.
 
 > Historical note: `VERSION` was previously date-based CalVer (`2026-07-02`). `WO-REL-PACKAGING`
 > switched it to semver — the release-readiness gate already required semver, and the update

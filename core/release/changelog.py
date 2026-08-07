@@ -1,10 +1,14 @@
-"""Native release-notes generator — CalVer versioning + conventional commits (R5 T3).
+"""Native release-notes generator — semver versioning + conventional commits (R5 T3).
 
-Dream Studio versions with CalVer (``YYYY.M.D`` in pyproject.toml), so the *version* is
-the release date — it is not derived from commit types the way release-please derives
-semver. What IS derived from conventional commits is the release *content*: this module
-groups the conventional-commit subjects since the last release into a Keep-a-Changelog
+Dream Studio versions with **semver** (``MAJOR.MINOR.PATCH``). Cutting a release is a human
+decision, so the version is chosen (not derived from commit types the way release-please
+derives semver). What IS derived from conventional commits is the release *content*: this
+module groups the conventional-commit subjects since the last release into a Keep-a-Changelog
 section. Owned natively (no external release action), matching the build-native principle.
+
+``--apply`` performs the full version bump in one place — it writes the top-level ``VERSION``
+file and ``pyproject.toml``, prepends the CHANGELOG section, and regenerates the plugin +
+marketplace manifests so a cut release actually publishes the bumped plugin version.
 
 The ``release`` GitHub Actions workflow (workflow_dispatch) calls ``main`` to produce the
 notes for a release PR. Pure ``render_release_notes`` is unit-tested without git.
@@ -18,6 +22,11 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+#: A release version must be valid semver (``MAJOR.MINOR.PATCH`` with an optional
+#: pre-release/build suffix). This is the same shape the release-readiness gate and the
+#: VERSION-format test enforce; the release flow rejects anything else (e.g. a dashed date).
+SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 
 _CONVENTIONAL = re.compile(
     r"^(?P<type>feat|fix|perf|refactor|docs|test|build|ci|chore|revert)"
@@ -51,7 +60,7 @@ def parse_conventional(subject: str) -> dict[str, str | bool] | None:
 
 
 def render_release_notes(subjects: list[str], version: str, date: str) -> str:
-    """Render a Keep-a-Changelog section for a CalVer ``version`` released on ``date``,
+    """Render a Keep-a-Changelog section for a semver ``version`` released on ``date``,
     grouping conventional-commit subjects by type. BREAKING changes are called out first;
     non-conventional and omitted-type commits do not appear."""
     parsed = [p for s in subjects if (p := parse_conventional(s))]
@@ -99,10 +108,16 @@ def prepend_changelog(notes: str, changelog_path: Path) -> None:
 
 
 def bump_pyproject_version(version: str, pyproject_path: Path) -> None:
-    """Set the first ``version = "..."`` line in pyproject.toml to ``version`` (CalVer)."""
+    """Set the first ``version = "..."`` line in pyproject.toml to ``version`` (semver)."""
     text = pyproject_path.read_text(encoding="utf-8")
     new = re.sub(r'(?m)^(version\s*=\s*")[^"]+(")', rf"\g<1>{version}\g<2>", text, count=1)
     pyproject_path.write_text(new, encoding="utf-8")
+
+
+def bump_version_file(version: str, version_path: Path) -> None:
+    """Write the semver ``version`` to the top-level ``VERSION`` file (the single source of
+    truth the plugin/marketplace manifests read). Trailing newline, no other content."""
+    version_path.write_text(version.strip() + "\n", encoding="utf-8")
 
 
 def _commits_since(ref: str | None) -> list[str]:
@@ -140,29 +155,53 @@ def _last_release_tag() -> str | None:
 def main(argv: list[str] | None = None) -> int:
     """Print the release notes for the commits since the last release tag.
 
-    ``--version`` and ``--date`` are supplied by the release workflow (CalVer date). No
-    ``Date.now`` here so the module stays deterministic/importable; the workflow injects
-    the date.
+    ``--version`` and ``--date`` are supplied by the release workflow (a chosen semver version
+    and the release date). No ``Date.now`` here so the module stays deterministic/importable;
+    the workflow injects the date. ``--apply`` performs the full version bump (VERSION +
+    pyproject + CHANGELOG + regenerated manifests).
     """
     import argparse
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--version", required=True, help="CalVer version, e.g. 2026.8.2")
+    parser.add_argument("--version", required=True, help="semver version, e.g. 0.2.0")
     parser.add_argument("--date", required=True, help="Release date, YYYY-MM-DD")
     parser.add_argument("--since", default=None, help="Base ref (default: last release tag)")
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="Update CHANGELOG.md + pyproject.toml in place (default: print notes only)",
+        help=(
+            "Bump the release in place: write VERSION + pyproject.toml, prepend CHANGELOG.md, "
+            "and regenerate the plugin + marketplace manifests (default: print notes only)"
+        ),
     )
     args = parser.parse_args(argv)
+
+    if not SEMVER_RE.match(args.version):
+        parser.error(
+            f"--version must be semver (MAJOR.MINOR.PATCH), got {args.version!r}. "
+            "Date-based version strings are no longer accepted."
+        )
 
     since = args.since or _last_release_tag()
     notes = render_release_notes(_commits_since(since), args.version, args.date)
     if args.apply:
         prepend_changelog(notes, REPO_ROOT / "CHANGELOG.md")
         bump_pyproject_version(args.version, REPO_ROOT / "pyproject.toml")
-        print(f"Applied release {args.version} to CHANGELOG.md + pyproject.toml")
+        bump_version_file(args.version, REPO_ROOT / "VERSION")
+        # Regenerate the manifests so the cut release publishes the bumped plugin version
+        # (VERSION is their single source of truth). Imported lazily to keep this module's
+        # import graph light for the pure-render unit tests.
+        from integrations.marketplace.plugin_manifest import (
+            write_marketplace_manifest,
+            write_plugin_manifest,
+        )
+
+        write_plugin_manifest()
+        write_marketplace_manifest()
+        print(
+            f"Applied release {args.version} to VERSION + pyproject.toml + CHANGELOG.md "
+            "and regenerated .claude-plugin/{plugin,marketplace}.json"
+        )
     else:
         print(notes)
     return 0

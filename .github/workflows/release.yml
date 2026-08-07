@@ -1,16 +1,16 @@
 name: release
 
-# Native CalVer release automation (R5 T3). Manually dispatched — cutting a release is a
+# Native semver release automation (R5 T3). Manually dispatched — cutting a release is a
 # human decision — it generates release notes from the conventional commits since the last
-# release, bumps the CalVer version, and opens a release PR for review. No external release
-# action; the notes come from core/release/changelog.py. Merging the PR cuts the release.
+# release, bumps the semver version (VERSION + pyproject) and regenerates the plugin +
+# marketplace manifests, and opens a release PR for review. No external release action; the
+# notes come from core/release/changelog.py. Merging the PR cuts the release.
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "CalVer version (YYYY.M.D). Blank = today (UTC)."
-        required: false
-        default: ""
+        description: "semver version to release (MAJOR.MINOR.PATCH, e.g. 0.2.0)"
+        required: true
 
 permissions:
   contents: write
@@ -28,15 +28,14 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Compute CalVer version + date
+      - name: Resolve release version + date
         id: ver
         run: |
           VER="${{ github.event.inputs.version }}"
-          if [ -z "$VER" ]; then VER="$(date -u +%Y.%-m.%-d)"; fi
           echo "version=$VER" >> "$GITHUB_OUTPUT"
           echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
 
-      - name: Apply release notes + CalVer version bump
+      - name: Apply release notes + semver version bump + manifest regen
         run: |
           python -m core.release.changelog --apply \
             --version "${{ steps.ver.outputs.version }}" \
@@ -54,4 +53,4 @@ jobs:
           git push -u origin "$BRANCH"
           gh pr create --base main --head "$BRANCH" \
             --title "chore(release): ${{ steps.ver.outputs.version }}" \
-            --body "Automated release PR — CHANGELOG + CalVer version bump for ${{ steps.ver.outputs.version }} (notes derived from conventional commits since the last release). Review and merge to cut the release."
+            --body "Automated release PR — CHANGELOG + semver version bump (VERSION + pyproject) and regenerated plugin/marketplace manifests for ${{ steps.ver.outputs.version }} (notes derived from conventional commits since the last release). Review and merge to cut the release."
