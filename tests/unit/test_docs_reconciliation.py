@@ -34,9 +34,9 @@ def test_changelog_has_versioned_release_entry() -> None:
     version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
     entries = re.findall(r"^## \[(\d+\.\d+\.\d+)\] - \d{4}-\d{2}-\d{2}", changelog, re.M)
     assert entries, "CHANGELOG must have a versioned release entry '## [X.Y.Z] - YYYY-MM-DD'"
-    assert version in entries, (
-        f"CHANGELOG must document the current VERSION {version!r}; found release entries {entries}"
-    )
+    assert (
+        version in entries
+    ), f"CHANGELOG must document the current VERSION {version!r}; found release entries {entries}"
 
 
 def test_readme_covers_marketplace_install_and_uninstall() -> None:
