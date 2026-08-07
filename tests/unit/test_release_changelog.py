@@ -16,6 +16,20 @@ from core.release.changelog import (
     render_release_notes,
 )
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_release_workflow_installs_deps_before_apply():
+    """WO-REL-FLOW-DEPS: release.yml must install dependencies before running
+    `changelog.py --apply`. Importing core.release pulls the versioning ->
+    production_readiness -> security.lifecycle chain, which imports PyYAML; without a deps
+    install the dispatch dies on ModuleNotFoundError (run 31216774291, 2026-08-07)."""
+    wf = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert "pip install -r requirements.txt" in wf, "release.yml must install deps"
+    assert wf.index("requirements.txt") < wf.index(
+        "core.release.changelog"
+    ), "dependency install must come before `changelog.py --apply`"
+
 
 def test_parse_conventional():
     p = parse_conventional("feat(gates): add the thing")
