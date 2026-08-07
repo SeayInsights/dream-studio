@@ -1,0 +1,12 @@
+invocation:
+  type: subagent-target
+  wrapper_agent: data-engineer
+  dispatch_path: ~/.claude/agents/data-engineer.md
+
+behavior:
+  graceful_degradation: true
+  fallback_standard: dbt documentation, BigQuery/Snowflake/Redshift official docs, Airflow documentation
+
+budgets:
+  max_tokens_per_session: null
+  typical_tokens_per_engagement: null   # 266-line SKILL.md — expect higher token usage than average skill

@@ -1,0 +1,55 @@
+# Terraform skill — captured gotchas
+# Source: verbatim from terraform-architect agent (promoted 2026-06-03)
+
+gotchas:
+  - id: tf-g1
+    title: Interrupted apply corrupts state
+    description: >
+      Ctrl+C or CI timeout during apply may leave resources created but unrecorded,
+      or a stale DynamoDB lock. Run terraform force-unlock <ID> to release lock;
+      then terraform plan to assess drift before next apply.
+    severity: critical
+    category: state
+
+  - id: tf-g2
+    title: Tainted resources are destroyed on next apply
+    description: >
+      Partially-created resources are auto-tainted; next plan shows destroy+create.
+      Run terraform untaint <address> to un-mark if the resource is actually healthy.
+    severity: high
+    category: state
+
+  - id: tf-g3
+    title: Sensitive values are plaintext in state
+    description: >
+      sensitive = true masks in CLI output but the value is still in the .tfstate JSON.
+      Control access to state bucket via strict IAM; minimize secrets in state by using
+      data sources to read from Secrets Manager at apply time.
+    severity: critical
+    category: security
+
+  - id: tf-g4
+    title: Deletion-protected resources fail mid-destroy
+    description: >
+      S3 buckets with objects, RDS with deletion_protection, ECR with images will fail
+      mid-destroy. Set force_destroy = true or deletion_protection = false and apply
+      before running terraform destroy.
+    severity: high
+    category: destroy
+
+  - id: tf-g5
+    title: -refresh=false gives stale plan
+    description: >
+      Skipping refresh misses out-of-band changes; the plan file may not reflect real
+      infra by apply time. Use -refresh-only periodically to sync state without changes.
+    severity: medium
+    category: planning
+
+  - id: tf-g6
+    title: Provider major version upgrade requires config migration
+    description: >
+      AWS v4->v5 broke aws_s3_bucket into sub-resources. Bump version constraint, run
+      terraform init -upgrade, run terraform plan -- address every breaking change
+      before apply. Never cross a major version boundary without reading the CHANGELOG.
+    severity: high
+    category: provider-versions

@@ -1,0 +1,12 @@
+triggers:
+  - "resume:"
+  - "pick up:"
+  - "get back to:"
+  - "what's next:"
+  - "what's active:"
+  - "start project:"
+  - "start building:"
+  - "continue:"
+  - "where was I:"
+  - "what am I working on:"
+  - "what should I do:"

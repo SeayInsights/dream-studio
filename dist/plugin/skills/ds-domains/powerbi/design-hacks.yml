@@ -1,0 +1,43 @@
+# Power BI Design Best Practices
+# Source: Jasmin319/Power-BI-Vibes
+
+visual_hierarchy:
+  primary_metrics_top_left: false
+  primary_metrics_header_area: false
+  kpis_large_bold_color: false
+  trends_mid_page_line_area: false
+  details_bottom_tables_lists: false
+
+mobile_optimization:
+  mobile_layout_9_16_created: false
+  visuals_simplified_for_small_screens: false
+  essential_metrics_only: false
+
+performance:
+  aggregated_data_used: false
+  visuals_per_page_under_10: false
+  directquery_only_when_necessary: false
+  composite_models_for_hybrid: false
+
+data_modeling:
+  star_schema_preferred: false
+  avoid_circular_relationships: false
+  inactive_relationships_minimal: false
+  date_table_marked: false
+
+color_usage:
+  brand_colors_applied: false
+  semantic_colors_for_kpis: false  # green=positive, red=negative
+  consistent_color_scheme: false
+
+tooltips:
+  custom_tooltips_for_context: false
+  tooltip_pages_for_detail: false
+
+filters:
+  filter_pane_organized: false
+  slicers_prominent_placement: false
+  default_filters_set: false
+
+verdict: ""  # excellent | good | needs_work
+performance_score: 0  # 1-10

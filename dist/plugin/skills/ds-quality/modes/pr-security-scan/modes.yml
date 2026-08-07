@@ -1,0 +1,62 @@
+# Secure Skill — Mode Configuration
+# Each mode defines which analysts run, dispatch order, and synthesis strategy.
+# any-reject strategy: one reject/strong-reject blocks ship regardless of other signals.
+
+pr-review:
+  status: tested
+  description: "Diff-aware OWASP code scan — injection, auth, data exposure, access control, misconfig, deps"
+  analysts:
+    - injection
+    - auth
+    - exposure
+    - access-control
+    - misconfig
+    - dependencies
+  quick_analysts:
+    - injection
+    - auth
+  max_parallel: 3
+  min_quorum: 4
+  raw_input: true
+  always_synthesize: false
+  synthesis:
+    strategy: any-reject
+    disagreement_threshold: 2
+    output: security-report
+
+architecture-review:
+  status: tested
+  description: "STRIDE threat model — Spoofing, Tampering, Repudiation, Disclosure, DoS, Elevation"
+  analysts:
+    - stride-spoofing
+    - stride-tampering
+    - stride-repudiation
+    - stride-disclosure
+    - stride-dos
+    - stride-elevation
+  quick_analysts:
+    - stride-spoofing
+    - stride-elevation
+  max_parallel: 3
+  min_quorum: 4
+  raw_input: true
+  always_synthesize: true
+  synthesis:
+    strategy: any-reject
+    disagreement_threshold: 2
+    output: threat-model
+
+dependency-audit:
+  status: experimental
+  description: "CVE scan, version pinning check, unused package detection"
+  analysts:
+    - dependencies
+  quick_analysts:
+    - dependencies
+  max_parallel: 1
+  min_quorum: 1
+  raw_input: true
+  always_synthesize: false
+  synthesis:
+    strategy: single-analyst
+    output: security-report

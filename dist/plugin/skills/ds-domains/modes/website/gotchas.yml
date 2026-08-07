@@ -1,0 +1,77 @@
+version: 1.0
+
+avoid:
+  - id: skip-discovery
+    severity: critical
+    discovered: 2026-05-02
+    title: "Never skip the discovery phase on first invocation"
+    context: "Building without structured discovery produces generic, AI-default designs. Discovery forces the agent to understand purpose, audience, and constraints before writing any HTML."
+    fix: "If no discovery brief exists, always run discover mode first. User can provide a pre-made brief to skip."
+
+  - id: improvise-after-direction-lock
+    severity: critical
+    discovered: 2026-05-02
+    title: "Never improvise colors/fonts after direction is locked"
+    context: "The direction lock produces deterministic OKLch palettes and font pairings. Improvising new colors mid-build defeats the purpose of locked directions and introduces AI-default vibes."
+    fix: "After direction lock, all colors MUST come from the locked palette. All fonts MUST be the locked pairing. No exceptions."
+
+  - id: deliver-without-lint
+    severity: critical
+    discovered: 2026-05-02
+    title: "Never deliver an HTML artifact without running anti-slop lint"
+    context: "AI-generated HTML reliably contains purple gradients, Inter as display, emoji icons, and other AI-default patterns. The linter catches these automatically."
+    fix: "Run py scripts/lint-artifact.py <output.html> before every delivery. Fix all findings before presenting to user."
+
+  - id: modify-deck-framework
+    severity: high
+    discovered: 2026-05-02
+    title: "Never modify the deck framework JS/CSS"
+    context: "The deck-framework.html contains frozen navigation, scale-to-fit, and keyboard handling. Modifying it breaks these features. Agent must only fill SLOT markers."
+    fix: "Only insert content into <!-- SLOT:slide-N --> markers. Never touch the framework <script> or <style> blocks."
+
+  - id: animation-over-800ms
+    severity: high
+    discovered: 2026-05-02
+    title: "Never create animations longer than 800ms"
+    context: "Animations over 800ms feel sluggish and break perceived performance. Users notice delay after 400ms; anything past 800ms is a UI bug."
+    fix: "Keep all entrance/exit animations under 800ms. Stagger patterns should complete within 1200ms total."
+
+  - id: duplicate-design-references
+    severity: medium
+    discovered: 2026-05-02
+    title: "Never duplicate references that exist in the design mode"
+    context: "Font pairings, anti-patterns, token architecture, design philosophies, semantic colors, and component composition already exist in skills/domains/modes/design/references/. Duplicating them creates drift."
+    fix: "Always reference existing design mode files by path. Only create NEW reference files for content not in the design mode."
+
+best_practices:
+  - id: lint-before-critique
+    title: "Run anti-slop lint before critique mode"
+    context: "The linter catches mechanical issues (wrong colors, placeholder text). Critique mode evaluates higher-order design quality. Running lint first prevents critique from flagging issues the linter would auto-catch."
+
+  - id: discovery-to-json
+    title: "Discovery output should be structured JSON, not prose"
+    context: "JSON briefs are deterministic and parseable by direction mode. Prose briefs introduce ambiguity."
+
+  - id: direction-lock-is-binding
+    title: "Direction lock is binding for the entire session"
+    context: "Changing directions mid-build wastes all prior work. If user wants a different direction, start a new pipeline."
+
+edge_cases:
+  - id: user-provides-brand-kit
+    title: "User provides existing brand guidelines"
+    context: "Skip discovery and direction if user already has a brand kit. Extract tokens directly from the provided guidelines."
+
+  - id: single-page-vs-site
+    title: "Single page vs multi-page site"
+    context: "For single pages, page mode is sufficient. For multi-page sites, each page runs through the page mode independently but shares the same direction lock and brand tokens."
+
+limitations:
+  - id: no-backend
+    title: "Website mode produces static HTML only"
+    context: "No server-side rendering, no database integration, no API endpoints. For dynamic features, use saas-build mode."
+
+  - id: no-real-deployment
+    title: "Export is local files only"
+    context: "Website mode produces HTML/CSS/JS files. Deployment is handled separately (e.g., Vercel, Cloudflare Pages)."
+
+deprecated: []

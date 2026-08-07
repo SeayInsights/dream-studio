@@ -1,0 +1,12 @@
+invocation:
+  type: subagent-target
+  wrapper_agent: mobile-developer
+  dispatch_path: ~/.claude/agents/mobile-developer.md
+
+behavior:
+  graceful_degradation: true
+  fallback_standard: Official iOS, Android, React Native, and Flutter documentation
+
+budgets:
+  max_tokens_per_session: null
+  typical_tokens_per_engagement: null

@@ -1,0 +1,13 @@
+# Research skill — runtime configuration
+invocation:
+  type: subagent-target
+  wrapper_agent: research-analyst
+  dispatch_path: ~/.claude/agents/research-analyst.md
+
+behavior:
+  graceful_degradation: true
+  fallback_standard: Standard research methodology (source hierarchy, triangulation, bias check)
+
+budgets:
+  max_tokens_per_session: null
+  typical_tokens_per_engagement: null

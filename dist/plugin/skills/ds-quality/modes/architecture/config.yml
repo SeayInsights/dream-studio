@@ -1,0 +1,114 @@
+# Architecture Skill — Stack-Aware Calibration Configuration
+# Version: 1.0.0
+#
+# How this works:
+#   1. The skill reads this file at audit time to determine thresholds.
+#   2. Projects create architecture_config.yml at their repo root to override.
+#   3. The override is merged (not replaced): only specified keys are changed;
+#      all others inherit these defaults.
+#
+# Project override example — create <project_root>/architecture_config.yml:
+#
+#   thresholds:
+#     god_class_loc:
+#       default: 1000   # raise for generated-code-heavy repos
+#   layer_map:
+#     layers:
+#       - name: "controllers"
+#         rank: 0
+#       - name: "services"
+#         rank: 1
+#       - name: "repositories"
+#         rank: 2
+#       - name: "domain"
+#         rank: 3
+#       - name: "infrastructure"
+#         rank: 4
+#
+# Stack-aware calibration — the Architect Genesis lesson:
+#   Their scoring weights (40/25/20/15) didn't generalize across stacks.
+#   A 500-LOC React component and a 500-LOC Java service are different problems.
+#   Dream Studio solves this by externalizing thresholds here, not baking them
+#   into the algorithm. Any project can override without forking the skill.
+
+version: "1.0"
+
+thresholds:
+  # god_class_loc: maximum LOC for a class before arch-001 fires (static pass)
+  # Why different values: React components are small by design (reuse expected);
+  # backend services coordinate multiple concerns (larger is acceptable);
+  # library utilities are single-responsibility (strict).
+  god_class_loc:
+    frontend: 300
+    backend: 500
+    library: 200
+    default: 400
+
+  # max_method_count: maximum public methods on a class before arch-001 fires
+  max_method_count:
+    frontend: 12
+    backend: 25
+    library: 8
+    default: 15
+
+  # max_import_count: maximum external package imports per module (arch-002)
+  # Counts distinct external package names, not total import statements.
+  # Internal relative imports excluded.
+  max_import_count:
+    frontend: 8
+    backend: 15
+    library: 5
+    default: 10
+
+  # max_nesting_depth: maximum directory depth relative to project source root (arch-003)
+  # Depth 1 = direct child of src/ or project root; depth 4 = src/a/b/c/file.py
+  max_nesting_depth:
+    frontend: 3
+    backend: 4
+    library: 2
+    default: 3
+
+  # afferent_coupling_threshold: max in-degree (modules depending on this one) — arch-008
+  # NOTE: arch-008 is DEFERRED to Phase 2. This threshold is reserved for when the
+  # graph builder exists. Do not use in Phase 1 static analysis.
+  afferent_coupling_threshold: 20
+
+  # efferent_coupling_threshold: max out-degree (modules this one depends on) — arch-009
+  # Counts all import targets, both external and internal.
+  efferent_coupling_threshold:
+    service: 12
+    utility: 5
+    default: 8
+
+  # premature_abstraction_implementer_min: minimum concrete implementations
+  # required before an interface/abstract class is NOT flagged (arch-011).
+  # Default 2: requires at least 2 concrete implementations before abstraction is justified.
+  premature_abstraction_implementer_min: 2
+
+
+# layer_map: canonical layer ordering for dependency direction analysis (arch-004).
+#
+# How it works:
+#   - Layers are ordered by rank: rank 0 = highest/most central (orchestration/control)
+#     Higher rank number = outer layer (adapters, infrastructure)
+#   - A layer inversion fires when a module in rank N imports from rank < N
+#     (i.e., a central layer depends on an outer/peripheral layer)
+#
+# Example violation with this map:
+#   core/domain/user.py (rank 1) imports interfaces/api/routes/users.py (rank 3)
+#   → violation: central layer depends on outer layer
+#
+# Default: Dream Studio's own layer structure.
+# Override this completely in your project's architecture_config.yml.
+layer_map:
+  layers:
+    - name: "control"
+      rank: 0    # orchestration, CLI entry points, adapters to external systems
+    - name: "core"
+      rank: 1    # business logic, domain
+    - name: "projections"
+      rank: 2    # derived state, read models
+    - name: "interfaces"
+      rank: 3    # API routes, webhooks, CLI command handlers
+    - name: "canonical"
+      rank: 4    # shared patterns, building blocks (lowest architectural layer)

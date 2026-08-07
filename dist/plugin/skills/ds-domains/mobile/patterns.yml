@@ -1,0 +1,472 @@
+# Mobile Development Patterns
+# Source: synthesized from production repositories and best practices
+version: 1
+
+patterns:
+  - id: swiftui-state-management
+    title: SwiftUI State and ObservableObject
+    description: >
+      Use @State for local view-owned value types (booleans, strings, simple structs).
+      Use @ObservableObject (or @Observable in iOS 17+) for shared reference-type models
+      that multiple views subscribe to. Pass bindings downward with @Binding; never reach
+      upward into parent state. Keep @EnvironmentObject for app-wide singletons only.
+    example: |
+      // iOS 17+ Observable macro
+      @Observable
+      class CartModel {
+          var items: [CartItem] = []
+          var totalPrice: Double { items.reduce(0) { $0 + $1.price } }
+
+          func add(_ item: CartItem) {
+              items.append(item)
+          }
+      }
+
+      struct CartView: View {
+          @Environment(CartModel.self) private var cart
+
+          var body: some View {
+              List(cart.items) { item in
+                  CartRowView(item: item)
+              }
+              Text("Total: \(cart.totalPrice, format: .currency(code: "USD"))")
+          }
+      }
+
+  - id: compose-state-hoisting
+    title: Jetpack Compose State Hoisting
+    description: >
+      Hoist state up to the lowest common ancestor that needs it. Stateless composables
+      receive state and callbacks as parameters -- this makes them reusable and testable.
+      Use remember{} for ephemeral UI state and ViewModel + StateFlow for screen-level
+      state that survives recomposition and configuration changes.
+    example: |
+      // Stateless composable -- fully testable
+      @Composable
+      fun SearchBar(
+          query: String,
+          onQueryChange: (String) -> Unit,
+          modifier: Modifier = Modifier
+      ) {
+          OutlinedTextField(
+              value = query,
+              onValueChange = onQueryChange,
+              modifier = modifier,
+              label = { Text("Search") }
+          )
+      }
+
+      // Screen-level ViewModel holds state
+      class SearchViewModel : ViewModel() {
+          private val _query = MutableStateFlow("")
+          val query: StateFlow<String> = _query.asStateFlow()
+
+          fun onQueryChange(value: String) { _query.value = value }
+      }
+
+      @Composable
+      fun SearchScreen(vm: SearchViewModel = viewModel()) {
+          val query by vm.query.collectAsStateWithLifecycle()
+          SearchBar(query = query, onQueryChange = vm::onQueryChange)
+      }
+
+  - id: react-native-jsi-bridge
+    title: React Native JSI vs Old Bridge
+    description: >
+      The old async bridge serializes all JS<->native calls to JSON over a message queue,
+      adding latency for high-frequency interactions (gestures, animations). JSI (JavaScript
+      Interface) gives JS a direct C++ reference to native objects, enabling synchronous
+      calls and shared memory. Use the New Architecture (Fabric + TurboModules) for
+      performance-sensitive modules. Reanimated 3 and RNGH v2 already run on JSI.
+    example: |
+      // turbo-module definition (NativeMyModule.ts)
+      import type { TurboModule } from 'react-native';
+      import { TurboModuleRegistry } from 'react-native';
+
+      export interface Spec extends TurboModule {
+          getDeviceId(): string;  // synchronous -- no callback needed
+      }
+
+      export default TurboModuleRegistry.getEnforcing<Spec>('MyModule');
+
+      // Usage in JS -- no await needed for sync calls
+      import NativeMyModule from './NativeMyModule';
+      const id = NativeMyModule.getDeviceId();
+
+  - id: flutter-widget-lifecycle
+    title: Flutter Widget and State Lifecycle
+    description: >
+      StatefulWidget lifecycle: createState -> initState -> didChangeDependencies ->
+      build -> (didUpdateWidget if parent rebuilds) -> deactivate -> dispose.
+      Run one-time async work in initState (not in build). Cancel subscriptions in
+      dispose to avoid memory leaks. Prefer StatelessWidget plus a state management
+      solution (Riverpod, Bloc, or Provider) over raw StatefulWidget for complex screens.
+    example: |
+      class UserProfileState extends State<UserProfile> {
+          late final StreamSubscription _sub;
+
+          @override
+          void initState() {
+              super.initState();
+              // Safe place for one-time setup
+              _sub = userStream.listen(_onUserUpdate);
+          }
+
+          @override
+          void dispose() {
+              _sub.cancel();  // Always cancel -- prevent memory leak
+              super.dispose();
+          }
+
+          @override
+          Widget build(BuildContext context) {
+              // Keep build() pure -- no side effects here
+              return Text(user?.name ?? 'Loading...');
+          }
+      }
+
+  - id: deep-linking-setup
+    title: Deep Linking -- Universal Links and App Links
+    description: >
+      iOS Universal Links require an apple-app-site-association (AASA) file served from
+      your domain at /.well-known/apple-app-site-association with Content-Type
+      application/json. Android App Links require a Digital Asset Links JSON file at
+      /.well-known/assetlinks.json. Both must be served over HTTPS with no redirects on
+      that path. Register the associated domain in Xcode entitlements (iOS) and add an
+      intent-filter with autoVerify=true (Android).
+    example: |
+      // iOS -- Xcode entitlements (Associated Domains)
+      // applinks:yourdomain.com
+
+      // AASA file at https://yourdomain.com/.well-known/apple-app-site-association
+      {
+        "applinks": {
+          "apps": [],
+          "details": [
+            {
+              "appID": "TEAMID.com.yourapp",
+              "paths": ["/products/*", "/orders/*"]
+            }
+          ]
+        }
+      }
+
+      // Android AndroidManifest.xml
+      <intent-filter android:autoVerify="true">
+          <action android:name="android.intent.action.VIEW" />
+          <category android:name="android.intent.category.DEFAULT" />
+          <category android:name="android.intent.category.BROWSABLE" />
+          <data android:scheme="https"
+                android:host="yourdomain.com"
+                android:pathPrefix="/products" />
+      </intent-filter>
+
+  - id: push-notification-permissions
+    title: Push Notification Permission Flow
+    description: >
+      On iOS, request notification permission at a contextually relevant moment -- not
+      at app launch. Show a pre-permission prompt (custom UI) explaining the value before
+      triggering the OS dialog. On Android 13+ (API 33), POST_NOTIFICATIONS permission
+      must be requested explicitly at runtime. Register for APNs/FCM after permission
+      is granted and sync the token to your backend immediately.
+    example: |
+      // iOS -- SwiftUI permission request with pre-prompt
+      func requestNotificationPermission() async {
+          let center = UNUserNotificationCenter.current()
+          let settings = await center.notificationSettings()
+          guard settings.authorizationStatus == .notDetermined else { return }
+
+          do {
+              let granted = try await center.requestAuthorization(
+                  options: [.alert, .badge, .sound]
+              )
+              if granted {
+                  await MainActor.run { UIApplication.shared.registerForRemoteNotifications() }
+              }
+          } catch {
+              print("Permission error: \(error)")
+          }
+      }
+
+      // Android 13+ -- request at the right moment
+      val launcher = registerForActivityResult(
+          ActivityResultContracts.RequestPermission()
+      ) { isGranted -> if (isGranted) registerFcmToken() }
+
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+          launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+      }
+
+  - id: background-task-constraints
+    title: Background Task Constraints Per Platform
+    description: >
+      iOS strictly limits background execution. BGProcessingTask allows up to a few
+      minutes for deferred work (set requiresNetworkConnectivity/requiresExternalPower).
+      BGAppRefreshTask gives ~30 seconds for quick updates. Android WorkManager is the
+      recommended approach -- schedule Constraints (network, charging) and the OS runs
+      tasks when conditions are met. Avoid background fetch in React Native without
+      Headless JS; in Flutter use workmanager plugin.
+    example: |
+      // iOS -- register and schedule background task
+      // In AppDelegate: BGTaskScheduler.shared.register(forTaskWithIdentifier:...)
+      func scheduleBackgroundSync() {
+          let request = BGProcessingTaskRequest(identifier: "com.app.sync")
+          request.requiresNetworkConnectivity = true
+          request.requiresExternalPower = false
+          request.earliestBeginDate = Date(timeIntervalSinceNow: 3600)
+          try? BGTaskScheduler.shared.submit(request)
+      }
+
+      // Android -- WorkManager with constraints
+      val constraints = Constraints.Builder()
+          .setRequiredNetworkType(NetworkType.CONNECTED)
+          .build()
+
+      val syncRequest = PeriodicWorkRequestBuilder<SyncWorker>(1, TimeUnit.HOURS)
+          .setConstraints(constraints)
+          .build()
+
+      WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+          "sync", ExistingPeriodicWorkPolicy.KEEP, syncRequest
+      )
+
+  - id: keychain-secure-storage
+    title: Keychain and Secure Storage
+    description: >
+      Never store auth tokens or sensitive data in SharedPreferences (Android) or
+      UserDefaults (iOS). Use Keychain Services (iOS) or Android Keystore + EncryptedSharedPreferences.
+      In React Native, use react-native-keychain. In Flutter, use flutter_secure_storage.
+      Set appropriate accessibility levels -- kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+      prevents iCloud backup of tokens.
+    example: |
+      // iOS Keychain write
+      func saveToken(_ token: String) throws {
+          let data = token.data(using: .utf8)!
+          let query: [String: Any] = [
+              kSecClass as String: kSecClassGenericPassword,
+              kSecAttrAccount as String: "authToken",
+              kSecValueData as String: data,
+              kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+          ]
+          SecItemDelete(query as CFDictionary)  // Remove old entry first
+          let status = SecItemAdd(query as CFDictionary, nil)
+          guard status == errSecSuccess else { throw KeychainError.saveFailed(status) }
+      }
+
+      // React Native -- react-native-keychain
+      import * as Keychain from 'react-native-keychain';
+      await Keychain.setGenericPassword('authToken', token);
+      const creds = await Keychain.getGenericPassword();
+
+  - id: biometric-auth
+    title: Biometric Authentication
+    description: >
+      Use LocalAuthentication (iOS) or BiometricPrompt (Android) for biometric gates.
+      Always check device capability before presenting biometric UI. Provide a fallback
+      (PIN/password) when biometrics fail or are unavailable. Store the real secret in
+      Keychain/Keystore and use biometrics only to unlock access to it -- never transmit
+      biometric data.
+    example: |
+      // iOS LocalAuthentication
+      func authenticateWithBiometrics() async throws -> Bool {
+          let context = LAContext()
+          var error: NSError?
+          guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics,
+                                          error: &error) else {
+              throw BiometricError.notAvailable
+          }
+          return try await context.evaluatePolicy(
+              .deviceOwnerAuthenticationWithBiometrics,
+              localizedReason: "Authenticate to access your account"
+          )
+      }
+
+      // Android BiometricPrompt
+      val promptInfo = BiometricPrompt.PromptInfo.Builder()
+          .setTitle("Biometric Login")
+          .setSubtitle("Log in using your biometric credential")
+          .setNegativeButtonText("Use account password")
+          .build()
+      biometricPrompt.authenticate(promptInfo)
+
+  - id: offline-first-local-db
+    title: Offline-First with SQLite / Room / Core Data
+    description: >
+      Design for offline-first: write to local DB first, then sync to server in the
+      background. On iOS use Core Data (or SwiftData iOS 17+) or SQLite via GRDB.
+      On Android use Room with a sync adapter or WorkManager job. In React Native use
+      WatermelonDB or expo-sqlite. Implement a conflict resolution strategy (last-write-wins,
+      CRDTs, or server-authority) before building sync logic.
+    example: |
+      // Android Room entity + DAO
+      @Entity(tableName = "notes")
+      data class Note(
+          @PrimaryKey val id: String = UUID.randomUUID().toString(),
+          val content: String,
+          val updatedAt: Long = System.currentTimeMillis(),
+          val synced: Boolean = false
+      )
+
+      @Dao
+      interface NoteDao {
+          @Query("SELECT * FROM notes WHERE synced = 0")
+          fun getUnsynced(): Flow<List<Note>>
+
+          @Insert(onConflict = OnConflictStrategy.REPLACE)
+          suspend fun upsert(note: Note)
+      }
+
+      // React Native -- WatermelonDB lazy-loading
+      const Post = database.get('posts').query(
+        Q.where('synced', false)
+      ).observe()
+
+anti_patterns:
+  - id: async-storage-tokens
+    title: Storing Auth Tokens in AsyncStorage (RN)
+    description: >
+      AsyncStorage in React Native is unencrypted and readable by any process with
+      access to the app sandbox. Storing JWT tokens, session secrets, or API keys there
+      exposes them to attackers with physical or backup access to the device. Use
+      react-native-keychain instead, which delegates to the platform secure enclave.
+
+  - id: main-thread-blocking-ios
+    title: Blocking the Main Thread on iOS
+    description: >
+      All UI updates must happen on the main thread. Running network calls, heavy JSON
+      decoding, or file I/O synchronously on the main thread causes dropped frames (below
+      60fps), ANR-like freezes, and watchdog kills in the background. Use async/await
+      or DispatchQueue.global() for work and DispatchQueue.main.async (or MainActor)
+      to update UI.
+
+  - id: swift-closure-memory-leaks
+    title: Retain Cycles from Closure Captures in Swift
+    description: >
+      Capturing self strongly inside a closure stored on self creates a retain cycle,
+      leaking the object. Common in ViewController viewModel subscriptions, URLSession
+      completion handlers stored as properties, and Combine sink closures. Always use
+      [weak self] in closures that outlive a function scope. Check with Instruments
+      Allocations template -- retained ViewController/ViewModel instances after pop are
+      a signal.
+
+  - id: overusing-useeffect-rn
+    title: Over-using useEffect in React Native
+    description: >
+      Treating useEffect as a general event handler leads to infinite re-render loops
+      (effect updates state -> re-renders -> effect fires again), race conditions from
+      stale closures, and hard-to-trace side effects. Derive values directly from state
+      where possible. Use event handlers for user-initiated actions. Reserve useEffect
+      for true external synchronization (subscriptions, timers, third-party SDK setup).
+
+  - id: android-back-stack-ignored
+    title: Ignoring Android Back Stack Behavior
+    description: >
+      Android users expect the system Back button to navigate hierarchically and exit
+      the app from the root screen. Implementing custom back behavior without calling
+      super or not clearing task stacks correctly leads to ghost Activities accumulating
+      in the back stack, duplicate screens on re-launch, and confusing navigation. Always
+      use the Navigation component or proper FLAG_ACTIVITY_* flags for task management.
+
+  - id: flutter-build-method-side-effects
+    title: Side Effects Inside Flutter build()
+    description: >
+      The build() method in Flutter may be called many times per second during animations
+      or state changes. Placing network calls, analytics events, stream subscriptions, or
+      heavy computations in build() causes duplicate calls and unpredictable behavior.
+      All side effects belong in initState(), didChangeDependencies(), or state management
+      callbacks -- never in build().
+
+gotchas:
+  - id: ios-simulator-vs-device-push
+    title: Push Notifications and Biometrics Do Not Work on iOS Simulator
+    description: >
+      The iOS Simulator cannot register with APNs, so push notification token registration
+      always fails silently. Face ID on simulator is simulated but Touch ID prompts may
+      behave differently. Always test push notification flows and biometric auth on a
+      physical device. Use the simctl push command to send simulated payloads locally
+      during development.
+    fix: >
+      Run "xcrun simctl push <device-id> <bundle-id> payload.apns" for local push
+      simulation. Gate APNs registration code with "#if !targetEnvironment(simulator)"
+      or check UNAuthorizationStatus at runtime. Always run final push + biometric QA
+      on real hardware before submitting to App Store.
+
+  - id: android-api-fragmentation
+    title: Android API Level Fragmentation
+    description: >
+      Features added in higher API levels crash on lower API devices if not guarded.
+      Common traps: JobScheduler available from API 21 but constraints from API 24;
+      BiometricPrompt from API 28; exact alarms require SCHEDULE_EXACT_ALARM from API 31;
+      POST_NOTIFICATIONS permission from API 33. minSdk targets vs actual device install
+      base diverge significantly in emerging markets.
+    fix: >
+      Always wrap API-gated code in "if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.X)"
+      checks. Use the compat libraries (AndroidX) wherever available -- they handle
+      version checks internally. Check your Play Console's Android version distribution
+      report before raising minSdk.
+
+  - id: metro-bundler-cache-corruption
+    title: React Native Metro Bundler Cache Corruption
+    description: >
+      Metro's transform cache can become stale or corrupted after dependency updates,
+      native module installs, or Xcode/Gradle clean builds. Symptoms include "module not
+      found" errors for packages that are installed, stale JS executing after updates,
+      and inexplicable red screen crashes that disappear after a clean.
+    fix: >
+      Run "npx react-native start --reset-cache" to clear Metro cache.
+      For deeper cleans: "cd android && ./gradlew clean" and "cd ios && xcodebuild clean".
+      Delete node_modules and reinstall if the issue persists after cache reset.
+      On macOS also run "watchman watch-del-all" to clear file watchers.
+
+  - id: flutter-hot-reload-state-limitations
+    title: Flutter Hot Reload Does Not Reset State
+    description: >
+      Hot reload in Flutter re-injects updated code but preserves existing widget tree
+      state. This means initState() does not re-run, StatefulWidget constructors are not
+      called again, and changes to initial state values, constructor parameters, or
+      class-level constants may appear to have no effect. Changes to build() render
+      immediately; changes to initialization logic require a hot restart.
+    fix: >
+      Use hot restart (Shift+R in terminal, or the restart button in IDEs) when changing
+      initState, constructor logic, or provider/riverpod setup. Reserve hot reload for
+      UI layout and styling iterations only.
+
+  - id: ios-ats-blocking-http
+    title: iOS App Transport Security Blocking HTTP Requests
+    description: >
+      iOS enforces App Transport Security (ATS) by default, blocking all plaintext HTTP
+      connections. API calls to http:// URLs fail silently in production builds (only
+      visible in device logs). This affects internal staging servers, third-party SDKs
+      that use HTTP, and embedded web content.
+    fix: >
+      Migrate all endpoints to HTTPS. For staging exceptions, add NSExceptionDomains
+      to Info.plist scoped to specific domains -- never set NSAllowsArbitraryLoads to
+      true app-wide (App Store review flags it). Use Charles Proxy or mitmproxy to
+      inspect TLS traffic during debugging.
+
+  - id: android-proguard-stripping
+    title: Android ProGuard/R8 Stripping Needed Classes
+    description: >
+      Release builds run R8 (ProGuard replacement) which removes unreferenced classes and
+      renames symbols. This silently breaks reflection-based code, Gson/Moshi serialization
+      of model classes, Firebase SDK internals, and native JNI bindings. Crashes appear
+      only in release builds, not debug.
+    fix: >
+      Add keep rules in proguard-rules.pro for any class accessed via reflection or
+      serialization: "-keep class com.yourapp.models.** { *; }".
+      Test release builds with "adb install app-release.apk" before every Play Store
+      submission. Check Logcat for ClassNotFoundException or NoSuchMethodException
+      after installing the signed APK.
+
+  - id: rn-android-keyboard-resize
+    title: React Native Android Keyboard Pushing Layout Off-Screen
+    description: >
+      Android's default windowSoftInputMode is "adjustResize" in some configs and
+      "adjustPan" in others, causing inconsistent behavior when the keyboard appears.
+      KeyboardAvoidingView behaves differently on iOS vs Android and often requires
+      platform-specific behavior prop values.
+    fix: >
+      Set android:windowSoftInputMode="adjustResize" in AndroidManifest.xml for the
+      MainActivity. Use KeyboardAvoidingView with behavior="padding" on iOS and
+      behavior="height" on Android. Test keyboard interactions on both platforms
+      and on devices with different screen aspect ratios.

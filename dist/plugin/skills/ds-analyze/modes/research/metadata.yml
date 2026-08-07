@@ -1,0 +1,53 @@
+name: research
+version: 1.0.0
+pack: analyze
+created_at: 2026-06-03
+updated_at: 2026-06-03
+
+origin: promoted-from-agent
+parent_skills: []
+generation: 0
+created_by: human
+
+status: jit-pending
+health: active
+tested_with_models: [sonnet]
+tested_with_hosts: [claude-code]
+
+quality_metrics:
+  times_used: 0
+  success_rate: null
+  avg_token_usage: null
+  avg_execution_time_seconds: null
+  last_success: null
+  last_failure: null
+
+common_failures: []
+
+dependencies:
+  core_modules: []
+  tools_required: []
+  tools_optional: []
+  env_vars_required: []
+  files_required: []
+  calls_skills: []
+
+compatibility:
+  min_context_window: 32000
+  works_best_with: sonnet
+  works_with: [sonnet, opus, haiku]
+  platforms: [windows, macos, linux]
+
+tags: [research, market-research, competitive-analysis, evidence-gathering, triangulation, bias-check]
+category: analyze
+triggers:
+  - "market research"
+  - "competitive analysis"
+  - "evidence gathering"
+  - "structured research"
+  - "source triangulation"
+description: >
+  Conduct structured research with source hierarchy (Tier 1/2/3), triangulation gate
+  (3+ independent sources), anti-sycophancy disconfirming-evidence-first protocol,
+  assumption inventory, and bias check. For market research, competitive analysis,
+  and evidence gathering tasks. Invoked via research-analyst subagent (Task tool dispatch).

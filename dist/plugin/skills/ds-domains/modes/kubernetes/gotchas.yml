@@ -1,0 +1,53 @@
+# Kubernetes skill — captured gotchas
+# Source: verbatim from kubernetes-expert agent (promoted 2026-06-03)
+
+gotchas:
+  - id: k8s-g1
+    title: OOMKill looks like CrashLoopBackOff
+    description: >
+      Check kubectl describe pod <name> | grep -A5 "Last State" for exit code 137
+      (OOMKilled) before adjusting probes. The symptom is identical until you look
+      at the exit code.
+    severity: high
+    category: debugging
+
+  - id: k8s-g2
+    title: HPA shows "unknown" targets without resource requests
+    description: >
+      HPA cannot compute utilization without resource requests on containers.
+      Fix requests on all containers, wait 2 scrape intervals (typically 30s each).
+    severity: high
+    category: autoscaling
+
+  - id: k8s-g3
+    title: Liveness probe restarts healthy pods during slow startup
+    description: >
+      startupProbe must have failureThreshold * periodSeconds >= max startup time.
+      Liveness does not start until startup probe passes. Missing startupProbe
+      causes liveness to kill a legitimately slow-starting pod.
+    severity: high
+    category: probes
+
+  - id: k8s-g4
+    title: Pending pods are not a pod bug
+    description: >
+      kubectl describe pod Events section shows Insufficient cpu / Insufficient memory
+      / node affinity mismatch. Fix at cluster/request level, not at pod spec level.
+    severity: medium
+    category: scheduling
+
+  - id: k8s-g5
+    title: RBAC denies are silent by default
+    description: >
+      Test with kubectl auth can-i <verb> <resource> --as=system:serviceaccount:<ns>:<sa>
+      before deploying. RBAC failures produce no meaningful runtime error.
+    severity: high
+    category: rbac
+
+  - id: k8s-g6
+    title: Default SA token mounted in every pod enables API server access
+    description: >
+      Set automountServiceAccountToken: false on ServiceAccount to prevent
+      unauthenticated pods from querying the API server. Default is true.
+    severity: high
+    category: security

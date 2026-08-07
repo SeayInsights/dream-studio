@@ -1,0 +1,20 @@
+skill_id: backend-api
+skill_name: Backend API Quality
+pack: quality
+mode: backend-api
+skill_description: |
+  Audits HTTP/REST API endpoints for production-readiness.
+  Covers input validation, error handling, authentication, authorization,
+  rate limiting, CORS policy, idempotency, pagination, and response shape.
+supports_brownfield: true
+frameworks_supported:
+  - fastapi
+  - flask
+  - django-rest
+  - express
+  - fastify
+  - hono
+  - nextjs-api
+  - gin
+  - axum
+  - actix

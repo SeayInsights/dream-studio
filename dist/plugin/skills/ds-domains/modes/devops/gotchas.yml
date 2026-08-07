@@ -1,0 +1,46 @@
+# DevOps skill — captured gotchas
+# Source: verbatim from devops-engineer agent (promoted 2026-06-03)
+
+gotchas:
+  - id: devops-g1
+    title: GITHUB_TOKEN cannot trigger downstream workflows
+    description: >
+      A commit pushed by GITHUB_TOKEN does not start CI on that commit.
+      Use a GitHub App token or PAT when CI must run on an automated commit.
+    severity: high
+    category: github-actions
+
+  - id: devops-g2
+    title: Fork PRs have no secrets by design
+    description: >
+      pull_request from a fork gets a read-only GITHUB_TOKEN and empty secret
+      values by design. Gate deployment jobs on a maintainer-added label or
+      use Environments.
+    severity: high
+    category: github-actions
+
+  - id: devops-g3
+    title: Concurrent deploys race on shared infrastructure
+    description: >
+      Two merges in quick succession both trigger deploy; last-write-wins on
+      S3 or leaves partial state. Add concurrency group to serialize.
+    severity: high
+    category: deployment
+
+  - id: devops-g4
+    title: Cache poisoning via untrusted PRs
+    description: >
+      Fork PRs that can write to a shared cache key can inject malicious
+      node_modules into trusted workflow runs. Scope keys or restrict cache
+      writes to main.
+    severity: high
+    category: security
+
+  - id: devops-g5
+    title: Artifact retention and size limits are silent on older action versions
+    description: >
+      Default 90-day retention, 500MB public / 2GB private per run. Upload
+      silently truncates on older action versions; actions/upload-artifact v4
+      fails loudly. Use v4.
+    severity: medium
+    category: artifacts

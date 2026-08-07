@@ -1,0 +1,5 @@
+triggers:
+  - "close milestone:"
+  - "milestone done:"
+
+estimated_tokens: 800

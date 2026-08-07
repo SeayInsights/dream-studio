@@ -1,0 +1,31 @@
+# Google Material Design 3 Compliance
+# Source: material-components/material-web
+
+material_principles:
+  material_as_metaphor: false  # Physical surfaces and edges
+  bold_graphic_intentional: false  # Print-based design
+  motion_provides_meaning: false  # User actions have consequences
+
+grid_system:
+  8dp_grid_used: false
+  4dp_for_dense_ui: false
+
+typography:
+  typography_scale_applied: false  # display, headline, body
+  roboto_or_material_font: false
+
+color_system:
+  primary_color_defined: false
+  secondary_accent_color: false
+  surface_backgrounds: false
+  error_color: false
+
+elevation:
+  consistent_shadow_usage: false
+  level_0_to_5_applied: false
+
+touch_targets:
+  minimum_48x48dp: false
+
+verdict: ""  # compliant | non_compliant
+issues: []

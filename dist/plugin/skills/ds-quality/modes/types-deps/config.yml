@@ -1,0 +1,145 @@
+name: types-deps
+model_tier: sonnet
+description: "Type safety and dependency health audit"
+argument-hint: "audit | build"
+user_invocable: true
+args: mode
+
+# ── Source-dir discovery (project-agnostic) ──────────────────────────────────
+# typ-001 and dep-007 discover this project's source roots rather than hardcoding
+# any specific directory layout. Do NOT assume core/, interfaces/, spool/ or any
+# Dream Studio-specific structure — this skill runs across the user's projects.
+source_dir_discovery:
+  # Files whose presence signals a source root candidate
+  package_markers: ["__init__.py"]
+  # pyproject.toml keys that declare source roots (checked in order)
+  pyproject_source_keys:
+    - "tool.setuptools.packages.find.where"   # e.g., ["."]
+    - "tool.setuptools.packages"              # explicit list
+    - "tool.coverage.run.source"              # coverage source dirs
+  # Fallback: top-level directories containing __init__.py (depth 1 only)
+  fallback: scan_root_packages
+
+# ── Type checker config discovery (typ-001) ──────────────────────────────────
+type_checker:
+  # Checked in priority order; first found wins
+  config_files:
+    - "pyrightconfig.json"          # pyright (Microsoft)
+    - "mypy.ini"                    # mypy standalone config
+    - ".mypy.ini"
+    - "setup.cfg"                   # [mypy] section
+    - "pyproject.toml"              # [tool.mypy] or [tool.pyright] sections
+  # pyright: the "include" array is the coverage surface
+  pyright_coverage_key: "include"
+  # mypy: the "files" / "packages" / "modules" keys define coverage
+  mypy_coverage_keys: ["files", "packages", "modules"]
+  # typeCheckingMode below which typ-001 upgrades its recommendation
+  pyright_permissive_modes: ["off"]     # "basic" is acceptable baseline; "strict" is ideal
+
+# ── Any leakage detection (typ-002) ──────────────────────────────────────────
+any_leakage:
+  # AST-level auto-accept: these patterns are recognized as boundary Any and skip LLM
+  # confirmation entirely. They are the community-consensus legitimate uses.
+  auto_accept_patterns:
+    # Common parameter names that signal JSON/external data boundaries
+    boundary_param_names:
+      - "data"
+      - "payload"
+      - "raw"
+      - "response"
+      - "body"
+      - "kwargs"
+    # Common function name prefixes that signal parsing/deserialization
+    boundary_function_prefixes:
+      - "parse_"
+      - "load_"
+      - "from_json"
+      - "from_dict"
+      - "from_yaml"
+      - "deserialize"
+      - "decode_"
+    # Structural auto-accept: dict[str, Any] and list[Any] in annotation position
+    # (the canonical JSON-value type; almost always legitimate)
+    auto_accept_type_forms:
+      - "dict[str, Any]"
+      - "Dict[str, Any]"
+      - "list[Any]"
+      - "List[Any]"
+      - "Optional[Any]"        # rare but accepted at boundaries
+  # Only functions/parameters NOT matching auto-accept go to LLM confirm
+  llm_confirm_required: true
+
+# ── Dependency audit (dep-001/002/003) ───────────────────────────────────────
+dependency_audit:
+  # Tools to check for CVE gate (dep-001)
+  cve_tools: ["pip-audit", "safety", "cyclonedx-bom"]
+  # CI signal for non-blocking gate
+  non_blocking_ci_patterns: ["continue-on-error: true", "continue-on-error:true"]
+  # dep-001: run the actual CVE tool when possible (to set severity from real output)
+  run_actual_audit: true
+  # dep-001 severity thresholds
+  severity_cve_present_nonblocking: critical
+  severity_no_cve_nonblocking: high
+  severity_no_tool: critical
+
+  # Lock file patterns (dep-002) — ordered by common convention
+  lock_file_patterns:
+    - "requirements.lock"
+    - "requirements-prod.lock"
+    - "requirements/production.lock"
+    - "poetry.lock"              # poetry
+    - "Pipfile.lock"             # pipenv
+    - "*.lock"                   # any .lock file at root
+  dev_lock_patterns:
+    - "requirements-dev.lock"
+    - "requirements-dev.txt.lock"
+    - "requirements/dev.lock"
+  # If no lock file, check if requirements files use only exact == pins
+  exact_pin_pattern: "=="        # acceptable alternative to a lock file
+
+  # License gate tools (dep-003)
+  license_tools: ["pip-licenses", "liccheck", "fossa"]
+  license_config_files: [".licenserc", "liccheck.ini", ".fossa.yml", "liccheck.cfg"]
+
+# ── Circular import detection (dep-007) ──────────────────────────────────────
+circular_imports:
+  # Exclude TYPE_CHECKING-guarded imports at AST level BEFORE candidates are generated.
+  # LLM sees only genuinely-ambiguous unguarded cycles; not a pile the AST could clear.
+  exclude_type_checking_guards: true   # imports inside `if TYPE_CHECKING:` blocks
+  exclude_function_level_imports: true  # imports inside function/method bodies (deferred)
+  exclude_try_except_imports: false     # try/except import blocks may be real cycles; keep
+  # Directories to skip entirely (generated code, migrations, etc.)
+  exclude_dirs:
+    - "__pycache__"
+    - "*.egg-info"
+    - ".git"
+    - "tests"                    # test files don't create production import cycles
+
+# ── Scope modes ───────────────────────────────────────────────────────────────
+scope_modes:
+  default: changed
+  sample_size: 10                # per top-level source dir
+
+# ── LLM pass settings ─────────────────────────────────────────────────────────
+audit:
+  llm_batch_size: 20             # files per LLM call for Any-leakage/cycle confirmation
+
+# ── Token budgets (estimates — first audit will validate) ──────────────────────
+budgets:
+  # Config rules (typ-001, dep-001, dep-002, dep-003) — static only, minimal tokens
+  max_tokens_config_rules: 5000
+  # Code rules (typ-003, typ-004) — static only, scales with file count
+  max_tokens_static_code_rules: 25000
+  # LLM confirm rules (typ-002, dep-007) — scales with candidate count
+  max_tokens_per_llm_confirm: 600    # per candidate
+  # Full audit (all rules, --changed default scope)
+  max_tokens_changed: 25000
+  max_tokens_full_small: 300000      # repos < 50 source files
+  max_tokens_full_medium: 1000000    # repos 50-200 source files
+  max_tokens_full_large: 3000000     # repos > 200 source files
+
+thresholds:
+  min_confidence_for_llm_finding: 0.75
+  halt_on_critical_in_build: true
+  warn_on_high_in_build: true
+  suppression_default_expires_days: 90

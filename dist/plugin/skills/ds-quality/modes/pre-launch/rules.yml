@@ -1,0 +1,1232 @@
+# Pre-Launch Rules — Phase 1
+# Version: 1.0.0
+# Schema version: 1
+#
+# Phase 1 scope: 20 rules (pl-001–020)
+# Phase 2 (18.8.x): orchestration wrapper — calls all quality skills, maps to T1/T2/T3, launch verdict
+#
+# TIER SYSTEM:
+#   T1 = launch blocking — must fix before launch; CLI exit code 1
+#   T2 = launch warning — should fix; surfaced but not blocking
+#   T3 = advisory — nice-to-have; informational only
+#
+# SERVICE-TYPE DISPATCH (load-bearing design decision):
+#   Rules annotated with service_types list the types where the rule applies.
+#   Rules with service_types: [all] apply regardless of detected service type.
+#   pl-001, pl-002, pl-003 apply to consumer services only at T1;
+#   internal-service gets T2; developer-tool and library get SILENT.
+#
+# CROSS-REFERENCES (dual-angle, not duplicates):
+#   pl-015 ↔ sec-*: pl-015 checks for security review sign-off document;
+#     sec-* checks for security finding patterns in code. Different surfaces.
+#   pl-017 ↔ dbc-*: pl-017 checks for privacy impact assessment document;
+#     dbc-* checks for PII handling patterns. Different surfaces.
+#   pl-012 ↔ ops-*: ops-* covers operational discipline (SIGTERM, health, timeout);
+#     pl-012 covers release rollback documentation. Different concern.
+#   pl-019 ↔ db-*: db-* audits migration schema quality; pl-019 checks whether a
+#     data migration is marked reversible in release docs. Different angle.
+#
+# DEFERRED (Phase 2 — orchestration wrapper):
+#   Calling existing security/dbc/ops/etc. skills under launch thresholds is Phase 2.
+#   Phase 1 only checks document presence/quality — not code findings.
+
+rules:
+
+  # ─── Category 1: Legal Documents ──────────────────────────────────────────
+
+  - id: "pl-001"
+    name: "Terms of Service or Terms & Conditions missing"
+    tier: T1
+    category: legal_documents
+    service_types:
+      consumer: T1
+      internal-service: T2
+      developer-tool: silent
+      library: silent
+    severity: high
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".md", ".html", ".txt"]
+      note: "Document presence rule. Scans for Terms of Service file at known paths (config.yml legal_doc_paths.terms_of_service)."
+
+    source:
+      list: "Consumer Protection Law"
+      section: "Service Terms"
+      item: "Consumer-facing services must provide legally binding terms governing service use"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          Scan for Terms of Service at all paths listed in config.yml:legal_doc_paths.terms_of_service.
+          Also check: UI code for /terms, /tos, /terms-of-service link patterns.
+          Also check: package.json or pyproject.toml for "terms" or "legal" metadata fields.
+
+          Consumer services: FIRE if not found.
+          Internal-service: FIRE at T2 (advisory — internal services often skip ToS).
+          Developer-tool / library: SILENT.
+
+          Flag as CANDIDATE if file found but is clearly a placeholder (< 200 words).
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are a launch readiness auditor checking rule pl-001.
+
+          Rule: pl-001 — Terms of Service missing or insufficient
+          Tier: T1 (launch blocking for consumer services)
+
+          Service type: {service_type}
+          File found (if any): {file_path}
+          Contents:
+          {file_excerpt}
+
+          Is the Terms of Service adequate for launch?
+
+          ADEQUATE (do NOT flag):
+          - Document covers: service description, user obligations, limitation of liability,
+            termination, governing law, dispute resolution
+          - At least 500 words of substantive content
+          - Not a generic placeholder ("Your terms here" / "TODO: add terms")
+
+          INADEQUATE (flag):
+          - No file found at any configured path
+          - File exists but is a template placeholder
+          - File exists but missing core sections (no liability limitation, no governing law)
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename or 'not found'", "explanation": "one sentence"}
+        context_scope: file
+        estimated_tokens: 400
+
+    triggers:
+      - "Terms of Service file not found at any configured path"
+      - "Terms of Service file found but appears to be a placeholder"
+
+    suppressions:
+      - "# pl-001: ignore"
+      - "// pl-001: ignore"
+
+    remediation: |
+      Create TERMS.md or docs/legal/terms.md with:
+      - Description of the service and what users agree to
+      - User obligations and prohibited uses
+      - Limitation of liability
+      - Termination conditions
+      - Governing law and dispute resolution
+      Template available at: canonical/skills/quality/modes/pre-launch/templates/terms-of-service.md
+
+    action: "report"
+
+  - id: "pl-002"
+    name: "Privacy Policy missing"
+    tier: T1
+    category: legal_documents
+    service_types:
+      consumer: T1
+      internal-service: T2
+      developer-tool: silent
+      library: silent
+    severity: critical
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".md", ".html", ".txt"]
+      note: "Document presence rule. Scans for Privacy Policy at known paths. Critical for consumer services handling any personal data."
+
+    source:
+      list: "GDPR Article 13 / CCPA Section 1798.100"
+      section: "Transparency requirement"
+      item: "Services collecting personal data must provide clear privacy policy before collection"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          Scan for Privacy Policy at all paths in config.yml:legal_doc_paths.privacy_policy.
+          Also check: UI code for /privacy, /privacy-policy link patterns.
+          Consumer services: FIRE at T1 if not found.
+          Internal-service: FIRE at T2.
+          Developer-tool: SILENT unless has_pii_schema=True (then T2).
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are a launch readiness auditor checking rule pl-002.
+
+          Rule: pl-002 — Privacy Policy missing or insufficient
+          Tier: T1 (launch blocking for consumer services handling personal data)
+
+          Service type: {service_type}
+          PII schema detected: {has_pii_schema}
+          File found (if any): {file_path}
+          Contents:
+          {file_excerpt}
+
+          Is the Privacy Policy adequate for launch?
+
+          ADEQUATE (do NOT flag):
+          - Covers: data collected, why collected, how stored, third parties, user rights,
+            retention, contact information, how to request deletion
+          - Not a generic placeholder
+          - References applicable regulations (GDPR, CCPA) if EU/CA users expected
+
+          INADEQUATE (flag):
+          - No file found
+          - Placeholder only
+          - Missing user rights section or data deletion procedure
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename or 'not found'", "explanation": "one sentence"}
+        context_scope: file
+        estimated_tokens: 400
+
+    triggers:
+      - "Privacy Policy file not found at any configured path"
+      - "Privacy Policy file found but is a placeholder or missing key sections"
+
+    suppressions:
+      - "# pl-002: ignore"
+      - "// pl-002: ignore"
+
+    remediation: |
+      Create PRIVACY.md or docs/legal/privacy-policy.md covering:
+      - Data collected and why
+      - How data is stored and protected
+      - Third-party data sharing
+      - User rights (access, deletion, portability)
+      - Data retention periods
+      - Contact information for privacy requests
+      Template: canonical/skills/quality/modes/pre-launch/templates/privacy-policy.md
+
+    action: "report"
+
+  - id: "pl-003"
+    name: "Cookie Notice missing for services using tracking cookies"
+    tier: T1
+    category: legal_documents
+    service_types:
+      consumer: T1
+      internal-service: T2
+      developer-tool: silent
+      library: silent
+    severity: high
+
+    applies_to:
+      languages: [typescript, javascript]
+      file_types: [".ts", ".tsx", ".js", ".jsx", ".md"]
+      note: "Checks for cookie notice when analytics, tracking, or session cookies are detected in UI code."
+
+    source:
+      list: "EU ePrivacy Directive / GDPR"
+      section: "Cookie Consent"
+      item: "Services using non-essential cookies must obtain prior consent and provide a cookie notice"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          1. Check if cookies are used: scan for document.cookie, localStorage analytics,
+             Google Analytics, Mixpanel, Hotjar, or cookie-setting patterns in JS/TS.
+          2. If cookies detected AND consumer service: check for cookie notice file or
+             cookie consent component (CookieBanner, CookieConsent, cookie-banner patterns).
+          3. FIRE at T1 if cookies used + consumer + no notice found.
+          4. SILENT if no cookies detected.
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are a launch readiness auditor checking rule pl-003.
+
+          Rule: pl-003 — Cookie Notice missing
+          Tier: T1 for consumer services using cookies
+
+          Code context (analytics/cookie usage found):
+          {static_finding_excerpt}
+
+          Does this service have a cookie consent mechanism?
+
+          ADEQUATE (do NOT flag):
+          - Cookie banner component (CookieBanner, CookieConsent) found in UI code
+          - Cookie policy page exists at /cookies, /cookie-policy
+          - Only session-essential cookies used (no tracking/analytics)
+
+          INADEQUATE (flag):
+          - Non-essential cookies (analytics, tracking, marketing) used without notice
+          - No cookie consent mechanism in UI code
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "explanation": "one sentence"}
+        context_scope: file
+        estimated_tokens: 400
+
+    triggers:
+      - "Analytics or tracking cookies used without cookie consent mechanism"
+
+    suppressions:
+      - "# pl-003: ignore"
+      - "// pl-003: ignore"
+
+    remediation: |
+      Add a cookie consent banner:
+      React: use react-cookie-consent or cookie-banner component
+      Or: create docs/legal/cookies.md and link from footer
+
+    action: "report"
+
+  - id: "pl-004"
+    name: "Accessibility Statement missing when accessibility features claimed"
+    tier: T2
+    category: legal_documents
+    service_types:
+      consumer: T2
+      internal-service: T3
+      developer-tool: silent
+      library: silent
+    severity: medium
+
+    applies_to:
+      languages: [typescript, javascript]
+      file_types: [".md", ".tsx", ".jsx"]
+      note: "LLM-only. Only fires if accessibility is mentioned in README/docs as a feature."
+
+    source:
+      list: "EN 301 549 / ADA Section 508"
+      section: "Accessibility Conformance"
+      item: "Services claiming WCAG compliance should publish an accessibility conformance statement"
+
+    detection:
+      type: llm_only
+      llm:
+        prompt_template: |
+          You are a launch readiness auditor checking rule pl-004.
+
+          Rule: pl-004 — Accessibility Statement missing
+          Tier: T2 (warning for consumer services)
+
+          README or docs excerpt:
+          {file_excerpt}
+
+          Is an Accessibility Statement required and present?
+
+          NOT REQUIRED (do NOT flag):
+          - Service makes no accessibility claims
+          - No WCAG or ADA compliance mentioned
+          - Developer tool or library (not end-user facing)
+
+          REQUIRED and MISSING (flag as T2):
+          - Service explicitly claims WCAG 2.1/2.2 compliance in docs
+          - Service claims ADA or EN 301 549 conformance
+          - No accessibility-statement.md or /accessibility page found
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename", "explanation": "one sentence"}
+        context_scope: file
+        estimated_tokens: 350
+
+    triggers:
+      - "Accessibility compliance claimed without published conformance statement"
+
+    suppressions:
+      - "# pl-004: ignore"
+
+    remediation: |
+      Publish an Accessibility Statement at docs/accessibility-statement.md:
+      - Conformance level claimed (WCAG 2.1 AA)
+      - Known issues and timeline for fixes
+      - Contact for accessibility feedback
+      Template: canonical/skills/quality/modes/pre-launch/templates/accessibility-statement.md
+
+    action: "report"
+
+  - id: "pl-005"
+    name: "GDPR Data Processing Agreement missing for EU-facing services"
+    tier: T1
+    category: legal_documents
+    service_types:
+      consumer: T1
+      internal-service: T2
+      developer-tool: silent
+      library: silent
+    severity: high
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".md", ".yaml", ".yml"]
+      note: "Only fires when 'gdpr' in compliance_hints or jurisdiction=eu in config."
+
+    source:
+      list: "GDPR Article 28"
+      section: "Processor obligations"
+      item: "Data processing by processors requires a Data Processing Agreement with each processor"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Pre-condition: compliance_hints contains 'gdpr' OR jurisdiction=eu in config.
+          If pre-condition not met: SILENT.
+
+          Scan for DPA at all paths in config.yml:legal_doc_paths.gdpr_dpa.
+          Also check: docs/legal/ for any file with 'data-processing' in name.
+
+          FIRE at T1 if consumer service with gdpr hint and no DPA found.
+        fallback_to_llm: false
+
+    triggers:
+      - "GDPR DPA not found for EU-facing consumer service"
+
+    suppressions:
+      - "# pl-005: ignore"
+
+    remediation: |
+      Create docs/legal/dpa.md or obtain signed DPAs from all data processors (cloud providers, email, analytics).
+      Template: canonical/skills/quality/modes/pre-launch/templates/gdpr-dpa.md
+
+    action: "report"
+
+  - id: "pl-006"
+    name: "Copyright notice missing from codebase or UI"
+    tier: T3
+    category: legal_documents
+    service_types:
+      consumer: T3
+      internal-service: T3
+      developer-tool: T3
+      library: T2
+    severity: low
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".md", ".tsx", ".jsx", ".ts", ".js"]
+      note: "Checks README and UI footer for copyright notice. T2 for libraries (important for OSS licensing)."
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Scan README.md for "Copyright" or "©" or "MIT License" or similar.
+          Scan UI footer components for copyright text.
+          Libraries: check LICENSE file existence AND year currency.
+          FIRE at T3 for services, T2 for libraries.
+        fallback_to_llm: false
+
+    triggers:
+      - "No copyright notice in README or UI footer"
+
+    suppressions:
+      - "# pl-006: ignore"
+
+    remediation: |
+      Add copyright notice:
+      README.md footer: © 2024 Your Company. All rights reserved.
+      UI footer component: <span>© {new Date().getFullYear()} Company Name</span>
+      Library: ensure LICENSE file has current year
+
+    action: "report"
+
+  # ─── Category 2: Release Documentation ────────────────────────────────────
+
+  - id: "pl-007"
+    name: "CHANGELOG not current for this release"
+    tier: T2
+    category: release_documentation
+    service_types: [all]
+    severity: medium
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".md"]
+      note: "Checks that CHANGELOG.md exists and has an entry for the current version or Unreleased section."
+
+    source:
+      list: "Keep a Changelog v1.1.0"
+      section: "Why Keep a Changelog?"
+      item: "Changelogs communicate intent and impact of each release to users and maintainers"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          1. Check for CHANGELOG at paths in config.yml:release_doc_paths.changelog.
+          2. If found: check for ## [Unreleased] section OR ## [x.y.z] entry within the last 3 commits.
+          3. If not found: FIRE at T2 (missing changelog).
+          4. If found but last entry is stale (> 5 versions ago with no Unreleased section): FIRE.
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are a launch readiness auditor checking rule pl-007.
+
+          Rule: pl-007 — CHANGELOG not current
+          Tier: T2 (warning for all service types)
+
+          CHANGELOG contents (first 100 lines):
+          {file_excerpt}
+
+          Is the CHANGELOG current for launch?
+
+          CURRENT (do NOT flag):
+          - Has ## [Unreleased] section with entries for current work
+          - Has recent version entry (matches or is close to current release tag)
+          - Entries describe actual changes, not just "bugfixes"
+
+          NOT CURRENT (flag as T2):
+          - File exists but ## [Unreleased] is empty with no entries
+          - Last version entry is many releases behind current tag
+          - File is a template placeholder with no real content
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "CHANGELOG.md", "explanation": "one sentence"}
+        context_scope: file
+        estimated_tokens: 350
+
+    triggers:
+      - "CHANGELOG missing"
+      - "CHANGELOG exists but has no entry for current release or Unreleased section"
+
+    suppressions:
+      - "# pl-007: ignore"
+
+    remediation: |
+      Update CHANGELOG.md following Keep a Changelog format:
+      ## [Unreleased]
+      ### Added
+      - New feature X
+
+      ## [1.2.0] - 2024-01-15
+      ### Fixed
+      - Bug fix Y
+
+    action: "report"
+
+  - id: "pl-008"
+    name: "Release notes not drafted"
+    tier: T2
+    category: release_documentation
+    service_types:
+      consumer: T2
+      internal-service: T2
+      developer-tool: T3
+      library: T2
+    severity: medium
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".md"]
+      note: "Checks for release notes document. T3 for developer tools (CHANGELOG often sufficient)."
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Check for release notes at config.yml:release_doc_paths.release_notes.
+          Also check GitHub Releases if git remote is GitHub (gh release list --limit 1).
+          FIRE at T2/T3 if not found.
+        fallback_to_llm: false
+
+    triggers:
+      - "Release notes document not found"
+
+    suppressions:
+      - "# pl-008: ignore"
+
+    remediation: |
+      Create RELEASE_NOTES.md or publish on GitHub Releases summarizing:
+      - New features
+      - Breaking changes (with migration guide)
+      - Bug fixes
+      - Known issues
+
+    action: "report"
+
+  - id: "pl-009"
+    name: "Semantic versioning not followed — release tags not semver"
+    tier: T1
+    category: release_documentation
+    service_types: [all]
+    severity: high
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: []
+      note: "Static git tag check. Reads most recent release tag from git. Fires if not semver format."
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Read most recent git tags:
+            git tag --sort=-version:refname | head -5
+          Check each tag against semver pattern: vX.Y.Z or X.Y.Z (with optional pre-release suffix).
+
+          FIRE at T1 if:
+          - Tags use non-semver format: release-2024-01-15, v2.1, v1.0-custom
+          - No version tags at all (using commit SHA for deployment)
+
+          PASS if: v1.2.3, 1.2.3, v2.0.0-beta.1 (pre-release is allowed, but checked by pl-010)
+          SILENT if: no git repo or no tags at all and this is first release.
+        fallback_to_llm: false
+
+    triggers:
+      - "Release tags do not follow semantic versioning (X.Y.Z)"
+
+    suppressions:
+      - "# pl-009: ignore"
+
+    remediation: |
+      Use semantic versioning for all release tags:
+      - Format: vMAJOR.MINOR.PATCH (e.g., v1.2.3)
+      - MAJOR: breaking changes
+      - MINOR: new features, backward compatible
+      - PATCH: bug fixes, backward compatible
+      See: https://semver.org
+
+    action: "report"
+
+  - id: "pl-010"
+    name: "Pre-release suffix in production release tag"
+    tier: T1
+    category: release_documentation
+    service_types: [all]
+    severity: high
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: []
+      note: "Static git tag check. Fires when production tag contains -rc, -alpha, -beta, -dev suffixes."
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Check most recent release tag against pre-release pattern:
+          -alpha, -beta, -rc, -dev, -preview, -pre, -SNAPSHOT, -next
+
+          Context check: if CI workflow indicates this is a production deployment (main branch,
+          deploy-to-prod job), then a pre-release tag is a T1 violation.
+
+          SILENT if: branch is clearly a staging/QA branch, or workflow is explicitly a pre-release workflow.
+        fallback_to_llm: false
+
+    triggers:
+      - "Production release tag contains pre-release suffix (-rc, -alpha, -beta, -dev)"
+
+    suppressions:
+      - "# pl-010: ignore"
+
+    remediation: |
+      Remove pre-release suffix before production deployment:
+      Incorrect: v1.5.0-rc3 (do not deploy to production)
+      Correct: v1.5.0
+
+    action: "report"
+
+  # ─── Category 3: Operational Readiness Docs ───────────────────────────────
+
+  - id: "pl-011"
+    name: "No deployment runbook or deployment guide"
+    tier: T1
+    category: operational_readiness
+    service_types:
+      consumer: T1
+      internal-service: T1
+      developer-tool: T2
+      library: silent
+    severity: high
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".md"]
+      note: "File detection + LLM quality check. Checks for deployment runbook at configured paths."
+
+    source:
+      list: "Site Reliability Engineering — Google"
+      section: "Chapter 8 — Release Engineering"
+      item: "Production deployments require documented procedures to ensure consistency and enable on-call response"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          Scan for runbook at all paths in config.yml:ops_doc_paths.runbook.
+          Also check CI workflow files (.github/workflows/) for deployment documentation comments.
+          FIRE at T1/T2 if not found. LLM quality check if found.
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are a launch readiness auditor checking rule pl-011.
+
+          Rule: pl-011 — No deployment runbook
+          Tier: T1 (launch blocking for services)
+
+          File: {file_path}
+          Contents:
+          {file_excerpt}
+
+          Does this runbook adequately document the deployment process?
+
+          ADEQUATE (do NOT flag):
+          - Describes environment setup (dependencies, env vars required)
+          - Step-by-step deployment procedure
+          - Post-deployment verification steps
+          - Not a placeholder or empty template
+
+          INADEQUATE (flag):
+          - File exists but is a template placeholder
+          - File exists but missing key steps (no env var setup, no verification)
+          - Runbook describes process too vaguely to be actionable
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename or 'not found'", "explanation": "one sentence"}
+        context_scope: file
+        estimated_tokens: 450
+
+    triggers:
+      - "Deployment runbook not found at any configured path"
+      - "Runbook found but is a placeholder or insufficiently detailed"
+
+    suppressions:
+      - "# pl-011: ignore"
+
+    remediation: |
+      Create DEPLOYMENT.md or docs/runbook.md with:
+      1. Prerequisites (environment variables, dependencies)
+      2. Step-by-step deployment commands
+      3. Post-deployment verification (health check URLs, smoke tests)
+      4. Rollback procedure reference
+      Template: canonical/skills/quality/modes/pre-launch/templates/deployment-runbook.md
+
+    cross_references:
+      - rule_id: "ops-*"
+        skill: "ops"
+        relationship: "dual_angle"
+        note: "ops-* audits operational code quality (SIGTERM, health endpoints, timeouts). pl-011 audits deployment documentation. Both can fire independently: a service can have perfect ops code but no written runbook."
+        surface_co_located: false
+
+    action: "report"
+
+  - id: "pl-012"
+    name: "No rollback procedure documented"
+    tier: T1
+    category: operational_readiness
+    service_types:
+      consumer: T1
+      internal-service: T1
+      developer-tool: T2
+      library: silent
+    severity: high
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".md", ".yml", ".yaml"]
+      note: "File detection + LLM. Also checks CI workflow for rollback-on-failure step."
+
+    source:
+      list: "Site Reliability Engineering — Google"
+      section: "Chapter 8 — Release Engineering"
+      item: "Every deployment must have a tested rollback procedure"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          Check file paths in config.yml:ops_doc_paths.rollback.
+          Also check CI workflows for: rollback, revert, on: failure with deploy-previous-version pattern.
+          FIRE at T1/T2 if not found.
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are a launch readiness auditor checking rule pl-012.
+
+          Rule: pl-012 — No rollback procedure
+          Tier: T1 (launch blocking for services)
+
+          File or CI excerpt:
+          {file_excerpt}
+
+          Is there an adequate rollback procedure?
+
+          ADEQUATE (do NOT flag):
+          - Document describes how to revert to previous version
+          - Includes database rollback steps if migrations are involved
+          - CI workflow has rollback-on-failure job or documented manual process
+
+          INADEQUATE (flag):
+          - No rollback document found
+          - Document exists but only says "redeploy previous version" without specific steps
+          - No consideration of database migration rollback
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename or 'not found'", "explanation": "one sentence"}
+        context_scope: file
+        estimated_tokens: 400
+
+    triggers:
+      - "Rollback procedure not documented"
+
+    suppressions:
+      - "# pl-012: ignore"
+
+    remediation: |
+      Create ROLLBACK.md covering:
+      1. When to trigger rollback (error rate, latency thresholds)
+      2. How to revert application (tag revert, container image rollback)
+      3. How to rollback database migrations (if applicable)
+      4. How to verify rollback succeeded
+      Template: canonical/skills/quality/modes/pre-launch/templates/rollback-procedure.md
+
+    action: "report"
+
+  - id: "pl-013"
+    name: "On-call or incident response contact not documented"
+    tier: T2
+    category: operational_readiness
+    service_types:
+      consumer: T2
+      internal-service: T2
+      developer-tool: T3
+      library: silent
+    severity: medium
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".md", ".toml"]
+      note: "File detection. Checks for on-call contact in ONCALL.md, CODEOWNERS, or README."
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Check config.yml:ops_doc_paths.on_call file paths.
+          Also check: README.md for "on-call", "incident", "contact" sections.
+          Also check: .github/CODEOWNERS for contact ownership.
+          FIRE at T2/T3 if not found.
+        fallback_to_llm: false
+
+    triggers:
+      - "No on-call or incident response contact documented"
+
+    suppressions:
+      - "# pl-013: ignore"
+
+    remediation: |
+      Document on-call contact in ONCALL.md or README:
+      ## On-Call
+      Primary: @username (Slack: #ops-alerts)
+      Escalation: engineering-manager@company.com
+
+    action: "report"
+
+  - id: "pl-014"
+    name: "Smoke test suite not documented or referenced"
+    tier: T2
+    category: operational_readiness
+    service_types:
+      consumer: T2
+      internal-service: T2
+      developer-tool: T3
+      library: silent
+    severity: medium
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".md", ".yml", ".yaml"]
+      note: "Checks for smoke test documentation or tests/smoke/ directory."
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Check config.yml:ops_doc_paths.smoke_tests paths.
+          Also check: CI workflows for "smoke" job step after deployment.
+          FIRE at T2/T3 if not found.
+        fallback_to_llm: false
+
+    triggers:
+      - "No smoke test suite documented or referenced in deployment process"
+
+    suppressions:
+      - "# pl-014: ignore"
+
+    remediation: |
+      Create tests/smoke/ directory with post-deployment smoke tests, or document smoke test
+      procedure in DEPLOYMENT.md:
+      ## Post-Deploy Verification
+      1. Check /api/health returns 200
+      2. Verify login flow works
+      3. Check key feature: [feature name]
+
+    action: "report"
+
+  # ─── Category 4: Security / Privacy Sign-Off ──────────────────────────────
+
+  - id: "pl-015"
+    name: "Security review sign-off not documented before launch"
+    tier: T1
+    category: signoff
+    service_types:
+      consumer: T1
+      internal-service: T1
+      developer-tool: T2
+      library: T3
+    severity: high
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".md", ".yml"]
+      note: |
+        Document presence check. pl-015 verifies that security findings were reviewed and
+        signed off — it does NOT re-run security checks (that is sec-* skill's job).
+        CROSS-REF: pl-015 ↔ sec-* (dual-angle: sign-off doc vs code findings).
+
+    source:
+      list: "OWASP SAMM"
+      section: "Security Testing"
+      item: "Production deployments require documented security review and sign-off"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Scan for security review document at config.yml:signoff_paths.security_review.
+          Also check: .planning/audits/ for any security audit file.
+          Also check: CI workflows for explicit security-review-required gate.
+          FIRE if not found at T1/T2.
+        fallback_to_llm: false
+
+    triggers:
+      - "Security review sign-off document not found before production launch"
+
+    suppressions:
+      - "# pl-015: ignore"
+
+    cross_references:
+      - rule_id: "sec-*"
+        skill: "security"
+        relationship: "dual_angle"
+        note: "sec-* skill finds security issues in code. pl-015 checks that those findings were reviewed and sign-off was documented. Different surfaces: code patterns vs process documentation."
+        surface_co_located: false
+
+    remediation: |
+      Run ds-quality security audit and document sign-off:
+      Create .planning/audits/security-signoff.md:
+      ## Security Review Sign-Off
+      Date: YYYY-MM-DD
+      Reviewer: @username
+      Findings resolved: [list of resolved findings]
+      Accepted risks: [list with justification]
+
+    action: "report"
+
+  - id: "pl-016"
+    name: "Privacy impact assessment not documented"
+    tier: T2
+    category: signoff
+    service_types:
+      consumer: T2
+      internal-service: T2
+      developer-tool: silent
+      library: silent
+    severity: medium
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".md"]
+      note: "Only fires when has_pii_schema=True. Cross-ref with dbc-* (dual-angle)."
+
+    source:
+      list: "GDPR Article 35"
+      section: "Data Protection Impact Assessment"
+      item: "Processing likely to result in high risk requires a DPIA before processing begins"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Pre-condition: has_pii_schema=True. If False: SILENT.
+          Scan for PIA at config.yml:signoff_paths.privacy_review.
+          FIRE at T2 if PII schema detected and no PIA document found.
+        fallback_to_llm: false
+
+    triggers:
+      - "Privacy Impact Assessment not documented for service with PII schema"
+
+    suppressions:
+      - "# pl-016: ignore"
+
+    cross_references:
+      - rule_id: "dbc-*"
+        skill: "database-compliance"
+        relationship: "dual_angle"
+        note: "dbc-* audits PII handling patterns in code. pl-016 checks that a Privacy Impact Assessment was conducted and documented. Different surfaces."
+        surface_co_located: false
+
+    remediation: |
+      Create docs/privacy-impact-assessment.md documenting:
+      - Data flows and data subjects affected
+      - Risks identified and mitigations applied
+      - Sign-off by DPO or privacy lead
+      Template: canonical/skills/quality/modes/pre-launch/templates/privacy-impact-assessment.md
+
+    action: "report"
+
+  - id: "pl-017"
+    name: "No evidence of dependency vulnerability scan before production"
+    tier: T1
+    category: signoff
+    service_types: [all]
+    severity: high
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".yml", ".yaml"]
+      note: "CI config scan. Checks for vulnerability scanning step in CI workflow before production deployment."
+
+    source:
+      list: "OWASP SAMM / NIST SSDF"
+      section: "Secure Build"
+      item: "Production deployments must be preceded by a dependency vulnerability scan"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Scan CI workflow YAML files for vulnerability scanning commands before a deploy step:
+            npm audit, yarn audit, pip-audit, safety check, govulncheck, cargo audit,
+            snyk test, trivy, grype, dependency-check
+
+          Also check: requirements.txt + pyproject.toml for safety/pip-audit in dev deps.
+          FIRE at T1 if production deployment step exists in CI but no vuln scan step precedes it.
+          SILENT if no CI deployment configured.
+        fallback_to_llm: false
+
+    triggers:
+      - "CI production deployment step has no preceding dependency vulnerability scan"
+
+    suppressions:
+      - "# pl-017: ignore"
+
+    remediation: |
+      Add vulnerability scan before production deploy in CI:
+      Python: pip-audit -r requirements.txt
+      Node.js: npm audit --audit-level=high
+      Go: govulncheck ./...
+      Rust: cargo audit
+      All: consider GitHub Dependabot or Snyk for continuous scanning
+
+    action: "report"
+
+  # ─── Category 5: Feature Safety ───────────────────────────────────────────
+
+  - id: "pl-018"
+    name: "High-risk features shipped without feature flags for safe rollout"
+    tier: T2
+    category: feature_safety
+    service_types:
+      consumer: T2
+      internal-service: T2
+      developer-tool: T3
+      library: silent
+    severity: medium
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      note: "LLM-only. Identifies high-risk new features (payment, auth changes, data migrations) without feature flags."
+
+    source:
+      list: "Continuous Delivery — Jez Humble"
+      section: "Chapter 10 — Deploying and Releasing Applications"
+      item: "High-risk changes should be deployed behind feature flags for gradual rollout and instant rollback"
+
+    detection:
+      type: llm_only
+      llm:
+        prompt_template: |
+          You are a launch readiness auditor checking rule pl-018.
+
+          Rule: pl-018 — High-risk features without feature flags
+          Tier: T2 (warning)
+
+          Recent changes in this release (from CHANGELOG or commit diff):
+          {file_excerpt}
+
+          Are high-risk features deployed without feature flags?
+
+          HIGH RISK (flag as T2 if no feature flag):
+          - New payment processing or billing system
+          - Authentication system changes (new OAuth provider, MFA changes)
+          - Major data migration affecting existing records
+          - New PII collection fields
+          - Infrastructure changes (database migration, new third-party service)
+
+          MITIGATED (do NOT flag):
+          - Feature is behind a flag: if (featureFlags.isEnabled('new-payment-flow'))
+          - Feature is for new users only (existing users unaffected)
+          - Low-risk change: UI copy, styling, minor bug fixes
+          - Feature already validated in staging with production data
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "explanation": "one sentence naming the high-risk feature"}
+        context_scope: file
+        estimated_tokens: 500
+
+    triggers:
+      - "High-risk feature (payment, auth, data migration) shipped without feature flag"
+
+    suppressions:
+      - "# pl-018: ignore"
+      - "// pl-018: ignore"
+
+    remediation: |
+      Wrap risky features behind a feature flag:
+      Python: if feature_flags.is_enabled('new_payment_flow', user_id): ...
+      TypeScript: if (flags.newPaymentFlow) { ... }
+      Consider LaunchDarkly, Unleash, or custom flag implementation.
+
+    action: "report"
+
+  - id: "pl-019"
+    name: "Data migration not marked reversible or tested in staging"
+    tier: T1
+    category: feature_safety
+    service_types: [all]
+    severity: high
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust, sql]
+      file_types: [".sql", ".py", ".ts", ".js", ".go"]
+      note: |
+        LLM + static. Only fires when new migration files appear in this release.
+        CROSS-REF: db-* audits migration schema quality; pl-019 audits release readiness
+        (is the migration reversible? was it tested in staging?).
+
+    source:
+      list: "Continuous Delivery"
+      section: "Chapter 12 — Managing Data"
+      item: "Database migrations must be designed to be reversible and validated in a staging environment"
+
+    detection:
+      type: llm_only
+      llm:
+        prompt_template: |
+          You are a launch readiness auditor checking rule pl-019.
+
+          Rule: pl-019 — Data migration not reversible or tested in staging
+          Tier: T1 (launch blocking)
+
+          Migration file:
+          {file_excerpt}
+
+          Is this migration safe for production launch?
+
+          SAFE (do NOT flag):
+          - Migration has a corresponding rollback/down migration
+          - Migration is additive-only (new columns with defaults, new tables — no drops)
+          - Comment or documentation confirms staging validation
+          - Migration adds only NULL-able columns or columns with defaults (zero-downtime safe)
+
+          UNSAFE (flag as T1):
+          - Destructive migration (DROP TABLE, DROP COLUMN) without explicit rollback path
+          - Non-reversible data transformation (hash existing plaintext, delete PII data)
+          - Migration removes a column referenced by application code
+          - Migration appears to be first-time tested (no staging validation evidence)
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename", "explanation": "one sentence naming the risk"}
+        context_scope: file
+        estimated_tokens: 500
+
+    triggers:
+      - "Destructive or irreversible database migration without documented rollback"
+
+    suppressions:
+      - "-- pl-019: ignore"
+      - "# pl-019: ignore"
+
+    cross_references:
+      - rule_id: "db-*"
+        skill: "database"
+        relationship: "dual_angle"
+        note: "db-* audits migration schema correctness (additive, reversible patterns). pl-019 audits release readiness: was staging testing completed, is rollback documented. Both can fire on the same migration file for different reasons."
+        surface_co_located: true
+
+    remediation: |
+      Mark migrations reversible and document staging validation:
+      -- pl-019: staging-validated 2024-01-10
+      -- rollback: ALTER TABLE users ADD COLUMN legacy_email TEXT
+      Always test destructive migrations with production-like data in staging before production.
+
+    action: "report"
+
+  - id: "pl-020"
+    name: "Performance budget not validated for user-facing release"
+    tier: T2
+    category: feature_safety
+    service_types:
+      consumer: T2
+      internal-service: T3
+      developer-tool: silent
+      library: silent
+    severity: medium
+
+    applies_to:
+      languages: [typescript, javascript]
+      file_types: [".yml", ".yaml", ".json", ".md"]
+      note: "CI config + file check. Checks for performance budget configuration or documented targets."
+
+    source:
+      list: "Core Web Vitals — Google"
+      section: "Performance Budgets"
+      item: "Consumer services should validate Core Web Vitals (LCP, INP, CLS) before production"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          Check for performance budget configuration:
+          - lighthouse-ci.js or .lighthouserc.json or .lighthouserc.yaml with budgets defined
+          - budgets.json (Web Performance Budget)
+          - CI workflow step running Lighthouse or similar
+          - Performance targets documented in README or docs/performance.md
+
+          Also check: Next.js/Vite bundle analyzer config.
+          FIRE at T2 if consumer frontend service with no performance budget found.
+        fallback_to_llm: false
+
+    triggers:
+      - "Consumer web service has no performance budget configuration or documented targets"
+
+    suppressions:
+      - "# pl-020: ignore"
+      - "// pl-020: ignore"
+
+    remediation: |
+      Add Lighthouse CI performance budget:
+      .lighthouserc.json:
+      {
+        "ci": {
+          "assert": {
+            "assertions": {
+              "first-contentful-paint": ["warn", {"maxNumericValue": 2000}],
+              "largest-contentful-paint": ["error", {"maxNumericValue": 2500}],
+              "cumulative-layout-shift": ["error", {"maxNumericValue": 0.1}]
+            }
+          }
+        }
+      }

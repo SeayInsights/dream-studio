@@ -1,0 +1,1268 @@
+# Testing Rules
+# Version: 1.0.0 (18.5.1 initial)
+# Schema version: 1
+#
+# Source authority:
+#   LIST-4 Section G = canonical/skills/quality/references/testing-best-practices.md (section G)
+#   LIST-4 Section I = canonical/skills/quality/references/testing-best-practices.md (section I, sleep cross-ref)
+#
+# Skill boundary with ds-quality:code-quality:
+#   Testing owns: test file quality (determinism, isolation, structure, naming, coverage)
+#   Code-quality owns: production code testability (pure functions, CQS, no side effects)
+#   Cross-references: tst-011 ↔ cq-019 (sleep); tst-009 ↔ cq-016 (critical paths)
+#
+# Five calibrations from design review (applied throughout):
+#   1. tst-001: coverage-based detection — flags modules with 0% test coverage, not missing test files
+#   2. tst-003: static pass severity = high (candidate); LLM confirmation required for critical
+#   3. tst-009: critical_path_globs config-driven, default projections/api/routes/**
+#   4. tst-010: reports BOTH actual coverage and the enforcement gap (fail_under vs actual)
+#   5. tst-002/tst-008: pre-committed demotion criterion > 20% human-LLM disagreement on first audit
+#
+# Rules with action.build_mode: null are audit-only
+
+rules:
+
+  - id: "tst-001"
+    name: "Modules have test coverage (coverage-based)"
+    severity: critical
+    category: coverage
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      note: "Per-ecosystem coverage parser. Python: coverage.py (coverage.json). JS/TS: vitest/jest (coverage/coverage-final.json, istanbul-compatible)."
+
+    source:
+      list: "LIST-4"
+      section: "G"
+      item: "Tests exist"
+
+    # CALIBRATION 1: Detection via coverage.py data, not path-scan.
+    # A module with 0% test coverage is critical. A module tested via integration tests
+    # (not matching a unit test file) still passes if coverage > 0.
+    # This avoids false criticals on modules that are tested via integration or differently-named files.
+    #
+    # OPERATING CONSTRAINT (confirmed by bisect + full run 2026-05-29):
+    # tst-001 is a CI-time / non-Windows check. The full unit suite takes ~79 min on Windows
+    # (subprocess spawn overhead); only evals run in the pre-push hook. Full-suite coverage is
+    # only available in remote CI or on a non-Windows machine. Therefore:
+    #   - tst-001 results from `ds-quality:testing audit` on Windows are unreliable for this rule.
+    #   - CI is the authoritative environment for tst-001.
+    # NOTE: does NOT OOM — peak 283MB/16GB verified 2026-05-29. The constraint is runtime cost.
+    #
+    # FAIL-LOUD ON INADEQUATE DATA — SCOPE-AWARE DETECTION (Phase 6 fix):
+    # The real question is "did the full suite run?", not "is the total percentage low?"
+    # A genuinely-low-coverage repo (real 12%) would have its findings wrongly suppressed
+    # by a percentage threshold. The correct check is SCOPE: which test directories were measured.
+    #
+    # PRIMARY CHECK: read coverage.json's context/measurement metadata.
+    # coverage.py records the measured paths (files that contributed to coverage).
+    # If the measurement only includes tests/evals/ paths (and no tests/unit/ or tests/integration/
+    # test files ran), the data is evals-only — emit the skip notice.
+    # If tests/unit/ test files contributed: the full suite (or a meaningful portion) ran.
+    #
+    # SECONDARY FALLBACK: if scope metadata is unavailable, check for the configured
+    # full_suite_command in config.yml — if the last coverage run doesn't match it, skip.
+    #
+    # PER-PROJECT OVERRIDE: operators can set full_suite_paths in config.yml to specify
+    # which directories must have contributed for the data to be considered "full suite."
+    # Default: ["tests/unit", "tests/integration"] — at least one must have run.
+    #
+    # This replaces the 15% magic-number proxy. A real 12% coverage repo gets its findings;
+    # an evals-only run on a well-tested repo correctly skips with an honest message.
+    coverage_adequacy_threshold: 15    # fallback percentage proxy IF scope detection unavailable
+    full_suite_paths: ["tests/unit", "tests/integration"]    # at least one must appear as a source
+    detection:
+      type: tool
+      tool:
+        name: coverage
+        command: "coverage report --format=json"
+        command_python: "coverage report --format=json"
+        command_js: "vitest run --coverage (reads coverage/coverage-final.json)"
+        notes: |
+          Parse coverage.json; flag source files with 0% line coverage.
+
+          SCOPE CHECK FIRST (the real question — did the full suite run?):
+          1. Inspect coverage.json metadata: which test directories contributed to the measurement.
+             coverage.py JSON includes the list of measured files (or the run context).
+             If only tests/evals/ files appear as sources and no tests/unit/ files contributed:
+             this is evals-only data.
+          2. If scope metadata unavailable: fall back to checking total coverage against
+             coverage_adequacy_threshold (15%). This is a proxy, not the real check.
+          3. Per-project override: config.yml full_suite_paths specifies which directories
+             must have contributed for data to be considered adequate.
+             Default: ["tests/unit", "tests/integration"] — at least one must appear.
+
+          SKIP MESSAGE if data is evals-only (scope check failed OR percentage fallback):
+          "tst-001 skipped: coverage data is evals-only or incomplete.
+          Measured paths: {measured_test_dirs}. Required: {full_suite_paths}.
+          Run `coverage run -m pytest tests/` in CI or on a non-Windows machine.
+          Windows pre-push hook runs tests/evals/ only — this is a documented CI-discipline
+          decision, not a test quality problem."
+
+          REAL-DATA PATH (scope check passed): flag source files with 0% coverage.
+          Use pyproject.toml coverage.omit list to exclude known legitimate exclusions.
+          Fallback if no coverage data: path-scan with reduced confidence.
+
+          FOR JAVASCRIPT/TYPESCRIPT (vitest/jest with coverage-v8 or istanbul):
+          Coverage output: coverage/coverage-final.json (istanbul-compatible per-file format)
+          Key: absolute file path
+          Value: { "statementMap": {...}, "s": {hit counts}, "fnMap": {...}, "f": {...} }
+
+          To find 0%-covered files:
+          - Read coverage/coverage-final.json
+          - For each file entry: if ALL values in "s" (statement hits) are 0 → 0% coverage
+          - Alternatively: if sum(s.values()) == 0 → 0% covered
+
+          Threshold config: vitest.config.ts → test.coverage.thresholds (lines/statements/functions/branches)
+
+          SCOPE CHECK for JS/TS: vitest.config.ts exclude patterns show which files are intentionally
+          excluded (e.g., "e2e/**"). Respect these exclusions.
+
+          FALLBACK MESSAGE if no coverage/coverage-final.json:
+          "tst-001 skipped: no JS/TS coverage data found at coverage/coverage-final.json.
+          Run: npx vitest run --coverage (requires @vitest/coverage-v8 or @vitest/coverage-istanbul)"
+        fallback_to_llm: false
+        fallback_to_path_scan: true
+      llm:
+        prompt_template: null
+        context_scope: null
+        estimated_tokens: 0
+
+    triggers:
+      - "Source module with 0% line coverage in coverage report"
+      - "No test file imports or exercises the module (path-scan fallback)"
+
+    suppressions:
+      - pattern: "example_usage.py"
+        reason: "Example/demo files are not production logic"
+      - pattern: "*/migrations/*"
+        reason: "Migration scripts are one-time ops, not production logic to unit test"
+      - pattern: "__init__.py"
+        reason: "Package init files with no implementation are not tested directly"
+
+    remediation:
+      summary: "Write tests for this module. Start with the public API, focus on critical paths first. Use `ds-quality:testing build` for structured guidance."
+      guide_ref: "canonical/skills/quality/references/testing-best-practices.md#g-testing"
+
+    cross_references: []
+    action:
+      build_mode: null    # audit-only (requires existing test data)
+
+
+  - id: "tst-002"
+    name: "Tests assert behavior, not implementation details"
+    severity: high
+    category: assertion_quality
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      test_file_patterns:
+        python: ["test_*.py", "*_test.py"]
+        typescript: ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx"]
+        javascript: ["*.test.js", "*.test.jsx", "*.spec.js"]
+      note: "Universal testing principle — LLM detects in any framework. Python AST static pass only; JS/TS uses LLM-only detection."
+
+    source:
+      list: "LIST-4"
+      section: "G"
+      item: "Test behavior, not implementation"
+
+    # CALIBRATION 5: Pre-committed demotion criterion.
+    # If human reviewer disagrees with LLM call on > 20% of flagged tests in the first audit,
+    # this rule is demoted to requires_human_review: true.
+    # Agreement rate must be reported in the verification paste for the first audit.
+    requires_human_review: false    # updated to true if demotion criterion met after first audit
+    demotion_criterion: "If first-audit human-LLM disagreement rate > 20% on tst-002 flags, set requires_human_review: true."
+
+    detection:
+      type: llm
+      static:
+        tool: null
+        config: null
+        fallback_to_llm: true
+        notes: null
+      llm:
+        prompt_template: |
+          You are a test quality auditor checking one specific rule.
+
+          Rule: tst-002 — Tests assert behavior, not implementation details
+          Applies to: Python (pytest), TypeScript/JavaScript (vitest, jest, mocha).
+          For Python: use pytest patterns. For JS/TS: use vitest/jest equivalents
+          (vi.fn()/jest.fn() instead of MagicMock, beforeEach/afterEach instead of fixtures,
+          describe/it/test instead of class-based test suites).
+          Severity: high
+          What to look for:
+          - Assertions on private attributes (names starting with _)
+          - Assertions on internal method call counts for non-boundary collaborators
+          - Tests that verify HOW something is done rather than WHAT it returns or does
+          - MagicMock.assert_called_on internal (non-boundary) methods
+
+          NOT a violation (do NOT flag):
+          - Asserting that a boundary mock (DB adapter, external API) was called
+          - Asserting observable return values or side effects on the public API
+          - Dream Studio's conftest.py pattern of early environment variable setting
+
+          Analyze the following test function for this rule only.
+          Return JSON exactly:
+          {"finding": true|false, "confidence": 0.0-1.0, "location": "filename:function_name",
+           "excerpt": "the specific problematic assertion, max 100 chars",
+           "explanation": "one sentence: what was found and why it tests implementation not behavior"}
+
+          Only return finding: true if confidence >= 0.75. Do not flag theoretical issues.
+        context_scope: function
+        estimated_tokens: 350
+
+    triggers:
+      - "Assert on attribute names starting with _ (private state)"
+      - "MagicMock.assert_called_once_with on an internal collaborator (not a boundary)"
+      - "Test body that patches an internal method rather than a boundary"
+
+    remediation:
+      summary: "Rewrite the test to assert the observable result (return value, public state change, or documented side effect) rather than how the code achieves it. Mock only at system boundaries (external APIs, databases, file system)."
+      guide_ref: "canonical/skills/quality/references/testing-best-practices.md#what-test-behavior-not-implementation-means"
+
+    action:
+      build_mode: null    # audit-only; build mode provides guidance on writing behavior-testing tests
+
+
+  - id: "tst-003"
+    name: "Tests are deterministic (no non-deterministic dependencies)"
+    severity: high
+    category: determinism
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      test_file_patterns:
+        python: ["test_*.py", "*_test.py"]
+        typescript: ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx"]
+        javascript: ["*.test.js", "*.test.jsx", "*.spec.js"]
+      note: "Universal testing principle — LLM detects in any framework. Python AST static pass only; JS/TS uses LLM-only detection."
+
+    source:
+      list: "LIST-4"
+      section: "G"
+      item: "Tests are deterministic"
+
+    # CALIBRATION 4: Static pass severity = high (candidate).
+    # The static grep finds datetime.now/time.time/random patterns but cannot confirm
+    # whether the non-deterministic value reaches an assertion.
+    # Static finding label: "candidate — confirm whether non-determinism reaches an assertion"
+    # LLM confirmation required to escalate to critical.
+    # Do NOT report as critical on pattern match alone — this prevents 10+ false criticals
+    # on benign timestamp-creation uses.
+    severity_static_candidate: high     # severity from static pass alone
+    severity_confirmed: critical        # severity after LLM confirms non-determinism reaches assertion
+
+    detection:
+      type: hybrid
+      static:
+        tool: ast
+        config: null
+        fallback_to_llm: true
+        notes: |
+          Parse test function bodies with Python ast. Flag patterns:
+          - datetime.now() / datetime.utcnow() / datetime.today() NOT covered by @patch or monkeypatch
+          - time.time() / time.monotonic() NOT covered by @patch
+          - random.random() / random.randint() / random.choice() NOT covered by @patch
+          - uuid.uuid4() used in assertion (not creation)
+          Report as: "CANDIDATE (high severity) — non-deterministic pattern detected; confirm whether it reaches an assertion."
+
+          For JavaScript/TypeScript (LLM-only — no AST static pass):
+          - Date.now() / new Date() in test body without vi.useFakeTimers() / jest.useFakeTimers()
+          - Math.random() in test body without vi.spyOn(Math, 'random') mock
+          The LLM pass handles JS/TS non-determinism patterns.
+      llm:
+        prompt_template: |
+          You are a test quality auditor checking one specific rule.
+
+          Rule: tst-003 — Tests are deterministic
+          Applies to: Python (pytest), TypeScript/JavaScript (vitest, jest, mocha).
+          For Python: use pytest patterns. For JS/TS: use vitest/jest equivalents
+          (vi.fn()/jest.fn() instead of MagicMock, beforeEach/afterEach instead of fixtures,
+          describe/it/test instead of class-based test suites).
+          Severity: high (candidate) → critical if confirmed
+
+          The static analysis detected a potentially non-deterministic pattern:
+          {static_finding_excerpt}
+
+          Does this non-deterministic value (datetime.now / random / time.time / uuid4) actually
+          reach a test ASSERTION? (i.e., is it compared to an expected value, or is it only used
+          to create data that is later asserted on by other means?)
+
+          Examples of CRITICAL (non-determinism reaches assertion):
+          - assert result.created_at == datetime.now()
+          - assert token == uuid4()
+          - assert result.timestamp > time.time() - 5
+
+          Examples of NOT CRITICAL (non-determinism in creation only):
+          - record = Record(created_at=datetime.now()); assert record.id == "expected-id"
+          - batch_id = uuid4(); service.process(batch_id); assert service.was_called
+
+          Return JSON exactly:
+          {"finding": true|false, "confidence": 0.0-1.0, "location": "filename:function_name",
+           "excerpt": "the specific assertion involving non-determinism, max 100 chars",
+           "explanation": "one sentence: how the non-deterministic value reaches an assertion"}
+
+          Only return finding: true if confidence >= 0.75.
+        context_scope: function
+        estimated_tokens: 400
+
+    triggers:
+      - "datetime.now() / datetime.utcnow() in test body without @patch or monkeypatch covering it"
+      - "random.random() / random.randint() / random.choice() in test body without @patch"
+      - "time.time() / time.monotonic() in test body without @patch"
+      - "uuid.uuid4() used in an assertion (not just object creation)"
+
+    suppressions:
+      - inline_comment: "# non-deterministic: intentional"
+        reason: "Operator explicitly acknowledges and accepts the non-determinism"
+      - pattern: "tests/integration/**"
+        reason: "Integration tests may legitimately use real timestamps for freshness checks (apply judgment)"
+
+    remediation:
+      summary: "Use pytest's monkeypatch or @patch to freeze time/random values: monkeypatch.setattr('module.datetime', ...) or @patch('module.uuid4', return_value='fixed-id'). Alternatively, design the test to not assert on the non-deterministic value."
+      guide_ref: "canonical/skills/quality/references/testing-best-practices.md#g-testing"
+
+    action:
+      build_mode: warn    # build mode warns if code under test uses datetime.now with no injectable clock
+
+
+  - id: "tst-004"
+    name: "Tests are independent (no shared mutable state)"
+    severity: high
+    category: isolation
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      test_file_patterns:
+        python: ["test_*.py", "*_test.py"]
+        typescript: ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx"]
+        javascript: ["*.test.js", "*.test.jsx", "*.spec.js"]
+      note: "Universal testing principle — LLM detects in any framework. Python AST static pass only; JS/TS uses LLM-only detection."
+
+    source:
+      list: "LIST-4"
+      section: "G"
+      item: "Tests are independent"
+
+    detection:
+      type: hybrid
+      static:
+        tool: ast
+        config: null
+        fallback_to_llm: true
+        notes: |
+          Static checks via ast:
+          - Module-level mutable variables in test files (not fixtures)
+          - Class attributes that are mutable containers (lists, dicts) on TestCase classes
+          - Test functions that call other test functions directly
+          Flag these as candidates for LLM confirmation.
+      llm:
+        prompt_template: |
+          You are a test quality auditor checking one specific rule.
+
+          Rule: tst-004 — Tests are independent (no shared mutable state)
+          Applies to: Python (pytest), TypeScript/JavaScript (vitest, jest, mocha).
+          For Python: use pytest patterns. For JS/TS: use vitest/jest equivalents
+          (vi.fn()/jest.fn() instead of MagicMock, beforeEach/afterEach instead of fixtures,
+          describe/it/test instead of class-based test suites).
+
+          The static analysis detected a potential shared-state pattern:
+          {static_finding_excerpt}
+
+          Does this test or test class share mutable state between tests in a way that could
+          cause test-order dependence? Consider:
+          - Module-level variables mutated by test functions
+          - Class attributes (not fixtures) holding mutable state shared across test methods
+          - Tests that explicitly call other test functions
+
+          NOT a violation:
+          - Module-level CONSTANTS (immutable)
+          - Dream Studio conftest.py pattern: setting env vars at module import time (this is CORRECT isolation, not a violation)
+          - Proper pytest fixtures (even session-scoped read-only ones)
+          - Class variables that are reset in setUp / setup_method
+
+          Return JSON:
+          {"finding": true|false, "confidence": 0.0-1.0, "location": "filename:class_or_function",
+           "excerpt": "the shared state construct, max 100 chars",
+           "explanation": "one sentence: why this could cause test-order dependence"}
+        context_scope: full_file
+        estimated_tokens: 450
+
+    triggers:
+      - "Mutable module-level variable in test file mutated by a test function"
+      - "Class attribute holding a mutable container shared across test methods"
+      - "Test function directly calling another test function"
+
+    suppressions:
+      - inline_comment: "# shared state: intentional"
+        reason: "Operator explicitly accepts the dependency"
+
+    remediation:
+      summary: "Move shared setup into pytest fixtures (function-scoped by default). Use conftest.py for project-wide fixtures. Avoid module-level mutable state in test files."
+      guide_ref: "canonical/skills/quality/references/testing-best-practices.md#fixture-scope-pitfalls"
+
+    action:
+      build_mode: null
+
+
+  - id: "tst-005"
+    name: "Tests follow AAA/GWT structure"
+    severity: medium
+    category: structure
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      test_file_patterns:
+        python: ["test_*.py", "*_test.py"]
+        typescript: ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx"]
+        javascript: ["*.test.js", "*.test.jsx", "*.spec.js"]
+      note: "Universal testing principle — LLM detects in any framework. Python AST static pass only; JS/TS uses LLM-only detection."
+
+    source:
+      list: "LIST-4"
+      section: "G"
+      item: "Arrange/Act/Assert (or Given/When/Then)"
+
+    detection:
+      type: llm
+      static:
+        tool: null
+        notes: null
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are a test quality auditor checking one specific rule.
+
+          Rule: tst-005 — Tests follow AAA/GWT structure
+          Applies to: Python (pytest), TypeScript/JavaScript (vitest, jest, mocha).
+          For Python: use pytest patterns. For JS/TS: use vitest/jest equivalents
+          (vi.fn()/jest.fn() instead of MagicMock, beforeEach/afterEach instead of fixtures,
+          describe/it/test instead of class-based test suites).
+          Severity: medium
+
+          A well-structured test has three distinct phases:
+          - Arrange: set up test data, fixtures, mocks
+          - Act: invoke the code under test (ONE invocation)
+          - Assert: verify the observable result
+
+          Flag if:
+          - The test has no clear Act step (only setup, no invocation)
+          - The test has multiple Act-Assert cycles (tests multiple behaviors)
+          - The test is a wall of code with no discernible phases
+
+          NOT a violation:
+          - Multiple assert statements that verify ONE concept (e.g., asserting ID, name, and timestamp of a created record)
+          - Setup code before Act as long as it's clearly setup
+
+          Return JSON:
+          {"finding": true|false, "confidence": 0.0-1.0, "location": "filename:function_name",
+           "excerpt": "description of the structural issue, max 100 chars",
+           "explanation": "one sentence: what AAA phase is missing or where structure breaks down"}
+        context_scope: function
+        estimated_tokens: 300
+
+    triggers:
+      - "Test with no clear Act step (all setup, no invocation)"
+      - "Multiple Act-Assert cycles in a single test function"
+
+    remediation:
+      summary: "Split tests that have multiple Act-Assert cycles. Add a clear invocation step. If the test has only assertions without a clear code-under-test invocation, it may be testing fixtures rather than production code."
+      guide_ref: "canonical/skills/quality/references/testing-best-practices.md#the-aaa-pattern"
+
+    action:
+      build_mode: null
+
+
+  - id: "tst-006"
+    name: "One logical assertion per test"
+    severity: medium
+    category: structure
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      test_file_patterns:
+        python: ["test_*.py", "*_test.py"]
+        typescript: ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx"]
+        javascript: ["*.test.js", "*.test.jsx", "*.spec.js"]
+      note: "Universal testing principle — LLM detects in any framework. Python AST static pass only; JS/TS uses LLM-only detection."
+
+    source:
+      list: "LIST-4"
+      section: "G"
+      item: "One logical assertion per test"
+
+    detection:
+      type: hybrid
+      static:
+        tool: ast
+        notes: |
+          Count assert statements per test function.
+          > 5 assert statements: flag for LLM review.
+          > 10 assert statements: flag as likely violation without LLM.
+          Note: multiple asserts on ONE concept is acceptable; this threshold
+          is a proxy, not a rule. LLM determines whether multiple asserts
+          cover one concept or multiple.
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are a test quality auditor checking one specific rule.
+
+          Rule: tst-006 — One logical assertion per test
+          Applies to: Python (pytest), TypeScript/JavaScript (vitest, jest, mocha).
+          For Python: use pytest patterns. For JS/TS: use vitest/jest equivalents
+          (vi.fn()/jest.fn() instead of MagicMock, beforeEach/afterEach instead of fixtures,
+          describe/it/test instead of class-based test suites).
+          Severity: medium
+
+          The static analysis detected {assert_count} assert statements in this test.
+
+          Is this test asserting ONE logical concept (acceptable, even with multiple asserts)
+          or MULTIPLE distinct behaviors (violation)?
+
+          One concept (acceptable):
+          - Asserting ID, name, and created_at of a single record (one creation event)
+          - Asserting both status code and response body of a single API call
+
+          Multiple behaviors (violation):
+          - Test creates a user AND sends an email AND verifies the email content
+          - Test creates a record, updates it, then verifies the update
+
+          Return JSON:
+          {"finding": true|false, "confidence": 0.0-1.0, "location": "filename:function_name",
+           "excerpt": "brief description of the multiple behaviors, max 100 chars",
+           "explanation": "one sentence: what distinct behaviors are being tested"}
+        context_scope: function
+        estimated_tokens: 350
+
+    triggers:
+      - "Test function with > 5 assertions covering multiple distinct behaviors"
+
+    remediation:
+      summary: "Split the test into multiple tests, one per behavior. Name each by the behavior it verifies. Multiple assertions on one concept (e.g., properties of a single created object) are acceptable."
+      guide_ref: "canonical/skills/quality/references/testing-best-practices.md#what-one-logical-assertion-means"
+
+    action:
+      build_mode: null
+
+
+  - id: "tst-007"
+    name: "Test names describe the behavior being verified"
+    severity: medium
+    category: naming
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      test_file_patterns:
+        python: ["test_*.py", "*_test.py"]
+        typescript: ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx"]
+        javascript: ["*.test.js", "*.test.jsx", "*.spec.js"]
+      note: "Universal testing principle — LLM detects in any framework. Python AST static pass only; JS/TS uses LLM-only detection."
+
+    source:
+      list: "LIST-4"
+      section: "G"
+      item: "Test names describe behavior"
+
+    detection:
+      type: hybrid
+      static:
+        tool: ast
+        notes: |
+          Flag test functions whose names:
+          - Are generic: test_1, test_it, test_check, test_run, test_main
+          - Describe what is done but not what is expected: test_create_user (what?), test_invoice (what?)
+          Flag as candidates for LLM review.
+          Names following test_<behavior>_when_<condition>_then_<result> or
+          test_<verb>_<noun>_<expected_outcome> patterns are generally acceptable.
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are a test quality auditor checking one specific rule.
+
+          Rule: tst-007 — Test names describe the behavior being verified
+          Applies to: Python (pytest), TypeScript/JavaScript (vitest, jest, mocha).
+          For Python: use pytest patterns. For JS/TS: use vitest/jest equivalents
+          (vi.fn()/jest.fn() instead of MagicMock, beforeEach/afterEach instead of fixtures,
+          describe/it/test instead of class-based test suites).
+          Severity: medium
+
+          Test function: {function_name}
+
+          Does this test name communicate WHAT behavior is being verified and WHAT the expected
+          outcome is? A good test name reads like a specification:
+          - test_invoice_total_includes_tax (good: what + expected outcome)
+          - test_user_creation_fails_when_email_is_duplicate (good: condition + expected outcome)
+          - test_login (bad: what behavior? what outcome?)
+          - test_create_user (bad: just describes the action, not the expected result)
+
+          For vitest/jest: generic names like it('works', ...), test('check', ...), describe('stuff', ...)
+          are equally problematic. Good: it('returns 404 when resource not found', ...).
+
+          Return JSON:
+          {"finding": true|false, "confidence": 0.0-1.0, "location": "filename:function_name",
+           "name": "{function_name}",
+           "explanation": "one sentence: what behavior/outcome is unclear from the name"}
+        context_scope: function
+        estimated_tokens: 250
+
+    triggers:
+      - "Generic test names (test_1, test_check, test_run)"
+      - "Names that describe the action but not the expected outcome (test_create_user)"
+
+    remediation:
+      summary: "Rename to describe the behavior and expected outcome: test_<behavior>_when_<condition> or test_<thing>_<does_what>. The name should read like a specification sentence."
+      guide_ref: "canonical/skills/quality/references/testing-best-practices.md#g-testing"
+
+    action:
+      build_mode: warn    # build mode suggests naming patterns when generating test stubs
+
+
+  - id: "tst-008"
+    name: "Mocks are at system boundaries, not internal collaborators"
+    severity: high
+    category: mocking
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      test_file_patterns:
+        python: ["test_*.py", "*_test.py"]
+        typescript: ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx"]
+        javascript: ["*.test.js", "*.test.jsx", "*.spec.js"]
+      note: "Universal testing principle — LLM detects in any framework. Python AST static pass only; JS/TS uses LLM-only detection."
+
+    source:
+      list: "LIST-4"
+      section: "G"
+      item: "Mock at boundaries, not internals"
+
+    # CALIBRATION 5: Pre-committed demotion criterion (same as tst-002).
+    # If human reviewer disagrees with LLM call on > 20% of flagged tests in the first audit,
+    # this rule is demoted to requires_human_review: true.
+    requires_human_review: false
+    demotion_criterion: "If first-audit human-LLM disagreement rate > 20% on tst-008 flags, set requires_human_review: true."
+
+    detection:
+      type: llm
+      static:
+        tool: null
+        notes: null
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are a test quality auditor checking one specific rule.
+
+          Rule: tst-008 — Mocks are at system boundaries, not internal collaborators
+          Applies to: Python (pytest), TypeScript/JavaScript (vitest, jest, mocha).
+          For Python: use pytest patterns. For JS/TS: use vitest/jest equivalents
+          (vi.fn()/jest.fn() instead of MagicMock, beforeEach/afterEach instead of fixtures,
+          describe/it/test instead of class-based test suites).
+          Severity: high
+
+          System boundaries (mock these — acceptable):
+          - External APIs, HTTP clients (httpx, requests)
+          - Databases (SQLite connections, ORM adapters)
+          - File system (when testing file operations abstractly)
+          - Time/random (when freezing for determinism)
+          - Email/notification services
+
+          Internal collaborators (do NOT mock these — violation):
+          - Private methods (_method_name) within the same module
+          - Internal helpers called by the code under test in the same package
+          - Pure calculation functions being invoked internally
+
+          Flag if:
+          - @patch or MagicMock targets a private method or internal helper
+          - The mock replaces an internal calculation rather than an external dependency
+
+          NOT a violation:
+          - Mocking a DB adapter even if it's in the same codebase (it's a boundary)
+          - Dream Studio's conftest.py pattern (not a mock, it's env var setting)
+
+          Return JSON:
+          {"finding": true|false, "confidence": 0.0-1.0, "location": "filename:function_name",
+           "excerpt": "the mock target being patched, max 100 chars",
+           "explanation": "one sentence: why this is an internal collaborator rather than a boundary"}
+        context_scope: function
+        estimated_tokens: 400
+
+    triggers:
+      - "@patch targeting a private method (_method_name) within the same module"
+      - "MagicMock replacing an internal calculation function"
+
+    remediation:
+      summary: "Replace internal mocks with boundary mocks. If the internal dependency is hard to mock at the boundary, consider whether the production code's structure makes it too tightly coupled."
+      guide_ref: "canonical/skills/quality/references/testing-best-practices.md#what-mock-at-boundaries-not-internals-means"
+
+    action:
+      build_mode: null
+
+
+  - id: "tst-009"
+    name: "Critical paths have integration tests"
+    severity: critical
+    category: coverage
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      test_file_patterns:
+        python: ["test_*.py", "*_test.py"]
+        typescript: ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx"]
+        javascript: ["*.test.js", "*.test.jsx", "*.spec.js"]
+      note: "Universal testing principle — LLM detects in any framework. Python AST static pass only; JS/TS uses LLM-only detection."
+
+    source:
+      list: "LIST-4"
+      section: "G"
+      item: "Critical paths have integration tests"
+
+    # CALIBRATION 3: critical_path_globs config-driven.
+    # Default is the API route surface for Dream Studio.
+    # Override per project via config.yml critical_path_globs.
+    # The rule is NOT "API routes must have integration tests" — it is
+    # "operator-defined critical paths must have integration tests."
+    config_driven: true
+    config_key: critical_path_globs
+    config_default: ["projections/api/routes/**"]
+    config_default_ts: ["src/app/api/**", "src/pages/api/**"]  # Next.js/Remix API route conventions
+
+    detection:
+      type: hybrid
+      static:
+        tool: ast
+        notes: |
+          1. Enumerate files matching config.critical_path_globs.
+          2. For each critical-path file, extract public functions/endpoints.
+          3. Check if tests/integration/ contains any test file that imports or calls these functions.
+          4. Flag critical-path functions with no integration-test coverage.
+          Fallback: check if function/route names appear in any file under tests/integration/.
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are a test quality auditor checking one specific rule.
+
+          Rule: tst-009 — Critical paths have integration tests
+          Applies to: Python (pytest), TypeScript/JavaScript (vitest, jest, mocha).
+          For Python: use pytest patterns. For JS/TS: use vitest/jest equivalents
+          (vi.fn()/jest.fn() instead of MagicMock, beforeEach/afterEach instead of fixtures,
+          describe/it/test instead of class-based test suites).
+          Severity: critical
+
+          Critical path files (from config): {critical_path_globs}
+          Critical-path function/endpoint: {function_name} in {file}
+
+          Search result from tests/integration/: {integration_test_search_result}
+
+          Is there evidence of an integration test that exercises this critical path?
+          Consider: direct function call, API client call, or end-to-end test that
+          would exercise this endpoint/function.
+
+          Return JSON:
+          {"finding": true|false, "confidence": 0.0-1.0,
+           "explanation": "one sentence: evidence for or against integration test coverage"}
+        context_scope: full_file
+        estimated_tokens: 400
+
+    triggers:
+      - "Public function/endpoint in critical_path_globs with no corresponding integration test"
+
+    remediation:
+      summary: "Add an integration test for this critical path. The test should exercise the full call stack — from the entry point (API call, CLI command) through to the observable side effect or response."
+      guide_ref: "canonical/skills/quality/references/testing-best-practices.md#g-testing"
+
+    cross_references:
+      - rule: "cq-016"
+        skill: "ds-quality:code-quality"
+        note: "cq-016 (validate at internal boundaries) explicitly EXCLUDES external entry points — those are handled by sec-003 and implicitly by tst-009. The scope separation is intentional: cq-016 fires on INTERNAL functions missing validation; tst-009 fires when EXTERNAL entry points (the critical_path_globs) have no integration test. Both may reference the same endpoint file, but for different reasons."
+        surface_co_located: false
+
+    action:
+      build_mode: null    # audit-only; build mode includes integration-test templates
+
+
+  - id: "tst-010"
+    name: "Coverage enforcement is meaningful (gap detection)"
+    severity: high
+    category: coverage
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      note: "Per-ecosystem threshold config. Python: pyproject.toml fail_under. JS/TS: vitest.config.ts thresholds / jest.config coverageThreshold."
+
+    source:
+      list: "LIST-4"
+      section: "G"
+      item: "Coverage is a floor, not a ceiling"
+
+    # CALIBRATION 2: Report BOTH actual coverage and the enforcement gap.
+    # The real signal is the gap between fail_under and actual coverage.
+    # A large gap means the gate permits large regressions before triggering.
+    # This is the testing-skill instance of the phase's throughline:
+    # a check nominally green but not enforcing what it claims.
+    #
+    # SCOPE NOTE (confirmed by full CI run 2026-05-29 — 4013 passed in 545s):
+    # Evals-only coverage = 7% (Dream Studio), which is BELOW fail_under=8%.
+    # This means evals alone don't meet the enforcement floor — the gap finding only
+    # applies when running the full test suite (actual 47.78%, gap 39.78 points).
+    # The gate CORRECTLY fires on evals-only (7% < 8%); that's different from the
+    # tst-010 gap finding (full suite actual >> fail_under).
+    # Always use full-suite coverage for tst-010 gap calculation.
+    # VERIFIED NUMBERS (CI run 2026-05-29): actual=47.78%, fail_under=8%, gap=39.78 points.
+    detection:
+      type: tool
+      tool:
+        name: coverage
+        command: "coverage report"
+        notes: |
+          Parse coverage report output for:
+          1. Total coverage %  (actual)
+          2. fail_under setting from pyproject.toml / .coveragerc  (enforcement floor)
+          3. Gap = actual - fail_under
+          Report both numbers always. Flag the gap as high severity when:
+          - gap > config.coverage.gap_high_severity_threshold (default 22 points)
+          The finding IS the gap, not the absolute coverage %.
+          Separate informational finding: actual coverage % for awareness.
+
+          FOR JAVASCRIPT/TYPESCRIPT (vitest/jest):
+          Coverage output: coverage/coverage-final.json (see tst-001 for format)
+          Threshold config location:
+          - vitest: vitest.config.ts → defineConfig({ test: { coverage: { thresholds: { lines: N } } } })
+          - jest: jest.config.js/ts → coverageThreshold: { global: { lines: N } }
+
+          Gap calculation: same as Python
+          - actual = computed from coverage-final.json (total lines hit / total lines)
+          - fail_under = threshold from config (e.g., thresholds.lines = 70)
+          - gap = actual - fail_under
+          - Flag high severity if gap > config.coverage.gap_high_severity_threshold (default 22 points)
+
+          Example (DreamySuite): actual=31.5%, threshold=70%, gap=-38.5 points.
+          NOTE: negative gap means coverage is BELOW threshold (the gate is already failing).
+          In that case report: "Coverage is below threshold — gate is already failing; no gap finding
+          needed. Coverage: {actual}%, threshold: {threshold}%."
+          Gap finding only applies when actual > threshold (gate passes but with large headroom).
+        fallback_to_llm: false
+      llm:
+        prompt_template: null
+        context_scope: null
+        estimated_tokens: 0
+
+    triggers:
+      - "Coverage enforcement floor (fail_under) is more than gap_high_severity_threshold points below actual coverage"
+
+    remediation:
+      summary: |
+        Update fail_under in pyproject.toml to a value closer to actual coverage (within 5-10 points).
+        This closes the regression window — a coverage drop of that many points will now trigger the gate.
+        Example: if actual coverage is 42%, set fail_under to 35-38%.
+        Do NOT set fail_under to exactly actual — leave headroom for legitimate new code.
+      guide_ref: "canonical/skills/quality/references/testing-best-practices.md#g-testing"
+
+    cross_references:
+      - note: "This finding is an instance of the 'coherence check satisfiable by relabeling' pattern documented in docs/architecture/aspirational-schema-debt.md — a gate nominally passing while not enforcing meaningful quality."
+
+    action:
+      build_mode: null    # audit-only; fix is a config change, not code generation
+
+
+  - id: "tst-011"
+    name: "No sleep() as synchronization primitive in tests"
+    severity: critical
+    category: determinism
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      note: "Python: static AST (no LLM needed). JS/TS: candidate/confirm only — setTimeout may be legitimate timer testing. LLM confirmation required before critical finding."
+
+    source:
+      list: "LIST-4"
+      section: "I"
+      item: "No sleep() as sync primitive in tests"
+
+    # Cross-reference: tst-011 ↔ cq-019 (sleep() in production code).
+    # Same symptom, different file scope. Both may fire on the same commit.
+
+    detection:
+      type: hybrid
+      static:
+        tool: ast
+        config: null
+        fallback_to_llm: true
+        notes: |
+          Parse test function bodies with ast. Flag any call to:
+          - time.sleep(...)
+          - asyncio.sleep(...) used as a synchronization wait (not in async test utility)
+          These are deterministically the wrong approach in test code and are always critical.
+          No LLM pass needed for Python — the static pattern is sufficient.
+
+          For JavaScript/TypeScript (LLM confirmation required — NOT fire-on-match):
+          Patterns flagged as CANDIDATES (JS/TS static):
+          - await new Promise(resolve => setTimeout(resolve, N)) in test body
+          - new Promise(resolve => setTimeout(resolve, N)) — callback sleep equivalent
+          Flag as: "CANDIDATE — setTimeout-as-sleep pattern detected; confirm it is used as
+          synchronization wait rather than legitimate async coordination."
+          CRITICAL: setTimeout may be legitimate (testing debounce behavior, testing timer-based
+          code). Static pattern alone cannot distinguish. LLM MUST confirm.
+      llm:
+        prompt_template: |
+          You are a test quality auditor checking one specific rule.
+
+          Rule: tst-011 — No sleep() as synchronization primitive in tests
+          Severity: critical (if confirmed)
+
+          The static analysis detected a potential sleep-as-sync pattern in a JS/TS test:
+          {static_finding_excerpt}
+
+          Is this setTimeout/Promise delay used as a SYNCHRONIZATION WAIT (waiting for async
+          operations to complete) — or as LEGITIMATE timer testing (testing debounce behavior,
+          testing setTimeout-dependent code, testing timer-driven animations)?
+
+          CONFIRMED VIOLATION (synchronization wait — the wrong approach):
+          - await new Promise(resolve => setTimeout(resolve, 500)) waiting for a fetch to finish
+          - setTimeout sleep used because the test writer didn't know how to await properly
+          - Fixed delay to "let the queue drain" instead of proper event-driven waiting
+
+          NOT A VIOLATION (legitimate timer testing):
+          - Testing that a debounce function fires after N ms (the timer IS the thing being tested)
+          - Testing a retry mechanism with a configurable delay
+          - Testing an animation library where timing is the observable behavior
+
+          Return JSON exactly:
+          {"finding": true|false, "confidence": 0.0-1.0,
+           "location": "filename:function_name",
+           "excerpt": "the sleep pattern and context, max 100 chars",
+           "explanation": "one sentence: why this is sync-wait vs legitimate timer testing"}
+
+          Only return finding: true if confidence >= 0.75 AND it is a synchronization wait.
+        context_scope: function
+        estimated_tokens: 350
+
+    triggers:
+      - "time.sleep() call in a test function body"
+      - "asyncio.sleep() used as a synchronization wait in a test function"
+
+    suppressions:
+      - inline_comment: "# sleep: intentional integration delay"
+        reason: "Operator explicitly accepts the sleep as necessary for integration test timing"
+
+    remediation:
+      summary: "Replace sleep() with proper synchronization: use pytest-timeout with event-driven waiting, mock the time-dependent code to control it, or use asyncio.wait_for with an event. In integration tests, use polling with a timeout instead of a fixed sleep."
+      guide_ref: "canonical/skills/quality/references/testing-best-practices.md#i-concurrency-testing-relevant-cross-reference"
+
+    cross_references:
+      - rule: "cq-019"
+        skill: "ds-quality:code-quality"
+        note: "cq-019 fires on sleep() in production code. tst-011 fires on sleep() in test code. Reports note the sibling rule."
+
+    action:
+      build_mode: warn    # build mode warns when suggesting async test patterns that might invite sleep()
+
+
+  - id: "tst-012"
+    name: "Fixture scope is appropriate (no mutable state in session/module fixtures)"
+    severity: high
+    category: isolation
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      note: "Python: conftest.py fixture scope detection. JS/TS: beforeAll/afterAll mutable state detection. Both use candidate/confirm — LLM confirmation required."
+
+    source:
+      list: "LIST-4"
+      section: "G"
+      item: "Tests are independent"
+
+    detection:
+      type: hybrid
+      static:
+        tool: ast
+        notes: |
+          Parse conftest.py and test files for pytest fixtures with scope='session' or scope='module'.
+          Extract fixture body. Flag if:
+          - Fixture returns or yields a mutable container (list, dict, set)
+          - Fixture assigns to a mutable class attribute
+          - Fixture yields a database connection (shared connections cause test-order dependence)
+          Exception: The early-isolation pattern in conftest.py (setting env vars at module import time) is NOT a fixture and is NOT flagged.
+
+          For JavaScript/TypeScript (vitest/jest) — CANDIDATE/CONFIRM structure:
+          Parse test files for describe-scoped shared mutable state patterns:
+          - beforeAll(() => { sharedState = [] }) with mutable container (list, dict-equivalent)
+          - beforeAll(() => { db = await createDatabase() }) with shared write-access
+          - let sharedArray = [] or let sharedObj = {} declared in describe() scope, mutated in beforeAll
+          Flag as: "CANDIDATE — beforeAll/describe-scoped mutable state detected; confirm whether
+          tests can modify this shared state and affect each other."
+          NOT A VIOLATION: beforeAll to set up read-only fixtures, beforeEach (function-scoped, fine)
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are a test quality auditor checking one specific rule.
+
+          Rule: tst-012 — Fixture scope is appropriate
+          Severity: high
+
+          The static analysis found a session or module-scoped fixture:
+          {fixture_code}
+
+          Does this fixture yield or return mutable state that could be modified by one test
+          and affect another test's execution?
+
+          NOT a violation:
+          - Read-only data (constants, tuples, frozen objects)
+          - Session-scoped database that is populated once and never mutated by tests
+          - Dream Studio conftest.py's early env-var setting (this is not a fixture)
+
+          VIOLATION:
+          - Returns/yields a list or dict that tests can append to or modify
+          - Yields a database connection that tests write to (shared write state)
+
+          For vitest/jest: check if the fixture pattern is:
+          VIOLATION: beforeAll(() => { sharedList = [] }) where tests push to sharedList
+          NOT A VIOLATION: beforeAll that sets up a database populated once and never mutated
+          The rule is about mutable shared state that causes test-order dependence.
+
+          Return JSON:
+          {"finding": true|false, "confidence": 0.0-1.0,
+           "location": "filename:fixture_name",
+           "excerpt": "the mutable state being yielded, max 100 chars",
+           "explanation": "one sentence: why this could cause test-order dependence"}
+        context_scope: function
+        estimated_tokens: 350
+
+    triggers:
+      - "session or module-scoped fixture yields a mutable container (list, dict, set)"
+      - "session or module-scoped fixture yields a shared database connection for write operations"
+
+    remediation:
+      summary: "Reduce fixture scope to function-scoped (default). If performance requires session/module scope, ensure the fixture yields read-only state and tests cannot mutate it."
+      guide_ref: "canonical/skills/quality/references/testing-best-practices.md#fixture-scope-pitfalls"
+
+    action:
+      build_mode: null
+
+
+  - id: "tst-013"
+    name: "Test file organization mirrors source structure"
+    severity: low
+    category: organization
+    applies_to:
+      languages: [python]
+      file_types: [".py"]
+      skip_on:
+        languages: [typescript, javascript]
+        reason: "JS/TS typically co-locates test files (module.test.ts next to module.ts) rather than mirroring to tests/unit/. This convention is correct for JS/TS projects. The mirroring rule is Python-specific (tests/unit/test_module.py pattern)."
+      note: "Python-only rule. On JS/TS projects, test co-location is the convention — this rule skips cleanly with 0 findings."
+
+    source:
+      list: "LIST-4"
+      section: "G"
+      item: "Tests exist"
+
+    # NOTE: tst-013 is the organizational angle of test existence.
+    # tst-001 is the coverage angle (does the code get exercised?).
+    # tst-013 is lower severity (low) because missing path mirroring is a convention concern,
+    # not a correctness concern. A module can be tested via integration or differently-named files.
+
+    detection:
+      type: static
+      static:
+        tool: ast
+        notes: |
+          For each source file in configured source paths (core/, runtime/, interfaces/, etc.):
+          Check if tests/unit/test_{module_name}.py exists.
+          If not, check if tests/unit/ contains any file that imports from that module.
+          If neither: flag as low severity (convention gap, not untested).
+          Note: this is organizational, not coverage. Use tst-001 for actual coverage.
+        fallback_to_llm: false
+      llm:
+        prompt_template: null
+        context_scope: null
+        estimated_tokens: 0
+
+    triggers:
+      - "Source module has no corresponding test file in tests/unit/ (by naming convention)"
+
+    suppressions:
+      - pattern: "*/migrations/*"
+        reason: "Migration scripts typically tested via integration"
+      - pattern: "__init__.py"
+        reason: "Package init files without implementation"
+      - pattern: "*/example_*"
+        reason: "Example files"
+
+    remediation:
+      summary: "Create tests/unit/test_{module_name}.py for this module. If it's already tested via integration tests or differently-named unit tests, add an import or comment in the unit test directory explaining why there's no direct unit test file."
+      guide_ref: "canonical/skills/quality/references/testing-best-practices.md#g-testing"
+
+    action:
+      build_mode: null
+
+
+  - id: "tst-014"
+    name: "Tests run in CI before merge"
+    severity: critical
+    category: ci
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      test_file_patterns:
+        python: ["test_*.py", "*_test.py"]
+        typescript: ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx"]
+        javascript: ["*.test.js", "*.test.jsx", "*.spec.js"]
+      note: "Universal testing principle — LLM detects in any framework. Python AST static pass only; JS/TS uses LLM-only detection."
+
+    source:
+      list: "LIST-4"
+      section: "G"
+      item: "Tests run in CI before merge"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Check .github/workflows/*.yml (or equivalent CI config) for:
+          - A step that runs pytest or equivalent test runner
+          - Applied on pull_request or push event (not only manual/workflow_dispatch)
+          Flag as critical if no test execution step is found in CI config.
+          Dream Studio known context: The pre-push hook runs tests/evals/ only — full suite
+          takes ~79 min on Windows (subprocess spawn overhead), documented in CLAUDE.md.
+          Does NOT OOM (verified 2026-05-29). This is NOT a violation — the full suite runs
+          ubuntu-only post-merge in full-ci.yml. Report the known context when evaluating Dream Studio.
+
+          Also check for vitest / jest / mocha execution steps on pull_request events.
+          A project is compliant if any test runner (pytest, vitest, jest, go test) runs on CI.
+        fallback_to_llm: false
+      llm:
+        prompt_template: null
+        context_scope: null
+        estimated_tokens: 0
+
+    triggers:
+      - "No CI configuration found with test execution step"
+      - "CI configuration exists but does not run tests on pull_request"
+
+    remediation:
+      summary: "Add a test execution step to your CI pipeline (GitHub Actions, GitLab CI, etc.) that runs on pull_request or push events. The step should fail the build if tests fail."
+      guide_ref: "canonical/skills/quality/references/testing-best-practices.md#g-testing"
+
+    action:
+      build_mode: null    # audit-only; CI config is project setup, not code generation
+
+
+  - id: "tst-015"
+    name: "Unit tests do not contain slow patterns (real DB/network/subprocess connections)"
+    severity: medium
+    category: speed
+
+    source:
+      list: "LIST-4"
+      section: "G"
+      item: "Tests run fast locally"
+
+    # NOTE: This rule applies to tests/unit/** only.
+    # Integration tests (tests/integration/**) and evals (tests/evals/**) legitimately
+    # use DB connections and network. The "fast locally" requirement is unit-specific.
+    #
+    # CANDIDATE/CONFIRM STRUCTURE (same as tst-003 — identical static-can't-tell limitation):
+    # The static pass finds DB/network/subprocess patterns in unit test bodies, but cannot
+    # determine whether the connection is:
+    #   (a) An isolated test fixture (tmp_path, :memory:, bootstrap_database(tmp_path)) — FINE
+    #   (b) A real external connection (production DB, external API) — SLOW PATTERN VIOLATION
+    # Confirmed by first audit 2026-05-29: test_critique_gate.py uses bootstrap_database(tmp_path)
+    # and was flagged by static pass but is correctly isolated (not a slow pattern violation).
+    # Static pass severity = medium (candidate). LLM confirmation required to confirm
+    # the connection is real/external (not a fixture/tmp/in-memory path).
+    severity_static_candidate: medium    # severity from static pass alone
+    severity_confirmed: medium           # severity after LLM confirms connection is real/external
+    # (medium stays medium when confirmed — a slow unit test is meaningful but not critical)
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+
+    applies_to_paths:
+      include: ["tests/unit/**", "**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
+      exclude: ["tests/integration/**", "tests/evals/**", "**/*.e2e.ts", "**/*.e2e-spec.ts"]
+
+    detection:
+      type: hybrid
+      static:
+        tool: ast
+        notes: |
+          Parse tests/unit/**/*.py only. Flag test functions containing:
+          - sqlite3.connect() — DB connection pattern
+          - requests.get/post/put/delete(), httpx.get/post/put/delete() — HTTP calls
+          - subprocess.run(), subprocess.Popen() — process invocation
+          Report as: "CANDIDATE (medium severity) — slow pattern detected; confirm whether
+          the connection is isolated (tmp_path, :memory:, test fixture) or real/external."
+          DO NOT report as a confirmed finding — the static pass cannot distinguish
+          bootstrap_database(tmp_path) from sqlite3.connect(PRODUCTION_DB).
+
+          For JavaScript/TypeScript (SAME CANDIDATE/CONFIRM STRUCTURE as Python):
+          The static pass finds these patterns but CANNOT confirm whether they are mocked/isolated:
+          - fetch() call in test body — may be mocked with vi.mock('node-fetch') or server.use()
+          - fs.readFileSync() — may be using a temp file fixture
+          - child_process.exec / execSync — may be a test utility wrapper
+          Flag as: "CANDIDATE (medium severity) — JS/TS slow pattern detected; confirm whether
+          the call is mocked/intercepted (MSW handler, vi.mock, jest.mock) or a real external call."
+          CRITICAL: Do NOT fire on match. The bootstrap_database(tmp_path) false-positive class
+          exists in JS/TS too: a fetch() inside a vi.mock() handler is fine. LLM confirms.
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are a test quality auditor checking one specific rule.
+
+          Rule: tst-015 — Unit tests do not contain slow patterns
+          Severity: medium (candidate) — confirm only if connection is real/external
+
+          The static analysis detected a DB/network pattern:
+          {static_finding_excerpt}
+
+          Is this connection REAL/EXTERNAL (slow pattern violation) or ISOLATED (fine)?
+
+          ISOLATED / NOT A VIOLATION:
+          - sqlite3.connect(str(tmp_path / "test.db")) or bootstrap_database(tmp_path)
+          - sqlite3.connect(":memory:")
+          - Connection through a pytest fixture that provides a tmp_path or in-memory DB
+          - Dream Studio's conftest.py pattern (DREAM_STUDIO_DB_PATH redirected to tmp)
+
+          REAL / EXTERNAL (violation — slow unit test):
+          - sqlite3.connect(PRODUCTION_DB_PATH) where path is not from tmp_path
+          - requests.get("https://real-api.com/...") — real HTTP call
+          - subprocess.run(["some_external_command"])
+          - A hardcoded database path not in a temp directory
+
+          For JavaScript/TypeScript specifically:
+          ISOLATED (fine): fetch() inside vi.mock('node-fetch'), MSW server.use() handler intercept,
+          fs.readFileSync() on a tmp file from beforeEach setup
+          REAL / EXTERNAL (violation): fetch("https://api.example.com") not intercepted by MSW,
+          fs.readFileSync("/etc/config") hardcoded path, child_process.exec of real external command
+
+          Return JSON exactly:
+          {"finding": true|false, "confidence": 0.0-1.0,
+           "location": "filename:function_name",
+           "excerpt": "the connection call and its argument, max 100 chars",
+           "explanation": "one sentence: why this is real/external or why it is isolated"}
+
+          Only return finding: true if confidence >= 0.75 AND the connection is real/external.
+        context_scope: function
+        estimated_tokens: 350
+
+    triggers:
+      - "sqlite3.connect() in tests/unit/ — confirm whether path is tmp/in-memory (isolated) or real (violation)"
+      - "Real HTTP call (requests/httpx) in tests/unit/ — confirm not mocked"
+      - "subprocess.run() or Popen in tests/unit/ — confirm not a test utility"
+
+    suppressions:
+      - inline_comment: "# slow-ok: integration boundary"
+        reason: "Operator explicitly accepts slow pattern as integration boundary"
+
+    remediation:
+      summary: "Move test to tests/integration/ (for legitimate integration tests) or replace the DB/network call with a mock or in-memory substitute. Use pytest fixtures to provide test doubles. If using bootstrap_database(tmp_path), this is NOT a violation — the fixture provides proper isolation."
+      guide_ref: "canonical/skills/quality/references/testing-best-practices.md#g-testing"
+
+    action:
+      build_mode: warn    # build mode warns when generating unit test stubs near DB-touching code

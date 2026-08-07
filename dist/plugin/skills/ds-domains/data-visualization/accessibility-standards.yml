@@ -1,0 +1,57 @@
+# Data Visualization Accessibility Standards
+# Sources: WCAG 2.1, A11Y Collective, Highcharts
+
+wcag_compliance:
+  level_aa:
+    text_contrast: 4.5  # 4.5:1 ratio
+    large_text_contrast: 3.0  # 3:1 ratio (18px+)
+    non_text_contrast: 3.0  # 3:1 ratio (chart elements)
+
+  level_aaa:
+    text_contrast: 7.0  # 7:1 ratio
+    large_text_contrast: 4.5  # 4.5:1 ratio
+
+color_accessibility:
+  color_not_sole_means: true
+  provide_alternatives:
+    - data_labels: true
+    - symbols: true
+    - patterns: true
+    - annotations: true
+    - tooltips: true
+
+  color_blindness_testing:
+    deuteranopia: true  # Red-green (most common)
+    protanopia: true  # Red-green
+    tritanopia: true  # Blue-yellow
+    monochromacy: true  # Total color blindness
+
+screen_reader_support:
+  aria_roles: true
+  aria_labels: true
+  semantic_html: true
+  data_table_alternative: true
+
+keyboard_navigation:
+  tab_order_logical: true
+  focus_indicators_visible: true
+  all_interactions_accessible: true
+  escape_key_closes_modals: true
+
+resizability:
+  text_resizable_to_200_percent: true
+  chart_maintains_function_when_resized: true
+
+chart_best_practices:
+  prefer_simple_types: true  # Bar, line over complex
+  avoid_clutter: true
+  remove_unnecessary_embellishments: true
+  provide_context: true  # Title, description, units
+
+testing_tools:
+  lighthouse: true
+  axe_devtools: true
+  wave: true
+  color_contrast_analyzer: true
+
+verdict: ""  # wcag_aa | wcag_aaa | non_compliant

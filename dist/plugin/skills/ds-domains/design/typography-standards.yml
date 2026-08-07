@@ -1,0 +1,85 @@
+# Typography Standards
+# Sources: Google Fonts, Microsoft Typography, Web Design Rules
+
+web_typography:
+  typeface_limit: 2  # 1-2 per page (max 3 for complex sites)
+
+  sizing:
+    body_text_min: 16px
+    body_text_max: 32px
+    body_text_optimal: 18px
+    headlines_min: 50px
+    small_text_min: 14px  # accessibility minimum
+
+  line_height:
+    body_text: 1.6  # 1.5-1.8 range, 1.6 optimal
+    headlines: 1.2  # 1.1-1.3 range
+
+  line_length:
+    max_characters: 75
+    optimal_characters: 60  # 50-60 optimal
+
+  weights:
+    minimum: 400  # avoid <400
+    body: 500  # 400-500
+    emphasis: 600  # 600-700
+    headlines: 700  # 700-900
+
+dashboard_typography:
+  typeface: "Sans-serif"  # Segoe UI, Roboto, Inter
+
+  sizing:
+    kpi_values: 42px  # 36-48px range
+    kpi_labels: 13px  # 12-14px range
+    chart_titles: 18px  # 16-20px range
+    axis_labels: 11px  # 10-12px range
+
+  line_height: 1.3  # 1.2-1.4 (tighter for data density)
+
+  colors:
+    match_axis_to_data: true  # Y-axis label color = data series color
+
+recommended_fonts:
+  sans_serif:
+    - Inter
+    - Open Sans
+    - Roboto
+    - Montserrat
+    - Segoe UI
+  serif:
+    - Merriweather
+    - Aleo
+    - Playfair Display
+    - Georgia
+
+rules:
+  avoid_justified_text: true
+  dont_center_long_text_blocks: true
+  use_consistent_font_scale: true
+
+# === APPENDED: repo-integration 2026-04-29 ===
+
+font_pairing:
+  principle: "Pair a display/heading font with a body font. Max 2 typefaces per project."
+  display_font_role: "Headlines, hero text, pull quotes — expressive, distinctive"
+  body_font_role: "Body copy, UI labels, captions — readable, neutral"
+  contrast_rule: "Display and body fonts should have clear visual contrast (serif + sans, geometric + humanist)"
+  avoid: "Using only one font for everything, or mixing 3+ typefaces"
+
+type_scale:
+  minor_third: "1.25 ratio — compact UIs, data-dense interfaces"
+  perfect_fourth: "1.333 ratio — balanced, recommended default"
+  major_third: "1.25 ratio — similar to minor third, slightly more expressive"
+  usage: "Pick one ratio and apply consistently. Don't mix ratios."
+
+opentype_features:
+  tabular_nums: "Enable for data tables and numeric displays — prevents layout shift"
+  ligatures: "Enable contextual ligatures for body text quality"
+  old_style_figures: "Use in running text for readability, lining figures for UI"
+  avoid: "Decorative ligatures in UI copy — use only in display text"
+
+oklch_type_color:
+  principle: "When using OKLCH for color, derive text colors from the same hue as the surface"
+  light_surface: "Text: L<20, same hue as surface at C<0.05"
+  dark_surface: "Text: L>85, same hue as surface at C<0.05"
+  avoid: "Pure black (#000) or pure white (#fff) text — use slightly tinted neutrals"

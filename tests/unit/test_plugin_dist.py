@@ -78,3 +78,62 @@ def test_declared_components_are_the_deliverable_set():
     """commands is not declared — Dream Studio ships no top-level commands (skills replace them)."""
     assert "commands" not in PLUGIN_COMPONENTS
     assert set(PLUGIN_COMPONENTS) == {"agents", "skills", ".mcp.json"}
+
+
+def test_installer_projection_vs_routable_surface_contract():
+    """Compare the installer's real directory-scan projection to the routable surface, so a
+    new/removed canonical/skills/<dir> is DETECTED (not silently ignored — the T2 gap).
+
+    The two differ only by documented exceptions:
+    - dir-scan-only = {ds-bootstrap} — a passive system component, excluded from the surface.
+    - routable-only = {ds-website, ds-fullstack} — packs whose sources live under
+      canonical/skills/domains/modes/* (not top-level dirs), delivered as standalone skills.
+    Any other difference means a canonical/skills change that must be reflected in packs.yaml.
+    """
+    from integrations.installer.claude_code_installer import _skill_id_from_dir_name
+
+    skills_dir = REPO_ROOT / "canonical" / "skills"
+    dir_scan = {
+        _skill_id_from_dir_name(d.name)
+        for d in skills_dir.iterdir()
+        if d.is_dir() and (d / "SKILL.md").is_file()
+    }
+    routable = set(skill_ids())
+    assert dir_scan - routable == {
+        "ds-bootstrap"
+    }, f"unexpected installed-but-unroutable skill dirs: {dir_scan - routable - {'ds-bootstrap'}}"
+    assert routable - dir_scan == {
+        "ds-website",
+        "ds-fullstack",
+    }, f"unexpected routable skills without a top-level dir: {routable - dir_scan}"
+
+
+def test_committed_dist_plugin_is_fresh(tmp_path: Path):
+    """The tracked dist/plugin artifact (what the marketplace git-subdir source serves) must
+    equal a fresh build — else a canonical edit ships a stale public plugin. Compares text via
+    read_text (newline-normalized) so it is CRLF/LF-agnostic across platforms."""
+    committed = REPO_ROOT / "dist" / "plugin"
+    assert committed.is_dir(), "dist/plugin must be committed (marketplace git-subdir payload)"
+
+    fresh = tmp_path / "plugin"
+    build_plugin_dist(fresh, repo_root=REPO_ROOT)
+
+    def _rel_files(root: Path) -> set[str]:
+        return {p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()}
+
+    fresh_files, committed_files = _rel_files(fresh), _rel_files(committed)
+    assert (
+        fresh_files == committed_files
+    ), f"dist/plugin is stale — rebuild it. diff={fresh_files ^ committed_files}"
+    for rel in sorted(fresh_files):
+        c_bytes, f_bytes = (committed / rel).read_bytes(), (fresh / rel).read_bytes()
+        if c_bytes == f_bytes:
+            continue
+        # Text files may differ only by checkout line-ending normalization — compare decoded,
+        # newline-agnostic. Binary files (that already failed the byte check) are genuinely stale.
+        try:
+            c_text = c_bytes.decode("utf-8").replace("\r\n", "\n")
+            f_text = f_bytes.decode("utf-8").replace("\r\n", "\n")
+        except UnicodeDecodeError:
+            raise AssertionError(f"dist/plugin/{rel} is stale (binary mismatch) — rebuild it")
+        assert c_text == f_text, f"dist/plugin/{rel} is stale — rebuild it"

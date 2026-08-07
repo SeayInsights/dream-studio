@@ -1,0 +1,39 @@
+# Data Visualization Accessibility (WCAG 2.1)
+# Sources: WCAG, A11Y Collective, Highcharts
+
+color_and_contrast:
+  text_contrast_4_5_to_1: false
+  non_text_contrast_3_to_1: false
+  color_not_sole_means: false  # Use patterns, labels, annotations
+  data_labels_present: false
+  color_blindness_tested: false
+
+alternative_formats:
+  data_table_alongside_chart: false
+  alt_text_on_visuals: false
+  text_descriptions_for_insights: false
+
+resizability:
+  chart_resizable_to_200_percent: false
+  no_loss_of_function_when_resized: false
+
+keyboard_navigation:
+  tab_order_logical: false
+  focus_indicators_visible: false
+  all_interactions_keyboard_accessible: false
+
+chart_simplicity:
+  simple_chart_types_preferred: false  # bar, line over complex
+  avoid_clutter: false
+  unnecessary_embellishments_removed: false
+
+aria_support:
+  aria_roles_and_labels: false
+  screen_reader_support: false
+
+semantic_html:
+  heading_for_chart: false
+  introductory_text: false
+
+verdict: ""  # accessible | needs_work
+wcag_level: ""  # AA | AAA | non_compliant
