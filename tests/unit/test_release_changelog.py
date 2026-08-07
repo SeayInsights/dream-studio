@@ -1,7 +1,8 @@
-"""R5 T3 — native CalVer release-notes generator.
+"""R5 T3 — native release-notes generator (semver versioning).
 
-Changelog content is derived from conventional commits; the version stays CalVer (the
-release date). See core/release/changelog.py.
+Changelog content is derived from conventional commits; the version is a chosen semver
+(``MAJOR.MINOR.PATCH``). These tests exercise the pure render/prepend/bump helpers with
+representative version strings. See core/release/changelog.py.
 """
 
 from __future__ import annotations
