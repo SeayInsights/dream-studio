@@ -113,7 +113,19 @@ def build_plugin_dist(
     out_dir.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
 
+    def _is_cruft(target: Path) -> bool:
+        # Never ship machine-local / non-reproducible cruft into the public artifact
+        # (compiled bytecode, caches, OS files) — it breaks the freshness guard on a clean
+        # checkout and bloats the distributable.
+        return (
+            "__pycache__" in target.parts
+            or target.suffix in {".pyc", ".pyo"}
+            or target.name == ".DS_Store"
+        )
+
     def _materialize(op) -> None:
+        if _is_cruft(op.target):
+            return
         op.target.parent.mkdir(parents=True, exist_ok=True)
         if op.source_content is not None:
             # Deterministic LF so the committed artifact is byte-stable across platforms.
