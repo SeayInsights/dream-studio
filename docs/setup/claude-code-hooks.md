@@ -43,7 +43,7 @@ Add the following to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "py C:\\Users\\<you>\\builds\\dream-studio-clean\\runtime\\hooks\\core\\on-post-tool-use.py"
+            "command": "py C:\\Users\\<you>\\builds\\dream-studio\\runtime\\hooks\\core\\on-post-tool-use.py"
           }
         ]
       }
