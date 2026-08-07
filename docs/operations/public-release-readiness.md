@@ -33,9 +33,14 @@ operator records an explicit go.
   All three fixed in `WO-REL-CI-BASELINE` (#589 fixed the first two; #590 fixed the wiring
   assertion via `app.openapi()`).
 - **Baseline start — first green:** `full-ci` run `31110598731` at commit `9654946e`
-  (2026-08-06) is the first green full-suite run on `main`. The sustained-green streak begins
-  here (streak: 1). Record the consecutive-green run count as it accrues; a public release
-  requires a sustained streak (a `WO-REL-SHIP-CLOSEOUT` concern), **not** the first green run.
+  (2026-08-06) is the first green full-suite run on `main`.
+- **Sustained-green threshold: N = 5** consecutive green `full-ci` runs on `main`
+  (operator-agreed 2026-08-07). A public release requires the streak to reach N — this is the
+  `WO-REL-SHIP-CLOSEOUT` gate, **not** the first green run.
+- **Streak progress (2026-08-07):** after the oi=40 release work landed, the only interruption
+  was one run (#596, the `dist/plugin` commit that shipped non-reproducible `.pyc` — fixed by
+  #597). Since that fix, `full-ci` is green for #597, #598, #599, #600 — **4 consecutive**; the
+  commit that records this baseline is the 5th run, which on green meets N = 5.
 
 ## Versioning
 
