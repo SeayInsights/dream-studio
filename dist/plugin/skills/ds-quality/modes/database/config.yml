@@ -1,0 +1,51 @@
+name: database
+model_tier: sonnet
+description: "Database quality enforcement — audit and build modes"
+argument-hint: "audit | build"
+user_invocable: true
+args: mode
+
+# Scope mode flags for audit mode
+# --changed: default — only files changed vs main branch
+# --full-repo: entire repository scan
+# --sample: random N files for budget estimation (default N=50)
+scope_modes:
+  default: changed
+  sample_size: 50
+
+# Token budgets per scope mode
+# These are roadmap estimates. LLM cost measurement pending —
+# first real LLM-pass audit will validate. See 18.4.2-followup or
+# next real invocation report for measured values.
+# Batch 7 (18.4.2) ran static-only; LLM pass not yet executed.
+# Baseline reference: security skill measured 22k for --changed on 6 files.
+budgets:
+  max_tokens_per_audit_changed: 12000            # estimate; awaiting LLM-pass measurement
+  max_tokens_per_audit_full_small: 300000         # repos < 200 files
+  max_tokens_per_audit_full_medium: 1200000       # repos 200-500 files
+  max_tokens_per_audit_full_large: 3000000        # repos > 500 files
+  max_tokens_per_audit_sample: 25000             # 50 files; lighter than security
+
+# Gate: require --force-full flag for full-repo mode on large repos
+full_repo_llm_gate_file_count: 500               # consistent with security skill
+
+thresholds:
+  min_confidence_for_llm_finding: 0.75
+  halt_on_critical_in_build: true
+  warn_on_high_in_build: true
+  suppression_default_expires_days: 90
+
+behavior:
+  llm_cache_enabled: true
+  cache_by: [rule_id, file_hash]
+  fallback_to_llm_when_tool_missing: true
+  log_tool_degradation: true
+  classify_before_fix: true
+  # Additional context scope value for config-file rules (connection pool, WAL mode, etc.)
+  # context_scope: config_section — extract the relevant config block, not the whole file
+  config_section_max_lines: 50
+
+models:
+  default: sonnet
+  audit_llm_pass: sonnet
+  build_check: sonnet

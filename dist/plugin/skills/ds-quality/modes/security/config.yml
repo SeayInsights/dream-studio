@@ -1,0 +1,55 @@
+name: security
+model_tier: sonnet
+description: "Build-time security enforcement — audit and build modes"
+argument-hint: "audit | build"
+user_invocable: true
+args: mode
+
+# Scope mode flags for audit mode (Decision 5 — approved Option C)
+# --changed: default — only files changed vs main branch
+# --full-repo: entire repository scan
+# --sample: random N files for budget estimation (default N=50)
+scope_modes:
+  default: changed
+  sample_size: 50
+
+# Token budgets per scope mode
+# MEASURED: 18.4.1 Batch 7, 2026-05-27, dream-studio-clean (1,651 applicable files)
+# --changed (6 files): ~22,000 actual. 20,000 estimate is accurate.
+# --full-repo (1,651 files): extrapolated ~6,050,000. Original 500k was off by ~12x.
+# Root cause: first-run has no cache; all files need LLM evaluation for ~10 LLM rules.
+# Full-repo is only feasible on repos < 500 files without --force-full override.
+budgets:
+  max_tokens_per_audit_changed: 20000            # MEASURED: 22k actual; 20k is a safe default
+  max_tokens_per_audit_full_small: 500000         # repos < 200 files
+  max_tokens_per_audit_full_medium: 2000000       # repos 200-500 files
+  max_tokens_per_audit_full_large: 6000000        # repos > 500 files (Dream Studio scale)
+  max_tokens_per_audit_sample: 50000             # 50 files; estimate unchanged
+
+# Gate: require --force-full flag for full-repo mode on large repos
+full_repo_llm_gate_file_count: 500               # above this, refuse --full-repo without --force-full
+
+thresholds:
+  # Minimum LLM confidence to record a finding (0.0-1.0)
+  min_confidence_for_llm_finding: 0.75
+  # Build mode: block generation on critical or high findings
+  halt_on_critical_in_build: true
+  warn_on_high_in_build: true
+  # Suppression entry max age before treated as expired
+  suppression_default_expires_days: 90
+
+behavior:
+  # Cache LLM results by (rule_id, sha256(file_content)) to avoid re-evaluating unchanged files
+  llm_cache_enabled: true
+  cache_by: [rule_id, file_hash]
+  # When a static tool is not installed, fall back to LLM for that rule
+  fallback_to_llm_when_tool_missing: true
+  # Log tool degradation visibly in audit report (not silent)
+  log_tool_degradation: true
+  # audit: never fix findings — report only
+  classify_before_fix: true
+
+models:
+  default: sonnet
+  audit_llm_pass: sonnet
+  build_check: sonnet

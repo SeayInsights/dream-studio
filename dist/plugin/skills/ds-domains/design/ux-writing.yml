@@ -1,0 +1,134 @@
+# UX Writing Standards
+# Sources: Nielsen Norman Group, Mailchimp Voice & Tone, Content Design best practices
+
+button_labels:
+  formula: "Verb + noun = specific action"
+  principles:
+    - "Use specific CTAs, not generic placeholder text"
+    - "Lead with strong action verb"
+    - "Include what happens as result"
+    - "Second person optional for clarity"
+
+  good_examples:
+    - "Create account"
+    - "Save changes"
+    - "Add to cart"
+    - "Send invitation"
+    - "Delete project"
+    - "Subscribe to newsletter"
+    - "Learn more"
+    - "View details"
+
+  avoid:
+    - "Submit" # Instead: Create account, Save changes, Send
+    - "OK" # Instead: Got it, Confirm, Continue
+    - "Click here" # Instead: Learn more, View details
+    - "Do it" # Instead: specific action
+    - "Next" # Instead: Save and continue, Review order
+    - "Confirm" # Unless confirming a destructive action
+
+error_messages:
+  formula: "What went wrong + what to do"
+  structure:
+    - "Name the problem clearly"
+    - "Explain why it happened (when helpful)"
+    - "Show exactly what to do next"
+    - "Use plain language, no error codes"
+
+  good_examples:
+    - "Email already in use. Sign in instead or reset your password."
+    - "Password too short. Use at least 8 characters including a number."
+    - "No internet connection. Check your connection and try again."
+    - "This invite has expired. Ask the project owner to send a new one."
+    - "File too large. Upload files under 10 MB."
+
+  tone:
+    - "Empathetic, not blaming"
+    - "Helpful, not just negative"
+    - "Specific, not vague"
+    - "Actionable, not apologetic"
+
+  avoid:
+    - "Error 404" # Instead: Page not found. Check the link or go home.
+    - "Invalid input" # Instead: Email must include @example.com
+    - "An error occurred" # Instead: describe specific problem
+    - "Try again" # Unless you explain what to try differently
+    - "Unknown error" # Always say what failed
+
+empty_states:
+  formula: "Explain why empty + suggest action"
+  structure:
+    - "Acknowledge the empty state"
+    - "Explain why (first time, no results, waiting)"
+    - "Suggest the next concrete action"
+
+  good_examples:
+    - "No projects yet. Create your first project to get started."
+    - "No search results. Try different keywords or browse categories."
+    - "Invite pending. We'll notify you when they join."
+    - "Your library is empty. Add articles to save them for later."
+    - "No notifications yet. You'll see updates here."
+
+  patterns:
+    first_time: "Acknowledge fresh start + clear first step"
+    no_results: "Validate search + suggest alternatives"
+    waiting_state: "Explain what's happening + when they'll see changes"
+    zero_state: "Make it feel intentional, not broken"
+
+microcopy:
+  principles:
+    - "Plain language: Use words users know"
+    - "Active voice: Do this, not this is done"
+    - "Second person: You and your, not users and their"
+    - "Conversational tone: Write how you speak"
+    - "Specific over generic: Save draft vs. Continue editing"
+    - "Short and scannable: Shorter = better comprehension"
+
+  examples:
+    plain_language: "Use email instead of electronic mail address"
+    active_voice: '"We sent your confirmation" not "Your confirmation has been sent"'
+    second_person: '"You have 3 invites pending" instead of "3 invites pending"'
+    specific: '"Saved 5 seconds ago" instead of "Recently saved"'
+
+  label_patterns:
+    toggles: "Do X / Don't do X — clear what toggling does"
+    checkboxes: "Remember me on this device — explain why user would want it"
+    dropdowns: "All projects, Recent, My projects — scannable groups"
+    placeholders: "name@example.com — show format not placeholder text"
+
+avoid:
+  vague_ctas:
+    - "Click here"
+    - "More info"
+    - "Do something"
+    - "OK"
+
+  passive_voice:
+    - '"Errors will be fixed" → "We''re fixing errors"'
+    - '"Data has been saved" → "Your data is saved"'
+    - '"Could not complete action" → "We couldn''t save your changes"'
+
+  tech_jargon:
+    - '"API endpoint" → "connection" or describe what it does'
+    - '"Cache cleared" → "Refreshed your view"'
+    - '"404 error" → "Page not found"'
+    - '"Parse error" → "We couldn''t read that file"'
+
+  negativity:
+    - '"You don''t have permission" → "Only project owners can do this"'
+    - '"Cannot delete" → "This item is protected"'
+    - '"Forbidden" → "You don''t have access"'
+    - '"Invalid" → be specific about what''s wrong'
+
+  overexplanation:
+    - Too many sentences in error messages
+    - Technical details users don't need
+    - Apologizing repeatedly ("Sorry, we're sorry...")
+
+voice_tone_grid:
+  friendly_helpful: "Welcome, guidance, onboarding, success messages"
+  clear_direct: "Error states, warnings, time-sensitive info"
+  professional_confident: "Power features, admin panels, team messaging"
+  empathetic_supportive: "Destructive actions, lost data, system down"
+
+  consistency: "Same problem = same message across all UI"

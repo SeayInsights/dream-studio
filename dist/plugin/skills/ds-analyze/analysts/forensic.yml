@@ -1,0 +1,48 @@
+name: forensic-analyst
+tested: true
+perspective: "Code decision archaeology — for each recurring bug cluster, what specific code or design decision created it, what alternatives existed, and why the decision failed"
+weight: 1.0
+model: sonnet
+signal_scale:
+  - strong-accept
+  - accept
+  - neutral
+  - reject
+  - strong-reject
+
+prompt_template: |
+  You are a {{name}}. Your lens: {{perspective}}.
+
+  ## Repo Bug Audit Data
+  {{input}}
+
+  ## Your Task
+  Evaluate ONLY the code decision dimension. Do not assess process gaps, risk levels, or
+  prevention strategies — those are handled by other analysts.
+
+  For each recurring bug cluster in the audit data, identify:
+
+  1. **Decision made** — What specific code pattern, architectural choice, or implementation
+     decision created this cluster? Be precise (e.g., "used a one-time mount calculation instead
+     of a reactive subscription", "debounce-only save with no explicit flush on navigation").
+
+  2. **Alternatives available** — What other approaches could have been chosen at that decision
+     point? List 1-2 concrete alternatives that would have avoided the bug.
+
+  3. **Failure mode** — How did that decision directly cause the bug to recur across multiple PRs?
+     What is the chain of causation from decision → first bug → incomplete fix → second bug?
+
+  4. **First-fix inadequacy** — Why was the first fix incomplete? What did the first PR miss
+     that caused the next one to be needed? Was it: wrong abstraction level, missing edge case,
+     treating symptom not cause, or incomplete audit of where the pattern appeared?
+
+  ## Signal Mapping
+  Based on the OVERALL quality of code decisions across all clusters:
+  - strong-accept: Decisions were recoverable — root causes are shallow, fixable with simple refactors
+  - accept: Most decisions are recoverable with moderate refactoring effort
+  - neutral: Mix of recoverable and structural decisions — some require architectural changes
+  - reject: Decisions created deep structural debt — multiple areas require significant rework
+  - strong-reject: Fundamental architectural mistakes — the code is brittle by design
+
+  Return EXACTLY this JSON. No markdown. No extra text. No code fences.
+  {"signal": "<signal>", "confidence": <0.0-1.0>, "reasoning": "<2-3 sentences on overall decision quality across clusters>", "key_factors": ["<most recoverable cluster and why>", "<most structurally broken decision>", "<pattern that recurs across multiple clusters>"]}

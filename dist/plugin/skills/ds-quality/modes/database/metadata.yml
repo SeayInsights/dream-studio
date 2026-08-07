@@ -1,0 +1,74 @@
+# Required fields
+name: database
+version: 1.0.0
+pack: quality
+created_at: 2026-05-28
+updated_at: 2026-05-28
+
+# Evolution tracking
+origin: new
+parent_skills: []
+generation: 0
+created_by: human
+
+# Quality & Health
+# status: jit-pending — functional, no real-world usage data yet.
+# Batch 7 of 18.4.2 will update quality_metrics with measured values.
+status: jit-pending
+health: active
+tested_with_models: [sonnet]
+tested_with_hosts: [claude-code]
+
+# Performance metrics — populated from 18.4.2 Batch 7 first real audit
+# Static-only pass on dream-studio-clean (80 migrations + 4 query files)
+# LLM pass not yet measured; avg_token_usage estimate based on security skill pattern
+quality_metrics:
+  times_used: 1
+  success_rate: 1.0
+  avg_token_usage: null                   # static-only run; LLM pass pending
+  avg_execution_time_seconds: null         # not measured; < 5s for static pass
+  last_success: "2026-05-28"
+  last_failure: null
+
+# Failure patterns — populated from real usage via ds-quality:learn
+common_failures: []
+
+# Dependencies
+dependencies:
+  core_modules:
+    - git                            # ds-core/git.md — used for --changed scope
+  tools_required: []
+  tools_optional:
+    - sqlfluff                       # SQL linting — NOT installed; LLM fallback active
+    - sqlparse                       # SQL token parsing — INSTALLED (v0.5.5); used for static schema rules
+  env_vars_required: []
+  files_required:
+    - canonical/skills/quality/references/database-best-practices.md  # rule source LIST-3
+  calls_skills: []
+
+# Compatibility
+compatibility:
+  min_context_window: 100000
+  works_best_with: sonnet
+  works_with: [sonnet, opus]
+  platforms: [windows, macos, linux]
+
+# Discovery
+tags: [database, schema, migration, query, backup, sqlite, sql, audit, enforcement]
+category: quality
+triggers:
+  - "audit:"
+  - "database audit:"
+  - "check schema:"
+  - "check migrations:"
+  - "db audit:"
+  - "build:database"
+  - "generate migration:"
+  - "design schema:"
+description: >
+  Database quality enforcement — audits schema design, query patterns, migration safety,
+  and backup strategy against 22 rules from LIST-3 (database best practices). Two modes:
+  audit (codebase scan with --changed/--full-repo/--sample scope) and build (static
+  pre-generation enforcement for migrations/queries/schema). Skill boundary with
+  ds-quality:security: this skill owns design quality; security owns exploit risk.
+  Token budgets are estimates; Batch 7 of 18.4.2 will update with measured values.

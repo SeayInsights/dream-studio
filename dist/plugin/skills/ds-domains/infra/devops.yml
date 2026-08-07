@@ -1,0 +1,288 @@
+# DevOps and CI/CD Patterns
+# Source: synthesized from production repositories and best practices
+version: 1
+
+patterns:
+  - id: reusable-workflows
+    title: GitHub Actions reusable workflows for shared CI logic
+    description: >
+      Extract common CI steps (lint, test, build, deploy) into reusable workflows
+      (workflow_call trigger). Callers pass inputs and secrets. This eliminates
+      copy-paste drift across repos and allows a single change to the reusable
+      workflow to propagate everywhere. Reusable workflows can be versioned by
+      ref (SHA or tag).
+    example: |
+      # .github/workflows/reusable-node-ci.yml (in shared repo)
+      on:
+        workflow_call:
+          inputs:
+            node-version:
+              type: string
+              default: "20"
+          secrets:
+            NPM_TOKEN:
+              required: true
+      jobs:
+        ci:
+          runs-on: ubuntu-latest
+          steps:
+            - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905139b7f7d  # v4.1.6
+            - uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8  # v4.0.2
+              with:
+                node-version: ${{ inputs.node-version }}
+                cache: npm
+            - run: npm ci
+            - run: npm test
+
+      # Caller workflow
+      # jobs:
+      #   ci:
+      #     uses: my-org/shared-workflows/.github/workflows/reusable-node-ci.yml@main
+      #     secrets: inherit
+
+  - id: oidc-cloud-auth
+    title: OIDC federation for cloud authentication (no long-lived secrets)
+    description: >
+      GitHub Actions can authenticate to AWS, GCP, and Azure via OIDC without
+      storing static credentials as secrets. The workflow requests a short-lived
+      token from the GitHub OIDC provider, which the cloud provider trusts via
+      a configured trust relationship. Tokens expire with the workflow run.
+    example: |
+      # AWS OIDC -- requires IAM role with GitHub OIDC trust policy
+      jobs:
+        deploy:
+          runs-on: ubuntu-latest
+          permissions:
+            id-token: write   # required for OIDC
+            contents: read
+          steps:
+            - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905139b7f7d
+            - uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502  # v4.0.2
+              with:
+                role-to-assume: arn:aws:iam::123456789012:role/github-actions-deploy
+                aws-region: us-east-1
+            - run: aws s3 cp dist/ s3://my-bucket/ --recursive
+
+  - id: sha-pinned-actions
+    title: Pin third-party actions to full commit SHA
+    description: >
+      Action tags (v4) and branches (main) are mutable -- a tag can be moved to point
+      to a different commit. Pinning to a full SHA (immutable) prevents supply chain
+      attacks where a compromised action repo pushes malicious code under an existing
+      tag. Use Dependabot to keep SHA pins up-to-date automatically.
+    example: |
+      # dependabot.yml -- auto-updates action SHA pins
+      version: 2
+      updates:
+        - package-ecosystem: "github-actions"
+          directory: "/"
+          schedule:
+            interval: "weekly"
+          groups:
+            actions:
+              patterns:
+                - "actions/*"
+
+      # In workflow: pin to SHA, comment with version for readability
+      - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905139b7f7d  # v4.1.6
+
+  - id: artifact-caching
+    title: Cache dependencies to reduce CI wall time
+    description: >
+      The actions/cache action stores and restores dependency directories keyed
+      by a hash of the lockfile. Cache hits skip reinstalling hundreds of packages.
+      Always include the lockfile hash in the cache key so a changed lockfile
+      busts the cache and triggers a fresh install.
+    example: |
+      - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9  # v4.0.2
+        with:
+          path: |
+            ~/.npm
+            node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+  - id: matrix-builds
+    title: Matrix strategy for multi-version and multi-platform testing
+    description: >
+      Matrix builds test combinations of OS, language version, or configuration
+      in parallel with minimal YAML repetition. Use 'fail-fast: false' so one
+      failing combination does not cancel the others (valuable for understanding
+      cross-platform differences).
+    example: |
+      jobs:
+        test:
+          runs-on: ${{ matrix.os }}
+          strategy:
+            fail-fast: false
+            matrix:
+              os: [ubuntu-latest, windows-latest, macos-latest]
+              node: ["18", "20", "22"]
+          steps:
+            - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905139b7f7d
+            - uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8
+              with:
+                node-version: ${{ matrix.node }}
+            - run: npm ci && npm test
+
+  - id: environment-protection-rules
+    title: Environment protection rules as deployment gates
+    description: >
+      GitHub Environments (Settings -> Environments) support required reviewers,
+      wait timers, and branch restrictions. Production deploys require a human
+      approval before the workflow can proceed. The environment name in the workflow
+      job triggers the protection rules.
+    example: |
+      jobs:
+        deploy-prod:
+          runs-on: ubuntu-latest
+          environment:
+            name: production
+            url: https://app.example.com
+          steps:
+            - run: ./scripts/deploy.sh
+
+  - id: branch-protection-required-checks
+    title: Branch protection with required status checks
+    description: >
+      Protect main/master with: require PR before merge, require status checks
+      to pass (CI, linting), require up-to-date branches, restrict who can push.
+      Use 'Require deployments to succeed' for environment-gated merges.
+      Configure via gh CLI or terraform (github_branch_protection resource).
+    example: |
+      # Configure via gh CLI
+      gh api repos/{owner}/{repo}/branches/main/protection \
+        --method PUT \
+        --field required_status_checks='{"strict":true,"contexts":["ci/test","ci/lint"]}' \
+        --field enforce_admins=true \
+        --field required_pull_request_reviews='{"required_approving_review_count":1}' \
+        --field restrictions=null
+
+  - id: docker-layer-caching
+    title: Docker BuildKit cache mounts for faster image builds
+    description: >
+      BuildKit RUN --mount=type=cache caches package manager directories between
+      builds. Combined with multi-stage builds, this keeps final image sizes small
+      while dramatically speeding up CI builds that change only application code,
+      not dependencies.
+    example: |
+      # Dockerfile with BuildKit cache mounts
+      FROM node:20-alpine AS builder
+      WORKDIR /app
+      COPY package*.json ./
+      RUN --mount=type=cache,target=/root/.npm \
+          npm ci --only=production
+      COPY . .
+      RUN npm run build
+
+      FROM node:20-alpine AS runtime
+      WORKDIR /app
+      COPY --from=builder /app/dist ./dist
+      COPY --from=builder /app/node_modules ./node_modules
+      USER node
+      CMD ["node", "dist/index.js"]
+
+anti_patterns:
+  - id: long-lived-cloud-credentials
+    title: Storing cloud credentials as long-lived GitHub secrets
+    description: >
+      Static AWS access keys stored as GitHub secrets never expire. If leaked via
+      a log, artifact, or compromised workflow, they grant persistent access until
+      manually rotated. Use OIDC federation -- credentials exist only for the
+      duration of the workflow run.
+
+  - id: mutable-action-refs
+    title: Pinning actions to a branch or mutable tag
+    description: >
+      uses: actions/checkout@main or uses: actions/checkout@v4 resolves to whatever
+      commit those refs point to at run time. A supply chain attack on the action
+      repo can inject malicious code that runs in your CI with your secrets.
+      Always pin to a full commit SHA.
+
+  - id: secrets-in-run-commands
+    title: Echoing or printing secrets in run steps
+    description: >
+      GitHub masks known secrets in logs, but 'echo $SECRET | base64' or variations
+      can bypass masking. Secrets in run steps also appear in verbose tool output.
+      Pass secrets via environment variables, not inline command arguments.
+      Never run 'env' or 'printenv' in CI steps.
+
+  - id: no-permissions-declaration
+    title: Omitting permissions block, relying on default GITHUB_TOKEN scope
+    description: >
+      Default GITHUB_TOKEN permissions vary by repo setting (read-all or write-all).
+      Workflows without an explicit permissions block may get more access than needed
+      (write to contents, packages, deployments). Always declare the minimal set
+      per-workflow and per-job.
+
+  - id: no-timeout-minutes
+    title: Jobs without timeout-minutes run indefinitely on hung processes
+    description: >
+      A hung test suite, infinite loop, or waiting for a resource that never appears
+      will consume a GitHub-hosted runner for the maximum billing window (6 hours by
+      default). Always set timeout-minutes at the job level. Standard CI jobs should
+      complete in under 20 minutes.
+
+gotchas:
+  - id: github-token-scope-limits
+    title: GITHUB_TOKEN cannot trigger downstream workflows
+    description: >
+      A workflow triggered by GITHUB_TOKEN push events does NOT trigger further
+      workflow runs on those commits. This prevents infinite loops but also means
+      push-to-release workflows that create a commit will not trigger CI on that
+      commit. Use a PAT or GitHub App token when the commit must trigger CI.
+    fix: >
+      Use a GitHub App installation token or a PAT stored as a secret when a
+      workflow commit needs to trigger another workflow.
+
+  - id: fork-pr-secrets-blocked
+    title: Secrets not available in fork pull request workflows
+    description: >
+      Workflows triggered by pull_request from a fork run with a read-only
+      GITHUB_TOKEN and NO access to repository secrets. This is intentional
+      security behavior. The fork author cannot access secrets even if the workflow
+      references them -- the values are empty strings. Use pull_request_target
+      carefully (it runs with write perms and secrets but in the context of the base
+      branch, not the fork -- dangerous for untrusted code).
+    fix: >
+      For fork PRs: keep CI jobs secret-free (test without deploy). Gate deployment
+      jobs on a label added by a maintainer or use Environments with required
+      reviewers before any secret-consuming step.
+
+  - id: concurrent-workflow-conflicts
+    title: Concurrent workflow runs can race on shared resources
+    description: >
+      Two PRs merged simultaneously can trigger two concurrent deploy workflows.
+      Both try to push to the same S3 bucket or deploy to the same environment,
+      causing partial deploys or state corruption. Use concurrency groups to
+      serialize workflow runs on shared resources.
+    fix: >
+      Add to workflow (cancels in-progress run on same ref):
+      concurrency:
+        group: deploy-${{ github.ref }}
+        cancel-in-progress: true
+      For environments, use cancel-in-progress: false to queue instead of cancel.
+
+  - id: cache-poisoning-risk
+    title: Untrusted PRs can poison shared caches
+    description: >
+      If cache keys are not scoped per-branch, a malicious PR can write a cache
+      entry that gets restored by a subsequent trusted workflow run. The cache
+      contains node_modules or build artifacts that execute during CI. Scope cache
+      keys to include the branch or use read-only cache access for fork PRs.
+    fix: >
+      Use restore-keys with a base key for reads but write only on the main branch.
+      Never restore an untrusted PR's cache entry in a privileged workflow.
+
+  - id: artifact-size-limits
+    title: GitHub Actions artifacts have size limits and short retention
+    description: >
+      Default artifact retention is 90 days (configurable down to 1 day). Per-run
+      artifact size limit is 500MB for public repos and 2GB for private. Uploading
+      large build outputs or node_modules as artifacts hits these limits silently --
+      the upload step succeeds but download fails. Use actions/upload-artifact v4
+      which fails loudly on size violations.
+    fix: >
+      Compress artifacts before upload. For large binaries, push to S3 or a container
+      registry instead. Set retention-days explicitly to match your policy.

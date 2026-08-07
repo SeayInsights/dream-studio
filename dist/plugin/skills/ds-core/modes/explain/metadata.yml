@@ -1,0 +1,42 @@
+name: explain
+version: 1.0.0
+pack: core
+created_at: 2026-04-29
+updated_at: 2026-04-29
+
+origin: new
+generation: 0
+created_by: dream-studio build
+
+status: draft
+health: active
+tested_with_models: [sonnet, haiku]
+tested_with_hosts: [claude-code]
+
+quality_metrics:
+  times_used: 0
+  success_rate: 0.0
+  avg_token_usage: 0
+  avg_execution_time_seconds: 0
+  last_success: null
+  last_failure: null
+
+common_failures: []
+
+dependencies:
+  core_modules: []
+  tools_required: []
+  env_vars_required: []
+  files_required: []
+  calls_skills: []
+
+compatibility:
+  min_context_window: 20000
+  works_best_with: haiku
+  works_with: [haiku, sonnet, opus]
+  platforms: [windows, macos, linux]
+
+tags: [explanation, tracing, architecture, onboarding]
+category: quality
+triggers: ["explain:", "how does", "walk me through", "what is this doing", "why does"]
+description: "Trace how X works — from entry point through layers to output, at the depth the Director needs."

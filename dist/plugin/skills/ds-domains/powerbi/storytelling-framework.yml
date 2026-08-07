@@ -1,0 +1,41 @@
+# Power BI Storytelling Framework
+# Source: francescaconselvan/Power-BI-visualization-storytelling + Cole Nussbaumer Knaflic
+
+audience_focus:
+  audience_identified: ""  # Who is this for?
+  domain_knowledge_level: ""  # Expert | intermediate | beginner
+  decision_supported: ""  # What decisions will this enable?
+  context_framed: ""  # User's context
+
+narrative_structure:
+  executive_summary_page: false  # Key insights upfront
+  detail_pages: false  # Drill-down for exploration
+  conclusion_recommendations: false  # Actionable next steps
+
+visual_hierarchy:
+  primary_kpis_top_left: false
+  primary_kpis_largest_bold: false
+  supporting_metrics_secondary: false
+  context_details_lower_emphasis: false
+
+chart_selection:
+  bar_charts_for_comparisons: false
+  line_charts_for_trends: false
+  tables_for_precise_values: false
+  avoid_3d_charts: false
+  avoid_pie_charts: false  # Use bar charts instead
+
+simplicity:
+  remove_chart_junk: false  # Unnecessary gridlines, borders
+  maximize_data_ink_ratio: false
+  direct_labeling_over_legends: false
+
+annotations:
+  text_annotations_for_insights: false
+  explain_why_not_just_what: false
+  arrows_callouts_to_guide: false
+
+exploratory_vs_explanatory:
+  mode: ""  # exploratory (understand data) | explanatory (tell story)
+
+verdict: ""  # compelling_story | data_dump

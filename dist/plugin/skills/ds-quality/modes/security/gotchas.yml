@@ -1,0 +1,14 @@
+# Security Mode — Gotchas
+# JIT enrichment policy: this file populates from first real usage.
+# Do NOT add speculative entries. See STRUCTURE.md v2.1.
+# Enrich after Batch 7 (first real audit on dream-studio-clean).
+
+avoid: []
+
+best_practices: []
+
+edge_cases: []
+
+limitations: []
+
+deprecated: []

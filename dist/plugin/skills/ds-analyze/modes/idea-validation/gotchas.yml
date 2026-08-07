@@ -1,0 +1,48 @@
+# Idea-validation skill — captured gotchas
+# Source: verbatim from idea-validator agent (promoted 2026-06-03)
+
+gotchas:
+  - id: idea-g1
+    title: '"Early customers love it" survivorship bias'
+    description: >
+      Early adopters are not representative buyers. They tolerate friction, evangelize,
+      and often have non-typical willingness-to-pay. A signal from 10 early adopters
+      does not generalize to the mainstream buyer.
+    severity: high
+    category: market-research
+
+  - id: idea-g2
+    title: Regulatory moats cut both ways
+    description: >
+      A highly regulated market can be a moat (barrier to entry) or a death trap
+      (compliance cost, sales cycle length, liability exposure). Run the analysis
+      both ways before concluding "regulation = protection."
+    severity: high
+    category: competitive-analysis
+
+  - id: idea-g3
+    title: '"Why now" often has a hidden expiration date'
+    description: >
+      The tailwind that makes an idea timely may have a 12-18 month window before
+      the market normalizes. Validate that the window is actually open and model
+      what happens if it closes before traction is established.
+    severity: high
+    category: market-timing
+
+  - id: idea-g4
+    title: Unverified assumptions compound exponentially
+    description: >
+      One unverified assumption in a chain is a risk. Three produce exponential
+      uncertainty. An idea with five load-bearing unverified assumptions is not
+      fundable regardless of how strong each sounds individually.
+    severity: critical
+    category: assumption-mapping
+
+  - id: idea-g5
+    title: '"We''ll pivot if needed" is not a plan'
+    description: >
+      Pivots are expensive. Accepting "we'll pivot" as a response to a fatal flaw
+      is accepting that the current idea requires replacement before it can work.
+      That is a NO-GO with an option to resubmit after the pivot is defined.
+    severity: high
+    category: fatal-flaw

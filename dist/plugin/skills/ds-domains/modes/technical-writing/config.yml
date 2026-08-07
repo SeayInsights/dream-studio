@@ -1,0 +1,12 @@
+invocation:
+  type: subagent-target
+  wrapper_agent: technical-writer
+  dispatch_path: ~/.claude/agents/technical-writer.md
+
+behavior:
+  graceful_degradation: true
+  fallback_standard: Diataxis framework and standard technical writing style guide
+
+budgets:
+  max_tokens_per_session: null
+  typical_tokens_per_engagement: null

@@ -1,0 +1,52 @@
+# Data Visualization Design Standards
+# Sources: Storytelling with Data (Cole Nussbaumer Knaflic), D3.js, Edward Tufte
+
+chart_selection:
+  bar_charts: "Comparisons, rankings (best for most use cases)"
+  line_charts: "Trends over time"
+  scatter_plots: "Correlations, distributions"
+  area_charts: "Part-to-whole over time"
+  pie_charts: "Avoid - use bar chart instead"
+  tables: "Precise values, lookup"
+
+design_principles:
+  simplicity:
+    remove_chart_junk: true  # Unnecessary gridlines, borders, backgrounds
+    maximize_data_ink_ratio: true
+    direct_labeling_over_legends: true
+
+  color_usage:
+    limit_colors_per_chart: 5  # Maximum
+    color_for_emphasis_not_decoration: true
+    gray_for_context_color_for_focus: true
+
+  annotations:
+    add_text_annotations: true  # For key insights
+    explain_why_not_what: true
+    use_arrows_callouts: true  # To guide attention
+
+storytelling_framework:
+  exploratory_vs_explanatory:
+    exploratory: "What you do to understand the data"
+    explanatory: "What you share with audience (specific story)"
+
+  narrative_structure:
+    setup: "Context, background"
+    conflict: "Problem, question"
+    resolution: "Answer, recommendation"
+
+  audience_focus:
+    start_with_knowledge_level: true
+    frame_in_their_context: true
+    support_their_decisions: true
+
+accessibility:
+  color_contrast_4_5_to_1: true
+  color_not_sole_means: true
+  provide_data_table: true
+  aria_labels: true
+
+performance:
+  limit_data_points: 10000  # Per chart
+  aggregate_when_possible: true
+  lazy_load_large_datasets: true

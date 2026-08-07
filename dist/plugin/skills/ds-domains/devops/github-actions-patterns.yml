@@ -1,0 +1,48 @@
+# GitHub Actions Security & Best Practices
+# Source: sdras/awesome-actions (21.7k stars)
+
+security_patterns:
+  pin_actions_to_sha: true  # Not branch/tag (immutable)
+  use_oidc_authentication: true  # Not static credentials
+  least_privilege_permissions: true
+  scan_dependencies_dependabot: true
+  environment_secrets: true  # Not hardcoded
+  branch_protection_rules: true
+
+workflow_structure:
+  reusable_workflows: true  # Avoid duplication
+  caching_for_dependencies: true
+  matrix_strategies: true  # Multi-platform builds
+  timeout_minutes: true  # Prevent runaway jobs
+
+common_actions:
+  checkout: "actions/checkout@SHA"
+  setup_node: "actions/setup-node@SHA"
+  cache: "actions/cache@SHA"
+  upload_artifact: "actions/upload-artifact@SHA"
+  deploy: "peaceiris/actions-gh-pages@SHA"
+
+deployment_checks:
+  workflow_exists: false
+  requires_pr_approval: false
+  secrets_in_github_secrets: false
+  branch_protection_on_main: false
+  auto_rollback_on_failure: false
+  deployment_notifications: false
+
+examples:
+  ci_workflow: |
+    name: CI
+    on: [push, pull_request]
+    jobs:
+      test:
+        runs-on: ubuntu-latest
+        permissions:
+          contents: read
+        steps:
+          - uses: actions/checkout@SHA
+          - uses: actions/setup-node@SHA
+            with:
+              cache: 'npm'
+          - run: npm ci
+          - run: npm test

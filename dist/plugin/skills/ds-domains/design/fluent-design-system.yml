@@ -1,0 +1,65 @@
+# Microsoft Fluent Design System
+# Source: microsoft/fluentui (18k stars)
+
+principles:
+  light:
+    description: "Illuminate the interface, guide focus"
+    implementation:
+      - use_subtle_animations: true
+      - hover_states_visible: true
+      - focus_indicators: true
+
+  depth:
+    description: "Create hierarchy with layering"
+    implementation:
+      - elevation_shadows: true
+      - z_index_layers: true
+      - parallax_scrolling: false  # Optional
+
+  motion:
+    description: "Purposeful animation (not decorative)"
+    implementation:
+      - easing_curves: "cubic-bezier(0.4, 0.0, 0.2, 1)"
+      - duration_200_to_500ms: true
+      - animation_purpose: "feedback | navigation | spatial_awareness"
+
+  material:
+    description: "Visual language consistent with physical world"
+    implementation:
+      - acrylic_backgrounds: true
+      - reveal_highlights: true
+      - responsive_surfaces: true
+
+  scale:
+    description: "Responsive across devices"
+    implementation:
+      - fluid_layouts: true
+      - adaptive_controls: true
+      - touch_targets_44px_min: true
+
+design_tokens:
+  spacing: 4px  # Base unit (multiples of 4)
+  font_family: "Segoe UI"
+
+  colors:
+    primary: "Semantic tokens (brand)"
+    neutral: "Gray scale"
+    danger: "Error states"
+    success: "Success states"
+
+  elevation:
+    level_0: "0px"  # Flat
+    level_1: "2px"  # Raised
+    level_2: "4px"  # Overlays
+    level_3: "8px"  # Modals
+    level_4: "16px"  # Navigation
+
+accessibility:
+  wcag_aa_minimum: true
+  focus_indicators_2px: true
+  keyboard_navigation: true
+  screen_reader_support: true
+
+component_library:
+  install: "npm install @fluentui/react-components"
+  import: "import { Button } from '@fluentui/react-components'"

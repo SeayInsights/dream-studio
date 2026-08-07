@@ -1,0 +1,116 @@
+---
+dream_studio:
+  skill_id: ds-core
+  pack: core
+  mode: plan
+  mode_type: planning
+  inputs: [approved_spec, user_stories, requirements]
+  outputs: [plan_document, traceability_registry, github_issues]
+  capabilities_required: [Read, Write, Bash]
+  model_preference: sonnet
+  estimated_duration: 15-45min
+---
+
+# Plan — Break Spec Into Steps
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
+
+## Imports
+- core/git.md — branch operations
+- core/traceability.md — traceability file structure, when to activate
+- core/format.md — task list format, requirements matrix, summary table
+
+## Trigger
+`plan:`, or after `think` spec is approved
+
+## Purpose
+Break an approved spec into executable steps with dependencies, order, and acceptance criteria.
+
+## Templates
+
+**Locations**: 
+- `skills/plan/templates/plan-template.md` — Implementation strategy and architecture
+- `skills/plan/templates/tasks-template.md` — Atomic task breakdown with dependencies
+
+Use these templates to structure your plan:
+- **Plan template** provides: Technical context, project structure, complexity tracking, requirements traceability
+- **Tasks template** provides: Phase-based organization, [P] parallel markers, user story grouping, dependency chains
+
+## Steps
+1. **Read spec** — Reference the approved spec from `think`. Confirm scope, user stories, and requirements. For **contract-bearing** work (API / schema / route), reference the governing **normative spec** (`docs/specs/`) and plan for it to reach `Ratified` before the contract work closes — the `api_contract_exists` gate blocks close otherwise.
+2. **Plan architecture** — Use `plan-template.md` to document technical decisions, structure, and approach. If the plan encodes or depends on a design decision, reference the governing ADR id (`ADR-NNNN`, authored in the file DB docstore — see `think` mode → *Design decisions → ADR*); if that decision is not recorded yet, author the ADR first.
+3. **Decompose** — Use `tasks-template.md` to break into atomic tasks. Each task = one logical commit.
+4. **Organize by user story** — Group tasks so each user story (P1, P2, P3) can be implemented and tested independently.
+5. **Order** — Dependencies first. Mark [P] for tasks that can run in parallel (different files, no dependencies).
+6. **Acceptance** — Each task gets acceptance criteria that can be verified without judgment.
+7. **Assess traceability need** — See Traceability section below.
+8. **Write plan** — Author to the docstore: `ds files write "specs/<topic>/plan.md" --category planning` (zero-disk — `.planning/` disk writes are denied)
+9. **Persist tasks to SQLite** — Tasks live in SQLite (`business_tasks`) only — never in `.planning/` files.
+   - If the active work order already has tasks in SQLite, skip this step entirely — do not add duplicates.
+   - If no tasks exist yet, present the proposed task list to the user for approval, then write each approved task via `create_task(work_order_id=..., project_id=..., title=..., description=..., source_root=..., dream_studio_home=...)` — one call per task.
+   - Never create `.planning/specs/<topic>/tasks.md`. Tasks are read from SQLite via `ds work-order tasks <id>`.
+10. **Write traceability registry** — If traceability is active, author to the docstore: `ds files write "traceability.yaml" --category planning`
+11. **Auto-issues (optional)** — If Director approves, generate GitHub issues from the task list:
+    - Run `gh issue create --title "<task description>" --body "**Acceptance:** <acceptance criteria>\n\n**Spec:** docstore specs/<topic>/spec.md (ds files read)"` for each task in SQLite
+    - This links plan tasks to trackable GitHub issues for visibility outside the session
+    - Skip if: prototype work, personal project without a GitHub remote, or Director declines
+
+## Traceability
+
+**See:** core/traceability.md — Traceability file structure, status lifecycle, when to activate
+
+**Decision criteria:**
+- Activate if: 4+ tasks, distinct requirements, user request, or audit trail needed
+- Skip if: 3 or fewer tasks, prototype work, or single-file bug fix
+
+**When active:** Create `.planning/traceability.yaml` and include Requirements table in plan
+**When inactive:** Use simplified plan format, do NOT create traceability.yaml
+
+## Plan format — Full (traceability active)
+
+**See:** core/format.md — Requirements matrix, numbered task list, summary table
+
+Include: Requirements table with TR-IDs, task list with "Implements" field, summary table with TR-ID column
+
+## Plan format — Lite (traceability inactive)
+
+**See:** core/format.md — Numbered task list, summary table
+
+Include: Task list without "Implements" field, summary table without TR-ID column
+| 2 | ... | 1 | medium |
+```
+
+## Example Usage
+
+```
+Input: "plan: user-auth" (after approved spec)
+
+Output: .planning/specs/user-auth/
+├── plan.md — Technical context, React 19 + Cloudflare Workers + D1
+│   (tasks persisted to SQLite — query with `ds work-order tasks <id>`)
+
+Tasks persisted to business_tasks with [P] markers for parallelization:
+- T004 [P] [US1] Create User model in src/models/user.ts
+- T005 [P] [US1] Create Session model in src/models/session.ts
+- T006 [US1] Implement AuthService (depends on T004, T005)
+```
+
+## Output
+- Plan document at `.planning/specs/<topic>/plan.md` (always)
+- Tasks persisted to SQLite `business_tasks` via `create_task()` per task (always, unless tasks already exist)
+- Traceability registry at `.planning/traceability.yaml` (only when traceability active)
+
+## Next in pipeline
+→ `build` (execute the plan)
+
+## Anti-patterns
+- Tasks too large (multiple unrelated changes in one task)
+- Missing acceptance criteria
+- No dependency ordering
+- Plan that doesn't cover the full spec
+- Traceability active but requirements lack TR-IDs (breaks the chain)
+- Traceability active but tasks not tagged with TR-IDs (orphaned work)
+- Activating traceability for a 2-task bug fix (overhead without value)
+- Plan encodes a design decision with no governing ADR referenced
+- Contract-bearing plan with no governing normative spec on a path to Ratified

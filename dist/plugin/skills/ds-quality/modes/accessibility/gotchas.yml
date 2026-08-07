@@ -1,0 +1,53 @@
+# Accessibility skill — captured gotchas
+# Source: verbatim from accessibility-expert agent (promoted 2026-05-28)
+# These represent real operational knowledge. Do not edit without evidence
+# from a real audit that a gotcha is wrong or outdated.
+
+gotchas:
+  - id: a11y-g1
+    title: NVDA+Chrome vs JAWS+Edge ARIA differences
+    description: >
+      NVDA+Chrome and JAWS+Edge expose ARIA differently. Test both before
+      calling a component accessible.
+    severity: high
+    category: screen-reader
+
+  - id: a11y-g2
+    title: VoiceOver iOS swipe navigation — no keydown events
+    description: >
+      VoiceOver on iOS uses swipe navigation and does not fire keydown events.
+      Desktop-passing components can fail on iPhone.
+    severity: high
+    category: screen-reader
+
+  - id: a11y-g3
+    title: Dynamic content invisible to screen readers without live region
+    description: >
+      Dynamic content injected into the DOM after a user action is invisible
+      to screen readers unless a live region or focus move is in place.
+    severity: high
+    category: dynamic-content
+
+  - id: a11y-g4
+    title: Modal focus trap — inert attribute required
+    description: >
+      Modal dialogs without a focus trap allow Tab to cycle into the obscured
+      background. Apply `inert` to background content.
+    severity: critical
+    category: focus-management
+
+  - id: a11y-g5
+    title: Custom combobox requires full ARIA keyboard pattern
+    description: >
+      Custom comboboxes need the full ARIA combobox keyboard pattern: arrows,
+      Enter, Escape, Home, End, type-ahead.
+    severity: high
+    category: keyboard
+
+  - id: a11y-g6
+    title: Missing required ARIA states fail axe-core
+    description: >
+      Toggle buttons need aria-pressed; disclosure widgets need aria-expanded;
+      tabbed UIs need aria-selected. Missing required ARIA states fail axe-core.
+    severity: high
+    category: aria

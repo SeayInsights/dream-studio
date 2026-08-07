@@ -1,0 +1,63 @@
+# Mobile skill — captured gotchas
+# Source: verbatim from mobile-developer agent (promoted 2026-06-03)
+
+gotchas:
+  - id: mobile-g1
+    title: iOS Simulator has no real push notifications or Touch ID
+    description: >
+      APNs registration always fails on simulator. Use xcrun simctl push for local
+      simulation. Gate biometric and push code with #if !targetEnvironment(simulator).
+      All final QA must run on physical hardware.
+    severity: high
+    category: ios
+
+  - id: mobile-g2
+    title: Android API level guards are required for many APIs
+    description: >
+      BiometricPrompt API 28+. POST_NOTIFICATIONS API 33+. Exact alarms API 31+.
+      Use Build.VERSION.SDK_INT checks or AndroidX compat libraries. Check Play Console
+      version distribution before raising minSdk.
+    severity: high
+    category: android
+
+  - id: mobile-g3
+    title: Metro bundler cache corruption after native module installs (RN)
+    description: >
+      Stale cache causes "module not found" on installed packages. Fix: npx react-native
+      start --reset-cache. Full clean: gradlew clean + xcodebuild clean + watchman watch-del-all.
+    severity: medium
+    category: react-native
+
+  - id: mobile-g4
+    title: Flutter hot reload preserves state — initState does not re-run
+    description: >
+      Changes to initialization logic, constructors, or provider setup require hot restart
+      (Shift+R). Hot reload is for build() / UI iteration only.
+    severity: medium
+    category: flutter
+
+  - id: mobile-g5
+    title: iOS ATS blocks all plaintext HTTP
+    description: >
+      Add NSExceptionDomains scoped to specific staging hosts in Info.plist. Never set
+      NSAllowsArbitraryLoads=true (App Store flags it). Use Charles Proxy or mitmproxy
+      to inspect TLS traffic.
+    severity: high
+    category: ios
+
+  - id: mobile-g6
+    title: Android ProGuard / R8 strips reflection-accessed classes in release builds
+    description: >
+      Crashes appear only in release APK. Add keep rules in proguard-rules.pro and
+      always test app-release.apk before Play Store submission.
+    severity: high
+    category: android
+
+  - id: mobile-g7
+    title: Android windowSoftInputMode inconsistency causes layout shift
+    description: >
+      Set android:windowSoftInputMode="adjustResize" in AndroidManifest.xml. Use
+      KeyboardAvoidingView with platform-specific behavior prop (padding on iOS,
+      height on Android) in RN.
+    severity: medium
+    category: android

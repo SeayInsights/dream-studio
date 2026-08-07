@@ -1,0 +1,79 @@
+# Color System Standards
+# Sources: WCAG 2.1, Material Design, Fluent Design
+
+accessibility:
+  text_contrast:
+    normal_text_min: 4.5  # 4.5:1 ratio (WCAG AA)
+    large_text_min: 3.0  # 3:1 ratio (18px+ or 14px bold)
+    aaa_normal: 7.0  # 7:1 ratio (WCAG AAA)
+    aaa_large: 4.5  # 4.5:1 ratio
+
+  non_text_contrast:
+    ui_components_min: 3.0  # 3:1 ratio
+    chart_elements_min: 3.0  # 3:1 ratio
+
+  color_blindness:
+    test_with_simulators: true
+    provide_patterns_labels_annotations: true
+    color_not_sole_indicator: true
+
+semantic_colors:
+  primary: ""  # Brand color, CTAs, links
+  secondary: ""  # Accent color, less frequent actions
+  success: "#10a840"  # Green
+  warning: "#ffc107"  # Yellow/orange
+  error: "#d32f2f"  # Red
+  info: "#0078d4"  # Blue
+  neutral: "#6c757d"  # Gray
+
+color_palette_structure:
+  brand_colors: 2  # 1-2 primary colors
+  grays: 6  # 5-7 shades (background to text)
+  accent_colors: 3  # 2-3 for emphasis
+  semantic_colors: 4  # success, warning, error, info
+
+avoid:
+  pure_black: true  # Use #1a1a1a or similar
+  highly_saturated_large_areas: true
+  more_than_5_colors_in_chart: true
+
+color_psychology:
+  red: "power, passion, excitement"
+  blue: "peace, trustworthiness, professionalism"
+  green: "harmony, nature, growth, health"
+  purple: "wealth, wisdom, magic"
+  orange: "happiness, cheerfulness, creativity"
+  yellow: "optimism, attention, warning"
+  black: "sophistication, luxury, formality"
+  white: "purity, simplicity, cleanliness"
+
+# === APPENDED: repo-integration 2026-04-29 ===
+
+oklch_color_space:
+  description: "OKLCH (Lightness, Chroma, Hue) — perceptually uniform, P3 wide-gamut support"
+  advantage: "Equal lightness steps look equal — predictable palette generation"
+  syntax: "oklch(L% C H) — L: 0-100, C: 0-0.4, H: 0-360"
+  recommended_for: "New projects targeting modern browsers (Chrome 111+, Safari 16.4+, Firefox 113+)"
+  fallback: "Provide hex fallback for older browsers using @supports"
+
+tinted_neutrals:
+  principle: "Neutrals should carry a slight tint of the brand's primary hue"
+  why: "Pure gray (#888) looks dead next to a colored brand — tinted neutrals feel cohesive"
+  implementation: "Use OKLCH with C: 0.01-0.03 at the brand hue for neutrals"
+  example: "Brand hue H:250 (blue) → neutral: oklch(50% 0.02 250)"
+
+dark_mode_tokens:
+  principle: "Use semantic tokens, not raw color values, in component styles"
+  token_structure:
+    surface: "Background of containers (not the page background)"
+    on-surface: "Text/icons on surface"
+    primary: "Brand accent for interactive elements"
+    on-primary: "Text/icons on primary color"
+  avoid: "Hardcoding light/dark color variants in components — components read tokens, themes set tokens"
+  implementation: "CSS custom properties with [data-theme='dark'] selector override"
+
+p3_wide_gamut:
+  description: "Display P3 gamut extends sRGB — more vivid blues, greens, reds available"
+  usage: "@media (color-gamut: p3) { color: oklch(...) }"
+  practical_gains: "Most impactful for primary brand colors and CTAs"
+  avoid: "Using P3 for text colors — subtle difference not worth the complexity"

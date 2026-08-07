@@ -1,0 +1,83 @@
+# Web Design Quality Evaluation (8 Dimensions)
+# Source: abbas-roholamin/web-design-rules-and-guidelines
+# Scoring: 1-5 per dimension, >32 = excellent, 24-32 = good, <24 = needs work
+
+dimension_1_typography:
+  score: 0  # Rate 1-5
+  criteria:
+    - use_single_typeface_or_limit_to_two: false
+    - body_text_16_to_32px: false
+    - headlines_50px_plus_bold: false
+    - minimum_font_weight_400: false
+    - line_height_1_5_to_2: false
+    - character_limit_under_75: false
+    - avoid_justified_text: false
+
+dimension_2_color:
+  score: 0  # Rate 1-5
+  criteria:
+    - main_color_and_grey_established: false
+    - contrast_ratio_4_5_to_1_normal_text: false
+    - contrast_ratio_3_to_1_large_text: false
+    - avoid_pure_black: false
+    - color_system_with_tints_and_shades: false
+
+dimension_3_layout:
+  score: 0  # Rate 1-5
+  criteria:
+    - established_patterns_used: false
+    - call_to_action_emphasized: false
+    - card_rows_and_z_patterns: false
+    - whitespace_16px_multiples: false
+    - proximity_law_applied: false
+
+dimension_4_spacing:
+  score: 0  # Rate 1-5
+  criteria:
+    - hard_rule_16px_multiples: false
+    - more_whitespace_for_larger_elements: false
+    - whitespace_instead_of_lines: false
+    - spacing_scales_with_typography: false
+
+dimension_5_images:
+  score: 0  # Rate 1-5
+  criteria:
+    - relevant_images_only: false
+    - original_or_original_looking: false
+    - high_res_2x_scale_factor: false
+    - compressed_for_performance: false
+    - text_on_images_readable: false
+
+dimension_6_shadows_and_effects:
+  score: 0  # Rate 1-5
+  criteria:
+    - shadows_used_sparingly: false
+    - shadows_kept_light: false
+    - small_shadows_for_small_elements: false
+    - animation_200_to_500ms: false
+
+dimension_7_accessibility:
+  score: 0  # Rate 1-5
+  criteria:
+    - contrast_ratio_4_5_to_1_checked: false
+    - lighthouse_test_run: false
+    - blue_underlined_text_links_only: false
+    - meaningful_form_feedback: false
+
+dimension_8_visual_hierarchy:
+  score: 0  # Rate 1-5
+  criteria:
+    - important_elements_positioned_high: false
+    - size_color_spacing_strategic: false
+    - titles_subtitles_emphasized: false
+    - secondary_info_de_emphasized: false
+
+scoring:
+  total_score: 0  # Sum of all dimensions (max 40)
+  verdict: ""  # excellent (>32) | good (24-32) | needs_work (<24)
+
+responsive_design:
+  fluid_layouts: false
+  responsive_units_rem: false
+  flexible_images: false
+  media_queries_at_breakpoints: false

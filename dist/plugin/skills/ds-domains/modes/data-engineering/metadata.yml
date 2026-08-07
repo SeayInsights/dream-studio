@@ -1,0 +1,70 @@
+name: data-engineering
+version: 1.0.0
+pack: domains
+created_at: 2026-06-03
+updated_at: 2026-06-03
+
+origin: promoted-from-agent
+parent_skills: []
+generation: 0
+created_by: human
+
+# status: jit-pending — promoted verbatim from data-engineer agent.
+# DELIBERATE SINGLE-MODE: content size (266 lines) is the largest promoted agent.
+# Split into multiple modes (e.g., dbt-pipelines vs warehousing vs orchestration) is
+# deferred to Phase 19 based on real usage signals. No split in this WO.
+status: jit-pending
+health: active
+tested_with_models: [sonnet]
+tested_with_hosts: [claude-code]
+
+quality_metrics:
+  times_used: 0
+  success_rate: null
+  avg_token_usage: null
+  avg_execution_time_seconds: null
+  last_success: null
+  last_failure: null
+
+common_failures: []
+
+dependencies:
+  core_modules: []
+  tools_required: []
+  tools_optional:
+    - dbt              # dbt Core CLI
+    - bq               # BigQuery CLI
+    - snowsql          # Snowflake CLI
+    - airflow          # Apache Airflow CLI
+  env_vars_required: []
+  files_required: []
+  calls_skills: []
+
+compatibility:
+  min_context_window: 64000  # 266-line SKILL.md; larger context recommended
+  works_best_with: sonnet
+  works_with: [sonnet, opus, haiku]
+  platforms: [windows, macos, linux]
+
+tags: [dbt, airflow, dagster, bigquery, snowflake, redshift, cdc, debezium, data-pipeline, warehouse, etl]
+category: domains
+triggers:
+  - "dbt"
+  - "BigQuery"
+  - "Snowflake"
+  - "Redshift"
+  - "Airflow DAG"
+  - "Dagster asset"
+  - "Debezium"
+  - "CDC"
+  - "data pipeline"
+  - "warehouse SQL"
+  - "data engineering"
+description: >
+  Specialist for dbt model authoring, data warehouse query debugging, pipeline
+  orchestration (Airflow/Dagster), CDC patterns, schema migrations, and data quality
+  contracts. Covers BigQuery, Snowflake, and Redshift warehouse-specific optimizations.
+  Scope boundary: data-engineering covers data pipelines and warehouse query patterns;
+  the database skill covers application-layer schema integrity, indexes, FK design, and
+  query anti-patterns in transactional databases. Different scopes — pipeline/warehouse
+  vs application schema. Invoked via data-engineer subagent (Task tool dispatch).

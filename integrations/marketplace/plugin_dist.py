@@ -87,7 +87,7 @@ def _normalize_pack_frontmatter(skill_id: str, skill_md: Path) -> None:
         body = parts[2].lstrip("\n") if len(parts) == 3 else text
     else:
         body = text
-    skill_md.write_text(fm + body, encoding="utf-8")
+    skill_md.write_text(fm + body, encoding="utf-8", newline="\n")
 
 
 def build_plugin_dist(
@@ -116,7 +116,8 @@ def build_plugin_dist(
     def _materialize(op) -> None:
         op.target.parent.mkdir(parents=True, exist_ok=True)
         if op.source_content is not None:
-            op.target.write_text(op.source_content, encoding="utf-8")
+            # Deterministic LF so the committed artifact is byte-stable across platforms.
+            op.target.write_text(op.source_content, encoding="utf-8", newline="\n")
         elif op.source_path is not None:
             shutil.copyfile(op.source_path, op.target)
         written.append(op.target)
@@ -156,6 +157,7 @@ def build_plugin_dist(
     manifest_path.write_text(
         json.dumps(build_plugin_manifest(repo_root / "packs.yaml"), indent=2) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
     written.append(manifest_path)
 

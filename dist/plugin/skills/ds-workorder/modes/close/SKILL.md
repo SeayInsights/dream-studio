@@ -1,0 +1,99 @@
+# ds-workorder:close — Close a work order
+
+**Wraps:**
+- `core.work_orders.close.check_close_gates(work_order_id=..., source_root=..., dream_studio_home=..., planning_root=...)` — preview gate status without mutating.
+- `core.work_orders.close.close_work_order(work_order_id=..., force=False, source_root=..., dream_studio_home=..., planning_root=...)` — verify gates + mutate to closed + emit spool events.
+
+---
+
+## When to invoke this mode
+
+An active work order is done — the user said so ("close work order", "finish the auth WO", "wrap up this WO"), or `ds-workorder:execute` just reported `all_tasks_complete: True` (chain into close directly, no confirmation needed).
+
+**Every task must be marked done first.** Close enforces a `tasks_done` gate: a WO with any
+task not yet `complete` (or deliberately `cancelled`) cannot close without `force=True` — there
+are no 0/N or partial closes. Both the CLI close path and the autonomous execute-work-orders
+loop go through the same `close_work_order`, so this is enforced identically everywhere. If you
+believe the WO is done but close reports a `tasks_done` failure, mark the remaining tasks via
+`ds-workorder:execute` rather than force-closing.
+
+## What to do
+
+1. **Preview gates first.** Call `check_close_gates(work_order_id=<wo>, source_root=..., dream_studio_home=..., planning_root=...)`. The returned dict tells you whether the WO would close cleanly without actually mutating anything.
+
+2. **If `gates_pass is True`:** call `close_work_order(work_order_id=<wo>, source_root=..., dream_studio_home=..., planning_root=...)` directly — no confirmation on the normal path. Surface the result dict (see contract below).
+
+3. **If `gates_pass is False`:** present the `gate_failures` list verbatim — one bullet per failure. Then offer two paths:
+   - **Fix the gates** (preferred): suggest the skill that addresses each failure. For example, `tasks_done` → invoke `ds-workorder:execute` and mark the remaining tasks done (do NOT force past hanging tasks); `design_brief_locked` → invoke `ds-project:brief` to fill and then `ds-project:brief` lock mode; `design_critique` → invoke `website:critique`; `security_scan` → invoke `security:scan`; `api_contract_exists` → write the contract spec (from `docs/specs/SPEC-000-template.md`) and **ratify** it (set Status: `Ratified`) — for WOs created on/after the 2026-08-02 cutover the gate blocks a non-Ratified spec (see `docs/specs/README.md`); `change_impact_affirmed` → run `ds work-order affirm-impact <id> [--auth] [--contract] [--migration] [--changelog]` to record the change's impact classes (CLAUDE.md's Code History & Impact Guardrail; WOs created before the 2026-08-02 cutover are grandfathered).
+   - **Force close** (requires explicit user approval — this is a stop condition): explain that `force=True` will bypass the failed gates and emit `gate.bypassed` spool events. Confirm: *"Bypass these gates? This is recorded for audit. (yes/no)"* — only on explicit yes, call `close_work_order(work_order_id=<wo>, force=True, ...)`.
+
+4. **Surface the close result.** Close is **report-only** — it never auto-starts the next work order (that side effect used to pile up dangling in-progress WOs on every close).
+   - If `gaps_block` is present, print it verbatim — the independent review found gaps and registered a remediation WO (`spawned_work_orders`). Surface its `next_command` so the operator can start it when ready.
+   - If `milestone_complete` is present, the milestone is done: surface `next_command` (milestone close) and stop.
+   - Otherwise surface `next_block` / `next_command` (the ready-set next WO) so the user knows what's next, then **stop** — starting the next WO is an explicit operator decision on the interactive path.
+   - **Autonomous execute-work-orders loop only:** the workflow's `next-iteration` node starts the advertised next WO and re-invokes the loop. The interactive close path does not chain.
+
+## Stop conditions
+
+Close is report-only: after a clean close on the interactive path, surface `next_command` and **stop** — the operator decides what to start next. Only the autonomous execute-work-orders workflow chains (its `next-iteration` node starts the advertised next WO and re-invokes). Places the agent waits for the operator:
+- Force-close approval (gate bypass).
+- `requires_brief_confirmation` on start.
+- `milestone_complete` (milestone done — milestone close is an operator decision).
+- A blocked WO.
+- A genuine blocking question the agent cannot resolve from the WO, the code, or sensible defaults.
+
+## Surface contract
+
+`check_close_gates` returns::
+
+    {
+      "ok": True,
+      "work_order_id": str,
+      "title": str,
+      "type_id": str | None,
+      "project_id": str,
+      "milestone_id": str | None,
+      "pre_gate": str | None,
+      "post_gate": str | None,
+      "gates_pass": bool,
+      "gate_failures": [str, ...],
+    }
+
+`close_work_order` returns one of three shapes:
+
+- WO not found: `{"ok": False, "error": "Work order not found: <id>"}`
+- Gates failed without force: `{"ok": False, "error": "Gate check failed", "failures": [...]}`
+- Success or forced::
+
+      {
+        "ok": True,
+        "work_order_id": str,
+        "title": str,
+        "status": "closed",
+        "forced": bool,
+        "bypassed_gates": [str, ...],          # populated when forced
+        "verify_warning": str | absent,        # inline verify was unreviewable (no commit evidence) — surface verbatim
+        "next_work_order": {...} | absent,     # next open WO in same milestone
+        "next_command": str | absent,          # explicit next-step hint
+        "next_block": str,                     # printable NEXT WORK ORDER / MILESTONE COMPLETE / none-found block
+        "milestone_complete": True | absent,
+        "milestone_id": str | absent,
+        "gaps_block": str | absent,            # printable GAPS FOUND block when independent review failed
+        "spawned_work_orders": [{...}] | absent,  # remediation WOs registered from review gaps
+      }
+
+    # Close is REPORT-ONLY: it advertises the next WO (`next_work_order` = the ready-set
+    # pick) and how to start it (`next_command`/`next_block`) but never starts it — there
+    # is no `auto_started`/`auto_start_error` key. Starting the next WO is an explicit
+    # operator action (or the execute-work-orders workflow's next-iteration node).
+
+## Side effects
+
+- Runs a projection tick (`sync_tick`) before reading task statuses so freshly marked-done tasks are reflected (no false `tasks_done` failure from projection lag).
+- Blocks the close when any task is not done (`tasks_done` gate) unless `force=True`; a forced close records the bypass via a `gate.bypassed` event carrying the `tasks_done` reason.
+- For an **escalated** WO (reopened because the deterministic verifier said NOT FIXED), re-close REQUIRES a passing independent review: the unreviewable/gap bypasses are skipped and `force=True` cannot bypass the `independent_review` gate (the result carries `escalated: True`). Get a passing `review-verdict.json` rather than forcing.
+- Sets the WO row's `status` to `closed`.
+- Emits a `work_order.closed` spool event.
+- When `force=True` with failures, emits one `gate.bypassed` event per failure for audit.
+- When the post-build gate is `independent_review`, runs the fresh-context verify inline; review gaps register remediation WOs, reported via `gaps_block` + `spawned_work_orders` (not started — run the reported `next_command` to begin remediation).
+- When verify passes, advertises the project-wide ready-set next WO via `next_work_order` / `next_command` / `next_block` — **report-only, the WO is not started** (the autonomous execute-work-orders workflow starts it in its next-iteration node).

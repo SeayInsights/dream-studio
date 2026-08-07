@@ -1,0 +1,138 @@
+# Pre-Launch Skill — Configuration
+# Version: 1.0.0
+#
+# Project override: create pre_launch_config.yml at project root
+#
+#   service_type: consumer       # overrides auto-detection
+#   launch_tier_threshold: T1    # only block on T1; show T2 as warnings
+#   skip_categories: [legal]     # skip entire category if docs managed externally
+#
+# service_type values:
+#   consumer        — public-facing service with user accounts or guest data
+#                     pl-001/002 (ToS, Privacy) fire at T1
+#   internal-service — private API, no public consumers
+#                     pl-001/002 fire at T2 (advisory)
+#   developer-tool  — CLI tool, SDK, or developer framework
+#                     pl-001/002 SILENT
+#   library         — code library with no runtime service
+#                     pl-001/002 SILENT; only release docs apply (pl-007-010)
+
+version: "1.0"
+
+# Default service type — overridden by detection or project config
+service_type: consumer
+
+# Minimum launch threshold — controls exit code behavior
+# T1: exit 1 when any T1 finding (default, recommended)
+# T2: exit 1 when any T1 or T2 finding (stricter)
+launch_tier_threshold: T1
+
+# Legal document paths — where to look for legal docs (checked in order)
+legal_doc_paths:
+  terms_of_service:
+    - "TERMS.md"
+    - "TERMS_OF_SERVICE.md"
+    - "TOS.md"
+    - "docs/legal/terms.md"
+    - "docs/legal/terms-of-service.md"
+    - "legal/terms.md"
+  privacy_policy:
+    - "PRIVACY.md"
+    - "PRIVACY_POLICY.md"
+    - "docs/legal/privacy.md"
+    - "docs/legal/privacy-policy.md"
+    - "legal/privacy.md"
+  cookie_notice:
+    - "COOKIE_NOTICE.md"
+    - "COOKIE_POLICY.md"
+    - "docs/legal/cookies.md"
+    - "legal/cookies.md"
+  accessibility_statement:
+    - "ACCESSIBILITY.md"
+    - "docs/legal/accessibility.md"
+    - "docs/accessibility-statement.md"
+  gdpr_dpa:
+    - "DPA.md"
+    - "docs/legal/dpa.md"
+    - "legal/data-processing-agreement.md"
+
+# Operational doc paths
+ops_doc_paths:
+  runbook:
+    - "RUNBOOK.md"
+    - "DEPLOYMENT.md"
+    - "docs/runbook.md"
+    - "docs/operations/deployment.md"
+    - "docs/deployment.md"
+  rollback:
+    - "ROLLBACK.md"
+    - "docs/rollback.md"
+    - "docs/operations/rollback.md"
+  on_call:
+    - "ONCALL.md"
+    - "ON_CALL.md"
+    - "docs/on-call.md"
+    - "docs/operations/on-call.md"
+    - ".github/CODEOWNERS"
+  smoke_tests:
+    - "SMOKE_TESTS.md"
+    - "docs/smoke-tests.md"
+    - "docs/testing/smoke.md"
+    - "tests/smoke/"
+    - "e2e/"
+
+# Release documentation paths
+release_doc_paths:
+  changelog:
+    - "CHANGELOG.md"
+    - "CHANGES.md"
+    - "HISTORY.md"
+  release_notes:
+    - "RELEASE_NOTES.md"
+    - "docs/release-notes.md"
+    - "RELEASE.md"
+
+# Launch escalation map — defines which findings become LAUNCH_BLOCKED vs LAUNCH_WARNING
+# per service_type. Read by SkillDispatcher.launch() (18.8.x).
+#
+# blocked_rules: finding.rule_id in this list → LAUNCH_BLOCKED regardless of audit severity
+# warning_rules: finding.rule_id in this list → LAUNCH_WARNING (surfaced, not blocking)
+# silent_rules: finding.rule_id in this list → excluded from launch verdict entirely
+# blocked_severities: any finding with severity in this list → LAUNCH_BLOCKED (cross-skill)
+#
+# Rules not listed anywhere: inherit audit verdict (most pass silently at launch time)
+launch_escalation:
+  consumer:
+    blocked_rules: [pl-001, pl-002, pl-011, pl-012, pl-016]
+    warning_rules: [pl-003, pl-007, pl-008, pl-013, pl-014, pl-015, pl-017, pl-018, pl-019]
+    silent_rules: []
+    blocked_severities: [critical]
+
+  developer-tool:
+    blocked_rules: [pl-009, pl-010]
+    warning_rules: [pl-007, pl-008, pl-011, pl-012, pl-017]
+    silent_rules: [pl-001, pl-002, pl-003, pl-004, pl-005, pl-006]
+    blocked_severities: [critical]
+
+  internal-service:
+    blocked_rules: [pl-009, pl-010, pl-011, pl-012]
+    warning_rules: [pl-001, pl-002, pl-007, pl-008, pl-013, pl-014, pl-015, pl-017]
+    silent_rules: []
+    blocked_severities: [critical]
+
+  library:
+    blocked_rules: [pl-009, pl-010]
+    warning_rules: [pl-007, pl-008, pl-017]
+    silent_rules: [pl-001, pl-002, pl-003, pl-004, pl-005, pl-011, pl-012, pl-013, pl-014]
+    blocked_severities: [critical]
+
+# Security/privacy sign-off paths
+signoff_paths:
+  security_review:
+    - ".planning/audits/security-signoff.md"
+    - "docs/security-review.md"
+    - "SECURITY_REVIEW.md"
+  privacy_review:
+    - "docs/privacy-impact-assessment.md"
+    - "PIA.md"
+    - ".planning/audits/privacy-review.md"
