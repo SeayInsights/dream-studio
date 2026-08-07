@@ -15,9 +15,27 @@ from integrations.marketplace.plugin_manifest import (
     skill_ids,
     validate_manifest,
     validate_marketplace_manifest,
+    write_marketplace_manifest,
+    write_plugin_manifest,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_write_manifests_emit_valid_json_matching_the_generators(tmp_path):
+    """WO 433edfa7: write_plugin_manifest / write_marketplace_manifest write to disk exactly
+    what their generators produce, as valid JSON."""
+    plugin_path = write_plugin_manifest(tmp_path / "plugin.json")
+    market_path = write_marketplace_manifest(tmp_path / "marketplace.json")
+
+    assert plugin_path.is_file() and market_path.is_file()
+    plugin = json.loads(plugin_path.read_text(encoding="utf-8"))
+    market = json.loads(market_path.read_text(encoding="utf-8"))
+
+    assert plugin == build_plugin_manifest()
+    assert market == build_marketplace_manifest()
+    assert validate_manifest(plugin) == []
+    assert validate_marketplace_manifest(market) == []
 
 
 def test_manifest_valid_and_layout_present():
