@@ -37,6 +37,27 @@ operator records an explicit go.
   here (streak: 1). Record the consecutive-green run count as it accrues; a public release
   requires a sustained streak (a `WO-REL-SHIP-CLOSEOUT` concern), **not** the first green run.
 
+## Versioning
+
+Dream Studio versions with **semver** (`MAJOR.MINOR.PATCH`). The top-level `VERSION` file is
+the single source of truth; `integrations/marketplace/plugin_manifest.py` reads it verbatim
+into `.claude-plugin/plugin.json`, and the once-per-day marketplace update check parses it as a
+version tuple. The release-readiness gate (`core/release/versioning.py`) rejects any version
+that is not valid semver.
+
+- **Pre-1.0 (current: `0.1.0`).** The public surface is real and installable but still evolving;
+  a `0.MINOR.PATCH` line makes no stability guarantee across minor bumps. Breaking changes bump
+  the minor while in `0.x`.
+- **`1.0.0`** is reserved for the first release that commits to a stable skill/CLI/route surface.
+- The plugin and marketplace manifests are **generated** (`build_plugin_manifest` /
+  `build_marketplace_manifest`) and parity-checked in `tests/unit/test_plugin_manifest.py`, so
+  the version and the public source never drift from the manifests on disk. Regenerate with
+  `write_plugin_manifest()` / `write_marketplace_manifest()` after a `VERSION` bump.
+
+> Historical note: `VERSION` was previously date-based CalVer (`2026-07-02`). `WO-REL-PACKAGING`
+> switched it to semver — the release-readiness gate already required semver, and the update
+> check's version-tuple parse silently degraded on the date form.
+
 ## How this is enforced
 
 The ship gate reads this checklist; `WO-REL-SHIP-CLOSEOUT` is the executable close-out that

@@ -160,13 +160,17 @@ def test_dev_script_exposes_narrow_product_readiness_target():
     assert "dream-studio-enterprise" not in body
 
 
-def test_local_marketplace_declares_structured_source_for_codex_loader():
+def test_marketplace_declares_structured_public_source_for_loader():
+    """WO-REL-PACKAGING T1: the marketplace source stays a structured object (so the
+    Codex/plugin loader can parse it), and for public distribution it resolves the
+    plugin from the hosted canonical repo rather than a local path."""
     marketplace = json.loads(_read(REPO_ROOT / ".claude-plugin" / "marketplace.json"))
     plugins = marketplace.get("plugins", [])
     dream_studio = next(item for item in plugins if item.get("name") == "dream-studio")
     source = dream_studio.get("source")
 
-    assert source == {"source": "local", "path": "."}
+    assert isinstance(source, dict), "source must be a structured object for the loader"
+    assert source == {"source": "github", "repo": "SeayInsights/dream-studio"}
 
 
 def test_authority_invariants_are_part_of_readiness_baseline():

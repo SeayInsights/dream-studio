@@ -7,11 +7,14 @@ from pathlib import Path
 
 from core.skills.invocation import load_skill_content
 from integrations.marketplace.plugin_manifest import (
+    MARKETPLACE_REPO,
     PLUGIN_COMPONENTS,
+    build_marketplace_manifest,
     build_plugin_manifest,
     namespaced_skill_ids,
     skill_ids,
     validate_manifest,
+    validate_marketplace_manifest,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -42,6 +45,32 @@ def test_manifest_valid_and_layout_present():
     # Skill set is non-empty and namespacing is consistent.
     assert skill_ids(), "manifest must declare skills"
     assert namespaced_skill_ids() == [f"dream-studio:{s}" for s in skill_ids()]
+
+
+def test_marketplace_manifest_public_source_and_parity():
+    """WO-REL-PACKAGING T1/T3: the committed marketplace.json resolves the plugin
+    from the public canonical repo (never a local path) and stays at parity with the
+    generator and the plugin manifest."""
+    marketplace_path = REPO_ROOT / ".claude-plugin" / "marketplace.json"
+    assert marketplace_path.is_file(), ".claude-plugin/marketplace.json must exist"
+
+    committed = json.loads(marketplace_path.read_text(encoding="utf-8"))
+    assert (
+        validate_marketplace_manifest(committed) == []
+    ), f"marketplace.json invalid: {validate_marketplace_manifest(committed)}"
+
+    # Committed marketplace manifest matches the generator (no drift).
+    assert committed == build_marketplace_manifest(), "marketplace.json is stale — regenerate it"
+
+    entry = committed["plugins"][0]
+    # Public distribution: source must be the hosted canonical repo, not a local path.
+    assert entry["source"] == {"source": "github", "repo": MARKETPLACE_REPO}
+    assert "path" not in entry["source"], "marketplace source must not carry a local path"
+
+    # Name + description are at parity with the plugin manifest (single source of truth).
+    plugin = build_plugin_manifest()
+    assert entry["name"] == plugin["name"]
+    assert entry["description"] == plugin["description"]
 
 
 def test_namespaced_and_bare_ids_resolve():
