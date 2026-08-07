@@ -1,7 +1,7 @@
 # Dream Studio
 
-[![PR Smoke](https://github.com/SeayInsights/dream-studio-clean/actions/workflows/ci.yml/badge.svg)](https://github.com/SeayInsights/dream-studio-clean/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-2026.5.17-blue.svg)](CHANGELOG.md)
+[![PR Smoke](https://github.com/SeayInsights/dream-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/SeayInsights/dream-studio/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
 
 ## What Dream Studio Is
@@ -56,7 +56,28 @@ When you invoke a Dream Studio skill, you are not calling a function. You are en
 
 ## Quick Start
 
-### One-line install (recommended)
+### Install as a Claude Code plugin (recommended)
+
+Dream Studio is published to the Claude Code plugin marketplace. Inside Claude Code:
+
+```
+/plugin marketplace add SeayInsights/dream-studio
+/plugin install dream-studio@dream-studio
+```
+
+This installs Dream Studio's skills, agents, commands, and hooks into Claude Code. Dream
+Studio also runs a local Python runtime (the `ds` CLI + a SQLite authority database) — after
+adding the plugin, complete the one-time runtime setup:
+
+```powershell
+py -m interfaces.cli.ds rehearsal-install --rehearsal-home "$env:USERPROFILE\.dream-studio"
+py -m interfaces.cli.ds doctor
+```
+
+> Requires Python 3.12+. If you don't have the repo checked out, clone it first (see the manual
+> steps below) — the runtime bootstrap runs from the source tree.
+
+### One-line install (from source)
 
 After cloning the repo, run the install script for your platform:
 
@@ -84,8 +105,8 @@ The script checks for Python 3.12+, installs it if missing, runs the Dream Studi
 
 ### 1. Clone the repository
 ```powershell
-git clone https://github.com/SeayInsights/dream-studio-clean ~/builds/dream-studio-clean
-cd ~/builds/dream-studio-clean
+git clone https://github.com/SeayInsights/dream-studio ~/builds/dream-studio
+cd ~/builds/dream-studio
 ```
 
 ### 2. Install dependencies
@@ -156,7 +177,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "py C:\\Users\\<YOUR_USERNAME>\\builds\\dream-studio-clean\\runtime\\hooks\\core\\on-post-tool-use.py"
+            "command": "py C:\\Users\\<YOUR_USERNAME>\\builds\\dream-studio\\runtime\\hooks\\core\\on-post-tool-use.py"
           }
         ]
       }
@@ -171,6 +192,18 @@ ds task set-active <task_id>
 ```
 
 See [docs/setup/claude-code-hooks.md](docs/setup/claude-code-hooks.md) for full setup and troubleshooting.
+
+### Uninstall
+
+Preview exactly what will be removed, then remove it:
+
+```powershell
+ds uninstall-check   # inventory the install targets (~/.claude entries, ~/.dream-studio, launcher) — deletes nothing
+ds uninstall         # remove them
+```
+
+If you installed via the plugin marketplace, also remove the plugin in Claude Code with
+`/plugin uninstall dream-studio@dream-studio`.
 
 ---
 
@@ -280,7 +313,7 @@ scope → register → set-active → next → start → [build] → task-done (
 Dream Studio uses three directories with distinct purposes:
 
 ```
-~/builds/dream-studio-clean/    # SOURCE — repo you cloned
+~/builds/dream-studio/          # SOURCE — repo you cloned
   canonical/                    # Skill and workflow definitions
   core/                         # Event store, config, shared intelligence
   integrations/                 # Compilers and installers per AI tool

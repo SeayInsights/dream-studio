@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-06
+
+First public release — Dream Studio is installable from the Claude Code plugin marketplace
+(`SeayInsights/dream-studio`).
+
+### Added
+- **Public distribution (WO-REL-PACKAGING):** semver versioning (`0.1.0`, replacing date-based
+  CalVer), a public marketplace source (`{source: github, repo: SeayInsights/dream-studio}`
+  instead of a local path), and a native, parity-checked plugin/marketplace manifest generator
+  (`build/validate_marketplace_manifest`).
+- **PRD + Statement-of-Work living document:** the PRD doubles as a Statement of Work, derived
+  read-only from authority + docstore data and auto-refreshed on milestone close (no new
+  `studio.db` tables), with a dashboard read-model + `/api/v1/prd-sow` route.
+- **Public-release readiness gate:** a green `full-ci` baseline on `main`, a release-blocker
+  checklist (`docs/operations/public-release-readiness.md`) consulted by the ship gate, and a
+  verified public-export boundary (sanitized Contract Atlas export, no private tier tracked).
+
 ### Fixed
 - **Documented the retain-or-drop verdict for `business_work_order_artifacts` (c64dd3db, from WO-FILESDB-REVET task 3):** `docs/architecture/aspirational-schema-debt.md` now records the KEEP verdict with its two required points — (1) authority-vs-disk necessity: the FILESDB milestone (C1–C6, released #521) moved WO ceremony off `.planning/work-orders/` into the table and C6 removed the disk fallback, so it is the sole store (dropping it would delete the only copy of live ceremony state); (2) the `review_verdict` artifact does not duplicate `business_work_orders.verify_status`/`verify_score`/`verified_at` (scalar summary columns vs the full structured verdict JSON — different granularity, deliberate).
 - **Untracked internal token-overhead methodology doc (WO-DOC-RESIDUE, 692fe0d5):** `docs/token-overhead.md` (measurement methodology for the `benchmark_tokens.py` dev tool; its sibling `token-reduction-summary.md` was already removed) is internal, not end-user-facing — `git rm --cached` + `.gitignore` per the push principle. `docs/operations/cleanup-discipline.md` is referenced only by untracked `.planning/` working files (no tracked doc references it) and does not exist, so the tracked-doc set needs no change there. `tests/unit/test_docs_reconciliation.py` guards both.
