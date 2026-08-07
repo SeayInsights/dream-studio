@@ -14,8 +14,8 @@ Run on Windows 11 AND on Ubuntu 22.04 LTS (or equivalent). VMs preferred to ensu
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/SeayInsights/dream-studio-clean.git ~/builds/dream-studio-clean
-cd ~/builds/dream-studio-clean
+git clone https://github.com/SeayInsights/dream-studio.git ~/builds/dream-studio
+cd ~/builds/dream-studio
 ```
 
 ### 2. Run the install script

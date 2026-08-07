@@ -25,6 +25,31 @@ def test_public_release_readiness_doc_lists_blockers() -> None:
     assert "ship gate" in text, "doc must reference the ship gate that consults it"
 
 
+def test_changelog_has_versioned_release_entry() -> None:
+    """WO-REL-DOCS T2: CHANGELOG must carry a versioned semver release entry (not only
+    [Unreleased]) matching the current VERSION, so every release is documented."""
+    import re
+
+    changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    entries = re.findall(r"^## \[(\d+\.\d+\.\d+)\] - \d{4}-\d{2}-\d{2}", changelog, re.M)
+    assert entries, "CHANGELOG must have a versioned release entry '## [X.Y.Z] - YYYY-MM-DD'"
+    assert (
+        version in entries
+    ), f"CHANGELOG must document the current VERSION {version!r}; found release entries {entries}"
+
+
+def test_readme_covers_marketplace_install_and_uninstall() -> None:
+    """WO-REL-DOCS T1: the README must document the public plugin path — marketplace install,
+    first-run runtime setup, and uninstall — for public plugin users."""
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8").lower()
+    assert "/plugin marketplace add" in readme, "README must document the marketplace install"
+    assert "seayinsights/dream-studio" in readme, "README must reference the public repo"
+    assert "ds uninstall" in readme, "README must document how to uninstall"
+    # No stale reference to the non-public dev repo name.
+    assert "dream-studio-clean" not in readme, "README must not reference the non-public repo name"
+
+
 def test_artifacts_keep_verdict_documented() -> None:
     text = (REPO_ROOT / "docs" / "architecture" / "aspirational-schema-debt.md").read_text(
         encoding="utf-8"
