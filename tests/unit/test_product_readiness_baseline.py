@@ -170,7 +170,10 @@ def test_marketplace_declares_structured_public_source_for_loader():
     source = dream_studio.get("source")
 
     assert isinstance(source, dict), "source must be a structured object for the loader"
-    assert source == {"source": "github", "repo": "SeayInsights/dream-studio"}
+    # git-subdir: the synthesized plugin root lives under dist/plugin (WO 90a13043).
+    assert source["source"] == "git-subdir"
+    assert source["path"] == "dist/plugin"
+    assert "SeayInsights/dream-studio" in source["url"]
 
 
 def test_authority_invariants_are_part_of_readiness_baseline():
