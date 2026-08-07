@@ -62,6 +62,30 @@ that is not valid semver.
 > switched it to semver — the release-readiness gate already required semver, and the update
 > check's version-tuple parse silently degraded on the date form.
 
+## Plugin delivery model
+
+A github-source marketplace install resolves a plugin's components (`skills/`, `agents/`,
+`.mcp.json`) relative to the plugin root and copies files verbatim — it cannot run Dream
+Studio's install-time frontmatter synthesis. The canonical skills ship **frontmatter-less**
+(single source = `packs.yaml` + `metadata.yml`), so the raw repo tree is not a loadable plugin.
+
+So the public plugin is a **synthesized artifact**, not the raw repo:
+
+- `integrations/marketplace/plugin_dist.py::build_plugin_dist` assembles a loadable plugin root
+  under `dist/plugin/` — synthesized `name`/`description` frontmatter on each skill (reusing the
+  installer's own `synthesize_skill_frontmatter`), the agent cards, `.mcp.json`, and the plugin
+  manifest.
+- The marketplace `source` is **git-subdir** → `dist/plugin` (a github/repo-root source would
+  resolve the un-loadable raw tree). The release flow (`core/release/changelog.py --apply`)
+  builds `dist/plugin` so a cut release keeps it fresh; `dist/plugin/` is the one un-ignored
+  path under the otherwise-ignored `dist/`.
+- **Skill surface contract:** the plugin ships the **routable pack set** (`packs.yaml`, the
+  authoritative user-facing surface). `ds-bootstrap` is excluded — it is a passive system
+  component, not a user-invocable skill. `commands` is not a declared component (Dream Studio
+  ships no top-level commands; skills replace them). `tests/unit/test_plugin_dist.py` guards all
+  of this — skill set == routable surface, every skill loadable, every declared component
+  delivered.
+
 ## How this is enforced
 
 The ship gate reads this checklist; `WO-REL-SHIP-CLOSEOUT` is the executable close-out that

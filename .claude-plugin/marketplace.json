@@ -5,8 +5,9 @@
       "name": "dream-studio",
       "description": "Dream Studio \u2014 local-first AI orchestration and operational intelligence platform.",
       "source": {
-        "source": "github",
-        "repo": "SeayInsights/dream-studio"
+        "source": "git-subdir",
+        "url": "https://github.com/SeayInsights/dream-studio.git",
+        "path": "dist/plugin"
       }
     }
   ]

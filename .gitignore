@@ -17,6 +17,10 @@ baselines/pre_phase_19/
 
 # Generated adapter output — build artifacts, never committed
 dist/
+# Exception: the synthesized public plugin artifact IS distributed — the marketplace
+# git-subdir source resolves it from dist/plugin, so the release flow commits it (WO 90a13043).
+!dist/plugin/
+!dist/plugin/**
 skills/**/.planning/
 
 # Structure audit reports — generated artifacts

@@ -63,9 +63,11 @@ def test_marketplace_manifest_public_source_and_parity():
     assert committed == build_marketplace_manifest(), "marketplace.json is stale — regenerate it"
 
     entry = committed["plugins"][0]
-    # Public distribution: source must be the hosted canonical repo, not a local path.
-    assert entry["source"] == {"source": "github", "repo": MARKETPLACE_REPO}
-    assert "path" not in entry["source"], "marketplace source must not carry a local path"
+    # Public distribution: a hosted git-subdir source pointing at the synthesized plugin root
+    # (the raw repo root is not a loadable plugin layout — canonical skills are frontmatter-less).
+    assert entry["source"]["source"] == "git-subdir"
+    assert MARKETPLACE_REPO in entry["source"]["url"]
+    assert entry["source"]["path"] == "dist/plugin"
 
     # Name + description are at parity with the plugin manifest (single source of truth).
     plugin = build_plugin_manifest()

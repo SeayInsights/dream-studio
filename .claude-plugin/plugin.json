@@ -6,7 +6,6 @@
     "name": "Dream Studio"
   },
   "components": [
-    "commands",
     "agents",
     "skills",
     ".mcp.json"

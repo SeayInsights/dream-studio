@@ -191,6 +191,7 @@ def main(argv: list[str] | None = None) -> int:
         # Regenerate the manifests so the cut release publishes the bumped plugin version
         # (VERSION is their single source of truth). Imported lazily to keep this module's
         # import graph light for the pure-render unit tests.
+        from integrations.marketplace.plugin_dist import build_plugin_dist
         from integrations.marketplace.plugin_manifest import (
             write_marketplace_manifest,
             write_plugin_manifest,
@@ -198,9 +199,13 @@ def main(argv: list[str] | None = None) -> int:
 
         write_plugin_manifest()
         write_marketplace_manifest()
+        # Build the synthesized plugin artifact the marketplace git-subdir source resolves
+        # (dist/plugin). Canonical skills ship frontmatter-less; this injects the synthesized
+        # frontmatter so a github-source install gets a loadable plugin root (WO 90a13043).
+        build_plugin_dist(REPO_ROOT / "dist" / "plugin")
         print(
-            f"Applied release {args.version} to VERSION + pyproject.toml + CHANGELOG.md "
-            "and regenerated .claude-plugin/{plugin,marketplace}.json"
+            f"Applied release {args.version} to VERSION + pyproject.toml + CHANGELOG.md, "
+            "regenerated .claude-plugin/{plugin,marketplace}.json, and built dist/plugin"
         )
     else:
         print(notes)

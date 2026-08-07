@@ -21,11 +21,19 @@ _PLUGIN_MANIFEST = _REPO_ROOT / ".claude-plugin" / "plugin.json"
 _MARKETPLACE_MANIFEST = _REPO_ROOT / ".claude-plugin" / "marketplace.json"
 
 PLUGIN_NAME = "dream-studio"
-#: Component directories a Claude plugin may provide.
-PLUGIN_COMPONENTS: tuple[str, ...] = ("commands", "agents", "skills", ".mcp.json")
+#: Component slots the built plugin artifact actually delivers. ``commands`` is dropped —
+#: Dream Studio ships no top-level commands (skills replace them), so declaring it would name
+#: an undeliverable payload (WO 90a13043).
+PLUGIN_COMPONENTS: tuple[str, ...] = ("agents", "skills", ".mcp.json")
 #: The public canonical source a marketplace install resolves the plugin from.
 #: For public distribution this must be a hosted repo, never a "local" path.
 MARKETPLACE_REPO = "SeayInsights/dream-studio"
+MARKETPLACE_GIT_URL = "https://github.com/SeayInsights/dream-studio.git"
+#: The plugin artifact is a SYNTHESIZED build (frontmatter-injected skills the canonical
+#: sources ship without) assembled under this repo-relative subdir by the release flow
+#: (integrations/marketplace/plugin_dist.py). The marketplace resolves it via a git-subdir
+#: source so a github install gets a loadable plugin root, not the raw canonical tree.
+MARKETPLACE_PLUGIN_SUBDIR = "dist/plugin"
 MARKETPLACE_SCHEMA_VERSION = 1
 
 
@@ -96,6 +104,24 @@ def validate_manifest(manifest: dict) -> list[str]:
     return problems
 
 
+def validate_plugin_manifest_component_delivery(manifest: dict, plugin_root: Path) -> list[str]:
+    """Return the declared components with no backing payload at *plugin_root*.
+
+    A github/git-subdir marketplace install resolves components relative to the plugin root, so
+    every declared component must exist there or the install loads nothing for it. ``skills`` and
+    ``agents`` resolve to same-named directories; ``.mcp.json`` (and any other dotted entry) to a
+    file of that name.
+    """
+    problems: list[str] = []
+    for component in manifest.get("components", []):
+        target = plugin_root / component
+        expect_file = component.startswith(".") or component.endswith(".json")
+        ok = target.is_file() if expect_file else target.is_dir()
+        if not ok:
+            problems.append(f"component {component!r} has no payload at the plugin root")
+    return problems
+
+
 def write_plugin_manifest(output_path: Path | None = None) -> Path:
     """Generate and write `.claude-plugin/plugin.json`. Returns the path."""
     out = output_path or _PLUGIN_MANIFEST
@@ -119,7 +145,14 @@ def build_marketplace_manifest(packs_yaml_path: Path | None = None) -> dict:
             {
                 "name": plugin["name"],
                 "description": plugin["description"],
-                "source": {"source": "github", "repo": MARKETPLACE_REPO},
+                # git-subdir: the loadable plugin root is the synthesized artifact under
+                # MARKETPLACE_PLUGIN_SUBDIR, not the repo root (the raw canonical tree is
+                # frontmatter-less and not a plugin layout). Sparse-cloned on install.
+                "source": {
+                    "source": "git-subdir",
+                    "url": MARKETPLACE_GIT_URL,
+                    "path": MARKETPLACE_PLUGIN_SUBDIR,
+                },
             }
         ],
     }
@@ -140,10 +173,13 @@ def validate_marketplace_manifest(manifest: dict) -> list[str]:
     if not entry.get("description"):
         problems.append("plugin description must be non-empty")
     source = entry.get("source") or {}
-    if source.get("source") == "local" or "path" in source:
-        problems.append("source must not be a local path for public distribution")
-    elif source.get("source") != "github" or not source.get("repo"):
-        problems.append("source must be a public github repo ({'source':'github','repo':...})")
+    # Public distribution: a hosted git source, never a local path. The synthesized plugin
+    # root lives in a subdir, so the source is git-subdir (github/url resolve the repo root,
+    # which is not a loadable plugin layout here).
+    if source.get("source") == "local" or "repo" in source:
+        problems.append("source must be a hosted git-subdir source, not local/repo-root")
+    elif source.get("source") != "git-subdir" or not source.get("url") or not source.get("path"):
+        problems.append("source must be git-subdir ({'source':'git-subdir','url':...,'path':...})")
     return problems
 
 
