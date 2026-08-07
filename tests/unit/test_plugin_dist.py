@@ -108,6 +108,19 @@ def test_installer_projection_vs_routable_surface_contract():
     }, f"unexpected routable skills without a top-level dir: {routable - dir_scan}"
 
 
+def test_build_excludes_bytecode_and_cruft(tmp_path: Path):
+    """The synthesized artifact must never carry machine-local/non-reproducible cruft
+    (compiled bytecode, caches, OS files) — canonical skill dirs may contain __pycache__."""
+    out = tmp_path / "plugin"
+    build_plugin_dist(out, repo_root=REPO_ROOT)
+    cruft = [
+        p.relative_to(out).as_posix()
+        for p in out.rglob("*")
+        if p.suffix in {".pyc", ".pyo"} or "__pycache__" in p.parts or p.name == ".DS_Store"
+    ]
+    assert cruft == [], f"synthesized plugin must exclude cruft, found: {cruft}"
+
+
 def test_committed_dist_plugin_is_fresh(tmp_path: Path):
     """The tracked dist/plugin artifact (what the marketplace git-subdir source serves) must
     equal a fresh build — else a canonical edit ships a stale public plugin. Compares text via
