@@ -47,7 +47,7 @@ The daemon also calls `spool.lifecycle.check_and_archive()` at startup, so resta
 
 ## Manual Controls
 
-All spool commands run from the dream-studio-clean repo root:
+All spool commands run from the dream-studio repo root:
 
 ```powershell
 cd "<repo-root>"

@@ -50,6 +50,29 @@ def test_readme_covers_marketplace_install_and_uninstall() -> None:
     assert "dream-studio-clean" not in readme, "README must not reference the non-public repo name"
 
 
+def test_user_facing_docs_use_public_repo_name() -> None:
+    """WO-REL-DOCS-UNIFY (8726d174): the docs public users read (README + docs/**/*.md) must
+    reference the public repo name, never the local dev dir name 'dream-studio-clean'.
+
+    Scope is deliberately the LIVING user-facing doc surface. Excluded: dated audit archives
+    under docs/audits/ (historical snapshots of a past state, like the CHANGELOG), and
+    functional code/config/test refs to the local working directory (which really is named
+    dream-studio-clean) — those are a separate, non-cosmetic concern a blanket rename would break.
+    """
+    surfaces = [REPO_ROOT / "README.md"]
+    surfaces += [
+        p
+        for p in (REPO_ROOT / "docs").rglob("*.md")
+        if "audits" not in p.relative_to(REPO_ROOT / "docs").parts
+    ]
+    offenders = [
+        str(p.relative_to(REPO_ROOT))
+        for p in surfaces
+        if p.is_file() and "dream-studio-clean" in p.read_text(encoding="utf-8")
+    ]
+    assert offenders == [], f"living user-facing docs must use the public repo name: {offenders}"
+
+
 def test_artifacts_keep_verdict_documented() -> None:
     text = (REPO_ROOT / "docs" / "architecture" / "aspirational-schema-debt.md").read_text(
         encoding="utf-8"
