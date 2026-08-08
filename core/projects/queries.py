@@ -410,3 +410,43 @@ def get_project_state(
             )
 
     return {"ok": True, "projects": result_projects, **cwd_fields}
+
+
+def fit_check_work_order(
+    *,
+    work_title: str,
+    work_description: str = "",
+    project_id: str | None = None,
+    source_root: Path,
+    dream_studio_home: Path | None = None,
+) -> dict[str, Any]:
+    """Fit-check proposed work against a project's open milestones (Attribution Coherence).
+
+    Read-only wrapper over ``core.projects.milestone_fit.candidate_milestones_for_work`` that
+    the attribution flow calls BEFORE binding a new work order to a milestone. It surfaces the
+    project's open milestones + their descriptions + a deterministic fit signal so the agent can
+    stop-and-ask instead of auto-filing work into whatever milestone happens to be active. When
+    ``project_id`` is omitted the globally-active project is used.
+
+    Returns ``candidate_milestones_for_work``'s payload with ``ok: True`` on success, or
+    ``{"ok": False, "error": ...}`` when no project can be resolved.
+    """
+    from core.projects.milestone_fit import candidate_milestones_for_work
+
+    db_path = _require_db(source_root, dream_studio_home)
+    if project_id is None:
+        with _connect(db_path) as conn:
+            row = conn.execute(
+                "SELECT project_id FROM business_projects WHERE status = 'active'"
+            ).fetchone()
+        if row is None:
+            return {
+                "ok": False,
+                "error": "no active project; pass project_id explicitly or set one active",
+            }
+        project_id = row["project_id"]
+
+    payload = candidate_milestones_for_work(
+        project_id, work_title, work_description, db_path=db_path
+    )
+    return {"ok": True, **payload}
