@@ -90,6 +90,23 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         help="Override .planning/ directory for gate file checks (default: <cwd>/.planning)",
     )
 
+    project_fit_check = project_sub.add_parser(
+        "fit-check",
+        help="Fit-check proposed work against a project's open milestones (attribution guard)",
+    )
+    project_fit_check.add_argument("--title", required=True, help="Proposed work order title")
+    project_fit_check.add_argument(
+        "--description",
+        default="",
+        help="Proposed work order description (sharpens the fit signal)",
+    )
+    project_fit_check.add_argument(
+        "--project-id",
+        default=None,
+        dest="project_id",
+        help="Project UUID (default: the globally-active project)",
+    )
+
 
 # ---------------------------------------------------------------------------
 # Dispatch
@@ -163,6 +180,14 @@ def dispatch(
             dream_studio_home=dream_studio_home,
             planning_root=planning_root,
         )
+    if args.project_command == "fit-check":
+        return _project_fit_check(
+            work_title=args.title,
+            work_description=args.description,
+            project_id=args.project_id,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
     print(f"Unknown project command: {args.project_command}", file=sys.stderr)
     return 1
 
@@ -193,6 +218,27 @@ def _project_register(
         result["hint"] = (
             f"To make this the active project, run: ds project set-active {result['project_id']}"
         )
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
+
+
+def _project_fit_check(
+    *,
+    work_title: str,
+    work_description: str,
+    project_id: str | None,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    from core.projects.queries import fit_check_work_order
+
+    result = fit_check_work_order(
+        work_title=work_title,
+        work_description=work_description,
+        project_id=project_id,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
     print(json.dumps(result, indent=2))
     return 0 if result.get("ok") else 1
 
