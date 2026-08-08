@@ -37,10 +37,14 @@ def test_dashboard_js_has_no_dead_audits_fetch():
 def test_dashboard_js_has_no_orphaned_audit_helpers():
     """WO-DASHBOARD-DEAD-JS: formatRelativeTime and switchSecuritySubtab had ZERO callers
     repo-wide — their only call sites were inside the removed audit block (exposed by WO
-    12d24499). Pin their removal so the dead helpers never creep back in."""
+    12d24499). formatDate was called ONLY by formatRelativeTime, so its removal orphaned
+    formatDate too (the cascade). Pin all three removals so the dead helpers never creep back in.
+    """
     content = DASHBOARD_JS.read_text(encoding="utf-8")
     assert "formatRelativeTime" not in content, "orphaned formatRelativeTime must stay removed"
     assert "switchSecuritySubtab" not in content, "orphaned switchSecuritySubtab must stay removed"
+    # formatDate is a substring of the still-used formatDateTime, so pin the DEFINITION.
+    assert "function formatDate(" not in content, "orphaned formatDate must stay removed"
 
 
 def test_dashboard_source_has_no_dead_audits_fetch():
