@@ -101,6 +101,30 @@ def test_explicit_profile_path_still_writes_json(tmp_path: Path) -> None:
     assert profile_path.is_file()
 
 
+def test_raw_runtime_state_stays_dropped_in_canonical_schema(tmp_path: Path) -> None:
+    """WO dbcaa64f (resolve the migration-150 DATA_LOSS risk): migration 150 dropped
+    raw_runtime_state — a ds_config duplicate (created by the never-released migration 146).
+    The review flagged that safety on a prose 'never released' claim rather than in-SQL evidence.
+    This pins the verifiable safe end-state on a freshly bootstrapped canonical schema:
+    raw_runtime_state stays absent (the duplicate is never re-created) and ds_config — the
+    runtime-state home the data was repointed to — is present. Together with the store tests
+    above (data lives + round-trips in ds_config), this proves no runtime state was lost."""
+    from core.config.sqlite_bootstrap import bootstrap_database
+
+    db = tmp_path / "fresh.db"
+    bootstrap_database(db)
+    conn = sqlite3.connect(str(db))
+    try:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    finally:
+        conn.close()
+    assert "raw_runtime_state" not in tables, (
+        "raw_runtime_state must stay dropped — it is a ds_config duplicate (migration 150); "
+        "re-creating it reintroduces the divergent-runtime-state risk"
+    )
+    assert "ds_config" in tables, "ds_config (the runtime-state home) must exist in the schema"
+
+
 def test_active_task_reads_and_clears_authority_row(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
