@@ -34,6 +34,15 @@ def test_dashboard_js_has_no_dead_audits_fetch():
     ), "the dead Security Audits subtab must not be reintroduced"
 
 
+def test_dashboard_js_has_no_orphaned_audit_helpers():
+    """WO-DASHBOARD-DEAD-JS: formatRelativeTime and switchSecuritySubtab had ZERO callers
+    repo-wide — their only call sites were inside the removed audit block (exposed by WO
+    12d24499). Pin their removal so the dead helpers never creep back in."""
+    content = DASHBOARD_JS.read_text(encoding="utf-8")
+    assert "formatRelativeTime" not in content, "orphaned formatRelativeTime must stay removed"
+    assert "switchSecuritySubtab" not in content, "orphaned switchSecuritySubtab must stay removed"
+
+
 def test_dashboard_source_has_no_dead_audits_fetch():
     """Combined html+css+js source (see tests/dashboard_source.py) must also be clean —
     covers the case where the tab/subtab markup lives in dashboard.html instead of JS."""
