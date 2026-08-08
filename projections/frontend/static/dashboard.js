@@ -1452,23 +1452,6 @@
             });
         }
 
-        function formatRelativeTime(isoString) {
-            if (!isoString) return 'N/A';
-            const date = new Date(isoString);
-            const now = new Date();
-            const diffMs = now - date;
-            const diffSecs = Math.floor(diffMs / 1000);
-            const diffMins = Math.floor(diffSecs / 60);
-            const diffHours = Math.floor(diffMins / 60);
-            const diffDays = Math.floor(diffHours / 24);
-
-            if (diffSecs < 60) return 'just now';
-            if (diffMins < 60) return `${diffMins}m ago`;
-            if (diffHours < 24) return `${diffHours}h ago`;
-            if (diffDays < 7) return `${diffDays}d ago`;
-            return formatDate(isoString);
-        }
-
     // ===== Sidebar Navigation Functions =====
     function toggleSidebar() {
         const sidebar = document.getElementById('sidebar');
@@ -7363,30 +7346,5 @@ function initHooksCharts() {
             } catch (error) {
                 console.error('Error uploading SARIF file:', error);
                 messageDiv.innerHTML = `<span class="text-red-600">Error: ${error.message}</span>`;
-            }
-        }
-
-        function switchSecuritySubtab(subtabName) {
-            // Hide all subtab contents
-            document.querySelectorAll('#security .subtab-content').forEach(content => {
-                content.classList.remove('active');
-            });
-
-            // Remove active state from all subtab buttons
-            document.querySelectorAll('#security .subtab-button').forEach(button => {
-                button.classList.remove('active', 'text-blue-500');
-                button.classList.add('text-gray-500', 'hover:text-gray-700');
-            });
-
-            // Show selected subtab content
-            if (subtabName === 'findings') {
-                document.getElementById('security-findings-subtab').classList.add('active');
-            }
-
-            // Add active state to selected subtab button
-            const activeButton = document.querySelector(`#security .subtab-button[data-subtab="${subtabName}"]`);
-            if (activeButton) {
-                activeButton.classList.add('active', 'text-blue-500');
-                activeButton.classList.remove('text-gray-500', 'hover:text-gray-700');
             }
         }
