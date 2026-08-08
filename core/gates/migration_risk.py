@@ -18,11 +18,61 @@ human decision to merge is still pending.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# DROP-safety (DATA_LOSS class, WO dbcaa64f): a forward migration that DROPs a table must not
+# rest on a prose "it was never released / it's empty" claim (the raw_runtime_state/mig-150
+# finding). It must carry, IN THE MIGRATION FILE, one of:
+#   - a backup/copy of the data (CREATE TABLE ..._backup AS SELECT / INSERT INTO ... SELECT), or
+#   - an explicit reviewed rationale line: "-- DROP-SAFETY: <why this loses no data>".
+# The gate scans only CHANGED forward migrations, so released migrations are never re-flagged.
+_DROP_TABLE_RE = re.compile(r'(?im)^\s*DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?["`\[]?(?P<name>\w+)')
+_DROP_SAFETY_MARKER = "-- DROP-SAFETY:"
+# A data-preserving copy: a *_backup table, or an INSERT ... SELECT (optional column list) that
+# migrates rows elsewhere before the drop. [^;] keeps the match within the one INSERT statement.
+_BACKUP_RE = re.compile(r"(?i)CREATE\s+TABLE\s+\S*_backup|INSERT\s+INTO\b[^;]*\bSELECT\b")
+
+
+def unguarded_drop_violations(sql_text: str) -> list[str]:
+    """Return a violation per DROP TABLE that lacks a backup/copy or a DROP-SAFETY rationale.
+
+    Pure function over migration SQL text so it is unit-testable without git."""
+    drops = [m.group("name") for m in _DROP_TABLE_RE.finditer(sql_text)]
+    if not drops:
+        return []
+    if _DROP_SAFETY_MARKER in sql_text or _BACKUP_RE.search(sql_text):
+        return []
+    return [
+        f"DROP TABLE {name}: no rows=0 backup/copy and no '{_DROP_SAFETY_MARKER} <why>' rationale"
+        for name in drops
+    ]
+
+
+def _changed_forward_migration_drops(risk_files: list[str]) -> list[str]:
+    """Collect DROP-safety violations across changed forward-migration .sql files.
+
+    Excludes rollback/ (reverse migrations legitimately drop what their forward created)."""
+    violations: list[str] = []
+    for path in risk_files:
+        if not path.endswith(".sql"):
+            continue
+        if "/rollback/" in path or "\\rollback\\" in path:
+            continue
+        if "core/event_store/migrations/" not in path.replace("\\", "/"):
+            continue
+        try:
+            sql = (REPO_ROOT / path).read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for v in unguarded_drop_violations(sql):
+            violations.append(f"{path}: {v}")
+    return violations
+
 
 # File patterns that constitute a migration-risk change.
 # Any changed path that matches one of these is considered high-risk.
@@ -102,6 +152,26 @@ def main() -> int:
         print("(reversible authority migrations — see docs/migrations.md).")
         for name in unpaired:
             print(f"  MISSING rollback for: {name}")
+        print("=" * 70)
+        print()
+        return 1
+
+    # DROP-safety escalation (DATA_LOSS class, WO dbcaa64f): a changed forward migration that
+    # DROPs a table must carry an in-file backup/copy or a "-- DROP-SAFETY:" rationale — not a
+    # hidden prose claim. Hard failure (a real data-loss defect), NOT bypassable by the
+    # matrix-watch acknowledgement below.
+    drop_violations = _changed_forward_migration_drops(risk_files)
+    if drop_violations:
+        print()
+        print("=" * 70)
+        print("MIGRATION DROP-SAFETY: unguarded DROP TABLE in a forward migration")
+        print("=" * 70)
+        print("A DROP TABLE must not rest on a prose 'never released / empty' claim. Add, in the")
+        print("migration file, a backup/copy (CREATE TABLE ..._backup AS SELECT / INSERT INTO")
+        print("... SELECT) OR an explicit reviewed rationale line:")
+        print("  -- DROP-SAFETY: <why this drops no live data, e.g. rows=0 verified / dead table>")
+        for v in drop_violations:
+            print(f"  {v}")
         print("=" * 70)
         print()
         return 1
