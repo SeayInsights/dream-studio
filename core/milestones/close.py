@@ -59,13 +59,18 @@ def _evaluate_milestone_artifacts(ms_dir: Path, *, has_ui: bool) -> list[str]:
 
     failures: list[str] = []
 
-    # CHECK 1 — design audit
+    # CHECK 1 — design audit (UI milestones only). website:critique has no meaning for a
+    # non-UI infrastructure milestone, so — like the Core Web Vitals check below — the design
+    # audit is only REQUIRED when the milestone has a UI work order. If a design-audit IS present
+    # on any milestone its score is still enforced, so an authored critique can't record a sub-3
+    # score and pass.
     content = read_milestone_artifact(ms_dir, "design-audit.md")
     if content is None:
-        failures.append(
-            "Design audit required. Invoke website:critique across all UI surfaces and"
-            f" write results to the docstore as milestones/{ms_dir.name}/design-audit.md"
-        )
+        if has_ui:
+            failures.append(
+                "Design audit required. Invoke website:critique across all UI surfaces and"
+                f" write results to the docstore as milestones/{ms_dir.name}/design-audit.md"
+            )
     else:
         for m in re.finditer(r"Score:\s*(\d+)/(\d+)", content):
             if int(m.group(1)) < 3:

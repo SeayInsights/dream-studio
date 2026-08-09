@@ -87,8 +87,11 @@ def get_milestone_status(
     from core.milestones.artifacts import read_milestone_artifact
 
     open_checks: list[str] = []
+    # Design audit is UI-only (mirrors the close-gate: website:critique has no meaning for a
+    # non-UI infrastructure milestone). Security + hardening apply to every milestone.
+    if has_ui and read_milestone_artifact(ms_dir, "design-audit.md") is None:
+        open_checks.append("design_audit")
     for filename, label in [
-        ("design-audit.md", "design_audit"),
         ("security-audit.md", "security_audit"),
         ("harden-results.md", "harden_results"),
     ]:

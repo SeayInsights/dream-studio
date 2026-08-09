@@ -205,6 +205,61 @@ def test_close_does_not_require_cwv_for_non_ui_milestone(db_home, tmp_path, monk
     assert rc == 0
 
 
+# ── 6b. close does NOT require design-audit for non-UI milestones ────────────
+
+
+def test_close_does_not_require_design_audit_for_non_ui_milestone(
+    db_home, tmp_path, monkeypatch, capsys
+):
+    """WO-GATE-HAS-UI: website:critique has no meaning for a non-UI infrastructure milestone,
+    so the design-audit gate must be has_ui-aware (like Core Web Vitals). Security + hardening
+    remain required."""
+    # Make every WO non-UI (api_endpoint) → has_ui is False.
+    conn = sqlite3.connect(str(_db_path(db_home)))
+    try:
+        conn.execute(
+            "UPDATE business_work_orders SET work_order_type = 'api_endpoint'"
+            " WHERE work_order_id = ?",
+            (WO_UI,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    d = _ms_dir(tmp_path)
+    d.mkdir(parents=True, exist_ok=True)
+    # security + harden present; NO design-audit.md, NO cwv-results.md.
+    (d / "security-audit.md").write_text("clear\n", encoding="utf-8")
+    (d / "harden-results.md").write_text("PASSED\n", encoding="utf-8")
+    rc = _close(db_home, tmp_path, monkeypatch)
+    assert rc == 0, capsys.readouterr().out
+
+
+def test_close_still_enforces_design_audit_score_when_present_on_non_ui(
+    db_home, tmp_path, monkeypatch, capsys
+):
+    """A design-audit that IS authored (even on a non-UI milestone) still cannot record a
+    sub-3 score and pass — the has_ui relaxation only drops the *requirement*, not the score bar."""
+    conn = sqlite3.connect(str(_db_path(db_home)))
+    try:
+        conn.execute(
+            "UPDATE business_work_orders SET work_order_type = 'api_endpoint'"
+            " WHERE work_order_id = ?",
+            (WO_UI,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    d = _ms_dir(tmp_path)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "design-audit.md").write_text("Score: 2/4\n", encoding="utf-8")
+    (d / "security-audit.md").write_text("clear\n", encoding="utf-8")
+    (d / "harden-results.md").write_text("PASSED\n", encoding="utf-8")
+    rc = _close(db_home, tmp_path, monkeypatch)
+    assert rc == 1
+    out = json.loads(capsys.readouterr().out)
+    assert any("below minimum 3" in f for f in out["failures"])
+
+
 # ── 7. close passes when all artifact files present and passing ───────────────
 
 
