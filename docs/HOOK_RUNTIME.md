@@ -297,3 +297,5 @@ These exist in runtime/hooks/ but are not reachable via any registered hook:
 <!-- Reviewed 2026-07-23 — WO-FILESDB-P3 S4a (feat/planning-zero-disk-enforce): on-edit-enforce now DENIES disk Edit/Write to .planning/** (incl. personal) and redirects to `ds files write --category planning` — .planning is docstore_only (zero-disk). classify_path gains the 'docstore_only' kind; docs/** stays 'doc' (files.db registration unchanged); the on-stop docstore-registration check is now docs/**-only. Fail-open on all error paths and DS_ENFORCE=0 escape hatch unchanged. No dispatcher/registration change. -->
 
 <!-- Last reviewed 2026-07-21 — WO-CLOSE-REPORT-ONLY (fix/close-report-only-no-autostart): no hook change. close_work_order became report-only and the execute-work-orders workflow's next-iteration node now starts the next WO explicitly (see WORKFLOW_RUNTIME.md). Hook runtime is unaffected. -->
+
+<!-- Last reviewed 2026-08-08 — WO-PREPUSH-DIST-FRESH (Gate & CI Hardening): no hook dispatch/registration/fail-open change. The pre-push pin-tests gate adds tests/unit/test_plugin_dist.py (committed dist/plugin freshness); see WORKFLOW_RUNTIME.md. -->

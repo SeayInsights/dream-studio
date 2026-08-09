@@ -81,5 +81,6 @@ jobs:
           tests/unit/test_gate_fixture_resurrection.py
           tests/unit/test_impact_selection.py
           tests/unit/test_hanging_detectors.py
+          tests/unit/test_plugin_dist.py
           tests/integration/test_pr_smoke_impact.py
           -q --tb=short

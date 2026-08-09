@@ -121,6 +121,38 @@ def test_build_excludes_bytecode_and_cruft(tmp_path: Path):
     assert cruft == [], f"synthesized plugin must exclude cruft, found: {cruft}"
 
 
+def test_pre_push_manifest_includes_dist_freshness_gate():
+    """WO-PREPUSH-DIST-FRESH: the committed-dist freshness guard must run in a BLOCKING pre-push
+    gate, not only in the full ubuntu suite. #610 edited canonical skills without re-projecting
+    dist/plugin; the freshness test lived only in full-ci, so both the pre-push gate and the
+    pr-smoke matrix went green while main's full-ci went red. This asserts the guard now fails
+    BEFORE merge (pre-push tier)."""
+    import yaml
+
+    manifest = yaml.safe_load(
+        (REPO_ROOT / "canonical" / "workflows" / "pre-push.yaml").read_text(encoding="utf-8")
+    )
+    running_gates = [
+        g
+        for g in manifest["gates"]
+        if g.get("tier") == "blocking"
+        and any("test_plugin_dist.py" in str(part) for part in g.get("command", []))
+    ]
+    assert running_gates, (
+        "no BLOCKING pre-push gate runs tests/unit/test_plugin_dist.py — a canonical skill edit "
+        "that isn't re-projected into dist/plugin would pass pre-push and only fail full-ci"
+    )
+
+
+def test_pr_smoke_runs_dist_freshness():
+    """The pr-smoke matrix (merge-authorization) must also run the dist freshness test, so a stale
+    dist/plugin fails on all three platforms at PR time rather than post-merge in full-ci."""
+    ci = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert (
+        "tests/unit/test_plugin_dist.py" in ci
+    ), "pr-smoke focused smoke tests must include tests/unit/test_plugin_dist.py"
+
+
 def test_committed_dist_plugin_is_fresh(tmp_path: Path):
     """The tracked dist/plugin artifact (what the marketplace git-subdir source serves) must
     equal a fresh build — else a canonical edit ships a stale public plugin. Compares text via
