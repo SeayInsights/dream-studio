@@ -39,7 +39,7 @@ def _fresh(db: Path) -> sqlite3.Connection:
     return conn
 
 
-def _list(db: Path, monkeypatch, **kw) -> list[dict]:
+def _list_via_route(db: Path, monkeypatch, **kw) -> list[dict]:
     monkeypatch.setattr(project_list, "get_db_connection", lambda: _fresh(db))
     return asyncio.run(project_list.list_projects(limit=50, offset=0, **kw))["projects"]
 
@@ -47,7 +47,7 @@ def _list(db: Path, monkeypatch, **kw) -> list[dict]:
 def test_project_list_surfaces_client_id(tmp_path, monkeypatch):
     """A returned project row carries its client_id (the new dashboard-API field)."""
     db = _seed_two_clients(tmp_path)
-    projects = _list(db, monkeypatch, client="fulcrum")
+    projects = _list_via_route(db, monkeypatch, client="fulcrum")
     assert [p["project_id"] for p in projects] == ["p-ful"]
     assert projects[0]["client_id"] == "fulcrum"
 
@@ -55,11 +55,11 @@ def test_project_list_surfaces_client_id(tmp_path, monkeypatch):
 def test_project_list_client_filter_scopes_to_one_client(tmp_path, monkeypatch):
     """?client=<id> returns only that client's projects."""
     db = _seed_two_clients(tmp_path)
-    sea = _list(db, monkeypatch, client="seayinsights")
+    sea = _list_via_route(db, monkeypatch, client="seayinsights")
     assert [p["project_id"] for p in sea] == ["p-sea"]
     assert sea[0]["client_id"] == "seayinsights"
     # A client with no projects returns an empty list (not an error).
-    assert _list(db, monkeypatch, client="hypershift") == []
+    assert _list_via_route(db, monkeypatch, client="hypershift") == []
 
 
 def test_project_list_client_id_guarded_when_column_absent(tmp_path, monkeypatch):
