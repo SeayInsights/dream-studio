@@ -260,6 +260,29 @@ def test_create_client_emits_event(monkeypatch):
     assert ev["trace"]["attribution_status"] == "fully_attributed"
 
 
+def test_slugify_client():
+    from core.clients.mutations import slugify_client
+
+    assert slugify_client("Acme Corp!") == "acme-corp"
+    assert slugify_client("Fulcrum") == "fulcrum"
+    assert slugify_client("  Multi   Word  ") == "multi-word"
+    assert slugify_client("") != ""  # non-empty uuid fallback
+
+
+def test_archive_client_emits_event(monkeypatch):
+    import spool.writer as sw
+    from core.clients import mutations
+
+    captured = []
+    monkeypatch.setattr(sw, "write_event", lambda d: captured.append(d))
+    monkeypatch.setattr("core.projections.runner.sync_tick", lambda: None)
+
+    result = mutations.archive_client(client_id="acme")
+    assert result["status"] == "archived"
+    assert captured[0]["event_type"] == "client.archived"
+    assert captured[0]["payload"] == {"client_id": "acme"}
+
+
 def test_delete_client_emits_event(monkeypatch):
     import spool.writer as sw
     from core.clients import mutations
