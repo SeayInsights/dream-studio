@@ -28,6 +28,7 @@ from core.installed_runtime import installed_runtime_model  # noqa: E402,F401
 
 # Per-group command modules
 from interfaces.cli.commands import analyze  # noqa: E402
+from interfaces.cli.commands import client as client_cmd  # noqa: E402
 from interfaces.cli.commands import config  # noqa: E402
 from interfaces.cli.commands import design_brief  # noqa: E402
 from interfaces.cli.commands import diagnostics  # noqa: E402
@@ -101,6 +102,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Per-group command modules (commands/ package)
     project.register(subcommands)
+    client_cmd.register(subcommands)
     integrate.register(subcommands)
     skill.register(subcommands)
     work_order.register(subcommands)
@@ -132,7 +134,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[debug] dream_studio_home: {home}", file=sys.stderr)
         print(f"[debug] db_path: {_db_path}", file=sys.stderr)
         print(f"[debug] command: {getattr(args, 'command', None)}", file=sys.stderr)
-        _sub = getattr(args, "work_order_command", None) or getattr(args, "project_command", None)
+        _sub = (
+            getattr(args, "work_order_command", None)
+            or getattr(args, "project_command", None)
+            or getattr(args, "client_command", None)
+        )
         if _sub:
             print(f"[debug] subcommand: {_sub}", file=sys.stderr)
 
@@ -183,6 +189,8 @@ def main(argv: list[str] | None = None) -> int:
         # Commands delegated to commands/ package modules
         if args.command == "project":
             return project.dispatch(args, source_root=source_root, dream_studio_home=home)
+        if args.command == "client":
+            return client_cmd.dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "integrate":
             return integrate.dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "skill":
