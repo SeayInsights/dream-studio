@@ -78,6 +78,13 @@ _EXTENSION_ENTRIES: tuple[EventTypeMeta, ...] = (
         EventCategory.PRODUCTION_EMITTED,
     ),
     EventTypeMeta(
+        EventType.CLIENT_DELETED,
+        "sdlc",
+        "A client was deleted (soft delete, status → deleted)",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
         EventType.MILESTONE_CREATED,
         "sdlc",
         "A new milestone was created under a project",

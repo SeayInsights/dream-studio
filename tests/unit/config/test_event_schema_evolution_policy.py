@@ -83,6 +83,9 @@ _GOOD_PAYLOADS: dict[str, dict] = {
     "client.archived": {
         "client_id": "acme",
     },
+    "client.deleted": {
+        "client_id": "acme",
+    },
     "work_order.deleted": {
         "work_order_id": str(uuid.uuid4()),
         "project_id": "proj-test",

@@ -94,6 +94,7 @@ class EventType(str, Enum):
     PROJECT_CLIENT_ASSIGNED = "project.client_assigned"
     CLIENT_CREATED = "client.created"
     CLIENT_ARCHIVED = "client.archived"
+    CLIENT_DELETED = "client.deleted"
     MILESTONE_CREATED = "milestone.created"
     MILESTONE_DELETED = "milestone.deleted"
     WORK_ORDER_CREATED = "work_order.created"

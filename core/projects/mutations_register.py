@@ -132,6 +132,7 @@ def register_project(
     description: str = "",
     project_path: Path | None = None,
     write_marker: bool = True,
+    client_id: str | None = None,
     source_root: Path,
     dream_studio_home: Path | None = None,
 ) -> dict[str, Any]:
@@ -241,6 +242,28 @@ def register_project(
                 },
             ).to_dict()
         )
+    except Exception:
+        pass
+
+    # Client Layer (Attribution Coherence Phase 2): assign the new project to a client — the
+    # explicit client_id, else the SeayInsights default. Guarded to the case where the client layer
+    # is live (business_projects.client_id exists; migration 155 applied): on a live DB where 155 is
+    # still unreleased the column is absent, so we skip and the activation backfill assigns it.
+    # Best-effort — a client-assignment failure must never fail project registration.
+    try:
+        with _connect(db_path) as _client_conn:
+            _has_client_col = any(
+                row[1] == "client_id"
+                for row in _client_conn.execute("PRAGMA table_info(business_projects)")
+            )
+        if _has_client_col:
+            from core.clients.mutations import assign_project_client
+            from core.clients.queries import resolve_default_client
+
+            assign_project_client(
+                project_id=project_id,
+                client_id=client_id or resolve_default_client(db_path=db_path),
+            )
     except Exception:
         pass
 

@@ -73,6 +73,25 @@ def archive_client(*, client_id: str) -> dict[str, Any]:
     return {"ok": True, "client_id": client_id, "status": "archived"}
 
 
+def delete_client(*, client_id: str) -> dict[str, Any]:
+    """Soft-delete a client (emits client.deleted; status → deleted). The row stays queryable, like
+    project.deleted."""
+    from canonical.events.envelope import CanonicalEventEnvelope
+
+    now = datetime.now(UTC).isoformat()
+    _emit(
+        CanonicalEventEnvelope(
+            event_type="client.deleted",
+            session_id=None,
+            payload={"client_id": client_id},
+            timestamp=now,
+            severity="info",
+            trace={"domain": "sdlc", "attribution_status": "fully_attributed"},
+        ).to_dict()
+    )
+    return {"ok": True, "client_id": client_id, "status": "deleted"}
+
+
 def assign_project_client(
     *, project_id: str, client_id: str, attribution_status: str = "fully_attributed"
 ) -> dict[str, Any]:
