@@ -27,10 +27,11 @@ This mode is **not** for scoping new projects (use `ds-project:scope`), filling 
 
 1. Call `get_project_list(status_filter=None, source_root=..., dream_studio_home=...)`. The default `status_filter='active'` returns only active projects; pass `None` (or omit) for all.
 2. Present the returned `projects` list grouped by `status` (active → paused → complete → cancelled). For each row show `name`, `description`, `status`, `created_at`. Keep `project_id` internal — only surface it if the user asks.
+3. **Client-aware views.** A client owns many projects, so when the operator is thinking in terms of clients, group by client instead: `ds project list --by-client` returns projects grouped under their `client_id`, and `ds project list --client <client_id>` scopes to one client. Prefer these when the operator names a client (e.g. "show Fulcrum's projects") — separate engagements under one client are the whole point of the client layer.
 
 ### Switch (set active)
 
-1. Resolve the target `project_id`. If the user named the project by description, call `get_project_list(status_filter=None, ...)` and match on `name`. If multiple match, ask the user to choose.
+1. Resolve the target `project_id`. If the user named the project by description, call `get_project_list(status_filter=None, ...)` and match on `name`. Names can collide **across clients** (two clients may each have an "API" project), so resolve within the named client when a client is known (`ds project list --client <client_id>`), and if a bare name is ambiguous across clients, **STOP AND ASK** the operator which client's project they mean rather than guessing.
 2. Show the user the project's `name` + current `status` and confirm: *"Switch to this project? Any currently-active project will be paused. (yes/no)"*
 3. Call `set_active_project(project_id=<id>, source_root=..., dream_studio_home=...)`. Surface the result dict (`{"ok": True, "project_id": str, "status": "active"}`).
 4. Suggest *"Run `ds-project:resume` to pick up where this project left off."*

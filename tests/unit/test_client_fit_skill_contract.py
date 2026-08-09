@@ -9,6 +9,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _DS_PROJECT_SKILL = REPO_ROOT / "canonical" / "skills" / "ds-project" / "SKILL.md"
+_DS_PROJECT_MANAGE = (
+    REPO_ROOT / "canonical" / "skills" / "ds-project" / "modes" / "manage" / "SKILL.md"
+)
 
 
 def test_ds_project_skill_instructs_client_project_fit_and_ask():
@@ -26,6 +29,16 @@ def test_ds_project_skill_instructs_client_project_fit_and_ask():
 def test_ds_project_skill_surfaces_active_client_on_resume():
     text = _DS_PROJECT_SKILL.read_text(encoding="utf-8")
     assert "active_client_id" in text
+    # Accuracy: the field comes from the `ds project state` CLI, not the raw get_project_state().
+    assert "ds project state" in text
+
+
+def test_ds_project_manage_mode_is_client_aware():
+    text = _DS_PROJECT_MANAGE.read_text(encoding="utf-8")
+    # Client-grouped listing + client-scoped name resolution (names collide across clients).
+    assert "ds project list --by-client" in text
+    assert "--client" in text
+    assert "STOP AND ASK" in text
 
 
 def test_client_fit_check_subcommand_registered():

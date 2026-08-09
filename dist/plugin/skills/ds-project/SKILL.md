@@ -325,9 +325,10 @@ Call `get_project_state(source_root=..., dream_studio_home=...)` and present the
 
 This returns everything in one call: active project, current milestone, next work
 order, gate status, design brief status, task count, and the recommended
-`next_action`. It also carries `active_client_id` — surface which **client** the active project
-belongs to when you narrate state (a client owns many projects; the operator may have several
-engagements under one client).
+`next_action`. The **`ds project state` CLI** additionally surfaces `active_client_id` (the CLI
+wrapper adds it; the raw `get_project_state()` function does not) — surface which **client** the
+active project belongs to when you narrate state (a client owns many projects; the operator may
+have several engagements under one client).
 
 **Step 1.5 — Current-repo check (WO-BROWNFIELD-DETECT):**
 
