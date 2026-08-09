@@ -414,6 +414,7 @@ def sync_tick() -> None:
         logger.debug("sync_tick: spool ingest failed (non-fatal)", exc_info=True)
 
     try:
+        from core.projections.client_projection import ClientProjection
         from core.projections.design_brief_projection import DesignBriefProjection
         from core.projections.milestone_projection import MilestoneProjection
         from core.projections.project_projection import ProjectProjection
@@ -425,6 +426,7 @@ def sync_tick() -> None:
         runner.register(TaskProjection())
         runner.register(MilestoneProjection())
         runner.register(ProjectProjection())
+        runner.register(ClientProjection())
         # DesignBriefProjection MUST be registered here too: the synchronous
         # Pattern C tick is the only projection pass in a one-shot CLI process
         # (create_design_brief -> update_design_brief_field in the same run).
@@ -490,6 +492,13 @@ def main() -> None:
         runner.register(ProjectProjection())
     except ImportError:
         logger.warning("ProjectProjection not found — skipping registration.")
+
+    try:
+        from core.projections.client_projection import ClientProjection
+
+        runner.register(ClientProjection())
+    except ImportError:
+        logger.warning("ClientProjection not found — skipping registration.")
 
     # PreflightProjection: removed migration 148 (WO-SCHEMALEAN) — the preflight_events /
     # business_work_order_preflights stack was an unwired aspirational loop (no writer);

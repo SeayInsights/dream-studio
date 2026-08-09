@@ -30,6 +30,27 @@ _BUSINESS_ENTRIES: tuple[RegistryEntry, ...] = (
         payload_required_keys=frozenset({"project_id"}),
     ),
     RegistryEntry(
+        "project.client_assigned",
+        _BUSINESS,
+        "meaningful-unit",
+        "Project assigned to a client (business_projects.client_id set)",
+        payload_required_keys=frozenset({"project_id", "client_id"}),
+    ),
+    RegistryEntry(
+        "client.created",
+        _BUSINESS,
+        "meaningful-unit",
+        "Client created (owns one or more projects)",
+        payload_required_keys=frozenset({"client_id"}),
+    ),
+    RegistryEntry(
+        "client.archived",
+        _BUSINESS,
+        "meaningful-unit",
+        "Client archived (status → archived)",
+        payload_required_keys=frozenset({"client_id"}),
+    ),
+    RegistryEntry(
         "project.registered",
         _BUSINESS,
         "meaningful-unit",

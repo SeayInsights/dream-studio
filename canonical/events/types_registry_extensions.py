@@ -57,6 +57,27 @@ _EXTENSION_ENTRIES: tuple[EventTypeMeta, ...] = (
         EventCategory.PRODUCTION_EMITTED,
     ),
     EventTypeMeta(
+        EventType.PROJECT_CLIENT_ASSIGNED,
+        "sdlc",
+        "A project was assigned to a client (business_projects.client_id set)",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.CLIENT_CREATED,
+        "sdlc",
+        "A new client was created (owns one or more projects)",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.CLIENT_ARCHIVED,
+        "sdlc",
+        "A client was archived (status → archived)",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
         EventType.MILESTONE_CREATED,
         "sdlc",
         "A new milestone was created under a project",
