@@ -207,9 +207,25 @@ There are exactly 10 valid types. Use the exact string — no abbreviations, no 
 
 **Execute in this exact order:**
 
+**Step 0 — Client & project attribution (do NOT auto-file into the active project).** A client owns
+many projects (e.g. Fulcrum has several separate engagements). Before creating anything, decide
+which **client** and which **project** this work belongs to — this is the layer above the milestone
+fit-check, and prevents the "everything filed as one project" mis-attribution:
+- If the work is for an existing client that already has projects, first confirm which PROJECT it
+  belongs to: run `ds client fit-check --client <client_id> --title "<work title>" --description "<what it is>"` and read the `verdict`:
+  - `clear_single` — one project clearly fits; scope the work under that existing project.
+  - `ambiguous` / `no_fit` / `no_projects` — **STOP AND ASK** the operator whether this is a new
+    project under the client or belongs to a specific existing one. Do not default to the active or
+    most-recent project — separate engagements deserve separate projects under the same client.
+- List a client's projects any time with `ds project list --client <client_id>` (or
+  `ds project list --by-client` for the whole portfolio grouped by client).
+
 **Step 1 — Register the project:**
-Call `register_project(name="<project name>", source_root=..., dream_studio_home=...)`.
-Capture the `project_id` from the returned dict. Every subsequent call references this ID.
+Call `register_project(name="<project name>", client_id="<client_id>", source_root=..., dream_studio_home=...)`.
+Capture the `project_id` from the returned dict. Every subsequent call references this ID. A project
+belongs to exactly one client; if `client_id` is omitted it defaults to the **SeayInsights** client
+(pass `fulcrum` / `hypershift` / a created client id for a specific engagement — create one first
+with `ds client create --name "<Client Name>"`).
 
 **Step 2 — Create milestones** (in dependency order, parents before children):
 For each milestone, call `create_milestone(project_id=..., title="<title>", description="<one-sentence deliverable>", order_index=<N>, source_root=..., dream_studio_home=...)`.
@@ -304,7 +320,9 @@ Call `get_project_state(source_root=..., dream_studio_home=...)` and present the
 
 This returns everything in one call: active project, current milestone, next work
 order, gate status, design brief status, task count, and the recommended
-`next_action`.
+`next_action`. It also carries `active_client_id` — surface which **client** the active project
+belongs to when you narrate state (a client owns many projects; the operator may have several
+engagements under one client).
 
 **Step 1.5 — Current-repo check (WO-BROWNFIELD-DETECT):**
 
