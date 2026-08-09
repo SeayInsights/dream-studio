@@ -50,6 +50,13 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         dest="client_id",
         help="List only the projects belonging to this client id",
     )
+    project_list.add_argument(
+        "--by-client",
+        action="store_true",
+        default=False,
+        dest="by_client",
+        help="Group all projects by client id",
+    )
 
     project_status_cmd = project_sub.add_parser(
         "status", help="Show milestone/work-order summary for a project"
@@ -145,6 +152,7 @@ def dispatch(
             status_filter=args.status,
             include_deleted=getattr(args, "include_deleted", False),
             client_id=getattr(args, "client_id", None),
+            by_client=getattr(args, "by_client", False),
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )
@@ -264,22 +272,34 @@ def _project_list(
     status_filter: str,
     include_deleted: bool = False,
     client_id: str | None = None,
+    by_client: bool = False,
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
-    # --client scopes the listing to one client's projects (reuses the client engine's read side,
-    # which is safe on a pre-migration-155 DB — it returns no rows rather than erroring).
-    if client_id:
+    # --client / --by-client reuse the client engine's read side, which is safe on a
+    # pre-migration-155 DB (returns no rows / '(unassigned)' rather than erroring).
+    if client_id or by_client:
         from interfaces.cli.ds import resolve_installed_runtime_paths
 
         db_path = resolve_installed_runtime_paths(
             source_root=source_root, dream_studio_home=dream_studio_home
         ).sqlite_path
         try:
-            from core.clients.queries import projects_for_client
+            if by_client:
+                from core.clients.queries import projects_grouped_by_client
 
-            projects = projects_for_client(client_id, db_path=db_path)
-            result = {"ok": True, "client_id": client_id, "projects": projects}
+                result = {
+                    "ok": True,
+                    "grouped_by_client": projects_grouped_by_client(db_path=db_path),
+                }
+            else:
+                from core.clients.queries import projects_for_client
+
+                result = {
+                    "ok": True,
+                    "client_id": client_id,
+                    "projects": projects_for_client(client_id, db_path=db_path),
+                }
         except Exception as exc:
             result = {"ok": False, "error": f"client listing unavailable: {exc}"}
         print(json.dumps(result, indent=2))

@@ -76,6 +76,34 @@ def resolve_default_client(*, db_path: Path | None = None) -> str:
     return DEFAULT_CLIENT_ID
 
 
+def projects_grouped_by_client(*, db_path: Path | None = None) -> dict[str, list[dict[str, Any]]]:
+    """Return non-deleted projects grouped by client id: {client_id: [{project_id, name, status}]}.
+
+    Guarded for a pre-migration-155 DB: if business_projects has no client_id column, every project
+    is grouped under '(unassigned)' rather than erroring.
+    """
+    conn = sqlite3.connect(str(_resolve_db(db_path)))
+    conn.row_factory = sqlite3.Row
+    try:
+        has_col = any(
+            r[1] == "client_id" for r in conn.execute("PRAGMA table_info(business_projects)")
+        )
+        client_expr = "COALESCE(client_id, '(unassigned)')" if has_col else "'(unassigned)'"
+        rows = conn.execute(
+            f"SELECT project_id, name, status, {client_expr} AS client_id FROM business_projects"
+            " WHERE status NOT IN ('deleted') ORDER BY client_id, name"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for r in rows:
+        groups.setdefault(r["client_id"], []).append(
+            {"project_id": r["project_id"], "name": r["name"], "status": r["status"]}
+        )
+    return groups
+
+
 def candidate_projects_for_work(
     client_id: str,
     work_title: str,

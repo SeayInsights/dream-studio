@@ -107,3 +107,64 @@ def test_client_show_missing_returns_error(monkeypatch, capsys):
     rc = _dispatch(["client", "show", "nope"])
     assert rc == 1
     assert json.loads(capsys.readouterr().out)["ok"] is False
+
+
+# ── seeded end-to-end (real DB via the ds main() entry, no mocks) ────────────
+
+import sqlite3  # noqa: E402
+
+from core.config.sqlite_bootstrap import bootstrap_database  # noqa: E402
+from interfaces.cli.ds import main  # noqa: E402
+
+
+def _home(tmp_path: Path) -> Path:
+    """A --home dir whose state/studio.db is bootstrapped (migration 155 applied → seed clients +
+    business_projects.client_id present) and seeded with two client-attached projects."""
+    db = tmp_path / "state" / "studio.db"
+    db.parent.mkdir(parents=True)
+    bootstrap_database(db)
+    conn = sqlite3.connect(str(db))
+    try:
+        conn.executemany(
+            "INSERT INTO business_projects (project_id, name, status, created_at, updated_at,"
+            " client_id) VALUES (?,?,?,?,?,?)",
+            [
+                ("p-ful", "Fulcrum Skill Library", "active", "t", "t", "fulcrum"),
+                ("p-ds", "Dream Studio", "paused", "t", "t", "seayinsights"),
+            ],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return tmp_path
+
+
+def test_e2e_client_list_and_show(tmp_path, capsys):
+    home = _home(tmp_path)
+    assert main(["--home", str(home), "client", "list"]) == 0
+    ids = {c["client_id"] for c in json.loads(capsys.readouterr().out)["clients"]}
+    assert {"seayinsights", "fulcrum", "hypershift"} <= ids
+
+    assert main(["--home", str(home), "client", "show", "fulcrum"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["client"]["name"] == "Fulcrum"
+    assert [p["project_id"] for p in out["client"]["projects"]] == ["p-ful"]
+
+
+def test_e2e_project_list_client_and_by_client(tmp_path, capsys):
+    home = _home(tmp_path)
+    assert main(["--home", str(home), "project", "list", "--client", "fulcrum"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert [p["project_id"] for p in out["projects"]] == ["p-ful"]
+
+    assert main(["--home", str(home), "project", "list", "--by-client"]) == 0
+    grouped = json.loads(capsys.readouterr().out)["grouped_by_client"]
+    assert grouped["fulcrum"][0]["project_id"] == "p-ful"
+    assert grouped["seayinsights"][0]["project_id"] == "p-ds"
+
+
+def test_e2e_project_state_surfaces_active_client(tmp_path, capsys):
+    home = _home(tmp_path)
+    # p-ful is the only 'active' project (p-ds is paused).
+    assert main(["--home", str(home), "project", "state"]) == 0
+    assert json.loads(capsys.readouterr().out).get("active_client_id") == "fulcrum"
