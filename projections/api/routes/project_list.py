@@ -26,7 +26,9 @@ router = APIRouter()
 
 @router.get("")
 async def list_projects(
-    limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    client: str | None = Query(None, description="Filter to one client id (Client Layer)"),
 ) -> dict[str, Any]:
     """
     List all analyzed projects with their latest health scores.
@@ -207,6 +209,10 @@ async def list_projects(
                 project_id=project["project_id"],
             )["readiness_score"]
             candidate_projects.append(project)
+        # Optional Client Layer filter: scope to one client (client_id is None on a pre-155 DB, so
+        # filtering by a client there correctly yields no rows rather than erroring).
+        if client is not None:
+            candidate_projects = [p for p in candidate_projects if p.get("client_id") == client]
         total = len(candidate_projects)
         projects = candidate_projects[offset : offset + limit]  # noqa: E203
         excluded_summary = Counter(
