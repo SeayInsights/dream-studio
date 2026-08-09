@@ -89,6 +89,39 @@ def test_client_projection_created_and_archived(tmp_path: Path):
         conn.close()
 
 
+def test_client_projection_deleted(tmp_path: Path):
+    from core.projections.client_projection import ClientProjection
+
+    conn = sqlite3.connect(str(_db(tmp_path)))
+    try:
+        proj = ClientProjection()
+        proj.handle(
+            {
+                "event_id": "c1",
+                "event_type": "client.created",
+                "event_timestamp": NOW,
+                "payload": {"client_id": "temp", "name": "Temp"},
+            },
+            conn,
+        )
+        proj.handle(
+            {
+                "event_id": "c2",
+                "event_type": "client.deleted",
+                "event_timestamp": NOW,
+                "payload": {"client_id": "temp"},
+            },
+            conn,
+        )
+        conn.commit()
+        assert (
+            conn.execute("SELECT status FROM business_clients WHERE client_id='temp'").fetchone()[0]
+            == "deleted"
+        )
+    finally:
+        conn.close()
+
+
 def test_project_client_assigned_handler_sets_client_id(tmp_path: Path):
     from core.projections.project_projection import ProjectProjection
 
@@ -142,6 +175,38 @@ def test_list_and_projects_for_client(tmp_path: Path):
     assert [p["project_id"] for p in ful] == ["p1"]
 
 
+def test_get_client_show(tmp_path: Path):
+    from core.clients import queries
+
+    db = _db(tmp_path)
+    assert queries.get_client("fulcrum", db_path=db)["name"] == "Fulcrum"
+    assert queries.get_client("nonexistent", db_path=db) is None
+
+
+def test_candidate_projects_ambiguous(tmp_path: Path):
+    from core.clients.queries import candidate_projects_for_work
+
+    db = _db(tmp_path)
+    conn = sqlite3.connect(str(db))
+    # Two projects that BOTH clearly overlap the work terms -> ambiguous.
+    _seed_project(conn, "p1", "Billing Payments Service", client_id="fulcrum")
+    conn.execute(
+        "UPDATE business_projects SET description='billing payments invoices stripe' WHERE"
+        " project_id='p1'"
+    )
+    _seed_project(conn, "p2", "Payments Reconciliation", client_id="fulcrum")
+    conn.execute(
+        "UPDATE business_projects SET description='payments invoices reconciliation ledger' WHERE"
+        " project_id='p2'"
+    )
+    conn.commit()
+    conn.close()
+    r = candidate_projects_for_work(
+        "fulcrum", "new payments invoices work", "billing payments invoices", db_path=db
+    )
+    assert r["verdict"] == "ambiguous"
+
+
 def test_candidate_projects_verdict_ladder(tmp_path: Path):
     from core.clients.queries import candidate_projects_for_work
 
@@ -193,6 +258,56 @@ def test_create_client_emits_event(monkeypatch):
     assert ev["event_type"] == "client.created"
     assert ev["payload"]["client_id"] == "acme-corp"
     assert ev["trace"]["attribution_status"] == "fully_attributed"
+
+
+def test_delete_client_emits_event(monkeypatch):
+    import spool.writer as sw
+    from core.clients import mutations
+
+    captured = []
+    monkeypatch.setattr(sw, "write_event", lambda d: captured.append(d))
+    monkeypatch.setattr("core.projections.runner.sync_tick", lambda: None)
+
+    mutations.delete_client(client_id="acme")
+    assert captured[0]["event_type"] == "client.deleted"
+    assert captured[0]["payload"] == {"client_id": "acme"}
+
+
+def test_detach_reassigns_to_default(monkeypatch):
+    import spool.writer as sw
+    from core.clients import mutations
+
+    captured = []
+    monkeypatch.setattr(sw, "write_event", lambda d: captured.append(d))
+    monkeypatch.setattr("core.projections.runner.sync_tick", lambda: None)
+
+    mutations.detach_project_client(project_id="p1")
+    ev = captured[0]
+    assert ev["event_type"] == "project.client_assigned"
+    assert ev["payload"] == {"project_id": "p1", "client_id": "seayinsights"}
+
+
+def test_register_project_assigns_default_client(tmp_path: Path, monkeypatch):
+    """New-project default = SeayInsights: register_project assigns the default client when the
+    client layer is live (client_id column present)."""
+    import spool.writer as sw
+    from core.clients import mutations
+    from core.projects import mutations_register
+
+    db = _db(tmp_path)
+    monkeypatch.setattr(mutations_register, "_require_db", lambda *a, **k: db)
+    monkeypatch.setattr(sw, "write_event", lambda d: None)
+    monkeypatch.setattr("core.projections.runner.sync_tick", lambda: None)
+    assigns = []
+    monkeypatch.setattr(
+        mutations, "assign_project_client", lambda **kw: assigns.append(kw) or {"ok": True}
+    )
+
+    mutations_register.register_project(
+        name="Brand New App", write_marker=False, source_root=Path("."), dream_studio_home=None
+    )
+    assert len(assigns) == 1
+    assert assigns[0]["client_id"] == "seayinsights"
 
 
 def test_assign_project_client_emits_event(monkeypatch):

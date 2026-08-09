@@ -51,6 +51,13 @@ _BUSINESS_ENTRIES: tuple[RegistryEntry, ...] = (
         payload_required_keys=frozenset({"client_id"}),
     ),
     RegistryEntry(
+        "client.deleted",
+        _BUSINESS,
+        "meaningful-unit",
+        "Client deleted (soft delete, status → deleted)",
+        payload_required_keys=frozenset({"client_id"}),
+    ),
+    RegistryEntry(
         "project.registered",
         _BUSINESS,
         "meaningful-unit",

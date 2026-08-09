@@ -32,6 +32,7 @@ class ClientProjection(Projection):
     consumed_event_types = [
         "client.created",
         "client.archived",
+        "client.deleted",
     ]
     source_canonical = "business"
     target_tables = [_TABLE]
@@ -72,10 +73,11 @@ class ClientProjection(Projection):
                 ),
             )
             return 1
-        if event_type == "client.archived":
+        if event_type in ("client.archived", "client.deleted"):
+            status = "archived" if event_type == "client.archived" else "deleted"
             conn.execute(
-                f"UPDATE {_TABLE} SET status = 'archived', updated_at = ? WHERE client_id = ?",
-                (now, client_id),
+                f"UPDATE {_TABLE} SET status = ?, updated_at = ? WHERE client_id = ?",
+                (status, now, client_id),
             )
             return 1
 
