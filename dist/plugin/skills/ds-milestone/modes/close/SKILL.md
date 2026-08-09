@@ -10,7 +10,7 @@ The user signaled a milestone is done ("close milestone 1", "milestone done", "w
 
 1. All work orders in the milestone must be `status='complete'`.
 2. For UI milestones (any work order with `work_order_type` in `ui_component`, `ui_page`), `design-audit.md` must exist; on any milestone, if a `design-audit.md` is present every `Score: N/M` must have `N >= 3`. `website:critique` has no meaning for a non-UI infrastructure milestone, so the design audit is not *required* there (a critique authored anyway still has its score enforced).
-3. `security-audit.md` must exist and not contain `BLOCKED` (all milestones).
+3. `security-audit.md` must exist and not report a BLOCKED finding (all milestones). A blocker is a finding/verdict marker — a line beginning with `BLOCKED`, a `BLOCKED:` marker, or a `Status:`/`Result:` line whose value is `BLOCKED`; a negated summary like "No BLOCKED findings" / "0 BLOCKED" passes.
 4. `harden-results.md` must exist and contain `PASSED` (all milestones).
 5. For UI milestones (`work_order_type` in `ui_component`, `ui_page`), `cwv-results.md` must also exist and contain `PASSED`.
 
