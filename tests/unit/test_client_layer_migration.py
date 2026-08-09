@@ -1,13 +1,16 @@
 """WO-CLIENT-SCHEMA: migration 155 adds the client layer (business_clients + project.client_id),
-seeds the reference clients, the backfill classifies existing projects, and the paired rollback
-removes it cleanly."""
+seeds the three reference clients, and the paired rollback removes it cleanly.
+
+Scope note: assigning existing projects to a client (the backfill) is done EVENT-SOURCED by the
+client engine (WO-CLIENT-ENGINE), not by a direct read-model UPDATE — so it is tested there, not
+here. This work order is the additive schema + reference-data seed + reversibility only.
+"""
 
 from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
 
-from core.clients.backfill import backfill_project_clients
 from core.config.sqlite_bootstrap import bootstrap_database
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -30,57 +33,13 @@ def test_fresh_bootstrap_has_client_layer(tmp_path: Path):
         conn.close()
 
 
-def test_backfill_classifies_by_name_or_path(tmp_path: Path):
+def test_seed_clients_have_names(tmp_path: Path):
     conn = sqlite3.connect(str(_bootstrap(tmp_path)))
     try:
-        conn.executemany(
-            "INSERT INTO business_projects (project_id, name, status, created_at, updated_at,"
-            " project_path) VALUES (?,?,?,?,?,?)",
-            [
-                ("p-ful", "Fulcrum Skill Library", "active", "t", "t", r"C:\Users\x\Fulcrum"),
-                ("p-hyp", "Hypershift Ops", "active", "t", "t", None),
-                ("p-ds", "Dream Studio", "paused", "t", "t", r"C:\x\dream-studio-clean"),
-                ("p-path", "Some App", "active", "t", "t", r"C:\clients\hypershift\app"),
-            ],
-        )
-        conn.commit()
-        counts = backfill_project_clients(conn)
-        conn.commit()
-        got = {
-            r[0]: r[1]
-            for r in conn.execute(
-                "SELECT project_id, client_id FROM business_projects WHERE project_id LIKE 'p-%'"
-            )
-        }
-        assert got["p-ful"] == "fulcrum"
-        assert got["p-hyp"] == "hypershift"
-        assert got["p-ds"] == "seayinsights"  # catch-all
-        assert got["p-path"] == "hypershift"  # matched on project_path
-        assert counts["fulcrum"] == 1 and counts["hypershift"] == 2 and counts["seayinsights"] == 1
-    finally:
-        conn.close()
-
-
-def test_backfill_is_idempotent(tmp_path: Path):
-    conn = sqlite3.connect(str(_bootstrap(tmp_path)))
-    try:
-        conn.execute(
-            "INSERT INTO business_projects (project_id, name, status, created_at, updated_at)"
-            " VALUES ('p1', 'Acme', 'active', 't', 't')"
-        )
-        conn.commit()
-        backfill_project_clients(conn)
-        conn.commit()
-        # A second run must not reassign an already-classified project.
-        second = backfill_project_clients(conn)
-        conn.commit()
-        assert second == {"fulcrum": 0, "hypershift": 0, "seayinsights": 0}
-        assert (
-            conn.execute(
-                "SELECT client_id FROM business_projects WHERE project_id='p1'"
-            ).fetchone()[0]
-            == "seayinsights"
-        )
+        names = {r[0]: r[1] for r in conn.execute("SELECT client_id, name FROM business_clients")}
+        assert names["seayinsights"] == "SeayInsights"
+        assert names["fulcrum"] == "Fulcrum"
+        assert names["hypershift"] == "Hypershift"
     finally:
         conn.close()
 
