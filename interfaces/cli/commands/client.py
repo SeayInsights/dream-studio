@@ -49,6 +49,16 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
     )
     c_detach.add_argument("project_id", help="Project UUID")
 
+    c_fit = client_sub.add_parser(
+        "fit-check",
+        help="Fit proposed work against a client's projects (which project does it belong to?)",
+    )
+    c_fit.add_argument("--client", required=True, dest="client_id", help="Client id (slug)")
+    c_fit.add_argument("--title", required=True, help="Proposed work title")
+    c_fit.add_argument(
+        "--description", default="", help="Proposed work description (sharpens the fit signal)"
+    )
+
 
 def _db_path(source_root: Path, dream_studio_home: Path | None) -> Path:
     from interfaces.cli.ds import resolve_installed_runtime_paths
@@ -99,6 +109,18 @@ def dispatch(args: argparse.Namespace, *, source_root: Path, dream_studio_home: 
         from core.clients.mutations import detach_project_client
 
         return _print(detach_project_client(project_id=args.project_id))
+    if cmd == "fit-check":
+        from core.clients.queries import candidate_projects_for_work
+
+        db = _db_path(source_root, dream_studio_home)
+        return _print(
+            {
+                "ok": True,
+                **candidate_projects_for_work(
+                    args.client_id, args.title, args.description, db_path=db
+                ),
+            }
+        )
     print(f"Unknown client command: {cmd}", file=sys.stderr)
     return 1
 
