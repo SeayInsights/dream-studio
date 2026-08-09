@@ -279,3 +279,6 @@ Static checks for this contract should verify:
 
 <!-- Last reviewed 2026-08-08 — WO-CLIENT-DASHBOARD-API (Client Layer, Phase 2): GET /api/v1/projects (projections/api/routes/project_list.py) gains a nullable `client_id` field per project row, read via a guarded column expr (p.client_id when the migration-155 column exists, else NULL) so a pre-155 live DB degrades to client_id=None rather than erroring. Purely ADDITIVE — no removed/renamed fields, no route change, derived_view semantics unchanged; the dashboard's visual client-rollup view is a later Dashboard Coherence concern, this WO ships only the data field. Read-only over business_projects; no authority write, no new table. -->
 
+<!-- Last reviewed 2026-08-08 — WO-CLIENT-DASHBOARD-API (filter follow-up): GET /api/v1/projects gains an optional `?client=<id>` query param that scopes the listing to one client's projects (a post-inclusion filter on the client_id field; a pre-migration-155 DB has client_id=None so filtering by a client simply matches nothing rather than erroring). Additive optional query param — omitting it preserves the prior full-list response exactly; derived_view semantics, field shapes, and route path unchanged. Read-only. -->
+
+
