@@ -9,10 +9,10 @@
 The user signaled a milestone is done ("close milestone 1", "milestone done", "wrap up the alpha release"). Milestone close runs four gate checks before mutating:
 
 1. All work orders in the milestone must be `status='complete'`.
-2. `design-audit.md` must exist with every `Score: N/M` having `N >= 3`.
-3. `security-audit.md` must exist and not contain `BLOCKED`.
-4. `harden-results.md` must exist and contain `PASSED`.
-5. For UI milestones (any work order with `work_order_type` in `ui_component`, `ui_page`), `cwv-results.md` must also exist and contain `PASSED`.
+2. For UI milestones (any work order with `work_order_type` in `ui_component`, `ui_page`), `design-audit.md` must exist; on any milestone, if a `design-audit.md` is present every `Score: N/M` must have `N >= 3`. `website:critique` has no meaning for a non-UI infrastructure milestone, so the design audit is not *required* there (a critique authored anyway still has its score enforced).
+3. `security-audit.md` must exist and not contain `BLOCKED` (all milestones).
+4. `harden-results.md` must exist and contain `PASSED` (all milestones).
+5. For UI milestones (`work_order_type` in `ui_component`, `ui_page`), `cwv-results.md` must also exist and contain `PASSED`.
 
 These artifacts live in the files.db docstore (names `milestones/<milestone_id>/<artifact>.md`), authored via `ds files write --category planning` — never on `.planning/` disk (zero-disk; the on-edit hook denies disk writes). The close gate reads them from the docstore (with a disk fallback during the transition).
 

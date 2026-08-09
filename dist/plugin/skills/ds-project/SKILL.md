@@ -221,7 +221,11 @@ For each milestone, call `create_milestone(project_id=..., title="<title>", desc
 Capture each `milestone_id` from the returned dict.
 
 **Step 3 — Create work orders for milestone 1** (in dependency order):
-For each work order, call `create_work_order(project_id=..., milestone_id=..., title="<title>", description="<module boundary and acceptance criteria>", work_order_type="<type>", source_root=..., dream_studio_home=...)`.
+**Attribution fit-check first (do NOT auto-file into the active milestone).** Before binding a work order to a milestone, confirm the work actually belongs there — this matters most when the project already has milestones from earlier sessions and the operator has since pivoted. For each proposed work order, run `ds project fit-check --project-id <project_id> --title "<wo title>" --description "<wo description>"` (read-only) and read the `verdict`:
+- `clear_single` — one milestone clearly fits; bind the work order there.
+- `ambiguous` / `no_fit` / `no_milestones` — **STOP AND ASK** the operator which milestone this belongs to (offer a different existing milestone, or a new milestone / separate project). Do not default to the active or most-recently-created milestone — filing separate engagements into one milestone is the mis-attribution this check prevents; asking is cheaper than the re-work.
+
+Then, for each work order, call `create_work_order(project_id=..., milestone_id=..., title="<title>", description="<module boundary and acceptance criteria>", work_order_type="<type>", source_root=..., dream_studio_home=...)`.
 Capture each `work_order_id` from the returned dict.
 
 **Step 4 — Create work order sketches for milestones 2–N:**
