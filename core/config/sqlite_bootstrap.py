@@ -200,11 +200,23 @@ def activate_pending_migrations(db_path: Path | None = None) -> dict:
     rv_path = migrations_dir() / ".released_version"
     rv_path.write_text(str(latest), encoding="utf-8")
 
+    # Post-activation data backfills (idempotent, best-effort). Client Layer (migration 155):
+    # classify every project with a NULL client_id into a client via project.client_assigned
+    # events. No-op once every project has a client; lazy import avoids a bootstrap import cycle.
+    client_backfill = {}
+    try:
+        from core.clients.backfill import backfill_project_clients
+
+        client_backfill = backfill_project_clients(db_path=db_path)
+    except Exception:  # pragma: no cover - never block an activation on the advisory backfill
+        client_backfill = {"ok": False}
+
     return {
         "ok": True,
         "applied": pending,
         "schema_version": new_version,
         "released_version": latest,
+        "client_backfill": client_backfill,
     }
 
 

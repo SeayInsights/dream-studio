@@ -24,6 +24,7 @@ from core.config.paths import state_dir  # noqa: E402
 
 
 def _get_engine():
+    from core.projections.client_projection import ClientProjection
     from core.projections.design_brief_projection import DesignBriefProjection
     from core.projections.framework import ProjectionEngine
     from core.projections.milestone_projection import MilestoneProjection
@@ -37,6 +38,7 @@ def _get_engine():
     engine.register(MilestoneProjection())
     engine.register(DesignBriefProjection())
     engine.register(ProjectProjection())
+    engine.register(ClientProjection())
     return engine
 
 

@@ -45,6 +45,7 @@ class ProjectProjection(Projection):
         "project.activated",
         "project.deactivated",
         "project.deleted",
+        "project.client_assigned",
     ]
     source_canonical = "business"
     target_tables = [_TABLE]
@@ -91,6 +92,8 @@ class ProjectProjection(Projection):
             return self._handle_deactivated(conn, project_id, event_id, now)
         if event_type == "project.deleted":
             return self._handle_deleted(conn, project_id, event_id, now)
+        if event_type == "project.client_assigned":
+            return self._handle_client_assigned(conn, project_id, payload, event_id, now)
 
         logger.warning(
             "ProjectProjection: unhandled event_type '%s' for %s", event_type, project_id
@@ -187,6 +190,31 @@ class ProjectProjection(Projection):
             " SET status = 'deleted', updated_at = ?, last_event_id = ?"
             " WHERE project_id = ?",
             (now, event_id, project_id),
+        )
+        return 1
+
+    def _handle_client_assigned(
+        self,
+        conn: sqlite3.Connection,
+        project_id: str,
+        payload: dict,
+        event_id: str,
+        now: str,
+    ) -> int:
+        """Assign the project to a client (Client Layer). Idempotent: re-applying the same
+        assignment is a no-op UPDATE."""
+        client_id = payload.get("client_id")
+        if not client_id:
+            logger.warning(
+                "ProjectProjection: project.client_assigned for %s has no client_id — skipping",
+                project_id,
+            )
+            return 0
+        conn.execute(
+            f"UPDATE {_TABLE}"
+            " SET client_id = ?, updated_at = ?, last_event_id = ?"
+            " WHERE project_id = ?",
+            (client_id, now, event_id, project_id),
         )
         return 1
 
