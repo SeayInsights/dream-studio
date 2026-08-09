@@ -61,6 +61,10 @@ async def list_projects(
         project_type_expr = "NULL AS project_type"
         project_source_expr = "NULL AS project_source"
         status_expr = "p.status AS status" if "status" in project_columns else "NULL AS status"
+        # client_id lands with migration 155 (Client Layer); guard so a pre-155 live DB returns NULL.
+        client_id_expr = (
+            "p.client_id AS client_id" if "client_id" in project_columns else "NULL AS client_id"
+        )
         is_temp_expr = "0 AS is_temp"
 
         # Get projects with pagination (deduplicated by path, prioritizing entries with most sessions)
@@ -155,6 +159,7 @@ async def list_projects(
             {project_type_expr},
             {project_source_expr},
             {status_expr},
+            {client_id_expr},
             {is_temp_expr},
             {stack_detected_expr},
             {stack_json_expr},
