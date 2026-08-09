@@ -131,8 +131,10 @@ def run_gate_check(
         content = _artifact_text(work_order_id, wo_dir, "security_scan", db_path)
         if content is None:
             return False, "security_scan: security-scan.md not found"
-        if "BLOCKED" in content.upper():
-            return False, "security_scan: security-scan.md contains BLOCKED"
+        from core.gates.security_verdict import is_security_blocked
+
+        if is_security_blocked(content):
+            return False, "security_scan: security-scan.md reports a BLOCKED finding"
         return True, ""
 
     if gate_name == "game_validate":

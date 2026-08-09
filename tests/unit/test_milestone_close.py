@@ -260,6 +260,19 @@ def test_close_still_enforces_design_audit_score_when_present_on_non_ui(
     assert any("below minimum 3" in f for f in out["failures"])
 
 
+def test_security_gate_passes_on_negated_blocked(db_home, tmp_path, monkeypatch, capsys):
+    """WO-SECGATE-BLOCKED-TOKEN: an honest 'No BLOCKED findings' security audit must PASS — the
+    gate detects a BLOCKED *finding marker*, not the mere substring. (The false-positive that
+    blocked the Attribution Coherence milestone close.)"""
+    _write_all_passing(tmp_path)
+    d = _ms_dir(tmp_path)
+    (d / "security-audit.md").write_text(
+        "Result: CLEAR. No BLOCKED findings; 0 critical/high.\n", encoding="utf-8"
+    )
+    rc = _close(db_home, tmp_path, monkeypatch)
+    assert rc == 0, capsys.readouterr().out
+
+
 # ── 7. close passes when all artifact files present and passing ───────────────
 
 

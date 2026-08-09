@@ -82,8 +82,10 @@ def _evaluate_milestone_artifacts(ms_dir: Path, *, has_ui: bool) -> list[str]:
     if content is None:
         failures.append("Security audit required.")
     else:
-        if "BLOCKED" in content.upper():
-            failures.append("Security audit: security-audit.md contains BLOCKED")
+        from core.gates.security_verdict import is_security_blocked
+
+        if is_security_blocked(content):
+            failures.append("Security audit: security-audit.md reports a BLOCKED finding")
 
     # CHECK 3 — hardening
     content = read_milestone_artifact(ms_dir, "harden-results.md")
