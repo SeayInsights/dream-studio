@@ -26,6 +26,12 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         metavar="DIR",
         help="Path to the project directory. A .dream-studio-project marker file will be written here.",
     )
+    project_register.add_argument(
+        "--client",
+        default=None,
+        dest="client_id",
+        help="Attach the new project to this client id (default: the SeayInsights client)",
+    )
 
     project_list = project_sub.add_parser("list", help="List registered projects")
     project_list.add_argument(
@@ -37,6 +43,12 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         default=False,
         dest="include_deleted",
         help="Include soft-deleted projects (status=deleted) in output",
+    )
+    project_list.add_argument(
+        "--client",
+        default=None,
+        dest="client_id",
+        help="List only the projects belonging to this client id",
     )
 
     project_status_cmd = project_sub.add_parser(
@@ -124,6 +136,7 @@ def dispatch(
             name=args.name,
             description=args.description,
             project_path=Path(args.path).resolve(),
+            client_id=getattr(args, "client_id", None),
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )
@@ -131,6 +144,7 @@ def dispatch(
         return _project_list(
             status_filter=args.status,
             include_deleted=getattr(args, "include_deleted", False),
+            client_id=getattr(args, "client_id", None),
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )
@@ -202,6 +216,7 @@ def _project_register(
     name: str,
     description: str,
     project_path: Path,
+    client_id: str | None = None,
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
@@ -211,6 +226,7 @@ def _project_register(
         name=name,
         description=description,
         project_path=project_path,
+        client_id=client_id,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
@@ -247,9 +263,28 @@ def _project_list(
     *,
     status_filter: str,
     include_deleted: bool = False,
+    client_id: str | None = None,
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
+    # --client scopes the listing to one client's projects (reuses the client engine's read side,
+    # which is safe on a pre-migration-155 DB — it returns no rows rather than erroring).
+    if client_id:
+        from interfaces.cli.ds import resolve_installed_runtime_paths
+
+        db_path = resolve_installed_runtime_paths(
+            source_root=source_root, dream_studio_home=dream_studio_home
+        ).sqlite_path
+        try:
+            from core.clients.queries import projects_for_client
+
+            projects = projects_for_client(client_id, db_path=db_path)
+            result = {"ok": True, "client_id": client_id, "projects": projects}
+        except Exception as exc:
+            result = {"ok": False, "error": f"client listing unavailable: {exc}"}
+        print(json.dumps(result, indent=2))
+        return 0 if result.get("ok") else 1
+
     from core.projects.queries import get_project_list
 
     result = get_project_list(
@@ -447,5 +482,29 @@ def _project_state(
         dream_studio_home=dream_studio_home,
         planning_root=planning_root,
     )
+    # Client Layer context: surface the active project's client. Guarded — business_projects.client_id
+    # exists only after migration 155, so on a pre-155 DB this stays None rather than erroring.
+    try:
+        import sqlite3 as _sqlite3
+
+        from interfaces.cli.ds import resolve_installed_runtime_paths
+
+        db = resolve_installed_runtime_paths(
+            source_root=source_root, dream_studio_home=dream_studio_home
+        ).sqlite_path
+        conn = _sqlite3.connect(str(db))
+        try:
+            has_col = any(
+                r[1] == "client_id" for r in conn.execute("PRAGMA table_info(business_projects)")
+            )
+            if has_col:
+                row = conn.execute(
+                    "SELECT client_id FROM business_projects WHERE status = 'active' LIMIT 1"
+                ).fetchone()
+                result["active_client_id"] = row[0] if row else None
+        finally:
+            conn.close()
+    except Exception:
+        pass
     print(json.dumps(result, indent=2))
     return 0 if result.get("ok") else 1
