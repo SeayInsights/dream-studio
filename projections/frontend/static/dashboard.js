@@ -984,11 +984,10 @@
         // Update KPI cards
         async function updateKPIs() {
             // Fetch all metrics
-            const [sessions, tokens, skills, alertHistory] = await Promise.all([
+            const [sessions, tokens, skills] = await Promise.all([
                 fetchMetrics('/sessions'),
                 fetchMetrics('/tokens'),
-                fetchMetrics('/skills'),
-                fetch('/api/v1/alerts/history').then(r => r.ok ? r.json() : []).catch(() => [])
+                fetchMetrics('/skills')
             ]);
 
             if (sessions) {
@@ -1006,15 +1005,16 @@
                     totalCost === null || totalCost === undefined ? 'unknown' : `$${totalCost.toFixed(2)}`;
             }
 
-            const activeAlerts = Array.isArray(alertHistory)
-                ? alertHistory.filter(alert => !['resolved', 'closed', 'dismissed'].includes(String(alert.status || '').toLowerCase())).length
-                : 0;
+            // Alert firing is no longer persisted (migration 131 retired the alert
+            // history/analytics routes), so there is no live active-alerts source.
+            // Show an honest zero rather than fetching the dead /api/v1/alerts/history route.
+            const activeAlerts = 0;
             document.getElementById('kpi-active-alerts').textContent = activeAlerts.toLocaleString();
             const alertBellCount = document.getElementById('alert-bell-count');
             if (alertBellCount) {
                 alertBellCount.textContent = activeAlerts.toLocaleString();
             }
-            renderAlertDrawer(Array.isArray(alertHistory) ? alertHistory : []);
+            renderAlertDrawer([]);
         }
 
         // Initialize Session Timeline Chart
@@ -1837,25 +1837,12 @@
                     <div class="min-w-0">
                         <div class="text-sm font-medium text-gray-800 truncate">${escHtml(e.skill_id || '')}</div>
                         <div class="text-xs text-gray-500">${escHtml(e.type_label || e.extension_type)} &bull; N=${e.past_wo_count ?? 0} WOs</div>
-                        <div class="text-xs text-indigo-600 mt-0.5" id="effect-${escHtml(e.extension_id||'')}">Loading effect...</div>
                     </div>
                     <button onclick="openRevertModal('${escHtml(e.extension_id||'')}','${escHtml(e.skill_id||'')} ${escHtml(e.type_label||'')}')"
                         class="flex-shrink-0 text-xs text-red-500 hover:text-red-700 border border-red-200 rounded px-2 py-1 hover:bg-red-50">Revert</button>
                 </div>
             `).join('');
-            // Load effect counts
-            personal.forEach(e => { loadEffectSummary(e.extension_id); });
         } catch(err) { el.innerHTML = '<div class="text-gray-400 text-sm py-4 text-center">Data unavailable.</div>'; }
-    }
-
-    async function loadEffectSummary(extId) {
-        try {
-            const r = await fetch(`/api/v1/intelligence/extensions/${extId}/effect-summary`);
-            if (!r.ok) return;
-            const d = await r.json();
-            const el = document.getElementById(`effect-${extId}`);
-            if (el) el.textContent = d.tracked ? d.description : 'Active — effects not yet tracked';
-        } catch(e) {}
     }
 
     async function loadPatternsAwaitingReview() {
@@ -3955,14 +3942,15 @@ function initHooksCharts() {
                     }
                 };
 
-                const [slaData, rulesData, historyData, analyticsData] = await Promise.all([
+                // Alert firing history + analytics were retired (migration 131 —
+                // alerts fire in-memory only, /api/v1/alerts/history|analytics are 404).
+                // The live Alerts surface is SLA gauges + rule CRUD.
+                const [slaData, rulesData] = await Promise.all([
                     fetchAlerts('/sla'),
-                    fetchAlerts('/rules'),
-                    fetchAlerts('/history'),
-                    fetchAlerts('/analytics')
+                    fetchAlerts('/rules')
                 ]);
 
-                if (!slaData || !rulesData || !historyData || !analyticsData) {
+                if (!slaData || !rulesData) {
                     console.warn('Some alerts data unavailable');
                 }
 
@@ -3982,15 +3970,6 @@ function initHooksCharts() {
 
                 // Populate alert rules table
                 populateAlertRulesTable(rulesData || []);
-
-                // Populate alert history timeline
-                populateAlertHistoryTimeline(historyData || []);
-
-                // Initialize analytics charts
-                await Promise.all([
-                    initTopTriggeredRulesChart(analyticsData?.top_triggered || []),
-                    initResolutionTimeChart(analyticsData?.resolution_times || [])
-                ]);
 
                 // Wire up Create Rule button
                 document.getElementById('createRuleButton').addEventListener('click', () => {
@@ -4125,172 +4104,6 @@ function initHooksCharts() {
             }
         }
 
-        // Populate alert history timeline
-        function populateAlertHistoryTimeline(events) {
-            const container = document.getElementById('alertHistoryTimeline');
-
-            if (!events || events.length === 0) {
-                container.innerHTML = '<div class="text-center text-gray-400 py-8">No recent alerts</div>';
-                return;
-            }
-
-            const severityIcons = {
-                'critical': '<svg class="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>',
-                'warning': '<svg class="w-5 h-5 text-yellow-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>',
-                'info': '<svg class="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>'
-            };
-
-            const severityColors = {
-                'critical': 'border-red-200 bg-red-50',
-                'warning': 'border-yellow-200 bg-yellow-50',
-                'info': 'border-blue-200 bg-blue-50'
-            };
-
-            container.innerHTML = events.slice(0, 50).map(event => {
-                const icon = severityIcons[event.severity] || severityIcons.info;
-                const colorClass = severityColors[event.severity] || 'border-gray-200 bg-gray-50';
-
-                return `
-                    <div class="flex items-start gap-3 p-3 border rounded-lg ${colorClass}">
-                        <div class="flex-shrink-0 mt-0.5">
-                            ${icon}
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-start justify-between gap-2">
-                                <div class="font-medium text-sm text-gray-900">${event.rule_name}</div>
-                                <div class="text-xs text-gray-500 whitespace-nowrap">${new Date(event.timestamp).toLocaleString()}</div>
-                            </div>
-                            <div class="text-sm text-gray-700 mt-1">${event.message}</div>
-                            ${event.resolved ? `<div class="text-xs text-green-600 mt-1">✓ Resolved ${event.resolution_time ? `in ${event.resolution_time}` : ''}</div>` : ''}
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        // Initialize top triggered rules chart
-        async function initTopTriggeredRulesChart(topRules) {
-            const ctx = document.getElementById('topTriggeredRulesChart').getContext('2d');
-
-            if (charts.topTriggeredRules) {
-                charts.topTriggeredRules.destroy();
-            }
-
-            if (!topRules || topRules.length === 0) {
-                console.warn('No top triggered rules data available');
-                return;
-            }
-
-            // Take top 10
-            const top10 = topRules.slice(0, 10);
-
-            charts.topTriggeredRules = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: top10.map(r => r.rule_name),
-                    datasets: [{
-                        label: 'Trigger Count',
-                        data: top10.map(r => r.count),
-                        backgroundColor: top10.map(r => {
-                            if (r.severity === 'critical') return '#ef4444';
-                            if (r.severity === 'warning') return '#f59e0b';
-                            return '#3b82f6';
-                        }),
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    indexAxis: 'y',
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return `Triggered: ${context.parsed.x} times`;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            beginAtZero: true,
-                            ticks: {
-                                precision: 0
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        // Initialize resolution time chart (histogram)
-        async function initResolutionTimeChart(resolutionTimes) {
-            const ctx = document.getElementById('resolutionTimeChart').getContext('2d');
-
-            if (charts.resolutionTime) {
-                charts.resolutionTime.destroy();
-            }
-
-            if (!resolutionTimes || resolutionTimes.length === 0) {
-                console.warn('No resolution time data available');
-                return;
-            }
-
-            // Create histogram buckets (in minutes)
-            const buckets = ['0-5m', '5-15m', '15-30m', '30-60m', '1-2h', '2h+'];
-            const bucketCounts = [0, 0, 0, 0, 0, 0];
-
-            resolutionTimes.forEach(time => {
-                const minutes = time.minutes || 0;
-                if (minutes < 5) bucketCounts[0]++;
-                else if (minutes < 15) bucketCounts[1]++;
-                else if (minutes < 30) bucketCounts[2]++;
-                else if (minutes < 60) bucketCounts[3]++;
-                else if (minutes < 120) bucketCounts[4]++;
-                else bucketCounts[5]++;
-            });
-
-            charts.resolutionTime = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: buckets,
-                    datasets: [{
-                        label: 'Alert Count',
-                        data: bucketCounts,
-                        backgroundColor: '#10b981',
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return `Alerts: ${context.parsed.y}`;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                precision: 0
-                            }
-                        }
-                    }
-                }
-            });
-        }
         // ==================== CREATE RULE MODAL ====================
 
         function openCreateRuleModal() {
@@ -5411,13 +5224,9 @@ function initHooksCharts() {
                 element.classList.toggle('hidden', !isAvailable);
             };
 
-            toggle('[data-project-tab="prds"]', availableSurfaces.prds !== false);
             toggle('[data-project-tab="security"]', availableSurfaces.security !== false);
-            toggle('[data-project-tab="dependencies"]', availableSurfaces.dependencies !== false);
             toggle('[data-project-tab="activity"]', availableSurfaces.activity !== false);
-            toggle('#project-tab-prds', availableSurfaces.prds !== false);
             toggle('#project-tab-security', availableSurfaces.security !== false);
-            toggle('#project-tab-dependencies', availableSurfaces.dependencies !== false);
             toggle('#project-tab-activity', availableSurfaces.activity !== false);
             toggle('#modal-bugs-card', availableSurfaces.bugs_summary !== false);
             toggle('#modal-violations-card', availableSurfaces.violations_summary !== false);
@@ -5569,12 +5378,8 @@ function initHooksCharts() {
                 switchProjectTab('overview');
                 return;
             }
-            if (currentProjectId && tabName === 'prds') {
-                loadProjectPRDs(currentProjectId);
-            } else if (currentProjectId && tabName === 'security') {
+            if (currentProjectId && tabName === 'security') {
                 loadProjectSecurity(currentProjectId);
-            } else if (currentProjectId && tabName === 'dependencies') {
-                loadProjectDependencies(currentProjectId);
             } else if (currentProjectId && tabName === 'activity') {
                 loadProjectActivity(currentProjectId);
             }
@@ -5640,50 +5445,6 @@ function initHooksCharts() {
             });
         }
 
-        async function loadProjectPRDs(projectId) {
-            try {
-                const container = document.getElementById('modal-prds-content');
-                container.innerHTML = '<p class="text-gray-500 text-center py-8">Loading PRDs...</p>';
-
-                const response = await fetch(`/api/v1/projects/${projectId}/prds`);
-                if (!response.ok) {
-                    container.innerHTML = '<p class="text-red-500 text-center py-8">Failed to load PRDs</p>';
-                    return;
-                }
-
-                const data = await response.json();
-                const prds = data.prds || [];
-                const authority = data.prd_authority || {};
-
-                if (prds.length === 0) {
-                    container.innerHTML = `
-                        <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
-                            <div class="font-semibold text-gray-900">PRD authority: ${telemetryEscapeHtml(authority.status || 'draft_generated')}</div>
-                            <div class="mt-1">${telemetryEscapeHtml(authority.reason || 'No current PRD authority row is linked for this project.')}</div>
-                            <div class="mt-2">${(authority.manual_review_flags || []).map(flag => `<span class="source-chip mr-1">${telemetryEscapeHtml(flag)}</span>`).join('')}</div>
-                        </div>
-                    `;
-                    return;
-                }
-
-                container.innerHTML = prds.map(prd => `
-                    <div class="border border-gray-200 rounded-lg p-4 mb-3 hover:bg-gray-50">
-                        <h4 class="font-semibold text-gray-900">${prd.title || 'Untitled'}</h4>
-                        <p class="text-sm text-gray-600 mt-1">${telemetryEscapeHtml(authority.summary || 'No PRD summary available.')}</p>
-                        <div class="text-xs text-gray-500 mt-2">
-                            Authority: <span class="font-medium">${telemetryEscapeHtml(authority.status || 'unknown')}</span> |
-                            Lifecycle: <span class="font-medium">${telemetryEscapeHtml(prd.status || 'Unknown')}</span> |
-                            Created: ${prd.created_at ? new Date(prd.created_at).toLocaleDateString() : 'Unknown'}
-                        </div>
-                    </div>
-                `).join('');
-            } catch (error) {
-                console.error('Error loading PRDs:', error);
-                document.getElementById('modal-prds-content').innerHTML =
-                    '<p class="text-red-500 text-center py-8">Error loading PRDs</p>';
-            }
-        }
-
         async function loadProjectSecurity(projectId) {
             try {
                 const container = document.getElementById('modal-security-content');
@@ -5725,95 +5486,6 @@ function initHooksCharts() {
                 console.error('Error loading security data:', error);
                 document.getElementById('modal-security-content').innerHTML =
                     '<p class="text-red-500 text-center py-8">Error loading security data</p>';
-            }
-        }
-
-        async function loadProjectDependencies(projectId) {
-            try {
-                const container = document.getElementById('modal-dependencies-content');
-                container.innerHTML = '<p class="text-gray-500 text-center py-8">Loading dependencies...</p>';
-
-                const response = await fetch(`/api/v1/projects/${projectId}/dependencies?limit=200`);
-                if (!response.ok) {
-                    container.innerHTML = '<p class="text-red-500 text-center py-8">Failed to load dependencies</p>';
-                    return;
-                }
-
-                const data = await response.json();
-
-                if (!data.edges || data.edges.length === 0) {
-                    container.innerHTML = `
-                        <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
-                            <div class="font-semibold text-gray-900">No confirmed dependencies found</div>
-                            <div class="mt-1">This is an honest empty state from the dependency authority route. The dashboard does not draw inferred or placeholder edges.</div>
-                            <div class="mt-2"><span class="source-chip">Source confidence: project dependency authority</span></div>
-                        </div>
-                    `;
-                    return;
-                }
-
-                // Build summary
-                const typeCounts = data.type_counts || {};
-                const typeList = Object.entries(typeCounts)
-                    .sort((a, b) => b[1] - a[1])
-                    .map(([type, count]) => `<span class="source-chip">${telemetryEscapeHtml(type)}: ${telemetryNumber(count)}</span>`)
-                    .join(' ');
-
-                // Build dependency list (top 50)
-                const topDeps = data.edges.slice(0, 50);
-                const depList = topDeps.map(edge => {
-                    const fromName = edge.from.split(':').pop();
-                    const toName = edge.to.split(':').pop();
-                    const refs = (edge.source_refs || edge.evidence_refs || []).slice(0, 2);
-                    return `
-                        <div class="py-2 border-b border-gray-100 text-sm">
-                            <div class="flex items-center gap-2">
-                                <div class="flex-1 truncate text-gray-700">${telemetryEscapeHtml(fromName)}</div>
-                                <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
-                                </svg>
-                                <div class="flex-1 truncate text-gray-700">${telemetryEscapeHtml(toName)}</div>
-                                <span class="text-xs text-gray-500 flex-shrink-0">${telemetryEscapeHtml(edge.type)}</span>
-                                <span class="source-chip">${telemetryEscapeHtml(edge.confirmation_status || 'confirmed')}</span>
-                            </div>
-                            <div class="mt-1 text-xs text-gray-500">${refs.length ? refs.map(ref => telemetryEscapeHtml(ref)).join(' / ') : 'No file-level evidence ref recorded.'}</div>
-                        </div>
-                    `;
-                }).join('');
-
-                container.innerHTML = `
-                    <div class="space-y-4">
-                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                            <div class="text-sm font-medium text-blue-900 mb-2">Confirmed Dependency Summary</div>
-                            <div class="mb-3 text-xs text-blue-800">Only persisted dependency edges are rendered. Inferred or unverified edges are not shown by default.</div>
-                            <div class="mb-3 text-xs text-blue-800">Inferred edges available but hidden: ${telemetryNumber((data.inferred_edge_count || 0) + (data.unverified_edge_count || 0))}</div>
-                            <div class="grid grid-cols-2 gap-3 mb-3">
-                                <div class="text-center">
-                                    <div class="text-2xl font-bold text-blue-600">${data.node_count}</div>
-                                    <div class="text-xs text-blue-700">Components</div>
-                                </div>
-                                <div class="text-center">
-                                    <div class="text-2xl font-bold text-blue-600">${data.edge_count}</div>
-                                    <div class="text-xs text-blue-700">Dependencies</div>
-                                </div>
-                            </div>
-                            <div class="flex flex-wrap gap-2">
-                                ${typeList}
-                            </div>
-                        </div>
-
-                        <div>
-                            <h4 class="text-sm font-semibold text-gray-900 mb-3">Top Dependencies (${Math.min(50, data.edge_count)} of ${data.edge_count})</h4>
-                            <div class="max-h-96 overflow-y-auto">
-                                ${depList}
-                            </div>
-                        </div>
-                    </div>
-                `;
-            } catch (error) {
-                console.error('Error loading dependencies:', error);
-                document.getElementById('modal-dependencies-content').innerHTML =
-                    '<p class="text-red-500 text-center py-8">Error loading dependencies</p>';
             }
         }
 
