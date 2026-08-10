@@ -6237,103 +6237,110 @@ function initHooksCharts() {
             await loadPRDData();
         }
 
+        // The PRD tab renders the active project's derived PRD + Statement-of-Work
+        // panel via /api/v1/prd-sow, NOT a docstore PRD list. The legacy per-PRD list
+        // and detail routes were dropped; prd_sow is derived read-only from
+        // milestones/WOs + docstore.
+        let _prdSowProjectId = null;
+
         async function loadPRDData() {
+            const tbody = document.getElementById('prd-list');
             try {
-                const response = await fetch('/api/prd/list');
+                const response = await fetch('/api/v1/prd-sow/active');
+                if (response.status === 404) {
+                    _prdSowProjectId = null;
+                    updatePRDSummary(null);
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="5" class="px-6 py-8 text-center text-gray-500">
+                                No active project. Set an active project to see its PRD + SOW coverage.
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
-                const data = await response.json();
+                const panel = await response.json();
+                _prdSowProjectId = panel.project_id;
 
-                // Update summary stats
-                updatePRDSummary(data.prds);
+                // Update summary stats + milestone (SOW) table
+                updatePRDSummary(panel);
+                updatePRDTable(panel);
 
-                // Update PRD list table
-                updatePRDTable(data.prds);
-
-                console.log('PRD data loaded successfully');
+                console.log('PRD+SOW panel loaded successfully');
             } catch (error) {
-                console.error('Failed to load PRD data:', error);
-                document.getElementById('prd-list').innerHTML = `
+                console.error('Failed to load PRD+SOW panel:', error);
+                tbody.innerHTML = `
                     <tr>
-                        <td colspan="7" class="px-6 py-8 text-center text-red-500">
-                            Failed to load PRD data. Error: ${error.message}
+                        <td colspan="5" class="px-6 py-8 text-center text-red-500">
+                            Failed to load PRD+SOW data. Error: ${error.message}
                         </td>
                     </tr>
                 `;
             }
         }
 
-        function updatePRDSummary(prds) {
-            const totalCount = prds.length;
-            const inProgressCount = prds.filter(p => p.status === 'in_progress' || p.status === 'approved').length;
-            const completedCount = prds.filter(p => p.status === 'completed').length;
-            const avgCompletion = prds.length > 0
-                ? prds.reduce((sum, p) => sum + (p.pct_complete || 0), 0) / prds.length
-                : 0;
-
-            document.getElementById('prd-total-count').textContent = totalCount;
-            document.getElementById('prd-in-progress-count').textContent = inProgressCount;
-            document.getElementById('prd-completed-count').textContent = completedCount;
-            document.getElementById('prd-avg-completion').textContent = `${avgCompletion.toFixed(1)}%`;
+        function _prdPct(v) {
+            return `${((v || 0) * 100).toFixed(0)}%`;
         }
 
-        function updatePRDTable(prds) {
-            const tbody = document.getElementById('prd-list');
+        function updatePRDSummary(panel) {
+            const milestones = (panel && panel.milestones) || [];
+            const capCount = (panel && panel.capabilities) ? panel.capabilities.length : 0;
+            const completedCount = milestones.filter(m => m.status === 'complete' || m.status === 'completed').length;
+            const inProgressCount = milestones.filter(m => m.status === 'in_progress' || m.status === 'partial').length;
 
-            if (prds.length === 0) {
+            document.getElementById('prd-total-count').textContent = capCount;
+            document.getElementById('prd-in-progress-count').textContent = inProgressCount;
+            document.getElementById('prd-completed-count').textContent = completedCount;
+            document.getElementById('prd-avg-completion').textContent = panel ? _prdPct(panel.coverage) : '--';
+        }
+
+        function updatePRDTable(panel) {
+            const tbody = document.getElementById('prd-list');
+            const milestones = (panel && panel.milestones) || [];
+
+            if (milestones.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="7" class="px-6 py-8 text-center text-gray-500">
-                            No PRDs found. Create your first PRD to get started.
+                        <td colspan="5" class="px-6 py-8 text-center text-gray-500">
+                            No milestones tracked for this project yet.
                         </td>
                     </tr>
                 `;
                 return;
             }
 
-            tbody.innerHTML = prds.map(prd => {
-                const statusColors = {
-                    'draft': 'bg-gray-100 text-gray-800',
-                    'approved': 'bg-blue-100 text-blue-800',
-                    'in_progress': 'bg-yellow-100 text-yellow-800',
-                    'completed': 'bg-green-100 text-green-800',
-                    'archived': 'bg-gray-100 text-gray-600'
-                };
-
-                const statusColor = statusColors[prd.status] || 'bg-gray-100 text-gray-800';
-                const createdDate = prd.created_at ? new Date(prd.created_at).toLocaleDateString() : 'N/A';
-                const completionPct = prd.pct_complete || 0;
+            tbody.innerHTML = milestones.map(m => {
+                const statusColor = getStatusColor(m.status);
+                const scorePct = (m.score || 0) * 100;
+                const capCount = (m.capabilities || []).length;
 
                 return `
                     <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            ${prd.prd_id}
-                        </td>
-                        <td class="px-6 py-4 text-sm text-gray-900">
-                            ${prd.title || 'Untitled'}
+                        <td class="px-6 py-4 text-sm font-medium text-gray-900">
+                            ${m.title || m.milestone_id}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor}">
-                                ${prd.status}
+                                ${m.status}
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <div class="flex items-center">
                                 <div class="w-24 bg-gray-200 rounded-full h-2.5 mr-2">
-                                    <div class="bg-blue-600 h-2.5 rounded-full" style="width: ${completionPct}%"></div>
+                                    <div class="bg-blue-600 h-2.5 rounded-full" style="width: ${scorePct}%"></div>
                                 </div>
-                                <span class="text-sm text-gray-600">${completionPct.toFixed(1)}%</span>
+                                <span class="text-sm text-gray-600">${scorePct.toFixed(0)}%</span>
                             </div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            ${prd.completed_tasks || 0} / ${prd.total_tasks || 0}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            ${createdDate}
+                            ${capCount}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <button onclick="viewPRDDetails('${prd.prd_id}')"
+                            <button onclick="viewPRDDetails('${m.milestone_id}')"
                                     class="text-blue-600 hover:text-blue-900">
                                 View Details
                             </button>
@@ -6343,76 +6350,67 @@ function initHooksCharts() {
             }).join('');
         }
 
-        async function viewPRDDetails(prdId) {
+        async function viewPRDDetails(milestoneId) {
+            if (!_prdSowProjectId) return;
             try {
-                const response = await fetch(`/api/prd/${prdId}`);
+                const response = await fetch(`/api/v1/prd-sow/${_prdSowProjectId}`);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
-                const data = await response.json();
+                const panel = await response.json();
+                const m = (panel.milestones || []).find(x => x.milestone_id === milestoneId);
+                if (!m) {
+                    alert('Milestone not found in the PRD+SOW panel');
+                    return;
+                }
 
                 // Update modal title
-                document.getElementById('prd-modal-title').textContent = data.prd.title || prdId;
+                document.getElementById('prd-modal-title').textContent = m.title || milestoneId;
 
-                // Build modal content
+                const caps = m.capabilities || [];
                 const content = `
                     <div class="space-y-4">
                         <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <span class="font-semibold">Status:</span>
-                                <span class="px-2 py-1 text-xs rounded-full ${getStatusColor(data.prd.status)}">
-                                    ${data.prd.status}
+                                <span class="px-2 py-1 text-xs rounded-full ${getStatusColor(m.status)}">
+                                    ${m.status}
                                 </span>
                             </div>
                             <div>
-                                <span class="font-semibold">Progress:</span>
-                                ${data.stats.completed} / ${data.stats.total} tasks (${data.prd.pct_complete?.toFixed(1) || 0}%)
+                                <span class="font-semibold">Score:</span>
+                                ${_prdPct(m.score)} (confidence ${_prdPct(m.confidence)})
                             </div>
                         </div>
 
                         <div class="border-t pt-4">
-                            <h4 class="font-semibold mb-2">Tasks Breakdown</h4>
-                            <div class="space-y-1">
-                                <div class="flex justify-between text-sm">
-                                    <span>Completed:</span>
-                                    <span class="font-medium">${data.stats.completed}</span>
-                                </div>
-                                <div class="flex justify-between text-sm">
-                                    <span>In Progress:</span>
-                                    <span class="font-medium">${data.stats.in_progress}</span>
-                                </div>
-                                <div class="flex justify-between text-sm">
-                                    <span>Pending:</span>
-                                    <span class="font-medium">${data.stats.pending}</span>
-                                </div>
-                                ${data.stats.blocked > 0 ? `
-                                <div class="flex justify-between text-sm">
-                                    <span>Blocked:</span>
-                                    <span class="font-medium text-red-600">${data.stats.blocked}</span>
-                                </div>
-                                ` : ''}
+                            <div class="text-sm text-gray-700 mb-1">
+                                <span class="font-semibold">Set out to:</span> ${m.set_out_to || '—'}
+                            </div>
+                            <div class="text-sm text-gray-700">
+                                <span class="font-semibold">Accomplished:</span> ${m.accomplished || '—'}
                             </div>
                         </div>
 
                         <div class="border-t pt-4">
-                            <h4 class="font-semibold mb-2">Task List</h4>
+                            <h4 class="font-semibold mb-2">Capabilities</h4>
                             <div class="max-h-64 overflow-y-auto">
                                 <table class="min-w-full text-sm">
                                     <thead class="bg-gray-50">
                                         <tr>
-                                            <th class="px-4 py-2 text-left">Task ID</th>
-                                            <th class="px-4 py-2 text-left">Name</th>
+                                            <th class="px-4 py-2 text-left">Capability</th>
+                                            <th class="px-4 py-2 text-left">Score</th>
                                             <th class="px-4 py-2 text-left">Status</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        ${data.tasks.map(task => `
+                                        ${caps.map(c => `
                                             <tr class="border-t">
-                                                <td class="px-4 py-2">${task.task_id}</td>
-                                                <td class="px-4 py-2">${task.task_name || 'Unnamed task'}</td>
+                                                <td class="px-4 py-2">${c.title || c.capability_id}</td>
+                                                <td class="px-4 py-2">${_prdPct(c.score)}</td>
                                                 <td class="px-4 py-2">
-                                                    <span class="px-2 py-1 text-xs rounded-full ${getTaskStatusColor(task.status)}">
-                                                        ${task.status}
+                                                    <span class="px-2 py-1 text-xs rounded-full ${getStatusColor(c.status)}">
+                                                        ${c.status}
                                                     </span>
                                                 </td>
                                             </tr>
@@ -6427,8 +6425,8 @@ function initHooksCharts() {
                 document.getElementById('prd-modal-content').innerHTML = content;
                 document.getElementById('prd-details-modal').classList.remove('hidden');
             } catch (error) {
-                console.error('Failed to load PRD details:', error);
-                alert('Failed to load PRD details: ' + error.message);
+                console.error('Failed to load PRD+SOW milestone details:', error);
+                alert('Failed to load milestone details: ' + error.message);
             }
         }
 
@@ -6443,17 +6441,6 @@ function initHooksCharts() {
                 'in_progress': 'bg-yellow-100 text-yellow-800',
                 'completed': 'bg-green-100 text-green-800',
                 'archived': 'bg-gray-100 text-gray-600'
-            };
-            return colors[status] || 'bg-gray-100 text-gray-800';
-        }
-
-        function getTaskStatusColor(status) {
-            const colors = {
-                'pending': 'bg-gray-100 text-gray-800',
-                'in_progress': 'bg-yellow-100 text-yellow-800',
-                'completed': 'bg-green-100 text-green-800',
-                'blocked': 'bg-red-100 text-red-800',
-                'skipped': 'bg-gray-100 text-gray-600'
             };
             return colors[status] || 'bg-gray-100 text-gray-800';
         }
