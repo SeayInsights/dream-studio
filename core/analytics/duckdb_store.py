@@ -373,6 +373,20 @@ def derive_events_fact(conn, studio_db_path, *, full_rebuild: bool = False) -> i
                 FROM s.{table} e
                 WHERE NOT EXISTS (SELECT 1 FROM events_fact f WHERE f.event_id = e.event_id)
             """)
+        # Freshness stamp (WO-DASH-COHERENCE): record every refresh so
+        # _aggregate_meta.last_aggregated_at reflects the actual events_fact freshness. The
+        # incremental runner path (the sole steady-state writer) previously never touched the
+        # stamp, so it read a stale "last aggregated" time while events_fact was in fact current —
+        # a misleading dashboard-freshness signal. Best-effort: never fail the refresh on the stamp.
+        try:
+            from datetime import UTC, datetime
+
+            conn.execute(
+                "INSERT OR REPLACE INTO _aggregate_meta (key, value) VALUES ('last_aggregated_at', ?)",
+                (datetime.now(UTC).isoformat(),),
+            )
+        except Exception:
+            pass
         return conn.execute("SELECT COUNT(*) FROM events_fact").fetchone()[0] - before
     finally:
         conn.execute("DETACH s")
