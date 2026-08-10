@@ -5378,7 +5378,9 @@ function initHooksCharts() {
                 switchProjectTab('overview');
                 return;
             }
-            if (currentProjectId && tabName === 'security') {
+            if (currentProjectId && tabName === 'milestones') {
+                loadProjectMilestones(currentProjectId);
+            } else if (currentProjectId && tabName === 'security') {
                 loadProjectSecurity(currentProjectId);
             } else if (currentProjectId && tabName === 'activity') {
                 loadProjectActivity(currentProjectId);
@@ -5486,6 +5488,115 @@ function initHooksCharts() {
                 console.error('Error loading security data:', error);
                 document.getElementById('modal-security-content').innerHTML =
                     '<p class="text-red-500 text-center py-8">Error loading security data</p>';
+            }
+        }
+
+        // ── Projects drill-down: milestones -> work orders -> tasks (WO-DASH-DRILLDOWN) ──
+        // Titles are looked up from these caches so only IDs (quote-safe) enter onclick.
+        let _drillProjectId = null;
+        let _drillMsCache = {};      // milestone_id -> title
+        let _drillWoCache = {};      // work_order_id -> title
+        let _drillCurrentMs = null;  // milestone_id currently drilled into (WO-level back nav)
+
+        function _drillStatusChip(status) {
+            const s = String(status || '').toLowerCase();
+            const cls = (s === 'complete' || s === 'completed' || s === 'closed') ? 'bg-green-100 text-green-800'
+                : (s === 'in_progress') ? 'bg-yellow-100 text-yellow-800'
+                : (s === 'blocked') ? 'bg-red-100 text-red-800'
+                : 'bg-gray-100 text-gray-700';
+            return `<span class="px-2 py-0.5 text-xs rounded-full ${cls}">${escHtml(status || 'unknown')}</span>`;
+        }
+
+        async function loadProjectMilestones(projectId) {
+            _drillProjectId = projectId;
+            const el = document.getElementById('modal-milestones-content');
+            el.innerHTML = '<p class="text-gray-500 text-center py-8">Loading milestones...</p>';
+            try {
+                const r = await fetch(`/api/v1/projects/${projectId}/milestones`);
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                const milestones = (await r.json()).milestones || [];
+                _drillMsCache = {};
+                milestones.forEach(m => { _drillMsCache[m.milestone_id] = m.title || m.milestone_id; });
+                const header = '<div class="text-xs text-gray-500 mb-3">Milestones</div>';
+                if (!milestones.length) {
+                    el.innerHTML = header + '<p class="text-gray-500 text-center py-8">No milestones for this project yet.</p>';
+                    return;
+                }
+                el.innerHTML = header + milestones.map(m => `
+                    <button onclick="drilldownMilestone('${escHtml(m.milestone_id)}')"
+                        class="w-full text-left border border-gray-200 rounded-lg p-3 mb-2 hover:bg-gray-50 flex items-center justify-between gap-2">
+                        <span class="text-sm font-medium text-gray-900 truncate">${escHtml(m.title || m.milestone_id)}</span>
+                        <span class="flex items-center gap-2 flex-shrink-0">${_drillStatusChip(m.status)}<span class="text-gray-400">&rsaquo;</span></span>
+                    </button>
+                `).join('');
+            } catch (e) {
+                el.innerHTML = `<p class="text-red-500 text-center py-8">Failed to load milestones: ${escHtml(e.message)}</p>`;
+            }
+        }
+
+        async function drilldownMilestone(milestoneId) {
+            _drillCurrentMs = milestoneId;
+            const el = document.getElementById('modal-milestones-content');
+            el.innerHTML = '<p class="text-gray-500 text-center py-8">Loading work orders...</p>';
+            try {
+                const r = await fetch(`/api/v1/milestones/${milestoneId}/work-orders`);
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                const wos = (await r.json()).work_orders || [];
+                _drillWoCache = {};
+                wos.forEach(w => { _drillWoCache[w.work_order_id] = w.title || w.work_order_id; });
+                const msTitle = _drillMsCache[milestoneId] || 'Milestone';
+                const crumb = `<nav class="text-xs text-gray-500 mb-3 flex items-center gap-1">
+                        <button onclick="loadProjectMilestones('${escHtml(_drillProjectId)}')" class="text-blue-600 hover:text-blue-900">Milestones</button>
+                        <span class="text-gray-300">/</span>
+                        <span class="text-gray-700 font-medium truncate">${escHtml(msTitle)}</span>
+                    </nav>`;
+                if (!wos.length) {
+                    el.innerHTML = crumb + '<p class="text-gray-500 text-center py-8">No work orders in this milestone.</p>';
+                    return;
+                }
+                el.innerHTML = crumb + wos.map(w => `
+                    <button onclick="drilldownWorkOrder('${escHtml(w.work_order_id)}')"
+                        class="w-full text-left border border-gray-200 rounded-lg p-3 mb-2 hover:bg-gray-50 flex items-center justify-between gap-2">
+                        <span class="min-w-0">
+                            <span class="block text-sm font-medium text-gray-900 truncate">${escHtml(w.title || w.work_order_id)}</span>
+                            <span class="block text-xs text-gray-500">${escHtml(w.type || 'work order')}</span>
+                        </span>
+                        <span class="flex items-center gap-2 flex-shrink-0">${_drillStatusChip(w.status)}<span class="text-gray-400">&rsaquo;</span></span>
+                    </button>
+                `).join('');
+            } catch (e) {
+                el.innerHTML = `<p class="text-red-500 text-center py-8">Failed to load work orders: ${escHtml(e.message)}</p>`;
+            }
+        }
+
+        async function drilldownWorkOrder(workOrderId) {
+            const el = document.getElementById('modal-milestones-content');
+            el.innerHTML = '<p class="text-gray-500 text-center py-8">Loading tasks...</p>';
+            try {
+                const r = await fetch(`/api/v1/work-orders/${workOrderId}/tasks`);
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                const tasks = (await r.json()).tasks || [];
+                const msTitle = _drillMsCache[_drillCurrentMs] || 'Milestone';
+                const woTitle = _drillWoCache[workOrderId] || 'Work order';
+                const crumb = `<nav class="text-xs text-gray-500 mb-3 flex flex-wrap items-center gap-1">
+                        <button onclick="loadProjectMilestones('${escHtml(_drillProjectId)}')" class="text-blue-600 hover:text-blue-900">Milestones</button>
+                        <span class="text-gray-300">/</span>
+                        <button onclick="drilldownMilestone('${escHtml(_drillCurrentMs)}')" class="text-blue-600 hover:text-blue-900 truncate">${escHtml(msTitle)}</button>
+                        <span class="text-gray-300">/</span>
+                        <span class="text-gray-700 font-medium truncate">${escHtml(woTitle)}</span>
+                    </nav>`;
+                if (!tasks.length) {
+                    el.innerHTML = crumb + '<p class="text-gray-500 text-center py-8">No tasks in this work order.</p>';
+                    return;
+                }
+                el.innerHTML = crumb + tasks.map(t => `
+                    <div class="border border-gray-200 rounded-lg p-3 mb-2 flex items-center justify-between gap-2">
+                        <span class="text-sm text-gray-900 truncate">${escHtml(t.title || t.task_id)}</span>
+                        ${_drillStatusChip(t.status)}
+                    </div>
+                `).join('');
+            } catch (e) {
+                el.innerHTML = `<p class="text-red-500 text-center py-8">Failed to load tasks: ${escHtml(e.message)}</p>`;
             }
         }
 

@@ -1254,6 +1254,9 @@
                                 <button onclick="switchProjectTab('overview')" data-project-tab="overview" class="project-tab-btn project-tab-active px-4 py-3 text-sm font-medium border-b-2">
                                     Overview
                                 </button>
+                                <button onclick="switchProjectTab('milestones')" data-project-tab="milestones" class="project-tab-btn px-4 py-3 text-sm font-medium border-b-2">
+                                    Milestones
+                                </button>
                                 <button onclick="switchProjectTab('security')" data-project-tab="security" class="project-tab-btn px-4 py-3 text-sm font-medium border-b-2">
                                     Security
                                 </button>
@@ -1310,6 +1313,13 @@
                                     <div class="relative h-64">
                                         <canvas id="modal-health-trend-chart"></canvas>
                                     </div>
+                                </div>
+                            </div>
+
+                            <!-- Milestones Tab (drill-down: milestones -> work orders -> tasks) -->
+                            <div id="project-tab-milestones" class="project-tab-content hidden">
+                                <div id="modal-milestones-content">
+                                    <p class="text-gray-500 text-center py-8">Loading milestones...</p>
                                 </div>
                             </div>
 
