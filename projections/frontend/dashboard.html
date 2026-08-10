@@ -860,32 +860,10 @@
                 </div>
             </div>
 
-            <!-- Alert Analytics -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                <!-- Top Triggered Rules -->
-                <div class="bg-white rounded-lg shadow p-6">
-                    <h2 class="text-xl font-bold text-gray-900 mb-4">Top Triggered Rules</h2>
-                    <div class="h-64">
-                        <canvas id="topTriggeredRulesChart"></canvas>
-                    </div>
-                </div>
-
-                <!-- Resolution Time Stats -->
-                <div class="bg-white rounded-lg shadow p-6">
-                    <h2 class="text-xl font-bold text-gray-900 mb-4">Resolution Time Distribution</h2>
-                    <div class="h-64">
-                        <canvas id="resolutionTimeChart"></canvas>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Alert History Timeline -->
-            <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-xl font-bold text-gray-900 mb-4">Alert History</h2>
-                <div id="alertHistoryTimeline" class="space-y-3 max-h-96 overflow-y-auto">
-                    <div class="text-center text-gray-400 py-8">Loading alert history...</div>
-                </div>
-            </div>
+            <!-- Alert firing history + analytics (Top Triggered Rules, Resolution Time,
+                 Alert History timeline) were retired with migration 131 — alerts fire
+                 in-memory only and /api/v1/alerts/history|analytics are 404. The live
+                 Alerts surface is the SLA gauges + rule CRUD above. -->
         </div>
 
         <!-- Strengths & Growth Tab -->
@@ -1276,14 +1254,8 @@
                                 <button onclick="switchProjectTab('overview')" data-project-tab="overview" class="project-tab-btn project-tab-active px-4 py-3 text-sm font-medium border-b-2">
                                     Overview
                                 </button>
-                                <button onclick="switchProjectTab('prds')" data-project-tab="prds" class="project-tab-btn px-4 py-3 text-sm font-medium border-b-2">
-                                    PRDs
-                                </button>
                                 <button onclick="switchProjectTab('security')" data-project-tab="security" class="project-tab-btn px-4 py-3 text-sm font-medium border-b-2">
                                     Security
-                                </button>
-                                <button onclick="switchProjectTab('dependencies')" data-project-tab="dependencies" class="project-tab-btn px-4 py-3 text-sm font-medium border-b-2">
-                                    Dependencies
                                 </button>
                                 <button onclick="switchProjectTab('activity')" data-project-tab='activity' class="project-tab-btn px-4 py-3 text-sm font-medium border-b-2">
                                     Activity
@@ -1341,24 +1313,10 @@
                                 </div>
                             </div>
 
-                            <!-- PRDs Tab -->
-                            <div id="project-tab-prds" class="project-tab-content hidden">
-                                <div id="modal-prds-content">
-                                    <p class="text-gray-500 text-center py-8">Loading PRDs...</p>
-                                </div>
-                            </div>
-
                             <!-- Security Tab -->
                             <div id="project-tab-security" class="project-tab-content hidden">
                                 <div id="modal-security-content">
                                     <p class="text-gray-500 text-center py-8">Loading security data...</p>
-                                </div>
-                            </div>
-
-                            <!-- Dependencies Tab -->
-                            <div id="project-tab-dependencies" class="project-tab-content hidden">
-                                <div id="modal-dependencies-content">
-                                    <p class="text-gray-500 text-center py-8">Loading dependency graph...</p>
                                 </div>
                             </div>
 
