@@ -1536,27 +1536,27 @@
         <div id="prd" class="tab-content">
             <!-- Summary Stats -->
             <div class="bg-white rounded-lg shadow p-6 mb-6">
-                <h2 class="text-xl font-bold text-gray-900 mb-4">PRD Tracking</h2>
+                <h2 class="text-xl font-bold text-gray-900 mb-4">PRD + Statement of Work</h2>
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div class="border border-gray-200 rounded-lg p-4">
-                        <div class="text-sm font-medium text-gray-600">Total PRDs</div>
+                        <div class="text-sm font-medium text-gray-600">Capabilities</div>
                         <div id="prd-total-count" class="mt-2 text-2xl font-bold text-blue-600">--</div>
-                        <div class="text-xs text-gray-500 mt-1">All statuses</div>
+                        <div class="text-xs text-gray-500 mt-1">Tracked</div>
                     </div>
                     <div class="border border-gray-200 rounded-lg p-4">
                         <div class="text-sm font-medium text-gray-600">In Progress</div>
                         <div id="prd-in-progress-count" class="mt-2 text-2xl font-bold text-yellow-600">--</div>
-                        <div class="text-xs text-gray-500 mt-1">Active development</div>
+                        <div class="text-xs text-gray-500 mt-1">Milestones</div>
                     </div>
                     <div class="border border-gray-200 rounded-lg p-4">
                         <div class="text-sm font-medium text-gray-600">Completed</div>
                         <div id="prd-completed-count" class="mt-2 text-2xl font-bold text-green-600">--</div>
-                        <div class="text-xs text-gray-500 mt-1">Successfully shipped</div>
+                        <div class="text-xs text-gray-500 mt-1">Milestones</div>
                     </div>
                     <div class="border border-gray-200 rounded-lg p-4">
-                        <div class="text-sm font-medium text-gray-600">Avg Completion</div>
+                        <div class="text-sm font-medium text-gray-600">Coverage</div>
                         <div id="prd-avg-completion" class="mt-2 text-2xl font-bold text-purple-600">--</div>
-                        <div class="text-xs text-gray-500 mt-1">Overall progress</div>
+                        <div class="text-xs text-gray-500 mt-1">Overall</div>
                     </div>
                 </div>
             </div>
@@ -1564,24 +1564,22 @@
             <!-- PRD List -->
             <div class="bg-white rounded-lg shadow overflow-hidden mb-6">
                 <div class="px-6 py-4 border-b border-gray-200">
-                    <h3 class="text-lg font-semibold text-gray-900">All PRDs</h3>
+                    <h3 class="text-lg font-semibold text-gray-900">Milestones (SOW)</h3>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead class="bg-gray-50">
                             <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PRD ID</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Milestone</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progress</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tasks</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Capabilities</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="prd-list" class="bg-white divide-y divide-gray-200">
                             <tr>
-                                <td colspan="7" class="px-6 py-8 text-center text-gray-500">Loading PRD data...</td>
+                                <td colspan="5" class="px-6 py-8 text-center text-gray-500">Loading PRD + SOW data...</td>
                             </tr>
                         </tbody>
                     </table>
