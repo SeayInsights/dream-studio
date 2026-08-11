@@ -34,7 +34,7 @@ def _seed_project(conn, pid, name, client_id=None, path=None, status="active"):
 @pytest.mark.parametrize(
     "name,path,expected",
     [
-        ("Fulcrum Skill Library", r"C:\Users\x\Fulcrum", "fulcrum"),
+        ("Fulcrum Skill Library", r"C:\x\Fulcrum", "fulcrum"),
         ("Some App", r"C:\clients\hypershift\app", "hypershift"),
         ("Hypershift Ops", None, "hypershift"),
         ("Dream Studio", r"C:\x\dream-studio", "seayinsights"),
