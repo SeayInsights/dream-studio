@@ -117,14 +117,15 @@ def test_dashboard_modernization_preserves_legacy_behavior_with_professional_con
     assert "dependency-source-status" in html
     assert "graph-source-status" in html
     assert "Confirmed Stack Evidence" in html
-    assert "Confirmed Dependency Summary" in html
+    # "Confirmed Dependency Summary" was the project-modal Dependencies sub-tab, removed
+    # in WO-DASH-COHERENCE T4 (pi_dependencies dropped). Knowledge Graph tab is unchanged.
     assert "Module/Profile Fit" in html
     assert "Validation And Attention" in html
     assert "Inferred/unverified hidden" in html
-    assert "edge.confirmation_status" in html
+    # "edge.confirmation_status" was in the removed Dependencies sub-tab render (T4).
     assert "repoScan.package_manifests" in html
     assert "details?.module_runtime_profile_fit" in html
-    assert "No confirmed dependencies found" in html
+    # "No confirmed dependencies found" was the removed Dependencies sub-tab empty state (T4).
     assert "Security Findings" in html
     assert "Attention Items" in html
     assert "health_model" in html
@@ -132,8 +133,10 @@ def test_dashboard_modernization_preserves_legacy_behavior_with_professional_con
     assert "work_order_status" in html
     assert "navigate('prd')" not in html
     assert 'data-retired-nav="knowledge-graph"' in html
-    assert "The dashboard does not draw inferred or placeholder edges." in html
-    assert "fetch('/api/v1/alerts/history')" in html
+    # Both removed in WO-DASH-COHERENCE T4: the Dependencies sub-tab empty-state copy
+    # ("...does not draw inferred or placeholder edges") and the dead
+    # fetch('/api/v1/alerts/history') behind the Active Alerts KPI (alert firing retired,
+    # migration 131). The KPI now shows an honest 0 without the 404 fetch.
     assert "stats?.trend_last_30_days" in html
     assert "buildLearningEmptyState()" in html
     assert "Learning analytics have no current authority rows yet." in html
