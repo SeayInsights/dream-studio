@@ -123,7 +123,9 @@ def test_default_business_copy_hides_raw_technical_source_labels() -> None:
     assert "Dashboard output is derived. Use evidence and authority references" in html
     assert "Source confidence:" in html
     assert "From route authority records." in html
-    assert "Source confidence: project dependency authority" in html
+    # "Source confidence: project dependency authority" lived in the project-modal
+    # Dependencies sub-tab, removed in WO-DASH-COHERENCE T4 (pi_dependencies dropped).
+    # The Knowledge Graph tab's "from current dependency authority" copy remains.
     assert "from current dependency authority" in html
     assert "From route_decision_records." not in html
     assert "source: /api/v1/projects/" not in html
