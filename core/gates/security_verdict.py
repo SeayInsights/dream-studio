@@ -16,12 +16,14 @@ import re
 # negated summary. Match, case-insensitive, multiline:
 #   - a finding line that BEGINS with BLOCKED (optionally bulleted): "BLOCKED ...", "- BLOCKED ..."
 #   - an inline finding marker: "BLOCKED: <reason>"
-#   - a status/result/verdict line whose value is BLOCKED: "Status: BLOCKED"
-# "No BLOCKED findings" / "0 BLOCKED" do NOT match (BLOCKED is mid-line, uncoloned, not a verdict).
+#   - a status/result/verdict/finding line whose value is BLOCKED: "Status: BLOCKED",
+#     "Finding: BLOCKED critical issue"
+# "No BLOCKED findings" / "0 BLOCKED" do NOT match (BLOCKED is mid-line, uncoloned, not a verdict;
+# "findings" is not the whole word "finding", so the negated summary never triggers the label rule).
 _BLOCKED_FINDING_RE = re.compile(
     r"(?im)^\s*(?:[-*]\s*)?BLOCKED\b"
     r"|\bBLOCKED\s*:"
-    r"|\b(?:status|result|verdict)\b[^\n]*?:\s*BLOCKED\b"
+    r"|\b(?:status|result|verdict|finding)\b[^\n]*?:\s*BLOCKED\b"
 )
 
 

@@ -34,6 +34,7 @@ CLASSIFICATION: dict[str, str] = {
     "authority_projection_records": "DROP",  # Dropped migration 130: 0 rows, no live writer, aspirational telemetry
     "blocker_resolution_records": "DROP",  # Dropped migration 130: 0 rows, no live writer, aspirational telemetry
     "business_canonical_events": "KEEP",
+    "business_clients": "KEEP",  # Added migration 155 (Client Layer, Phase 2): client organizing layer over business_projects
     "business_design_briefs": "KEEP",
     "business_milestones": "KEEP",
     "business_projects": "KEEP",

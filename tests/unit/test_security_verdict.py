@@ -16,6 +16,7 @@ from core.gates.security_verdict import is_security_blocked
         "BLOCKED: SQL injection in report query",  # inline finding marker
         "Status: BLOCKED",  # verdict line
         "Result: BLOCKED — do not ship",  # verdict line
+        "Finding: BLOCKED critical issue",  # labelled finding (no colon after BLOCKED, not line-start)
     ],
 )
 def test_real_blocker_is_detected(text: str) -> None:
