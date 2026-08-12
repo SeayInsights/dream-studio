@@ -8,9 +8,89 @@ verbatim from the original module.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 _MOCK_ENV = "DREAM_STUDIO_VERIFY_MOCK"
+
+# ── Grader I/O contract (WO-VERIFY-CONFORMANCE) ─────────────────────────────────
+#
+# The grader verdict schema is the published, provider-neutral I/O contract: any
+# provider whose output validates against it can back the graders. This turns
+# "portable in principle" (WO-GRADER-PROVIDER-NEUTRAL) into a checkable claim.
+
+_GRADER_VERDICT_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[2] / "schemas" / "grader_verdict.schema.json"
+)
+
+# The fixed prompt the conformance suite feeds a provider. A conformant provider
+# returns ONLY a JSON grader verdict (a *_score in [0,1]).
+_CONFORMANCE_PROMPT = (
+    "You are a Dream Studio verification grader. Respond with ONLY a JSON object "
+    'matching the grader verdict contract, e.g. {"completion_score": 1.0, '
+    '"summary": "...", "gaps": []}. No prose outside the JSON.'
+)
+
+
+def grader_verdict_schema() -> dict[str, Any]:
+    """Load the published grader verdict I/O-contract schema."""
+    return json.loads(_GRADER_VERDICT_SCHEMA_PATH.read_text(encoding="utf-8"))
+
+
+def validate_grader_verdict(verdict: Any) -> list[str]:
+    """Return schema-validation error messages for a grader verdict ([] == conformant)."""
+    import jsonschema
+
+    if not isinstance(verdict, dict):
+        return [f"verdict is not a JSON object (got {type(verdict).__name__})"]
+    validator = jsonschema.Draft202012Validator(grader_verdict_schema())
+    return [e.message for e in validator.iter_errors(verdict)]
+
+
+def run_grader_conformance(
+    profile: dict[str, Any] | None = None, *, prompt: str | None = None
+) -> dict[str, Any]:
+    """Run one provider through the conformance check.
+
+    Spawns the provider via the provider-neutral runner, collects its output, and
+    validates the parsed verdict against the published contract. Returns
+    ``{provider, passed, errors, verdict}``. Any provider (the vendor CLI, a stub, a
+    second vendor) is exercised identically — that is the portability proof.
+    """
+    from core.adapters.grader_runner import resolve_profile, spawn_grader
+    from core.work_orders.verify_graders import _collect_grader
+
+    resolved = resolve_profile(profile)
+    proc = spawn_grader(prompt or _CONFORMANCE_PROMPT, resolved)
+    try:
+        verdict = _collect_grader(proc)
+    except Exception as exc:
+        # A non-JSON / crashed provider is non-conformant, not an error to propagate.
+        return {
+            "provider": resolved.get("command"),
+            "passed": False,
+            "errors": [f"provider did not return a parseable verdict: {exc}"],
+            "verdict": None,
+        }
+    if isinstance(verdict, dict) and (verdict.get("unreviewable") or verdict.get("_grader_error")):
+        errors = [str(verdict.get("reason") or verdict.get("_grader_error") or "no verdict")]
+    else:
+        errors = validate_grader_verdict(verdict)
+    return {
+        "provider": resolved.get("command"),
+        "passed": not errors,
+        "errors": errors,
+        "verdict": verdict,
+    }
+
+
+def record_conformance_result(result: dict[str, Any], path: Path) -> Path:
+    """Persist a conformance result as an evidence artifact (JSON). Returns the path."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
+    return path
+
 
 # ── Mock fixtures (one per grader) ─────────────────────────────────────────────
 
