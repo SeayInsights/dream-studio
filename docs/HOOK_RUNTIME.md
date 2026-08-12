@@ -124,6 +124,25 @@ via `step_sync_hook_projection`, installed `~/.claude/hooks/runtime/lib/` via
 the installer) with `.ds-source-root` as the repo-import fallback.
 Gate tests: `tests/unit/test_enforce_sqlite_hooks.py`.
 
+### Grader provider selection (verification plane)
+
+The other operator override alongside `DS_ENFORCE`: which LLM provider grades each
+WO-verify role. Selection is resolved by `config/grader_profiles.py`
+(`resolve_grader_profile(role)`) with this precedence, highest first:
+
+1. `DS_GRADER_STUB` — path to a stub grader script (headless/CI; dominates so verify
+   and the conformance suite run with no vendor CLI present).
+2. an explicit CLI flag value (`ds grader profiles --grader-profile "<argv>"`).
+3. the per-role env override `DS_GRADER_PROFILE_<ROLE>` (shlex argv), e.g.
+   `DS_GRADER_PROFILE_CORRECTNESS="my-grader --grade"`.
+4. a per-role (or `default`) entry in the config file at `DS_GRADER_PROFILE_CONFIG`.
+5. the built-in registry default in `config/grader_profiles.py`.
+
+If none resolves, selection **fails closed** (`UnresolvableGraderProfile`) with a
+message naming the exact keys to set — it never silently spawns an unresolved provider.
+Inspect the resolved role→provider mapping before running verify with
+`ds grader profiles`. Spawn is provider-neutral via `core/adapters/grader_runner.py`.
+
 ## Dispatcher Sub-Handler Mapping
 
 ### on-prompt-dispatch (UserPromptSubmit)

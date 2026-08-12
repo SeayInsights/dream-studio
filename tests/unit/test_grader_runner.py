@@ -51,3 +51,38 @@ def test_prompt_via_stdin_never_puts_prompt_in_argv():
         {"command": "c", "prompt_via": "stdin"}, prompt="hello"
     )
     assert "hello" not in argv
+
+
+# ── gap 9227c560: coverage for run_generation + grader_provider_available ─────
+
+
+def test_run_generation_with_stub_profile(tmp_path):
+    stub = tmp_path / "gen.py"
+    stub.write_text("import sys; sys.stdin.read(); print('GEN-OK')", encoding="utf-8")
+    profile = {"command": sys.executable, "base_args": [str(stub)], "prompt_via": "stdin"}
+    cp = grader_runner.run_generation("hello", profile=profile, timeout=30)
+    assert cp.returncode == 0
+    assert "GEN-OK" in cp.stdout
+
+
+def test_run_generation_argv_mode_passes_prompt(tmp_path):
+    stub = tmp_path / "gen.py"
+    stub.write_text("import sys; print('ARGS:' + '|'.join(sys.argv[1:]))", encoding="utf-8")
+    profile = {"command": sys.executable, "base_args": [str(stub)], "prompt_via": "argv"}
+    cp = grader_runner.run_generation("the-prompt", profile=profile, timeout=30)
+    assert "the-prompt" in cp.stdout
+
+
+def test_grader_provider_available_true_for_present_probe(tmp_path):
+    stub = tmp_path / "g.py"
+    stub.write_text("", encoding="utf-8")
+    profile = {"command": sys.executable, "availability_probe": sys.executable}
+    assert grader_runner.grader_provider_available(profile) is True
+
+
+def test_grader_provider_available_false_for_missing():
+    profile = {
+        "command": "definitely-not-a-real-binary-xyz-123",
+        "availability_probe": "definitely-not-a-real-binary-xyz-123",
+    }
+    assert grader_runner.grader_provider_available(profile) is False

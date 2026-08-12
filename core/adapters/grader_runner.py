@@ -90,8 +90,11 @@ def resolve_grader_argv(
     print_flag = p.get("print_flag")
     if print_flag:
         argv.append(print_flag)
-    if model and p.get("model_flag"):
-        argv += [p["model_flag"], model]
+    # The model comes from the explicit `model` arg (live-eval) or the profile's
+    # own `model_id` (WO-GRADER-PROFILE-REGISTRY: profiles carry the model to request).
+    effective_model = model or p.get("model_id")
+    if effective_model and p.get("model_flag"):
+        argv += [p["model_flag"], effective_model]
     if output_format and p.get("output_format_flag"):
         argv += [p["output_format_flag"], output_format]
     argv += list(p.get("extra_args", []))
@@ -165,12 +168,14 @@ def run_generation(
 
 
 def grader_provider_available(profile: dict[str, Any] | None = None) -> bool:
-    """True if the resolved provider's executable is invocable (CLI on PATH, stub
-    file present, or an absolute interpreter). Used to fail closed / mark unreviewable."""
+    """True if the provider is invocable. Checks the profile's ``availability_probe``
+    (WO-GRADER-PROFILE-REGISTRY min field) when present, else the command: a PATH name
+    resolves via which, an absolute path via exists. Used to fail closed / mark
+    unreviewable rather than crash when the provider is absent (CI, or any host without it)."""
     import shutil
 
     p = resolve_profile(profile)
-    cmd = p["command"]
-    if os.path.isabs(cmd):
-        return os.path.exists(cmd)
-    return shutil.which(cmd) is not None
+    probe = p.get("availability_probe") or p["command"]
+    if os.path.isabs(probe):
+        return os.path.exists(probe)
+    return shutil.which(probe) is not None

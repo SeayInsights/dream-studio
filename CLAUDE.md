@@ -53,6 +53,8 @@ Two blocking hooks convert the authority/docstore rules from prose into failure 
 
 Both hooks fail open (a broken DB disables enforcement, never editing) and respect the operator escape hatch `DS_ENFORCE=0`. Canonical source: `runtime/hooks/meta/on-edit-enforce.py`, `runtime/hooks/meta/on-stop-enforce.py`, `runtime/lib/enforcement.py`; wired in `hooks/hooks.json`.
 
+**Grader provider selection** (the other operator override): which LLM provider grades each WO-verify role is resolved by `config/grader_profiles.py`, precedence highest-first: `DS_GRADER_STUB` (headless/CI) > explicit `--grader-profile` CLI flag > per-role env `DS_GRADER_PROFILE_<ROLE>` > config file `DS_GRADER_PROFILE_CONFIG` > built-in default. Unresolvable → fail closed (names the key to set). Inspect with `ds grader profiles`. Full precedence in `docs/HOOK_RUNTIME.md`.
+
 ## Dream Studio CLI — Decision Guide
 
 ### Session Start

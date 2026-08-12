@@ -37,6 +37,7 @@ from interfaces.cli.commands import integrate  # noqa: E402
 from interfaces.cli.commands import milestone  # noqa: E402
 from interfaces.cli.commands import prd  # noqa: E402
 from interfaces.cli.commands import project  # noqa: E402
+from interfaces.cli.commands import grader  # noqa: E402
 from interfaces.cli.commands import skill  # noqa: E402
 from interfaces.cli.commands import system  # noqa: E402
 from interfaces.cli.commands import task  # noqa: E402
@@ -110,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
     milestone.register(subcommands)
     prd.register(subcommands)
     task.register(subcommands)
+    grader.register(subcommands)
     analyze.register(subcommands)
     eval_cmd.register(subcommands)
     config.register(subcommands)
@@ -209,6 +211,8 @@ def main(argv: list[str] | None = None) -> int:
             return diagnostics.dispatch(args)
         if args.command == "config":
             return config.dispatch(args, source_root=source_root, dream_studio_home=home)
+        if args.command == "grader":
+            return grader.dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "analyze":
             return analyze.dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "eval":
