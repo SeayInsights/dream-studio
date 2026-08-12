@@ -209,3 +209,25 @@ tools:
       - ds-quality (infrastructure security checks)
       - ds-domains (rapid security assessment)
     docs_url: "https://docs.projectdiscovery.io/nuclei"
+
+  grader-provider:
+    name: Grader Provider (verification plane)
+    description: "The LLM provider that backs WO-verify independent-review graders and live evals. It is NOT hardcoded: verify + evals spawn through the provider-neutral core.adapters.grader_runner, which resolves a per-role provider profile via config.grader_profiles. Selection precedence (highest first): DS_GRADER_STUB (a stub-script path, headless/CI) > DS_GRADER_ARGV (operator argv override) > --grader-profile CLI flag > per-role env DS_GRADER_PROFILE_<ROLE> > DS_GRADER_PROFILE_CONFIG file > the built-in registry default (the Claude CLI). Any provider whose output validates against schemas/grader_verdict*.schema.json can back the graders. Inspect the resolved role->provider mapping with `ds grader profiles`."
+    detect_command:
+      windows: "where claude"
+      mac: "which claude"
+      linux: "which claude"
+    version_command: "claude --version"
+    min_version: "0.0.0"
+    upgrade_command:
+      windows: "npm install -g @anthropic-ai/claude-code"
+      mac: "npm install -g @anthropic-ai/claude-code"
+      linux: "npm install -g @anthropic-ai/claude-code"
+    install_command:
+      windows: "npm install -g @anthropic-ai/claude-code"
+      mac: "npm install -g @anthropic-ai/claude-code"
+      linux: "npm install -g @anthropic-ai/claude-code"
+    what_it_unlocks:
+      - ds-workorder (independent-review graders on close/verify)
+      - ds-core (verify mode + live evals)
+    docs_url: "https://docs.claude.com/claude-code"

@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from collections import Counter, defaultdict
 from typing import Any
 
 from core.shared_intelligence.authority import require_shared_intelligence_tables
 
-# WO-GRADER-PROFILE-REGISTRY: model_provider_profiles was dropped as unused (migration
-# 131) and its CREATE is squashed away — the module has no baseline backing table. Rather
-# than resurrect a deliberately-dropped, inference-only schema, the declaration is
-# neutralized to reflect reality: no backing table. The read-model functions already
-# degrade to honest empty state (see _model_profiles' try/except), and grader provider
-# profiles live in config (config/grader_profiles.py), not this registry.
+# WO-GRADER-PROFILE-REGISTRY (+ gap c6fc31b1 — branch b, executed): model_provider_profiles
+# was dropped as unused (migration 131) and its CREATE is squashed away — the module has no
+# baseline backing table. Rather than resurrect a deliberately-dropped, inference-only
+# schema, the dead query path is removed: _model_profiles no longer SELECTs the dropped
+# table (it returns [] by design), the module no longer lists it as an owned table
+# (core/module_contracts.py), and grader provider profiles live in config
+# (config/grader_profiles.py), not this registry. The two public read models return an
+# honest, documented empty state (asserted by tests/unit/test_model_registry_backing.py).
 MODEL_REGISTRY_SOURCE_TABLES: tuple[str, ...] = ()
 
 
@@ -130,38 +131,13 @@ def model_provider_registry_policy() -> dict[str, Any]:
 
 
 def _model_profiles(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    # model_provider_profiles dropped migration 131 — return empty gracefully
-    try:
-        rows = conn.execute("""
-            SELECT *
-            FROM model_provider_profiles
-            ORDER BY provider ASC, model_id ASC
-            """).fetchall()
-    except Exception:
-        return []
-    return [_decode_profile(row) for row in rows]
-
-
-def _decode_profile(row: sqlite3.Row) -> dict[str, Any]:
-    profile = dict(row)
-    profile["capability_tags"] = _loads(profile.pop("capability_tags_json"), [])
-    profile["cost_profile"] = _loads(profile.pop("cost_profile_json"), {})
-    profile["token_behavior"] = _loads(profile.pop("token_behavior_json"), {})
-    profile["output_quality"] = _loads(profile.pop("output_quality_json"), {})
-    profile["failure_modes"] = _loads(profile.pop("failure_modes_json"), [])
-    profile["best_use_patterns"] = _loads(profile.pop("best_use_patterns_json"), [])
-    profile["source_refs"] = _loads(profile.pop("source_refs_json"), [])
-    profile["evidence_refs"] = _loads(profile.pop("evidence_refs_json"), [])
-    return profile
-
-
-def _loads(raw: str | None, default: Any) -> Any:
-    if raw is None:
-        return default
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        return default
+    # WO-GRADER-PROFILE-REGISTRY gap c6fc31b1: model_provider_profiles was dropped
+    # (migration 131) and its CREATE is squashed away — there is no backing table. The
+    # dead SELECT-and-decode path (a try/except that could only ever return []) is removed:
+    # this read model has no source rows by design. ``conn`` is retained so the two public
+    # read models keep a stable signature and still assert the shared-intelligence tables.
+    _ = conn
+    return []
 
 
 def _with_authority(model_name: str, payload: dict[str, Any]) -> dict[str, Any]:
