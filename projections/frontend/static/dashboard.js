@@ -6104,11 +6104,11 @@ function initHooksCharts() {
                 return `
                     <tr class="hover:bg-gray-50">
                         <td class="px-6 py-4 text-sm font-medium text-gray-900">
-                            ${m.title || m.milestone_id}
+                            ${escHtml(m.title || m.milestone_id)}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor}">
-                                ${m.status}
+                                ${escHtml(m.status)}
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
@@ -6157,7 +6157,7 @@ function initHooksCharts() {
                             <div>
                                 <span class="font-semibold">Status:</span>
                                 <span class="px-2 py-1 text-xs rounded-full ${getStatusColor(m.status)}">
-                                    ${m.status}
+                                    ${escHtml(m.status)}
                                 </span>
                             </div>
                             <div>
@@ -6168,10 +6168,10 @@ function initHooksCharts() {
 
                         <div class="border-t pt-4">
                             <div class="text-sm text-gray-700 mb-1">
-                                <span class="font-semibold">Set out to:</span> ${m.set_out_to || '—'}
+                                <span class="font-semibold">Set out to:</span> ${escHtml(m.set_out_to || '—')}
                             </div>
                             <div class="text-sm text-gray-700">
-                                <span class="font-semibold">Accomplished:</span> ${m.accomplished || '—'}
+                                <span class="font-semibold">Accomplished:</span> ${escHtml(m.accomplished || '—')}
                             </div>
                         </div>
 
@@ -6189,11 +6189,11 @@ function initHooksCharts() {
                                     <tbody>
                                         ${caps.map(c => `
                                             <tr class="border-t">
-                                                <td class="px-4 py-2">${c.title || c.capability_id}</td>
+                                                <td class="px-4 py-2">${escHtml(c.title || c.capability_id)}</td>
                                                 <td class="px-4 py-2">${_prdPct(c.score)}</td>
                                                 <td class="px-4 py-2">
                                                     <span class="px-2 py-1 text-xs rounded-full ${getStatusColor(c.status)}">
-                                                        ${c.status}
+                                                        ${escHtml(c.status)}
                                                     </span>
                                                 </td>
                                             </tr>
