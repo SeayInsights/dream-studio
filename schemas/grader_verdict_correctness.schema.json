@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dreamstudio.local/schemas/grader_verdict_correctness.schema.json",
+  "title": "Dream Studio grader verdict — correctness role",
+  "description": "The correctness grader's I/O contract. A conformant correctness provider returns a JSON object carrying correctness_score in [0,1] plus its role-specific payload (architecture violations, coverage gaps, migration gaps). Extra fields are allowed. Requiring the role's own score is what distinguishes this from the other three role contracts (WO-VERIFY-CONFORMANCE gap 0a64cf8c).",
+  "type": "object",
+  "required": ["correctness_score"],
+  "properties": {
+    "correctness_score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "correctness_passed": { "type": "boolean" },
+    "summary": { "type": "string" },
+    "violations": { "type": "array" },
+    "coverage_gaps": { "type": "array" },
+    "migration_gaps": { "type": "array" }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dreamstudio.local/schemas/grader_verdict_migration.schema.json",
+  "title": "Dream Studio grader verdict — migration role",
+  "description": "The migration grader's I/O contract (migration-class work orders only). A conformant migration provider returns a JSON object carrying migration_score in [0,1] plus its role-specific payload (the migration_safe flag and the risks list). Extra fields are allowed. Requiring the role's own score is what distinguishes this from the other three role contracts (WO-VERIFY-CONFORMANCE gap 0a64cf8c).",
+  "type": "object",
+  "required": ["migration_score"],
+  "properties": {
+    "migration_score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "migration_safe": { "type": "boolean" },
+    "summary": { "type": "string" },
+    "risks": { "type": "array" }
+  }
+}

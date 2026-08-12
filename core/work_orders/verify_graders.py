@@ -25,6 +25,7 @@ from .verify_shared import (
     _MOCK_ENV,
     _MOCK_MIGRATION,
     _MOCK_QUALITY,
+    validate_grader_verdict,
 )
 
 # ── Parallel grader execution ───────────────────────────────────────────────────
@@ -110,6 +111,56 @@ def _collect_grader(proc: subprocess.Popen, timeout: int = 360) -> dict[str, Any
         raise RuntimeError(f"Grader failed: {exc}")
 
 
+def _should_retry(result: dict[str, Any]) -> bool:
+    """A grader miss is retryable when it is unreviewable (empty output) OR non-JSON
+    (_grader_error) — both are transient LLM formatting flakes a fresh call usually
+    resolves. A structurally-absent CLI (grader_cli_unavailable) is NOT retryable: a
+    re-spawn cannot conjure a missing binary."""
+    needs = result.get("unreviewable") or result.get("_grader_error")
+    return bool(needs) and result.get("reason") != "grader_cli_unavailable"
+
+
+def _retry_grader_once(prompt: str, profile: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Re-spawn + collect one grader once; return the clean retry verdict, or None if the
+    retry also missed. The single shared retry step (WO-GRADER-RETRY-NONJSON) used by both
+    the parallel WO-verify path and the conformance suite so they exercise identical retry
+    semantics (gap 2bbed8d8)."""
+    try:
+        retry_proc = _spawn_grader(prompt, profile)
+        retry_result = _collect_grader(retry_proc, timeout=60)
+        if not retry_result.get("unreviewable") and not retry_result.get("_grader_error"):
+            return retry_result
+    except Exception:
+        pass  # keep the caller's original result on retry failure
+    return None
+
+
+def collect_grader_with_retry(prompt: str, profile: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Spawn one grader, collect it, and apply the single transient-miss retry.
+
+    The retry-owning code path the conformance suite drives (gap 2bbed8d8): a non-JSON
+    first reply is re-spawned once and only a clean retry replaces it. Shares
+    ``_retry_grader_once`` with the parallel WO-verify path so both retry identically.
+    """
+    try:
+        proc = _spawn_grader(prompt, profile)
+    except FileNotFoundError:
+        return {
+            "unreviewable": True,
+            "reason": "grader_cli_unavailable",
+            "_grader_error": "grader provider not available on this host",
+        }
+    try:
+        result = _collect_grader(proc)
+    except Exception as exc:
+        result = {"_grader_error": str(exc)}
+    if _should_retry(result):
+        retry = _retry_grader_once(prompt, profile)
+        if retry is not None:
+            result = retry
+    return result
+
+
 def _run_graders_parallel(
     prompts: dict[str, str],
 ) -> dict[str, dict[str, Any]]:
@@ -161,16 +212,19 @@ def _run_graders_parallel(
         # are LLM formatting flakes a fresh call usually resolves; without the
         # non-JSON retry a prose reply defaults the score to 0.0 and false-FAILs
         # the WO (WO-GRADER-RETRY-NONJSON — WO-GAP-DEDUPE-CLASS needed 3 manual
-        # verify runs). Skip when the CLI is simply absent (grader_cli_unavailable)
-        # — a re-spawn cannot recover that. Accept the retry only if it is clean.
-        needs_retry = result.get("unreviewable") or result.get("_grader_error")
-        if needs_retry and result.get("reason") != "grader_cli_unavailable":
-            try:
-                retry_proc = _spawn_grader(prompts[name], profiles.get(name))
-                retry_result = _collect_grader(retry_proc, timeout=60)
-                if not retry_result.get("unreviewable") and not retry_result.get("_grader_error"):
-                    result = retry_result
-            except Exception:
-                pass  # keep original result on retry failure
+        # verify runs). The retry step is shared with the conformance suite so both
+        # paths retry identically (gap 2bbed8d8).
+        if _should_retry(result):
+            retry = _retry_grader_once(prompts[name], profiles.get(name))
+            if retry is not None:
+                result = retry
+        # gap 0a64cf8c: check real-mode grader output against the published per-role
+        # contract in the LIVE path (not only in tests). Observability only — the
+        # errors are attached as evidence; scoring keeps its own fallbacks so a
+        # score-less-but-scorable verdict (e.g. {"passed": true}) is not rejected here.
+        if not result.get("unreviewable") and not result.get("_grader_error"):
+            schema_errors = validate_grader_verdict(result, role=name)
+            if schema_errors:
+                result["_schema_errors"] = schema_errors
         results[name] = result
     return results

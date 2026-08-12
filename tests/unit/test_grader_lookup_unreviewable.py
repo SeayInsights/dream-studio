@@ -271,3 +271,26 @@ def test_gate_still_fails_on_reviewable_failed_verdict(tmp_path):
     )
     assert passed is False
     assert "review failed" in reason
+
+
+def test_live_grader_path_validates_real_verdict_against_role_schema(tmp_path, monkeypatch):
+    """gap 0a64cf8c task 2: real-mode grader output is checked against the role's published
+    contract in the LIVE collection path. A completion verdict missing completion_score
+    parses fine but is schema-invalid, so _run_graders_parallel attaches _schema_errors
+    (observability) instead of silently accepting off-contract output."""
+    stub = tmp_path / "no_score_stub.py"
+    stub.write_text(
+        "import sys, json\nsys.stdin.read()\n"
+        'print(json.dumps({"summary": "no score here", "gaps": []}))\n',
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("DREAM_STUDIO_VERIFY_MOCK", raising=False)
+    monkeypatch.delenv("DS_GRADER_ARGV", raising=False)
+    monkeypatch.setenv("DS_GRADER_STUB", str(stub))
+
+    from core.work_orders.verify import _run_graders_parallel
+
+    results = _run_graders_parallel({"completion": "grade it"})
+    r = results["completion"]
+    assert not r.get("unreviewable") and not r.get("_grader_error"), "verdict parsed as JSON"
+    assert r.get("_schema_errors"), "live path must record role-schema errors for real output"

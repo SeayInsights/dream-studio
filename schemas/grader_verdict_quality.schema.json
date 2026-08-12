@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dreamstudio.local/schemas/grader_verdict_quality.schema.json",
+  "title": "Dream Studio grader verdict — quality role",
+  "description": "The quality grader's I/O contract. A conformant quality provider returns a JSON object carrying quality_score in [0,1] plus its role-specific payload (the issues list). Extra fields are allowed. Requiring the role's own score is what distinguishes this from the other three role contracts (WO-VERIFY-CONFORMANCE gap 0a64cf8c).",
+  "type": "object",
+  "required": ["quality_score"],
+  "properties": {
+    "quality_score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "quality_passed": { "type": "boolean" },
+    "summary": { "type": "string" },
+    "issues": { "type": "array" }
+  }
+}
