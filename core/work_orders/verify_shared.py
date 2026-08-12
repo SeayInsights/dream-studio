@@ -20,68 +20,169 @@ _MOCK_ENV = "DREAM_STUDIO_VERIFY_MOCK"
 # provider whose output validates against it can back the graders. This turns
 # "portable in principle" (WO-GRADER-PROVIDER-NEUTRAL) into a checkable claim.
 
-_GRADER_VERDICT_SCHEMA_PATH = (
-    Path(__file__).resolve().parents[2] / "schemas" / "grader_verdict.schema.json"
-)
+_SCHEMA_DIR = Path(__file__).resolve().parents[2] / "schemas"
+_GRADER_VERDICT_SCHEMA_PATH = _SCHEMA_DIR / "grader_verdict.schema.json"
 
-# The fixed prompt the conformance suite feeds a provider. A conformant provider
-# returns ONLY a JSON grader verdict (a *_score in [0,1]).
-_CONFORMANCE_PROMPT = (
-    "You are a Dream Studio verification grader. Respond with ONLY a JSON object "
-    'matching the grader verdict contract, e.g. {"completion_score": 1.0, '
-    '"summary": "...", "gaps": []}. No prose outside the JSON.'
-)
+# The four grader roles each publish their own contract: a role verdict must carry that
+# role's own score (gap 0a64cf8c). The combined schema above stays the "any role" union.
+GRADER_ROLES = ("completion", "correctness", "quality", "migration")
+_ROLE_SCHEMA_PATHS = {
+    role: _SCHEMA_DIR / f"grader_verdict_{role}.schema.json" for role in GRADER_ROLES
+}
+
+# The fixed prompts the conformance suite feeds a provider — one per role, each asking
+# for that role's own score so the returned verdict is checked against the role contract
+# (gap 2bbed8d8). A conformant provider returns ONLY a JSON grader verdict.
+_ROLE_CONFORMANCE_PROMPTS = {
+    "completion": '{"completion_score": 1.0, "summary": "...", "gaps": []}',
+    "correctness": '{"correctness_score": 1.0, "violations": [], "coverage_gaps": []}',
+    "quality": '{"quality_score": 1.0, "issues": []}',
+    "migration": '{"migration_score": 1.0, "migration_safe": true, "risks": []}',
+}
 
 
-def grader_verdict_schema() -> dict[str, Any]:
-    """Load the published grader verdict I/O-contract schema."""
-    return json.loads(_GRADER_VERDICT_SCHEMA_PATH.read_text(encoding="utf-8"))
+def _conformance_prompt(role: str | None) -> str:
+    example = _ROLE_CONFORMANCE_PROMPTS.get(
+        role or "completion", _ROLE_CONFORMANCE_PROMPTS["completion"]
+    )
+    return (
+        "You are a Dream Studio verification grader"
+        + (f" acting in the {role} role" if role else "")
+        + ". Respond with ONLY a JSON object matching the grader verdict contract, e.g. "
+        + example
+        + ". No prose outside the JSON."
+    )
 
 
-def validate_grader_verdict(verdict: Any) -> list[str]:
-    """Return schema-validation error messages for a grader verdict ([] == conformant)."""
+# Backward-compat alias (the completion-shaped prompt).
+_CONFORMANCE_PROMPT = _conformance_prompt("completion")
+
+
+def grader_verdict_schema(role: str | None = None) -> dict[str, Any]:
+    """Load a published grader-verdict I/O-contract schema.
+
+    ``role`` in ``GRADER_ROLES`` loads that role's own contract (which requires the role's
+    score); ``None`` loads the combined "any role" union schema.
+    """
+    path = _ROLE_SCHEMA_PATHS[role] if role in _ROLE_SCHEMA_PATHS else _GRADER_VERDICT_SCHEMA_PATH
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def validate_grader_verdict(verdict: Any, role: str | None = None) -> list[str]:
+    """Return schema-validation error messages for a grader verdict ([] == conformant).
+
+    When ``role`` names a grader role the verdict is checked against that role's own
+    contract (so a completion verdict must carry ``completion_score`` etc., gap 0a64cf8c);
+    otherwise it is checked against the combined union contract.
+    """
     import jsonschema
 
     if not isinstance(verdict, dict):
         return [f"verdict is not a JSON object (got {type(verdict).__name__})"]
-    validator = jsonschema.Draft202012Validator(grader_verdict_schema())
+    validator = jsonschema.Draft202012Validator(grader_verdict_schema(role))
     return [e.message for e in validator.iter_errors(verdict)]
 
 
 def run_grader_conformance(
-    profile: dict[str, Any] | None = None, *, prompt: str | None = None
+    profile: dict[str, Any] | None = None, *, role: str | None = None, prompt: str | None = None
 ) -> dict[str, Any]:
-    """Run one provider through the conformance check.
+    """Run one provider through the conformance check for one grader role.
 
-    Spawns the provider via the provider-neutral runner, collects its output, and
-    validates the parsed verdict against the published contract. Returns
-    ``{provider, passed, errors, verdict}``. Any provider (the vendor CLI, a stub, a
-    second vendor) is exercised identically — that is the portability proof.
+    Spawns the provider via the provider-neutral runner **through the shared retry path**
+    (so a transient non-JSON reply is re-tried exactly as in real verify — gap 2bbed8d8),
+    then validates the parsed verdict against that role's published contract. Returns
+    ``{provider, role, passed, unreviewable, is_stub, errors, verdict}``. Any provider (the
+    vendor CLI, a stub, a second vendor) is exercised identically — that is the portability
+    proof. ``unreviewable`` (empty output) is reported distinctly from a conformance failure
+    so an empty reply is not treated as close-blocking (gap 2bbed8d8 / WO-VERIFY-NOSUMMARY).
     """
-    from core.adapters.grader_runner import resolve_profile, spawn_grader
-    from core.work_orders.verify_graders import _collect_grader
+    from core.adapters.grader_runner import resolve_profile
+    from core.work_orders.verify_graders import collect_grader_with_retry
 
     resolved = resolve_profile(profile)
-    proc = spawn_grader(prompt or _CONFORMANCE_PROMPT, resolved)
-    try:
-        verdict = _collect_grader(proc)
-    except Exception as exc:
-        # A non-JSON / crashed provider is non-conformant, not an error to propagate.
+    is_stub = bool(resolved.get("is_stub"))
+    verdict = collect_grader_with_retry(prompt or _conformance_prompt(role), resolved)
+
+    base = {"provider": resolved.get("command"), "role": role, "is_stub": is_stub}
+    if isinstance(verdict, dict) and verdict.get("unreviewable"):
+        # Empty / no-summary output: unreviewable, distinct from non-conformant.
         return {
-            "provider": resolved.get("command"),
+            **base,
             "passed": False,
-            "errors": [f"provider did not return a parseable verdict: {exc}"],
-            "verdict": None,
+            "unreviewable": True,
+            "errors": [str(verdict.get("reason") or "grader returned empty output")],
+            "verdict": verdict,
         }
-    if isinstance(verdict, dict) and (verdict.get("unreviewable") or verdict.get("_grader_error")):
-        errors = [str(verdict.get("reason") or verdict.get("_grader_error") or "no verdict")]
-    else:
-        errors = validate_grader_verdict(verdict)
+    if isinstance(verdict, dict) and verdict.get("_grader_error"):
+        return {
+            **base,
+            "passed": False,
+            "unreviewable": False,
+            "errors": [f"provider did not return a parseable verdict: {verdict['_grader_error']}"],
+            "verdict": verdict,
+        }
+    errors = validate_grader_verdict(verdict, role=role)
     return {
-        "provider": resolved.get("command"),
+        **base,
         "passed": not errors,
+        "unreviewable": False,
         "errors": errors,
         "verdict": verdict,
+    }
+
+
+def run_conformance_suite(
+    profile: dict[str, Any] | None = None, *, roles: tuple[str, ...] = GRADER_ROLES
+) -> dict[str, Any]:
+    """Run the full conformance suite: one provider across every grader role.
+
+    Returns ``{provider, is_stub, passed, roles: {role: result, ...}}``. ``passed`` is True
+    only if every role returned a schema-valid verdict — the whole-provider portability
+    claim (gap 2bbed8d8). Drives each role from the resolved provider *profile* rather than
+    an ambient default.
+    """
+    from core.adapters.grader_runner import resolve_profile
+
+    resolved = resolve_profile(profile)
+    per_role = {role: run_grader_conformance(resolved, role=role) for role in roles}
+    return {
+        "provider": resolved.get("command"),
+        "is_stub": bool(resolved.get("is_stub")),
+        "passed": all(r["passed"] for r in per_role.values()),
+        "roles": per_role,
+    }
+
+
+def run_provider_conformance_or_block(
+    provider_name: str, *, roles: tuple[str, ...] = GRADER_ROLES
+) -> dict[str, Any]:
+    """Run the conformance suite against a NAMED REAL provider, or report it blocked.
+
+    Returns ``{provider, blocked, reason?, suite?}``. The honest handling of gap 930ea6df's
+    "second provider" task: a stub profile or a provider that is not invocable on this host
+    yields ``blocked=True`` with the reason — never a stub pass recorded as real-provider
+    evidence. Only a real, reachable provider is actually exercised.
+    """
+    from config.grader_profiles import resolve_named_provider
+    from core.adapters.grader_runner import grader_provider_available
+
+    profile = resolve_named_provider(provider_name)
+    if profile.get("is_stub"):
+        return {
+            "provider": provider_name,
+            "blocked": True,
+            "reason": "profile is a stub; a stub run is not real-provider conformance evidence",
+        }
+    if not grader_provider_available(profile):
+        return {
+            "provider": provider_name,
+            "blocked": True,
+            "reason": f"provider command {profile.get('command')!r} is not invocable on this host",
+        }
+    return {
+        "provider": provider_name,
+        "blocked": False,
+        "suite": run_conformance_suite(profile, roles=roles),
     }
 
 
@@ -90,6 +191,29 @@ def record_conformance_result(result: dict[str, Any], path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
     return path
+
+
+class StubConformanceNotProviderEvidence(ValueError):
+    """Raised when a stub conformance run is offered as real-provider evidence (gap 930ea6df).
+
+    A stub always returns a canned pass, so recording it as a *provider* conformance pass is
+    a false-done. Provider evidence must come from a non-stub profile.
+    """
+
+
+def record_provider_conformance(result: dict[str, Any], path: Path) -> Path:
+    """Persist a conformance result as **real-provider** evidence, refusing a stub.
+
+    If ``result['is_stub']`` is truthy this raises ``StubConformanceNotProviderEvidence``
+    — a stub run must never be recorded as proof that a second real provider satisfies the
+    contract (gap 930ea6df: recording a stub pass as a real-provider pass is a false-done).
+    """
+    if result.get("is_stub"):
+        raise StubConformanceNotProviderEvidence(
+            "refusing to record a stub conformance run as real-provider evidence "
+            f"(provider={result.get('provider')!r})"
+        )
+    return record_conformance_result(result, path)
 
 
 # ── Mock fixtures (one per grader) ─────────────────────────────────────────────

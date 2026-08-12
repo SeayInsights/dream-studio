@@ -51,6 +51,46 @@ _DEFAULT_PROFILES: dict[str, dict[str, Any]] = {
 }
 
 
+# Named real (non-stub) provider profiles. The registry must contain at least two real
+# providers so "the verification plane is portable across providers" is more than a claim
+# about one vendor (gap 930ea6df). A profile DEFINITION here does not assert the binary is
+# installed or that it emits a conformant verdict on this host — that is a runtime question
+# answered by grader_provider_available + run_grader_conformance.
+PROVIDER_PROFILES: dict[str, dict[str, Any]] = {
+    "claude-cli": _DEFAULT_PROFILES["default"],
+    # OpenAI Codex CLI, non-interactive: `codex exec "<prompt>"`. Registered so the
+    # registry holds a second real provider; whether it can act as a one-shot JSON grader
+    # on a given host is checked at runtime (it needs login and is agentic, so it may not).
+    "codex-cli": {
+        "provider_id": "codex-cli",
+        "command": "codex",
+        "base_args": ["exec"],
+        "model_flag": "--model",
+        "model_id": None,
+        "prompt_via": "argv",
+        "availability_probe": "codex",
+    },
+}
+
+
+def real_provider_profiles() -> dict[str, dict[str, Any]]:
+    """Return the named real (non-stub) provider profiles the registry knows about."""
+    return {name: _normalize(p) for name, p in PROVIDER_PROFILES.items()}
+
+
+def resolve_named_provider(name: str) -> dict[str, Any]:
+    """Resolve a named real provider profile by id (bypasses the stub/env precedence).
+
+    Used to run conformance against a specific real provider (gap 930ea6df). Raises
+    ``UnresolvableGraderProfile`` for an unknown provider.
+    """
+    if name not in PROVIDER_PROFILES:
+        raise UnresolvableGraderProfile(
+            f"Unknown grader provider {name!r}. Known real providers: {sorted(PROVIDER_PROFILES)}."
+        )
+    return _normalize(PROVIDER_PROFILES[name])
+
+
 class UnresolvableGraderProfile(RuntimeError):
     """Raised when no profile can be resolved for a role (fail closed)."""
 

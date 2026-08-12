@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dreamstudio.local/schemas/grader_verdict_completion.schema.json",
+  "title": "Dream Studio grader verdict — completion role",
+  "description": "The completion grader's I/O contract. A conformant completion provider returns a JSON object carrying completion_score in [0,1] plus its role-specific payload (per-task verdicts and any gaps). Extra fields are allowed. Requiring the role's own score is what distinguishes this from the other three role contracts (WO-VERIFY-CONFORMANCE gap 0a64cf8c).",
+  "type": "object",
+  "required": ["completion_score"],
+  "properties": {
+    "completion_score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "passed": { "type": "boolean" },
+    "summary": { "type": "string" },
+    "tasks_verified": { "type": "array" },
+    "gaps": { "type": "array" }
+  }
+}
