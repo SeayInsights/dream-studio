@@ -201,7 +201,7 @@ MODULE_CONTRACTS: tuple[dict[str, Any], ...] = (
     {
         "module_id": "shared_intelligence",
         "purpose": "Expose adapter, model, context packet, usage accounting, and Contract Atlas read models.",
-        "owned_tables": ["adapter_authority_profiles", "model_provider_profiles"],
+        "owned_tables": ["adapter_authority_profiles"],
         "read_dependencies": ["adapter profiles", "module contracts", "runtime profiles"],
         "write_dependencies": ["setup/config commands only when explicitly authorized"],
         "emitted_events": ["context_packet_generated"],
