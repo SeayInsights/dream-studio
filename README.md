@@ -6,18 +6,113 @@
 
 ## What Dream Studio Is
 
-Dream Studio is a **local-first AI orchestration** platform — not a plugin, not a workflow template library. An operating system that manages the relationship between developer intent and AI execution — providing persistent memory across sessions, enforcing quality standards natively, routing work to the right capability automatically, and accumulating intelligence across sessions and projects.
+**Dream Studio makes an AI agent accountable to a system of record it cannot edit.** An
+agent working under Dream Studio cannot change source outside an approved work order, cannot
+close a defect while its symptom still reproduces, cannot self-certify its own work, and
+cannot silently drift its config away from authority. These are not conventions the agent is
+asked to follow — they are runtime gates enforced by the SQLite authority and the hooks that
+guard it. You can watch all four hold, against a throwaway project, in about ten seconds:
+[`ds prove`](#prove-it).
 
-Dream Studio runs three layers in concert:
+That accountability is the point; the orchestration is how it is delivered. Underneath, Dream
+Studio is a local-first platform that runs three layers in concert:
 
 - **Capability layer** — skills, agents, and workflows that encode structured development practices
 - **Infrastructure layer** — an event pipeline, spool system, SQLite authority database, and provisioner that wire AI sessions to persistent state
 - **Intelligence layer** — a project spine with SDLC pipeline, design gates, and session memory that accumulates across every build
 
-When you invoke a Dream Studio skill, you are not calling a function. You are engaging a system that knows your project, your history, your quality standards, and your current work order — and routes execution accordingly.
+When you invoke a Dream Studio skill, you are not calling a function. You are engaging a system
+that knows your project, your history, your quality standards, and your current work order —
+and holds execution to them.
 
 > **Architecture note (TA0b):** canonical_events is the single authoritative event store.
 > execution_events is a projection rebuilt from canonical events. See docs/architecture/event-store.md.
+
+## What it refuses to do
+
+Four refusals, each enforced by code you can read and reproduced live by [`ds prove`](#prove-it):
+
+- **An unauthorized source edit.** Editing product source in a registered project with no
+  `in_progress` work order is **denied**, with the exact `ds work-order start <id>` remediation.
+  Enforced by [`runtime/hooks/meta/on-edit-enforce.py`](runtime/hooks/meta/on-edit-enforce.py).
+- **Ending a session with unrecorded work.** A session that edited product source but recorded
+  no authority write (a completed task or closed work order) is **blocked from stopping** until
+  it does. Enforced by [`runtime/hooks/meta/on-stop-enforce.py`](runtime/hooks/meta/on-stop-enforce.py).
+- **Closing a defect whose symptom still reproduces.** A work order with an `originating_symptom`
+  cannot close while that SQL check still fails — and closes once it passes.
+  Enforced by [`core/work_orders/close_gates.py`](core/work_orders/close_gates.py).
+- **Self-certifying its own work.** The independent-review graders that score a work order
+  receive the diff but **not** the claimed task list (only the completion grader sees both), so
+  a grader cannot be steered by the agent's own account of what it did.
+  Enforced by [`core/work_orders/verify_main.py`](core/work_orders/verify_main.py).
+
+Every refusal fails **open**, never closed: a broken authority DB disables enforcement rather
+than blocking edits, and `DS_ENFORCE=0` is a total escape hatch. Enforcement is also
+**graduated** — run `DS_ENFORCE_TIER=observe` to record what *would* have been blocked without
+blocking it, review it with `ds enforce report`, then escalate observe → warn → enforce (see
+[docs/HOOK_RUNTIME.md](docs/HOOK_RUNTIME.md)).
+
+## Prove it
+
+`ds prove` stands up a disposable scratch project + authority DB, runs the four refusals
+against it, prints the **real** runtime output (not a rendering of one), tears the scratch
+down, and exits non-zero if any claim fails — so it doubles as a CI gate. It never touches
+your live `~/.dream-studio/state/studio.db`. A representative run:
+
+```text
+ds prove — Dream Studio substrate enforcement demonstration
+Scratch project + authority DB: /tmp/ds-prove-XXXXXXXX (torn down)
+The operator's live ~/.dream-studio/state/studio.db is never touched.
+
+CLAIM 1 — an unauthorized source edit is denied
+  {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+   "permissionDecisionReason": "[dream-studio] Authority enforcement: no work order is
+   in_progress for project 'prove-scratch'. Product-source edits require an active work
+   order in the SQLite authority.\nRun: py -m interfaces.cli.ds work-order start <id> ..."}}
+  → PASS
+
+CLAIM 2 — a defect cannot close while its symptom reproduces
+  with symptom reproducing → close BLOCKED: originating_symptom: SQL-CHECK still failing
+    after satisfying the symptom → close ok=True
+  → PASS
+
+CLAIM 3 — graders are blind to the claimed task list
+  task list in completion prompt: True; in correctness: False; in quality: False
+    diff present in all three: True
+  → PASS
+
+CLAIM 4 — adapter configs regenerate from authority and drift is detected
+  authority hash 5b83eee713eb… == fresh projection: True
+    after out-of-band edit, hash 505d21448244… != authority: True
+  → PASS
+
+RESULT: 4/4 claims passed
+```
+
+`tests/integration/test_readme_prove_transcript.py` fails if this pasted transcript drifts
+from what `ds prove` currently emits (a renamed claim, a `PASS` that becomes `FAIL`, a changed
+count), so the README cannot quietly go stale.
+
+## What the numbers are
+
+Substantiation, computed from this repository (not hand-typed):
+
+| Metric | Count |
+|--------|------:|
+| Authority tables in the lean baseline | 56 |
+| Migration files (squashed baseline + incremental) | 14 |
+| Executable gate modules (`core/gates/*.py`) | 19 |
+| Independent-review grader roles | 4 |
+| Skill directories (`canonical/skills/`) | 11 |
+| Test functions | 5,192 |
+| Test files | 562 |
+
+## What this is not
+
+Dream Studio is **not** a coding agent and not a model router. It does not write your code,
+does not pick which model runs, does not make the model smarter, and does not replace your
+host tool's skills or subagents. It is the accountability substrate *underneath* whatever
+agent you already use — the system of record that agent has to answer to.
 
 ---
 
@@ -209,76 +304,9 @@ If you installed via the plugin marketplace, also remove the plugin in Claude Co
 
 ## CLI Reference
 
-### Project
-| Command | Description |
-|---------|-------------|
-| `ds project register --name "Name" --path <dir>` | Register a new project and write marker |
-| `ds project list` | List registered projects |
-| `ds project set-active <id>` | Set the active project |
-| `ds project status <id>` | Show milestone and work-order summary |
-| `ds project next <id>` | Return the next open work order |
-| `ds project deactivate <id>` | Deactivate a project |
-
-### Work Order
-| Command | Description |
-|---------|-------------|
-| `ds work-order start <id>` | Start a work order and write context.md |
-| `ds work-order list` | List work orders |
-| `ds work-order close <id>` | Close a work order (gate-checked) |
-| `ds work-order task-done <wo_id> <task_id>` | Mark a task complete |
-| `ds work-order tasks <id>` | List tasks for a work order |
-| `ds work-order block <id> --reason "..."` | Block a work order |
-| `ds work-order unblock <id>` | Unblock a work order |
-
-### Milestone
-| Command | Description |
-|---------|-------------|
-| `ds milestone list <project_id>` | List milestones for a project |
-| `ds milestone close <id>` | Close a milestone |
-| `ds milestone status <id>` | Show milestone detail and open gate checks |
-
-### Design Brief
-| Command | Description |
-|---------|-------------|
-| `ds design-brief show <project_id>` | Show project design brief |
-| `ds design-brief create <project_id>` | Create a draft design brief |
-| `ds design-brief lock <brief_id>` | Lock a design brief (human approval gate) |
-| `ds design-brief update <id> --field X --value Y` | Update a field |
-
-### Skill
-| Command | Description |
-|---------|-------------|
-| `ds skill invoke ds-project:scope` | Invoke a skill |
-| `ds skill list` | List available skills |
-
-### Spool
-| Command | Description |
-|---------|-------------|
-| `ds spool ingest` | Ingest pending spool events into SQLite |
-| `ds spool archive` | Archive processed spool events |
-
-### Integrate
-| Command | Description |
-|---------|-------------|
-| `ds integrate detect` | Detect installed AI tools |
-| `ds integrate status` | Integration health summary |
-| `ds integrate install claude_code --execute` | Install Claude Code integration |
-| `ds integrate install claude_code --dry-run` | Simulate install |
-| `ds integrate doctor` | Full health report |
-
-### Memory
-| Command | Description |
-|---------|-------------|
-| `ds memory ingest-sessions` | Harvest intelligence from Claude Code session history |
-| `ds memory ingest-sessions --dry-run` | Preview harvest counts without writing |
-
-### Health checks
-| Command | Plane | Description |
-|---------|-------|-------------|
-| `ds validate` | DB authority | Schema version, migrations, module profiles |
-| `ds doctor` | Claude Code integration | Skills, agents, hooks, routing, version |
-| `ds version` | — | Show Dream Studio version |
-| `ds status` | — | Show installed runtime status |
+The full `ds` command surface — project, work order, milestone, design brief, skill, spool,
+integrate, memory, verification/enforcement (`ds prove`, `ds grader`, `ds enforce`), and
+health checks — lives in **[docs/CLI.md](docs/CLI.md)**.
 
 ---
 
