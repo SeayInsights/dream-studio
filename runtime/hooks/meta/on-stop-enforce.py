@@ -16,13 +16,14 @@ most once when:
 The block reason names the exact remediation command for each violation.
 Never blocks twice: respects stop_hook_active from the payload and a
 stop_blocked_at marker in session state. Fails open on every error path.
-DS_ENFORCE=0 disables enforcement entirely.
+Honors the graduated tier (WO-ENFORCE-TIERS): `DS_ENFORCE_TIER` ∈
+off|observe|warn|enforce (default enforce); observe/warn record what would have
+blocked and allow the stop; DS_ENFORCE=0 is equivalent to off.
 """
 
 from __future__ import annotations
 
 import json
-import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -85,8 +86,8 @@ def _docstore_violations(enforcement, session: dict) -> list[str]:
     return violations
 
 
-def _enforce() -> tuple[str, str | None]:
-    """Run the Stop enforcement decision.
+def _enforce(tier: str) -> tuple[str, str | None]:
+    """Run the Stop enforcement decision at the given tier.
 
     Returns ``(decision, session_id)``: ``block`` (stop blocked with violations),
     ``allow`` (session clean, state cleared), ``noop`` (re-entrant / no session /
@@ -129,22 +130,46 @@ def _enforce() -> tuple[str, str | None]:
         shown = violations[:_MAX_LISTED_VIOLATIONS]
         if len(violations) > len(shown):
             shown.append(f"...and {len(violations) - len(shown)} more.")
-        session["stop_blocked_at"] = enforcement.now_iso()
-        enforcement.save_session(session_id, session)
         reason = (
             "[dream-studio] SQLite enforcement: this session has unrecorded work.\n"
             + "\n".join(f"- {v}" for v in shown)
-            + "\nResolve the items above (or set DS_ENFORCE=0), then stop again."
+            + "\nResolve the items above (or set DS_ENFORCE=0, or lower DS_ENFORCE_TIER),"
+            " then stop again."
         )
-        print(json.dumps({"decision": "block", "reason": reason}), flush=True)
-        return ("block", session_id)
+        if tier == "enforce":
+            session["stop_blocked_at"] = enforcement.now_iso()
+            enforcement.save_session(session_id, session)
+            print(json.dumps({"decision": "block", "reason": reason}), flush=True)
+            return ("block", session_id)
+        # observe/warn (WO-ENFORCE-TIERS): record what WOULD have blocked the stop — the same
+        # reason string — and ALLOW the session to end; warn also surfaces it on stderr.
+        enforcement.record_observation(
+            hook_name="on_stop_enforce",
+            hook_type="Stop",
+            rule="stop_unrecorded_work",
+            reason=reason,
+            tier=tier,
+            session_id=session_id,
+        )
+        if tier == "warn":
+            print(reason, file=sys.stderr, flush=True)
+        enforcement.delete_session(session_id)
+        enforcement.gc_session_files()
+        return ("observe", session_id)
     except Exception:
         return ("error", session_id)
 
 
 def main() -> None:
-    # DS_ENFORCE=0 disables enforcement AND its telemetry — the escape hatch is total.
-    if os.environ.get("DS_ENFORCE", "").strip() == "0":
+    # Resolve the graduated tier. DS_ENFORCE=0 (or DS_ENFORCE_TIER=off) disables enforcement
+    # AND its telemetry — the escape hatch is total. A broken enforcement lib fails open.
+    try:
+        from runtime.lib import enforcement  # noqa: PLC0415
+
+        tier = enforcement.resolve_tier()
+    except Exception:
+        return
+    if tier == "off":
         return
 
     started_at = datetime.now(timezone.utc).isoformat()
@@ -154,7 +179,7 @@ def main() -> None:
     error_msg: str | None = None
     session_id: str | None = None
     try:
-        decision, session_id = _enforce()
+        decision, session_id = _enforce(tier)
         if decision == "error":
             # _enforce's internal fail-open swallowed an exception — record the run
             # as failed so the stats view does not report it as a clean success.

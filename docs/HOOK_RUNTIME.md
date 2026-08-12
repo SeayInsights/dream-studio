@@ -117,12 +117,38 @@ Code to parse it.
 (`.git`/`.claude`/caches; never denied, never tracked).
 
 Shared logic lives in `runtime/lib/enforcement.py`. Both hooks fail open on
-every error path (broken DB disables enforcement, never editing), honor
-`stop_hook_active`, and respect the `DS_ENFORCE=0` operator escape hatch.
-`runtime/lib/` is carried by both projections (repo `.claude/hooks/runtime/lib/`
-via `step_sync_hook_projection`, installed `~/.claude/hooks/runtime/lib/` via
-the installer) with `.ds-source-root` as the repo-import fallback.
-Gate tests: `tests/unit/test_enforce_sqlite_hooks.py`.
+every error path (broken DB disables enforcement, never editing) and honor
+`stop_hook_active`. `runtime/lib/` is carried by both projections (repo
+`.claude/hooks/runtime/lib/` via `step_sync_hook_projection`, installed
+`~/.claude/hooks/runtime/lib/` via the installer) with `.ds-source-root` as the
+repo-import fallback. Gate tests: `tests/unit/test_enforce_sqlite_hooks.py`,
+`tests/integration/test_enforcement_tiers.py`.
+
+### Graduated enforcement tiers (WO-ENFORCE-TIERS)
+
+Enforcement is **not** binary. A team that did not build the substrate should not
+meet a denied edit as its first experience. `runtime/lib/enforcement.py::resolve_tier`
+resolves one of four tiers, least → most intrusive:
+
+| Tier | Behavior |
+|------|----------|
+| `off` | Enforcement and its telemetry are entirely disabled. |
+| `observe` | Record what WOULD have been denied (the same reason + remediation command the `enforce` tier emits), then **allow** the action. |
+| `warn` | `observe`, and additionally surface the message (on the hook's stderr), then **allow**. |
+| `enforce` | Block the action — the historical behavior. |
+
+**Resolution / escape hatch.** The legacy `DS_ENFORCE=0` switch still works and is
+**equivalent to `off`** (it disables enforcement and its telemetry). Otherwise the
+tier comes from `DS_ENFORCE_TIER` ∈ {`off`,`observe`,`warn`,`enforce`}. An unset or
+unrecognized value defaults to `enforce` — enforcement stays on by default, and only
+an explicit, recognized tier lowers it. The fail-open invariant holds at every tier:
+a broken authority DB or a failed import yields no enforcement, never a blocked edit.
+
+**Adoption path.** Run `DS_ENFORCE_TIER=observe` for a week, then
+`ds enforce report` to see exactly what would have been blocked and by which rule
+(the observe records ride the existing `system.hook.execution.logged` canonical event
+via `trigger_context`; no new table). Once the team has seen the data, escalate
+`observe → warn → enforce`. `ds enforce tier` prints the currently resolved tier.
 
 ### Grader provider selection (verification plane)
 
