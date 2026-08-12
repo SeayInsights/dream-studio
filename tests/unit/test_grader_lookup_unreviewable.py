@@ -238,6 +238,18 @@ def test_spawn_grader_feeds_prompt_via_stdin_not_argv():
 
     assert captured["args"] == ["claude", "--print"], "prompt must not be an argv element"
     assert captured["stdin_is_pipe"] is True
+
+    # gap 592794f0: an explicit per-role provider profile drives the spawn argv,
+    # not a hardcoded default — this is how each grader role selects its provider.
+    captured.clear()
+    with patch.object(verify_graders_mod.subprocess, "Popen", _fake_popen):
+        proc = verify_mod._spawn_grader(
+            big_prompt, {"command": "other-grader", "print_flag": "-p", "prompt_via": "stdin"}
+        )
+        proc._ds_feeder.join(timeout=10)
+
+    assert captured["args"] == ["other-grader", "-p"], "resolved per-role profile must drive argv"
+    assert big_prompt not in captured["args"], "prompt still never an argv element"
     assert proc.stdin.getvalue() == big_prompt
 
 

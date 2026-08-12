@@ -1,10 +1,15 @@
 """Parallel LLM grader execution for work-order verify.
 
 WO-GF-WO-LIFECYCLE: split from ``core/work_orders/verify.py``. Holds the
-subprocess-based grader spawning (``claude --print``), JSON-object extraction
-from grader output, per-grader collection with retry, and the parallel
-grader-set runner (mock-mode aware). No logic changes — extracted verbatim
-from the original module.
+subprocess-based grader spawning (via the provider-neutral runner), JSON-object
+extraction from grader output, per-grader collection with retry, and the parallel
+grader-set runner (mock-mode aware).
+
+WO-GRADER-PROVIDER-NEUTRAL / -PROFILE-REGISTRY: the spawn provider is NOT hardcoded
+here. Each grader role resolves its own provider profile via
+``config.grader_profiles.resolve_grader_profile(role)`` and spawns through
+``core.adapters.grader_runner`` — so which provider grades which role is config-driven
+and inspectable (``describe_grader_selection``).
 """
 
 from __future__ import annotations
@@ -25,19 +30,19 @@ from .verify_shared import (
 # ── Parallel grader execution ───────────────────────────────────────────────────
 
 
-def _spawn_grader(prompt: str) -> subprocess.Popen:  # type: ignore[type-arg]
+def _spawn_grader(prompt: str, profile: dict[str, Any] | None = None) -> subprocess.Popen:  # type: ignore[type-arg]
     """Spawn a grader, feeding the prompt via stdin.
 
-    WO-GRADER-PROVIDER-NEUTRAL: the spawn argv is resolved by the provider-neutral
-    ``core.adapters.grader_runner`` (from a provider profile / DS_GRADER_STUB /
-    DS_GRADER_ARGV override / the default vendor CLI) rather than hardcoding one
-    vendor's CLI here. The prompt is still delivered on stdin — never as an argv
-    element, which a real diff would overflow (Windows ~32K cmdline, WinError 206) —
-    and written from a daemon thread so graders consume in parallel.
+    The spawn argv is resolved by the provider-neutral ``core.adapters.grader_runner``
+    from the given per-role provider ``profile`` (see
+    ``config.grader_profiles.resolve_grader_profile``) — never a hardcoded vendor CLI.
+    The prompt is delivered on stdin, never as an argv element (a real diff would
+    overflow the Windows ~32K cmdline, WinError 206), written from a daemon thread so
+    graders consume in parallel.
     """
     from core.adapters.grader_runner import spawn_grader
 
-    return spawn_grader(prompt)
+    return spawn_grader(prompt, profile)
 
 
 def _extract_first_json_object(text: str) -> str | None:
@@ -119,24 +124,31 @@ def _run_graders_parallel(
             mocks["migration"] = _MOCK_MIGRATION.copy()
         return mocks
 
-    # Spawn each grader. When the `claude` CLI is absent (CI, or any host without
-    # it), Popen raises FileNotFoundError — treat that grader as unreviewable
-    # rather than letting the exception abort the whole verify (the post-merge
-    # main-red on WO-FIX-VERIFY-GATE). It then flows through the existing
-    # unreviewable-graders path (no false-done: unreviewable never certifies).
+    # Spawn each grader through its per-role provider profile
+    # (config.grader_profiles.resolve_grader_profile). When the resolved provider is
+    # absent (CI, or any host without it) Popen raises FileNotFoundError, and an
+    # unresolvable role raises UnresolvableGraderProfile — treat either as unreviewable
+    # rather than aborting the whole verify (the post-merge main-red on WO-FIX-VERIFY-GATE).
+    # It flows through the existing unreviewable path (no false-done: unreviewable never
+    # certifies).
+    from config.grader_profiles import UnresolvableGraderProfile, resolve_grader_profile
+
     procs: dict[str, subprocess.Popen[str] | None] = {}
+    profiles: dict[str, dict[str, Any] | None] = {}
     for name, prompt in prompts.items():
         try:
-            procs[name] = _spawn_grader(prompt)
-        except FileNotFoundError:
+            profiles[name] = resolve_grader_profile(name)
+            procs[name] = _spawn_grader(prompt, profiles[name])
+        except (FileNotFoundError, UnresolvableGraderProfile):
             procs[name] = None
+            profiles[name] = None
     results: dict[str, dict[str, Any]] = {}
     for name, proc in procs.items():
         if proc is None:
             results[name] = {
                 "unreviewable": True,
                 "reason": "grader_cli_unavailable",
-                "_grader_error": "claude CLI not found on this host",
+                "_grader_error": "grader provider not available on this host",
             }
             continue
         try:
@@ -154,7 +166,7 @@ def _run_graders_parallel(
         needs_retry = result.get("unreviewable") or result.get("_grader_error")
         if needs_retry and result.get("reason") != "grader_cli_unavailable":
             try:
-                retry_proc = _spawn_grader(prompts[name])
+                retry_proc = _spawn_grader(prompts[name], profiles.get(name))
                 retry_result = _collect_grader(retry_proc, timeout=60)
                 if not retry_result.get("unreviewable") and not retry_result.get("_grader_error"):
                     result = retry_result

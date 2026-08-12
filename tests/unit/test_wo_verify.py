@@ -749,3 +749,26 @@ def test_grader_cli_unavailable_is_not_retried() -> None:
 
     assert results["completion"].get("reason") == "grader_cli_unavailable"
     assert collect.call_count == 0, "absent CLI must not be collected or retried"
+
+
+def test_run_graders_passes_resolved_per_role_profile_to_spawn() -> None:
+    """gap 592794f0: each role's spawn receives the provider profile resolved by
+    config.grader_profiles.resolve_grader_profile(role) as its 2nd arg — the per-role
+    wiring — not a hardcoded default. Guards against a silent regression back to a
+    single global provider."""
+    from core.work_orders.verify import _run_graders_parallel
+
+    spawn = MagicMock(return_value=MagicMock())
+    collect = MagicMock(return_value={"completion_score": 1.0})
+    with (
+        patch("core.work_orders.verify_graders._spawn_grader", spawn),
+        patch("core.work_orders.verify_graders._collect_grader", collect),
+    ):
+        os.environ.pop("DREAM_STUDIO_VERIFY_MOCK", None)
+        _run_graders_parallel({"completion": "prompt"})
+
+    assert spawn.call_count >= 1, "the grader must be spawned"
+    _prompt, profile = spawn.call_args.args
+    assert isinstance(profile, dict) and profile.get(
+        "command"
+    ), "spawn must receive the role's resolved provider profile, not None/default"

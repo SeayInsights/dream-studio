@@ -77,7 +77,7 @@ from .verify_shared import (
 _DYNAMIC_REEXPORTS = {
     "_collect_git_commits": ".verify_git",
     "_run_graders_parallel": ".verify_graders",
-    "_spawn_grader": ".verify_graders",
+    "_spawn_grader": ".verify_graders",  # (prompt, profile): profile = the role's resolved provider
     "_collect_grader": ".verify_graders",
 }
 
