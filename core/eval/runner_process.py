@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import logging
-import shutil
 import subprocess
 import time
 import uuid
@@ -169,26 +168,23 @@ class EvalRunner:
         """
         start = time.monotonic()
 
-        if not shutil.which("claude"):
+        # WO-GRADER-PROVIDER-NEUTRAL: resolve availability + spawn through the
+        # provider-neutral runner rather than hardcoding the 'claude' CLI, so live
+        # evals ride the same swappable provider profile the WO graders use.
+        from core.adapters.grader_runner import grader_provider_available, run_generation
+
+        if not grader_provider_available():
             raise NotImplementedError(
-                "Live eval mode requires the 'claude' CLI in PATH. "
-                "Install Claude Code and ensure 'claude' is on your PATH."
+                "Live eval mode requires a grader provider — the 'claude' CLI in PATH "
+                "by default, or a DS_GRADER_STUB / DS_GRADER_ARGV override."
             )
 
         try:
             # ── 1. Spawn subagent — isolated, no session history ──────────────
-            proc = subprocess.run(
-                [
-                    "claude",
-                    "--print",
-                    case.input_prompt,
-                    "--model",
-                    "claude-haiku-4-5-20251001",
-                    "--output-format",
-                    "json",
-                ],
-                capture_output=True,
-                text=True,
+            proc = run_generation(
+                case.input_prompt,
+                model="claude-haiku-4-5-20251001",
+                output_format="json",
                 timeout=120,
             )
             raw_output = proc.stdout or ""
