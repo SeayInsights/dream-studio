@@ -28,40 +28,16 @@ from .verify_shared import (
 def _spawn_grader(prompt: str) -> subprocess.Popen:  # type: ignore[type-arg]
     """Spawn a grader, feeding the prompt via stdin.
 
-    The prompt must NOT be passed as an argv element: with a real diff it
-    routinely exceeds Windows' ~32K command-line limit and CreateProcess fails
-    with WinError 206 (found re-verifying WO-DEBT-I under WO-GRADER-LOOKUP).
-    Stdin is written from a daemon thread so all graders start consuming
-    immediately and in parallel — a 64K pipe buffer would otherwise block the
-    spawn loop on large prompts.
+    WO-GRADER-PROVIDER-NEUTRAL: the spawn argv is resolved by the provider-neutral
+    ``core.adapters.grader_runner`` (from a provider profile / DS_GRADER_STUB /
+    DS_GRADER_ARGV override / the default vendor CLI) rather than hardcoding one
+    vendor's CLI here. The prompt is still delivered on stdin — never as an argv
+    element, which a real diff would overflow (Windows ~32K cmdline, WinError 206) —
+    and written from a daemon thread so graders consume in parallel.
     """
-    import threading
+    from core.adapters.grader_runner import spawn_grader
 
-    proc = subprocess.Popen(
-        ["claude", "--print"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-
-    def _feed() -> None:
-        try:
-            assert proc.stdin is not None
-            proc.stdin.write(prompt)
-            proc.stdin.close()
-        except Exception:
-            pass  # broken pipe → grader died; _collect_grader surfaces it
-
-    feeder = threading.Thread(target=_feed, daemon=True)
-    feeder.start()
-    # _collect_grader joins this before communicate() — communicate() closes
-    # stdin, which would otherwise race a still-writing feeder and silently
-    # truncate the prompt.
-    proc._ds_feeder = feeder  # type: ignore[attr-defined]
-    return proc
+    return spawn_grader(prompt)
 
 
 def _extract_first_json_object(text: str) -> str | None:
