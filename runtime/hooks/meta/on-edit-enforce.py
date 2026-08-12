@@ -10,13 +10,14 @@ the exact command to run. Allowed edits are recorded to session state so
 on-stop-enforce can verify the session's authority/docstore writes.
 
 Fails open on every error path: no payload, no authority DB, import failure,
-unregistered path — all allow. DS_ENFORCE=0 disables enforcement entirely.
+unregistered path — all allow. Honors the graduated tier (WO-ENFORCE-TIERS):
+`DS_ENFORCE_TIER` ∈ off|observe|warn|enforce (default enforce); observe/warn
+record the would-be deny and allow; DS_ENFORCE=0 is equivalent to off.
 """
 
 from __future__ import annotations
 
 import json
-import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -51,8 +52,35 @@ def _deny(reason: str) -> None:
     )
 
 
-def _enforce() -> tuple[str, str | None]:
-    """Run the PreToolUse enforcement decision.
+def _apply(tier: str, rule: str, reason: str, session_id: str | None) -> str:
+    """Apply the graduated tier to a would-be denial (WO-ENFORCE-TIERS).
+
+    ``enforce`` → deny (print the deny JSON, block the edit). ``observe``/``warn`` → record
+    what WOULD have been denied — the SAME reason string — and ALLOW the edit; ``warn`` also
+    surfaces the reason on stderr. Returns the decision string (``deny`` or ``observe``)."""
+    if tier == "enforce":
+        _deny(reason)
+        return "deny"
+    try:
+        from runtime.lib import enforcement  # noqa: PLC0415
+
+        enforcement.record_observation(
+            hook_name="on_edit_enforce",
+            hook_type="PreToolUse",
+            rule=rule,
+            reason=reason,
+            tier=tier,
+            session_id=session_id or None,
+        )
+    except Exception:
+        pass  # observe recording is best-effort; the edit is allowed regardless
+    if tier == "warn":
+        print(reason, file=sys.stderr, flush=True)
+    return "observe"
+
+
+def _enforce(tier: str) -> tuple[str, str | None]:
+    """Run the PreToolUse enforcement decision at the given tier.
 
     Returns ``(decision, session_id)`` where decision is one of ``allow`` (edit
     permitted / recorded), ``deny`` (product-source edit blocked), ``noop`` (path
@@ -100,15 +128,15 @@ def _enforce() -> tuple[str, str | None]:
         if kind == "docstore_only":
             # WO-FILESDB-P3 zero-disk: .planning working state lives in the files.db
             # docstore, never on disk. Deny the disk write and point at `ds files`.
-            _deny(
+            reason = (
                 "[dream-studio] Zero-disk .planning: working notes, specs, plans, and"
                 " reports are authored in the files.db docstore, never on disk. Use:\n"
                 '  py -m interfaces.cli.ds files write "<name>" --category planning'
                 " [--work-order <id>]\n"
                 "  (read: ds files read <name>  ·  list: ds files list --category planning)\n"
-                "Operator escape hatch: set DS_ENFORCE=0."
+                "Operator escape hatch: set DS_ENFORCE=0 (or run at a lower DS_ENFORCE_TIER)."
             )
-            return ("deny", session_id)
+            return (_apply(tier, "zero_disk_planning", reason, session_id), session_id)
 
         wo = enforcement.in_progress_work_order(project["project_id"])
 
@@ -128,9 +156,10 @@ def _enforce() -> tuple[str, str | None]:
                 "Or list work orders: py -m interfaces.cli.ds work-order list"
                 f" {project['project_id']}"
             )
-            lines.append("Operator escape hatch: set DS_ENFORCE=0.")
-            _deny("\n".join(lines))
-            return ("deny", session_id)
+            lines.append(
+                "Operator escape hatch: set DS_ENFORCE=0 (or run at a lower DS_ENFORCE_TIER)."
+            )
+            return (_apply(tier, "authority_source_edit", "\n".join(lines), session_id), session_id)
 
         if session_id:
             enforcement.record_edit(
@@ -146,8 +175,16 @@ def _enforce() -> tuple[str, str | None]:
 
 
 def main() -> None:
-    # DS_ENFORCE=0 disables enforcement AND its telemetry — the escape hatch is total.
-    if os.environ.get("DS_ENFORCE", "").strip() == "0":
+    # Resolve the graduated tier. DS_ENFORCE=0 (or DS_ENFORCE_TIER=off) disables enforcement
+    # AND its telemetry — the escape hatch is total. A broken enforcement lib fails open (no
+    # enforcement), never blocks editing.
+    try:
+        from runtime.lib import enforcement  # noqa: PLC0415
+
+        tier = enforcement.resolve_tier()
+    except Exception:
+        return
+    if tier == "off":
         return
 
     started_at = datetime.now(timezone.utc).isoformat()
@@ -157,7 +194,7 @@ def main() -> None:
     error_msg: str | None = None
     session_id: str | None = None
     try:
-        decision, session_id = _enforce()
+        decision, session_id = _enforce(tier)
         if decision == "error":
             # _enforce's internal fail-open swallowed an exception — record the run
             # as failed so the stats view does not report it as a clean success.

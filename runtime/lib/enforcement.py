@@ -52,8 +52,123 @@ _EXEMPT_SEGMENTS = frozenset(
 _SESSION_FILE_MAX_AGE_SECS = 7 * 24 * 3600
 
 
+_TIER_ENV = "DS_ENFORCE_TIER"
+VALID_TIERS = ("off", "observe", "warn", "enforce")
+
+
+def resolve_tier() -> str:
+    """Resolve the graduated enforcement tier (WO-ENFORCE-TIERS).
+
+    Ladder (least → most intrusive):
+      off      — enforcement and its telemetry are entirely disabled.
+      observe  — record what WOULD have been denied, then allow the action.
+      warn     — observe, and additionally surface the message, then allow.
+      enforce  — block the action (the historical behavior).
+
+    Resolution: the legacy total-off switch ``DS_ENFORCE=0`` wins and maps to ``off``
+    (so ``off`` and ``DS_ENFORCE=0`` are equivalent). Otherwise ``DS_ENFORCE_TIER`` in
+    ``VALID_TIERS``; an unset/invalid value defaults to ``enforce`` — enforcement stays on
+    by default, and only an explicit, recognized tier lowers it.
+    """
+    if os.environ.get("DS_ENFORCE", "").strip() == "0":
+        return "off"
+    tier = os.environ.get(_TIER_ENV, "").strip().lower()
+    return tier if tier in VALID_TIERS else "enforce"
+
+
 def enforcement_disabled() -> bool:
-    return os.environ.get("DS_ENFORCE", "").strip() == "0"
+    """True when enforcement is entirely off. ``DS_ENFORCE=0`` and ``DS_ENFORCE_TIER=off``
+    are equivalent (both resolve to the ``off`` tier)."""
+    return resolve_tier() == "off"
+
+
+def record_observation(
+    *,
+    hook_name: str,
+    hook_type: str,
+    rule: str,
+    reason: str,
+    tier: str = "observe",
+    session_id: str | None = None,
+    started_at: str | None = None,
+    duration_ms: int = 0,
+    db_path: Path | None = None,
+) -> None:
+    """Record a would-have-denied action at the observe/warn tier.
+
+    Carries the SAME reason string (including the remediation command) the ``enforce`` tier
+    would have emitted, so the observe-mode record is directly comparable to an enforce-mode
+    deny. Best-effort, like ``log_hook_execution`` — a broken emit path never affects the
+    allow decision. The record rides the existing HOOK_EXECUTION_LOGGED canonical event via
+    ``trigger_context`` (no new table)."""
+    try:
+        from core.event_store.event_writer import insert_hook_execution
+
+        insert_hook_execution(
+            hook_name=hook_name,
+            hook_type=hook_type,
+            trigger_context={
+                "decision": "observe",
+                "tier": tier,
+                "rule": rule,
+                "would_deny_reason": reason,
+            },
+            started_at=started_at or now_iso(),
+            completed_at=now_iso(),
+            duration_ms=duration_ms,
+            exit_code=0,
+            status="success",
+            session_id=session_id,
+            db_path=db_path,
+        )
+    except Exception:
+        pass  # telemetry is best-effort; never let a broken emit affect enforcement
+
+
+def observations_report(*, since_iso: str | None = None, db_path: Path | None = None) -> dict:
+    """Answer 'what would have been blocked, and by which rule' from the observe-mode records.
+
+    Reads the HOOK_EXECUTION_LOGGED observations (decision == observe) from the authority and
+    groups them by rule. This is the artifact that earns a team's consent to escalate from
+    observe → warn → enforce. Returns
+    ``{"since": iso|None, "total": int, "by_rule": {rule: {"count": n, "samples": [...]}}}``.
+    """
+    target = db_path or AUTHORITY_DB
+    conn = _connect_ro(target)
+    if conn is None:
+        return {"since": since_iso, "total": 0, "by_rule": {}, "note": "authority DB unavailable"}
+    try:
+        params: list[str] = []
+        where = (
+            "event_type = 'system.hook.execution.logged'"
+            " AND json_extract(payload, '$.trigger_context.decision') = 'observe'"
+        )
+        if since_iso:
+            where += " AND event_timestamp >= ?"
+            params.append(since_iso)
+        rows = conn.execute(
+            "SELECT event_timestamp,"
+            " json_extract(payload, '$.trigger_context.rule') AS rule,"
+            " json_extract(payload, '$.trigger_context.would_deny_reason') AS reason,"
+            " json_extract(payload, '$.hook_name') AS hook_name"
+            f" FROM ai_canonical_events WHERE {where} ORDER BY event_timestamp DESC",
+            params,
+        ).fetchall()
+    except sqlite3.Error:
+        return {"since": since_iso, "total": 0, "by_rule": {}, "note": "query failed"}
+    finally:
+        conn.close()
+
+    by_rule: dict[str, dict] = {}
+    for row in rows:
+        rule = row["rule"] or "unknown"
+        bucket = by_rule.setdefault(rule, {"count": 0, "samples": []})
+        bucket["count"] += 1
+        if len(bucket["samples"]) < 5:
+            bucket["samples"].append(
+                {"when": row["event_timestamp"], "hook": row["hook_name"], "reason": row["reason"]}
+            )
+    return {"since": since_iso, "total": len(rows), "by_rule": by_rule}
 
 
 def now_iso() -> str:
