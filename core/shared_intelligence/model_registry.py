@@ -9,7 +9,13 @@ from typing import Any
 
 from core.shared_intelligence.authority import require_shared_intelligence_tables
 
-MODEL_REGISTRY_SOURCE_TABLES: tuple[str, ...] = ("model_provider_profiles",)
+# WO-GRADER-PROFILE-REGISTRY: model_provider_profiles was dropped as unused (migration
+# 131) and its CREATE is squashed away — the module has no baseline backing table. Rather
+# than resurrect a deliberately-dropped, inference-only schema, the declaration is
+# neutralized to reflect reality: no backing table. The read-model functions already
+# degrade to honest empty state (see _model_profiles' try/except), and grader provider
+# profiles live in config (config/grader_profiles.py), not this registry.
+MODEL_REGISTRY_SOURCE_TABLES: tuple[str, ...] = ()
 
 
 def model_provider_registry_summary(conn: sqlite3.Connection) -> dict[str, Any]:
