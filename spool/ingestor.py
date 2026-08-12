@@ -131,7 +131,13 @@ def _process_one(
         return
 
     if data.get("event_type") == "skill.invoked":
-        skill_id = data.get("skill_id", "")
+        # skill_id may be top-level (legacy CLI emission) OR in trace (the Claude Code
+        # emitter path, which stamps trace.skill_id — the same place the canonical write
+        # reads it from below). Accept either so emitter-emitted skill.invoked survives.
+        _trace = data.get("trace") or {}
+        skill_id = (
+            data.get("skill_id") or _trace.get("skill_id") or _trace.get("skill_specifier") or ""
+        )
         if not _SKILL_ID_RE.match(skill_id):
             _move_to_failed(processing_path, failed_dir, "malformed_skill_id")
             result.failed += 1

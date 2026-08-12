@@ -1,4 +1,5 @@
 from __future__ import annotations
+import re
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +65,26 @@ def _subagent_type(tool_name: str, tool_input: Any) -> str | None:
     return subagent or None
 
 
+# WO-SKILL-CAPTURE-REGRESSION: a Skill tool call IS a skill invocation. Claude Code's
+# PostToolUse payload for the Skill tool exposes the skill name in tool_input.skill
+# (e.g. "ds-project"). Skill telemetry stopped 2026-07-02 when the old on-skill-telemetry
+# Stop hook path went unwired; the live emitter never captured native Skill-tool calls.
+# Emitting skill.invoked here stamps trace.skill_id, which the ingestor maps to the
+# skill_id column (spool/ingestor.py) so the dashboard Top Skills panel repopulates.
+# The ingestor validates skill_id against ^ds-[a-z][a-z0-9-]*$, so only DS skills
+# (the ds-* Skill names) are emitted; anything else is skipped rather than rejected.
+_SKILL_ID_RE = re.compile(r"^ds-[a-z][a-z0-9-]*$")
+
+
+def _skill_name(tool_name: str, tool_input: Any) -> str | None:
+    """Return the ds-* skill id for a Skill tool call, else None."""
+    if tool_name != "Skill" or not isinstance(tool_input, dict):
+        return None
+    name = tool_input.get("skill") or tool_input.get("command") or tool_input.get("name")
+    name = str(name).strip() if name else ""
+    return name if _SKILL_ID_RE.match(name) else None
+
+
 def normalize_post_tool_use(
     payload: dict[str, Any], root: Path | None = None
 ) -> list[CanonicalEventEnvelope]:
@@ -106,6 +127,23 @@ def normalize_post_tool_use(
                 },
                 project_id=project_id,
                 trace={"domain": "telemetry", "agent_id": subagent, "agent_type": subagent},
+            )
+        )
+    skill = _skill_name(tool_name, tool_input)
+    if skill is not None:
+        # skill_id goes in trace (the ingestor reads trace.skill_id into the skill_id
+        # column) and payload (so any payload reader/raw store also sees it).
+        envelopes.append(
+            CanonicalEventEnvelope(
+                event_type=EventType.SKILL_INVOKED.value,
+                session_id=session_id,
+                confidence=confidence,
+                payload={
+                    "skill_id": skill,
+                    "outcome_status": "failed" if is_error else "completed",
+                },
+                project_id=project_id,
+                trace={"domain": "telemetry", "skill_id": skill},
             )
         )
     return envelopes

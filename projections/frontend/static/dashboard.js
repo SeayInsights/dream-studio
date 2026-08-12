@@ -6123,7 +6123,7 @@ function initHooksCharts() {
                             ${capCount}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <button onclick="viewPRDDetails('${m.milestone_id}')"
+                            <button onclick="viewPRDDetails('${escHtml(m.milestone_id)}')"
                                     class="text-blue-600 hover:text-blue-900">
                                 View Details
                             </button>
