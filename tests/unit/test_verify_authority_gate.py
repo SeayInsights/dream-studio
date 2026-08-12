@@ -169,11 +169,15 @@ class TestAuthorityCertification:
         main red on the WO-FIX-VERIFY-GATE merge. A passing AC routes into grading
         via the authority-evidence fallback; a missing grader = unreviewable."""
 
-        def _boom(_prompt):
-            raise FileNotFoundError("[Errno 2] No such file or directory: 'claude'")
+        def _spawn_grader_missing_cli(_prompt, _profile=None):
+            # Mirror the real _spawn_grader(prompt, profile) seam: _run_graders_parallel
+            # now passes the role's resolved provider profile as the 2nd arg.
+            raise FileNotFoundError("[Errno 2] No such file or directory: 'grader-cli'")
 
         monkeypatch.delenv("DREAM_STUDIO_VERIFY_MOCK", raising=False)
-        monkeypatch.setattr("core.work_orders.verify_graders._spawn_grader", _boom)
+        monkeypatch.setattr(
+            "core.work_orders.verify_graders._spawn_grader", _spawn_grader_missing_cli
+        )
         repo = _make_git_repo(tmp_path, ["chore: unrelated"])
         db_path = _make_db(tmp_path)
         wo_id = str(uuid.uuid4())
