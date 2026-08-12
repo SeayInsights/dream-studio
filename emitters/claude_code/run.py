@@ -189,6 +189,18 @@ def main() -> int:
             pass  # Fail open.
 
     if hook_event == "Stop":
+        # WO-TOKEN-CAPTURE-REAL: emit real per-turn token.consumed from the transcript
+        # BEFORE ingest_pending so the same Stop ingests them. Idempotent via deterministic
+        # event_id (INSERT OR IGNORE), so repeated Stops never double-count.
+        try:
+            from emitters.claude_code.token_transcript import normalize_stop_token_usage
+            from emitters.shared.spool_writer import write_envelopes
+
+            token_envelopes = normalize_stop_token_usage(payload)
+            if token_envelopes:
+                write_envelopes(token_envelopes)
+        except Exception:
+            pass
         try:
             from spool.ingestor import ingest_pending
 
