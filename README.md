@@ -15,7 +15,7 @@ guard it. You can watch all four hold, against a throwaway project, in about ten
 [`ds prove`](#prove-it).
 
 That accountability is the point; the orchestration is how it is delivered. Underneath, Dream
-Studio is a local-first platform that runs three layers in concert:
+Studio is a **local-first AI orchestration** platform that runs three layers in concert:
 
 - **Capability layer** — skills, agents, and workflows that encode structured development practices
 - **Infrastructure layer** — an event pipeline, spool system, SQLite authority database, and provisioner that wire AI sessions to persistent state
