@@ -50,13 +50,17 @@ def _fake_live_result() -> EvalResult:
 
 def test_default_run_case_never_shells_out(tmp_path: Path) -> None:
     runner = EvalRunner(db_path=tmp_path / "eval.db")
+    # WO-GRADER-PROVIDER-NEUTRAL routed the live spawn through core.adapters.grader_runner,
+    # so the shell-out seam is run_generation + grader_provider_available (no longer a direct
+    # runner_process.shutil.which / subprocess.run). The default (non-live) case must never
+    # reach either.
     with (
-        patch("core.eval.runner_process.subprocess.run") as proc,
-        patch("core.eval.runner_process.shutil.which") as which,
+        patch("core.adapters.grader_runner.run_generation") as gen,
+        patch("core.adapters.grader_runner.grader_provider_available") as avail,
     ):
         runner.run_case(_case())  # default: no live flag
-        proc.assert_not_called()
-        which.assert_not_called()
+        gen.assert_not_called()
+        avail.assert_not_called()
 
 
 def test_default_run_case_does_not_reach_live(tmp_path: Path) -> None:

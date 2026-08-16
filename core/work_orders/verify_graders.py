@@ -81,6 +81,13 @@ def _collect_grader(proc: subprocess.Popen, timeout: int = 360) -> dict[str, Any
         feeder = getattr(proc, "_ds_feeder", None)
         if feeder is not None:
             feeder.join(timeout=120)
+            # The feeder thread already wrote AND closed proc.stdin. Detach it so
+            # communicate() does not touch stdin again: on posix, communicate() flushes
+            # self.stdin, and flushing an already-closed pipe raises
+            # ValueError("I/O operation on closed file") — which turned every grader-spawn
+            # test red on Linux full-ci while Windows' thread-based communicate() tolerated
+            # it. Nulling stdin makes communicate() skip stdin entirely (WO-MAINRED-GRADER-IO).
+            proc.stdin = None
         stdout, _ = proc.communicate(timeout=timeout)
         output = stdout.strip()
         # T1: empty/whitespace-only output → unreviewable, not a hard failure.
