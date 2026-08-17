@@ -24,9 +24,17 @@ _DS_PATH_MARKER = "# Dream Studio PATH — added by ds installer"
 
 
 def _python_cmd() -> str:
-    """Return the platform-correct Python command for generated hook scripts."""
+    """Return the Python command for generated hook scripts (WO-INSTALL-PY-ABS).
+
+    Uses the ABSOLUTE ``sys.executable`` — the interpreter that installed Dream Studio — on
+    every platform, so a hook command is self-contained and a reinstall regenerates the same
+    working command instead of clobbering an operator's manual absolute-path edit. Windows
+    previously emitted the bare ``py`` launcher, which is not reliably resolvable in the hook
+    exec environment (and forced operators to re-apply an absolute path after every
+    ``ds integrate install``). On Windows the path is quoted and forward-slashed to match the
+    ``hooks_dir`` convention and survive spaces (e.g. ``C:/Users/First Last/...``)."""
     if platform.system() == "Windows":
-        return "py"
+        return f'"{sys.executable.replace(chr(92), "/")}"'
     return sys.executable
 
 

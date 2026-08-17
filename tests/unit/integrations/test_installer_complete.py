@@ -719,9 +719,15 @@ def test_execute_install_removes_legacy_hooks_when_stable_present(
 # ── Platform compatibility (WS 9e-2) ─────────────────────────────────────────
 
 
-def test_python_cmd_returns_py_on_windows():
+def test_python_cmd_returns_absolute_quoted_on_windows():
+    # WO-INSTALL-PY-ABS: Windows must emit the ABSOLUTE, quoted interpreter (not bare 'py'),
+    # so `ds integrate install` stops clobbering an operator's manual absolute-path edit.
     with patch("platform.system", return_value="Windows"):
-        assert _python_cmd() == "py"
+        cmd = _python_cmd()
+    assert cmd == f'"{sys.executable.replace(chr(92), "/")}"'
+    assert cmd != "py"
+    assert cmd.startswith('"') and cmd.endswith('"')
+    assert "\\" not in cmd  # forward-slashed to match the hooks_dir convention
 
 
 def test_python_cmd_returns_sys_executable_on_non_windows():
@@ -749,8 +755,12 @@ def test_hook_commands_use_python_cmd_placeholder_resolved(config_root, canonica
     ), "{python_cmd} placeholder was not resolved in hook commands"
 
 
-def test_hook_commands_use_py_on_windows_mock(config_root, canonical_root, ds_home):
-    """When platform is Windows, hook commands must use 'py' as the Python executable."""
+def test_hook_commands_use_absolute_interpreter_on_windows_mock(
+    config_root, canonical_root, ds_home
+):
+    """On Windows, hook commands must use the ABSOLUTE quoted interpreter, never bare 'py'
+    (WO-INSTALL-PY-ABS) — so a reinstall regenerates a self-contained command instead of
+    clobbering an operator's absolute-path edit."""
     with patch("platform.system", return_value="Windows"):
         installer = ClaudeCodeInstaller(
             config_root, "user", canonical_root=canonical_root, ds_home=ds_home
@@ -768,9 +778,15 @@ def test_hook_commands_use_py_on_windows_mock(config_root, canonical_root, ds_ho
         for h in entry.get("hooks", [])
         if isinstance(h, dict)
     ]
+    interp = f'"{sys.executable.replace(chr(92), "/")}"'
+    hook_cmds = [cmd for cmd in all_cmds if cmd.strip()]
+    assert hook_cmds, "no hook commands were generated"
+    assert not any(
+        cmd.startswith("py ") for cmd in hook_cmds
+    ), "no hook command may use the bare 'py' launcher on Windows"
     assert any(
-        cmd.startswith("py ") for cmd in all_cmds
-    ), "No hook command starts with 'py' on Windows mock"
+        cmd.startswith(interp) for cmd in hook_cmds
+    ), "hook commands must invoke the absolute quoted interpreter"
 
 
 def test_hook_commands_use_sys_executable_on_linux_mock(config_root, canonical_root, ds_home):
