@@ -104,7 +104,7 @@ Substantiation, computed from this repository (not hand-typed):
 | Executable gate modules (`core/gates/*.py`) | 19 |
 | Independent-review grader roles | 4 |
 | Skill directories (`canonical/skills/`) | 11 |
-| Test functions | 5,192 |
+| Test functions | 5,191 |
 | Test files | 562 |
 
 ## What this is not
