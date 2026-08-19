@@ -73,6 +73,15 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         "--force", action="store_true", default=False, help="Bypass gate failures"
     )
     wo_close.add_argument(
+        "--skip-verify",
+        action="store_true",
+        default=False,
+        help=(
+            "Skip the default-on independent review for this close"
+            " (recorded as a gate.bypassed event — never silent)"
+        ),
+    )
+    wo_close.add_argument(
         "--planning-root",
         default=None,
         help="Override .planning/ directory (default: <cwd>/.planning)",
@@ -224,6 +233,7 @@ def dispatch(
         return _work_order_close(
             work_order_id=args.work_order_id,
             force=args.force,
+            skip_verify=args.skip_verify,
             source_root=source_root,
             dream_studio_home=dream_studio_home,
             planning_root=planning_root,

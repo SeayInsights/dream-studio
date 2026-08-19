@@ -141,6 +141,20 @@ def reset_warnings():
 
 
 @pytest.fixture(autouse=True)
+def default_verify_mock(monkeypatch):
+    """WO-GRADER-ADVERSARIAL: independent review is default-on at close, so any
+    test that closes a non-documentation WO now runs verify inline. Default the
+    grader to the deterministic mock so the suite stays hermetic — no test may
+    spawn a real grader CLI as a side effect of closing a WO. Tests that
+    exercise real grader resolution or unreviewable flows pop/override
+    DREAM_STUDIO_VERIFY_MOCK inside the test body (the established pattern in
+    test_wo_verify, test_grader_lookup_unreviewable, et al.).
+    """
+    if "DREAM_STUDIO_VERIFY_MOCK" not in _os.environ:
+        monkeypatch.setenv("DREAM_STUDIO_VERIFY_MOCK", "1")
+
+
+@pytest.fixture(autouse=True)
 def restore_stdin():
     """Snapshot and restore ``sys.stdin`` around every test.
 

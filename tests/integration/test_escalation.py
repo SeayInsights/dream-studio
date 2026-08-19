@@ -233,7 +233,7 @@ def test_escalated_wo_routes_retry_to_opus(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_escalated_reclose_requires_independent_review(tmp_path: Path) -> None:
+def test_escalated_reclose_requires_independent_review(tmp_path: Path, monkeypatch) -> None:
     """An escalated WO cannot re-close without a passing independent review — not
     even with force=True. Once a passing verdict exists, close succeeds.
 
@@ -242,6 +242,9 @@ def test_escalated_reclose_requires_independent_review(tmp_path: Path) -> None:
     from core.work_orders.close import close_work_order
     from core.work_orders.escalation import mark_escalated
 
+    # Premise: inline auto-verify must come back UNREVIEWABLE (no git evidence) —
+    # pop the conftest-level mock default that would fabricate a passing verdict.
+    monkeypatch.delenv("DREAM_STUDIO_VERIFY_MOCK", raising=False)
     db = _make_db(tmp_path)
     planning_root = tmp_path / ".planning"
     wo = _seed_inprogress_wo(db, ac="SQL-CHECK: SELECT 1")  # AC + tasks_done both pass

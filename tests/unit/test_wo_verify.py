@@ -476,7 +476,9 @@ def test_completion_prompt_template_behavioral_ac_check_not_emit_conditions() ->
 # ---------------------------------------------------------------------------
 
 
-def test_unreviewable_with_passing_ac_proceeds(tmp_path: pytest.TempPathFactory) -> None:
+def test_unreviewable_with_passing_ac_proceeds(
+    tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Unreviewable grader + passing executable AC → close PROCEEDS (AC gate compensates).
 
     WO-REVIEW-TRACEABILITY T4: an unreviewable independent_review verdict is NOT a
@@ -487,6 +489,9 @@ def test_unreviewable_with_passing_ac_proceeds(tmp_path: pytest.TempPathFactory)
     against by test_unreviewable_without_ac_blocks_close below and by
     tests/integration/test_review_traceability.py::test_unreviewable_blocks_close.
     """
+    # This test's premise is the UNREVIEWABLE flow — the conftest-level
+    # DREAM_STUDIO_VERIFY_MOCK default (hermetic passing graders) must not apply.
+    monkeypatch.delenv("DREAM_STUDIO_VERIFY_MOCK", raising=False)
     db_path = _make_db(tmp_path)
     project_id = str(uuid.uuid4())
     milestone_id = str(uuid.uuid4())

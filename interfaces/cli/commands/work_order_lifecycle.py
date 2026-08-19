@@ -82,6 +82,7 @@ def _work_order_close(
     *,
     work_order_id: str,
     force: bool = False,
+    skip_verify: bool = False,
     source_root: Path,
     dream_studio_home: Path | None,
     planning_root: Path | None = None,
@@ -98,6 +99,7 @@ def _work_order_close(
     result = close_work_order(
         work_order_id=work_order_id,
         force=force,
+        skip_verify=skip_verify,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
         planning_root=planning_root,
