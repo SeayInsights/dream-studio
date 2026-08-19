@@ -56,7 +56,7 @@ def test_impact_relevant_unlisted_names_files(monkeypatch, capsys):
     impact-relevant file — asserted on main()'s output with the impact set
     monkeypatched (hermetic against future pre-merge list additions)."""
     fake_unlisted = "tests/unit/test_totally_unlisted_impact_target.py"
-    monkeypatch.setattr(tlc, "_changed_files", lambda: ["core/some_module.py"])
+    monkeypatch.setattr(tlc, "_changed_files", lambda: (["core/some_module.py"], None))
     monkeypatch.setattr(
         "core.gates.blast_radius.compute_impact_set",
         lambda changed, repo_root=None: {"dependent_tests": [fake_unlisted]},
@@ -69,11 +69,45 @@ def test_impact_relevant_unlisted_names_files(monkeypatch, capsys):
 
 
 def test_impact_relevant_unlisted_helper_live_graph():
-    """Self-referential integration proof on the REAL dependency graph: this
-    very test file depends on core/gates/test_list_completeness.py and is not
-    in any pre-merge list."""
-    relevant = tlc.impact_relevant_unlisted(["core/gates/test_list_completeness.py"])
+    """Integration proof over the REAL dependency graph: this test file depends
+    on core/gates/test_list_completeness.py, so the impact set finds it.
+    Explicit empty `sources` keeps the assertion about DEPENDENCY RESOLUTION
+    and immune to this file later joining a pre-merge list (gap WO 681b294e)."""
+    relevant = tlc.impact_relevant_unlisted(
+        ["core/gates/test_list_completeness.py"], {"pre-push.yaml": [], "ci.yml": []}
+    )
     assert "tests/unit/test_testlist_completeness.py" in relevant
+
+
+def test_unreadable_manifest_fails_loudly(monkeypatch, capsys, tmp_path):
+    """Gap WO 681b294e (quality rule 2, error severity): a missing/renamed
+    manifest previously recorded an EMPTY list — the gate reported 'all
+    present' while guarding nothing. It must now fail loudly."""
+    monkeypatch.setattr(tlc, "_PRE_PUSH_MANIFEST", tmp_path / "gone" / "pre-push.yaml")
+    with pytest.raises(tlc.ManifestUnreadable):
+        tlc.listed_test_paths()
+    rc = tlc.main()
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "unreadable" in out
+    assert "cannot verify lists it cannot read" in out
+
+
+def test_advisory_failure_never_breaks_the_gate(monkeypatch, capsys):
+    """The blast_radius advisory is best-effort: an analysis failure or an
+    undeterminable change set reports itself and exits 0 (gap WO 681b294e)."""
+    monkeypatch.setattr(tlc, "_changed_files", lambda: ([], "git diff against origin/main failed"))
+    assert tlc.main() == 0
+    assert "ADVISORY UNAVAILABLE" in capsys.readouterr().out
+
+    monkeypatch.setattr(tlc, "_changed_files", lambda: (["core/x.py"], None))
+    monkeypatch.setattr(
+        tlc,
+        "impact_relevant_unlisted",
+        lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    assert tlc.main() == 0
+    assert "boom" in capsys.readouterr().out
 
 
 # ── Path B fallback retired ─────────────────────────────────────────────────────
@@ -107,6 +141,57 @@ def test_path_b_fallback_removed(tmp_path):
 
 
 # ── symptom visibility ──────────────────────────────────────────────────────────
+
+
+def test_all_tests_pass_positive_path_with_executable_check(tmp_path):
+    """The POSITIVE path the Path-B retirement left uncovered (gap WO 681b294e):
+    a task carrying a passing executable TEST-CHECK satisfies all_tests_pass."""
+    from core.config.sqlite_bootstrap import bootstrap_database
+    from core.work_orders.close_gates import run_gate_check
+
+    db = tmp_path / "state" / "studio.db"
+    db.parent.mkdir(parents=True)
+    bootstrap_database(db)
+    project_id = "11111111-2222-3333-4444-555555555555"
+    wo_id = "66666666-7777-8888-9999-aaaaaaaaaaaa"
+    now = "2026-05-16T00:00:00+00:00"
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, project_path, created_at, updated_at)"
+        " VALUES (?,?,?,?,?,?,?)",
+        (project_id, "P", "", "active", str(REPO_ROOT), now, now),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, status,"
+        "  work_order_type, created_at, updated_at)"
+        " VALUES (?,?,NULL,'WO','d','in_progress','deployment',?,?)",
+        (wo_id, project_id, now, now),
+    )
+    conn.execute(
+        "INSERT INTO business_tasks"
+        " (task_id, work_order_id, project_id, title, description, acceptance_criteria,"
+        "  status, created_at, updated_at)"
+        " VALUES ('t1',?,?,'T1','do',?, 'complete', ?, ?)",
+        (wo_id, project_id, 'TEST-CHECK: cmd: py -c "pass"', now, now),
+    )
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(str(db))
+    try:
+        passed, reason = run_gate_check(
+            "all_tests_pass",
+            planning_root=tmp_path / ".planning",
+            work_order_id=wo_id,
+            project_id=project_id,
+            conn=conn,
+            db_path=db,
+        )
+    finally:
+        conn.close()
+    assert passed is True, reason
 
 
 def test_symptom_check_detail_surfaces_sql_and_flags_trivial(tmp_path):
@@ -166,3 +251,29 @@ def test_symptom_diff_relatedness(tmp_path, monkeypatch):
     assert related["diff_related"] is True
     assert decorative["diff_related"] is False  # tables untouched by the diff
     assert trivial["diff_related"] is None and trivial["trivially_true"] is True
+
+
+def test_diff_relatedness_uses_word_boundaries(tmp_path, monkeypatch):
+    """Gap WO 681b294e: a substring match let table `things` be 'related' to a
+    diff mentioning only `somethings` — false reassurance."""
+    from core.work_orders.close_gates import symptom_check_detail
+
+    db = tmp_path / "studio.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE things (n INTEGER)")
+    conn.execute("INSERT INTO things VALUES (1)")
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(
+        "core.work_orders.verify_git._collect_git_commits",
+        lambda root, wo_id, title=None: "+ def count_somethings(): pass\n",
+    )
+    details = symptom_check_detail(
+        "SQL-CHECK: SELECT COUNT(*) FROM things",
+        db,
+        work_order_id="wo-x",
+        project_root=tmp_path,
+        title="T",
+    )
+    assert details[0]["diff_related"] is False

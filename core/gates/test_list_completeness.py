@@ -25,15 +25,26 @@ _CI_WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
 _TEST_PATH = re.compile(r"(tests/[A-Za-z0-9_./-]+\.py)")
 
 
+class ManifestUnreadable(RuntimeError):
+    """A gate manifest could not be read — the gate cannot verify unseen lists."""
+
+
 def listed_test_paths() -> dict[str, list[str]]:
-    """Every test path named in the two pre-merge gate lists, by source."""
+    """Every test path named in the two pre-merge gate lists, by source.
+
+    Raises ``ManifestUnreadable`` when a manifest cannot be read. Gap WO
+    681b294e (caught by this gate's own review, quality rule 2): swallowing
+    OSError recorded an EMPTY list for that source, so renaming or moving
+    pre-push.yaml / ci.yml made the completeness gate silently vacuous — it
+    would report "all present" while guarding nothing. A gate that cannot read
+    its inputs must fail loudly, not pass quietly.
+    """
     sources: dict[str, list[str]] = {}
     for name, path in (("pre-push.yaml", _PRE_PUSH_MANIFEST), ("ci.yml", _CI_WORKFLOW)):
         try:
             text = path.read_text(encoding="utf-8")
-        except OSError:
-            sources[name] = []
-            continue
+        except OSError as exc:
+            raise ManifestUnreadable(f"{name} unreadable at {path}: {exc}") from exc
         sources[name] = sorted(set(_TEST_PATH.findall(text)))
     return sources
 
@@ -67,8 +78,14 @@ def impact_relevant_unlisted(
     return sorted(t for t in dependent if t not in listed and t.startswith("tests/"))
 
 
-def _changed_files() -> list[str]:
-    """Changed files for the push (base ref envs mirror the sibling gates)."""
+def _changed_files() -> tuple[list[str], str | None]:
+    """``(changed_files, unavailable_reason)`` for the push.
+
+    Base-ref envs mirror the sibling gates. The reason string (gap WO 681b294e)
+    makes an undeterminable diff VISIBLE — a shallow clone or missing
+    ``origin/main`` previously produced a silent empty advisory that read like
+    "nothing is impact-relevant".
+    """
     import os
     import subprocess
 
@@ -81,11 +98,11 @@ def _changed_files() -> list[str]:
             text=True,
             check=False,
         )
-    except OSError:
-        return []
+    except OSError as exc:
+        return [], f"git unavailable: {exc}"
     if result.returncode != 0:
-        return []
-    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        return [], f"git diff against {base_ref} failed: {result.stderr.strip()[:200]}"
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()], None
 
 
 def unlisted_unit_files(sources: dict[str, list[str]] | None = None) -> list[str]:
@@ -105,7 +122,15 @@ def unlisted_unit_files(sources: dict[str, list[str]] | None = None) -> list[str
 
 
 def main() -> int:
-    sources = listed_test_paths()
+    try:
+        sources = listed_test_paths()
+    except ManifestUnreadable as exc:
+        print(f"TEST-LIST COMPLETENESS: {exc}")
+        print(
+            "The gate cannot verify lists it cannot read — a renamed or moved manifest"
+            " must update this gate's paths in the SAME change set."
+        )
+        return 1
     missing = missing_listed_files(sources)
     if missing:
         print("TEST-LIST COMPLETENESS: listed test file(s) no longer exist — dead guards:")
@@ -122,8 +147,18 @@ def main() -> int:
     )
 
     # Advisory (named, blast_radius-derived): tests THIS push's changes depend on
-    # that no pre-merge list runs — the likeliest post-merge reds.
-    relevant = impact_relevant_unlisted(_changed_files(), sources)
+    # that no pre-merge list runs — the likeliest post-merge reds. Guarded (gap WO
+    # 681b294e): an advisory failure must never break the blocking gate, and an
+    # undeterminable diff says so rather than reading as "nothing impacted".
+    changed, unavailable = _changed_files()
+    if unavailable:
+        print(f"ADVISORY UNAVAILABLE: change set undeterminable — {unavailable}")
+        return 0
+    try:
+        relevant = impact_relevant_unlisted(changed, sources)
+    except Exception as exc:  # noqa: BLE001 - advisory must not break the gate
+        print(f"ADVISORY UNAVAILABLE: impact-set analysis failed — {exc}")
+        return 0
     if relevant:
         print(
             f"ADVISORY: {len(relevant)} impact-relevant test file(s) run only post-merge"

@@ -524,12 +524,17 @@ def symptom_check_detail(
                     )
                 )
             )
+            # Word-boundary match (gap WO 681b294e): a naive substring test made
+            # table `things` match `somethings`, a filename, or a comment —
+            # inflating diff-relatedness into a false reassurance.
             entry: dict[str, Any] = {
                 "sql": sql,
                 "tables": tables,
                 "trivially_true": not tables,
                 "diff_related": (
-                    any(t in diff_text for t in tables) if (diff_text and tables) else None
+                    any(_re.search(r"\b" + _re.escape(t) + r"\b", diff_text) for t in tables)
+                    if (diff_text and tables)
+                    else None
                 ),
             }
             try:
