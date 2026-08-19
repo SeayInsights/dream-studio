@@ -263,3 +263,5 @@ These are **not abstracted** — they're passed directly to the orchestrating ag
 <!-- Reviewed 2026-08-19 — WO-HOOK-COVERAGE (f2dda052): no workflow-runtime change. The PreToolUse enforcement matcher widened (Bash + MCP write tools) and on-edit-enforce gained write-target extraction + the module_boundary advisory — see docs/HOOK_RUNTIME.md. Workflow dispatch, nodes, and the pre-push manifest are unchanged. -->
 
 <!-- Reviewed 2026-08-19 — WO-HOOK-DRIFT-STOP (e294b06e): no workflow-runtime change. Hook-projection drift detection widened to the full copied tree and the stop hook re-blocks while violations persist (capped, loud allow) — see docs/HOOK_RUNTIME.md. Workflow dispatch, nodes, and the pre-push manifest unchanged. -->
+
+<!-- Reviewed 2026-08-19 — WO-CI-COMPLETENESS (04953426): pre-push manifest gains the blocking test-list-completeness gate (listed-path existence + post-merge-only visibility; see docs/operations/lightweight-github-ci-strategy.md). No other workflow-runtime change. -->

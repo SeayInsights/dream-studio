@@ -76,18 +76,23 @@ def test_spec_approved_fail(wo_dir: Path, tmp_path: Path) -> None:
 # ── all_tests_pass ────────────────────────────────────────────────────────────
 
 
-def test_all_tests_pass_pass(wo_dir: Path, tmp_path: Path) -> None:
+def test_all_tests_pass_string_fallback_retired(wo_dir: Path, tmp_path: Path) -> None:
+    """WO-CI-COMPLETENESS: a hand-writable test-results.md containing 'PASSED'
+    no longer satisfies the gate — without executable TEST-CHECKs the gate is
+    explicitly UNVERIFIED (audit finding: the string fallback passed on any
+    stale or hand-authored file)."""
     (wo_dir / "test-results.md").write_text("All checks PASSED\n", encoding="utf-8")
     passed, reason = _check("all_tests_pass", tmp_path / ".planning")
-    assert passed is True
-    assert reason == ""
+    assert passed is False
+    assert "UNVERIFIED" in reason
+    assert "TEST-CHECK" in reason
 
 
 def test_all_tests_pass_fail_missing_file(wo_dir: Path, tmp_path: Path) -> None:
     passed, reason = _check("all_tests_pass", tmp_path / ".planning")
     assert passed is False
     assert "all_tests_pass" in reason
-    assert "test-results.md" in reason
+    assert "UNVERIFIED" in reason
 
 
 def test_all_tests_pass_fail_no_passed_marker(wo_dir: Path, tmp_path: Path) -> None:

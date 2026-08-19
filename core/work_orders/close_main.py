@@ -267,11 +267,21 @@ def close_work_order(
 
         # Re-run the originating symptom SQL-CHECK (if captured at registration).
         # A still-failing symptom means the fix never landed — block close unless forced.
+        # WO-CI-COMPLETENESS: the checks are also surfaced VERBATIM with their live
+        # results (symptom_checks in the result dict, incl. a trivially_true flag for
+        # FROM-less SQL) so a decorative symptom is visible to the operator at close.
         _orig_symptom = meta.get("originating_symptom")
+        _symptom_checks: list[dict[str, Any]] = []
         if _orig_symptom:
             _sym_failure = _check_originating_symptom(_orig_symptom, db_path)
             if _sym_failure:
                 gate_failures.append(_sym_failure)
+            try:
+                from .close_gates import symptom_check_detail
+
+                _symptom_checks = symptom_check_detail(_orig_symptom, db_path)
+            except Exception:
+                _symptom_checks = []
 
         # WO-LIVE-DATA-GATE T3: Dashboard truth gate — runs for telemetry/dashboard WO
         # types only.  A fresh/empty authority always vacuously passes, so this gate
@@ -471,6 +481,8 @@ def close_work_order(
         "forced": force,
         "bypassed_gates": gate_failures if force else [],
     }
+    if _symptom_checks:
+        result["symptom_checks"] = _symptom_checks
     if _verify_ran and _verify_result is not None and _verify_result.get("unreviewable"):
         result["verify_warning"] = _verify_result.get("summary") or (
             "independent review unreviewable: no commit evidence found."

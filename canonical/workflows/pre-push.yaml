@@ -92,6 +92,19 @@ gates:
       or a renamed symbol. Fix the import; do not skip. This mirrors what the
       full-CI unit run does before it can even start.
 
+  - id: test-list-completeness
+    tier: blocking
+    description: >
+      The pin-tests and pr-smoke focused lists are hardcoded file lists — a
+      listed file that is deleted or renamed silently stops guarding anything
+      (WO-CI-COMPLETENESS, 2026-08-18 audit). Validates every listed path
+      exists and reports how many tests/unit files run only post-merge.
+    command: [py, -m, core.gates.test_list_completeness]
+    fail_hint: >
+      A test file named in canonical/workflows/pre-push.yaml or
+      .github/workflows/ci.yml no longer exists — remove or repoint the entry
+      in the SAME change set as the rename/delete.
+
   - id: atlas-leak
     tier: blocking
     description: >

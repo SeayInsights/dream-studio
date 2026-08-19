@@ -154,14 +154,17 @@ def run_gate_check(
                     )
                     return False, f"all_tests_pass: {len(_failed)} TEST-CHECK(s) failed — {_detail}"
                 return True, ""
-            # No TEST-CHECKs registered — fall through to file-presence check below.
-        results_path = wo_dir / "test-results.md"
-        if not results_path.is_file():
-            return False, "all_tests_pass: test-results.md not found"
-        content = results_path.read_text(encoding="utf-8")
-        if "PASSED" not in content.upper():
-            return False, "all_tests_pass: test-results.md does not contain PASSED"
-        return True, ""
+        # WO-CI-COMPLETENESS: the legacy Path B fallback (test-results.md containing
+        # the string "PASSED" — a hand-writable, never-freshness-checked file) is
+        # RETIRED. With no executable TEST-CHECKs and no db context this gate is
+        # UNVERIFIED and says so explicitly, naming the remediation.
+        return False, (
+            "all_tests_pass: UNVERIFIED — no TEST-CHECK acceptance criteria are"
+            " registered across this WO's tasks (or no db context to execute them)."
+            " Register a TEST-CHECK AC (bare pytest node-id or 'cmd: ...') on a task,"
+            " or attest a design-only WO via: py -m interfaces.cli.ds work-order attest."
+            " The test-results.md string fallback is retired."
+        )
 
     if gate_name == "design_critique":
         import re as _re
@@ -464,6 +467,48 @@ def _check_originating_symptom(symptom: str, db_path: Path) -> str | None:
         conn.close()
 
     return None
+
+
+def symptom_check_detail(symptom: str, db_path: Path) -> list[dict[str, Any]]:
+    """Each SQL-CHECK line with its live result — symptom VISIBILITY at close.
+
+    WO-CI-COMPLETENESS: the audit found symptom SQL could be trivially true
+    (``SELECT 1 WHERE EXISTS (...business_projects...)``) and was never shown
+    to the operator. Close output now carries every check verbatim with its
+    result, plus a ``trivially_true`` flag when the SQL has no FROM clause at
+    all (nothing real is being asserted). Advisory — never changes the gate
+    outcome; the blocking re-check stays in ``_check_originating_symptom``.
+    """
+    import re as _re
+    import sqlite3 as _sqlite3
+
+    details: list[dict[str, Any]] = []
+    try:
+        conn = _sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    except Exception:
+        return details
+    try:
+        for raw_line in symptom.splitlines():
+            line = raw_line.strip()
+            if not line.upper().startswith("SQL-CHECK:"):
+                continue
+            sql = line[len("SQL-CHECK:") :].strip()  # noqa: E203
+            entry: dict[str, Any] = {
+                "sql": sql,
+                "trivially_true": not _re.search(r"\bFROM\b", sql, _re.IGNORECASE),
+            }
+            try:
+                row = conn.execute(sql).fetchone()
+                entry["value"] = row[0] if row is not None else None
+                entry["passed"] = bool(entry["value"])
+            except Exception as exc:
+                entry["value"] = None
+                entry["passed"] = False
+                entry["error"] = str(exc)
+            details.append(entry)
+    finally:
+        conn.close()
+    return details
 
 
 def _evaluate_gates(
