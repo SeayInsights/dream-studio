@@ -225,6 +225,91 @@ def test_closed_spawn_resolves_completion_gap(tmp_path: pytest.TempPathFactory) 
     assert resolved["resolved_gaps"] == [spawned_id]
 
 
+def test_closed_child_diffs_join_parent_evidence(tmp_path: pytest.TempPathFactory) -> None:
+    """WO-GAP-EVIDENCE: a CLOSED gap WO spawned from the parent contributes its
+    remediation diff to the parent's graded evidence — the completion grader
+    sees the fixes committed under the child's id and can pass on merits,
+    independent of grader-phrasing-stable gap keys."""
+    db_path = _make_db(tmp_path)
+    project_id, milestone_id, work_order_id = (str(uuid.uuid4()) for _ in range(3))
+    _seed(db_path, project_id=project_id, milestone_id=milestone_id, work_order_id=work_order_id)
+
+    # Seed a CLOSED child gap WO carrying the parent's gap-key marker.
+    child_id = str(uuid.uuid4())
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description,"
+        "  work_order_type, status, sequence_order, created_at, updated_at, last_updated_at)"
+        " VALUES (?,?,?,?,?,?,'closed',2,?,?,?)",
+        (
+            child_id,
+            project_id,
+            milestone_id,
+            "Gap remediation",
+            f"Fix the gap. [gap-key: {work_order_id}::some-category]",
+            "cleanup",
+            NOW,
+            NOW,
+            NOW,
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    def _per_id_diffs(root, wo_id, title=None):
+        if wo_id == work_order_id:
+            return "diff --git a/parent.py b/parent.py\n+parent change"
+        if wo_id == child_id:
+            return "diff --git a/child_fix.py b/child_fix.py\n+the remediation"
+        return None
+
+    passing_graders = {
+        "completion": {
+            "passed": True,
+            "completion_score": 1.0,
+            "tasks_verified": [{"task_title": "T1", "evidence": "done", "verdict": "pass"}],
+            "summary": "done",
+            "gaps": [],
+        },
+        "correctness": {
+            "correctness_passed": True,
+            "correctness_score": 1.0,
+            "violations": [],
+            "coverage_gaps": [],
+            "migration_gaps": [],
+        },
+        "quality": {"quality_passed": True, "quality_score": 1.0, "issues": []},
+    }
+    captured_prompts: dict = {}
+
+    def _capture_graders(prompts):
+        captured_prompts.update(prompts)
+        return passing_graders
+
+    with _patch_db(db_path):
+        with patch(
+            "core.work_orders.verify_graders._run_graders_parallel",
+            side_effect=_capture_graders,
+        ):
+            with patch(
+                "core.work_orders.verify_git._collect_git_commits", side_effect=_per_id_diffs
+            ):
+                from core.work_orders.verify import verify_work_order
+
+                result = verify_work_order(
+                    work_order_id=work_order_id,
+                    source_root=REPO_ROOT,
+                    dream_studio_home=tmp_path,
+                    planning_root=tmp_path / "planning",
+                )
+    assert result["ok"] is True
+    completion_prompt = captured_prompts.get("completion", "")
+    assert "the remediation" in completion_prompt, "child diff must reach the grader"
+    assert f"remediation evidence (closed gap WO {child_id})" in completion_prompt
+    assert "parent change" in completion_prompt
+
+
 def test_violation_never_discounted(tmp_path: pytest.TempPathFactory) -> None:
     """A rule violation keeps the verdict failed even when its spawned WO is closed."""
     db_path = _make_db(tmp_path)
