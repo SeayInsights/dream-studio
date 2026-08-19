@@ -2,7 +2,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash|mcp__.*__(write_file|append_file|edit_file|create_file)",
         "dream_studio_managed": true,
         "hooks": [
           {

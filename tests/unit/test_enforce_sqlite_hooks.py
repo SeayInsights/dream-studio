@@ -46,7 +46,7 @@ CREATE TABLE business_projects (
 CREATE TABLE business_milestones (milestone_id TEXT, order_index INTEGER);
 CREATE TABLE business_work_orders (
     work_order_id TEXT, project_id TEXT, milestone_id TEXT, title TEXT,
-    status TEXT, started_at TEXT, closed_at TEXT, created_at TEXT,
+    description TEXT, status TEXT, started_at TEXT, closed_at TEXT, created_at TEXT,
     sequence_order INTEGER
 );
 CREATE TABLE business_tasks (
