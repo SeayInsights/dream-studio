@@ -24,6 +24,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from core.config.sqlite_bootstrap import bootstrap_database
+from core.work_orders.artifact_envelope import wrap
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NOW = "2026-01-01T00:00:00+00:00"
@@ -138,13 +139,19 @@ def _seed_inprogress_wo(db_path: Path, *, ac: str) -> str:
 
 def _write_passing_verdict(planning_root: Path, wo: str) -> None:
     """Pre-write a passing review-verdict.json so the independent_review gate passes
-    and close's inline auto-verify is skipped."""
+    and close's inline auto-verify is skipped.
+
+    WO-VERIFY-PROVENANCE: the gate now requires a provenance envelope — wrap the
+    content the same way ``_persist_review_verdict`` does for a genuine verify run.
+    """
     wo_dir = planning_root / "work-orders" / wo
     wo_dir.mkdir(parents=True, exist_ok=True)
-    (wo_dir / "review-verdict.json").write_text(
+    stored = wrap(
         json.dumps({"ok": True, "passed": True, "work_order_id": wo, "summary": "ok"}),
-        encoding="utf-8",
+        generator="ds work-order verify",
+        head_commit_sha=None,
     )
+    (wo_dir / "review-verdict.json").write_text(stored, encoding="utf-8")
 
 
 def _wo_status(db_path: Path, wo: str) -> str:

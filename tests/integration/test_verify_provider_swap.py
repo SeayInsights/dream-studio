@@ -16,6 +16,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from core.config.sqlite_bootstrap import bootstrap_database
+from core.work_orders.artifact_envelope import unwrap
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NOW = "2026-01-01T00:00:00.000000Z"
@@ -127,4 +128,7 @@ def test_full_verify_path_scores_via_stub_provider(tmp_path, monkeypatch):
     # The verdict was persisted (the same artifact the vendor path writes).
     verdict_path = planning_root / "work-orders" / work_order_id / "review-verdict.json"
     assert verdict_path.is_file()
-    assert json.loads(verdict_path.read_text())["scores"]["composite_score"] == 0.66
+    # WO-VERIFY-PROVENANCE: _persist_review_verdict wraps the verdict in a
+    # provenance envelope — unwrap before parsing the verdict body.
+    stored_verdict = json.loads(unwrap(verdict_path.read_text())[0])
+    assert stored_verdict["scores"]["composite_score"] == 0.66

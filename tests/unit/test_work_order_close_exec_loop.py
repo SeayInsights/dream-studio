@@ -24,6 +24,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from core.config.sqlite_bootstrap import bootstrap_database
+from core.work_orders.artifact_envelope import wrap
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NOW = "2026-05-20T00:00:00+00:00"
@@ -101,9 +102,19 @@ def _planning(tmp_path: Path, wo_id: str) -> Path:
 
 
 def _write_pass_verdict(planning: Path, wo_id: str) -> None:
-    """Write a passing verdict file — required for the independent_review gate to pass."""
+    """Write a passing verdict file — required for the independent_review gate to pass.
+
+    WO-VERIFY-PROVENANCE: the independent_review gate now rejects verdicts with no
+    provenance envelope, so this must model the same wrapped form
+    ``_persist_review_verdict`` writes for a genuine verify run.
+    """
     path = planning / "work-orders" / wo_id / "review-verdict.json"
-    path.write_text(json.dumps({"passed": True, "gaps": [], "summary": "ok"}), encoding="utf-8")
+    stored = wrap(
+        json.dumps({"passed": True, "gaps": [], "summary": "ok"}),
+        generator="ds work-order verify",
+        head_commit_sha=None,
+    )
+    path.write_text(stored, encoding="utf-8")
 
 
 def _write_fail_verdict(planning: Path, wo_id: str) -> None:

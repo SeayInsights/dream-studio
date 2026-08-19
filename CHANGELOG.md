@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Gate artifacts carry provenance; hand-written and stale artifacts no longer close work orders (WO-VERIFY-PROVENANCE, b5ddac3e, #648):** the 2026-08-18 enforcement audit found every close-gate artifact was bare text — a hand-written `{"passed": true}` satisfied `independent_review` via bare `json.loads`, verdicts were tied to no commit and could be re-run until green, and every artifact gate accepted stale files. Gate artifacts are now stored inside a provenance envelope (generator identity, `created_at`, repo HEAD at write time — new `core/work_orders/artifact_envelope.py`; `set_wo_artifact(generator=…, project_root=…)` wraps, `get_wo_artifact` unwraps transparently). The `independent_review` gate rejects envelope-less verdicts ("hand-written or pre-provenance — re-run `ds work-order verify`") and verdicts predated by newer WO-attributed commits (WO-scoped `git log sha..HEAD` over verify's own evidence patterns); `security_scan` / `api_contract_exists` / `design_critique` and the four milestone audit gates reject **enveloped**-but-stale artifacts (whole-repo staleness for milestone audits — any later commit potentially invalidates a surface-wide audit). Legacy envelope-less artifacts keep historical acceptance so existing WOs stay closeable; a missing sha (no-git project, unreviewable flows) skips only the staleness check — the envelope is a tripwire against hand-authoring, not a signature. Verdicts additionally record `graded_commits`.
+- `tests/unit/test_artifact_provenance.py` (new, 8 tests) + 15 existing verdict tests updated to the enveloped storage contract (same behavioral assertions, new representation).
+
 ## [0.1.0] - 2026-08-06
 
 First public release — Dream Studio is installable from the Claude Code plugin marketplace

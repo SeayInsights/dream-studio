@@ -26,6 +26,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from core.config.sqlite_bootstrap import bootstrap_database
+from core.work_orders.artifact_envelope import unwrap, wrap
 from core.work_orders.verify import _collect_git_commits
 
 NOW = "2026-01-01T00:00:00.000000Z"
@@ -159,9 +160,10 @@ def test_verify_unreviewable_no_score_zero_no_spawned_wos(tmp_path, monkeypatch)
     assert result["spawned_work_orders"] == []
     assert "unreviewable" in result["auto_continue_warning"]
 
-    verdict = json.loads(
-        (planning_root / "work-orders" / wo_id / "review-verdict.json").read_text()
-    )
+    # WO-VERIFY-PROVENANCE: _persist_review_verdict wraps the verdict in a
+    # provenance envelope — unwrap before parsing the verdict body.
+    raw_stored = (planning_root / "work-orders" / wo_id / "review-verdict.json").read_text()
+    verdict = json.loads(unwrap(raw_stored)[0])
     assert verdict["unreviewable"] is True
     assert verdict["spawned_work_orders"] == []
 
@@ -189,9 +191,15 @@ def test_gate_does_not_pass_on_unreviewable_verdict(tmp_path):
     wo_id = str(uuid.uuid4())
     wo_dir = tmp_path / "work-orders" / wo_id
     wo_dir.mkdir(parents=True)
-    (wo_dir / "review-verdict.json").write_text(
-        json.dumps({"passed": False, "unreviewable": True, "unreviewable_reason": "no commits"})
+    # WO-VERIFY-PROVENANCE: a genuine verify run wraps its verdict in a provenance
+    # envelope — model that here so the gate reaches the unreviewable check below
+    # instead of short-circuiting on "no provenance envelope".
+    stored = wrap(
+        json.dumps({"passed": False, "unreviewable": True, "unreviewable_reason": "no commits"}),
+        generator="ds work-order verify",
+        head_commit_sha=None,
     )
+    (wo_dir / "review-verdict.json").write_text(stored)
     passed, reason = run_gate_check(
         "independent_review",
         planning_root=tmp_path,
@@ -259,9 +267,14 @@ def test_gate_still_fails_on_reviewable_failed_verdict(tmp_path):
     wo_id = str(uuid.uuid4())
     wo_dir = tmp_path / "work-orders" / wo_id
     wo_dir.mkdir(parents=True)
-    (wo_dir / "review-verdict.json").write_text(
-        json.dumps({"passed": False, "summary": "real failure"})
+    # WO-VERIFY-PROVENANCE: model a genuine (enveloped) verify-produced verdict so
+    # the gate reaches the "review failed" check instead of the provenance check.
+    stored = wrap(
+        json.dumps({"passed": False, "summary": "real failure"}),
+        generator="ds work-order verify",
+        head_commit_sha=None,
     )
+    (wo_dir / "review-verdict.json").write_text(stored)
     passed, reason = run_gate_check(
         "independent_review",
         planning_root=tmp_path,

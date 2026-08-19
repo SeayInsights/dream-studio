@@ -15,7 +15,48 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from .close_shared import _artifact_text
+from .close_shared import _artifact_text, _artifact_with_envelope
+
+
+def _provenance_staleness(
+    envelope: dict[str, Any] | None,
+    *,
+    work_order_id: str,
+    conn: Any,
+    db_path: Path | None,
+) -> str | None:
+    """WO-scoped staleness: WO-attributed commits landed after the artifact's sha.
+
+    Returns a human-readable staleness description, or None when the artifact is
+    fresh or staleness cannot be determined (no envelope/sha, no git, unknown sha
+    — envelope *presence* is enforced separately by gates that require it).
+    """
+    if not envelope:
+        return None
+    sha = envelope.get("head_commit_sha")
+    if not sha or db_path is None:
+        return None
+    from core.work_orders.artifact_envelope import wo_commits_after
+    from core.work_orders.verify import resolve_project_root
+
+    title: str | None = None
+    try:
+        row = conn.execute(
+            "SELECT title FROM business_work_orders WHERE work_order_id = ?",
+            (work_order_id,),
+        ).fetchone()
+        title = row[0] if row else None
+    except Exception:
+        pass
+    newer = wo_commits_after(
+        sha, resolve_project_root(work_order_id, db_path), work_order_id, title=title
+    )
+    if newer:
+        return (
+            f"{len(newer)} work-order commit(s) landed after it was produced "
+            f"(at {sha[:12]}; newest {newer[0][:12]})"
+        )
+    return None
 
 
 def run_gate_check(
@@ -62,7 +103,17 @@ def run_gate_check(
     if gate_name == "api_contract_exists":
         from core.gates.spec_ratification import evaluate_api_contract
 
-        contract = _artifact_text(work_order_id, wo_dir, "api_contract", db_path)
+        contract, _contract_env = _artifact_with_envelope(
+            work_order_id, wo_dir, "api_contract", db_path
+        )
+        _stale = _provenance_staleness(
+            _contract_env, work_order_id=work_order_id, conn=conn, db_path=db_path
+        )
+        if _stale:
+            return False, (
+                f"api_contract_exists: api-contract.md is stale — {_stale}. "
+                "Regenerate the contract and re-store the artifact."
+            )
         ok, reason = evaluate_api_contract(contract, _wo_created_at(conn, work_order_id))
         return (True, "") if ok else (False, f"api_contract_exists: {reason}")
 
@@ -118,7 +169,19 @@ def run_gate_check(
         critique_path = wo_dir / "design-critique.md"
         if not critique_path.is_file():
             return False, "design_critique: design-critique.md not found"
-        content = critique_path.read_text(encoding="utf-8")
+        from core.work_orders.artifact_envelope import unwrap as _unwrap
+
+        content, _critique_env = _unwrap(critique_path.read_text(encoding="utf-8"))
+        _stale = _provenance_staleness(
+            _critique_env, work_order_id=work_order_id, conn=conn, db_path=db_path
+        )
+        if _stale:
+            return False, (
+                f"design_critique: design-critique.md is stale — {_stale}. "
+                "Re-run website:critique and re-store the artifact."
+            )
+        if content is None:
+            return False, "design_critique: design-critique.md is empty"
         match = _re.search(r"Score:\s*(\d+)/(\d+)", content)
         if not match:
             return False, "design_critique: no 'Score: N/M' found in design-critique.md"
@@ -128,9 +191,21 @@ def run_gate_check(
         return True, ""
 
     if gate_name == "security_scan":
-        content = _artifact_text(work_order_id, wo_dir, "security_scan", db_path)
+        content, _scan_env = _artifact_with_envelope(
+            work_order_id, wo_dir, "security_scan", db_path
+        )
         if content is None:
             return False, "security_scan: security-scan.md not found"
+        # WO-VERIFY-PROVENANCE: enveloped scans must not predate newer WO commits.
+        # Legacy (envelope-less) scans keep their historical acceptance.
+        _stale = _provenance_staleness(
+            _scan_env, work_order_id=work_order_id, conn=conn, db_path=db_path
+        )
+        if _stale:
+            return False, (
+                f"security_scan: security-scan.md is stale — {_stale}. "
+                "Re-run the security audit and re-store the artifact."
+            )
         from core.gates.security_verdict import is_security_blocked
 
         if is_security_blocked(content):
@@ -179,11 +254,33 @@ def run_gate_check(
     if gate_name == "independent_review":
         import json as _json
 
-        verdict_raw = _artifact_text(work_order_id, wo_dir, "review_verdict", db_path)
+        verdict_raw, verdict_envelope = _artifact_with_envelope(
+            work_order_id, wo_dir, "review_verdict", db_path
+        )
         if verdict_raw is None:
             return False, (
                 f"independent_review: review-verdict.json not found. "
                 f"Run: py -m interfaces.cli.ds work-order verify {work_order_id}"
+            )
+        # WO-VERIFY-PROVENANCE: a verdict without a provenance envelope is
+        # hand-written or pre-provenance — either way it is not a certified
+        # review. The envelope is a tripwire, not a signature: it makes a
+        # hand-written verdict detectably different from verify's output. A
+        # missing head_commit_sha (project without git) skips only the
+        # staleness check — _provenance_staleness handles that case.
+        if not verdict_envelope or not verdict_envelope.get("generator"):
+            return False, (
+                f"independent_review: verdict lacks a provenance envelope "
+                f"(hand-written or pre-provenance) — re-run: "
+                f"py -m interfaces.cli.ds work-order verify {work_order_id}"
+            )
+        _stale = _provenance_staleness(
+            verdict_envelope, work_order_id=work_order_id, conn=conn, db_path=db_path
+        )
+        if _stale:
+            return False, (
+                f"independent_review: verdict is stale — {_stale}. Re-run: "
+                f"py -m interfaces.cli.ds work-order verify {work_order_id}"
             )
         try:
             verdict = _json.loads(verdict_raw)

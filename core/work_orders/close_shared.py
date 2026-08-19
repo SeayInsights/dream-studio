@@ -31,17 +31,32 @@ def _artifact_text(work_order_id: str, wo_dir: Path, kind: str, db_path: Path | 
 
     WO-FILESDB-P1: artifacts moved into business_work_order_artifacts. The disk
     fallback keeps historical WOs (and the live authority DB before the migration
-    is activated) gate-satisfiable during the transition.
+    is activated) gate-satisfiable during the transition. Provenance envelopes
+    (WO-VERIFY-PROVENANCE) are unwrapped transparently.
     """
-    from core.work_orders.artifacts import KIND_TO_FILENAME, get_wo_artifact
+    content, _ = _artifact_with_envelope(work_order_id, wo_dir, kind, db_path)
+    return content
 
-    content = get_wo_artifact(work_order_id, kind, db_path=db_path)
+
+def _artifact_with_envelope(
+    work_order_id: str, wo_dir: Path, kind: str, db_path: Path | None
+) -> tuple[str | None, dict[str, Any] | None]:
+    """Like ``_artifact_text`` but also returns the provenance envelope.
+
+    ``envelope`` is None for legacy bare-text artifacts (both stores) and for
+    absent artifacts — gates that require provenance treat that as a failure
+    with a regeneration message (WO-VERIFY-PROVENANCE).
+    """
+    from core.work_orders.artifact_envelope import unwrap
+    from core.work_orders.artifacts import KIND_TO_FILENAME, get_wo_artifact_envelope
+
+    content, envelope = get_wo_artifact_envelope(work_order_id, kind, db_path=db_path)
     if content is not None:
-        return content
+        return content, envelope
     fpath = wo_dir / KIND_TO_FILENAME[kind]
     if fpath.is_file():
-        return fpath.read_text(encoding="utf-8")
-    return None
+        return unwrap(fpath.read_text(encoding="utf-8"))
+    return None, None
 
 
 def _lookup_work_order_and_gates(conn: Any, work_order_id: str) -> dict[str, Any]:

@@ -12,6 +12,7 @@ import json
 import sqlite3
 from pathlib import Path
 
+from core.work_orders.artifact_envelope import unwrap
 from core.work_orders.artifacts import get_wo_artifact
 from core.work_orders.verify import _persist_review_verdict
 
@@ -55,4 +56,6 @@ def test_verdict_falls_back_to_disk_when_table_absent(tmp_path):
     # Table absent → disk fallback (returns the written path).
     assert path is not None
     assert path.is_file()
-    assert json.loads(path.read_text(encoding="utf-8"))["passed"] is False
+    # WO-VERIFY-PROVENANCE: the disk-fallback write is also provenance-wrapped —
+    # unwrap before parsing the verdict body.
+    assert json.loads(unwrap(path.read_text(encoding="utf-8"))[0])["passed"] is False

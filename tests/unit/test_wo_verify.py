@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from core.config.sqlite_bootstrap import bootstrap_database
+from core.work_orders.artifact_envelope import unwrap, wrap
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NOW = "2026-01-01T00:00:00.000000Z"
@@ -138,7 +139,9 @@ def test_verify_no_commits_mock_gap(tmp_path: pytest.TempPathFactory) -> None:
     # verdict file must be written
     verdict_path = planning_root / "work-orders" / work_order_id / "review-verdict.json"
     assert verdict_path.is_file()
-    data = json.loads(verdict_path.read_text())
+    # WO-VERIFY-PROVENANCE: _persist_review_verdict wraps the verdict in a
+    # provenance envelope — unwrap before parsing the verdict body.
+    data = json.loads(unwrap(verdict_path.read_text())[0])
     assert data["passed"] is True
 
 
@@ -274,7 +277,9 @@ def test_close_gate_failed_verdict_blocks(tmp_path: pytest.TempPathFactory) -> N
     wo_dir = planning_root / "work-orders" / work_order_id
     wo_dir.mkdir(parents=True)
     spawned_id = str(uuid.uuid4())
-    (wo_dir / "review-verdict.json").write_text(
+    # WO-VERIFY-PROVENANCE: model a genuine (enveloped) verify-produced verdict so
+    # the gate reaches the "review failed" check instead of the provenance check.
+    stored = wrap(
         json.dumps(
             {
                 "passed": False,
@@ -284,8 +289,10 @@ def test_close_gate_failed_verdict_blocks(tmp_path: pytest.TempPathFactory) -> N
                 ],
             }
         ),
-        encoding="utf-8",
+        generator="ds work-order verify",
+        head_commit_sha=None,
     )
+    (wo_dir / "review-verdict.json").write_text(stored, encoding="utf-8")
 
     passed, reason = run_gate_check(
         "independent_review",
@@ -314,7 +321,9 @@ def test_close_gate_passed_verdict_allows(tmp_path: pytest.TempPathFactory) -> N
     planning_root = tmp_path / "planning"
     wo_dir = planning_root / "work-orders" / work_order_id
     wo_dir.mkdir(parents=True)
-    (wo_dir / "review-verdict.json").write_text(
+    # WO-VERIFY-PROVENANCE: model a genuine (enveloped) verify-produced verdict so
+    # the gate reaches the passed-verdict check instead of the provenance check.
+    stored = wrap(
         json.dumps(
             {
                 "passed": True,
@@ -322,8 +331,10 @@ def test_close_gate_passed_verdict_allows(tmp_path: pytest.TempPathFactory) -> N
                 "spawned_work_orders": [],
             }
         ),
-        encoding="utf-8",
+        generator="ds work-order verify",
+        head_commit_sha=None,
     )
+    (wo_dir / "review-verdict.json").write_text(stored, encoding="utf-8")
 
     passed, reason = run_gate_check(
         "independent_review",
@@ -535,7 +546,9 @@ def test_unreviewable_with_passing_ac_proceeds(tmp_path: pytest.TempPathFactory)
     # Verdict file must record unreviewable_graders
     verdict_path = planning_root / "work-orders" / work_order_id / "review-verdict.json"
     assert verdict_path.is_file()
-    data = json.loads(verdict_path.read_text())
+    # WO-VERIFY-PROVENANCE: _persist_review_verdict wraps the verdict in a
+    # provenance envelope — unwrap before parsing the verdict body.
+    data = json.loads(unwrap(verdict_path.read_text())[0])
     assert data["unreviewable"] is True
     assert "unreviewable_graders" in data
     assert len(data["unreviewable_graders"]) > 0

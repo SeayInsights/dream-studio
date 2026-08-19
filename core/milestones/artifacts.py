@@ -22,8 +22,23 @@ def read_milestone_artifact(
     ``milestones/<milestone_id>/<filename>``. Reads the docstore first, then falls back
     to the legacy disk path ``ms_dir / filename``. ``db_path`` selects a non-default
     docstore (used by the PRD rescore engine and isolated tests); None = default docstore.
+    Provenance envelopes (WO-VERIFY-PROVENANCE) are unwrapped transparently.
+    """
+    content, _ = read_milestone_artifact_with_envelope(ms_dir, filename, db_path=db_path)
+    return content
+
+
+def read_milestone_artifact_with_envelope(
+    ms_dir: Path, filename: str, *, db_path: Path | None = None
+) -> tuple[str | None, dict | None]:
+    """Like ``read_milestone_artifact`` but also returns the provenance envelope.
+
+    ``envelope`` is None for legacy bare-text artifacts (both stores) and for
+    absent artifacts. Milestone gates use it to reject enveloped audits that
+    predate later commits (WO-VERIFY-PROVENANCE).
     """
     from core.files.store import read_file_by_name
+    from core.work_orders.artifact_envelope import unwrap
 
     try:
         row = read_file_by_name(f"milestones/{ms_dir.name}/{filename}", db_path=db_path)
@@ -32,10 +47,10 @@ def read_milestone_artifact(
     if row is not None:
         content = row["content"]
         if isinstance(content, (bytes, bytearray)):
-            return content.decode("utf-8")
-        return str(content)
+            content = content.decode("utf-8")
+        return unwrap(str(content))
 
     disk = ms_dir / filename
     if disk.is_file():
-        return disk.read_text(encoding="utf-8")
-    return None
+        return unwrap(disk.read_text(encoding="utf-8"))
+    return None, None
