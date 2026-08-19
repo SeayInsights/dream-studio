@@ -79,6 +79,50 @@ from .verify_prompts import (
 )
 from .verify_shared import _MOCK_COMPLETION, _MOCK_CORRECTNESS, _MOCK_ENV, _MOCK_QUALITY
 
+# ── Falsification diff budget (WO-FALSIFY-TIMEOUT) ─────────────────────────────
+#
+# The falsification analyst reasons over the WHOLE diff (every surface × every
+# scenario class), so its cost grows with diff size — its first live run timed
+# out on an ordinary multi-file change. A longer per-role window is half the fix;
+# the other half is not handing it unbounded input. Newest commits first, because
+# the most recent work is what the operator is about to declare done.
+
+_FALSIFICATION_DIFF_BUDGET = 60_000
+
+
+def budget_falsification_diff(
+    git_diff: str, *, budget: int = _FALSIFICATION_DIFF_BUDGET
+) -> tuple[str, bool]:
+    """Return ``(diff_for_analysis, truncated)`` within ``budget`` characters.
+
+    Splits on the ``=== commit <sha> ===`` markers ``_collect_git_commits`` writes
+    and keeps NEWEST-first whole sections until the budget is spent, then restores
+    chronological order so the analyst reads the change as it happened. A diff with
+    no markers (authority-evidence text) is head-truncated. ``truncated`` is
+    recorded in the verdict so a partial analysis is never mistaken for a complete
+    enumeration.
+    """
+    if len(git_diff) <= budget:
+        return git_diff, False
+
+    import re as _re
+
+    parts = _re.split(r"(?=^=== (?:commit|remediation evidence) )", git_diff, flags=_re.MULTILINE)
+    sections = [p for p in parts if p.strip()]
+    if len(sections) <= 1:
+        return git_diff[:budget], True
+
+    kept: list[str] = []
+    used = 0
+    for section in reversed(sections):  # newest commit first
+        if used + len(section) > budget and kept:
+            break
+        kept.append(section)
+        used += len(section)
+    kept.reverse()  # back to chronological order for the reader
+    return "".join(kept), True
+
+
 # ── Score computation ───────────────────────────────────────────────────────────
 
 
@@ -391,6 +435,10 @@ def verify_work_order(
         if git_diff is None:
             git_diff = f"(no commits found referencing {work_order_id[:8]})"
 
+        # WO-FALSIFY-TIMEOUT: budget the falsification analyst's input before
+        # building its prompt; the other roles keep the full diff.
+        _falsification_diff, _falsification_truncated = budget_falsification_diff(git_diff)
+
         # Build grader prompts.
         prompts: dict[str, str] = {
             "completion": _COMPLETION_PROMPT_TEMPLATE.format(
@@ -404,10 +452,12 @@ def verify_work_order(
             "quality": _QUALITY_PROMPT_TEMPLATE.format(git_diff=git_diff),
             # WO-FALSIFY-FIRST-PASS: the only grader that asks what SHOULD have
             # been tested and wasn't. Runs on every verify alongside the others.
+            # WO-FALSIFY-TIMEOUT: on a budgeted diff (newest commits first) so a
+            # large change set yields an analysis instead of a timeout.
             "falsification": _FALSIFICATION_PROMPT_TEMPLATE.format(
                 title=wo["title"],
                 task_list=task_list_str,
-                git_diff=git_diff,
+                git_diff=_falsification_diff,
             ),
         }
 
@@ -716,6 +766,13 @@ def verify_work_order(
         # analysis must never read as "no worst cases found".
         if falsification is not None:
             full_verdict["falsification"] = falsification
+            if _falsification_truncated:
+                # A partial enumeration must never read as a complete one.
+                full_verdict["falsification_diff_truncated"] = (
+                    f"diff exceeded the {_FALSIFICATION_DIFF_BUDGET}-char falsification budget;"
+                    " the analyst saw the newest commits only — surfaces in older commits of"
+                    " this work order may be unenumerated."
+                )
             if falsification.get("_grader_error") or falsification.get("unreviewable"):
                 full_verdict["falsification_unavailable"] = str(
                     falsification.get("_grader_error") or "grader returned empty output"
@@ -759,6 +816,7 @@ def verify_work_order(
         "falsification": falsification,
         "unverified_risks": full_verdict.get("unverified_risks", []),
         "falsification_unavailable": full_verdict.get("falsification_unavailable"),
+        "falsification_diff_truncated": full_verdict.get("falsification_diff_truncated"),
         "verdict_path": str(verdict_path) if verdict_path else None,
     }
 

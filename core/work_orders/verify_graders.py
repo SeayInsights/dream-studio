@@ -77,7 +77,31 @@ def _extract_first_json_object(text: str) -> str | None:
     return None
 
 
-def _collect_grader(proc: subprocess.Popen, timeout: int = 360) -> dict[str, Any]:  # type: ignore[type-arg]
+# WO-FALSIFY-TIMEOUT: per-role collect budgets. The narrow-scope roles grade a
+# diff against a fixed rule list; the falsification analyst has to reason over the
+# WHOLE diff and enumerate worst reachable states per surface, so it needs a longer
+# window. Its first live run timed out at the shared 360s on an ordinary multi-file
+# diff — a grader that cannot finish on realistic input is dead capability exactly
+# where the worst cases matter most.
+_DEFAULT_COLLECT_TIMEOUT = 360
+_ROLE_COLLECT_TIMEOUTS: dict[str, int] = {"falsification": 900}
+# A retry after a transient miss gets a shorter window (the first call already
+# consumed the operator's patience); still per-role so falsification can finish.
+_DEFAULT_RETRY_TIMEOUT = 60
+_ROLE_RETRY_TIMEOUTS: dict[str, int] = {"falsification": 300}
+
+
+def role_collect_timeout(role: str | None) -> int:
+    """Collect budget for a grader role (see _ROLE_COLLECT_TIMEOUTS)."""
+    return _ROLE_COLLECT_TIMEOUTS.get(role or "", _DEFAULT_COLLECT_TIMEOUT)
+
+
+def role_retry_timeout(role: str | None) -> int:
+    """Retry budget for a grader role (see _ROLE_RETRY_TIMEOUTS)."""
+    return _ROLE_RETRY_TIMEOUTS.get(role or "", _DEFAULT_RETRY_TIMEOUT)
+
+
+def _collect_grader(proc: subprocess.Popen, timeout: int = _DEFAULT_COLLECT_TIMEOUT) -> dict[str, Any]:  # type: ignore[type-arg]
     try:
         feeder = getattr(proc, "_ds_feeder", None)
         if feeder is not None:
@@ -128,14 +152,19 @@ def _should_retry(result: dict[str, Any]) -> bool:
     return bool(needs) and result.get("reason") != "grader_cli_unavailable"
 
 
-def _retry_grader_once(prompt: str, profile: dict[str, Any] | None) -> dict[str, Any] | None:
+def _retry_grader_once(
+    prompt: str,
+    profile: dict[str, Any] | None,
+    *,
+    timeout: int = _DEFAULT_RETRY_TIMEOUT,
+) -> dict[str, Any] | None:
     """Re-spawn + collect one grader once; return the clean retry verdict, or None if the
     retry also missed. The single shared retry step (WO-GRADER-RETRY-NONJSON) used by both
     the parallel WO-verify path and the conformance suite so they exercise identical retry
     semantics (gap 2bbed8d8)."""
     try:
         retry_proc = _spawn_grader(prompt, profile)
-        retry_result = _collect_grader(retry_proc, timeout=60)
+        retry_result = _collect_grader(retry_proc, timeout=timeout)
         if not retry_result.get("unreviewable") and not retry_result.get("_grader_error"):
             return retry_result
     except Exception:
@@ -143,12 +172,16 @@ def _retry_grader_once(prompt: str, profile: dict[str, Any] | None) -> dict[str,
     return None
 
 
-def collect_grader_with_retry(prompt: str, profile: dict[str, Any] | None = None) -> dict[str, Any]:
+def collect_grader_with_retry(
+    prompt: str, profile: dict[str, Any] | None = None, *, role: str | None = None
+) -> dict[str, Any]:
     """Spawn one grader, collect it, and apply the single transient-miss retry.
 
     The retry-owning code path the conformance suite drives (gap 2bbed8d8): a non-JSON
     first reply is re-spawned once and only a clean retry replaces it. Shares
     ``_retry_grader_once`` with the parallel WO-verify path so both retry identically.
+    ``role`` selects the per-role collect/retry budget (WO-FALSIFY-TIMEOUT) so this
+    path and the parallel path give a role the same window.
     """
     try:
         proc = _spawn_grader(prompt, profile)
@@ -159,11 +192,11 @@ def collect_grader_with_retry(prompt: str, profile: dict[str, Any] | None = None
             "_grader_error": "grader provider not available on this host",
         }
     try:
-        result = _collect_grader(proc)
+        result = _collect_grader(proc, timeout=role_collect_timeout(role))
     except Exception as exc:
         result = {"_grader_error": str(exc)}
     if _should_retry(result):
-        retry = _retry_grader_once(prompt, profile)
+        retry = _retry_grader_once(prompt, profile, timeout=role_retry_timeout(role))
         if retry is not None:
             result = retry
     return result
@@ -213,7 +246,7 @@ def _run_graders_parallel(
             }
             continue
         try:
-            result = _collect_grader(proc)
+            result = _collect_grader(proc, timeout=role_collect_timeout(name))
         except Exception as exc:
             # Grader failure is non-fatal; return a safe default so the rest proceeds.
             result = {"_grader_error": str(exc)}
@@ -225,7 +258,9 @@ def _run_graders_parallel(
         # verify runs). The retry step is shared with the conformance suite so both
         # paths retry identically (gap 2bbed8d8).
         if _should_retry(result):
-            retry = _retry_grader_once(prompts[name], profiles.get(name))
+            retry = _retry_grader_once(
+                prompts[name], profiles.get(name), timeout=role_retry_timeout(name)
+            )
             if retry is not None:
                 result = retry
         # gap 0a64cf8c: check real-mode grader output against the published per-role
