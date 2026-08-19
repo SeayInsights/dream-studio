@@ -9,8 +9,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .doctor_shared import _ENTRY_HOOK_RELPATHS
-
 
 def _check_dispatcher_hooks(claude_dir: Path) -> bool:
     import json
@@ -143,19 +141,20 @@ def _check_stale_dbs(dream_studio_home: Path) -> dict[str, Any]:
 
 
 def _check_hook_freshness(source_root: Path, claude_dir: Path) -> dict[str, Any]:
-    """Compare deployed entry-hook copies against their canonical runtime sources.
+    """Compare EVERY deployed hook-projection file against canonical runtime.
 
-    The two blocking enforce hooks (on-edit-enforce, on-stop-enforce) are wired
-    directly in hooks.json — not dispatched — and are copied into
-    ``<claude_dir>/hooks/`` at install time. A canonical edit does not auto-propagate
-    (``ds update`` is version-gated), so the deployed copy can silently go stale — as
-    it did after WO-HOOK-ENFORCE-EXEC-STATS, when the telemetry emission never fired
-    from the stale copy. Flags any entry hook whose deployed copy differs from
-    canonical (line endings normalized so a CRLF install still compares equal).
+    WO-HOOK-DRIFT-STOP: previously only the two entry hooks were compared —
+    runtime/lib/enforcement.py (imported by both enforce hooks) and the 30+
+    other copied files could silently drift, so a stale deployed copy ran
+    outdated enforcement undetected by doctor. The manifest now comes from
+    ``projected_hook_relpaths`` — the same set the projection sync copies.
+    Line endings are normalized so a CRLF install still compares equal.
     """
+    from core.health.doctor_shared import projected_hook_relpaths
+
     stale: list[str] = []
     checked = 0
-    for rel in _ENTRY_HOOK_RELPATHS:
+    for rel in projected_hook_relpaths(source_root):
         canonical = source_root / rel
         deployed = claude_dir / "hooks" / rel
         if not canonical.is_file() or not deployed.is_file():
