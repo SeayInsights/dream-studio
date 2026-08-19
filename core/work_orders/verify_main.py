@@ -333,6 +333,7 @@ def verify_work_order(
                 },
                 planning_root=p_root,
                 db_path=db_path,
+                project_root=_search_root,
             )
             return {
                 "ok": True,
@@ -447,6 +448,7 @@ def verify_work_order(
                 },
                 planning_root=p_root,
                 db_path=db_path,
+                project_root=_search_root,
             )
             return {
                 "ok": True,
@@ -560,6 +562,13 @@ def verify_work_order(
         # WO-FILESDB-C2: DB-first verdict persistence (authority, kind=review_verdict);
         # .planning disk only as the unreleased-migration fallback. Supersedes the
         # WO-FILESDB-P1 disk+DB dual-write.
+        # WO-VERIFY-PROVENANCE: record which commits were actually graded; the
+        # provenance envelope (via _persist_review_verdict) records the repo HEAD.
+        _graded_commits: list[str] = []
+        if not authority_certified and git_diff:
+            import re as _re_commits
+
+            _graded_commits = _re_commits.findall(r"=== commit ([0-9a-f]{7,40}) ===", git_diff)
         full_verdict: dict[str, Any] = {
             "work_order_id": work_order_id,
             "passed": passed,
@@ -571,12 +580,17 @@ def verify_work_order(
             "gaps": all_gaps,
             "spawned_work_orders": spawned,
             "certification_basis": "authority_evidence" if authority_certified else "git_diff",
+            "graded_commits": _graded_commits,
             "verified_at": completed_at,
         }
         if migration is not None:
             full_verdict["migration"] = migration
         verdict_path = _persist_review_verdict(
-            work_order_id, full_verdict, planning_root=p_root, db_path=db_path
+            work_order_id,
+            full_verdict,
+            planning_root=p_root,
+            db_path=db_path,
+            project_root=_search_root,
         )
 
     return {
@@ -640,7 +654,12 @@ def attest_work_order(
             "verified_at": now,
         }
         verdict_path = _persist_review_verdict(
-            work_order_id, verdict, planning_root=p_root, db_path=db_path
+            work_order_id,
+            verdict,
+            planning_root=p_root,
+            db_path=db_path,
+            project_root=resolve_project_root(work_order_id, db_path) or source_root,
+            generator="ds work-order attest",
         )
     return {
         "ok": True,

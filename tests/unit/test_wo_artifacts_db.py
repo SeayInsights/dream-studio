@@ -125,7 +125,16 @@ def test_graceful_degradation_without_table(tmp_path):
 def test_independent_review_gate_reads_db_verdict(tmp_path):
     """The independent_review gate passes from a DB-stored review_verdict (no disk file)."""
     db = _db_with_table(tmp_path)
-    set_wo_artifact("wo-6", "review_verdict", '{"passed": true}', db_path=db)
+    # WO-VERIFY-PROVENANCE: the gate now requires a provenance envelope (generator
+    # identity) — set_wo_artifact's generator= kwarg models the same wrapped form a
+    # genuine verify run stores.
+    set_wo_artifact(
+        "wo-6",
+        "review_verdict",
+        '{"passed": true}',
+        db_path=db,
+        generator="ds work-order verify",
+    )
     conn = sqlite3.connect(str(db))
     try:
         ok, _ = run_gate_check(

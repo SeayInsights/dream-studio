@@ -60,14 +60,26 @@ def set_wo_artifact(
     *,
     instance_key: str = "",
     db_path: Path | None = None,
+    generator: str | None = None,
+    project_root: Path | None = None,
 ) -> bool:
     """Upsert an artifact. Returns False (no-op) when the table is absent.
 
     Singleton artifacts use the default instance_key=''; multi-instance kinds
     (e.g. ``eval``) pass instance_key (e.g. the eval_type) so each coexists.
+
+    WO-VERIFY-PROVENANCE: when ``generator`` is given, the content is stored
+    inside a provenance envelope (generator identity, created_at, and the HEAD
+    commit of ``project_root``) so close gates can verify who produced the
+    artifact and against which commit. ``get_wo_artifact`` unwraps
+    transparently; ``get_wo_artifact_envelope`` exposes the metadata.
     """
     if kind not in VALID_KINDS:
         raise ValueError(f"unknown artifact kind: {kind!r}")
+    if generator is not None:
+        from core.work_orders.artifact_envelope import git_head_sha, wrap
+
+        content = wrap(content, generator=generator, head_commit_sha=git_head_sha(project_root))
     now = datetime.now(UTC).isoformat()
     try:
         conn = sqlite3.connect(str(_resolve_db(db_path)))
@@ -99,19 +111,38 @@ def set_wo_artifact(
 def get_wo_artifact(
     work_order_id: str, kind: str, *, instance_key: str = "", db_path: Path | None = None
 ) -> str | None:
-    """Return the stored artifact content, or None if absent / table missing."""
+    """Return the stored artifact content, or None if absent / table missing.
+
+    Provenance-enveloped artifacts (WO-VERIFY-PROVENANCE) are unwrapped
+    transparently — callers always receive the bare artifact text.
+    """
+    content, _ = get_wo_artifact_envelope(
+        work_order_id, kind, instance_key=instance_key, db_path=db_path
+    )
+    return content
+
+
+def get_wo_artifact_envelope(
+    work_order_id: str, kind: str, *, instance_key: str = "", db_path: Path | None = None
+) -> tuple[str | None, dict | None]:
+    """Return ``(content, envelope | None)`` for a stored artifact.
+
+    ``envelope`` is None for legacy bare-text artifacts and for absent rows.
+    """
+    from core.work_orders.artifact_envelope import unwrap
+
     try:
         conn = sqlite3.connect(str(_resolve_db(db_path)))
     except sqlite3.Error:
-        return None
+        return None, None
     try:
         row = conn.execute(
             f"SELECT content FROM {_TABLE} WHERE work_order_id=? AND kind=? AND instance_key=?",
             (work_order_id, kind, instance_key),
         ).fetchone()
-        return row[0] if row else None
+        return unwrap(row[0]) if row else (None, None)
     except sqlite3.OperationalError:
-        return None
+        return None, None
     finally:
         conn.close()
 
@@ -139,7 +170,9 @@ def list_wo_artifacts(
             " WHERE work_order_id=? AND kind=? ORDER BY instance_key",
             (work_order_id, kind),
         ).fetchall()
-        return [(r[0], r[1]) for r in rows]
+        from core.work_orders.artifact_envelope import unwrap
+
+        return [(r[0], unwrap(r[1])[0] or "") for r in rows]
     except sqlite3.OperationalError:
         return []
     finally:
@@ -167,7 +200,9 @@ def list_artifacts_by_kind(
             " WHERE kind=? ORDER BY updated_at DESC, work_order_id, instance_key",
             (kind,),
         ).fetchall()
-        return [(r[0], r[1], r[2], r[3]) for r in rows]
+        from core.work_orders.artifact_envelope import unwrap
+
+        return [(r[0], r[1], unwrap(r[2])[0] or "", r[3]) for r in rows]
     except sqlite3.OperationalError:
         return []
     finally:

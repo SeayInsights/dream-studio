@@ -52,19 +52,42 @@ def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
     return paths.sqlite_path
 
 
-def _evaluate_milestone_artifacts(ms_dir: Path, *, has_ui: bool) -> list[str]:
+def _evaluate_milestone_artifacts(
+    ms_dir: Path, *, has_ui: bool, project_root: Path | None = None
+) -> list[str]:
     """Run all artifact checks under ``ms_dir``. Returns list of failure reasons."""
 
-    from core.milestones.artifacts import read_milestone_artifact
+    from core.milestones.artifacts import read_milestone_artifact_with_envelope
 
     failures: list[str] = []
+
+    def _read(filename: str) -> str | None:
+        """Read an artifact; enveloped audits must not predate later commits.
+
+        WO-VERIFY-PROVENANCE: a milestone audit covers the whole surface, so ANY
+        commit after its recorded HEAD potentially invalidates it. Legacy
+        (envelope-less) artifacts keep their historical acceptance. Returns the
+        content; staleness is appended to ``failures`` directly.
+        """
+        content, envelope = read_milestone_artifact_with_envelope(ms_dir, filename)
+        sha = (envelope or {}).get("head_commit_sha")
+        if content is not None and sha:
+            from core.work_orders.artifact_envelope import commits_after
+
+            newer = commits_after(sha, project_root)
+            if newer:
+                failures.append(
+                    f"{filename} is stale: {len(newer)} commit(s) landed after it was "
+                    f"produced (at {sha[:12]}). Regenerate it and re-store via the docstore."
+                )
+        return content
 
     # CHECK 1 — design audit (UI milestones only). website:critique has no meaning for a
     # non-UI infrastructure milestone, so — like the Core Web Vitals check below — the design
     # audit is only REQUIRED when the milestone has a UI work order. If a design-audit IS present
     # on any milestone its score is still enforced, so an authored critique can't record a sub-3
     # score and pass.
-    content = read_milestone_artifact(ms_dir, "design-audit.md")
+    content = _read("design-audit.md")
     if content is None:
         if has_ui:
             failures.append(
@@ -78,7 +101,7 @@ def _evaluate_milestone_artifacts(ms_dir: Path, *, has_ui: bool) -> list[str]:
                 break
 
     # CHECK 2 — security audit
-    content = read_milestone_artifact(ms_dir, "security-audit.md")
+    content = _read("security-audit.md")
     if content is None:
         failures.append("Security audit required.")
     else:
@@ -88,7 +111,7 @@ def _evaluate_milestone_artifacts(ms_dir: Path, *, has_ui: bool) -> list[str]:
             failures.append("Security audit: security-audit.md reports a BLOCKED finding")
 
     # CHECK 3 — hardening
-    content = read_milestone_artifact(ms_dir, "harden-results.md")
+    content = _read("harden-results.md")
     if content is None:
         failures.append("Hardening check required. Invoke quality:harden and write results.")
     else:
@@ -97,7 +120,7 @@ def _evaluate_milestone_artifacts(ms_dir: Path, *, has_ui: bool) -> list[str]:
 
     # CHECK 4 — Core Web Vitals (UI milestones only)
     if has_ui:
-        content = read_milestone_artifact(ms_dir, "cwv-results.md")
+        content = _read("cwv-results.md")
         if content is None:
             failures.append("Core Web Vitals check required.")
         else:
@@ -193,7 +216,7 @@ def close_milestone(
             }
 
         has_ui = any(r[3] in _UI_WO_TYPES for r in wo_rows)
-        failures = _evaluate_milestone_artifacts(ms_dir, has_ui=has_ui)
+        failures = _evaluate_milestone_artifacts(ms_dir, has_ui=has_ui, project_root=source_root)
 
         if failures and not force:
             return {

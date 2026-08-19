@@ -86,6 +86,8 @@ def _persist_review_verdict(
     *,
     planning_root: Path,
     db_path: Path | None = None,
+    project_root: Path | None = None,
+    generator: str = "ds work-order verify",
 ) -> Path | None:
     """DB-first review-verdict persistence (WO-FILESDB-C2).
 
@@ -95,14 +97,21 @@ def _persist_review_verdict(
     live DB during the transition — C6 removes the fallback after release). Returns the
     disk Path when the fallback was used, else None (stored in the authority). The
     close ``independent_review`` gate reads the verdict DB-or-disk.
+
+    WO-VERIFY-PROVENANCE: the stored verdict carries a provenance envelope
+    (generator identity + the HEAD commit of ``project_root`` at write time) on
+    both the authority and disk-fallback paths, so the independent_review gate
+    can reject hand-written and stale verdicts.
     """
+    from core.work_orders.artifact_envelope import git_head_sha, wrap
     from core.work_orders.artifacts import set_wo_artifact
 
     payload = json.dumps(verdict, indent=2)
-    if set_wo_artifact(work_order_id, "review_verdict", payload, db_path=db_path):
+    wrapped = wrap(payload, generator=generator, head_commit_sha=git_head_sha(project_root))
+    if set_wo_artifact(work_order_id, "review_verdict", wrapped, db_path=db_path):
         return None
     verdict_dir = planning_root / "work-orders" / work_order_id
     verdict_dir.mkdir(parents=True, exist_ok=True)
     verdict_path = verdict_dir / "review-verdict.json"
-    verdict_path.write_text(payload, encoding="utf-8")
+    verdict_path.write_text(wrapped, encoding="utf-8")
     return verdict_path
