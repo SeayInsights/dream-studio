@@ -42,7 +42,7 @@ Per-WO gates are evaluated in `core/work_orders/close.py`. These are always bloc
 | `api_contract_exists` | api_endpoint WOs | `.planning/work-orders/<id>/api-contract.md` |
 | `api_contract_and_security_review` | api_endpoint + security | both files above |
 | `spec_approved` | spec-gated WOs | `.planning/work-orders/<id>/spec.md` |
-| `all_tests_pass` | test-gated WOs | `.planning/work-orders/<id>/test-results.md` with PASSED |
+| `all_tests_pass` | test-gated WOs | The WO's `TEST-CHECK` ACs, **executed** at close. None registered → UNVERIFIED (the `test-results.md` string fallback was retired, WO-CI-COMPLETENESS) |
 | `design_critique` | design WOs | `.planning/work-orders/<id>/design-critique.md` with Score: N/M ≥ 3 |
 | `design_brief_locked` | brief-gated WOs | design brief in locked state |
 

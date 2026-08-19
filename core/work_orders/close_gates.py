@@ -71,9 +71,10 @@ def run_gate_check(
     """Return (passed, failure_reason). failure_reason is empty string when passed=True.
 
     The optional ``db_path`` argument is used by the ``all_tests_pass`` gate to
-    execute TEST-CHECKs from the WO's task acceptance criteria.  Callers that
-    don't hold a db_path (e.g. tests that invoke run_gate_check directly) may omit
-    it; in that case the gate falls back to the legacy file-presence check.
+    execute TEST-CHECKs from the WO's task acceptance criteria. Without a db_path
+    (or with no TEST-CHECK registered) that gate fails as UNVERIFIED — the legacy
+    ``test-results.md`` file-presence fallback was retired by WO-CI-COMPLETENESS,
+    since a hand-writable file containing "PASSED" is not evidence.
     """
     if not gate_name:
         return True, ""

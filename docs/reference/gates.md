@@ -73,7 +73,7 @@ Applied by `ds work-order close <wo_id>`. Gate checked automatically — failure
 | `api_contract_exists` | `.planning/work-orders/<id>/api-contract.md` | `api_endpoint`, `saas_feature` |
 | `api_contract_and_security_review` | Both files above | `authentication` |
 | `security_scan` | `.planning/work-orders/<id>/security-scan.md` with no BLOCKED findings | `infrastructure` (and any WO with security-critical changes) |
-| `all_tests_pass` | `.planning/work-orders/<id>/test-results.md` with PASSED | `deployment`, `data_pipeline`, `game_mechanic`, `authentication` |
+| `all_tests_pass` | The WO's `TEST-CHECK` acceptance criteria, **executed** at close (bare pytest node-id or `cmd: ...`). No TEST-CHECK registered → the gate fails as UNVERIFIED; the `test-results.md` string fallback was retired (WO-CI-COMPLETENESS). | `deployment`, `data_pipeline`, `game_mechanic`, `authentication` |
 | `design_critique` | `.planning/work-orders/<id>/design-critique.md` with `Score: N/M ≥ 3` | `ui_component`, `ui_page` |
 | `spec_approved` | `.planning/work-orders/<id>/spec.md` | `game_mechanic` |
 

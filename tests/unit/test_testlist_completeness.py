@@ -140,6 +140,25 @@ def test_path_b_fallback_removed(tmp_path):
     assert "TEST-CHECK" in reason
 
 
+def test_no_surface_still_advertises_the_retired_fallback():
+    """Gap WO 83acb055: the Path-B retirement must hold at the surfaces
+    operators read, not only in the executing code path. Two gate-reference
+    tables and run_gate_check's own docstring kept telling operators a
+    test-results.md containing 'PASSED' satisfies all_tests_pass — the same
+    false-reassurance class the retirement removed."""
+    from core.work_orders import close_gates
+
+    for rel in ("docs/reference/gates.md", "docs/operations/gates.md"):
+        text = (REPO_ROOT / rel).read_text(encoding="utf-8")
+        for line in text.splitlines():
+            if "all_tests_pass" in line and "test-results.md" in line:
+                assert "retired" in line.lower(), f"{rel} still advertises the fallback: {line}"
+
+    doc = close_gates.run_gate_check.__doc__ or ""
+    assert "falls back to the legacy file-presence check" not in doc
+    assert "UNVERIFIED" in doc
+
+
 # ── symptom visibility ──────────────────────────────────────────────────────────
 
 
