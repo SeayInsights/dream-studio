@@ -498,7 +498,11 @@ def close_work_order(
     try:
         from core.health.main_ci import main_ci_status, main_ci_warning
 
-        _main_ci = main_ci_status(repo_root=source_root)
+        # WO-MAINCI-CACHE: close reads LIVE (max_age_seconds=0). doctor and
+        # project state accept a short-TTL cached answer because they run
+        # constantly; declaring work done is the one low-frequency,
+        # high-consequence moment that must not be told about main by a cache.
+        _main_ci = main_ci_status(repo_root=source_root, max_age_seconds=0)
         _warning = main_ci_warning(_main_ci)
         if _warning:
             result["main_ci_warning"] = _warning
