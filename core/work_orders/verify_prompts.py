@@ -142,6 +142,8 @@ Quality rules:
 (4) API DESIGN: new routes must return consistent response shapes, correct HTTP status codes, all error paths have responses.
 (5) TEST QUALITY: tests must assert behavior not implementation; no tests that only check a function was called without checking its effect on state.
 (6) SQL PATTERNS: unbounded SELECT on large tables must have LIMIT; no N+1 query patterns in loops.
+(7) DURABLE-STATE ADVERSARIAL COVERAGE: when the diff introduces or modifies durable state that a read path trusts (a marker, a token or claim record, a cached row, a version stamp, a status flag another component reads), the diff must also carry an adversarial test for the failure window between the write and the read — crash mid-write, race between writers, version/schema skew between writer and reader. FLAG AS ERROR: a silent key mismatch where the persist path stores under one key/column/name and the read path looks up a DIFFERENT key/column/name (the write "succeeds", the reader finds nothing, no error surfaces anywhere). A diff adding trusted durable state with no crash/race/skew test is an error-severity finding; the test may live in the same diff under any name — judge by what it exercises, not its filename.
+(8) CONFIG-AS-PROXY / SIGNAL-VS-REACHABILITY: a guard that gates a secret, token, credential, or privileged response on a CONFIG SIGNAL (a URL string, an env flag, a display value, a mode name) rather than on the property that actually controls reachability or validity (bind address, the requesting client's address, token audience/binding, actual network exposure) is an error-severity finding. Trace what the secret is valid AGAINST, not what the message displays: if a response returns a live credential/token, the condition guarding it must be the condition that makes it safe — flag any case where a different knob (e.g. BIND_HOST vs a base-URL default) can open the hole while the guard still believes it is closed.
 
 Return ONLY valid JSON (no prose, no markdown fences):
 {{
@@ -149,7 +151,7 @@ Return ONLY valid JSON (no prose, no markdown fences):
   "quality_score": <float 0.0-1.0: 1.0 if no issues, subtract 0.1 per error, 0.03 per warning, floor at 0.0>,
   "issues": [
     {{
-      "category": "<rule name: SECURITY | ERROR_HANDLING | TYPE_SAFETY | API_DESIGN | TEST_QUALITY | SQL_PATTERNS>",
+      "category": "<rule name: SECURITY | ERROR_HANDLING | TYPE_SAFETY | API_DESIGN | TEST_QUALITY | SQL_PATTERNS | DURABLE_STATE_ADVERSARIAL | CONFIG_AS_PROXY>",
       "file": "<file path from diff>",
       "line": "<line number or N/A>",
       "detail": "<one sentence describing the issue>",

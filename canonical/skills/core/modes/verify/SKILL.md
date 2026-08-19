@@ -157,3 +157,24 @@ Evidence: `[test name] pre-fix → FAIL (exit 1) | post-fix → PASS (exit 0)`
 - Skipping regression checks
 - Claiming verification without running the app
 - ANY wording implying success without having run verification
+
+## Adversarial-first for durable state (WO-GRADER-ADVERSARIAL) {#adversarial-first}
+
+For anything a read path trusts — a marker, a token or claim record, a cached
+row, a version stamp, a status flag another component reads — verify the
+failure WINDOW, not just the mechanism:
+
+- **DO** write the crash/race/skew test FIRST: kill between the write and the
+  read; run two writers; skew the writer and reader versions.
+- **DO** trace what a secret is valid AGAINST, not what the message displays —
+  the condition guarding a returned credential must be the condition that makes
+  it safe (bind address / client address / token binding), never a config
+  signal a different knob can drift away from.
+- **DO** check the persist key against the read key — a write that "succeeds"
+  under a key the reader never looks up is a silent failure.
+- **DON'T** approve on the happy path: the question is "what is the worst
+  reachable state", not "does the fix work".
+
+The verify grader enforces these as quality rules 7 (DURABLE_STATE_ADVERSARIAL)
+and 8 (CONFIG_AS_PROXY); independent review runs by default at close for every
+non-documentation WO (`--skip-verify` opts out and is recorded as a gate bypass).

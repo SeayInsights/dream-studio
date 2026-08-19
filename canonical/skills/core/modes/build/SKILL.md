@@ -175,3 +175,13 @@ Each task only advances after writing proof to disk. If context fills mid-task, 
 | Skipping spec compliance and jumping to code quality | Spec compliance must pass first — in that order, always |
 | Accepting "close enough" on spec compliance | Either it meets the acceptance criterion or it doesn't — no partial credit |
 | Starting a build without CONSTITUTION.md on a 5+ file project | Run ds-quality harden first to scaffold project constitution |
+
+## Build durable state adversarially (WO-GRADER-ADVERSARIAL) {#durable-state}
+
+Before implementing anything a read path will trust (markers, token/claim
+records, cached rows, version stamps): enumerate the worst reachable states —
+crash mid-write, race between writers, version skew, config drift — and write
+those tests FIRST, building fakes from the other side's contract. The verify
+grader flags durable state shipped without crash/race/skew coverage (rule 7)
+and secrets guarded by config signals instead of actual reachability (rule 8);
+independent review runs by default at every non-documentation close.

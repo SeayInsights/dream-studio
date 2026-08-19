@@ -28,6 +28,11 @@ from .close_gates import (
 from .close_shared import _lookup_work_order_and_gates, _require_db
 from .models import TERMINAL_WO_STATUSES, terminal_wo_status_placeholders
 
+# WO-GRADER-ADVERSARIAL: independent review is default-on at close for every WO
+# type except these (no code to review — their deliverable is the document, and
+# the executable_ac / attestation path covers them).
+_VERIFY_EXEMPT_TYPES = frozenset({"documentation"})
+
 
 def check_close_gates(
     *,
@@ -91,6 +96,7 @@ def close_work_order(
     *,
     work_order_id: str,
     force: bool = False,
+    skip_verify: bool = False,
     source_root: Path,
     dream_studio_home: Path | None = None,
     planning_root: Path | None = None,
@@ -137,7 +143,16 @@ def close_work_order(
         return _pre_meta
 
     _post_gate_str = _pre_meta.get("post_gate") or ""
-    if "independent_review" in [g.strip() for g in _post_gate_str.split("|") if g.strip()]:
+    _ir_in_post = "independent_review" in [
+        g.strip() for g in _post_gate_str.split("|") if g.strip()
+    ]
+    # WO-GRADER-ADVERSARIAL (operator directive 2026-08-18: capabilities fire on
+    # relevance, asking optional): independent review is DEFAULT-ON for every WO
+    # type except documentation — previously it ran only for types whose post-gate
+    # named independent_review, so most code WOs closed with zero review. Opting
+    # out requires the explicit skip_verify flag and is recorded as a gate bypass.
+    _verify_default_on = (_pre_meta.get("type_id") or "") not in _VERIFY_EXEMPT_TYPES
+    if _ir_in_post or _verify_default_on:
         # WO-FILESDB-C2: a verdict may live in the authority (DB) or on the .planning
         # disk fallback — check both before triggering an inline re-verify.
         from core.work_orders.artifacts import has_wo_artifact as _has_verdict
@@ -147,7 +162,16 @@ def close_work_order(
             _has_verdict(work_order_id, "review_verdict", db_path=db_path)
             or _verdict_path.is_file()
         )
-        if not _verdict_exists:
+        if not _verdict_exists and skip_verify:
+            # The escape hatch works — and leaves a mark (WO-BYPASS-TELEMETRY).
+            from core.gates.bypass_event import record_gate_bypass
+
+            record_gate_bypass(
+                "independent_review",
+                f"skip_verify: close of {work_order_id} proceeded without independent review",
+                extra={"work_order_id": work_order_id},
+            )
+        elif not _verdict_exists:
             # Deferred import: verify.py is a sibling module; deferring keeps the
             # import tree symmetrical with the other lazy imports in this module
             # and avoids any future circular-import risk if verify gains a close
@@ -166,12 +190,16 @@ def close_work_order(
                     "ok": False,
                     "error": f"Auto-verify raised an exception: {exc}",
                 }
-            _verify_ran = True
-            if not _verify_result.get("ok"):
-                return {
-                    "ok": False,
-                    "error": f"Auto-verify failed: {_verify_result.get('error', 'unknown error')}",
-                }
+            if _verify_result.get("ok"):
+                _verify_ran = True
+            else:
+                # WO-GRADER-ADVERSARIAL: verify could not run at all (e.g. the WO
+                # has no tasks). Do NOT hard-fail the close with an opaque verify
+                # error — fall through so the gates report the ACTUAL failures
+                # (missing verdict, tasks_done, executable_ac), which are the
+                # actionable ones. _verify_ran stays False so the unreviewable/
+                # gaps bypasses below cannot misfire on a non-verdict.
+                _verify_result = None
 
     # Gaps exist when verify ran and returned passed=False with spawned remediation WOs.
     _has_gaps = (
@@ -212,6 +240,25 @@ def close_work_order(
             planning_root=p_root,
             db_path=db_path,
         )
+
+        # WO-GRADER-ADVERSARIAL: the independent_review gate applies to every
+        # non-exempt WO type, not only those whose type post-gate names it —
+        # previously api_endpoint/ui/saas/pipeline WOs closed with zero review.
+        # skip_verify (recorded as a gate bypass above) waives it for this close;
+        # the unreviewable+AC and gaps bypasses below keep their existing semantics.
+        if _verify_default_on and not _ir_in_post and not skip_verify:
+            from .close_gates import run_gate_check as _run_ir_gate
+
+            _ir_ok, _ir_reason = _run_ir_gate(
+                "independent_review",
+                planning_root=p_root,
+                work_order_id=work_order_id,
+                project_id=project_id,
+                conn=conn,
+                db_path=db_path,
+            )
+            if not _ir_ok:
+                gate_failures.append(_ir_reason)
 
         # Always-on AC gate: run all executable checks across every task.
         # Runs regardless of WO type; additional to (not replacing) the existing gates.
