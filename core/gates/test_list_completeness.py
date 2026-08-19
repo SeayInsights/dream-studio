@@ -49,6 +49,45 @@ def missing_listed_files(sources: dict[str, list[str]] | None = None) -> list[tu
     return missing
 
 
+def impact_relevant_unlisted(
+    changed_files: list[str], sources: dict[str, list[str]] | None = None
+) -> list[str]:
+    """NAMED unlisted test files the current change set makes relevant.
+
+    Gap WO e3e6b5a9 (from WO-CI-COMPLETENESS's own review): the advisory printed
+    only a count — the blast_radius impact set now names the test files this
+    push's changes depend on that no pre-merge list runs. Those are the tests
+    most likely to break post-merge, invisible until full-ci.
+    """
+    from core.gates.blast_radius import compute_impact_set
+
+    sources = sources if sources is not None else listed_test_paths()
+    listed = {p for paths in sources.values() for p in paths}
+    dependent = compute_impact_set(changed_files, repo_root=_REPO_ROOT)["dependent_tests"]
+    return sorted(t for t in dependent if t not in listed and t.startswith("tests/"))
+
+
+def _changed_files() -> list[str]:
+    """Changed files for the push (base ref envs mirror the sibling gates)."""
+    import os
+    import subprocess
+
+    base_ref = os.environ.get("DREAM_STUDIO_BASE_REF", "origin/main")
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
+            cwd=_REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return []
+    if result.returncode != 0:
+        return []
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
 def unlisted_unit_files(sources: dict[str, list[str]] | None = None) -> list[str]:
     """tests/unit files no pre-merge list runs (advisory — they first run
     post-merge in full-ci, ubuntu-only)."""
@@ -81,6 +120,19 @@ def main() -> int:
         f"test-list completeness: {total_listed} listed path(s) all present; "
         f"{len(unlisted)} tests/unit file(s) run only post-merge (full-ci, ubuntu-only)."
     )
+
+    # Advisory (named, blast_radius-derived): tests THIS push's changes depend on
+    # that no pre-merge list runs — the likeliest post-merge reds.
+    relevant = impact_relevant_unlisted(_changed_files(), sources)
+    if relevant:
+        print(
+            f"ADVISORY: {len(relevant)} impact-relevant test file(s) run only post-merge"
+            " for this change set:"
+        )
+        for rel in relevant[:20]:
+            print(f"  {rel}")
+        if len(relevant) > 20:
+            print(f"  ...and {len(relevant) - 20} more.")
     return 0
 
 

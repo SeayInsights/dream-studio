@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from core.gates import test_list_completeness as tlc
+import core.gates.test_list_completeness as tlc
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -49,6 +49,15 @@ def test_unlisted_files_are_reported_not_blocking(monkeypatch, capsys):
     assert rc == 0
     out = capsys.readouterr().out
     assert "post-merge" in out
+
+
+def test_impact_relevant_unlisted_names_files():
+    """Gap WO e3e6b5a9: the advisory NAMES the unlisted tests the change set
+    depends on (blast_radius), not just a count. Self-referential proof: this
+    very test file depends on core/gates/test_list_completeness.py and is not
+    in any pre-merge list."""
+    relevant = tlc.impact_relevant_unlisted(["core/gates/test_list_completeness.py"])
+    assert "tests/unit/test_testlist_completeness.py" in relevant
 
 
 # ── Path B fallback retired ─────────────────────────────────────────────────────
@@ -106,3 +115,38 @@ def test_symptom_check_detail_surfaces_sql_and_flags_trivial(tmp_path):
     assert real["passed"] is True and real["trivially_true"] is False
     assert trivial["passed"] is True and trivial["trivially_true"] is True
     assert broken["passed"] is False and "error" in broken
+    # Without git evidence, diff-relatedness is undeterminable — never a false verdict.
+    assert real["diff_related"] is None
+
+
+def test_symptom_diff_relatedness(tmp_path, monkeypatch):
+    """Gap WO ade31afb: each check reports whether the tables its SQL reads
+    appear in the WO's diff — a symptom asserting only untouched tables is the
+    decorative-symptom pattern."""
+    from core.work_orders.close_gates import symptom_check_detail
+
+    db = tmp_path / "studio.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE things (n INTEGER)")
+    conn.execute("CREATE TABLE unrelated (n INTEGER)")
+    conn.execute("INSERT INTO things VALUES (1)")
+    conn.execute("INSERT INTO unrelated VALUES (1)")
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(
+        "core.work_orders.verify_git._collect_git_commits",
+        lambda root, wo_id, title=None: "=== commit abc ===\n+INSERT INTO things ...\n",
+    )
+    symptom = (
+        "SQL-CHECK: SELECT COUNT(*) FROM things\n"
+        "SQL-CHECK: SELECT COUNT(*) FROM unrelated\n"
+        "SQL-CHECK: SELECT 1\n"
+    )
+    details = symptom_check_detail(
+        symptom, db, work_order_id="wo-x", project_root=tmp_path, title="T"
+    )
+    related, decorative, trivial = details
+    assert related["diff_related"] is True
+    assert decorative["diff_related"] is False  # tables untouched by the diff
+    assert trivial["diff_related"] is None and trivial["trivially_true"] is True

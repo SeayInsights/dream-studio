@@ -469,18 +469,40 @@ def _check_originating_symptom(symptom: str, db_path: Path) -> str | None:
     return None
 
 
-def symptom_check_detail(symptom: str, db_path: Path) -> list[dict[str, Any]]:
+def symptom_check_detail(
+    symptom: str,
+    db_path: Path,
+    *,
+    work_order_id: str | None = None,
+    project_root: Path | None = None,
+    title: str | None = None,
+) -> list[dict[str, Any]]:
     """Each SQL-CHECK line with its live result — symptom VISIBILITY at close.
 
     WO-CI-COMPLETENESS: the audit found symptom SQL could be trivially true
     (``SELECT 1 WHERE EXISTS (...business_projects...)``) and was never shown
     to the operator. Close output now carries every check verbatim with its
     result, plus a ``trivially_true`` flag when the SQL has no FROM clause at
-    all (nothing real is being asserted). Advisory — never changes the gate
+    all (nothing real is being asserted).
+
+    Gap WO ade31afb: when the WO's commit diff is collectable, each entry also
+    carries ``diff_related`` — whether ANY table the SQL reads appears in the
+    diff text. A symptom asserting only tables the change never touched is the
+    decorative-symptom pattern the audit flagged. None = undeterminable (no
+    git evidence / no tables in the SQL). Advisory — never changes the gate
     outcome; the blocking re-check stays in ``_check_originating_symptom``.
     """
     import re as _re
     import sqlite3 as _sqlite3
+
+    diff_text: str | None = None
+    if work_order_id and project_root is not None:
+        try:
+            from core.work_orders.verify_git import _collect_git_commits
+
+            diff_text = _collect_git_commits(project_root, work_order_id, title=title)
+        except Exception:
+            diff_text = None
 
     details: list[dict[str, Any]] = []
     try:
@@ -493,9 +515,22 @@ def symptom_check_detail(symptom: str, db_path: Path) -> list[dict[str, Any]]:
             if not line.upper().startswith("SQL-CHECK:"):
                 continue
             sql = line[len("SQL-CHECK:") :].strip()  # noqa: E203
+            tables = sorted(
+                set(
+                    _re.findall(
+                        r"\b(?:FROM|JOIN|INTO|UPDATE)\s+([A-Za-z_][A-Za-z0-9_]*)",
+                        sql,
+                        _re.IGNORECASE,
+                    )
+                )
+            )
             entry: dict[str, Any] = {
                 "sql": sql,
-                "trivially_true": not _re.search(r"\bFROM\b", sql, _re.IGNORECASE),
+                "tables": tables,
+                "trivially_true": not tables,
+                "diff_related": (
+                    any(t in diff_text for t in tables) if (diff_text and tables) else None
+                ),
             }
             try:
                 row = conn.execute(sql).fetchone()
