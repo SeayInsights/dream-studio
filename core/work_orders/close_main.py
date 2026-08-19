@@ -499,14 +499,24 @@ def close_work_order(
         from core.work_orders.verify_persist import read_unverified_ledger
 
         _ledger = read_unverified_ledger(work_order_id, planning_root=p_root, db_path=db_path)
-        if _ledger and _ledger.get("unverified"):
+        if _ledger and _ledger.get("unreadable"):
+            # A ledger that exists but cannot be read is NOT zero residual risk.
+            result["unverified_risks_note"] = (
+                f"residual-risk ledger could not be read — {_ledger['unreadable']}."
+                " Re-run: py -m interfaces.cli.ds work-order verify " + work_order_id
+            )
+        elif _ledger and _ledger.get("unverified"):
             result["unverified_risks"] = _ledger["unverified"]
             result["unverified_risks_note"] = (
                 f"{len(_ledger['unverified'])} worst-case scenario(s) remain UNVERIFIED for"
                 " this work order — residual risk recorded, not resolved."
             )
-    except Exception:
-        pass  # ledger surfacing is best-effort; never blocks or alters the close
+    except Exception as exc:  # noqa: BLE001 - surfacing must not block the close
+        # But it must not vanish either: a failed read is reported, not swallowed
+        # (quality rule 2, caught by this stage's own verify).
+        result["unverified_risks_note"] = (
+            f"residual-risk ledger surfacing failed: {type(exc).__name__}: {str(exc)[:200]}"
+        )
     if _verify_ran and _verify_result is not None and _verify_result.get("unreviewable"):
         result["verify_warning"] = _verify_result.get("summary") or (
             "independent review unreviewable: no commit evidence found."

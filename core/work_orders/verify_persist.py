@@ -117,6 +117,7 @@ def _persist_unverified_ledger(
         {"work_order_id": work_order_id, "unverified": unverified, "count": len(unverified)},
         indent=2,
     )
+    ledger_path = planning_root / "work-orders" / work_order_id / _UNVERIFIED_LEDGER_FILENAME
     if set_wo_artifact(
         work_order_id,
         "report",
@@ -126,10 +127,19 @@ def _persist_unverified_ledger(
         generator="ds work-order verify (falsification analyst)",
         project_root=project_root,
     ):
+        # SINGLE SOURCE OF TRUTH (quality rule 7, caught by this stage's own verify):
+        # a WO whose earlier run fell back to disk and whose later run reached the
+        # authority would leave TWO ledgers, and an authority-first reader could
+        # serve the older one — version skew between stores on durable state a read
+        # path trusts. On a successful authority write, drop any stale disk copy so
+        # exactly one ledger exists per WO.
+        if ledger_path.is_file():
+            try:
+                ledger_path.unlink()
+            except OSError:
+                pass  # a stale copy that cannot be removed is still shadowed by the authority
         return None
-    ledger_dir = planning_root / "work-orders" / work_order_id
-    ledger_dir.mkdir(parents=True, exist_ok=True)
-    ledger_path = ledger_dir / _UNVERIFIED_LEDGER_FILENAME
+    ledger_path.parent.mkdir(parents=True, exist_ok=True)
     ledger_path.write_text(payload, encoding="utf-8")
     return ledger_path
 
@@ -142,20 +152,32 @@ def read_unverified_ledger(
     Returns the parsed ledger dict, or None when no analysis ever wrote one
     (distinct from an EMPTY ledger, which means the analyst found no untestable
     residual). Used by close to surface residual risk at declare-done time.
+
+    A ledger that EXISTS but cannot be parsed returns
+    ``{"unreadable": <reason>, "unverified": []}`` rather than None: "corrupt"
+    and "absent" are different facts, and collapsing them would let a broken
+    ledger read as "no residual risk" — the silence this stage exists to remove.
     """
     from core.work_orders.artifacts import get_wo_artifact
 
     raw = get_wo_artifact(work_order_id, "report", instance_key="unverified_risks", db_path=db_path)
+    source = "authority"
     if raw is None:
         disk = planning_root / "work-orders" / work_order_id / _UNVERIFIED_LEDGER_FILENAME
         if not disk.is_file():
             return None
-        raw = disk.read_text(encoding="utf-8")
+        source = "disk"
+        try:
+            raw = disk.read_text(encoding="utf-8")
+        except OSError as exc:
+            return {"unreadable": f"{source} ledger unreadable: {exc}", "unverified": []}
     try:
         parsed = json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
-        return None
-    return parsed if isinstance(parsed, dict) else None
+    except (json.JSONDecodeError, ValueError) as exc:
+        return {"unreadable": f"{source} ledger is not valid JSON: {exc}", "unverified": []}
+    if not isinstance(parsed, dict):
+        return {"unreadable": f"{source} ledger is not a JSON object", "unverified": []}
+    return parsed
 
 
 def _persist_review_verdict(
