@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dreamstudio.local/schemas/grader_verdict_falsification.schema.json",
+  "title": "Dream Studio grader verdict — falsification role",
+  "description": "The falsification analyst's I/O contract (WO-FALSIFY-FIRST-PASS). A conformant provider enumerates the worst reachable states for the change and classifies each scenario COVERED / PROPOSED / UNVERIFIED, so 'what should have been tested and wasn't' is answered by construction rather than left silent. falsification_score is the role's own score: 1.0 when no scenario is UNVERIFIED or error-severity PROPOSED. Extra fields are allowed.",
+  "type": "object",
+  "required": ["falsification_score", "scenarios"],
+  "properties": {
+    "falsification_score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "summary": { "type": "string" },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["scenario_class", "surface", "scenario", "status"],
+        "properties": {
+          "scenario_class": {
+            "type": "string",
+            "description": "One of the taxonomy classes: crash_mid_write, race_between_writers, version_skew, partial_failure, malformed_input, interrupted_io, reachability_vs_config, empty_absent_state."
+          },
+          "surface": { "type": "string" },
+          "scenario": { "type": "string" },
+          "status": { "type": "string", "enum": ["COVERED", "PROPOSED", "UNVERIFIED"] },
+          "evidence": { "type": "string" },
+          "severity": { "type": "string", "enum": ["error", "warning", "info"] }
+        }
+      }
+    }
+  }
+}

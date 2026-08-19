@@ -185,3 +185,14 @@ those tests FIRST, building fakes from the other side's contract. The verify
 grader flags durable state shipped without crash/race/skew coverage (rule 7)
 and secrets guarded by config signals instead of actual reachability (rule 8);
 independent review runs by default at every non-documentation close.
+
+## Answer the falsification questions before you implement {#falsification-first}
+
+The verify stage will enumerate the worst reachable states of your change and
+demand a COVERED / PROPOSED / UNVERIFIED classification for each. Front-run it:
+before writing durable state a read path will trust, or any code returning a
+secret or token, enumerate crash-mid-write, writer races, version skew, partial
+failure, malformed input, interrupted IO, reachability-vs-config, and empty-state
+— then write those tests FIRST. Scenarios you cannot test become named
+UNVERIFIED ledger entries rather than unknowns; error-severity testable ones you
+skip come back as gap work orders.

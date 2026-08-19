@@ -490,6 +490,23 @@ def close_work_order(
     }
     if _symptom_checks:
         result["symptom_checks"] = _symptom_checks
+
+    # WO-FALSIFY-FIRST-PASS: surface the WO's open UNVERIFIED risk ledger at
+    # close. A residual risk the falsification analyst could not test must be
+    # visible when the WO is declared done — otherwise "closed" reads as "no
+    # known risk", which is exactly the silence this milestone removes.
+    try:
+        from core.work_orders.verify_persist import read_unverified_ledger
+
+        _ledger = read_unverified_ledger(work_order_id, planning_root=p_root, db_path=db_path)
+        if _ledger and _ledger.get("unverified"):
+            result["unverified_risks"] = _ledger["unverified"]
+            result["unverified_risks_note"] = (
+                f"{len(_ledger['unverified'])} worst-case scenario(s) remain UNVERIFIED for"
+                " this work order — residual risk recorded, not resolved."
+            )
+    except Exception:
+        pass  # ledger surfacing is best-effort; never blocks or alters the close
     if _verify_ran and _verify_result is not None and _verify_result.get("unreviewable"):
         result["verify_warning"] = _verify_result.get("summary") or (
             "independent review unreviewable: no commit evidence found."

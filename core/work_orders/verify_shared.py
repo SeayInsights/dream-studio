@@ -25,7 +25,7 @@ _GRADER_VERDICT_SCHEMA_PATH = _SCHEMA_DIR / "grader_verdict.schema.json"
 
 # The four grader roles each publish their own contract: a role verdict must carry that
 # role's own score (gap 0a64cf8c). The combined schema above stays the "any role" union.
-GRADER_ROLES = ("completion", "correctness", "quality", "migration")
+GRADER_ROLES = ("completion", "correctness", "quality", "migration", "falsification")
 _ROLE_SCHEMA_PATHS = {
     role: _SCHEMA_DIR / f"grader_verdict_{role}.schema.json" for role in GRADER_ROLES
 }
@@ -244,6 +244,12 @@ _MOCK_MIGRATION: dict[str, Any] = {
     "migration_safe": True,
     "migration_score": 1.0,
     "risks": [],
+}
+
+_MOCK_FALSIFICATION: dict[str, Any] = {
+    "falsification_score": 1.0,
+    "summary": "[mock] falsification analyst — DREAM_STUDIO_VERIFY_MOCK=1",
+    "scenarios": [],
 }
 
 # Backward-compat alias used by callers that imported _MOCK_FIXTURE directly.

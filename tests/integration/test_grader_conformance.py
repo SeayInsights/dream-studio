@@ -29,7 +29,12 @@ _ALL_ROLES_STUB = """import sys, json
 sys.stdin.read()
 print(json.dumps({
     "completion_score": 1.0, "correctness_score": 1.0,
-    "quality_score": 1.0, "migration_score": 1.0, "summary": "ok",
+    "quality_score": 1.0, "migration_score": 1.0,
+    # WO-FALSIFY-FIRST-PASS: the falsification role's contract requires its own
+    # score AND the scenarios array (an analyst that returns no scenario list has
+    # not enumerated anything — the schema refuses to call that conformant).
+    "falsification_score": 1.0, "scenarios": [],
+    "summary": "ok",
 }))
 """
 
@@ -98,13 +103,15 @@ def test_second_provider_result_recorded(monkeypatch, tmp_path):
     assert recorded["verdict"]["completion_score"] == 1.0
 
 
-# ── gap 2bbed8d8: all four roles, driven from a resolved provider profile ──────────
+# ── gap 2bbed8d8: every role, driven from a resolved provider profile ─────────────
 
 
-def test_conformance_covers_all_four_roles(monkeypatch, tmp_path):
-    """The suite asserts a schema-valid verdict for completion, correctness, quality AND
-    migration — driven from a profile resolved via config.grader_profiles, not an ambient
-    default (gap 2bbed8d8)."""
+def test_conformance_covers_all_roles(monkeypatch, tmp_path):
+    """The suite asserts a schema-valid verdict for EVERY declared grader role —
+    completion, correctness, quality, migration, and the falsification analyst
+    (WO-FALSIFY-FIRST-PASS) — driven from a profile resolved via
+    config.grader_profiles, not an ambient default (gap 2bbed8d8). Parameterized
+    off GRADER_ROLES so adding a role cannot skip conformance."""
     _use_stub(monkeypatch, tmp_path, _ALL_ROLES_STUB)
     profile = resolve_grader_profile("completion")  # explicit profile resolution
     suite = run_conformance_suite(profile, roles=GRADER_ROLES)

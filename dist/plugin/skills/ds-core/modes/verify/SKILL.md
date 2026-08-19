@@ -178,3 +178,26 @@ failure WINDOW, not just the mechanism:
 The verify grader enforces these as quality rules 7 (DURABLE_STATE_ADVERSARIAL)
 and 8 (CONFIG_AS_PROXY); independent review runs by default at close for every
 non-documentation WO (`--skip-verify` opts out and is recorded as a gate bypass).
+
+## The falsification pass runs on every verify {#falsification-pass}
+
+`ds work-order verify` now runs a fifth grader — the **falsification analyst** —
+alongside completion/correctness/quality/migration. It does not check whether the
+change works; it enumerates the worst reachable states and classifies each one:
+
+- **COVERED** — names the test node-id that exercises it.
+- **PROPOSED** — testable, untested. Error-severity items become a gap work order
+  (tracked work, not a note).
+- **UNVERIFIED** — cannot be tested yet, with the reason. These land in the WO's
+  **unverified-risks ledger**, surfaced again at close.
+
+Taxonomy: crash mid-write · race between writers · version/schema skew · partial
+failure · malformed input · interrupted IO · **reachability-vs-config** (for any
+secret or token: what is it valid AGAINST versus what does the code check) ·
+empty/absent state.
+
+- **DO** read the `falsification` section and the ledger before declaring done —
+  a closed WO with open UNVERIFIED items has *named residual risk*, not zero risk.
+- **DON'T** treat an absent analysis as a clean one: a grader that could not run
+  is recorded as `falsification_unavailable`, which is not the same as "no worst
+  cases found".

@@ -17,6 +17,48 @@ from typing import Any
 # ── Gap generation helpers ──────────────────────────────────────────────────────
 
 
+def _falsification_to_gaps(scenarios: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Error-severity PROPOSED scenarios → one gap WO carrying the missing tests.
+
+    WO-FALSIFY-FIRST-PASS. Only PROPOSED-and-error scenarios spawn: the analyst
+    has said the worst-case IS testable and no test exists, which is exactly
+    actionable work. COVERED needs nothing; UNVERIFIED has nothing to write yet
+    and is recorded in the unverified-risks ledger instead (named, not silent).
+    The gap category is stable (``missing-adversarial-tests``) so re-verifies
+    dedup against the same spawn rather than breeding duplicates.
+    """
+    actionable = [
+        s for s in scenarios if s.get("status") == "PROPOSED" and s.get("severity") == "error"
+    ]
+    if not actionable:
+        return []
+    tasks = [
+        {
+            "title": (
+                f"Add adversarial test: {s.get('scenario_class', 'unknown')} on "
+                f"{s.get('surface', 'unknown surface')}"
+            ),
+            "description": (
+                f"Worst case: {s.get('scenario', '')}\n" f"Proposed test: {s.get('evidence', '')}"
+            ),
+        }
+        for s in actionable
+    ]
+    return [
+        {
+            "title": "Add missing adversarial tests for durable/reachable failure modes",
+            "description": (
+                f"{len(actionable)} error-severity worst-case scenario(s) are testable but "
+                "untested (falsification analyst). See review-verdict.json "
+                "falsification.scenarios for the full enumeration.\n"
+                "[gap-category: missing-adversarial-tests]"
+            ),
+            "work_order_type": "cleanup",
+            "tasks": tasks,
+        }
+    ]
+
+
 def _violations_to_gaps(
     violations: list[dict[str, Any]],
     coverage_gaps: list[dict[str, Any]],

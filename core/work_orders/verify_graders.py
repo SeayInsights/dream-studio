@@ -23,6 +23,7 @@ from .verify_shared import (
     _MOCK_COMPLETION,
     _MOCK_CORRECTNESS,
     _MOCK_ENV,
+    _MOCK_FALSIFICATION,
     _MOCK_MIGRATION,
     _MOCK_QUALITY,
     validate_grader_verdict,
@@ -180,6 +181,8 @@ def _run_graders_parallel(
         }
         if "migration" in prompts:
             mocks["migration"] = _MOCK_MIGRATION.copy()
+        if "falsification" in prompts:
+            mocks["falsification"] = _MOCK_FALSIFICATION.copy()
         return mocks
 
     # Spawn each grader through its per-role provider profile

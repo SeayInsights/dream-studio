@@ -57,6 +57,7 @@ from .verify_db import (
 )
 from .verify_executor import resolve_project_root, run_executable_checks
 from .verify_gaps import (
+    _falsification_to_gaps,
     _filter_invented_threshold_gaps,
     _insert_gap_work_orders,
     _migration_risks_to_gaps,
@@ -64,10 +65,15 @@ from .verify_gaps import (
     _violations_to_gaps,
 )
 from .verify_git import _authority_evidence, _find_migration_files
-from .verify_persist import _persist_review_verdict, _write_eval_run
+from .verify_persist import (
+    _persist_review_verdict,
+    _persist_unverified_ledger,
+    _write_eval_run,
+)
 from .verify_prompts import (
     _COMPLETION_PROMPT_TEMPLATE,
     _CORRECTNESS_PROMPT_TEMPLATE,
+    _FALSIFICATION_PROMPT_TEMPLATE,
     _MIGRATION_PROMPT_TEMPLATE,
     _QUALITY_PROMPT_TEMPLATE,
 )
@@ -396,6 +402,13 @@ def verify_work_order(
             ),
             "correctness": _CORRECTNESS_PROMPT_TEMPLATE.format(git_diff=git_diff),
             "quality": _QUALITY_PROMPT_TEMPLATE.format(git_diff=git_diff),
+            # WO-FALSIFY-FIRST-PASS: the only grader that asks what SHOULD have
+            # been tested and wasn't. Runs on every verify alongside the others.
+            "falsification": _FALSIFICATION_PROMPT_TEMPLATE.format(
+                title=wo["title"],
+                task_list=task_list_str,
+                git_diff=git_diff,
+            ),
         }
 
         # Grader 4: migration — only when diff includes migration SQL files.
@@ -427,6 +440,7 @@ def verify_work_order(
         correctness = grader_results.get("correctness", _MOCK_CORRECTNESS.copy())
         quality = grader_results.get("quality", _MOCK_QUALITY.copy())
         migration: dict[str, Any] | None = grader_results.get("migration")
+        falsification: dict[str, Any] | None = grader_results.get("falsification")
 
         # T1/T3: Detect unreviewable graders (empty LLM output after retry).
         # Record and surface a warning instead of scoring — there is nothing to
@@ -556,7 +570,21 @@ def verify_work_order(
         if migration and not migration_safe:
             all_gaps.extend(_migration_risks_to_gaps(migration.get("risks", [])))
 
-        # Overall pass/fail.
+        # WO-FALSIFY-FIRST-PASS: an error-severity scenario the analyst says is
+        # TESTABLE BUT UNTESTED (PROPOSED) becomes tracked work, not a note —
+        # this is what turns "what should have been tested" into a work order.
+        # UNVERIFIED scenarios do NOT spawn (there is nothing to write yet); they
+        # land in the ledger below so the residual risk is named, never silent.
+        _fals_scenarios: list[dict[str, Any]] = (
+            falsification.get("scenarios", []) if falsification else []
+        )
+        all_gaps.extend(_falsification_to_gaps(_fals_scenarios))
+        _unverified = [s for s in _fals_scenarios if s.get("status") == "UNVERIFIED"]
+
+        # Overall pass/fail. Falsification is ADDITIVE evidence: it spawns gap WOs
+        # and records residual risk, but it does not gate certification — an
+        # analyst that flags an untestable deploy-only risk must not permanently
+        # block a WO whose declared work is complete and correct.
         passed = completion_passed and correctness_passed and composite >= 0.70 and migration_safe
 
         auto_continue_warning: str | None = None
@@ -682,6 +710,27 @@ def verify_work_order(
             "resolved_gaps": resolved_gap_wos,
             "verified_at": completed_at,
         }
+        # WO-FALSIFY-FIRST-PASS: the falsification section and the UNVERIFIED
+        # ledger ride the verdict. A falsification grader that could not run is
+        # recorded as unavailable rather than silently omitted — an absent
+        # analysis must never read as "no worst cases found".
+        if falsification is not None:
+            full_verdict["falsification"] = falsification
+            if falsification.get("_grader_error") or falsification.get("unreviewable"):
+                full_verdict["falsification_unavailable"] = str(
+                    falsification.get("_grader_error") or "grader returned empty output"
+                )[:300]
+            else:
+                full_verdict["unverified_risks"] = _unverified
+                _persist_unverified_ledger(
+                    work_order_id,
+                    _unverified,
+                    planning_root=p_root,
+                    db_path=db_path,
+                    project_root=_search_root,
+                )
+        else:
+            full_verdict["falsification_unavailable"] = "falsification grader produced no result"
         if migration is not None:
             full_verdict["migration"] = migration
         verdict_path = _persist_review_verdict(
@@ -707,6 +756,9 @@ def verify_work_order(
         "spawned_work_orders": spawned,
         "certification_basis": "authority_evidence" if authority_certified else "git_diff",
         "resolved_gaps": resolved_gap_wos,
+        "falsification": falsification,
+        "unverified_risks": full_verdict.get("unverified_risks", []),
+        "falsification_unavailable": full_verdict.get("falsification_unavailable"),
         "verdict_path": str(verdict_path) if verdict_path else None,
     }
 

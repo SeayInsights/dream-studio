@@ -35,7 +35,16 @@ _CONFIG_ENV = "DS_GRADER_PROFILE_CONFIG"
 _STUB_ENV = "DS_GRADER_STUB"
 
 #: The grader roles the verify plane runs, in a stable order.
-GRADER_ROLES: tuple[str, ...] = ("completion", "correctness", "quality", "migration")
+GRADER_ROLES: tuple[str, ...] = (
+    "completion",
+    "correctness",
+    "quality",
+    "migration",
+    # WO-FALSIFY-FIRST-PASS: the falsification analyst enumerates worst reachable
+    # states and classifies each COVERED/PROPOSED/UNVERIFIED. Resolves through the
+    # ``default`` registry entry unless a per-role override is set.
+    "falsification",
+)
 
 # Built-in registry table. ``default`` is the fallback for any role without an entry.
 _DEFAULT_PROFILES: dict[str, dict[str, Any]] = {

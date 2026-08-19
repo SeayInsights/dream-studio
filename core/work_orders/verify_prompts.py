@@ -191,3 +191,83 @@ Return ONLY valid JSON (no prose, no markdown fences):
   ]
 }}
 """
+
+# ── Grader 5 — Falsification analyst (WO-FALSIFY-FIRST-PASS) ───────────────────
+#
+# The systemic answer to the 2026-08-18 audit: every other grader checks
+# COMPLIANCE with criteria the author wrote. None asks "what should have been
+# tested and wasn't" — the question a human reviewer asked across seven rounds
+# of gw#619. This grader asks it by construction: it enumerates the worst
+# reachable states for the change and must classify EVERY scenario it raises as
+# COVERED / PROPOSED / UNVERIFIED. Nothing may be left silent; an untestable
+# risk becomes a named UNVERIFIED ledger entry rather than an unknown.
+
+_FALSIFICATION_PROMPT_TEMPLATE = """You are an adversarial falsification analyst.
+Your job is NOT to confirm the change works. Your job is to enumerate the worst
+reachable states this change permits, and to say — for each one — whether a test
+actually covers it.
+
+Work order: {title}
+Task list:
+{task_list}
+
+Git diff to analyse:
+{git_diff}
+
+Scenario taxonomy. Consider EVERY class; skip a class only when it genuinely
+cannot apply to this diff (do not pad with irrelevant scenarios):
+
+(1) crash_mid_write — the process dies between a write and the read that trusts
+    it. Durable state left half-written, a marker present without its payload.
+(2) race_between_writers — two processes/sessions write the same state
+    concurrently; last-write-wins clobber, lost update, interleaved partial rows.
+(3) version_skew — writer and reader run different code/schema versions; a field
+    added or renamed on one side only; a stale deployed copy of the same module.
+(4) partial_failure — a multi-step operation succeeds partway (store A written,
+    store B not), with no reconciliation to detect the split.
+(5) malformed_input — hostile or corrupt input reaches a parser: truncated JSON,
+    wrong types, unexpected encodings, paths with spaces/quotes/globs.
+(6) interrupted_io — a file move, copy, or fsync interrupted; a lock held; a disk
+    full; a network read cut mid-stream.
+(7) reachability_vs_config — CRITICAL for anything returning a secret, token,
+    credential, signed URL, or privileged response: identify what the value is
+    actually VALID AGAINST (bind address, requesting client address, token
+    audience/binding, real network exposure) versus what the code CHECKS (a URL
+    string, an env flag, a mode name, a display value). Flag any case where a
+    different knob can open the hole while the guard still believes it is closed.
+(8) empty_absent_state — the happy path assumes rows/files/config exist; what
+    happens on a fresh install, an empty table, a missing artifact, a first run.
+
+For each scenario you raise, classify it:
+  COVERED    — an existing test or check exercises it. Put the test node-id (or
+               the specific check) in "evidence". Do not claim COVERED without
+               naming the evidence.
+  PROPOSED   — it is testable but no test exists. Put a concrete proposed test
+               name plus the assertion it would make in "evidence".
+  UNVERIFIED — it cannot be tested now (needs infrastructure, a second provider,
+               a real deploy). Put WHY in "evidence".
+
+Severity: "error" for a scenario that would corrupt durable state, leak a
+credential, or silently lose data; "warning" for degraded behavior; "info" for
+cosmetic or already-mitigated cases.
+
+Return ONLY valid JSON (no prose, no markdown fences):
+{{
+  "falsification_score": <float 0.0-1.0: 1.0 when no scenario is UNVERIFIED and
+      none is an error-severity PROPOSED; subtract 0.15 per error-severity
+      PROPOSED, 0.10 per UNVERIFIED, 0.03 per warning-severity PROPOSED, floor 0.0>,
+  "summary": "<one sentence: the worst reachable state and whether it is covered>",
+  "scenarios": [
+    {{
+      "scenario_class": "crash_mid_write" | "race_between_writers" | "version_skew"
+          | "partial_failure" | "malformed_input" | "interrupted_io"
+          | "reachability_vs_config" | "empty_absent_state",
+      "surface": "<file path and function/symbol the scenario targets>",
+      "scenario": "<the concrete worst-case sequence, in one sentence>",
+      "status": "COVERED" | "PROPOSED" | "UNVERIFIED",
+      "evidence": "<test node-id | proposed test name + assertion | why unverifiable>",
+      "severity": "error" | "warning" | "info"
+    }}
+  ]
+}}
+"""
