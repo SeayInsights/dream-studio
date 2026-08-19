@@ -76,10 +76,25 @@ def test_budget_keeps_at_least_one_section_and_handles_markerless_diffs():
 
 def test_remediation_evidence_sections_are_budgeted_too():
     """Closed-child remediation evidence (WO-GAP-EVIDENCE) uses its own header and
-    must participate in the same whole-section budgeting."""
+    must participate in the same whole-section budgeting — as whole sections, and
+    behind the WO's own commits.
+
+    This test originally asserted the evidence section survived truncation. It did,
+    but only because a plain newest-first walk kept the LAST section, and evidence
+    is appended after the commits — so the WO's own diff was what got dropped. The
+    falsification analyst named that (empty_absent_state on this function): the
+    analyst would enumerate worst cases for a change set whose diff it never saw.
+    Commits are now budgeted first; the invariant kept here is the one that was
+    always intended — evidence is budgeted, not exempt, and never fragmented. See
+    tests/unit/test_falsification_adversarial.py for the priority itself.
+    """
     parent = _commit("par00001", 40_000)
     child = "=== remediation evidence (closed gap WO abc) ===\n" + ("+fix\n" * 12_000)
     trimmed, truncated = budget_falsification_diff(parent + child)
     assert truncated is True
-    assert "remediation evidence" in trimmed
+    assert "par00001" in trimmed, "the WO's own commit outranks appended evidence"
+    assert len(trimmed) <= _FALSIFICATION_DIFF_BUDGET
     assert trimmed.lstrip().startswith("=== ")
+    # Whole sections only — evidence is either included entirely or not at all.
+    if "remediation evidence" in trimmed:
+        assert trimmed.count("+fix\n") == 12_000

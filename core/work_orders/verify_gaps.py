@@ -27,8 +27,21 @@ def _falsification_to_gaps(scenarios: list[dict[str, Any]]) -> list[dict[str, An
     The gap category is stable (``missing-adversarial-tests``) so re-verifies
     dedup against the same spawn rather than breeding duplicates.
     """
+    # MALFORMED INPUT (falsification analyst finding on this function): a live
+    # grader can return `"scenarios": ["crash mid write is untested"]` — strings,
+    # or a bare object instead of a list. Calling .get() on those raised
+    # AttributeError INSIDE verify's open authority transaction, taking down the
+    # whole verify rather than degrading. Non-dict entries are skipped, and the
+    # skip is reported in the gap description so a malformed grader reply is
+    # visible rather than silently narrowing the enumeration.
+    if isinstance(scenarios, dict):  # a single scenario object, not a list
+        scenarios = [scenarios]
+    elif not isinstance(scenarios, list):
+        return []
+    well_formed = [s for s in scenarios if isinstance(s, dict)]
+    malformed_count = len(scenarios) - len(well_formed)
     actionable = [
-        s for s in scenarios if s.get("status") == "PROPOSED" and s.get("severity") == "error"
+        s for s in well_formed if s.get("status") == "PROPOSED" and s.get("severity") == "error"
     ]
     if not actionable:
         return []
@@ -51,7 +64,13 @@ def _falsification_to_gaps(scenarios: list[dict[str, Any]]) -> list[dict[str, An
                 f"{len(actionable)} error-severity worst-case scenario(s) are testable but "
                 "untested (falsification analyst). See review-verdict.json "
                 "falsification.scenarios for the full enumeration.\n"
-                "[gap-category: missing-adversarial-tests]"
+                + (
+                    f"NOTE: {malformed_count} scenario entr(ies) were malformed (not objects) "
+                    "and could not be classified — the enumeration may be incomplete.\n"
+                    if malformed_count
+                    else ""
+                )
+                + "[gap-category: missing-adversarial-tests]"
             ),
             "work_order_type": "cleanup",
             "tasks": tasks,

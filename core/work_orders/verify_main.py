@@ -112,14 +112,30 @@ def budget_falsification_diff(
     if len(sections) <= 1:
         return git_diff[:budget], True
 
+    # THE WO'S OWN COMMITS COME FIRST (falsification analyst finding,
+    # empty_absent_state on this function): closed-child remediation evidence is
+    # APPENDED after the commits, so a plain newest-first walk kept the evidence
+    # and could spend the entire budget on it — the analyst would then enumerate
+    # worst cases for a change set whose actual diff it never saw. Commits are
+    # budgeted first (newest-first within their group), then evidence gets what
+    # remains.
+    def _is_evidence(section: str) -> bool:
+        return section.lstrip().startswith("=== remediation evidence")
+
+    commits = [s for s in sections if not _is_evidence(s)]
+    evidence = [s for s in sections if _is_evidence(s)]
+
     kept: list[str] = []
     used = 0
-    for section in reversed(sections):  # newest commit first
-        if used + len(section) > budget and kept:
-            break
-        kept.append(section)
-        used += len(section)
-    kept.reverse()  # back to chronological order for the reader
+    for group in (commits, evidence):
+        for section in reversed(group):  # newest-first within the group
+            if used + len(section) > budget and kept:
+                continue  # this one does not fit; a smaller later one still might
+            kept.append(section)
+            used += len(section)
+    # Restore the original order so the analyst reads the change as it happened.
+    order = {id(s): i for i, s in enumerate(sections)}
+    kept.sort(key=lambda s: order[id(s)])
     return "".join(kept), True
 
 
@@ -785,6 +801,12 @@ def verify_work_order(
                     planning_root=p_root,
                     db_path=db_path,
                     project_root=_search_root,
+                    # Carry the partial-analysis caveat and the run stamp into the
+                    # ledger itself, so every downstream reader (close, project
+                    # state) knows the enumeration was partial and can detect a
+                    # ledger/verdict pair from different runs.
+                    truncated=full_verdict.get("falsification_diff_truncated"),
+                    verified_at=completed_at,
                 )
         else:
             full_verdict["falsification_unavailable"] = "falsification grader produced no result"

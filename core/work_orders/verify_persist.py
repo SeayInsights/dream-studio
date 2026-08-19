@@ -90,6 +90,8 @@ def _persist_unverified_ledger(
     planning_root: Path,
     db_path: Path | None = None,
     project_root: Path | None = None,
+    truncated: str | None = None,
+    verified_at: str | None = None,
 ) -> Path | None:
     """Persist the UNVERIFIED risk ledger for a WO (WO-FALSIFY-FIRST-PASS).
 
@@ -113,10 +115,23 @@ def _persist_unverified_ledger(
     """
     from core.work_orders.artifacts import set_wo_artifact
 
-    payload = json.dumps(
-        {"work_order_id": work_order_id, "unverified": unverified, "count": len(unverified)},
-        indent=2,
-    )
+    # PARTIAL ANALYSIS AND PAIRING (falsification analyst findings on the verify
+    # flow): the truncation caveat used to live only in the verdict, so close and
+    # ds project state reported UNVERIFIED items from a PARTIAL enumeration
+    # without knowing it was partial; and a crash between this write and the
+    # verdict write could pair run N's ledger with run N-1's verdict undetectably.
+    # Carrying both the caveat and the run's verified_at makes a partial ledger
+    # self-describing and a mismatched pair detectable.
+    _payload: dict[str, Any] = {
+        "work_order_id": work_order_id,
+        "unverified": unverified,
+        "count": len(unverified),
+    }
+    if truncated:
+        _payload["truncated"] = truncated
+    if verified_at:
+        _payload["verified_at"] = verified_at
+    payload = json.dumps(_payload, indent=2)
     ledger_path = planning_root / "work-orders" / work_order_id / _UNVERIFIED_LEDGER_FILENAME
     if set_wo_artifact(
         work_order_id,
@@ -158,12 +173,42 @@ def read_unverified_ledger(
     and "absent" are different facts, and collapsing them would let a broken
     ledger read as "no residual risk" — the silence this stage exists to remove.
     """
-    from core.work_orders.artifacts import get_wo_artifact
+    from core.work_orders.artifacts import get_wo_artifact_envelope
 
-    raw = get_wo_artifact(work_order_id, "report", instance_key="unverified_risks", db_path=db_path)
+    disk = planning_root / "work-orders" / work_order_id / _UNVERIFIED_LEDGER_FILENAME
+    raw, envelope = get_wo_artifact_envelope(
+        work_order_id, "report", instance_key="unverified_risks", db_path=db_path
+    )
     source = "authority"
+
+    # NEWEST WINS, not authority-first (falsification analyst finding, version_skew
+    # on this very function): a run whose authority write LANDED followed by a run
+    # whose write NO-OPPED under verify's own transaction lock (the documented
+    # fd981a32 case) leaves a newer ledger on disk behind an older one in the
+    # authority. An authority-first reader serves the stale copy — the exact
+    # skew-on-trusted-durable-state class rule 7 exists to catch. Compare the
+    # authority envelope's created_at against the disk file's mtime and take the
+    # newer; a missing timestamp on either side loses to a known one.
+    if raw is not None and disk.is_file():
+        from datetime import UTC, datetime
+
+        authority_at: datetime | None = None
+        created = (envelope or {}).get("created_at")
+        if created:
+            try:
+                authority_at = datetime.fromisoformat(str(created))
+                if authority_at.tzinfo is None:
+                    authority_at = authority_at.replace(tzinfo=UTC)
+            except ValueError:
+                authority_at = None
+        try:
+            disk_at: datetime | None = datetime.fromtimestamp(disk.stat().st_mtime, tz=UTC)
+        except OSError:
+            disk_at = None
+        if disk_at is not None and (authority_at is None or disk_at > authority_at):
+            raw, source = None, "disk"  # fall through to the disk read below
+
     if raw is None:
-        disk = planning_root / "work-orders" / work_order_id / _UNVERIFIED_LEDGER_FILENAME
         if not disk.is_file():
             return None
         source = "disk"

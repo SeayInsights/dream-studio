@@ -522,9 +522,14 @@ def close_work_order(
             )
         elif _ledger and _ledger.get("unverified"):
             result["unverified_risks"] = _ledger["unverified"]
+            _partial = (
+                " The analysis was PARTIAL (diff truncated), so this list may be incomplete."
+                if _ledger.get("truncated")
+                else ""
+            )
             result["unverified_risks_note"] = (
                 f"{len(_ledger['unverified'])} worst-case scenario(s) remain UNVERIFIED for"
-                " this work order — residual risk recorded, not resolved."
+                f" this work order — residual risk recorded, not resolved.{_partial}"
             )
     except Exception as exc:  # noqa: BLE001 - surfacing must not block the close
         # But it must not vanish either: a failed read is reported, not swallowed
