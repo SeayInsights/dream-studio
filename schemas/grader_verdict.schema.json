@@ -5,27 +5,96 @@
   "description": "The provider-neutral I/O contract every WO-verify grader must satisfy. A conformant provider returns a JSON object carrying at least one role score in [0,1]. Extra fields are allowed so providers may add detail; the contract is the score + optional structured findings. This is what makes the verification plane portable: any provider whose output validates here can back the graders (WO-GRADER-PROVIDER-NEUTRAL / WO-GRADER-PROFILE-REGISTRY).",
   "type": "object",
   "anyOf": [
-    { "required": ["completion_score"] },
-    { "required": ["correctness_score"] },
-    { "required": ["quality_score"] },
-    { "required": ["migration_score"] }
+    {
+      "required": [
+        "completion_score"
+      ]
+    },
+    {
+      "required": [
+        "correctness_score"
+      ]
+    },
+    {
+      "required": [
+        "quality_score"
+      ]
+    },
+    {
+      "required": [
+        "migration_score"
+      ]
+    },
+    {
+      "required": [
+        "falsification_score"
+      ]
+    }
   ],
   "properties": {
-    "completion_score": { "type": "number", "minimum": 0, "maximum": 1 },
-    "correctness_score": { "type": "number", "minimum": 0, "maximum": 1 },
-    "quality_score": { "type": "number", "minimum": 0, "maximum": 1 },
-    "migration_score": { "type": "number", "minimum": 0, "maximum": 1 },
-    "summary": { "type": "string" },
-    "passed": { "type": "boolean" },
-    "correctness_passed": { "type": "boolean" },
-    "quality_passed": { "type": "boolean" },
-    "migration_safe": { "type": "boolean" },
-    "gaps": { "type": "array" },
-    "tasks_verified": { "type": "array" },
-    "violations": { "type": "array" },
-    "coverage_gaps": { "type": "array" },
-    "migration_gaps": { "type": "array" },
-    "issues": { "type": "array" },
-    "risks": { "type": "array" }
+    "completion_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "correctness_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "quality_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "migration_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "summary": {
+      "type": "string"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "correctness_passed": {
+      "type": "boolean"
+    },
+    "quality_passed": {
+      "type": "boolean"
+    },
+    "migration_safe": {
+      "type": "boolean"
+    },
+    "gaps": {
+      "type": "array"
+    },
+    "tasks_verified": {
+      "type": "array"
+    },
+    "violations": {
+      "type": "array"
+    },
+    "coverage_gaps": {
+      "type": "array"
+    },
+    "migration_gaps": {
+      "type": "array"
+    },
+    "issues": {
+      "type": "array"
+    },
+    "risks": {
+      "type": "array"
+    },
+    "falsification_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "scenarios": {
+      "type": "array"
+    }
   }
 }

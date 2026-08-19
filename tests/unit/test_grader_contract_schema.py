@@ -1,5 +1,5 @@
 """WO-VERIFY-CONFORMANCE task 1 (+ gap 0a64cf8c): the grader I/O contract is published —
-as the combined union schema AND four explicit per-role schemas each requiring its own
+as the combined union schema AND one explicit per-role schema per GRADER_ROLES entry, each requiring its own
 score — and the existing mock grader fixtures validate against it (the contract matches
 reality). Plus gap 930ea6df's real-provider-evidence guards.
 """
@@ -12,6 +12,7 @@ from config.grader_profiles import GRADER_ROLES, real_provider_profiles
 from core.work_orders.verify_shared import (
     _MOCK_COMPLETION,
     _MOCK_CORRECTNESS,
+    _MOCK_FALSIFICATION,
     _MOCK_MIGRATION,
     _MOCK_QUALITY,
     StubConformanceNotProviderEvidence,
@@ -26,6 +27,9 @@ _MOCKS = {
     "correctness": _MOCK_CORRECTNESS,
     "quality": _MOCK_QUALITY,
     "migration": _MOCK_MIGRATION,
+    # WO-FALSIFY-FIRST-PASS added a fifth role; this dict is keyed off GRADER_ROLES
+    # by the parametrized tests below, so a new role must land here too.
+    "falsification": _MOCK_FALSIFICATION,
 }
 
 
@@ -35,15 +39,14 @@ def test_schema_loads_and_is_wellformed():
     assert "anyOf" in schema  # at least one role score required
 
 
-@pytest.mark.parametrize(
-    "fixture",
-    [_MOCK_COMPLETION, _MOCK_CORRECTNESS, _MOCK_QUALITY, _MOCK_MIGRATION],
-)
+@pytest.mark.parametrize("fixture", list(_MOCKS.values()), ids=list(_MOCKS))
 def test_mock_fixtures_validate_against_schema(fixture):
+    """Driven off _MOCKS (keyed by GRADER_ROLES) rather than a hardcoded list, so
+    adding a grader role cannot skip union-schema validation."""
     assert validate_grader_verdict(fixture) == []
 
 
-# ── gap 0a64cf8c: four explicit per-role schemas, each requiring its own score ─────
+# ── gap 0a64cf8c: one explicit per-role schema per role, each requiring its own score ──
 
 
 @pytest.mark.parametrize("role", GRADER_ROLES)

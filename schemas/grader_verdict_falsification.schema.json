@@ -2,9 +2,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://dreamstudio.local/schemas/grader_verdict_falsification.schema.json",
   "title": "Dream Studio grader verdict — falsification role",
-  "description": "The falsification analyst's I/O contract (WO-FALSIFY-FIRST-PASS). A conformant provider enumerates the worst reachable states for the change and classifies each scenario COVERED / PROPOSED / UNVERIFIED, so 'what should have been tested and wasn't' is answered by construction rather than left silent. falsification_score is the role's own score: 1.0 when no scenario is UNVERIFIED or error-severity PROPOSED. Extra fields are allowed.",
+  "description": "The falsification analyst's I/O contract (WO-FALSIFY-FIRST-PASS). A conformant provider enumerates the worst reachable states for the change and classifies each scenario COVERED / PROPOSED / UNVERIFIED, so 'what should have been tested and wasn't' is answered by construction rather than left silent. falsification_score is the role's own score: 1.0 when no scenario is UNVERIFIED or error-severity PROPOSED. Extra fields are allowed. Like every other role contract, ONLY the role's own score is required (the repo-wide invariant guarded by test_each_role_schema_requires_its_own_score): an empty scenarios array would satisfy a required-check anyway, so requiring it bought nothing — the enumeration expectation lives in the prompt, and the scenarios shape is validated here when present.",
   "type": "object",
-  "required": ["falsification_score", "scenarios"],
+  "required": ["falsification_score"],
   "properties": {
     "falsification_score": { "type": "number", "minimum": 0, "maximum": 1 },
     "summary": { "type": "string" },
