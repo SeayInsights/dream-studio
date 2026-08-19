@@ -51,9 +51,25 @@ def test_unlisted_files_are_reported_not_blocking(monkeypatch, capsys):
     assert "post-merge" in out
 
 
-def test_impact_relevant_unlisted_names_files():
-    """Gap WO e3e6b5a9: the advisory NAMES the unlisted tests the change set
-    depends on (blast_radius), not just a count. Self-referential proof: this
+def test_impact_relevant_unlisted_names_files(monkeypatch, capsys):
+    """Gap WO e3e6b5a9: the gate's printed ADVISORY names the specific unlisted
+    impact-relevant file — asserted on main()'s output with the impact set
+    monkeypatched (hermetic against future pre-merge list additions)."""
+    fake_unlisted = "tests/unit/test_totally_unlisted_impact_target.py"
+    monkeypatch.setattr(tlc, "_changed_files", lambda: ["core/some_module.py"])
+    monkeypatch.setattr(
+        "core.gates.blast_radius.compute_impact_set",
+        lambda changed, repo_root=None: {"dependent_tests": [fake_unlisted]},
+    )
+    rc = tlc.main()
+    assert rc == 0  # advisory, never blocking
+    out = capsys.readouterr().out
+    assert "ADVISORY" in out
+    assert fake_unlisted in out
+
+
+def test_impact_relevant_unlisted_helper_live_graph():
+    """Self-referential integration proof on the REAL dependency graph: this
     very test file depends on core/gates/test_list_completeness.py and is not
     in any pre-merge list."""
     relevant = tlc.impact_relevant_unlisted(["core/gates/test_list_completeness.py"])
