@@ -73,6 +73,18 @@ def run_doctor_checks(
 
     bypass_audit_info = bypass_audit(live_db)
 
+    # WO-MAINRED-VISIBILITY: the post-merge full-ci verdict for main. pr-smoke
+    # green is merge authorization, not proof main is green — and main sat red
+    # across eight merges on 2026-08-19 because nothing reported it. Advisory:
+    # a red main never fails the doctor (someone else's red must not block work),
+    # it just stops being invisible.
+    from core.health.main_ci import main_ci_status, main_ci_warning
+
+    main_ci_info = main_ci_status(repo_root=source_root)
+    _main_ci_warning = main_ci_warning(main_ci_info)
+    if _main_ci_warning:
+        main_ci_info["warning"] = _main_ci_warning
+
     core_pass = validation["ready"]
     critical_fail = (
         not dispatcher_ok
@@ -170,6 +182,7 @@ def run_doctor_checks(
             "stale_dbs": stale_dbs_info,
             "hook_freshness": hook_freshness_info,
             "bypass_audit": bypass_audit_info,
+            "main_ci": main_ci_info,
         },
         "validation": validation,
     }

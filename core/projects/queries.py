@@ -240,6 +240,18 @@ def get_project_state(
         except Exception:
             return {"total": 0, "work_orders": [], "unreadable": [], "note": "unavailable"}
 
+    # WO-MAINRED-VISIBILITY: the post-merge full-ci verdict for main, surfaced
+    # where operators and agents orient. Advisory; unknown stays unknown.
+    try:
+        from core.health.main_ci import main_ci_status, main_ci_warning
+
+        main_ci: dict[str, Any] = main_ci_status(repo_root=source_root)
+        _mc_warning = main_ci_warning(main_ci)
+        if _mc_warning:
+            main_ci["warning"] = _mc_warning
+    except Exception:
+        main_ci = {"status": "unknown", "red": False, "reason": "unavailable"}
+
     with _connect(db_path) as conn:
         projects_raw = conn.execute(
             "SELECT project_id, name, status FROM business_projects WHERE status = 'active'"
@@ -277,6 +289,7 @@ def get_project_state(
                 "projects": [],
                 "next_action": "No active projects. Run `ds-project scope` to scope a new one.",
                 "bypass_summary": bypass_summary,
+                "main_ci": main_ci,
                 **cwd_fields,
             }
 
@@ -437,7 +450,13 @@ def get_project_state(
                 }
             )
 
-    return {"ok": True, "projects": result_projects, "bypass_summary": bypass_summary, **cwd_fields}
+    return {
+        "ok": True,
+        "projects": result_projects,
+        "bypass_summary": bypass_summary,
+        "main_ci": main_ci,
+        **cwd_fields,
+    }
 
 
 def fit_check_work_order(
