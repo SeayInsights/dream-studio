@@ -546,6 +546,29 @@ def verify_work_order(
                 reviewed_wo_sequence=wo.get("sequence_order"),
             )
 
+        # WO-VERIFY-GAP-RESOLUTION: a gap whose remediation WO is already CLOSED is
+        # resolved, not open. Verify grades only WO-attributed commits, so remediation
+        # committed under a spawned gap WO's own id is invisible to this diff — without
+        # this pass an already-remediated-and-closed gap fails the original WO forever.
+        # Discount ONLY when every gap maps to a closed prior spawn (respawn_suppressed
+        # from the dedup) and the sole failure driver is coverage-class gaps: rule
+        # violations, migration gaps, completion failures, and open gap WOs never
+        # discount (no-false-done preserved).
+        resolved_gap_wos: list[str] = []
+        if (
+            not passed
+            and spawned
+            and all(s.get("respawn_suppressed") for s in spawned)
+            and completion_passed
+            and migration_safe
+            and composite >= 0.70
+            and not correctness.get("violations")
+            and not correctness.get("migration_gaps")
+        ):
+            resolved_gap_wos = [s["work_order_id"] for s in spawned]
+            passed = True
+            failure_reasons = [f"resolved_by_closed_gap_wos: {', '.join(resolved_gap_wos)}"]
+
         completed_at = datetime.now(UTC).isoformat()
 
         # Write eval run.
@@ -581,6 +604,7 @@ def verify_work_order(
             "spawned_work_orders": spawned,
             "certification_basis": "authority_evidence" if authority_certified else "git_diff",
             "graded_commits": _graded_commits,
+            "resolved_gaps": resolved_gap_wos,
             "verified_at": completed_at,
         }
         if migration is not None:
@@ -607,6 +631,7 @@ def verify_work_order(
         "gaps": all_gaps,
         "spawned_work_orders": spawned,
         "certification_basis": "authority_evidence" if authority_certified else "git_diff",
+        "resolved_gaps": resolved_gap_wos,
         "verdict_path": str(verdict_path) if verdict_path else None,
     }
 
