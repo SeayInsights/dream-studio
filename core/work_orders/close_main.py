@@ -491,6 +491,21 @@ def close_work_order(
     if _symptom_checks:
         result["symptom_checks"] = _symptom_checks
 
+    # WO-MAINRED-VISIBILITY: a WO must not be declared done while its own merge
+    # has main red without the operator seeing it. Advisory only — never blocks,
+    # never alters a gate outcome; an unknown status stays silent rather than
+    # crying wolf.
+    try:
+        from core.health.main_ci import main_ci_status, main_ci_warning
+
+        _main_ci = main_ci_status(repo_root=source_root)
+        _warning = main_ci_warning(_main_ci)
+        if _warning:
+            result["main_ci_warning"] = _warning
+            result["main_ci"] = _main_ci
+    except Exception:
+        pass  # status reporting must never affect a close
+
     # WO-FALSIFY-FIRST-PASS: surface the WO's open UNVERIFIED risk ledger at
     # close. A residual risk the falsification analyst could not test must be
     # visible when the WO is declared done — otherwise "closed" reads as "no

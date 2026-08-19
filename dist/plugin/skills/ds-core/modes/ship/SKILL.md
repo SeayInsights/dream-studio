@@ -157,3 +157,17 @@ After a successful deploy, archive the spec to prevent .planning/specs/ from acc
 4. Commit: `chore: archive <topic> spec post-ship`
 
 This keeps .planning/specs/ clean — only in-progress specs live there.
+
+## pr-smoke green is merge authorization, not proof main is green {#post-merge-ci}
+
+The 3-platform `pr-smoke` matrix runs a **focused subset** (11 files). The FULL
+suite runs **post-merge, ubuntu-only** in `full-ci`. A merge can therefore be
+correctly authorized and still break `main`.
+
+- **DO** check the post-merge run after every merge:
+  `gh run list --branch main --workflow "Full CI" --limit 3`
+  (or read `checks.main_ci` from `ds doctor` / `main_ci` from `ds project state`,
+  which report it for you — WO-MAINRED-VISIBILITY).
+- **DO** treat a red `main` from your own merge as your work, immediately.
+- **DON'T** read a passing matrix as "the full suite passed" — on 2026-08-19 main
+  sat red across eight merges because nobody looked.

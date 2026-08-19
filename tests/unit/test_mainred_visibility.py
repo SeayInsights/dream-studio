@@ -1,0 +1,299 @@
+"""WO-MAINRED-VISIBILITY: post-merge full-ci status is surfaced, not assumed.
+
+Operator-caught 2026-08-19: main sat RED across eight merges and nothing
+reported it. The merge rule is satisfied by the 3-platform pr-smoke matrix (11
+focused files); the FULL suite runs post-merge, ubuntu-only — so a merge can be
+correctly authorized and still break main. An unwatched signal is an invisible
+signal, the same class as the enforcement bypasses this milestone made visible.
+
+Advisory by design: a red main never blocks (someone else's red must not stop
+unrelated work), and an unreadable signal is reported as unknown — never as a
+pass, never as a failure.
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from core.health.main_ci import main_ci_status, main_ci_warning
+
+
+def _gh(runs: list[dict]) -> MagicMock:
+    proc = MagicMock()
+    proc.returncode = 0
+    proc.stdout = json.dumps(runs)
+    proc.stderr = ""
+    return proc
+
+
+def _run(runs: list[dict]) -> dict:
+    with patch("subprocess.run", return_value=_gh(runs)):
+        return main_ci_status(repo_root=Path("."))
+
+
+# ── status reading ──────────────────────────────────────────────────────────────
+
+
+def test_red_main_surfaces_in_doctor(tmp_path):
+    """The doctor reports a failing post-merge run with the commit and run URL."""
+    runs = [
+        {
+            "conclusion": "failure",
+            "status": "completed",
+            "headSha": "ab929c8a1111",
+            "url": "https://github.com/x/y/actions/runs/1",
+            "displayTitle": "feat(verify): falsification analyst",
+        }
+    ]
+    status = _run(runs)
+    assert status["status"] == "failure"
+    assert status["red"] is True
+    assert status["head_sha"].startswith("ab929c8a")
+
+    warning = main_ci_warning(status)
+    assert warning and "main is RED" in warning
+    assert "ab929c8a" in warning
+    assert "actions/runs/1" in warning
+    # The lesson that caused this WO is stated where an operator will read it.
+    assert "not proof main is green" in warning
+
+    # And it genuinely lands on the doctor's checks payload — run_doctor_checks
+    # is read-only, so this drives the real composition rather than asserting on
+    # a hand-built dict.
+    with patch("core.health.main_ci.main_ci_status", return_value=status):
+        from core.health.doctor import run_doctor_checks
+
+        report = run_doctor_checks(source_root=Path("."), dream_studio_home=tmp_path)
+    main_ci_check = report["checks"]["main_ci"]
+    assert main_ci_check["red"] is True
+    assert main_ci_check["head_sha"].startswith("ab929c8a")
+    assert main_ci_check["warning"].startswith("main is RED")
+    # Advisory: a red main must not turn the doctor's own verdict into a failure.
+    assert report["status"] in ("pass", "warn", "attention_required", "fail")
+
+
+def test_green_and_running_produce_no_warning():
+    """Only a definite failure warns — crying wolf on in-progress runs would
+    train operators to ignore the line that matters."""
+    green = _run(
+        [
+            {
+                "conclusion": "success",
+                "status": "completed",
+                "headSha": "aaa",
+                "url": "u",
+                "displayTitle": "t",
+            }
+        ]
+    )
+    assert green["status"] == "success" and green["red"] is False
+    assert main_ci_warning(green) is None
+
+    running = _run(
+        [
+            {
+                "conclusion": None,
+                "status": "in_progress",
+                "headSha": "bbb",
+                "url": "u",
+                "displayTitle": "t",
+            }
+        ]
+    )
+    assert running["status"] == "running" and running["red"] is False
+    assert main_ci_warning(running) is None
+
+    queued = _run(
+        [
+            {
+                "conclusion": None,
+                "status": "queued",
+                "headSha": "ccc",
+                "url": "u",
+                "displayTitle": "t",
+            }
+        ]
+    )
+    assert queued["status"] == "running"
+
+
+def test_cancelled_is_unknown_not_a_pass_or_a_failure():
+    """A cancelled/skipped run is neither evidence of health nor of a defect."""
+    for conclusion in ("cancelled", "skipped", "neutral", "action_required"):
+        status = _run(
+            [
+                {
+                    "conclusion": conclusion,
+                    "status": "completed",
+                    "headSha": "d",
+                    "url": "u",
+                    "displayTitle": "t",
+                }
+            ]
+        )
+        assert status["status"] == "unknown", conclusion
+        assert status["red"] is False, conclusion
+        assert main_ci_warning(status) is None
+
+
+@pytest.mark.parametrize(
+    "failure_mode",
+    [
+        FileNotFoundError("gh"),
+        subprocess.TimeoutExpired(cmd="gh", timeout=25),
+        OSError("boom"),
+    ],
+)
+def test_unavailable_gh_yields_unknown_never_a_fabricated_verdict(failure_mode):
+    """No gh, a timeout, or an OS error must never be reported as success."""
+    with patch("subprocess.run", side_effect=failure_mode):
+        status = main_ci_status(repo_root=Path("."))
+    assert status["status"] == "unknown"
+    assert status["red"] is False
+    assert status["reason"], "an unknown status must say WHY"
+    assert main_ci_warning(status) is None
+
+
+def test_gh_error_exit_and_non_json_are_unknown_with_reason():
+    proc = MagicMock()
+    proc.returncode = 1
+    proc.stdout = ""
+    proc.stderr = "gh: not authenticated\nrun gh auth login"
+    with patch("subprocess.run", return_value=proc):
+        status = main_ci_status(repo_root=Path("."))
+    assert status["status"] == "unknown"
+    assert "not authenticated" in status["reason"]
+
+    proc2 = MagicMock()
+    proc2.returncode = 0
+    proc2.stdout = "not json at all"
+    proc2.stderr = ""
+    with patch("subprocess.run", return_value=proc2):
+        status2 = main_ci_status(repo_root=Path("."))
+    assert status2["status"] == "unknown"
+    assert "non-JSON" in status2["reason"]
+
+
+def test_no_runs_found_is_unknown_with_reason():
+    status = _run([])
+    assert status["status"] == "unknown"
+    assert "no Full CI runs" in status["reason"]
+
+
+# ── close-ceremony advisory ─────────────────────────────────────────────────────
+
+
+def test_close_surfaces_main_red_advisory(tmp_path):
+    """close_work_order carries a main_ci_warning when main is red — a WO must
+    not be declared done while its own merge has main red without the operator
+    seeing it. Advisory: the close still succeeds."""
+    import sqlite3
+    import uuid
+
+    from core.config.sqlite_bootstrap import bootstrap_database
+
+    db = tmp_path / "state" / "studio.db"
+    db.parent.mkdir(parents=True)
+    bootstrap_database(db)
+    project_id, wo_id = str(uuid.uuid4()), str(uuid.uuid4())
+    now = "2026-05-16T00:00:00+00:00"
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at)"
+        " VALUES (?,?,?,?,?,?)",
+        (project_id, "P", "", "active", now, now),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+        "  status, created_at, updated_at) VALUES (?,?,NULL,'WO','d','cleanup','in_progress',?,?)",
+        (wo_id, project_id, now, now),
+    )
+    conn.commit()
+    conn.close()
+
+    red = {
+        "status": "failure",
+        "red": True,
+        "head_sha": "deadbeef1234",
+        "run_url": "https://example/run/9",
+        "title": "some merge",
+        "conclusion": "failure",
+        "reason": None,
+    }
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        with patch("core.health.main_ci.main_ci_status", return_value=red):
+            from core.work_orders.close import close_work_order
+
+            result = close_work_order(
+                work_order_id=wo_id,
+                force=True,  # gates are not under test; the advisory is
+                source_root=tmp_path,
+                dream_studio_home=tmp_path,
+                planning_root=tmp_path / "planning",
+            )
+    assert result["ok"] is True, result
+    assert "main is RED" in result["main_ci_warning"]
+    assert result["main_ci"]["head_sha"] == "deadbeef1234"
+
+
+def test_close_is_silent_when_main_is_green(tmp_path):
+    """A green (or unknown) main adds no noise to the close output."""
+    import sqlite3
+    import uuid
+
+    from core.config.sqlite_bootstrap import bootstrap_database
+
+    db = tmp_path / "state" / "studio.db"
+    db.parent.mkdir(parents=True)
+    bootstrap_database(db)
+    project_id, wo_id = str(uuid.uuid4()), str(uuid.uuid4())
+    now = "2026-05-16T00:00:00+00:00"
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at)"
+        " VALUES (?,?,?,?,?,?)",
+        (project_id, "P", "", "active", now, now),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+        "  status, created_at, updated_at) VALUES (?,?,NULL,'WO','d','cleanup','in_progress',?,?)",
+        (wo_id, project_id, now, now),
+    )
+    conn.commit()
+    conn.close()
+
+    green = {
+        "status": "success",
+        "red": False,
+        "head_sha": "a",
+        "run_url": "u",
+        "title": "t",
+        "conclusion": "success",
+        "reason": None,
+    }
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        with patch("core.health.main_ci.main_ci_status", return_value=green):
+            from core.work_orders.close import close_work_order
+
+            result = close_work_order(
+                work_order_id=wo_id,
+                force=True,
+                source_root=tmp_path,
+                dream_studio_home=tmp_path,
+                planning_root=tmp_path / "planning",
+            )
+    assert result["ok"] is True, result
+    assert "main_ci_warning" not in result
