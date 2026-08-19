@@ -550,16 +550,16 @@ def verify_work_order(
         # resolved, not open. Verify grades only WO-attributed commits, so remediation
         # committed under a spawned gap WO's own id is invisible to this diff — without
         # this pass an already-remediated-and-closed gap fails the original WO forever.
-        # Discount ONLY when every gap maps to a closed prior spawn (respawn_suppressed
-        # from the dedup) and the sole failure driver is coverage-class gaps: rule
-        # violations, migration gaps, completion failures, and open gap WOs never
-        # discount (no-false-done preserved).
+        # WO-GAP-RES-COMPLETION: completion-driven gaps discount too — a closed
+        # (gate-checked, independently verified) remediation WO IS the completion
+        # evidence the parent diff cannot carry, so completion_passed is not required.
+        # Rule violations, migration gaps, and non-closed spawns never discount
+        # (no-false-done preserved; the status=='closed' check is below).
         resolved_gap_wos: list[str] = []
         if (
             not passed
             and spawned
             and all(s.get("respawn_suppressed") for s in spawned)
-            and completion_passed
             and migration_safe
             and composite >= 0.70
             and not correctness.get("violations")
