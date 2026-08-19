@@ -100,14 +100,6 @@ def _enforce(tier: str) -> tuple[str, str | None]:
             tool_input = json.loads(tool_input)
         except Exception:
             tool_input = {}
-    file_path = (
-        tool_input.get("file_path")
-        or tool_input.get("notebook_path")
-        or tool_input.get("path")
-        or ""
-    )
-    if not file_path:
-        return ("noop", None)
 
     try:
         from runtime.lib import enforcement  # noqa: PLC0415
@@ -138,62 +130,127 @@ def _enforce(tier: str) -> tuple[str, str | None]:
             pass
         return ("noop", None)
 
+    session_id = payload.get("session_id", "")
+
+    # WO-HOOK-COVERAGE: candidates come from three tool families — direct file
+    # tools (file_path/notebook_path), MCP write tools (path), and Bash/PowerShell
+    # commands, whose write targets are extracted best-effort. A write-shaped
+    # command with no resolvable target records an unparsed_write visibility
+    # event and allows (fail-open stays; invisibility does not).
+    file_path = (
+        tool_input.get("file_path")
+        or tool_input.get("notebook_path")
+        or tool_input.get("path")
+        or ""
+    )
+    candidates = [file_path] if file_path else []
+    _command = tool_input.get("command") or ""
+    if not candidates and (payload.get("tool_name") == "Bash" or _command):
+        try:
+            targets, has_write = enforcement.extract_write_targets(_command)
+        except Exception:
+            return ("noop", session_id)
+        if targets:
+            candidates = targets
+        else:
+            if has_write:
+                try:
+                    enforcement.record_bypass(
+                        hook_name="on_edit_enforce",
+                        hook_type="PreToolUse",
+                        rule="unparsed_write",
+                        detail=f"write-shaped command, no resolvable target: {_command[:300]}",
+                        session_id=session_id or None,
+                    )
+                except Exception:
+                    pass
+            return ("noop", session_id)
+    if not candidates:
+        return ("noop", None)
+
     try:
-        project = enforcement.match_registered_project(file_path)
-        if project is None:
-            return ("noop", None)
+        decision = "noop"
+        for cand in candidates:
+            project = enforcement.match_registered_project(cand)
+            if project is None:
+                continue
 
-        kind = enforcement.classify_path(file_path, project["project_path"])
-        if kind == "exempt":
-            return ("noop", None)
+            kind = enforcement.classify_path(cand, project["project_path"])
+            if kind == "exempt":
+                continue
 
-        session_id = payload.get("session_id", "")
-
-        if kind == "docstore_only":
-            # WO-FILESDB-P3 zero-disk: .planning working state lives in the files.db
-            # docstore, never on disk. Deny the disk write and point at `ds files`.
-            reason = (
-                "[dream-studio] Zero-disk .planning: working notes, specs, plans, and"
-                " reports are authored in the files.db docstore, never on disk. Use:\n"
-                '  py -m interfaces.cli.ds files write "<name>" --category planning'
-                " [--work-order <id>]\n"
-                "  (read: ds files read <name>  ·  list: ds files list --category planning)\n"
-                "Operator escape hatch: set DS_ENFORCE=0 (or run at a lower DS_ENFORCE_TIER)."
-            )
-            return (_apply(tier, "zero_disk_planning", reason, session_id), session_id)
-
-        wo = enforcement.in_progress_work_order(project["project_id"])
-
-        if wo is None and kind == "source":
-            nxt = enforcement.next_created_work_order(project["project_id"])
-            lines = [
-                "[dream-studio] Authority enforcement: no work order is in_progress"
-                f" for project '{project['name']}'. Product-source edits require an"
-                " active work order in the SQLite authority.",
-            ]
-            if nxt is not None:
-                lines.append(
-                    f"Run: py -m interfaces.cli.ds work-order start {nxt['work_order_id']}"
-                    f"  (next: {nxt['title']})"
+            if kind == "docstore_only":
+                # WO-FILESDB-P3 zero-disk: .planning working state lives in the files.db
+                # docstore, never on disk. Deny the disk write and point at `ds files`.
+                reason = (
+                    "[dream-studio] Zero-disk .planning: working notes, specs, plans, and"
+                    " reports are authored in the files.db docstore, never on disk. Use:\n"
+                    '  py -m interfaces.cli.ds files write "<name>" --category planning'
+                    " [--work-order <id>]\n"
+                    "  (read: ds files read <name>  ·  list: ds files list --category planning)\n"
+                    "Operator escape hatch: set DS_ENFORCE=0 (or run at a lower DS_ENFORCE_TIER)."
                 )
-            lines.append(
-                "Or list work orders: py -m interfaces.cli.ds work-order list"
-                f" {project['project_id']}"
-            )
-            lines.append(
-                "Operator escape hatch: set DS_ENFORCE=0 (or run at a lower DS_ENFORCE_TIER)."
-            )
-            return (_apply(tier, "authority_source_edit", "\n".join(lines), session_id), session_id)
+                return (_apply(tier, "zero_disk_planning", reason, session_id), session_id)
 
-        if session_id:
-            enforcement.record_edit(
-                session_id,
-                file_path=file_path,
-                kind=kind,
-                project_id=project["project_id"],
-                work_order_id=wo["work_order_id"] if wo else None,
-            )
-        return ("allow", session_id)
+            wo = enforcement.in_progress_work_order(project["project_id"])
+
+            if wo is None and kind == "source":
+                nxt = enforcement.next_created_work_order(project["project_id"])
+                lines = [
+                    "[dream-studio] Authority enforcement: no work order is in_progress"
+                    f" for project '{project['name']}'. Product-source edits require an"
+                    " active work order in the SQLite authority.",
+                ]
+                if nxt is not None:
+                    lines.append(
+                        f"Run: py -m interfaces.cli.ds work-order start {nxt['work_order_id']}"
+                        f"  (next: {nxt['title']})"
+                    )
+                lines.append(
+                    "Or list work orders: py -m interfaces.cli.ds work-order list"
+                    f" {project['project_id']}"
+                )
+                lines.append(
+                    "Operator escape hatch: set DS_ENFORCE=0 (or run at a lower DS_ENFORCE_TIER)."
+                )
+                return (
+                    _apply(tier, "authority_source_edit", "\n".join(lines), session_id),
+                    session_id,
+                )
+
+            # WO-HOOK-COVERAGE: module_boundary advisory — the WO's declared
+            # boundary was pure prose before; edits outside it are now recorded
+            # (observe tier, never a deny) so scope drift is visible.
+            if wo is not None and kind == "source":
+                try:
+                    globs = enforcement.boundary_globs(wo.get("description", ""))
+                    if globs and not enforcement.path_in_boundary(
+                        cand, project["project_path"], globs
+                    ):
+                        enforcement.record_observation(
+                            hook_name="on_edit_enforce",
+                            hook_type="PreToolUse",
+                            rule="module_boundary_advisory",
+                            reason=(
+                                f"edit outside the module boundary of WO"
+                                f" {wo['work_order_id'][:8]} ({wo['title'][:60]}): {cand}"
+                            ),
+                            tier="observe",
+                            session_id=session_id or None,
+                        )
+                except Exception:
+                    pass  # advisory only — never affects the decision
+
+            if session_id:
+                enforcement.record_edit(
+                    session_id,
+                    file_path=cand,
+                    kind=kind,
+                    project_id=project["project_id"],
+                    work_order_id=wo["work_order_id"] if wo else None,
+                )
+            decision = "allow"
+        return (decision, session_id)
     except Exception:
         return ("error", session_id)
 

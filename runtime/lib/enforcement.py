@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import tempfile
 import time
@@ -407,7 +408,7 @@ def in_progress_work_order(project_id: str) -> dict | None:
         return None
     try:
         row = conn.execute(
-            "SELECT work_order_id, title FROM business_work_orders"
+            "SELECT work_order_id, title, description FROM business_work_orders"
             " WHERE project_id = ? AND status = 'in_progress'"
             " ORDER BY started_at DESC LIMIT 1",
             (project_id,),
@@ -416,7 +417,95 @@ def in_progress_work_order(project_id: str) -> dict | None:
         return None
     finally:
         conn.close()
-    return {"work_order_id": row[0], "title": row[1]} if row else None
+    return {"work_order_id": row[0], "title": row[1], "description": row[2] or ""} if row else None
+
+
+# ---------------------------------------------------------------------------
+# Bash/PowerShell write-target extraction + module-boundary advisory
+# (WO-HOOK-COVERAGE — the PreToolUse matcher covered only Edit/Write/MultiEdit/
+# NotebookEdit, so any write via Bash, PowerShell, or an MCP write tool bypassed
+# enforcement entirely, and module_boundary was never checked anywhere in code.)
+# ---------------------------------------------------------------------------
+
+_WRITE_INDICATORS = re.compile(
+    r"(?:^|[\s;|&(])("
+    r">>?|\btee\b|\bSet-Content\b|\bAdd-Content\b|\bOut-File\b"
+    r"|\bgit\s+apply\b|\bcp\b|\bmv\b|\bcopy\b|\bmove\b"
+    r")"
+    r"|open\([^)]*['\"][wax]",
+    re.IGNORECASE,
+)
+
+_QUOTED_OR_BARE = r"(?:\"([^\"]+)\"|'([^']+)'|([^\s;|&<>\"']+))"
+_REDIRECT_TARGET = re.compile(r"(?<![<>0-9])>{1,2}\s*" + _QUOTED_OR_BARE)
+_TEE_TARGET = re.compile(r"\btee\s+(?:-a\s+)?" + _QUOTED_OR_BARE, re.IGNORECASE)
+_PS_TARGET = re.compile(
+    r"\b(?:Set-Content|Add-Content|Out-File)\s+(?:-Path\s+)?" + _QUOTED_OR_BARE,
+    re.IGNORECASE,
+)
+
+
+def extract_write_targets(command: str) -> tuple[list[str], bool]:
+    """Best-effort write-target extraction from a shell command.
+
+    Returns ``(targets, has_write_indicators)``. Quoted targets (paths with
+    spaces) are captured; targets containing shell variables or substitutions
+    are unresolvable and dropped — when indicators exist but no target
+    resolved, the caller records an ``unparsed_write`` visibility event and
+    allows (fail-open stays; invisibility does not).
+    """
+    if not command:
+        return [], False
+    has_indicators = bool(_WRITE_INDICATORS.search(command))
+    targets: list[str] = []
+    for pattern in (_REDIRECT_TARGET, _TEE_TARGET, _PS_TARGET):
+        for match in pattern.finditer(command):
+            raw = (match.group(1) or match.group(2) or match.group(3) or "").strip()
+            if not raw or raw in ("/dev/null", "NUL", "nul", "&1", "&2"):
+                continue
+            if any(ch in raw for ch in ("$", "%", "`", "*")):
+                continue  # unresolvable at parse time — covered by the indicator flag
+            targets.append(raw)
+    return list(dict.fromkeys(targets)), has_indicators
+
+
+def boundary_globs(description: str) -> list[str]:
+    """Parse a WO description's ``Module boundary: a, b, c.`` clause into path
+    prefixes. Returns [] when no boundary is declared (advisory check skips)."""
+    match = re.search(r"Module boundary:\s*([^.]+(?:\.[a-z]+[^.]*)*)", description or "")
+    if not match:
+        return []
+    clause = match.group(1)
+    parts = [p.strip().rstrip(".").strip() for p in clause.split(",")]
+    return [p for p in parts if p and ("/" in p or "." in p)]
+
+
+def path_in_boundary(file_path: str, project_path: str, globs: list[str]) -> bool:
+    """True when file_path falls under any declared boundary prefix (or no
+    boundary is declared). Prefix semantics: 'core/x.py' matches exactly,
+    'docs' matches the subtree."""
+    if not globs:
+        return True
+    resolved = _resolve(file_path)
+    root = _resolve(project_path)
+    if resolved is None or root is None:
+        return True
+    try:
+        rel = resolved.relative_to(root).as_posix()
+    except ValueError:
+        try:
+            rel = Path(str(resolved).lower()).relative_to(Path(str(root).lower())).as_posix()
+        except ValueError:
+            return True
+    rel_lower = rel.lower()
+    for g in globs:
+        g_norm = g.replace("\\", "/").strip("/").lower()
+        if rel_lower == g_norm or rel_lower.startswith(g_norm.rstrip("/") + "/"):
+            return True
+        # 'tests/unit/test_x.py'-style file prefixes: also accept dirname match.
+        if "/" in g_norm and rel_lower.startswith(g_norm.rsplit("/", 1)[0] + "/"):
+            return True
+    return False
 
 
 def next_created_work_order(project_id: str) -> dict | None:
