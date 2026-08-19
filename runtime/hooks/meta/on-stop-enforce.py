@@ -43,6 +43,10 @@ if _sidecar.is_file():
         pass
 
 _MAX_LISTED_VIOLATIONS = 8
+# WO-HOOK-DRIFT-STOP: consecutive enforce-tier blocks before the stop is allowed
+# loudly (stderr warning + recorded stop_bypassed mark). Bounded so a stuck
+# session can always end; recorded so it can never end invisibly.
+_MAX_STOP_BLOCKS = 3
 
 
 def _authority_violations(enforcement, session: dict) -> list[str]:
@@ -116,9 +120,14 @@ def _enforce(tier: str) -> tuple[str, str | None]:
         session = enforcement.load_session(session_id)
         if not session:
             return ("noop", session_id)
-        if session.get("stop_blocked_at"):
-            return ("noop", session_id)
 
+        # WO-HOOK-DRIFT-STOP: the old one-shot (`stop_blocked_at` set → noop)
+        # let the SECOND stop through unconditionally — the weakest remediation
+        # was simply stopping again. Now every stop RE-VALIDATES: violations
+        # resolved → allow; still present → re-block, capped at
+        # _MAX_STOP_BLOCKS consecutive blocks, after which the stop is allowed
+        # LOUDLY with a recorded stop_bypassed mark (never an infinite lock,
+        # never a silent pass-through).
         violations = _authority_violations(enforcement, session)
         violations += _docstore_violations(enforcement, session)
 
@@ -136,8 +145,33 @@ def _enforce(tier: str) -> tuple[str, str | None]:
             + "\nResolve the items above (or set DS_ENFORCE=0, or lower DS_ENFORCE_TIER),"
             " then stop again."
         )
+        block_count = int(session.get("stop_block_count") or 0)
+        if tier == "enforce" and block_count >= _MAX_STOP_BLOCKS:
+            try:
+                enforcement.record_bypass(
+                    hook_name="on_stop_enforce",
+                    hook_type="Stop",
+                    rule="stop_bypassed",
+                    detail=(
+                        f"{len(violations)} violation(s) still unresolved after"
+                        f" {block_count} consecutive blocks — stop allowed loudly"
+                    ),
+                    session_id=session_id,
+                )
+            except Exception:
+                pass
+            print(
+                f"[dream-studio] WARNING: stop allowed after {block_count} blocks with"
+                f" unresolved work (recorded as stop_bypassed).\n{reason}",
+                file=sys.stderr,
+                flush=True,
+            )
+            enforcement.delete_session(session_id)
+            enforcement.gc_session_files()
+            return ("observe", session_id)
         if tier == "enforce":
             session["stop_blocked_at"] = enforcement.now_iso()
+            session["stop_block_count"] = block_count + 1
             enforcement.save_session(session_id, session)
             print(json.dumps({"decision": "block", "reason": reason}), flush=True)
             return ("block", session_id)

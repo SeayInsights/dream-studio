@@ -232,7 +232,11 @@ class TestStopEnforcement:
         decision = json.loads(out)
         assert decision["decision"] == "block"
         assert "task-done" in decision["reason"]
-        assert _run_hook(STOP_HOOK, _stop_payload()) == ""  # never blocks twice
+        # WO-HOOK-DRIFT-STOP: the old one-shot let the second stop through
+        # unconditionally; unresolved work now RE-BLOCKS (capped — see
+        # test_hook_drift.py for the cap + loud-allow behavior).
+        out2 = _run_hook(STOP_HOOK, _stop_payload())
+        assert out2 and json.loads(out2)["decision"] == "block"
 
     def test_pass_with_task_completed_event(self, env):
         self._seed_source_session(env)
