@@ -432,17 +432,44 @@ def verify_work_order(
         # Record and surface a warning instead of scoring — there is nothing to
         # remediate and spawning gap WOs for an empty diff would be unactionable.
         # Mock mode bypasses this so CI fixtures keep exercising the grader path.
+        # WO-GRADER-ERROR-UNREVIEWABLE: a grader that could not RUN is not evidence
+        # in either direction. Empty output was already treated as unreviewable; a
+        # non-JSON HARD ERROR (provider quota/auth failure, crash) was not — it fell
+        # through to _compute_scores, which read a missing completion_score as
+        # tasks_passed/total = 0.0 and produced a FAILED verdict with an empty
+        # summary. That converts an infrastructure failure into a substantive
+        # negative verdict: a false-fail, the mirror of false-done.
+        _grader_errors = {
+            name: grader_results[name]["_grader_error"]
+            for name in ("completion", "correctness", "quality", "migration")
+            if name in grader_results and grader_results[name].get("_grader_error")
+        }
         unreviewable_graders = [
             name
             for name in ("completion", "correctness", "quality", "migration")
-            if name in grader_results and grader_results[name].get("unreviewable")
+            if name in grader_results
+            and (
+                grader_results[name].get("unreviewable")
+                or grader_results[name].get("_grader_error")
+            )
         ]
         if unreviewable_graders and not os.environ.get(_MOCK_ENV):
             reason_str = ", ".join(unreviewable_graders)
-            warning = (
-                f"independent review unreviewable: grader(s) [{reason_str}] returned empty output. "
-                f"Work is NOT certified — review manually."
-            )
+            if _grader_errors:
+                _err_detail = "; ".join(
+                    f"{name}: {str(err).strip()[:300]}" for name, err in _grader_errors.items()
+                )
+                warning = (
+                    f"independent review unreviewable: grader(s) [{reason_str}] did not produce a"
+                    f" verdict — {_err_detail}. This is a GRADER failure (e.g. provider quota or"
+                    f" auth), NOT a finding about the work. Work is NOT certified — re-run verify"
+                    f" once the provider is available, or review manually."
+                )
+            else:
+                warning = (
+                    f"independent review unreviewable: grader(s) [{reason_str}] returned empty"
+                    f" output. Work is NOT certified — review manually."
+                )
             scores = {
                 "completion_score": 0.0,
                 "correctness_score": 0.0,
@@ -468,6 +495,7 @@ def verify_work_order(
                     "unreviewable": True,
                     "unreviewable_graders": unreviewable_graders,
                     "unreviewable_reason": warning,
+                    "grader_errors": _grader_errors,
                     "scores": scores,
                     "auto_continue_warning": warning,
                     "completion": completion,
