@@ -80,6 +80,84 @@ def _write_eval_run(
 # ── Review-verdict persistence (WO-FILESDB-C2) ───────────────────────────────────
 
 
+_UNVERIFIED_LEDGER_FILENAME = "unverified-risks.json"
+
+
+def _persist_unverified_ledger(
+    work_order_id: str,
+    unverified: list[dict[str, Any]],
+    *,
+    planning_root: Path,
+    db_path: Path | None = None,
+    project_root: Path | None = None,
+) -> Path | None:
+    """Persist the UNVERIFIED risk ledger for a WO (WO-FALSIFY-FIRST-PASS).
+
+    Worst-case scenarios the falsification analyst says cannot be tested yet are
+    recorded as durable state — named residual risk, surfaced at close — rather
+    than left as an unknown. Stored under the existing multi-instance ``report``
+    kind (instance_key=``unverified_risks``), so no new artifact kind and no
+    migration are needed.
+
+    Returns the disk Path when the authority write did not land, else None
+    (stored in the authority) — the same dual-path contract the review verdict
+    uses. The fallback matters here for a known reason: this call runs INSIDE
+    verify's open authority transaction, so the second connection
+    ``set_wo_artifact`` opens can hit a write lock and no-op (registered defect
+    WO-ARTIFACT-LOCK-FALLBACK / fd981a32, which makes it authority-native).
+    Until then the ledger must survive either way — a residual risk that silently
+    fails to persist is exactly the silence this stage exists to remove.
+
+    An EMPTY ledger is written too: "the analyst found no untestable residual"
+    and "no analysis ran" must not look identical downstream.
+    """
+    from core.work_orders.artifacts import set_wo_artifact
+
+    payload = json.dumps(
+        {"work_order_id": work_order_id, "unverified": unverified, "count": len(unverified)},
+        indent=2,
+    )
+    if set_wo_artifact(
+        work_order_id,
+        "report",
+        payload,
+        instance_key="unverified_risks",
+        db_path=db_path,
+        generator="ds work-order verify (falsification analyst)",
+        project_root=project_root,
+    ):
+        return None
+    ledger_dir = planning_root / "work-orders" / work_order_id
+    ledger_dir.mkdir(parents=True, exist_ok=True)
+    ledger_path = ledger_dir / _UNVERIFIED_LEDGER_FILENAME
+    ledger_path.write_text(payload, encoding="utf-8")
+    return ledger_path
+
+
+def read_unverified_ledger(
+    work_order_id: str, *, planning_root: Path, db_path: Path | None = None
+) -> dict[str, Any] | None:
+    """Read a WO's UNVERIFIED ledger — authority first, disk fallback.
+
+    Returns the parsed ledger dict, or None when no analysis ever wrote one
+    (distinct from an EMPTY ledger, which means the analyst found no untestable
+    residual). Used by close to surface residual risk at declare-done time.
+    """
+    from core.work_orders.artifacts import get_wo_artifact
+
+    raw = get_wo_artifact(work_order_id, "report", instance_key="unverified_risks", db_path=db_path)
+    if raw is None:
+        disk = planning_root / "work-orders" / work_order_id / _UNVERIFIED_LEDGER_FILENAME
+        if not disk.is_file():
+            return None
+        raw = disk.read_text(encoding="utf-8")
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
 def _persist_review_verdict(
     work_order_id: str,
     verdict: dict[str, Any],
