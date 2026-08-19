@@ -168,6 +168,63 @@ def test_blocked_gap_wo_never_resolves_verdict(tmp_path: pytest.TempPathFactory)
         assert rerun["resolved_gaps"] == []
 
 
+def _graders_completion_gap() -> dict:
+    """Completion grader fails a task and emits a gap; correctness/quality clean."""
+    return {
+        "completion": {
+            "passed": False,
+            "completion_score": 0.67,
+            "tasks_verified": [
+                {"task_title": "T1", "evidence": "weaker variant shipped", "verdict": "missing"}
+            ],
+            "summary": "Task T1 shipped a weaker variant.",
+            "gaps": [
+                {
+                    "title": "Deliver T1 as specified",
+                    "description": "T1 was approximated",
+                    "work_order_type": "cleanup",
+                    "tasks": [{"title": "Do T1 exactly", "description": "as written"}],
+                }
+            ],
+        },
+        "correctness": {
+            "correctness_passed": True,
+            "correctness_score": 1.0,
+            "violations": [],
+            "coverage_gaps": [],
+            "migration_gaps": [],
+        },
+        "quality": {"quality_passed": True, "quality_score": 1.0, "issues": []},
+    }
+
+
+def test_closed_spawn_resolves_completion_gap(tmp_path: pytest.TempPathFactory) -> None:
+    """WO-GAP-RES-COMPLETION: a completion-driven gap whose spawned remediation
+    WO is CLOSED resolves the parent verdict — the closed (gate-checked,
+    independently reviewed) WO is the completion evidence the parent diff
+    cannot carry. Blocked/cancelled spawns never discount."""
+    db_path = _make_db(tmp_path)
+    project_id, milestone_id, work_order_id = (str(uuid.uuid4()) for _ in range(3))
+    _seed(db_path, project_id=project_id, milestone_id=milestone_id, work_order_id=work_order_id)
+    graders = _graders_completion_gap()
+
+    first = _run_verify(db_path, tmp_path, work_order_id, graders)
+    assert first["passed"] is False
+    spawned_id = first["spawned_work_orders"][0]["work_order_id"]
+
+    # Blocked or cancelled remediation: never discounts.
+    for not_done in ("blocked", "cancelled"):
+        _set_status(db_path, spawned_id, not_done)
+        rerun = _run_verify(db_path, tmp_path, work_order_id, graders)
+        assert rerun["passed"] is False, f"{not_done} spawn must not resolve a completion gap"
+
+    # Closed remediation: the completion gap is resolved.
+    _set_status(db_path, spawned_id, "closed")
+    resolved = _run_verify(db_path, tmp_path, work_order_id, graders)
+    assert resolved["passed"] is True, resolved.get("gaps")
+    assert resolved["resolved_gaps"] == [spawned_id]
+
+
 def test_violation_never_discounted(tmp_path: pytest.TempPathFactory) -> None:
     """A rule violation keeps the verdict failed even when its spawned WO is closed."""
     db_path = _make_db(tmp_path)
