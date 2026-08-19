@@ -278,8 +278,15 @@ def close_work_order(
                 gate_failures.append(_sym_failure)
             try:
                 from .close_gates import symptom_check_detail
+                from .verify_executor import resolve_project_root as _rpr
 
-                _symptom_checks = symptom_check_detail(_orig_symptom, db_path)
+                _symptom_checks = symptom_check_detail(
+                    _orig_symptom,
+                    db_path,
+                    work_order_id=work_order_id,
+                    project_root=_rpr(work_order_id, db_path) or source_root,
+                    title=title,
+                )
             except Exception:
                 _symptom_checks = []
 
