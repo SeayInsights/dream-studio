@@ -136,8 +136,9 @@ def run_gate_check(
 
     if gate_name == "all_tests_pass":
         # Real execution: run TEST-CHECKs from the WO's task ACs (via run_executable_checks).
-        # Falls back to file-presence check only when db_path is not provided or no
-        # TEST-CHECKs are registered across the WO's tasks.
+        # No db_path, or no TEST-CHECK registered across the WO's tasks, means the gate
+        # has nothing to execute — it fails as UNVERIFIED below. There is no
+        # file-presence fallback (WO-CI-COMPLETENESS retired it).
         if db_path is not None:
             _tasks = _read_wo_tasks(conn, work_order_id)
             from core.work_orders.verify import resolve_project_root, run_executable_checks

@@ -158,6 +158,38 @@ def test_no_surface_still_advertises_the_retired_fallback():
     assert "falls back to the legacy file-presence check" not in doc
     assert "UNVERIFIED" in doc
 
+    # In-BODY comments too (gap WO 83acb055 re-review): a comment inside the
+    # all_tests_pass branch still described the fallback as current behavior,
+    # contradicting the UNVERIFIED return it sat above.
+    #
+    # The unit of meaning is the contiguous comment BLOCK, not the line — a
+    # per-line scan false-positives on any block whose "retired" qualifier
+    # wraps onto a later line.
+    import inspect
+    import re as _re
+
+    src = inspect.getsource(close_gates.run_gate_check)
+    branch = src.split('if gate_name == "all_tests_pass":', 1)[1].split("if gate_name ==", 1)[0]
+    blocks: list[str] = []
+    current: list[str] = []
+    for line in branch.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            current.append(stripped.lstrip("#").strip())
+        elif current:
+            blocks.append(" ".join(current))
+            current = []
+    if current:
+        blocks.append(" ".join(current))
+
+    for block in blocks:
+        # "fall back", "falls back", and the single-word "fallback" all count.
+        if _re.search(r"falls?\s*back", block, _re.IGNORECASE):
+            lowered = block.lower()
+            assert (
+                "retired" in lowered or "no file-presence" in lowered
+            ), f"all_tests_pass comment describes a fallback as current behavior: {block}"
+
 
 # ── symptom visibility ──────────────────────────────────────────────────────────
 
