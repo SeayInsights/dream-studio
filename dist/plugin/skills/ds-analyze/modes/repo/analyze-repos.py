@@ -64,6 +64,8 @@ def clone_repo(url: str, temp_dir: Path, verbose: bool = False) -> Path:
             check=True,
             capture_output=not verbose,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         if verbose:
             print(f"[CLONE] ✓ Cloned to {clone_path}")
