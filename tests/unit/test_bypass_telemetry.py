@@ -149,6 +149,76 @@ def test_migration_ack_recorded(monkeypatch):
     assert rel in (recorded[0][2] or {}).get("risk_files", [])
 
 
+# ── The emitters themselves execute (gap WO 08298665) ──────────────────────────
+
+
+def test_record_gate_bypass_writes_spool_event(monkeypatch):
+    """Run record_gate_bypass's REAL body: envelope construction + spool write
+    (previously only ever monkeypatched, so the path never executed under test)."""
+    written: list[dict] = []
+    monkeypatch.setattr("spool.writer.write_event", lambda ev: written.append(ev))
+
+    from core.gates.bypass_event import record_gate_bypass
+
+    record_gate_bypass(
+        "migration_risk",
+        "MIGRATION_RISK_ACKNOWLEDGED=1",
+        extra={"risk_files": ["core/event_store/migrations/x.sql"]},
+    )
+    assert len(written) == 1
+    ev = written[0]
+    assert ev["event_type"] == "gate.bypassed"
+    assert ev["payload"]["gate"] == "migration_risk"
+    assert ev["payload"]["risk_files"] == ["core/event_store/migrations/x.sql"]
+    assert ev["severity"] == "warning"
+    assert ev["trace"]["domain"] == "sdlc"
+
+
+def test_trailer_consumption_records_bypass(monkeypatch, capsys):
+    """The docs-drift gate records which domains a Docs-Reviewed-No-Change
+    trailer actually cleared — and stays silent when none were cleared."""
+    from interfaces.cli import contract_docs_drift_gate as gate
+
+    def _fake_report(cleared: bool) -> dict:
+        status = "docs_reviewed_no_change_needed" if cleared else "docs_current"
+        return {
+            "status": "pass",
+            "domains": [{"domain_id": "release_publication_gate", "status": status}],
+        }
+
+    recorded: list[tuple] = []
+    monkeypatch.setattr(
+        "core.gates.bypass_event.record_gate_bypass",
+        lambda g, reason, extra=None: recorded.append((g, extra)),
+    )
+    monkeypatch.setattr(gate, "validate_contract_registry", lambda reg: [])
+    monkeypatch.setattr(gate, "contract_registry", lambda: {})
+    monkeypatch.setattr(
+        gate, "_gather_reviewed_no_change", lambda **kw: {"release_publication_gate"}
+    )
+    monkeypatch.setattr(gate, "_changed_files", lambda args: ["core/gates/x.py"])
+    monkeypatch.setattr(sys, "argv", ["contract_docs_drift_gate.py"])
+
+    # Trailer cleared a domain: recorded with the domain ids.
+    monkeypatch.setattr(gate, "change_impact_report", lambda *a, **kw: _fake_report(True))
+    with pytest.raises(SystemExit) as exc:
+        gate.main()
+    assert exc.value.code == 0
+    capsys.readouterr()
+    assert recorded == [
+        ("docs_drift_reviewed_no_change", {"domains": ["release_publication_gate"]})
+    ]
+
+    # No domain cleared: nothing recorded.
+    recorded.clear()
+    monkeypatch.setattr(gate, "change_impact_report", lambda *a, **kw: _fake_report(False))
+    with pytest.raises(SystemExit) as exc:
+        gate.main()
+    assert exc.value.code == 0
+    capsys.readouterr()
+    assert recorded == []
+
+
 # ── The surfaces read the marks ─────────────────────────────────────────────────
 
 
