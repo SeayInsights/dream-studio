@@ -228,6 +228,18 @@ def get_project_state(
     except Exception:
         bypass_summary = {"last_7d_total": 0, "note": "unavailable"}
 
+    # WO-FALSIFY-FIRST-PASS (gap WO 5ed752d7): open UNVERIFIED residual risk,
+    # aggregated across the project's non-closed work orders. Risk that only
+    # appears when you happen to close one WO is still effectively invisible;
+    # this puts it where operators and agents orient.
+    def _unverified_for(project_id: str) -> dict[str, Any]:
+        try:
+            from core.work_orders.unverified_summary import project_unverified_summary
+
+            return project_unverified_summary(project_id, planning_root=p_root, db_path=db_path)
+        except Exception:
+            return {"total": 0, "work_orders": [], "unreadable": [], "note": "unavailable"}
+
     with _connect(db_path) as conn:
         projects_raw = conn.execute(
             "SELECT project_id, name, status FROM business_projects WHERE status = 'active'"
@@ -421,6 +433,7 @@ def get_project_state(
                     "status": proj["status"],
                     "next_work_order": wo_info,
                     "next_action": next_action,
+                    "unverified_risks": _unverified_for(pid),
                 }
             )
 
