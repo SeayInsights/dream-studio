@@ -162,6 +162,44 @@ def test_project_summary_reports_unreadable_separately(tmp_path):
     assert [u["work_order_id"] for u in summary["unreadable"]] == [bad]
 
 
+def test_clean_project_still_carries_the_key_with_a_zero_aggregate(tmp_path):
+    """The key must be PRESENT with a zero aggregate for a project that has no
+    ledgers — never omitted (caught by 5ed752d7's own verify: the positive path
+    was pinned but this guarantee was unpinned and could silently regress, which
+    would make 'no residual risk' indistinguishable from 'the field vanished').
+    """
+    db = _db(tmp_path)
+    planning = tmp_path / "planning"
+    project_id = str(uuid.uuid4())
+    _seed_wo(db, project_id, title="No ledger here")
+
+    summary = project_unverified_summary(project_id, planning_root=planning, db_path=db)
+    assert summary == {"total": 0, "work_orders": [], "unreadable": []}
+
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        from core.projects.queries import get_project_state
+
+        state = get_project_state(
+            source_root=tmp_path, dream_studio_home=tmp_path, planning_root=planning
+        )
+    proj = next(p for p in state["projects"] if p["project_id"] == project_id)
+    assert "unverified_risks" in proj, "the key must never disappear for a clean project"
+    assert proj["unverified_risks"]["total"] == 0
+    assert proj["unverified_risks"]["work_orders"] == []
+
+
+def test_aggregate_degrades_to_a_noted_zero_when_the_authority_is_unreadable(tmp_path):
+    """An unreadable authority yields a zero aggregate WITH a note — the same
+    corrupt-is-not-clean rule the per-WO reader follows."""
+    summary = project_unverified_summary(
+        str(uuid.uuid4()), planning_root=tmp_path / "planning", db_path=tmp_path / "missing.db"
+    )
+    assert summary["total"] == 0
+    assert summary.get("note"), "an unreadable authority must say why, not just report zero"
+
+
 def test_project_state_carries_unverified_risks(tmp_path):
     """ds project state surfaces the aggregate where operators orient."""
     db = _db(tmp_path)
