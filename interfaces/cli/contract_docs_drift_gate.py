@@ -68,6 +68,24 @@ def main() -> None:
     report["registry_validation_errors"] = registry_errors
     if registry_errors:
         report["status"] = "fail"
+
+    # WO-BYPASS-TELEMETRY: a Docs-Reviewed-No-Change trailer that actually
+    # cleared an impacted domain's docs requirement is a gate escape hatch —
+    # record which domains it cleared. Best-effort; never changes the outcome.
+    consumed = [
+        d.get("domain_id")
+        for d in report.get("domains", [])
+        if d.get("status") == "docs_reviewed_no_change_needed"
+    ]
+    if consumed:
+        from core.gates.bypass_event import record_gate_bypass
+
+        record_gate_bypass(
+            "docs_drift_reviewed_no_change",
+            "Docs-Reviewed-No-Change cleared impacted domains without doc changes",
+            extra={"domains": consumed},
+        )
+
     print(json.dumps(report, indent=2, sort_keys=True))
     raise SystemExit(0 if report["status"] == "pass" else 1)
 

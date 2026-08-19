@@ -170,6 +170,17 @@ def main() -> None:
     except Exception:
         return
     if tier == "off":
+        # WO-BYPASS-TELEMETRY: record the suppressed stop-enforcement before the
+        # short-circuit. Emission failures never block.
+        try:
+            enforcement.record_bypass(
+                hook_name="on_stop_enforce",
+                hook_type="Stop",
+                rule="enforcement_disabled",
+                detail="DS_ENFORCE=0 / DS_ENFORCE_TIER=off — stop enforcement short-circuited",
+            )
+        except Exception:
+            pass
         return
 
     started_at = datetime.now(timezone.utc).isoformat()

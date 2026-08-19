@@ -66,6 +66,13 @@ def run_doctor_checks(
     schema_coherence_info = check_schema_coherence(source_root=source_root, live_db_path=live_db)
     overhead_info = run_overhead_checks(source_root=source_root, claude_dir=claude_dir)
 
+    # WO-BYPASS-TELEMETRY: which enforcement escape hatches fired recently.
+    # Informational — bypasses are legitimate operator decisions; INVISIBLE
+    # bypasses are the defect this section removes.
+    from core.health.doctor_bypass import bypass_audit
+
+    bypass_audit_info = bypass_audit(live_db)
+
     core_pass = validation["ready"]
     critical_fail = (
         not dispatcher_ok
@@ -162,6 +169,7 @@ def run_doctor_checks(
             "handoff_spawner": handoff_spawner_info,
             "stale_dbs": stale_dbs_info,
             "hook_freshness": hook_freshness_info,
+            "bypass_audit": bypass_audit_info,
         },
         "validation": validation,
     }
