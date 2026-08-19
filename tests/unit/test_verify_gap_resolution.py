@@ -146,6 +146,28 @@ def test_closed_gap_wo_resolves_verdict(tmp_path: pytest.TempPathFactory) -> Non
     assert third["resolved_gaps"] == [spawned_id]
 
 
+def test_blocked_gap_wo_never_resolves_verdict(tmp_path: pytest.TempPathFactory) -> None:
+    """respawn_suppressed fires for any non-open status — but only exactly
+    'closed' may discount. A blocked or cancelled gap WO (remediation never
+    done) keeps the verdict failed (gap WO d6e7b4c0)."""
+    db_path = _make_db(tmp_path)
+    project_id, milestone_id, work_order_id = (str(uuid.uuid4()) for _ in range(3))
+    _seed(db_path, project_id=project_id, milestone_id=milestone_id, work_order_id=work_order_id)
+    graders = _grader_results(
+        coverage_gaps=[{"function": "helper_fn", "file": "core/x.py"}],
+    )
+
+    first = _run_verify(db_path, tmp_path, work_order_id, graders)
+    assert first["passed"] is False
+    spawned_id = first["spawned_work_orders"][0]["work_order_id"]
+
+    for not_done_status in ("blocked", "cancelled"):
+        _set_status(db_path, spawned_id, not_done_status)
+        rerun = _run_verify(db_path, tmp_path, work_order_id, graders)
+        assert rerun["passed"] is False, f"{not_done_status} gap WO must not discount"
+        assert rerun["resolved_gaps"] == []
+
+
 def test_violation_never_discounted(tmp_path: pytest.TempPathFactory) -> None:
     """A rule violation keeps the verdict failed even when its spawned WO is closed."""
     db_path = _make_db(tmp_path)

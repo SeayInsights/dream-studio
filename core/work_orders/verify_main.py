@@ -565,9 +565,25 @@ def verify_work_order(
             and not correctness.get("violations")
             and not correctness.get("migration_gaps")
         ):
-            resolved_gap_wos = [s["work_order_id"] for s in spawned]
-            passed = True
-            failure_reasons = [f"resolved_by_closed_gap_wos: {', '.join(resolved_gap_wos)}"]
+            # respawn_suppressed fires for ANY non-open prior spawn — including
+            # 'blocked' and 'cancelled', where the remediation was never done.
+            # Only a WO whose status is exactly 'closed' (gate-checked completion)
+            # may discount (gap WO d6e7b4c0, caught by verify's own review of
+            # WO-VERIFY-GAP-RESOLUTION).
+            _gap_ids = [s["work_order_id"] for s in spawned]
+            _ph = ",".join("?" for _ in _gap_ids)
+            _closed = {
+                r[0]
+                for r in conn.execute(
+                    "SELECT work_order_id FROM business_work_orders"
+                    f" WHERE work_order_id IN ({_ph}) AND status = 'closed'",
+                    _gap_ids,
+                ).fetchall()
+            }
+            if all(g in _closed for g in _gap_ids):
+                resolved_gap_wos = _gap_ids
+                passed = True
+                failure_reasons = [f"resolved_by_closed_gap_wos: {', '.join(resolved_gap_wos)}"]
 
         completed_at = datetime.now(UTC).isoformat()
 
