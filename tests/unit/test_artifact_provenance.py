@@ -221,3 +221,76 @@ def test_legacy_security_scan_still_accepted(db, repo, tmp_path):
     _wo_commit(repo, f"more work after the scan ({WO_ID[:8]})")
     passed, reason = _gate(db, tmp_path, "security_scan")
     assert passed is True, reason
+
+
+# ── whole-repo staleness + milestone audit gates (gap WO 1c49e8ca) ─────────────
+
+
+def test_commits_after_whole_repo_staleness(repo):
+    """commits_after: ANY commit after the sha counts — the milestone-audit signal."""
+    from core.work_orders.artifact_envelope import commits_after
+
+    sha = git_head_sha(repo)
+    assert commits_after(sha, repo) == []
+    # An unrelated commit (no WO reference) IS whole-repo staleness.
+    _wo_commit(repo, "unrelated maintenance commit")
+    newer = commits_after(sha, repo)
+    assert newer == [git_head_sha(repo)]
+    # Unanswerable cases return None, never a false verdict.
+    assert commits_after("0" * 40, repo) is None
+    assert commits_after(sha, None) is None
+    assert commits_after(sha, repo / "not-a-dir") is None
+
+
+def test_read_milestone_artifact_with_envelope(tmp_path, repo):
+    """Enveloped disk artifacts return their metadata; legacy files return None."""
+    from core.milestones.artifacts import (
+        read_milestone_artifact,
+        read_milestone_artifact_with_envelope,
+    )
+
+    ms_dir = tmp_path / "ms-prov-test-0001"
+    ms_dir.mkdir()
+    sha = git_head_sha(repo)
+    (ms_dir / "harden-results.md").write_text(
+        wrap("All checks PASSED", generator="ds-quality harden", head_commit_sha=sha),
+        encoding="utf-8",
+    )
+    (ms_dir / "security-audit.md").write_text("No BLOCKED findings", encoding="utf-8")
+
+    content, envelope = read_milestone_artifact_with_envelope(ms_dir, "harden-results.md")
+    assert content == "All checks PASSED"
+    assert envelope is not None and envelope["head_commit_sha"] == sha
+    # Transparent reader unwraps; legacy file carries no envelope.
+    assert read_milestone_artifact(ms_dir, "harden-results.md") == "All checks PASSED"
+    assert read_milestone_artifact_with_envelope(ms_dir, "security-audit.md") == (
+        "No BLOCKED findings",
+        None,
+    )
+    assert read_milestone_artifact_with_envelope(ms_dir, "absent.md") == (None, None)
+
+
+def test_milestone_stale_audit_rejected(tmp_path, repo):
+    """An enveloped milestone audit predating ANY later commit fails the gate;
+    fresh enveloped and legacy artifacts pass (the untested reject path from
+    _evaluate_milestone_artifacts, gap WO 1c49e8ca)."""
+    from core.milestones.close import _evaluate_milestone_artifacts
+
+    ms_dir = tmp_path / "ms-prov-test-0002"
+    ms_dir.mkdir()
+    sha = git_head_sha(repo)
+    (ms_dir / "security-audit.md").write_text(
+        wrap("No BLOCKED findings", generator="ds-quality security", head_commit_sha=sha),
+        encoding="utf-8",
+    )
+    (ms_dir / "harden-results.md").write_text("PASSED", encoding="utf-8")  # legacy
+
+    # Fresh enveloped audit + legacy hardening: no failures.
+    failures = _evaluate_milestone_artifacts(ms_dir, has_ui=False, project_root=repo)
+    assert failures == [], failures
+
+    # Any later commit stales the enveloped audit — legacy stays accepted.
+    _wo_commit(repo, "unrelated post-audit commit")
+    failures = _evaluate_milestone_artifacts(ms_dir, has_ui=False, project_root=repo)
+    assert any("security-audit.md is stale" in f for f in failures), failures
+    assert not any("harden-results" in f for f in failures), failures
