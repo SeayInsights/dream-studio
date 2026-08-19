@@ -194,6 +194,18 @@ def test_no_surface_still_advertises_the_retired_fallback():
 # ── symptom visibility ──────────────────────────────────────────────────────────
 
 
+def test_trivial_passing_probe():
+    """Portable target for the positive-path test below.
+
+    The bare pytest node-id TEST-CHECK form runs via ``sys.executable -m pytest``,
+    so it works on every platform. The earlier ``cmd: py -c "pass"`` form used the
+    Windows-only ``py`` launcher and passed locally but failed post-merge on the
+    ubuntu full-ci runner ([Errno 2] No such file or directory: 'py') — a
+    Windows-ism pr-smoke never ran, caught only by the full suite.
+    """
+    assert True
+
+
 def test_all_tests_pass_positive_path_with_executable_check(tmp_path):
     """The POSITIVE path the Path-B retirement left uncovered (gap WO 681b294e):
     a task carrying a passing executable TEST-CHECK satisfies all_tests_pass."""
@@ -225,7 +237,13 @@ def test_all_tests_pass_positive_path_with_executable_check(tmp_path):
         " (task_id, work_order_id, project_id, title, description, acceptance_criteria,"
         "  status, created_at, updated_at)"
         " VALUES ('t1',?,?,'T1','do',?, 'complete', ?, ?)",
-        (wo_id, project_id, 'TEST-CHECK: cmd: py -c "pass"', now, now),
+        (
+            wo_id,
+            project_id,
+            "TEST-CHECK: tests/unit/test_testlist_completeness.py::test_trivial_passing_probe",
+            now,
+            now,
+        ),
     )
     conn.commit()
     conn.close()
