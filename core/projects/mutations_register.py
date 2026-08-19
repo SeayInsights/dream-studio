@@ -105,6 +105,8 @@ def _write_project_marker(
             ["git", "config", "--get", "remote.origin.url"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=str(project_path),
             timeout=5,
         )

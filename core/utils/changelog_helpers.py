@@ -29,7 +29,15 @@ README_REQUIRED = [
 def run_git(args: list[str], cwd: Path) -> str:
     """Run git command and return stdout, or empty string on error."""
     try:
-        r = subprocess.run(["git"] + args, cwd=cwd, capture_output=True, text=True, timeout=5)
+        r = subprocess.run(
+            ["git"] + args,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=5,
+        )
         return r.stdout.strip() if r.returncode == 0 else ""
     except Exception:
         return ""

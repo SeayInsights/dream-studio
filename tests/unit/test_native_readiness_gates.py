@@ -60,6 +60,8 @@ def _run_cli(script: str, *args: str, home: Path) -> subprocess.CompletedProcess
         [sys.executable, str(REPO_ROOT / script), *args],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=60,
         cwd=str(REPO_ROOT),
         env=_env_for(home),

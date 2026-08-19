@@ -298,6 +298,8 @@ def _rclone_run(args: list[str]) -> subprocess.CompletedProcess:
         ["rclone", *args],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=120,
     )
 

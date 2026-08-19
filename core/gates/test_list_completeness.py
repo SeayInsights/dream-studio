@@ -96,6 +96,8 @@ def _changed_files() -> tuple[list[str], str | None]:
             cwd=_REPO_ROOT,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
     except OSError as exc:

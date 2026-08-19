@@ -135,6 +135,8 @@ def test_ds_commands_run_from_outside_repo_against_rehearsal_home(tmp_path: Path
         cwd=outside,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=True,
     )
     status = subprocess.run(
@@ -150,6 +152,8 @@ def test_ds_commands_run_from_outside_repo_against_rehearsal_home(tmp_path: Path
         cwd=outside,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=True,
     )
     packet = subprocess.run(
@@ -169,6 +173,8 @@ def test_ds_commands_run_from_outside_repo_against_rehearsal_home(tmp_path: Path
         cwd=outside,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=True,
     )
 
@@ -203,6 +209,8 @@ def test_ds_router_refuses_missing_state_without_bootstrap(tmp_path: Path) -> No
         cwd=outside,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
 
     payload = json.loads(result.stderr)

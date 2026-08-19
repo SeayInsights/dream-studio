@@ -104,6 +104,8 @@ def _diff_text(base_ref: str) -> str:
             ["git", "diff", f"{base_ref}...HEAD", "--", "tests/"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=REPO_ROOT,
             timeout=15,
         )
@@ -113,6 +115,8 @@ def _diff_text(base_ref: str) -> str:
             ["git", "diff", "HEAD", "--", "tests/"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=REPO_ROOT,
             timeout=15,
         )

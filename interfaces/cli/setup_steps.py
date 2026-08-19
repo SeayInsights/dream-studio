@@ -66,6 +66,8 @@ def step_venv_and_deps() -> StepResult:
                 [str(venv_python), "-m", "ensurepip", "--upgrade"],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
             )
             if repair.returncode != 0 or not pip.exists():
                 return StepResult(
@@ -82,6 +84,8 @@ def step_venv_and_deps() -> StepResult:
             [str(pip), "install", "-r", str(REQUIREMENTS)],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         if result.returncode != 0:
             detail = (result.stderr or result.stdout or "").strip().splitlines()

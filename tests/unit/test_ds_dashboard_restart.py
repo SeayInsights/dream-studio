@@ -81,6 +81,8 @@ def test_help_documents_restart():
         [sys.executable, "interfaces/cli/ds_dashboard.py", "--help"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=30,
     )
     text = result.stdout + result.stderr

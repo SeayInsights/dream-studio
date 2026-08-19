@@ -17,6 +17,8 @@ def test_ds_analytics_cli_help_imports_from_plain_checkout() -> None:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
 

@@ -297,6 +297,8 @@ def _check_pre_launch(scope_path: Path, context: dict | None = None) -> list[dic
             ["git", "-C", str(scope_path), "tag", "--sort=-version:refname"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=5,
         )
         if tags_result.returncode == 0:

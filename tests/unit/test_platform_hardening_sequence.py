@@ -139,6 +139,8 @@ def test_installed_cli_platform_hardening_commands_work_outside_repo(tmp_path: P
             cwd=tmp_path,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
         assert result.returncode == 0, result.stdout + result.stderr

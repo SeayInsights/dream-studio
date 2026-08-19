@@ -744,6 +744,8 @@ def _run_shim(stdin_data: str, extra_env: dict | None = None) -> subprocess.Comp
         input=stdin_data,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         env=env,
         timeout=30,
     )
@@ -827,6 +829,8 @@ def test_shim_writes_hook_failures_jsonl_on_import_error(tmp_path):
         input=json.dumps(_make_payload()),
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         env=env,
         timeout=30,
     )

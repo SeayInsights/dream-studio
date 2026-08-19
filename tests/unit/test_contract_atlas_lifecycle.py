@@ -233,6 +233,8 @@ def test_contract_atlas_lifecycle_gate_runs_without_live_home_or_db() -> None:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
 

@@ -104,6 +104,8 @@ def run_flake8() -> list[str]:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     return normalized_findings(result.stdout + result.stderr)
 

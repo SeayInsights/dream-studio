@@ -27,6 +27,8 @@ def _write_path_to_profile(bin_dir: Path) -> dict[str, Any]:
                 ["powershell", "-Command", "$PROFILE"],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=10,
             ).stdout.strip()
             profile_path = Path(raw) if raw else None

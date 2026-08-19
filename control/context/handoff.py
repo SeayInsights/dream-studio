@@ -95,6 +95,8 @@ def git(args: list[str], cwd: Path) -> str:
             cwd=cwd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=5,
         )
         return result.stdout.strip()
@@ -116,6 +118,8 @@ def active_files(cwd: Path) -> list[tuple[str, str]]:
             cwd=cwd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=5,
         )
         raw = proc.stdout
@@ -303,6 +307,8 @@ def last_commit_age_seconds(cwd: Path) -> float | None:
             cwd=cwd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=4,
         )
         ts = result.stdout.strip()
@@ -347,6 +353,8 @@ def record_session_to_db(cwd: Path, session_id: str | None, handoff_path: Path |
                 cwd=cwd,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=5,
             ).stdout.strip()
             or "unknown"
@@ -357,6 +365,8 @@ def record_session_to_db(cwd: Path, session_id: str | None, handoff_path: Path |
                 cwd=cwd,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=5,
             ).stdout.strip()
             or "unknown"

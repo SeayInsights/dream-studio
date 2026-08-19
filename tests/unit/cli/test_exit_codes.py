@@ -35,6 +35,8 @@ def bootstrapped_db(tmp_path, monkeypatch):
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=60,
     )
     if result.returncode != 0:
@@ -57,6 +59,8 @@ def bootstrapped_db(tmp_path, monkeypatch):
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=30,
     )
     if result.returncode != 0:
@@ -70,7 +74,9 @@ def bootstrapped_db(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("cmd", READ_ONLY_COMMANDS)
 def test_read_only_command_exits_zero(cmd):
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30
+    )
     assert (
         result.returncode == 0
     ), f"Command {cmd} exited {result.returncode}, expected 0. stderr: {result.stderr}"
@@ -81,6 +87,8 @@ def test_project_state_exits_zero(bootstrapped_db):
         [sys.executable, "-m", "interfaces.cli.ds", "project", "state"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=30,
     )
     assert (
@@ -96,6 +104,8 @@ def test_work_order_list_exits_zero(bootstrapped_db):
         [sys.executable, "-m", "interfaces.cli.ds", "work-order", "list"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=30,
     )
     assert (

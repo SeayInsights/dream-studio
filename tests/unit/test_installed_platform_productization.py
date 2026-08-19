@@ -486,6 +486,8 @@ def test_windows_ds_launcher_runs_from_outside_repo(tmp_path: Path) -> None:
         cwd=outside,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=True,
     )
     status = subprocess.run(
@@ -502,6 +504,8 @@ def test_windows_ds_launcher_runs_from_outside_repo(tmp_path: Path) -> None:
         cwd=outside,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=True,
     )
 
@@ -557,6 +561,8 @@ def test_global_command_surface_installs_plain_ds_launcher(tmp_path: Path) -> No
             env=env,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=True,
         )
         status_payload = subprocess.run(
@@ -565,6 +571,8 @@ def test_global_command_surface_installs_plain_ds_launcher(tmp_path: Path) -> No
             env=env,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=True,
         )
         assert json.loads(install_payload.stdout)["selected_profiles"] == ["analytics_only"]
@@ -634,6 +642,8 @@ def _run_ds(ds: Path, cwd: Path, *args: str) -> dict[str, object]:
         cwd=cwd,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=True,
     )
     return json.loads(result.stdout)

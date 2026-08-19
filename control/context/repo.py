@@ -327,6 +327,8 @@ def _git_hash(root: Path) -> str | None:
             cwd=root,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=5,
         )
         if result.returncode == 0:

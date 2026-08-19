@@ -99,6 +99,8 @@ def _changed_files(base_ref: str = "origin/main") -> list[str]:
             ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=REPO_ROOT,
             timeout=15,
         )
@@ -108,6 +110,8 @@ def _changed_files(base_ref: str = "origin/main") -> list[str]:
                 ["git", "diff", "--name-only", "HEAD"],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 cwd=REPO_ROOT,
                 timeout=15,
             )
