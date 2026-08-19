@@ -275,12 +275,20 @@ def format_report(report: PrePushReport) -> str:
             hint = gate.warn_hint if gate.is_advisory else gate.fail_hint
             if hint:
                 lines.append(f"   {'advisory' if gate.is_advisory else 'hint'}: {hint}")
+            # Both streams, not stderr-or-stdout. The `elif` here dropped stdout
+            # whenever stderr held anything at all, and for a pytest gate that is
+            # backwards: the failing assertion is on stdout while stderr carries
+            # only an unrelated import warning. A pin-tests failure therefore
+            # printed its hint and nothing else, and the only way to learn WHICH
+            # pin drifted was to re-run the gate by hand — the same
+            # failure-with-no-reason-attached shape as the codec defect this WO
+            # started from (WO-LOCALE-DECODE-SILENT-LOSS).
+            if gate.stdout_tail:
+                lines.append("   stdout tail:")
+                lines.extend(f"     {line}" for line in gate.stdout_tail.splitlines())
             if gate.stderr_tail:
                 lines.append("   stderr tail:")
                 lines.extend(f"     {line}" for line in gate.stderr_tail.splitlines())
-            elif gate.stdout_tail:
-                lines.append("   stdout tail:")
-                lines.extend(f"     {line}" for line in gate.stdout_tail.splitlines())
     lines.append("")
     lines.append("Overall: " + ("PASS" if report.overall_passed else "FAIL"))
     if report.advisory_warnings:
