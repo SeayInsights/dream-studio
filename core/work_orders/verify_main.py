@@ -263,6 +263,37 @@ def verify_work_order(
         if git_diff is None and originating_wo_id:
             git_diff = _collect_git_commits(_search_root, originating_wo_id)
 
+        # WO-GAP-EVIDENCE: remediation for THIS WO's review gaps is committed under
+        # the spawned gap WOs' own ids — invisible to the parent-id collection above,
+        # so the completion grader re-failed already-remediated tasks forever (and
+        # grader-phrasing-dependent gap keys made the closed-spawn discount unable to
+        # converge). Append each CLOSED child gap WO's diff as labeled remediation
+        # evidence: the grader then grades the full picture and passes on merits.
+        if originating_wo_id is None:
+            try:
+                _child_rows = conn.execute(
+                    "SELECT work_order_id FROM business_work_orders"
+                    " WHERE instr(description, ?) > 0 AND status = 'closed'"
+                    " AND work_order_id != ?",
+                    (f"[gap-key: {work_order_id}::", work_order_id),
+                ).fetchall()
+                _remediation_parts: list[str] = []
+                for _child_row in _child_rows:
+                    _child_id = _child_row[0]
+                    _child_diff = _collect_git_commits(_search_root, _child_id)
+                    if _child_diff:
+                        _remediation_parts.append(
+                            f"=== remediation evidence (closed gap WO {_child_id}) ===\n"
+                            f"{_child_diff}"
+                        )
+                if _remediation_parts:
+                    _remediation_text = "\n\n".join(_remediation_parts)
+                    git_diff = (
+                        f"{git_diff}\n\n{_remediation_text}" if git_diff else _remediation_text
+                    )
+            except Exception:
+                pass  # evidence enrichment is best-effort; the parent diff stands alone
+
         # WO-FIX-VERIFY-GATE: commit-grep by WO id/title fails for every
         # squash-merged WO (the id never survives the squash), forcing force=True
         # or a wo-<shortid> branch-pointer hack. When _collect_git_commits finds
