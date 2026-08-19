@@ -171,6 +171,47 @@ def observations_report(*, since_iso: str | None = None, db_path: Path | None = 
     return {"since": since_iso, "total": len(rows), "by_rule": by_rule}
 
 
+def record_bypass(
+    *,
+    hook_name: str,
+    hook_type: str,
+    rule: str,
+    detail: str,
+    session_id: str | None = None,
+    db_path: Path | None = None,
+) -> None:
+    """Record an enforcement bypass or fail-open (WO-BYPASS-TELEMETRY).
+
+    Every escape hatch leaves a mark: the DS_ENFORCE=0 / tier=off short-circuit
+    and the fail-open allow paths (broken DB, lib import failure) are recorded
+    with ``decision == "bypass"`` on the same HOOK_EXECUTION_LOGGED canonical
+    event ``record_observation`` uses — no new table, and the writer falls back
+    to a text file on DB lock, so a broken authority DB does not also kill the
+    signal. Best-effort: a broken emit path never affects the allow decision.
+    """
+    try:
+        from core.event_store.event_writer import insert_hook_execution
+
+        insert_hook_execution(
+            hook_name=hook_name,
+            hook_type=hook_type,
+            trigger_context={
+                "decision": "bypass",
+                "rule": rule,
+                "detail": detail,
+            },
+            started_at=now_iso(),
+            completed_at=now_iso(),
+            duration_ms=0,
+            exit_code=0,
+            status="success",
+            session_id=session_id,
+            db_path=db_path,
+        )
+    except Exception:
+        pass  # telemetry is best-effort; never let a broken emit affect enforcement
+
+
 def now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
@@ -280,6 +321,16 @@ def match_registered_project(file_path: str) -> dict | None:
 
     conn = _connect_ro(AUTHORITY_DB)
     if conn is None:
+        # WO-BYPASS-TELEMETRY: the authority DB is missing/unreadable, so path
+        # enforcement silently fails open for EVERY edit. Record the fail-open —
+        # the spool write lands on disk first, so a broken DB does not also kill
+        # the signal.
+        record_bypass(
+            hook_name="enforcement_lib",
+            hook_type="PreToolUse",
+            rule="fail_open_authority_db",
+            detail=f"authority DB unavailable at {AUTHORITY_DB} — enforcement fails open",
+        )
         return None
     try:
         rows = conn.execute(
@@ -287,6 +338,12 @@ def match_registered_project(file_path: str) -> dict | None:
             " WHERE status IN ('active', 'paused') AND project_path IS NOT NULL"
         ).fetchall()
     except sqlite3.Error:
+        record_bypass(
+            hook_name="enforcement_lib",
+            hook_type="PreToolUse",
+            rule="fail_open_authority_query",
+            detail="business_projects query failed (locked/corrupt schema) — enforcement fails open",
+        )
         return None
     finally:
         conn.close()

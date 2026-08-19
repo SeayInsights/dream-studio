@@ -112,6 +112,30 @@ def _enforce(tier: str) -> tuple[str, str | None]:
     try:
         from runtime.lib import enforcement  # noqa: PLC0415
     except Exception:
+        # WO-BYPASS-TELEMETRY: the enforcement lib failed to import — enforcement
+        # silently fails open. Record the fail-open through the event writer
+        # directly (the lib that would normally record it is the thing that broke).
+        try:
+            from core.event_store.event_writer import insert_hook_execution  # noqa: PLC0415
+
+            _now = datetime.now(timezone.utc).isoformat()
+            insert_hook_execution(
+                hook_name="on_edit_enforce",
+                hook_type="PreToolUse",
+                trigger_context={
+                    "decision": "bypass",
+                    "rule": "fail_open_lib_import",
+                    "detail": "runtime.lib.enforcement import failed — edit allowed unenforced",
+                },
+                started_at=_now,
+                completed_at=_now,
+                duration_ms=0,
+                exit_code=0,
+                status="success",
+                session_id=None,
+            )
+        except Exception:
+            pass
         return ("noop", None)
 
     try:
@@ -185,6 +209,18 @@ def main() -> None:
     except Exception:
         return
     if tier == "off":
+        # WO-BYPASS-TELEMETRY: the escape hatch still works, but it leaves a mark —
+        # every enforcement decision suppressed by DS_ENFORCE=0 / tier=off is
+        # recorded before the short-circuit. Emission failures never block.
+        try:
+            enforcement.record_bypass(
+                hook_name="on_edit_enforce",
+                hook_type="PreToolUse",
+                rule="enforcement_disabled",
+                detail="DS_ENFORCE=0 / DS_ENFORCE_TIER=off — edit enforcement short-circuited",
+            )
+        except Exception:
+            pass
         return
 
     started_at = datetime.now(timezone.utc).isoformat()

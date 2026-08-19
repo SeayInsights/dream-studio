@@ -203,6 +203,15 @@ def main() -> int:
     # Bypass with: MIGRATION_RISK_ACKNOWLEDGED=1 git push
     if os.environ.get("MIGRATION_RISK_ACKNOWLEDGED"):
         print("MIGRATION_RISK_ACKNOWLEDGED set — bypassing block.")
+        # WO-BYPASS-TELEMETRY: the acknowledgment still works, but it is recorded —
+        # previously this env var left no trace anywhere.
+        from core.gates.bypass_event import record_gate_bypass
+
+        record_gate_bypass(
+            "migration_risk",
+            "MIGRATION_RISK_ACKNOWLEDGED=1 — matrix-watch reminder bypassed at push",
+            extra={"risk_files": risk_files},
+        )
         return 0
 
     return 1

@@ -377,8 +377,15 @@ class TestHookExecutionTelemetry:
         assert names == {"on_edit_enforce", "on_stop_enforce"}
 
     def test_ds_enforce_zero_skips_telemetry(self, env, monkeypatch, captured_hook_executions):
-        # DS_ENFORCE=0 is a total escape hatch — no enforcement AND no telemetry.
+        # DS_ENFORCE=0 skips enforcement AND its execution telemetry — but the
+        # short-circuit itself leaves a bypass mark (WO-BYPASS-TELEMETRY): the
+        # ONLY records emitted are decision=bypass/rule=enforcement_disabled.
+        # No execution-stats records (decision allow/deny/observe) may appear.
         monkeypatch.setenv("DS_ENFORCE", "0")
         _run_hook(EDIT_HOOK, _edit_payload(env["project"] / "src" / "main.py"))
         _run_hook(STOP_HOOK, _stop_payload())
-        assert captured_hook_executions == []
+        assert captured_hook_executions, "the DS_ENFORCE=0 short-circuit must be recorded"
+        for call in captured_hook_executions:
+            ctx = call.get("trigger_context") or {}
+            assert ctx.get("decision") == "bypass"
+            assert ctx.get("rule") == "enforcement_disabled"

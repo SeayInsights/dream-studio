@@ -214,6 +214,20 @@ def get_project_state(
     db_path = _require_db(source_root, dream_studio_home)
     p_root = planning_root or Path.cwd() / ".planning"
 
+    # WO-BYPASS-TELEMETRY: recent enforcement escape-hatch activity, surfaced in
+    # the one-command state so bypasses are visible where the operator orients.
+    try:
+        from core.health.doctor_bypass import bypass_audit
+
+        _ba = bypass_audit(db_path)
+        bypass_summary: dict[str, Any] = {
+            "last_7d_total": _ba["total"],
+            "rules": {k: v["count"] for k, v in _ba["by_rule"].items()},
+            "gates": {k: v["count"] for k, v in _ba["gate_bypasses"].items()},
+        }
+    except Exception:
+        bypass_summary = {"last_7d_total": 0, "note": "unavailable"}
+
     with _connect(db_path) as conn:
         projects_raw = conn.execute(
             "SELECT project_id, name, status FROM business_projects WHERE status = 'active'"
@@ -250,6 +264,7 @@ def get_project_state(
                 "ok": True,
                 "projects": [],
                 "next_action": "No active projects. Run `ds-project scope` to scope a new one.",
+                "bypass_summary": bypass_summary,
                 **cwd_fields,
             }
 
@@ -409,7 +424,7 @@ def get_project_state(
                 }
             )
 
-    return {"ok": True, "projects": result_projects, **cwd_fields}
+    return {"ok": True, "projects": result_projects, "bypass_summary": bypass_summary, **cwd_fields}
 
 
 def fit_check_work_order(
