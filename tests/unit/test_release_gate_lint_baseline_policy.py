@@ -106,6 +106,11 @@ def test_ci_gate_run_check_uses_isolated_env_for_non_test_checks(monkeypatch) ->
         text: bool,
         cwd: Path,
         env: dict[str, str] | None,
+        # WO-LOCALE-DECODE-SILENT-LOSS: the call under test now names its codec
+        # explicitly. **kwargs rather than two more named parameters, because this
+        # stub exists to capture cmd/cwd/env — pinning the full kwarg list makes it
+        # fail on any unrelated addition to the call, which is what happened here.
+        **kwargs: object,
     ) -> subprocess.CompletedProcess[str]:
         captured.update(
             {
@@ -114,6 +119,7 @@ def test_ci_gate_run_check_uses_isolated_env_for_non_test_checks(monkeypatch) ->
                 "text": text,
                 "cwd": cwd,
                 "env": env,
+                **kwargs,
             }
         )
         return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
