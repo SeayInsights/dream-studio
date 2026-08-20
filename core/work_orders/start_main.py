@@ -19,6 +19,26 @@ from core.event_store.studio_db import _connect
 from .start_shared import _check_sequence_order
 
 
+def _resolve_wo_repo_root(work_order_id: str, db_path: Path, source_root: Path) -> Path:
+    """The repo the WO's work happens in — its project's ``project_path``.
+
+    Falls back to ``source_root`` when the project has no recorded path. The
+    boundary must be stamped against the TARGET repo, not against whatever
+    directory DS happens to be running from: a cross-project WO's commits live in
+    the other repo, and stamping DS's HEAD would record a boundary that ranges
+    over the wrong history entirely.
+    """
+    try:
+        from core.work_orders.verify_executor import resolve_project_root
+
+        resolved = resolve_project_root(work_order_id, db_path)
+        if resolved is not None:
+            return Path(resolved)
+    except Exception:
+        pass
+    return source_root
+
+
 def start_work_order(
     *,
     work_order_id: str,
@@ -126,6 +146,25 @@ def start_work_order(
 
     context_path = write_work_order_context(
         brief_data, planning_root=p_root, now=now, db_path=_db_path_for_seq
+    )
+
+    # WO-VERIFY-GRADES-DELIVERY: stamp the change-set boundary NOW, while it is a
+    # fact rather than something to reconstruct later. Verify has been locating a
+    # WO's work by grepping history for its uuid or title — which fails for a
+    # squash merge, a reworded title, unpushed work, a commit that names the WO by
+    # its human tag, or a non-git target, none of which mean nothing was
+    # delivered. Recording start_commit here makes the range start_commit..HEAD,
+    # with no message convention involved.
+    #
+    # Deliberately best-effort: refusing to start work because a boundary could
+    # not be written would be a worse defect than the one it fixes.
+    from .delivery_boundary import record_delivery_boundary
+
+    _boundary = record_delivery_boundary(
+        work_order_id,
+        repo_root=_resolve_wo_repo_root(work_order_id, _db_path_for_seq, source_root),
+        db_path=_db_path_for_seq,
+        now=now,
     )
 
     try:
