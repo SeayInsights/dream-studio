@@ -185,6 +185,66 @@ def test_no_runs_found_is_unknown_with_reason():
     assert "no Full CI runs" in status["reason"]
 
 
+def test_non_text_gh_output_degrades_to_unknown():
+    """WO-MAINRED-GH-NONSTR — the defect that took main red for a day.
+
+    A bare ``MagicMock(returncode=0)`` is what a caller patching
+    ``subprocess.run`` for some OTHER subprocess call hands back, and it is a
+    legitimate shape: ``.stdout`` is an auto-created attribute that happens to be
+    truthy and is not a string. ``stdout or "[]"`` passed it to ``json.loads``,
+    which raises TypeError — not a JSONDecodeError and not a ValueError, so the
+    guard here never caught it.
+    """
+    with patch("subprocess.run", return_value=MagicMock(returncode=0)):
+        status = main_ci_status(repo_root=Path("."))
+    assert status["status"] == "unknown"
+    assert status["red"] is False
+    assert "non-text" in status["reason"]
+
+
+def test_advisory_reader_never_raises_into_its_caller():
+    """The class, not the instance.
+
+    This reader is documented as advisory: it never blocks a close, never fails
+    the doctor, never alters a gate outcome. An exception escaping it violates
+    that whatever the trigger, so every malformed shape must come back as a
+    well-formed unknown rather than propagate.
+    """
+    shapes: list[tuple[str, object, object, object]] = [
+        ("non-str stdout", 0, b"bytes not str", ""),
+        ("non-str stderr on failure", 1, "", b"bytes not str"),
+        ("stdout is a list", 0, ["already", "parsed"], ""),
+        ("stdout is None", 0, None, ""),
+        ("returncode is not an int", MagicMock(), "[]", ""),
+    ]
+    for label, code, out, err in shapes:
+        proc = MagicMock()
+        proc.returncode = code
+        proc.stdout = out
+        proc.stderr = err
+        with patch("subprocess.run", return_value=proc):
+            status = main_ci_status(repo_root=Path("."))  # must not raise
+        assert status["status"] == "unknown", label
+        assert status["red"] is False, label
+        assert status["reason"], f"{label}: an unknown must always say why"
+        # And the advisory renderer stays silent rather than inventing an alarm.
+        assert main_ci_warning(status) is None, label
+
+
+def test_empty_gh_output_is_not_confused_with_unreadable_output():
+    """An empty string means "gh answered, there were no runs"; a non-string means
+    "we could not read the answer". Collapsing them would report a real absence as
+    a malfunction, or worse, the reverse."""
+    proc = MagicMock()
+    proc.returncode = 0
+    proc.stdout = ""
+    proc.stderr = ""
+    with patch("subprocess.run", return_value=proc):
+        status = main_ci_status(repo_root=Path("."))
+    assert status["status"] == "unknown"
+    assert "no Full CI runs" in status["reason"], "empty output is an absence, not a read failure"
+
+
 # ── close-ceremony advisory ─────────────────────────────────────────────────────
 
 

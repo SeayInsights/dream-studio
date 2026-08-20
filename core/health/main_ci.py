@@ -47,13 +47,36 @@ def _gh_json(args: list[str], cwd: Path | None) -> tuple[Any, str | None]:
         return None, f"gh timed out after {_TIMEOUT}s"
     except OSError as exc:
         return None, f"gh could not run: {exc}"
+
+    # WO-MAINRED-GH-NONSTR: everything below reads two attributes off whatever
+    # `subprocess.run` returned, and this reader's documented contract is that any
+    # unusable reply becomes unknown-with-reason — never an exception, because it
+    # is an ADVISORY check that must not be able to raise into a caller who was
+    # asking about something else. A caller that patches subprocess.run (a
+    # legitimate thing for a test about a DIFFERENT subprocess call to do) hands
+    # back a mock whose .stdout is a truthy non-string, and `stdout or "[]"` fed
+    # it straight to json.loads, which raises TypeError — not a subclass of
+    # JSONDecodeError or ValueError, so the guard below never saw it. That took
+    # main red for a full day. Normalise to text first, then parse.
+    def _text(value: Any) -> str:
+        return value if isinstance(value, str) else ""
+
+    if not isinstance(result.returncode, int):
+        return None, "gh returned no usable exit status"
     if result.returncode != 0:
-        detail = (result.stderr or result.stdout).strip().splitlines()
+        detail = (_text(result.stderr) or _text(result.stdout)).strip().splitlines()
         reason = detail[0][:200] if detail else f"gh exited {result.returncode}"
         return None, reason
+    raw = _text(result.stdout)
+    if not raw.strip():
+        # No text at all is a real answer ("no runs yet"), not a parse failure —
+        # but it must not be confused with output we simply could not read.
+        if result.stdout is not None and not isinstance(result.stdout, str):
+            return None, "gh returned non-text output"
+        return [], None
     try:
-        return json.loads(result.stdout or "[]"), None
-    except (json.JSONDecodeError, ValueError) as exc:
+        return json.loads(raw), None
+    except (json.JSONDecodeError, TypeError, ValueError) as exc:
         return None, f"gh returned non-JSON: {exc}"
 
 
