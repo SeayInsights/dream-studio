@@ -12,6 +12,7 @@ extracted verbatim from the original module.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -90,6 +91,60 @@ def check_close_gates(
     meta["gate_failures"] = failures
     meta["gates_pass"] = not failures
     return meta
+
+
+def _ledger_verdict_mismatch(
+    ledger: dict[str, Any],
+    work_order_id: str,
+    *,
+    planning_root: Path,
+    db_path: Path | None,
+) -> str:
+    """Note text when the residual-risk ledger came from a DIFFERENT verify run
+    than the stored verdict — else an empty string.
+
+    Gap WO 72b19987 task 3. The ledger and the verdict are persisted to two stores
+    in sequence, and that window cannot be closed without a cross-store
+    transaction, so the pair must at least be DETECTABLE. Carrying the run stamp
+    made it *recordable*; this reader is what makes it *detected*. Recording a
+    signal nobody consumes leaves the mismatch exactly as invisible as it was —
+    the same engine-key-with-no-reader shape this milestone keeps finding.
+
+    Silent (returns "") whenever the comparison cannot be made: an absent stamp on
+    either side is a pre-stamp artifact, not evidence of a mismatch. Never raises —
+    this decorates an advisory note and must not be able to block a close.
+    """
+    try:
+        ledger_at = ledger.get("verified_at")
+        if not isinstance(ledger_at, str) or not ledger_at:
+            return ""  # pre-stamp ledger: absence is not a mismatch
+
+        from core.work_orders.artifacts import get_wo_artifact_envelope
+
+        raw, _envelope = get_wo_artifact_envelope(work_order_id, "review_verdict", db_path=db_path)
+        if raw is None:
+            disk = planning_root / "work-orders" / work_order_id / "review-verdict.json"
+            raw = disk.read_text(encoding="utf-8") if disk.is_file() else None
+        if not raw:
+            return ""
+        payload = json.loads(raw)
+        # An enveloped artifact carries the verdict as a JSON string in `content`.
+        if isinstance(payload, dict) and isinstance(payload.get("content"), str):
+            payload = json.loads(payload["content"])
+        if not isinstance(payload, dict):
+            return ""
+        verdict_at = payload.get("completed_at") or payload.get("verified_at")
+        if not isinstance(verdict_at, str) or not verdict_at:
+            return ""
+        if verdict_at == ledger_at:
+            return ""
+        return (
+            " NOTE: this residual-risk list is from a different verify run than the stored"
+            f" verdict (ledger {ledger_at}, verdict {verdict_at}) — one of the two writes did"
+            " not complete. Re-run `ds work-order verify` so both describe the same run."
+        )
+    except Exception:
+        return ""  # a decoration must never break the note it decorates
 
 
 def close_work_order(
@@ -531,9 +586,18 @@ def close_work_order(
                 if _ledger.get("truncated")
                 else ""
             )
+            # PAIRING CHECK (gap WO 72b19987 task 3, caught by that WO's own
+            # re-verify): the ledger and the verdict are written to two stores in
+            # sequence, so a crash between them pairs run N's ledger with run
+            # N-1's verdict. Carrying the run stamp made that RECORDABLE — but
+            # nothing read it, so "detectable" was latent data and the mismatch
+            # stayed as invisible as before. Something has to do the comparing.
+            _stale_pair = _ledger_verdict_mismatch(
+                _ledger, work_order_id, planning_root=p_root, db_path=db_path
+            )
             result["unverified_risks_note"] = (
                 f"{len(_ledger['unverified'])} worst-case scenario(s) remain UNVERIFIED for"
-                f" this work order — residual risk recorded, not resolved.{_partial}"
+                f" this work order — residual risk recorded, not resolved.{_partial}{_stale_pair}"
             )
     except Exception as exc:  # noqa: BLE001 - surfacing must not block the close
         # But it must not vanish either: a failed read is reported, not swallowed

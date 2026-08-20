@@ -403,6 +403,126 @@ def test_ledger_carries_the_run_stamp_so_a_mismatched_pair_is_detectable(tmp_pat
     ), "the ledger must carry its own run stamp so a mismatched pair is detectable"
 
 
+def test_a_mismatched_pair_is_actually_DETECTED_at_close(tmp_path):
+    """Gap WO 72b19987 task 3, second pass.
+
+    The first fix carried ``verified_at`` on the ledger so a ledger/verdict pair
+    from different runs would be *recordable*. Its own re-verify pointed out that
+    nothing READ it: "detectable" was latent data, and the mismatch stayed exactly
+    as invisible as before — the engine-key-with-no-reader shape again. A signal
+    nobody consumes is not a detection.
+
+    So close now compares the two stamps and says so. This drives the real close.
+    """
+    db = _db(tmp_path)
+    planning = tmp_path / "planning"
+    wo_id = _seed_closeable_wo(db)
+
+    # Verdict from run N-1 ...
+    verdict_dir = planning / "work-orders" / wo_id
+    verdict_dir.mkdir(parents=True, exist_ok=True)
+    (verdict_dir / "review-verdict.json").write_text(
+        json.dumps({"passed": True, "summary": "ok", "completed_at": "2026-08-19T10:00:00+00:00"}),
+        encoding="utf-8",
+    )
+    # ... paired with a ledger from run N.
+    _persist_unverified_ledger(
+        wo_id,
+        [{**_SCENARIO, "status": "UNVERIFIED"}],
+        planning_root=planning,
+        db_path=db,
+        verified_at="2026-08-19T11:00:00+00:00",
+    )
+
+    from core.work_orders.close import close_work_order
+
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        result = close_work_order(
+            work_order_id=wo_id,
+            force=True,
+            source_root=tmp_path,
+            dream_studio_home=tmp_path,
+            planning_root=planning,
+        )
+    note = result.get("unverified_risks_note") or ""
+    assert "different verify run" in note, (
+        "a ledger paired with another run's verdict must be reported, not merely "
+        f"recorded: {note!r}"
+    )
+    assert "10:00:00" in note and "11:00:00" in note, "both stamps must be named"
+
+
+def test_a_matched_pair_is_silent(tmp_path):
+    """The converse, so the mismatch note means something: identical stamps must
+    not produce a warning, or the note becomes noise on every close."""
+    db = _db(tmp_path)
+    planning = tmp_path / "planning"
+    wo_id = _seed_closeable_wo(db)
+    stamp = "2026-08-19T12:00:00+00:00"
+
+    verdict_dir = planning / "work-orders" / wo_id
+    verdict_dir.mkdir(parents=True, exist_ok=True)
+    (verdict_dir / "review-verdict.json").write_text(
+        json.dumps({"passed": True, "summary": "ok", "completed_at": stamp}), encoding="utf-8"
+    )
+    _persist_unverified_ledger(
+        wo_id,
+        [{**_SCENARIO, "status": "UNVERIFIED"}],
+        planning_root=planning,
+        db_path=db,
+        verified_at=stamp,
+    )
+
+    from core.work_orders.close import close_work_order
+
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        result = close_work_order(
+            work_order_id=wo_id,
+            force=True,
+            source_root=tmp_path,
+            dream_studio_home=tmp_path,
+            planning_root=planning,
+        )
+    note = result.get("unverified_risks_note") or ""
+    assert note, "the residual risk itself is still surfaced"
+    assert "different verify run" not in note, f"a matched pair must be silent: {note!r}"
+
+
+def test_a_pre_stamp_ledger_does_not_read_as_a_mismatch(tmp_path):
+    """Absence of a stamp is a pre-stamp artifact, not evidence of a mismatch —
+    otherwise every historical ledger would cry wolf."""
+    db = _db(tmp_path)
+    planning = tmp_path / "planning"
+    wo_id = _seed_closeable_wo(db)
+
+    verdict_dir = planning / "work-orders" / wo_id
+    verdict_dir.mkdir(parents=True, exist_ok=True)
+    (verdict_dir / "review-verdict.json").write_text(
+        json.dumps({"passed": True, "completed_at": "2026-08-19T10:00:00+00:00"}), encoding="utf-8"
+    )
+    _persist_unverified_ledger(
+        wo_id, [{**_SCENARIO, "status": "UNVERIFIED"}], planning_root=planning, db_path=db
+    )  # no verified_at
+
+    from core.work_orders.close import close_work_order
+
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        result = close_work_order(
+            work_order_id=wo_id,
+            force=True,
+            source_root=tmp_path,
+            dream_studio_home=tmp_path,
+            planning_root=planning,
+        )
+    assert "different verify run" not in (result.get("unverified_risks_note") or "")
+
+
 def test_ledger_without_a_run_stamp_is_still_readable(tmp_path):
     """Ledgers written before the stamp existed must not become unreadable —
     absence of the field is not corruption."""
