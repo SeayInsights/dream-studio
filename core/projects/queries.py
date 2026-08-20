@@ -444,6 +444,22 @@ def get_project_state(
                     "gotchas": gotchas,
                 }
 
+                # WO-SEPARATE-TEST-RUNNER gap (e3a17189): resume is where an agent
+                # decides what state the work is in. A WO already verified by a
+                # review that never ran a test must not be surfaced as plainly
+                # certified — the same silence-removal as the unverified-risk ledger
+                # and the main-CI advisory next to it.
+                try:
+                    from core.gates.merge_readiness import work_order_execution_caveat
+
+                    _exec_caveat = work_order_execution_caveat(
+                        wo_row["work_order_id"], db_path=db_path
+                    )
+                    if _exec_caveat:
+                        wo_info["test_execution_warning"] = _exec_caveat
+                except Exception:
+                    pass  # advisory only — never break orientation
+
             result_projects.append(
                 {
                     "project_id": pid,

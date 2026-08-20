@@ -267,7 +267,7 @@ def test_a_read_only_verdict_is_labelled_as_such(db):
     assert out["state"] == "passed", "the caveat must not be smuggled in as a failure"
     assert out["ready"] is True
     assert "CAVEAT" in out["advice"]
-    assert "not on running" in out["advice"] or "not on running it" in out["advice"]
+    assert "not by running it" in out["advice"]
     assert out["execution"]["basis"] == "none_registered"
 
 
@@ -329,6 +329,104 @@ def _flat(text: str) -> str:
     import re
 
     return re.sub(r"\s+", " ", text.lower())
+
+
+# ── Gap e3a17189: the same fact at close and on resume, not only at merge ──────
+
+
+def test_the_caveat_is_silent_where_the_checks_have_just_run():
+    """`not_run_at_verify` is the ORDINARY state on the git-diff verify path, and
+    close executes every registered TEST-CHECK before it can complete. Printing the
+    caveat there would put it on nearly every close — and a caveat on everything is
+    a caveat nobody reads, which is the failure mode this milestone keeps finding."""
+    from core.gates.merge_readiness import execution_caveat
+
+    registered_unrun = {"registered": 2, "executed": 0, "passed": 0, "basis": "not_run_at_verify"}
+    assert execution_caveat(registered_unrun) is not None, "merge has not run them yet"
+    assert execution_caveat(registered_unrun, checks_ran_here=True) is None
+
+    # "No check exists" is NOT resolved by a caller that runs checks — there was
+    # nothing to run. This one speaks in both places.
+    none_registered = {"registered": 0, "executed": 0, "passed": 0, "basis": "none_registered"}
+    assert execution_caveat(none_registered, checks_ran_here=True) is not None
+
+    assert execution_caveat({"basis": "executed", "registered": 1}) is None
+    assert execution_caveat(None) is None, "absent means unknown, never an assertion"
+
+
+def test_close_surfaces_a_verdict_that_nothing_executed(db, tmp_path):
+    """The gap the independent review found: the distinction existed at merge-check
+    and nowhere else, so a WO could CLOSE — the moment work is declared done — with
+    a review that never ran a test, reading as ordinary certification.
+
+    Drives the real ``close_work_order``. ``force=True`` because the gates are not
+    what is under test here (the advisory is), and ``none_registered`` is the basis
+    that speaks in every context: there was no check to run, so no caller can have
+    run one.
+    """
+    from unittest.mock import MagicMock, patch
+
+    from core.work_orders.close import close_work_order
+
+    wo_id = _wo_with_acs(db, [None])
+    _store_verdict(
+        db,
+        wo_id,
+        {
+            "passed": True,
+            "completion": {"summary": "read the code"},
+            "test_execution": {
+                "registered": 0,
+                "executed": 0,
+                "passed": 0,
+                "basis": "none_registered",
+            },
+        },
+    )
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        result = close_work_order(
+            work_order_id=wo_id,
+            force=True,
+            source_root=tmp_path,
+            dream_studio_home=tmp_path,
+            planning_root=tmp_path / "planning",
+        )
+    assert result["ok"] is True, f"the caveat must not block the close: {result}"
+    warning = result.get("test_execution_warning")
+    assert warning, f"close must state what the review rested on: {result}"
+    assert "not by running it" in warning
+
+
+def test_project_state_surfaces_it_where_an_agent_orients(db, tmp_path):
+    """Resume is where an agent decides what state the work is in. Same silence
+    removal as the unverified-risk ledger and the main-CI advisory beside it."""
+    from core.gates.merge_readiness import work_order_execution_caveat
+
+    wo_id = _wo_with_acs(db, [None])
+    _store_verdict(
+        db,
+        wo_id,
+        {
+            "passed": True,
+            "test_execution": {
+                "registered": 0,
+                "executed": 0,
+                "passed": 0,
+                "basis": "none_registered",
+            },
+        },
+    )
+    caveat = work_order_execution_caveat(wo_id, db_path=db)
+    assert caveat and "no TEST-CHECK" in caveat
+
+    # And project state actually reads it — the wiring, not just the reader. A
+    # grep is the honest check here: seeding a full active project + milestone to
+    # drive get_project_state would test the seeding, not the wiring.
+    queries = (_REPO / "core" / "projects" / "queries.py").read_text(encoding="utf-8")
+    assert "work_order_execution_caveat" in queries
+    assert '"test_execution_warning"' in queries
 
 
 # ── Task 4: the rule ships in canonical skill text ────────────────────────────

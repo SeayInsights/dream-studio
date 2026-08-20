@@ -75,6 +75,7 @@ Close is report-only: after a clean close on the interactive path, surface `next
         "bypassed_gates": [str, ...],          # populated when forced
         "verify_warning": str | absent,        # inline verify was unreviewable (no commit evidence) — surface verbatim
         "main_ci_warning": str | absent,       # post-merge Full CI for main is RED — surface verbatim, advisory
+        "test_execution_warning": str | absent, # the review certified by reading, not running — verbatim, advisory
         "main_ci": {...} | absent,             # the reading behind it (status/red/head_sha/run_url/as_of/age_seconds/local_head_includes_run)
         "next_work_order": {...} | absent,     # next open WO in same milestone
         "next_command": str | absent,          # explicit next-step hint
@@ -112,7 +113,7 @@ The gate asks two questions now, and the failure text says which one failed (WO-
 
 ## What the tests rest on {#separate-test-runner}
 
-`all_tests_pass` **executes** the TEST-CHECKs — no report is read, and the "a file containing PASSED" fallback is retired, so a self-reported pass cannot satisfy it. Two things still need your eyes: the verdict's `test_execution.basis` (`none_registered` or `not_run_at_verify` means the review certified by reading rather than running — `ds work-order merge-check` says so, and merge lands before this close executes anything), and **who ran them** — whoever wrote the change does not run its own suite as the evidence; spawn a runner and hand it node ids, not a conclusion.
+`all_tests_pass` **executes** the TEST-CHECKs — no report is read, and the "a file containing PASSED" fallback is retired, so a self-reported pass cannot satisfy it. Two things still need your eyes. **What the review rested on:** close returns `test_execution_warning` when the verdict certified by reading rather than running (no TEST-CHECK registered, or none executed at verify) — print it verbatim; it never blocks, and `ds work-order merge-check` says the same thing earlier. **Who ran them:** whoever wrote the change does not run its own suite as the evidence — spawn a runner and hand it node ids, not a conclusion.
 
 ## After the merge: pr-smoke green is not proof main is green
 

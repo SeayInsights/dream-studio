@@ -546,6 +546,25 @@ def close_work_order(
     if _symptom_checks:
         result["symptom_checks"] = _symptom_checks
 
+    # WO-SEPARATE-TEST-RUNNER gap (e3a17189): a close whose review certified by
+    # READING must not read the same as one a test run backs. all_tests_pass
+    # executes the WO's own checks, but an attested WO or one with no TEST-CHECK
+    # registered can still reach here — and "closed" then implies execution that
+    # never happened. Advisory: it states the basis, it does not block.
+    try:
+        from core.gates.merge_readiness import work_order_execution_caveat
+
+        # checks_ran_here: all_tests_pass just executed every registered TEST-CHECK,
+        # so "registered but not run at verify" is no longer true by the time a close
+        # completes — saying it anyway would print on nearly every close.
+        _exec_caveat = work_order_execution_caveat(
+            work_order_id, db_path=db_path, planning_root=p_root, checks_ran_here=True
+        )
+        if _exec_caveat:
+            result["test_execution_warning"] = _exec_caveat
+    except Exception:
+        pass  # an advisory must never affect a close
+
     # WO-MAINRED-VISIBILITY: a WO must not be declared done while its own merge
     # has main red without the operator seeing it. Advisory only — never blocks,
     # never alters a gate outcome; an unknown status stays silent rather than

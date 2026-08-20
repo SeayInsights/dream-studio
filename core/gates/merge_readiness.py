@@ -193,6 +193,59 @@ def verdict_state(
     return result
 
 
+def execution_caveat(
+    execution: dict[str, Any] | None, *, checks_ran_here: bool = False
+) -> str | None:
+    """One sentence for a verdict that certified by reading rather than by running.
+
+    WO-SEPARATE-TEST-RUNNER gap (e3a17189). The first cut said this at merge-check
+    only, so a WO could still CLOSE — and be surfaced on resume — with a verdict
+    nothing had executed, reading as ordinary certification. One builder, three
+    consumers (merge-check, close, project state): a second wording would be a
+    second thing to keep in sync, which is how the two-copies-one-stale defects in
+    this milestone started.
+
+    ``checks_ran_here`` is the caller saying it executed the work order's checks
+    itself. Close does: ``all_tests_pass`` runs every registered TEST-CHECK before a
+    close can complete. So ``not_run_at_verify`` — which is the ORDINARY state on the
+    git-diff verify path — is silent there, because by then they have run. Without
+    that distinction this would print on nearly every close, and a caveat on
+    everything is a caveat nobody reads.
+
+    ``None`` when the verdict IS execution-backed, or predates the field — absent
+    must mean unknown, never an assertion about a verdict that cannot answer.
+    """
+    if not isinstance(execution, dict):
+        return None
+    basis = execution.get("basis")
+    if basis == "none_registered":
+        return (
+            "This work order registers no TEST-CHECK, so its review certified by"
+            " reading the code, not by running it. Nothing was executed."
+        )
+    if basis == "not_run_at_verify" and not checks_ran_here:
+        return (
+            f"{execution.get('registered')} TEST-CHECK(s) are registered but none ran"
+            " during verify, so the review is not execution-backed yet."
+        )
+    return None
+
+
+def work_order_execution_caveat(
+    work_order_id: str,
+    *,
+    db_path: Path | None = None,
+    planning_root: Path | None = None,
+    checks_ran_here: bool = False,
+) -> str | None:
+    """``execution_caveat`` for a work order's stored verdict, or None."""
+    try:
+        info = verdict_state(work_order_id, db_path=db_path, planning_root=planning_root)
+    except Exception:  # noqa: BLE001 - an advisory must never break its caller
+        return None
+    return execution_caveat(info.get("execution"), checks_ran_here=checks_ran_here)
+
+
 def merge_readiness(
     *,
     work_order_id: str | None = None,
@@ -251,18 +304,10 @@ def merge_readiness(
     # a test run backs, and merge is the last point where that matters — close's
     # all_tests_pass runs afterwards. Say so instead of letting both read as certified.
     execution = info.get("execution")
-    if state == "passed" and isinstance(execution, dict):
-        basis = execution.get("basis")
-        if basis == "none_registered":
-            advice += (
-                " CAVEAT: this work order registers no TEST-CHECK, so the verdict rests"
-                " on reading the code, not on running it. Nothing has executed."
-            )
-        elif basis == "not_run_at_verify":
-            advice += (
-                f" CAVEAT: {execution.get('registered')} TEST-CHECK(s) are registered but"
-                " none ran during verify, so this verdict is not execution-backed yet."
-            )
+    if state == "passed":
+        caveat = execution_caveat(execution)
+        if caveat:
+            advice += f" CAVEAT: {caveat}"
 
     return {
         "ready": ready,
