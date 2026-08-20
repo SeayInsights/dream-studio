@@ -91,3 +91,24 @@ When confirmed: call `lock_design_brief(brief_id=..., source_root=..., dream_stu
 
 Then: "Brief locked. The `design_brief_locked` gate is now satisfied.
 Invoke `ds-project:resume` and type **start** to begin the work order."
+
+## Locked is not current {#brief-currency}
+
+**DO** treat a lock as having an expiry driven by work, not by time. `design_brief_locked` used to ask only whether a locked row existed, so a brief locked in May satisfied it in August after months of UI work had moved the surfaces it described (WO-BRIEF-CURRENCY). It now also asks whether the brief is **current**.
+
+A brief goes stale when a **UI-class work order closes** after it was locked — `ui_component`, `ui_page`, or `saas_feature`. Backend-only work (`api_endpoint`, `data_pipeline`, `infrastructure`, `deployment`, `documentation`) does **not** stale it: a brief that still describes the UI is still true, and crying wolf would train operators to re-lock reflexively.
+
+| Gate says | Meaning | Do this |
+|---|---|---|
+| `no locked design brief` | none exists | fill and lock one (this mode) |
+| `existence but not currency` | locked, but UI work closed since | re-lock, **or** declare reviewed-no-change |
+| passes | current | proceed |
+
+**Two remedies, and they are not interchangeable:**
+
+- **Re-lock** when the design language actually changed. Re-locking does not require re-running the whole wizard — update what moved and lock again.
+- **Declare reviewed-no-change** when the surface moved but the brief genuinely still holds (a new button reusing existing tokens, say). This is the same idiom the docs-drift gates use, and it is **recorded with its own timestamp and a note** — so it ages exactly like a lock. Work closing *after* the declaration stales the brief again.
+
+**DON'T** reach for reviewed-no-change to skip a real re-lock. A declaration that says "still holds" about a brief that no longer does is worse than a stale lock, because it looks like someone checked.
+
+**DON'T** ask for a brief per work order. `business_design_briefs` is project-scoped deliberately: a brief per WO would proliferate near-duplicates and destroy the shared design language that is the whole point of having one. One current project brief satisfies every UI work order in the project.

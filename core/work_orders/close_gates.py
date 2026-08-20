@@ -148,6 +148,17 @@ def run_gate_check(
                 row = None
         if row is None:
             return False, "design_brief_locked: no locked design brief found for this project"
+        # WO-BRIEF-CURRENCY: existence is not currency. A brief locked in May
+        # satisfied this gate in August, after months of UI work had moved the
+        # surfaces it describes — so a UI work order could close against a brief
+        # that no longer described the design. Currency is derived from authority
+        # state (UI-class work orders closing after the lock), which needs no repo
+        # introspection and so works for an external project too.
+        from core.gates.brief_currency import currency_failure
+
+        _stale_brief = currency_failure(project_id, conn=conn, db_path=db_path)
+        if _stale_brief:
+            return False, f"design_brief_locked: {_stale_brief}"
         return True, ""
 
     if gate_name == "api_contract_exists":
