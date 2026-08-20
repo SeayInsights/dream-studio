@@ -87,11 +87,8 @@ def test_an_interrupted_verdict_write_leaves_no_artifact(tmp_path):
 
     payload = "x" * 100_000
     with pytest.raises(Boom):
-        # Interrupt inside the write by making the encode step raise.
-        class Exploding(str):
-            def __str__(self) -> str:  # pragma: no cover - defensive
-                raise Boom()
-
+        # Interrupt between the content write and the rename, which is the window
+        # that used to leave a truncated verdict at the real path.
         def _boom(*_a, **_k):
             raise Boom()
 
