@@ -49,6 +49,9 @@ _PROJECTED = _REPO / "dist" / "plugin" / "skills"
 _PASSING_CMD = "cmd: git --version"
 _FAILING_CMD = "cmd: git --no-such-flag-here"
 _PASSING_AC = f"TEST-CHECK: {_PASSING_CMD}"
+# A check that cannot START — the honest "nothing ran" case, distinct from a
+# check that ran and failed.
+_UNRUNNABLE_AC = "TEST-CHECK: cmd: ds-no-such-binary-a1b2c3"
 _FAILING_AC = f"TEST-CHECK: {_FAILING_CMD}"
 
 
@@ -515,17 +518,24 @@ def test_resume_skill_text_tells_the_agent_to_surface_it(db):
     assert "advisory" in text or "must not block" in text
 
 
-def test_close_does_not_claim_execution_it_bypassed(db, tmp_path):
-    """Found by this WO's own verify. The first cut asserted `checks_ran_here=True`
-    unconditionally, reasoning that all_tests_pass runs the checks before any close.
-    A FORCED close bypasses that gate — so a `not_run_at_verify` verdict went silent
-    on the strength of an execution that never happened, which is precisely the
-    false implicit claim this advisory was built to remove."""
+def test_close_does_not_claim_execution_that_never_happened(db, tmp_path):
+    """Found by this WO's own verify, then corrected twice by measurement.
+
+    v1 asserted `checks_ran_here=True` unconditionally. v2 derived it from the type's
+    `all_tests_pass` gate — which most WO types do not list, so it printed a FALSE
+    caveat on this feature's own clean close ("none ran during verify", moments after
+    the always-on AC gate had run all three). v3 COUNTS what the AC gate executed,
+    which cannot be wrong in either direction.
+
+    Here the only registered check cannot start, so nothing ran and the caveat must
+    speak. Its converse — a check that ran and FAILED past a force — is the
+    following test: force bypasses the failure, not the execution.
+    """
     from unittest.mock import MagicMock, patch
 
     from core.work_orders.close import close_work_order
 
-    wo_id = _wo_with_acs(db, [_FAILING_AC])
+    wo_id = _wo_with_acs(db, [_UNRUNNABLE_AC])
     _store_verdict(
         db,
         wo_id,
@@ -553,6 +563,46 @@ def test_close_does_not_claim_execution_it_bypassed(db, tmp_path):
     warning = result.get("test_execution_warning") or ""
     assert warning, f"a forced close ran nothing — it must not imply it did: {result}"
     assert "not execution-backed" in warning
+
+
+def test_close_stays_quiet_when_the_checks_did_run_and_were_forced_past(db, tmp_path):
+    """A check that RAN and failed is execution — the force bypassed the failure, not
+    the run, and `bypassed_gates` already reports that. Saying "not execution-backed"
+    here would be the false caveat this measurement replaced."""
+    from unittest.mock import MagicMock, patch
+
+    from core.work_orders.close import close_work_order
+
+    wo_id = _wo_with_acs(db, [_FAILING_AC])
+    _store_verdict(
+        db,
+        wo_id,
+        {
+            "passed": True,
+            "test_execution": {
+                "registered": 1,
+                "executed": 0,
+                "passed": 0,
+                "basis": "not_run_at_verify",
+            },
+        },
+    )
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        result = close_work_order(
+            work_order_id=wo_id,
+            force=True,
+            source_root=tmp_path,
+            dream_studio_home=tmp_path,
+            planning_root=tmp_path / "planning",
+        )
+    assert result["ok"] is True
+    assert "test_execution_warning" not in result, (
+        "the check executed at close — reporting it as unexecuted would be the false"
+        f" caveat: {result.get('test_execution_warning')}"
+    )
+    assert result["bypassed_gates"], "the FAILURE is what was bypassed, and that is reported"
 
 
 # ── Task 4: the rule ships in canonical skill text ────────────────────────────

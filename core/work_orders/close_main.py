@@ -317,7 +317,10 @@ def close_work_order(
 
         # Always-on AC gate: run all executable checks across every task.
         # Runs regardless of WO type; additional to (not replacing) the existing gates.
-        ac_failures = _run_ac_gate(conn, work_order_id=work_order_id, db_path=db_path)
+        _ac_stats: dict[str, Any] = {}
+        ac_failures = _run_ac_gate(
+            conn, work_order_id=work_order_id, db_path=db_path, stats=_ac_stats
+        )
         gate_failures.extend(ac_failures)
 
         # Re-run the originating symptom SQL-CHECK (if captured at registration).
@@ -554,21 +557,16 @@ def close_work_order(
     try:
         from core.gates.merge_readiness import work_order_execution_caveat
 
-        # checks_ran_here is EARNED, not assumed. The first cut passed True
-        # unconditionally, on the reasoning that all_tests_pass executes every
-        # registered TEST-CHECK before a close completes — true on a clean close,
-        # false on a forced one that bypassed that very gate, and false for a WO
-        # whose gate list does not include it. Asserting execution that did not
-        # happen is exactly the claim this advisory exists to remove, so it is
-        # computed from what actually ran: the gate was in the WO's list AND it did
-        # not fail.
-        _gate_names: set[str] = set()
-        for _raw_gate in (meta.get("pre_gate"), meta.get("post_gate")):
-            if _raw_gate:
-                _gate_names.update(_raw_gate.split("|"))
-        _tests_gate_ran = "all_tests_pass" in _gate_names and not any(
-            str(f).startswith("all_tests_pass") for f in gate_failures
-        )
+        # checks_ran_here is EARNED, and it is measured at the place that actually
+        # runs them: the ALWAYS-ON AC gate above, which executes every TEST-CHECK on
+        # every close regardless of WO type. Two wrong versions preceded this one —
+        # asserting True unconditionally (a forced close bypasses execution and would
+        # have gone silent about it), then deriving it from the type's
+        # `all_tests_pass` gate, which most WO types do not list. The second printed
+        # a FALSE caveat on this feature's own clean close: "none ran during verify",
+        # moments after the AC gate had run all three. Counting what ran cannot be
+        # wrong in either direction.
+        _tests_gate_ran = int(_ac_stats.get("test_checks_executed") or 0) > 0
         _exec_caveat = work_order_execution_caveat(
             work_order_id,
             db_path=db_path,

@@ -581,6 +581,7 @@ def _run_ac_gate(
     *,
     work_order_id: str,
     db_path: Path,
+    stats: dict[str, Any] | None = None,
 ) -> list[str]:
     """Run all executable checks across a WO's tasks.  Return list of failure reasons.
 
@@ -589,6 +590,12 @@ def _run_ac_gate(
       (at least one check is required unless ``force=True``).
     - If any checks fail → returns a failure reason per failing check (up to 5).
     - If all checks pass → returns ``[]``.
+
+    ``stats``, when given, is filled with ``{"test_checks_executed": int}`` — how many
+    TEST-CHECKs this gate actually RAN. WO-SEPARATE-TEST-RUNNER needs that fact and
+    cannot re-derive it: re-running the checks to count them would pay the whole test
+    suite twice. The failure-reason list is unchanged, so existing callers are not
+    affected by asking.
     """
     from core.work_orders.verify import resolve_project_root, run_executable_checks
 
@@ -601,6 +608,16 @@ def _run_ac_gate(
     all_checks: list[dict[str, Any]] = []
     for task_checks in ac_results.values():
         all_checks.extend(task_checks)
+
+    if stats is not None:
+        # THIS gate is what executes a work order's tests at close time — not the
+        # type-specific `all_tests_pass`, which many WO types do not list. Deriving
+        # "did anything run here" from the type's gate list produced a FALSE caveat on
+        # e3a17189's own clean close: it reported "none ran during verify" moments
+        # after this gate had run all three.
+        stats["test_checks_executed"] = sum(
+            1 for c in all_checks if c.get("kind") == "TEST-CHECK" and c.get("executed")
+        )
 
     if not all_checks:
         # Design-only WOs whose deliverable is an operator-local docstore artifact (a spec, an
