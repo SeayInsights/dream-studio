@@ -399,34 +399,160 @@ def test_close_surfaces_a_verdict_that_nothing_executed(db, tmp_path):
     assert "not by running it" in warning
 
 
+def _wo_in_ready_set(db: Path, ac: str | None) -> tuple[str, str]:
+    """A project + milestone + open WO that ``get_project_state`` will actually pick.
+
+    The first version of this test grepped queries.py for the call instead of driving
+    the query. Its own verify called that out: a grep proves the line was typed, not
+    that the payload carries the key.
+    """
+    project_id, milestone_id, wo_id = str(uuid.uuid4()), str(uuid.uuid4()), str(uuid.uuid4())
+    now = "2026-08-20T00:00:00+00:00"
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+        (project_id, "P", "", "active", now, now),
+    )
+    conn.execute(
+        "INSERT INTO business_milestones"
+        " (milestone_id, project_id, title, description, status, order_index,"
+        "  created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+        (milestone_id, project_id, "M", "", "active", 1, now, now),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+        "  status, created_at, updated_at, sequence_order)"
+        " VALUES (?,?,?,'WO','d','infrastructure','in_progress',?,?,1)",
+        (wo_id, project_id, milestone_id, now, now),
+    )
+    conn.execute(
+        "INSERT INTO business_tasks"
+        " (task_id, work_order_id, project_id, title, description, status,"
+        "  created_at, updated_at, acceptance_criteria) VALUES (?,?,?,'t','','pending',?,?,?)",
+        (str(uuid.uuid4()), wo_id, project_id, now, now, ac),
+    )
+    conn.commit()
+    conn.close()
+    return project_id, wo_id
+
+
+def _state_for(db: Path, tmp_path: Path) -> dict:
+    from unittest.mock import MagicMock, patch
+
+    from core.projects.queries import get_project_state
+
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        return get_project_state(source_root=tmp_path, dream_studio_home=tmp_path)
+
+
 def test_project_state_surfaces_it_where_an_agent_orients(db, tmp_path):
     """Resume is where an agent decides what state the work is in. Same silence
-    removal as the unverified-risk ledger and the main-CI advisory beside it."""
-    from core.gates.merge_readiness import work_order_execution_caveat
+    removal as the unverified-risk ledger and the main-CI advisory beside it.
 
-    wo_id = _wo_with_acs(db, [None])
+    `not_run_at_verify` on purpose: project state runs nothing, so a registered but
+    unexecuted check is genuinely still unexecuted when an operator reads this.
+    """
+    _project_id, wo_id = _wo_in_ready_set(db, "TEST-CHECK: tests/unit/test_x.py::test_y")
     _store_verdict(
         db,
         wo_id,
         {
             "passed": True,
             "test_execution": {
-                "registered": 0,
+                "registered": 2,
                 "executed": 0,
                 "passed": 0,
-                "basis": "none_registered",
+                "basis": "not_run_at_verify",
             },
         },
     )
-    caveat = work_order_execution_caveat(wo_id, db_path=db)
-    assert caveat and "no TEST-CHECK" in caveat
+    state = _state_for(db, tmp_path)
+    assert state["ok"] is True
+    wo_info = state["projects"][0]["next_work_order"]
+    assert wo_info["work_order_id"] == wo_id
+    warning = wo_info.get("test_execution_warning")
+    assert warning, f"project state must carry the basis: {wo_info}"
+    assert "2 TEST-CHECK" in warning
+    assert "not execution-backed" in warning
 
-    # And project state actually reads it — the wiring, not just the reader. A
-    # grep is the honest check here: seeding a full active project + milestone to
-    # drive get_project_state would test the seeding, not the wiring.
-    queries = (_REPO / "core" / "projects" / "queries.py").read_text(encoding="utf-8")
-    assert "work_order_execution_caveat" in queries
-    assert '"test_execution_warning"' in queries
+
+def test_project_state_stays_quiet_for_an_execution_backed_verdict(db, tmp_path):
+    """And for one that predates the field. A note on every WO is a note nobody
+    reads, and absence must never be rendered as either a warning or as proof."""
+    _project_id, backed_wo = _wo_in_ready_set(db, "TEST-CHECK: tests/unit/test_x.py::test_y")
+    _store_verdict(
+        db,
+        backed_wo,
+        {
+            "passed": True,
+            "test_execution": {"registered": 2, "executed": 2, "passed": 2, "basis": "executed"},
+        },
+    )
+    backed = _state_for(db, tmp_path)["projects"][0]["next_work_order"]
+    assert backed["work_order_id"] == backed_wo
+    assert "test_execution_warning" not in backed
+
+    legacy_db = db.parent / "legacy.db"
+    bootstrap_database(legacy_db)
+    _project_id, legacy_wo = _wo_in_ready_set(legacy_db, None)
+    _store_verdict(legacy_db, legacy_wo, {"passed": True, "completion": {"summary": "older run"}})
+    legacy = _state_for(legacy_db, tmp_path)["projects"][0]["next_work_order"]
+    assert legacy["work_order_id"] == legacy_wo
+    assert "test_execution_warning" not in legacy
+
+
+def test_resume_skill_text_tells_the_agent_to_surface_it(db):
+    """An engine key with no reader is the defect this milestone keeps finding. The
+    briefing composed by resume mode has to name the key, or the payload is talking
+    to nobody."""
+    text = _flat((_CANONICAL / "ds-project" / "SKILL.md").read_text(encoding="utf-8"))
+    assert "test_execution_warning" in text
+    assert "verbatim" in text
+    assert "advisory" in text or "must not block" in text
+
+
+def test_close_does_not_claim_execution_it_bypassed(db, tmp_path):
+    """Found by this WO's own verify. The first cut asserted `checks_ran_here=True`
+    unconditionally, reasoning that all_tests_pass runs the checks before any close.
+    A FORCED close bypasses that gate — so a `not_run_at_verify` verdict went silent
+    on the strength of an execution that never happened, which is precisely the
+    false implicit claim this advisory was built to remove."""
+    from unittest.mock import MagicMock, patch
+
+    from core.work_orders.close import close_work_order
+
+    wo_id = _wo_with_acs(db, [_FAILING_AC])
+    _store_verdict(
+        db,
+        wo_id,
+        {
+            "passed": True,
+            "test_execution": {
+                "registered": 1,
+                "executed": 0,
+                "passed": 0,
+                "basis": "not_run_at_verify",
+            },
+        },
+    )
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        result = close_work_order(
+            work_order_id=wo_id,
+            force=True,  # bypasses all_tests_pass — nothing ran
+            source_root=tmp_path,
+            dream_studio_home=tmp_path,
+            planning_root=tmp_path / "planning",
+        )
+    assert result["ok"] is True
+    warning = result.get("test_execution_warning") or ""
+    assert warning, f"a forced close ran nothing — it must not imply it did: {result}"
+    assert "not execution-backed" in warning
 
 
 # ── Task 4: the rule ships in canonical skill text ────────────────────────────

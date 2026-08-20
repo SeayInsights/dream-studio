@@ -554,11 +554,26 @@ def close_work_order(
     try:
         from core.gates.merge_readiness import work_order_execution_caveat
 
-        # checks_ran_here: all_tests_pass just executed every registered TEST-CHECK,
-        # so "registered but not run at verify" is no longer true by the time a close
-        # completes — saying it anyway would print on nearly every close.
+        # checks_ran_here is EARNED, not assumed. The first cut passed True
+        # unconditionally, on the reasoning that all_tests_pass executes every
+        # registered TEST-CHECK before a close completes — true on a clean close,
+        # false on a forced one that bypassed that very gate, and false for a WO
+        # whose gate list does not include it. Asserting execution that did not
+        # happen is exactly the claim this advisory exists to remove, so it is
+        # computed from what actually ran: the gate was in the WO's list AND it did
+        # not fail.
+        _gate_names: set[str] = set()
+        for _raw_gate in (meta.get("pre_gate"), meta.get("post_gate")):
+            if _raw_gate:
+                _gate_names.update(_raw_gate.split("|"))
+        _tests_gate_ran = "all_tests_pass" in _gate_names and not any(
+            str(f).startswith("all_tests_pass") for f in gate_failures
+        )
         _exec_caveat = work_order_execution_caveat(
-            work_order_id, db_path=db_path, planning_root=p_root, checks_ran_here=True
+            work_order_id,
+            db_path=db_path,
+            planning_root=p_root,
+            checks_ran_here=_tests_gate_ran,
         )
         if _exec_caveat:
             result["test_execution_warning"] = _exec_caveat

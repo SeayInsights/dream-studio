@@ -354,7 +354,14 @@ Parse the first project in `projects[]`. Compose a plain English briefing:
 > **Next:** [next_work_order.title] ([type_label])
 > **Status:** [status]
 > [If gotchas exist]: **Watch out for:** [gotchas[0].title]
+> [If `next_work_order.test_execution_warning` exists]: **Not execution-backed:** [that line verbatim]
 > [If gate blocked]: **Blocker:** [next_action from response]"
+
+`test_execution_warning` says a stored review verdict certified this work order by
+READING rather than by running its tests. Surface it verbatim when present; it is
+advisory and must not block or be paraphrased into a verdict. Absent means the
+verdict was execution-backed or predates the field — never render absence as a
+warning, and never render it as confirmed execution either.
 
 Then end with this exact gate — no variations:
 
@@ -445,4 +452,5 @@ A scope session that produces "TBD" in any field has failed the quality bar. Ask
 
 <!-- Reviewed 2026-08-19 — WO-MAINRED-VISIBILITY (9a9e23da): core/projects/queries.py::get_project_state gains an ADDITIVE main_ci key — {status: success|failure|running|unknown, red, conclusion, head_sha, run_url, title, reason, warning?} — reading the latest post-merge "Full CI" run for main via core/health/main_ci.py. Rationale: pr-smoke green is merge authorization, not proof main is green (the full suite runs post-merge, ubuntu-only), and main sat red across eight merges with no surface reporting it. Resume mode MAY surface the one-line main_ci.warning when red is true; it must NOT block or gate on it (someone else's red main must not stop unrelated work) and must render status unknown as unknown WITH its reason, never as green. No existing key changed, no new mode, routing keyword, or CLI surface. -->
 
+<!-- Reviewed 2026-08-20 — WO-SEPARATE-TEST-RUNNER gap (e3a17189): core/projects/queries.py::get_project_state gains an ADDITIVE next_work_order.test_execution_warning key — one sentence, built by core/gates/merge_readiness.py::execution_caveat from the WO's stored verdict's test_execution.basis (none_registered | not_run_at_verify). Rationale: verify records whether a certification rested on RUNNING the work order's tests or on reading its code, and that distinction previously existed only at `ds work-order merge-check` — so a WO verified by a review that never executed a test was surfaced on resume as plainly certified. Resume mode SHOULD surface the line verbatim when present; it must NOT block and must NOT treat absence as either a warning or as confirmed execution (a verdict predating the field cannot answer). No existing key changed, no new mode, routing keyword, or CLI surface. -->
 <!-- Reviewed 2026-08-19 — WO-MAINCI-CACHE (c14c2eea): the main_ci key on get_project_state is unchanged in shape but may now be served from a SHORT-TTL CACHE. core/projects/queries.py passes max_age_seconds=CACHE_MAX_AGE_SECONDS (300s) because project state runs on every resume and was paying a gh round trip each time — typically ~1s, worst case the full 25s timeout when gh is unreachable or unauthenticated. Every main_ci payload now carries as_of (ISO time the status was actually READ from gh) and age_seconds (0 when live, >0 when cached), and main_ci.warning states its own age, e.g. "(cached, 4 min old)". Resume mode MUST NOT present a cached status as current: when age_seconds is non-zero, say so if it surfaces the line at all — a red that has since been fixed is exactly the case an operator needs to be able to tell apart, and this surface's whole value is that what it says about main can be trusted. Caching is opt-in at the call site and the reader's default is a live read, so nothing else changes behaviour; `close` deliberately reads live. Advisory semantics are untouched: still never blocks, still renders unknown as unknown with its reason, still never fabricates green. No key removed or renamed, no new mode, routing keyword, or CLI surface. -->
