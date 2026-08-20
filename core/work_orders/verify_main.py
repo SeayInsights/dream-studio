@@ -412,10 +412,29 @@ def verify_work_order(
                 authority_certified = True
 
         if git_diff is None and not os.environ.get(_MOCK_ENV):
+            # WO-VERIFY-GRADES-DELIVERY task 5: NO FALSE-UNREVIEWABLE. Reaching here
+            # now means every layer was empty — the recorded commit range, the
+            # boundary-scoped working tree, the boundary files themselves, the
+            # commit-message grep, and the WO's own executable checks. That is a
+            # finding about the WORK (a work order that delivered nothing findable),
+            # not the metadata artifact this message used to describe.
+            #
+            # The old wording blamed the work for a bookkeeping miss: "no commits
+            # found referencing <id> or '<title>'" told an operator to go looking
+            # for commits when the real problem was often that nothing had recorded
+            # where to look. It must now say what was actually tried, so the reader
+            # can tell "nothing was delivered" from "the boundary was never
+            # stamped" — which have opposite remedies.
             token = wo["title"].split(" - ")[0].strip()
+            _why = _boundary_note or "no delivery boundary recorded for this work order"
             warning = (
-                f"independent review unreviewable: no commits found referencing "
-                f"{work_order_id[:8]} or '{token}'. Work is NOT certified — review manually."
+                "independent review unreviewable: no delivered change could be located"
+                f" for {work_order_id[:8]}. Tried: recorded delivery boundary"
+                f" ({_why}); commit-message search for {work_order_id[:8]} or"
+                f" '{token}'; and this work order's own executable checks."
+                " Work is NOT certified — if the work exists, verify from the"
+                " branch/commit where it landed; if the boundary was never stamped,"
+                " re-start the work order so it is."
             )
             scores = {
                 "completion_score": 0.0,

@@ -590,7 +590,14 @@ def test_the_range_diff_is_the_primary_evidence(db, tmp_path):
     }
     for args in (["add", "."], ["commit", "-qm", "totally unrelated subject line"]):
         subprocess.run(
-            ["git", *args], cwd=str(repo), capture_output=True, text=True, env=env, timeout=30
+            ["git", *args],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            timeout=30,
         )
 
     text, note = boundary_diff_text(wo_id, repo_root=repo, db_path=db)
@@ -653,3 +660,66 @@ def test_caveats_are_carried_so_a_partial_view_is_never_presented_as_whole(db, t
     text, note = boundary_diff_text(wo_id, repo_root=plain, db_path=db)
     assert text is None
     assert note and "Module boundary" in note
+
+
+# ── No false-unreviewable (task 5) ─────────────────────────────────────────────
+
+
+def test_the_unreviewable_message_names_every_layer_it_tried(db, tmp_path, monkeypatch):
+    """The old wording — "no commits found referencing <id> or '<title>'" — blamed
+    the WORK for a bookkeeping miss, sending an operator to look for commits when
+    the real problem was often that nothing had recorded where to look. Those two
+    have opposite remedies, so the message has to distinguish them.
+    """
+    import sqlite3
+    from unittest.mock import MagicMock
+
+    from core.work_orders.verify_main import verify_work_order
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    project_id, wo_id = str(uuid.uuid4()), str(uuid.uuid4())
+    now = "2026-08-20T00:00:00+00:00"
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at, project_path)"
+        " VALUES (?,?,?,?,?,?,?)",
+        (project_id, "P", "", "active", now, now, str(repo)),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+        "  status, created_at, updated_at)"
+        " VALUES (?,?,NULL,'Nothing was delivered here','no boundary','infrastructure',"
+        "         'in_progress',?,?)",
+        (wo_id, project_id, now, now),
+    )
+    conn.execute(
+        "INSERT INTO business_tasks"
+        " (task_id, work_order_id, project_id, title, description, status, created_at, updated_at)"
+        " VALUES (?,?,?,'t','d','complete',?,?)",
+        (str(uuid.uuid4()), wo_id, project_id, now, now),
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.delenv("DREAM_STUDIO_VERIFY_MOCK", raising=False)
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    fake_paths.dream_studio_home = tmp_path
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        result = verify_work_order(
+            work_order_id=wo_id,
+            source_root=repo,
+            dream_studio_home=tmp_path,
+            planning_root=tmp_path / "planning",
+        )
+
+    summary = (result.get("summary") or "") + (result.get("warning") or "")
+    assert "unreviewable" in summary
+    # It must name what was tried, not just what was not found.
+    assert "recorded delivery boundary" in summary
+    assert "executable checks" in summary
+    # And it must offer the two distinct remedies.
+    assert "where it landed" in summary
+    assert "re-start the work order" in summary
