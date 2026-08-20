@@ -161,9 +161,11 @@ def _run_one_test_check(expr: str, project_root: Path | None = None) -> dict[str
             argv = shlex.split(raw)
         except ValueError as exc:
             check["error"] = f"TEST-CHECK cmd: unparseable command {raw!r} — {exc}"
+            check["not_executed_reason"] = "the command could not be parsed into argv"
             return check
         if not argv:
             check["error"] = "TEST-CHECK cmd: empty command"
+            check["not_executed_reason"] = "the command was empty"
             return check
     else:
         argv = [sys.executable, "-m", "pytest", stripped, "-q", "--tb=short", "--no-header"]
@@ -208,7 +210,11 @@ def _run_one_test_check(expr: str, project_root: Path | None = None) -> dict[str
         check["executed"] = False
         check["not_executed_reason"] = "the command does not exist here"
     except Exception as exc:
+        # executed is re-forced rather than left to the default: it is set True the
+        # moment subprocess.run returns, so a future edit that raises after that point
+        # must not leave a verdict-less result claiming execution.
         check["error"] = str(exc)
+        check["executed"] = False
         check["not_executed_reason"] = f"{type(exc).__name__} before the check produced a verdict"
     return check
 
