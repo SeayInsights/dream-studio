@@ -306,3 +306,77 @@ def test_no_recorded_boundary_says_so_rather_than_going_quiet(db, tmp_path):
     )
     conn.close()
     assert "No delivery boundary was recorded" in reason
+
+
+# ── The claim itself (task 5 of the WO): one WO, two checkouts ─────────────────
+
+
+def test_one_work_order_two_checkouts_one_verdict(db, tmp_path):
+    """The claim this whole work order rests on, reconstructed rather than cited.
+
+    758fbedd is now closed, so it is no longer evidence of an unsatisfiable gate —
+    citing it would be citing a fixed bug. What it DID prove is reproduced here:
+    the same work order, the same acceptance criterion, two different checkouts,
+    and previously two different verdicts with no change to the delivered work.
+
+    Before: checkout A (test present) -> passed; checkout B (test absent) ->
+    "TEST-CHECK command exited with code 4", indistinguishable from a real
+    assertion failure. An operator reading verdict B concludes the work is broken.
+
+    After: B is reported as UNVERIFIED / could-not-be-RUN, naming both the
+    delivery point and the current checkout. The verdict about the WORK is the
+    same in both — because the work did not change.
+    """
+    from core.work_orders.close_gates import run_gate_check
+
+    # Checkout A: the criterion's target exists here.
+    checkout_a = tmp_path / "a"
+    checkout_a.mkdir()
+    (checkout_a / "test_delivered.py").write_text(
+        "def test_shipped():\n    assert True\n", encoding="utf-8"
+    )
+    # Checkout B: same WO, same criterion, target absent.
+    checkout_b = tmp_path / "b"
+    checkout_b.mkdir()
+
+    wo_id = _wo_with_check(db, "test_delivered.py::test_shipped")
+
+    def _gate(project_path: Path) -> tuple[bool, str]:
+        conn = sqlite3.connect(str(db))
+        conn.execute(
+            "UPDATE business_projects SET project_path = ? WHERE project_id = ("
+            "  SELECT project_id FROM business_work_orders WHERE work_order_id = ?)",
+            (str(project_path), wo_id),
+        )
+        conn.commit()
+        conn.row_factory = sqlite3.Row
+        try:
+            return run_gate_check(
+                "all_tests_pass",
+                planning_root=tmp_path,
+                work_order_id=wo_id,
+                project_id="",
+                conn=conn,
+                db_path=db,
+            )
+        finally:
+            conn.close()
+
+    passed_a, reason_a = _gate(checkout_a)
+    passed_b, reason_b = _gate(checkout_b)
+
+    assert passed_a is True, f"the delivered work passes where it exists: {reason_a}"
+
+    # B still does not pass — no false green, the work genuinely was not verified
+    # here. But it must not read as a verdict against the work.
+    assert passed_b is False
+    assert "UNVERIFIED" in reason_b
+    assert "could not be RUN" in reason_b
+    assert "none actually failed" in reason_b
+    assert "not a verdict about the work" in reason_b
+
+    # The old message is gone: B must not claim a test failed.
+    assert "TEST-CHECK(s) failed" not in reason_b, (
+        "checkout B previously reported a FAILED test for work that was fine — "
+        "that is the misreport this work order exists to remove"
+    )
