@@ -58,6 +58,7 @@ from .verify_db import (
 from .verify_executor import resolve_project_root, run_executable_checks
 from .verify_gaps import (
     _falsification_to_gaps,
+    normalise_falsification_scenarios,
     _filter_invented_threshold_gaps,
     _insert_gap_work_orders,
     _migration_risks_to_gaps,
@@ -647,15 +648,11 @@ def verify_work_order(
         # calling .get() on every element — so the very reply the task describes
         # still raised AttributeError here, INSIDE verify's open authority
         # transaction, taking down the whole verify. Hardening one of two readers of
-        # the same untrusted payload leaves the failure exactly where it was; both
-        # normalise the shape now.
-        _raw_scenarios = falsification.get("scenarios") if falsification else None
-        if isinstance(_raw_scenarios, dict):  # a single scenario object, not a list
-            _raw_scenarios = [_raw_scenarios]
-        elif not isinstance(_raw_scenarios, list):
-            _raw_scenarios = []
-        _fals_scenarios: list[dict[str, Any]] = [s for s in _raw_scenarios if isinstance(s, dict)]
-        _fals_malformed = len(_raw_scenarios) - len(_fals_scenarios)
+        # the same untrusted payload leaves the failure exactly where it was, so the
+        # shape contract now lives in ONE shared normaliser both readers call.
+        _fals_scenarios, _fals_malformed = normalise_falsification_scenarios(
+            falsification.get("scenarios") if falsification else None
+        )
         all_gaps.extend(_falsification_to_gaps(_fals_scenarios))
         _unverified = [s for s in _fals_scenarios if s.get("status") == "UNVERIFIED"]
 

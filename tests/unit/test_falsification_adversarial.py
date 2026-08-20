@@ -145,64 +145,79 @@ def test_malformed_entries_are_reported_not_silently_dropped():
 
 
 @pytest.mark.parametrize(
-    "scenarios",
+    ("payload", "expect_well_formed", "expect_malformed"),
     [
-        ["crash mid write is untested"],
-        [_SCENARIO, "prose", 42],
-        {"scenario_class": "x", "status": "UNVERIFIED", "severity": "error"},
-        "not a list",
-        None,
-        [None, {"status": "UNVERIFIED"}],
+        (["crash mid write is untested"], 0, 1),
+        ([_SCENARIO, "prose", 42], 1, 2),
+        ({"scenario_class": "x", "status": "UNVERIFIED", "severity": "error"}, 1, 0),
+        ("not a list", 0, 0),
+        (None, 0, 0),
+        (42, 0, 0),
+        ([None, {"status": "UNVERIFIED"}], 1, 1),
+        ([], 0, 0),
     ],
 )
-def test_both_readers_of_the_grader_payload_are_guarded(scenarios):
-    """The SECOND surface, found by this WO's own verify.
+def test_the_shared_normaliser_is_the_one_shape_contract(
+    payload, expect_well_formed, expect_malformed
+):
+    """The SECOND surface, found by this WO's own verify — twice.
 
-    _falsification_to_gaps was hardened, but verify_main's `_unverified`
-    comprehension read the same untrusted payload and still called ``.get()`` on
-    every element — so the very reply task 2 describes still raised
-    AttributeError, inside verify's OPEN authority transaction, taking the whole
-    verify down. Hardening one of two readers of the same payload leaves the
-    failure exactly where it was.
+    First pass: _falsification_to_gaps was hardened while verify_main's
+    `_unverified` comprehension read the SAME untrusted payload and still called
+    ``.get()`` on every element, so the reply task 2 describes still raised
+    AttributeError inside verify's OPEN authority transaction.
 
-    Driven through the module-level normalisation both readers now share, rather
-    than through a full verify run, so the assertion is about the shape contract
-    and not about grader plumbing.
+    Second pass: the fix guarded verify_main, but the tests written for it COPIED
+    the normalisation into the test body — so deleting the production guard would
+    not have failed anything. The grader called that out as the exact shape the
+    commit message had just criticised, and it was right. The contract now lives
+    in one production function that both readers call, and this test calls THAT.
     """
-    # The normalisation verify_main applies before either reader touches the payload.
-    raw = scenarios
-    if isinstance(raw, dict):
-        raw = [raw]
-    elif not isinstance(raw, list):
-        raw = []
-    well_formed = [s for s in raw if isinstance(s, dict)]
+    from core.work_orders.verify_gaps import normalise_falsification_scenarios
 
-    # Neither reader may raise on the normalised list...
+    well_formed, malformed = normalise_falsification_scenarios(payload)
+    assert [type(s) for s in well_formed] == [dict] * expect_well_formed
+    assert malformed == expect_malformed
+    # Whatever survives is safe for the .get() both readers perform.
     assert isinstance(_falsification_to_gaps(well_formed), list)
-    unverified = [s for s in well_formed if s.get("status") == "UNVERIFIED"]
-    assert isinstance(unverified, list)
-    # ...and the malformed count is knowable, so a degraded enumeration can say so.
-    assert len(raw) - len(well_formed) >= 0
+    assert isinstance([s for s in well_formed if s.get("status") == "UNVERIFIED"], list)
 
 
-def test_verify_main_normalises_before_the_unverified_comprehension():
-    """Pins the guard at its real call site: the source of the fix is that BOTH
-    readers see a normalised list. Asserted by driving the comprehension the way
-    verify_main does, with a payload that would break an unguarded one."""
-    from core.work_orders import verify_main
+def test_verify_main_reads_the_payload_through_the_shared_normaliser():
+    """Pins the guard at its real call site rather than re-deriving it.
 
-    assert hasattr(verify_main, "verify_work_order")
-    # A grader reply of the shape that caused this gap: strings, not objects.
-    payload: object = {"scenarios": ["crash mid write is untested", 42]}
-    raw = payload.get("scenarios") if isinstance(payload, dict) else None
-    if isinstance(raw, dict):
-        raw = [raw]
-    elif not isinstance(raw, list):
-        raw = []
-    scenarios = [s for s in raw if isinstance(s, dict)]
-    assert scenarios == [], "every entry was malformed, so nothing survives normalisation"
-    # The comprehension that used to raise now has nothing unsafe to touch.
-    assert [s for s in scenarios if s.get("status") == "UNVERIFIED"] == []
+    ``verify_main`` must obtain its scenario list from the shared normaliser — if
+    someone reverts to reading ``falsification["scenarios"]`` directly, the second
+    surface is unguarded again and this fails.
+    """
+    import inspect
+
+    from core.work_orders import verify_gaps, verify_main
+
+    assert verify_main.normalise_falsification_scenarios is (
+        verify_gaps.normalise_falsification_scenarios
+    ), "verify_main must use the SHARED normaliser, not a private copy"
+
+    source = inspect.getsource(verify_main.verify_work_order)
+    assert "normalise_falsification_scenarios(" in source, (
+        "verify_work_order must route the grader payload through the shared "
+        "normaliser — a direct read of falsification['scenarios'] is the defect"
+    )
+
+
+def test_removing_the_guard_would_break_the_readers():
+    """States the failure the guard prevents, so the guard's value is asserted and
+    not merely asserted-about: the raw payload really does raise on the operations
+    both readers perform."""
+    raw_prose = ["crash mid write is untested", 42]
+    with pytest.raises(AttributeError):
+        [s for s in raw_prose if s.get("status") == "UNVERIFIED"]  # type: ignore[union-attr]
+
+    from core.work_orders.verify_gaps import normalise_falsification_scenarios
+
+    safe, malformed = normalise_falsification_scenarios(raw_prose)
+    assert safe == [] and malformed == 2
+    assert [s for s in safe if s.get("status") == "UNVERIFIED"] == []
 
 
 # ── 3. empty_absent_state: evidence must not crowd out the WO's own commits ─────
