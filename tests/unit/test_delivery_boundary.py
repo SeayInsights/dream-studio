@@ -240,3 +240,96 @@ def test_the_boundary_payload_is_json_and_self_describing(db, tmp_path):
     assert payload["start_commit"] == head
     assert payload["repo_root"] == str(repo)
     assert envelope, "the boundary carries provenance like every other gate artifact"
+
+
+def test_start_reports_the_boundary_it_stamped(db, tmp_path):
+    """A boundary recorded where nobody can see it is the
+    engine-key-with-no-reader shape this milestone keeps finding."""
+    from unittest.mock import MagicMock
+
+    from core.work_orders.start_main import start_work_order
+
+    repo, head = _git_repo(tmp_path / "repo")
+    project_id, wo_id = str(uuid.uuid4()), str(uuid.uuid4())
+    now = "2026-08-20T00:00:00+00:00"
+
+    import sqlite3
+
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at, project_path)"
+        " VALUES (?,?,?,?,?,?,?)",
+        (project_id, "P", "", "active", now, now, str(repo)),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+        "  status, created_at, updated_at) VALUES (?,?,NULL,'WO','d','infrastructure','created',?,?)",
+        (wo_id, project_id, now, now),
+    )
+    conn.commit()
+    conn.close()
+
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    fake_paths.dream_studio_home = tmp_path
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        result = start_work_order(
+            work_order_id=wo_id,
+            source_root=tmp_path,
+            dream_studio_home=tmp_path,
+            planning_root=tmp_path / "planning",
+            accept_no_brief=True,
+        )
+    assert result["delivery_boundary"]["start_commit"] == head
+    assert result["delivery_boundary"]["recorded"] is True
+    # A clean stamp is quiet — the note exists for the failure case.
+    assert "delivery_boundary_note" not in result
+
+
+def test_start_says_so_when_no_boundary_could_be_stamped(db, tmp_path):
+    """The case that matters most: verify will silently fall back to the uuid grep,
+    so the operator has to be told why."""
+    from unittest.mock import MagicMock
+
+    from core.work_orders.start_main import start_work_order
+
+    plain = tmp_path / "not-a-repo"
+    plain.mkdir()
+    project_id, wo_id = str(uuid.uuid4()), str(uuid.uuid4())
+    now = "2026-08-20T00:00:00+00:00"
+
+    import sqlite3
+
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at, project_path)"
+        " VALUES (?,?,?,?,?,?,?)",
+        (project_id, "P", "", "active", now, now, str(plain)),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+        "  status, created_at, updated_at) VALUES (?,?,NULL,'WO','d','infrastructure','created',?,?)",
+        (wo_id, project_id, now, now),
+    )
+    conn.commit()
+    conn.close()
+
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    fake_paths.dream_studio_home = tmp_path
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        result = start_work_order(
+            work_order_id=wo_id,
+            source_root=tmp_path,
+            dream_studio_home=tmp_path,
+            planning_root=tmp_path / "planning",
+            accept_no_brief=True,
+        )
+    assert result["delivery_boundary"]["start_commit"] is None
+    note = result.get("delivery_boundary_note") or ""
+    assert "no start commit was stamped" in note
+    assert "commit-message search" in note, "the operator must learn what verify will do instead"

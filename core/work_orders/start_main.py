@@ -266,4 +266,21 @@ def start_work_order(
     # pending_audits feature retired (migration 131): writer defer_project_audit()
     # was dead, table dropped. The advisory reader is removed with it.
 
+    # WO-VERIFY-GRADES-DELIVERY: report the stamped boundary. A boundary recorded
+    # where nobody can see it is the engine-key-with-no-reader shape this milestone
+    # keeps finding — and it matters most in the case where it did NOT get
+    # recorded, because verify will silently fall back to the old uuid grep and the
+    # operator has no way to know why. Additive keys only.
+    result["delivery_boundary"] = {
+        "start_commit": _boundary.get("start_commit"),
+        "recorded": _boundary.get("recorded"),
+    }
+    if _boundary.get("start_commit_reason") or _boundary.get("record_error"):
+        result["delivery_boundary_note"] = (
+            "no start commit was stamped for this work order"
+            f" ({_boundary.get('start_commit_reason') or _boundary.get('record_error')})."
+            " Verify will fall back to locating the change set by commit-message"
+            " search, which fails for squash merges, reworded titles and unpushed work."
+        )
+
     return result
