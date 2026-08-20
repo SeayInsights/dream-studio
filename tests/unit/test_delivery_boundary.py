@@ -723,3 +723,31 @@ def test_the_unreviewable_message_names_every_layer_it_tried(db, tmp_path, monke
     # And it must offer the two distinct remedies.
     assert "where it landed" in summary
     assert "re-start the work order" in summary
+
+
+def test_the_locator_is_a_fallback_chain_not_a_concatenation(db, tmp_path):
+    """The boundary range REPLACES the grep when it has content, rather than being
+    appended to it.
+
+    The first cut made them additive, reasoning that a rebase can move work outside
+    the recorded range so both together see more. That WO's own verify then timed
+    out the completion grader at 360s: for any WO whose commits DO mention it, both
+    layers return the same commits and the grader input roughly doubles — a
+    universal cost to cover a rare case, paid from the one budget already tight.
+
+    So the range wins when it has content, and the rare rebase case degrades to
+    exactly what it was before this work order (the grep) rather than charging
+    every WO double.
+    """
+    import inspect
+
+    from core.work_orders import verify_main
+
+    src = inspect.getsource(verify_main.verify_work_order)
+    assert "_boundary_diff or _collect_git_commits(" in src, (
+        "the locator must be a fallback chain — range first, grep only when the " "range is empty"
+    )
+    assert 'f"{_boundary_diff}\n\n{git_diff}"' not in src, (
+        "concatenating both locators doubles the grader input for every WO whose "
+        "commits mention it"
+    )

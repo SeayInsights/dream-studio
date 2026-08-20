@@ -335,21 +335,27 @@ def verify_work_order(
         # "no commits found referencing 758fbedd", for work merged and green on all
         # three platforms.
         #
-        # Order matters: range first (a real diff, no message convention needed),
-        # then the grep (which adds commits the range might miss when work landed
-        # outside it, e.g. a rebase), so the two are additive rather than
-        # exclusive. `boundary_diff_text` returns None when it has nothing, leaving
-        # the old path exactly as it was for WOs that predate boundaries.
+        # The recorded boundary is the locator and the grep is the FALLBACK, not an
+        # addition. The first cut of this made them additive (reasoning: a rebase can
+        # move work outside the recorded range, so both together see more). Its own
+        # verify then timed out the completion grader at 360s — because for any WO
+        # whose commits DO mention it, both layers return the same commits and the
+        # grader input roughly doubles. A universal cost to cover a rare case, paid
+        # in the one budget that was already tight.
+        #
+        # So: use the range when it produced something, else fall back to the grep.
+        # The rare rebase case degrades to what it was before this WO — the grep —
+        # rather than costing every WO double input.
         from .delivery_boundary import boundary_diff_text
 
         _boundary_diff, _boundary_note = boundary_diff_text(
             work_order_id, repo_root=Path(_search_root), db_path=db_path
         )
-        git_diff = _collect_git_commits(_search_root, work_order_id, title=wo["title"])
+        git_diff = _boundary_diff or _collect_git_commits(
+            _search_root, work_order_id, title=wo["title"]
+        )
         if git_diff is None and originating_wo_id:
             git_diff = _collect_git_commits(_search_root, originating_wo_id)
-        if _boundary_diff:
-            git_diff = f"{_boundary_diff}\n\n{git_diff}" if git_diff else _boundary_diff
 
         # WO-GAP-EVIDENCE: remediation for THIS WO's review gaps is committed under
         # the spawned gap WOs' own ids — invisible to the parent-id collection above,
