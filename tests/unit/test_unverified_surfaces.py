@@ -280,3 +280,105 @@ def test_close_is_silent_when_no_analysis_ever_ran(tmp_path):
     result = _close(db, planning, tmp_path, wo_id)
     assert result["ok"] is True, result
     assert "unverified_risks_note" not in result
+
+
+# ── ds project state's main_ci key (gap WO c467f396) ───────────────────────────
+
+
+def test_project_state_carries_main_ci(tmp_path):
+    """The main_ci key WO-MAINRED-VISIBILITY added to get_project_state had no test
+    at all — the coverage grader caught it. It is the surface an operator and an
+    agent both orient from, so an untested additive key is one refactor away from
+    silently disappearing, which would restore the invisibility the WO removed.
+    """
+    db = _db(tmp_path)
+    project_id = str(uuid.uuid4())
+    _seed_wo(db, project_id, title="Open")
+
+    red = {
+        "status": "failure",
+        "conclusion": "failure",
+        "head_sha": "abc12345def",
+        "run_url": "https://github.com/x/y/actions/runs/7",
+        "title": "some merge",
+        "red": True,
+        "reason": None,
+        "as_of": "2026-08-19T23:00:00+00:00",
+        "age_seconds": 0,
+        "local_head_includes_run": True,
+        "local_head_reason": None,
+    }
+
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        with patch("core.health.main_ci.main_ci_status", return_value=red):
+            from core.projects.queries import get_project_state
+
+            state = get_project_state(
+                source_root=tmp_path, dream_studio_home=tmp_path, planning_root=tmp_path / "p"
+            )
+
+    assert "main_ci" in state, "project state must carry the post-merge CI verdict"
+    assert state["main_ci"]["red"] is True
+    assert state["main_ci"]["head_sha"] == "abc12345def"
+    # The rendered advisory travels with it, so resume mode has a line to print.
+    assert "main is RED" in state["main_ci"]["warning"]
+
+
+def test_project_state_main_ci_is_advisory_and_never_blocks(tmp_path):
+    """A red main from anyone's merge must not stop unrelated work, and an
+    unreadable signal must not become a fabricated verdict."""
+    db = _db(tmp_path)
+    project_id = str(uuid.uuid4())
+    _seed_wo(db, project_id, title="Open")
+
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+
+    # A reader that RAISES must not take project state down with it — the same
+    # partial_failure class the falsification analyst named for the doctor.
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        with patch("core.health.main_ci.main_ci_status", side_effect=RuntimeError("gh exploded")):
+            from core.projects.queries import get_project_state
+
+            state = get_project_state(
+                source_root=tmp_path, dream_studio_home=tmp_path, planning_root=tmp_path / "p"
+            )
+    assert state["ok"] is True, "an advisory read must never fail project state"
+    assert state["main_ci"]["status"] == "unknown"
+    assert state["main_ci"]["red"] is False
+    assert state["main_ci"].get("reason"), "an unknown must say why"
+    # And the project list itself is intact — the payload is not truncated.
+    assert any(p["project_id"] == project_id for p in state["projects"])
+
+
+def test_project_state_main_ci_green_carries_no_warning(tmp_path):
+    """No warning key on a green main: crying wolf trains operators to skip the
+    line that matters."""
+    db = _db(tmp_path)
+    _seed_wo(db, str(uuid.uuid4()), title="Open")
+    green = {
+        "status": "success",
+        "conclusion": "success",
+        "head_sha": "aaa",
+        "run_url": "u",
+        "title": "t",
+        "red": False,
+        "reason": None,
+        "as_of": "2026-08-19T23:00:00+00:00",
+        "age_seconds": 0,
+        "local_head_includes_run": None,
+        "local_head_reason": None,
+    }
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        with patch("core.health.main_ci.main_ci_status", return_value=green):
+            from core.projects.queries import get_project_state
+
+            state = get_project_state(
+                source_root=tmp_path, dream_studio_home=tmp_path, planning_root=tmp_path / "p"
+            )
+    assert state["main_ci"]["status"] == "success"
+    assert "warning" not in state["main_ci"]

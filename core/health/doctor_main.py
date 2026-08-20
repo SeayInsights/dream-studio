@@ -84,10 +84,24 @@ def run_doctor_checks(
     # and is otherwise entirely local, so paying a gh round trip (up to 25s when
     # gh is unreachable) every time was the wrong trade for a signal that changes
     # on the order of tens of minutes. A cached result states its age.
-    main_ci_info = main_ci_status(repo_root=source_root, max_age_seconds=CACHE_MAX_AGE_SECONDS)
-    _main_ci_warning = main_ci_warning(main_ci_info)
-    if _main_ci_warning:
-        main_ci_info["warning"] = _main_ci_warning
+    #
+    # Gap WO 094f3c12 (partial_failure, named by the falsification analyst): this
+    # is the LAST check in the report and the only one that leaves the machine, so
+    # an exception here discards every check already computed and hands the operator
+    # a traceback instead of a doctor payload. The reader is built not to raise, but
+    # "built not to" is what was believed before a TypeError from it took main red
+    # for a day. An advisory check earns no right to abort the report around it.
+    try:
+        main_ci_info = main_ci_status(repo_root=source_root, max_age_seconds=CACHE_MAX_AGE_SECONDS)
+        _main_ci_warning = main_ci_warning(main_ci_info)
+        if _main_ci_warning:
+            main_ci_info["warning"] = _main_ci_warning
+    except Exception as exc:  # noqa: BLE001 - advisory: report the failure, never propagate it
+        main_ci_info = {
+            "status": "unknown",
+            "red": False,
+            "reason": f"main CI status could not be read: {type(exc).__name__}: {exc}"[:200],
+        }
 
     core_pass = validation["ready"]
     critical_fail = (

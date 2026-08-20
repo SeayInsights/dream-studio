@@ -120,7 +120,11 @@ def test_second_call_is_served_from_cache_without_a_subprocess(db, tmp_path):
         first = main_ci_status(repo_root=repo, db_path=db, max_age_seconds=CACHE_MAX_AGE_SECONDS)
     assert first["status"] == "failure"
     assert first["age_seconds"] == 0, "a live read is age 0"
-    assert run.call_count == 1
+    # Count gh calls specifically: a RED status also probes git for the local-HEAD
+    # relationship (gap WO ebbd529c), so a bare call_count would pin an unrelated
+    # implementation detail and break the next time a probe is added.
+    gh_calls = [c for c in run.call_args_list if c.args and c.args[0] and c.args[0][0] == "gh"]
+    assert len(gh_calls) == 1
 
     # Second call: no subprocess at all. A patch that would EXPLODE if called
     # proves the network was not touched, rather than merely counting calls.

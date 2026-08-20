@@ -29,6 +29,7 @@ believe the WO is done but close reports a `tasks_done` failure, mark the remain
 
 4. **Surface the close result.** Close is **report-only** — it never auto-starts the next work order (that side effect used to pile up dangling in-progress WOs on every close).
    - If `gaps_block` is present, print it verbatim — the independent review found gaps and registered a remediation WO (`spawned_work_orders`). Surface its `next_command` so the operator can start it when ready.
+   - If `main_ci_warning` is present, **print it verbatim.** It is advisory — it never blocks the close and never means this WO failed. A red `main` from someone else's merge must not stop unrelated work; the defect it fixes was invisibility, not permissiveness. The line states whether the failing run **includes your local HEAD** (your own work is in it) or **predates** it, and says so when that is unknown. Do not paraphrase it into a verdict, and do not re-run gates because of it.
    - If `milestone_complete` is present, the milestone is done: surface `next_command` (milestone close) and stop.
    - Otherwise surface `next_block` / `next_command` (the ready-set next WO) so the user knows what's next, then **stop** — starting the next WO is an explicit operator decision on the interactive path.
    - **Autonomous execute-work-orders loop only:** the workflow's `next-iteration` node starts the advertised next WO and re-invokes the loop. The interactive close path does not chain.
@@ -73,6 +74,8 @@ Close is report-only: after a clean close on the interactive path, surface `next
         "forced": bool,
         "bypassed_gates": [str, ...],          # populated when forced
         "verify_warning": str | absent,        # inline verify was unreviewable (no commit evidence) — surface verbatim
+        "main_ci_warning": str | absent,       # post-merge Full CI for main is RED — surface verbatim, advisory
+        "main_ci": {...} | absent,             # the reading behind it (status/red/head_sha/run_url/as_of/age_seconds/local_head_includes_run)
         "next_work_order": {...} | absent,     # next open WO in same milestone
         "next_command": str | absent,          # explicit next-step hint
         "next_block": str,                     # printable NEXT WORK ORDER / MILESTONE COMPLETE / none-found block
@@ -87,6 +90,26 @@ Close is report-only: after a clean close on the interactive path, surface `next
     # is no `auto_started`/`auto_start_error` key. Starting the next WO is an explicit
     # operator action (or the execute-work-orders workflow's next-iteration node).
 
+## After the merge: pr-smoke green is not proof main is green
+
+**DO** check the post-merge Full CI run for `main` after every merge:
+
+    gh run list --branch main --workflow "Full CI" --limit 3
+
+or read `checks.main_ci` (`ds doctor`) or `main_ci` (`ds project state`) — both carry the same reading, and both may serve a cached answer that states its own age.
+
+**DON'T** treat a green 3-platform matrix as proof `main` is healthy. Merge authorization and main's health are different claims measured by different suites:
+
+| Stage | What runs | What it proves |
+|---|---|---|
+| pre-push gates | 20 gates, local | this change set passes the local bar |
+| `pr-smoke` matrix (3 platforms) | ~11 focused files | **merge authorization** |
+| `full-ci` (post-merge, ubuntu only) | the full suite (~5,400 tests) | main is actually green |
+
+A merge can be correctly authorized and still break `main` — the full suite never ran before it landed. On 2026-08-19 `main` sat red across **eight** merges before an operator noticed, and twice more that day a red was found only because someone thought to look. Every one of those was a single failing test out of ~5,386.
+
+**DO** treat a red `main` you caused as the next thing you work on. **DON'T** let someone else's red block your close — `main_ci_warning` is advisory precisely so it cannot.
+
 ## Side effects
 
 - Runs a projection tick (`sync_tick`) before reading task statuses so freshly marked-done tasks are reflected (no false `tasks_done` failure from projection lag).
@@ -97,3 +120,4 @@ Close is report-only: after a clean close on the interactive path, surface `next
 - When `force=True` with failures, emits one `gate.bypassed` event per failure for audit.
 - When the post-build gate is `independent_review`, runs the fresh-context verify inline; review gaps register remediation WOs, reported via `gaps_block` + `spawned_work_orders` (not started — run the reported `next_command` to begin remediation).
 - When verify passes, advertises the project-wide ready-set next WO via `next_work_order` / `next_command` / `next_block` — **report-only, the WO is not started** (the autonomous execute-work-orders workflow starts it in its next-iteration node).
+- Reads the post-merge Full CI verdict for `main` (advisory) and, when it is RED, adds `main_ci_warning` + `main_ci` to the result. Reads **live** (never from the status cache that `ds doctor` / `ds project state` may use), because declaring work done is the one moment that must not be told about main by a cache. Never blocks, never fails a gate, never fabricates green: an unavailable/unauthenticated/timed-out `gh` yields `status="unknown"` **with a reason**.
