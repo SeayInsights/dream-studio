@@ -263,6 +263,89 @@ def working_tree_changes(
     return scoped, None
 
 
+_MAX_FALLBACK_FILES = 40
+_MAX_FALLBACK_BYTES = 200_000
+
+
+def boundary_file_contents(
+    work_order_id: str,
+    *,
+    repo_root: Path | None,
+    db_path: Path | None = None,
+) -> tuple[str, str | None]:
+    """Current content of the WO's boundary files. Returns ``(text, reason)``.
+
+    The layer that makes this foolproof: it needs no VCS at all. A non-git target,
+    a shallow clone with no usable range, a repo whose history was rewritten — in
+    every one of those the boundary files still exist on disk, and their content is
+    what the WO actually delivered.
+
+    Deliberately the LAST resort, because it shows the current state rather than
+    the change: a reviewer sees what the code is, not what this WO did to it. That
+    is weaker evidence than a diff and must never displace one — but it is
+    infinitely better than "unreviewable", which is what the grader says today when
+    the grep misses.
+
+    Bounded (``_MAX_FALLBACK_FILES`` files, ``_MAX_FALLBACK_BYTES`` chars) and the
+    truncation is REPORTED, because a silently clipped fallback is a partial
+    picture presented as a whole one.
+    """
+    if repo_root is None:
+        return "", "no repo root resolved for this work order"
+    globs = _module_boundary_globs(work_order_id, db_path)
+    if not globs:
+        return "", "this work order declares no 'Module boundary:' to read"
+
+    root = Path(repo_root)
+    collected: list[str] = []
+    used = 0
+    seen = 0
+    skipped_missing: list[str] = []
+
+    for glob in globs:
+        target = root / glob.rstrip("/")
+        candidates: list[Path] = []
+        if target.is_file():
+            candidates = [target]
+        elif target.is_dir():
+            candidates = sorted(p for p in target.rglob("*") if p.is_file())
+        else:
+            skipped_missing.append(glob)
+            continue
+        for path in candidates:
+            if seen >= _MAX_FALLBACK_FILES or used >= _MAX_FALLBACK_BYTES:
+                break
+            try:
+                body = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            seen += 1
+            rel = path.relative_to(root).as_posix() if path.is_relative_to(root) else str(path)
+            chunk = f"=== boundary file {rel} ===\n{body}\n"
+            collected.append(chunk)
+            used += len(chunk)
+
+    if not collected:
+        detail = (
+            f"none of the declared boundary paths exist: {', '.join(skipped_missing)}"
+            if skipped_missing
+            else "no readable files under the declared boundary"
+        )
+        return "", detail
+
+    text = "".join(collected)
+    truncated = seen >= _MAX_FALLBACK_FILES or used >= _MAX_FALLBACK_BYTES
+    reason = None
+    if truncated:
+        reason = (
+            f"boundary content truncated at {seen} file(s) / {used} chars — this is a"
+            " PARTIAL view of the declared boundary"
+        )
+    elif skipped_missing:
+        reason = f"declared boundary path(s) not present: {', '.join(skipped_missing)}"
+    return text[:_MAX_FALLBACK_BYTES], reason
+
+
 def boundary_commit_range(
     work_order_id: str, *, db_path: Path | None = None
 ) -> tuple[str | None, str | None]:

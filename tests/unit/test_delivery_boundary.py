@@ -475,3 +475,92 @@ def test_attribution_fails_closed_where_enforcement_fails_open(db, tmp_path):
     paths, reason = working_tree_changes(wo_id, repo_root=repo, db_path=db)
     assert paths == ["mine/x.py"], f"attribution must fail closed: {paths}"
     assert reason is None
+
+
+# ── Boundary-file fallback (task 3): the layer that needs no VCS ───────────────
+
+
+def test_boundary_content_is_readable_with_no_git_at_all(db, tmp_path):
+    """The layer that makes this foolproof. A non-git target has no range and no
+    history to grep, but the boundary files still exist and their content is what
+    the WO delivered."""
+    from core.work_orders.delivery_boundary import boundary_file_contents
+
+    plain = tmp_path / "no-vcs"
+    (plain / "core").mkdir(parents=True)
+    (plain / "core" / "thing.py").write_text("def delivered():\n    return 1\n", encoding="utf-8")
+    (plain / "unrelated.py").write_text("not mine\n", encoding="utf-8")
+
+    wo_id = _wo_with_boundary(db, plain, "core/")
+    text, reason = boundary_file_contents(wo_id, repo_root=plain, db_path=db)
+    assert reason is None
+    assert "def delivered()" in text
+    assert "boundary file core/thing.py" in text
+    assert "not mine" not in text, "content outside the boundary is not this WO's delivery"
+
+
+def test_a_single_file_boundary_reads_that_file(db, tmp_path):
+    from core.work_orders.delivery_boundary import boundary_file_contents
+
+    plain = tmp_path / "one"
+    (plain / "core").mkdir(parents=True)
+    (plain / "core" / "x.py").write_text("MARKER = 1\n", encoding="utf-8")
+
+    wo_id = _wo_with_boundary(db, plain, "core/x.py")
+    text, reason = boundary_file_contents(wo_id, repo_root=plain, db_path=db)
+    assert reason is None and "MARKER = 1" in text
+
+
+def test_no_declared_boundary_has_nothing_to_read(db, tmp_path):
+    from core.work_orders.delivery_boundary import boundary_file_contents
+
+    plain = tmp_path / "nb"
+    plain.mkdir()
+    wo_id = _wo_with_boundary(db, plain, None)
+    text, reason = boundary_file_contents(wo_id, repo_root=plain, db_path=db)
+    assert text == ""
+    assert reason and "declares no 'Module boundary:'" in reason
+
+
+def test_a_missing_boundary_path_is_reported_not_silently_empty(db, tmp_path):
+    """A boundary pointing at paths that do not exist is a finding about the WO —
+    possibly work that was never done — not an empty read to shrug at."""
+    from core.work_orders.delivery_boundary import boundary_file_contents
+
+    plain = tmp_path / "gone"
+    plain.mkdir()
+    wo_id = _wo_with_boundary(db, plain, "core/never_created.py")
+    text, reason = boundary_file_contents(wo_id, repo_root=plain, db_path=db)
+    assert text == ""
+    assert reason and "exist" in reason
+    assert "core/never_created.py" in reason, "name the path that is missing"
+
+
+def test_truncation_is_reported_as_partial(db, tmp_path):
+    """A silently clipped fallback is a partial picture presented as a whole one."""
+    from core.work_orders.delivery_boundary import _MAX_FALLBACK_FILES, boundary_file_contents
+
+    plain = tmp_path / "many"
+    (plain / "core").mkdir(parents=True)
+    for i in range(_MAX_FALLBACK_FILES + 10):
+        (plain / "core" / f"f{i}.py").write_text(f"X = {i}\n", encoding="utf-8")
+
+    wo_id = _wo_with_boundary(db, plain, "core/")
+    text, reason = boundary_file_contents(wo_id, repo_root=plain, db_path=db)
+    assert text, "a truncated read still yields content"
+    assert reason and "PARTIAL" in reason
+
+
+def test_undecodable_bytes_do_not_break_the_read(db, tmp_path):
+    """errors='replace' rather than a crash — the same lesson as the codec sweep:
+    a reader that dies on odd bytes reports nothing about work that exists."""
+    from core.work_orders.delivery_boundary import boundary_file_contents
+
+    plain = tmp_path / "bytes"
+    (plain / "core").mkdir(parents=True)
+    (plain / "core" / "b.py").write_bytes(b"ok\x8d\xff done\n")
+
+    wo_id = _wo_with_boundary(db, plain, "core/")
+    text, reason = boundary_file_contents(wo_id, repo_root=plain, db_path=db)
+    assert reason is None
+    assert "ok" in text and "done" in text
