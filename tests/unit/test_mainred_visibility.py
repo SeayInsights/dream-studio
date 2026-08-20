@@ -388,10 +388,14 @@ def test_malformed_runs_payload_never_raises(body):
     proc.stderr = ""
     with patch("subprocess.run", return_value=proc):
         status = main_ci_status(repo_root=Path("."))  # must not raise
-    assert status["status"] in ("unknown", "success", "failure", "running")
-    assert status["red"] is False or status["status"] == "failure"
-    if status["status"] == "unknown":
-        assert status["reason"], "an unknown must always say why"
+    # This assertion was originally `status in ("unknown","success","failure",
+    # "running")` — every possible value, so it could not fail and proved nothing.
+    # 094f3c12's own verify flagged it. A payload that is not a list of runs is
+    # unknown, full stop: any other verdict would be fabricated from data the
+    # reader could not parse.
+    assert status["status"] == "unknown", f"a non-run payload must be unknown: {body!r}"
+    assert status["red"] is False, "an unparseable payload is never a definite failure"
+    assert status["reason"], "an unknown must always say why"
 
 
 def test_doctor_survives_a_raising_main_ci_read(tmp_path):
@@ -429,6 +433,33 @@ def test_the_workflow_name_matches_the_ci_workflow_file():
     assert declared == _WORKFLOW, (
         f"main_ci.py looks for workflow {_WORKFLOW!r} but full-ci.yml declares "
         f"{declared!r} — post-merge red would become invisible. Update both together."
+    )
+
+
+def test_the_branch_matches_the_workflow_trigger():
+    """The OTHER unpinned string in the same `gh run list` call.
+
+    094f3c12's verify caught that pinning `--workflow` while leaving `--branch`
+    unpinned covers half of one invocation. `full-ci.yml` runs `on: push:
+    branches: [main]`, so if that trigger changes and `_BRANCH` does not, the
+    query asks for runs on a branch the workflow never runs on and gets `[]`
+    forever — reported as "no Full CI runs found", which is indistinguishable
+    from a repo that has simply never run it. Identical failure mode to the
+    workflow-name skew, identical invisibility.
+    """
+    import re
+
+    from core.health.main_ci import _BRANCH
+
+    workflow = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "full-ci.yml"
+    text = workflow.read_text(encoding="utf-8")
+    match = re.search(r"^\s*branches:\s*\[([^\]]*)\]", text, flags=re.MULTILINE)
+    assert match, "full-ci.yml no longer declares a push-branches list — re-pin this test"
+    declared = [b.strip().strip("\"'") for b in match.group(1).split(",") if b.strip()]
+    assert _BRANCH in declared, (
+        f"main_ci.py reads branch {_BRANCH!r} but full-ci.yml only runs on {declared!r} — "
+        "the query would return no runs forever and post-merge red would go invisible. "
+        "Update both together."
     )
 
 
