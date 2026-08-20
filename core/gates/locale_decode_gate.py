@@ -188,8 +188,9 @@ def main(argv: list[str] | None = None) -> int:
     product = [s for s in sites if not s.is_test]
     tests = [s for s in sites if s.is_test]
     print(f"locale-decode gate: FAILED — {len(sites)} site(s) decode child output with the")
-    print("  platform locale codec (cp1252 on Windows). One non-cp1252 byte raises")
-    print("  UnicodeDecodeError in subprocess's reader thread and HANGS the parent.")
+    print("  platform locale codec (cp1252 on Windows). One unmapped byte raises")
+    print("  UnicodeDecodeError in subprocess's reader thread; run() then returns")
+    print("  returncode=0 with stdout=None, so the caller is handed success plus no output.")
     for label, group in (("product", product), ("tests", tests)):
         if not group:
             continue

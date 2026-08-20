@@ -218,6 +218,68 @@ def _work_order_affirm_impact(
     return 0 if ok else 1
 
 
+def _work_order_merge_check(
+    *,
+    work_order_id: str | None,
+    branch: str | None,
+    override: str | None,
+    pull_request: int | None,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """WO-MERGE-BEFORE-VERIFY: consult the WO's own verdict before a merge.
+
+    Exit 0 when ready (or when there is no work order to consult), 1 when the
+    verdict is not green. Non-zero is a REPORT, not a block — nothing here can stop
+    a merge, and `--override <reason>` records a deliberate one as a gate.bypassed
+    event so the count surfaces in `ds doctor` instead of passing unremarked.
+
+    This surface exists because the checker's own verify found it had no production
+    call site: "a gate that exists, is correct, and sits where it cannot stop the
+    thing it was built to stop" — the same diagnosis the work order was registered
+    on, reproduced inside its own fix.
+    """
+    from core.gates.merge_readiness import merge_readiness, record_merge_override
+    from core.installed_runtime import resolve_installed_runtime_paths
+
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root, dream_studio_home=dream_studio_home
+    )
+    if not work_order_id and not branch:
+        # Resolve from the current branch so the common case needs no arguments.
+        try:
+            import subprocess
+
+            proc = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                cwd=str(source_root),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
+            )
+            if isinstance(proc.returncode, int) and proc.returncode == 0:
+                branch = (proc.stdout or "").strip() or None
+        except Exception:
+            branch = None
+
+    result = merge_readiness(work_order_id=work_order_id, branch=branch, db_path=paths.sqlite_path)
+    if override:
+        record_merge_override(
+            work_order_id=result.get("work_order_id"),
+            state=str(result.get("state")),
+            reason=override,
+            pull_request=pull_request,
+        )
+        result["override_recorded"] = True
+        result["override_reason"] = override
+    print(json.dumps(result, indent=2))
+    # An override is a deliberate, recorded decision — it exits 0 so a caller that
+    # chains on this command proceeds, having said why.
+    return 0 if (result.get("ready") or override) else 1
+
+
 def _work_order_next(
     *,
     project_id: str,

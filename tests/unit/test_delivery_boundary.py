@@ -1,0 +1,754 @@
+"""WO-VERIFY-GRADES-DELIVERY task 1: record the boundary, do not search for it.
+
+Verify has located a WO's work by grepping history for its uuid or title. That
+fails for a squash merge, a reworded title, unpushed work, a commit naming the WO
+by its human tag, or a non-git target — and none of those mean nothing was
+delivered. Observed live on 758fbedd: "no commits found referencing 758fbedd",
+for work that was merged and green on three platforms.
+
+Recording ``start_commit`` at start makes the change set ``start_commit..HEAD``,
+which needs no message convention and survives every case above.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import uuid
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+from core.config.sqlite_bootstrap import bootstrap_database
+from core.work_orders.delivery_boundary import (
+    boundary_commit_range,
+    read_delivery_boundary,
+    record_delivery_boundary,
+)
+
+
+@pytest.fixture
+def db(tmp_path: Path) -> Path:
+    path = tmp_path / "state" / "studio.db"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    bootstrap_database(path)
+    return path
+
+
+def _git_repo(root: Path) -> tuple[Path, str]:
+    """A real one-commit repo; returns (root, head_sha)."""
+    root.mkdir(parents=True, exist_ok=True)
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@e",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@e",
+    }
+
+    def git(*args: str) -> str:
+        out = subprocess.run(
+            ["git", *args],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            timeout=30,
+        )
+        assert out.returncode == 0, f"git {args}: {out.stderr}"
+        return out.stdout.strip()
+
+    git("init", "-q")
+    (root / "a.txt").write_text("1", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-qm", "first")
+    return root, git("rev-parse", "HEAD")
+
+
+# ── Recording ──────────────────────────────────────────────────────────────────
+
+
+def test_the_start_commit_is_recorded_and_readable(db, tmp_path):
+    repo, head = _git_repo(tmp_path / "repo")
+    wo_id = str(uuid.uuid4())
+
+    boundary = record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+    assert boundary["start_commit"] == head
+    assert boundary["recorded"] is True
+
+    read_back = read_delivery_boundary(wo_id, db_path=db)
+    assert read_back is not None
+    assert read_back["start_commit"] == head
+    assert read_back["started_at"]
+
+
+def test_the_range_needs_no_commit_message_convention(db, tmp_path):
+    """The whole point: the locator is the recorded sha, not a grep for the uuid."""
+    repo, head = _git_repo(tmp_path / "repo")
+    wo_id = str(uuid.uuid4())
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+
+    expr, reason = boundary_commit_range(wo_id, db_path=db)
+    assert reason is None
+    assert expr == f"{head}..HEAD"
+    # Nothing in the range refers to the work order at all.
+    assert wo_id not in expr
+
+
+# ── The cases that broke the grep ──────────────────────────────────────────────
+
+
+def test_a_non_git_project_records_absence_with_a_reason(db, tmp_path):
+    """A boundary that exists with start_commit=None ("no git here") is a
+    different fact from no boundary at all ("we never looked")."""
+    not_a_repo = tmp_path / "plain"
+    not_a_repo.mkdir()
+    wo_id = str(uuid.uuid4())
+
+    boundary = record_delivery_boundary(wo_id, repo_root=not_a_repo, db_path=db)
+    assert boundary["start_commit"] is None
+    assert boundary["start_commit_reason"], "absence must be recorded WITH its reason"
+
+    expr, reason = boundary_commit_range(wo_id, db_path=db)
+    assert expr is None
+    assert reason and "no commit range" in reason
+
+
+def test_no_boundary_at_all_is_distinguishable_from_a_recorded_absence(db):
+    """A WO that started before boundaries were stamped must not look like a
+    non-git project — the first says fall back to the old locator, the second
+    says this repo has no commits to range over."""
+    assert read_delivery_boundary(str(uuid.uuid4()), db_path=db) is None
+
+    expr, reason = boundary_commit_range(str(uuid.uuid4()), db_path=db)
+    assert expr is None
+    assert reason and "no delivery boundary recorded" in reason
+
+
+def test_git_unavailable_does_not_prevent_recording(db, tmp_path):
+    """Refusing to start work over a bookkeeping failure would be a worse defect
+    than the one this fixes."""
+    wo_id = str(uuid.uuid4())
+    with patch("subprocess.run", side_effect=FileNotFoundError("git")):
+        boundary = record_delivery_boundary(wo_id, repo_root=tmp_path, db_path=db)
+    assert boundary["start_commit"] is None
+    assert boundary["start_commit_reason"] == "git not installed"
+    assert boundary["recorded"] is True, "the absence itself is still recorded"
+
+
+def test_a_failed_artifact_write_is_reported_not_raised(db, tmp_path):
+    repo, _head = _git_repo(tmp_path / "repo")
+    wo_id = str(uuid.uuid4())
+    with patch(
+        "core.work_orders.artifacts.set_wo_artifact", side_effect=RuntimeError("db exploded")
+    ):
+        boundary = record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+    assert boundary["recorded"] is False
+    assert "db exploded" in boundary["record_error"]
+    assert boundary["start_commit"], "the sha was still read even though storing failed"
+
+
+def test_a_corrupt_boundary_reads_as_absent_rather_than_raising(db, tmp_path):
+    wo_id = str(uuid.uuid4())
+    from core.work_orders.artifacts import set_wo_artifact
+
+    set_wo_artifact(
+        wo_id,
+        "report",
+        "not json at all",
+        instance_key="delivery_boundary",
+        db_path=db,
+        generator="test",
+    )
+    assert read_delivery_boundary(wo_id, db_path=db) is None
+    expr, reason = boundary_commit_range(wo_id, db_path=db)
+    assert expr is None and reason
+
+
+# ── Wired into start ───────────────────────────────────────────────────────────
+
+
+def test_start_work_order_stamps_the_boundary(db, tmp_path):
+    """Driven through the real start path — a boundary recorded only by a direct
+    call to the helper would leave the production flow unpinned."""
+    from core.work_orders.start_main import start_work_order
+
+    repo, head = _git_repo(tmp_path / "repo")
+    project_id, wo_id = str(uuid.uuid4()), str(uuid.uuid4())
+    now = "2026-08-20T00:00:00+00:00"
+
+    import sqlite3
+
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at, project_path)"
+        " VALUES (?,?,?,?,?,?,?)",
+        (project_id, "P", "", "active", now, now, str(repo)),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+        "  status, created_at, updated_at) VALUES (?,?,NULL,'WO','d','infrastructure','created',?,?)",
+        (wo_id, project_id, now, now),
+    )
+    conn.commit()
+    conn.close()
+
+    from unittest.mock import MagicMock
+
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    fake_paths.dream_studio_home = tmp_path
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        result = start_work_order(
+            work_order_id=wo_id,
+            source_root=tmp_path,
+            dream_studio_home=tmp_path,
+            planning_root=tmp_path / "planning",
+            accept_no_brief=True,
+        )
+    assert result.get("ok") is True, result
+
+    boundary = read_delivery_boundary(wo_id, db_path=db)
+    assert boundary is not None, "start must stamp the boundary"
+    assert boundary["start_commit"] == head, (
+        "the boundary must be stamped against the WO's TARGET repo, not against "
+        "whatever directory DS is running from"
+    )
+
+
+def test_the_boundary_payload_is_json_and_self_describing(db, tmp_path):
+    """Stored under the existing multi-instance `report` kind — no new table, no
+    migration. Readable without this module, so a future reader is not locked in."""
+    repo, head = _git_repo(tmp_path / "repo")
+    wo_id = str(uuid.uuid4())
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+
+    from core.work_orders.artifacts import get_wo_artifact_envelope
+
+    raw, envelope = get_wo_artifact_envelope(
+        wo_id, "report", instance_key="delivery_boundary", db_path=db
+    )
+    assert raw is not None
+    payload = json.loads(raw)
+    assert payload["work_order_id"] == wo_id
+    assert payload["start_commit"] == head
+    assert payload["repo_root"] == str(repo)
+    assert envelope, "the boundary carries provenance like every other gate artifact"
+
+
+def test_start_reports_the_boundary_it_stamped(db, tmp_path):
+    """A boundary recorded where nobody can see it is the
+    engine-key-with-no-reader shape this milestone keeps finding."""
+    from unittest.mock import MagicMock
+
+    from core.work_orders.start_main import start_work_order
+
+    repo, head = _git_repo(tmp_path / "repo")
+    project_id, wo_id = str(uuid.uuid4()), str(uuid.uuid4())
+    now = "2026-08-20T00:00:00+00:00"
+
+    import sqlite3
+
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at, project_path)"
+        " VALUES (?,?,?,?,?,?,?)",
+        (project_id, "P", "", "active", now, now, str(repo)),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+        "  status, created_at, updated_at) VALUES (?,?,NULL,'WO','d','infrastructure','created',?,?)",
+        (wo_id, project_id, now, now),
+    )
+    conn.commit()
+    conn.close()
+
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    fake_paths.dream_studio_home = tmp_path
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        result = start_work_order(
+            work_order_id=wo_id,
+            source_root=tmp_path,
+            dream_studio_home=tmp_path,
+            planning_root=tmp_path / "planning",
+            accept_no_brief=True,
+        )
+    assert result["delivery_boundary"]["start_commit"] == head
+    assert result["delivery_boundary"]["recorded"] is True
+    # A clean stamp is quiet — the note exists for the failure case.
+    assert "delivery_boundary_note" not in result
+
+
+def test_start_says_so_when_no_boundary_could_be_stamped(db, tmp_path):
+    """The case that matters most: verify will silently fall back to the uuid grep,
+    so the operator has to be told why."""
+    from unittest.mock import MagicMock
+
+    from core.work_orders.start_main import start_work_order
+
+    plain = tmp_path / "not-a-repo"
+    plain.mkdir()
+    project_id, wo_id = str(uuid.uuid4()), str(uuid.uuid4())
+    now = "2026-08-20T00:00:00+00:00"
+
+    import sqlite3
+
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at, project_path)"
+        " VALUES (?,?,?,?,?,?,?)",
+        (project_id, "P", "", "active", now, now, str(plain)),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+        "  status, created_at, updated_at) VALUES (?,?,NULL,'WO','d','infrastructure','created',?,?)",
+        (wo_id, project_id, now, now),
+    )
+    conn.commit()
+    conn.close()
+
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    fake_paths.dream_studio_home = tmp_path
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        result = start_work_order(
+            work_order_id=wo_id,
+            source_root=tmp_path,
+            dream_studio_home=tmp_path,
+            planning_root=tmp_path / "planning",
+            accept_no_brief=True,
+        )
+    assert result["delivery_boundary"]["start_commit"] is None
+    note = result.get("delivery_boundary_note") or ""
+    assert "no start commit was stamped" in note
+    assert "commit-message search" in note, "the operator must learn what verify will do instead"
+
+
+# ── Working-tree layer (task 2) ────────────────────────────────────────────────
+
+
+def _wo_with_boundary(db: Path, repo: Path, boundary: str | None) -> str:
+    import sqlite3
+
+    project_id, wo_id = str(uuid.uuid4()), str(uuid.uuid4())
+    now = "2026-08-20T00:00:00+00:00"
+    desc = f"Module boundary: {boundary}." if boundary else "No boundary declared here"
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at, project_path)"
+        " VALUES (?,?,?,?,?,?,?)",
+        (project_id, "P", "", "active", now, now, str(repo)),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+        "  status, created_at, updated_at) VALUES (?,?,NULL,'WO',?,'infrastructure','in_progress',?,?)",
+        (wo_id, project_id, desc, now, now),
+    )
+    conn.commit()
+    conn.close()
+    return wo_id
+
+
+def test_uncommitted_work_is_visible(db, tmp_path):
+    """Work in progress is still delivered work — grading only committed state is
+    why an uncommitted deliverable reads as nothing delivered."""
+    from core.work_orders.delivery_boundary import working_tree_changes
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    (repo / "core").mkdir()
+    (repo / "core" / "thing.py").write_text("x = 1\n", encoding="utf-8")  # untracked
+    (repo / "a.txt").write_text("modified\n", encoding="utf-8")  # tracked, dirty
+
+    wo_id = _wo_with_boundary(db, repo, "core/")
+    paths, reason = working_tree_changes(wo_id, repo_root=repo, db_path=db)
+    assert reason is None
+    assert "core/thing.py" in paths, "a brand-new module is exactly what a tracked-only diff misses"
+    assert "a.txt" not in paths, "outside the declared boundary"
+
+
+def test_dirty_files_outside_the_boundary_are_not_attributed(db, tmp_path):
+    """The reverse hazard, and worse than the defect it fixes: sweeping in every
+    unrelated dirty file would let a WO be certified by work it never did."""
+    from core.work_orders.delivery_boundary import working_tree_changes
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    (repo / "mine").mkdir()
+    (repo / "mine" / "x.py").write_text("1\n", encoding="utf-8")
+    (repo / "theirs").mkdir()
+    (repo / "theirs" / "y.py").write_text("2\n", encoding="utf-8")
+
+    wo_id = _wo_with_boundary(db, repo, "mine/")
+    paths, reason = working_tree_changes(wo_id, repo_root=repo, db_path=db)
+    assert reason is None
+    assert paths == ["mine/x.py"], f"only the WO's own boundary: {paths}"
+
+
+def test_no_declared_boundary_attributes_nothing_and_says_why(db, tmp_path):
+    """Without a boundary there is no basis for attribution. Returning everything
+    would be the certified-by-someone-else's-work failure; returning nothing
+    silently would hide it."""
+    from core.work_orders.delivery_boundary import working_tree_changes
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    (repo / "z.py").write_text("1\n", encoding="utf-8")
+
+    wo_id = _wo_with_boundary(db, repo, None)
+    paths, reason = working_tree_changes(wo_id, repo_root=repo, db_path=db)
+    assert paths == []
+    assert reason and "declares no 'Module boundary:'" in reason
+
+
+def test_a_clean_tree_is_empty_without_a_reason(db, tmp_path):
+    """Nothing uncommitted is a real answer, not a failure to look."""
+    from core.work_orders.delivery_boundary import working_tree_changes
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    wo_id = _wo_with_boundary(db, repo, "core/")
+    paths, reason = working_tree_changes(wo_id, repo_root=repo, db_path=db)
+    assert paths == [] and reason is None
+
+
+def test_git_unavailable_reports_a_reason_rather_than_claiming_clean(db, tmp_path):
+    from core.work_orders.delivery_boundary import working_tree_changes
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    wo_id = _wo_with_boundary(db, repo, "core/")
+    with patch("subprocess.run", side_effect=FileNotFoundError("git")):
+        paths, reason = working_tree_changes(wo_id, repo_root=repo, db_path=db)
+    assert paths == []
+    assert reason == "git not installed", "an unreadable tree must not read as a clean one"
+
+
+def test_the_boundary_rule_is_the_enforcement_lib_s(db, tmp_path):
+    """One boundary rule, one implementation. Two would let the on-edit hook and
+    verify disagree about what a WO owns."""
+    from core.work_orders import delivery_boundary as mod
+
+    src = Path(mod.__file__).read_text(encoding="utf-8")
+    assert "from runtime.lib.enforcement import boundary_globs" in src
+    assert "from runtime.lib.enforcement import path_in_boundary" in src
+
+
+def test_attribution_fails_closed_where_enforcement_fails_open(db, tmp_path):
+    """The same predicate needs opposite defaults on either side of the boundary.
+
+    runtime.lib.enforcement.path_in_boundary returns True for a path it cannot
+    resolve — correct for the on-edit hook, whose job is to avoid BLOCKING an edit
+    it cannot classify. For attribution that default is inverted: a path we cannot
+    place must not be CLAIMED as this WO's delivery, or an unresolvable path
+    silently certifies a WO with work it never did.
+
+    Documented here because inheriting the wrong default is invisible: the reused
+    helper would simply return more matches, and nothing would look broken.
+    """
+    from runtime.lib.enforcement import boundary_globs, path_in_boundary
+
+    globs = boundary_globs("Module boundary: mine/.")
+    assert globs == ["mine/"]
+    # The helper's own behaviour, unchanged: an unplaceable path matches.
+    assert path_in_boundary("theirs/y.py", "/definitely/not/here", globs) is True
+
+    # Attribution must not inherit that. A file outside the boundary in a real
+    # repo is excluded, and the caller resolves paths before asking.
+    from core.work_orders.delivery_boundary import working_tree_changes
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    (repo / "mine").mkdir()
+    (repo / "mine" / "x.py").write_text("1\n", encoding="utf-8")
+    (repo / "theirs").mkdir()
+    (repo / "theirs" / "y.py").write_text("2\n", encoding="utf-8")
+    wo_id = _wo_with_boundary(db, repo, "mine/")
+
+    paths, reason = working_tree_changes(wo_id, repo_root=repo, db_path=db)
+    assert paths == ["mine/x.py"], f"attribution must fail closed: {paths}"
+    assert reason is None
+
+
+# ── Boundary-file fallback (task 3): the layer that needs no VCS ───────────────
+
+
+def test_boundary_content_is_readable_with_no_git_at_all(db, tmp_path):
+    """The layer that makes this foolproof. A non-git target has no range and no
+    history to grep, but the boundary files still exist and their content is what
+    the WO delivered."""
+    from core.work_orders.delivery_boundary import boundary_file_contents
+
+    plain = tmp_path / "no-vcs"
+    (plain / "core").mkdir(parents=True)
+    (plain / "core" / "thing.py").write_text("def delivered():\n    return 1\n", encoding="utf-8")
+    (plain / "unrelated.py").write_text("not mine\n", encoding="utf-8")
+
+    wo_id = _wo_with_boundary(db, plain, "core/")
+    text, reason = boundary_file_contents(wo_id, repo_root=plain, db_path=db)
+    assert reason is None
+    assert "def delivered()" in text
+    assert "boundary file core/thing.py" in text
+    assert "not mine" not in text, "content outside the boundary is not this WO's delivery"
+
+
+def test_a_single_file_boundary_reads_that_file(db, tmp_path):
+    from core.work_orders.delivery_boundary import boundary_file_contents
+
+    plain = tmp_path / "one"
+    (plain / "core").mkdir(parents=True)
+    (plain / "core" / "x.py").write_text("MARKER = 1\n", encoding="utf-8")
+
+    wo_id = _wo_with_boundary(db, plain, "core/x.py")
+    text, reason = boundary_file_contents(wo_id, repo_root=plain, db_path=db)
+    assert reason is None and "MARKER = 1" in text
+
+
+def test_no_declared_boundary_has_nothing_to_read(db, tmp_path):
+    from core.work_orders.delivery_boundary import boundary_file_contents
+
+    plain = tmp_path / "nb"
+    plain.mkdir()
+    wo_id = _wo_with_boundary(db, plain, None)
+    text, reason = boundary_file_contents(wo_id, repo_root=plain, db_path=db)
+    assert text == ""
+    assert reason and "declares no 'Module boundary:'" in reason
+
+
+def test_a_missing_boundary_path_is_reported_not_silently_empty(db, tmp_path):
+    """A boundary pointing at paths that do not exist is a finding about the WO —
+    possibly work that was never done — not an empty read to shrug at."""
+    from core.work_orders.delivery_boundary import boundary_file_contents
+
+    plain = tmp_path / "gone"
+    plain.mkdir()
+    wo_id = _wo_with_boundary(db, plain, "core/never_created.py")
+    text, reason = boundary_file_contents(wo_id, repo_root=plain, db_path=db)
+    assert text == ""
+    assert reason and "exist" in reason
+    assert "core/never_created.py" in reason, "name the path that is missing"
+
+
+def test_truncation_is_reported_as_partial(db, tmp_path):
+    """A silently clipped fallback is a partial picture presented as a whole one."""
+    from core.work_orders.delivery_boundary import _MAX_FALLBACK_FILES, boundary_file_contents
+
+    plain = tmp_path / "many"
+    (plain / "core").mkdir(parents=True)
+    for i in range(_MAX_FALLBACK_FILES + 10):
+        (plain / "core" / f"f{i}.py").write_text(f"X = {i}\n", encoding="utf-8")
+
+    wo_id = _wo_with_boundary(db, plain, "core/")
+    text, reason = boundary_file_contents(wo_id, repo_root=plain, db_path=db)
+    assert text, "a truncated read still yields content"
+    assert reason and "PARTIAL" in reason
+
+
+def test_undecodable_bytes_do_not_break_the_read(db, tmp_path):
+    """errors='replace' rather than a crash — the same lesson as the codec sweep:
+    a reader that dies on odd bytes reports nothing about work that exists."""
+    from core.work_orders.delivery_boundary import boundary_file_contents
+
+    plain = tmp_path / "bytes"
+    (plain / "core").mkdir(parents=True)
+    (plain / "core" / "b.py").write_bytes(b"ok\x8d\xff done\n")
+
+    wo_id = _wo_with_boundary(db, plain, "core/")
+    text, reason = boundary_file_contents(wo_id, repo_root=plain, db_path=db)
+    assert reason is None
+    assert "ok" in text and "done" in text
+
+
+# ── The locator (task 4): recorded state first, grep as reinforcement ──────────
+
+
+def test_the_range_diff_is_the_primary_evidence(db, tmp_path):
+    """A real commit made after start is found by RANGE, with no mention of the WO
+    anywhere in the commit message."""
+    from core.work_orders.delivery_boundary import boundary_diff_text, record_delivery_boundary
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    wo_id = _wo_with_boundary(db, repo, "core/")
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+
+    # Land work AFTER the boundary, naming the WO nowhere.
+    (repo / "core").mkdir()
+    (repo / "core" / "feature.py").write_text("def shipped():\n    return 42\n", encoding="utf-8")
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@e",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@e",
+    }
+    for args in (["add", "."], ["commit", "-qm", "totally unrelated subject line"]):
+        subprocess.run(
+            ["git", *args],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            timeout=30,
+        )
+
+    text, note = boundary_diff_text(wo_id, repo_root=repo, db_path=db)
+    assert text, f"the range must find the work: note={note}"
+    assert "def shipped()" in text
+    assert "commit range" in text
+    assert wo_id not in text, "found without any reference to the work order at all"
+
+
+def test_uncommitted_work_appears_when_there_is_no_commit(db, tmp_path):
+    from core.work_orders.delivery_boundary import boundary_diff_text, record_delivery_boundary
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    wo_id = _wo_with_boundary(db, repo, "core/")
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+
+    (repo / "core").mkdir()
+    (repo / "core" / "wip.py").write_text("draft = True\n", encoding="utf-8")
+
+    text, _note = boundary_diff_text(wo_id, repo_root=repo, db_path=db)
+    assert text and "core/wip.py" in text
+    assert "module boundary" in text
+
+
+def test_the_no_vcs_floor_is_used_only_when_nothing_else_exists(db, tmp_path):
+    """Content shows current state rather than the change, so it must never
+    displace a diff that exists."""
+    from core.work_orders.delivery_boundary import boundary_diff_text
+
+    plain = tmp_path / "no-vcs"
+    (plain / "core").mkdir(parents=True)
+    (plain / "core" / "only.py").write_text("FLOOR = 1\n", encoding="utf-8")
+    wo_id = _wo_with_boundary(db, plain, "core/")
+
+    text, _note = boundary_diff_text(wo_id, repo_root=plain, db_path=db)
+    assert text and "FLOOR = 1" in text
+    assert "boundary file core/only.py" in text
+
+
+def test_nothing_delivered_is_reported_as_a_finding_not_as_missing_metadata(db, tmp_path):
+    """The only honest 'nothing to look at': every layer empty. That is a finding
+    about the WORK, not the metadata artifact 'unreviewable' used to mean."""
+    from core.work_orders.delivery_boundary import boundary_diff_text, record_delivery_boundary
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    wo_id = _wo_with_boundary(db, repo, "core/")
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+    # No commits after start, nothing uncommitted, boundary path never created.
+    text, note = boundary_diff_text(wo_id, repo_root=repo, db_path=db)
+    assert text is None
+    assert note, "an empty result must always say why"
+
+
+def test_caveats_are_carried_so_a_partial_view_is_never_presented_as_whole(db, tmp_path):
+    from core.work_orders.delivery_boundary import boundary_diff_text
+
+    plain = tmp_path / "nb"
+    plain.mkdir()
+    wo_id = _wo_with_boundary(db, plain, None)  # no boundary declared
+    text, note = boundary_diff_text(wo_id, repo_root=plain, db_path=db)
+    assert text is None
+    assert note and "Module boundary" in note
+
+
+# ── No false-unreviewable (task 5) ─────────────────────────────────────────────
+
+
+def test_the_unreviewable_message_names_every_layer_it_tried(db, tmp_path, monkeypatch):
+    """The old wording — "no commits found referencing <id> or '<title>'" — blamed
+    the WORK for a bookkeeping miss, sending an operator to look for commits when
+    the real problem was often that nothing had recorded where to look. Those two
+    have opposite remedies, so the message has to distinguish them.
+    """
+    import sqlite3
+    from unittest.mock import MagicMock
+
+    from core.work_orders.verify_main import verify_work_order
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    project_id, wo_id = str(uuid.uuid4()), str(uuid.uuid4())
+    now = "2026-08-20T00:00:00+00:00"
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at, project_path)"
+        " VALUES (?,?,?,?,?,?,?)",
+        (project_id, "P", "", "active", now, now, str(repo)),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+        "  status, created_at, updated_at)"
+        " VALUES (?,?,NULL,'Nothing was delivered here','no boundary','infrastructure',"
+        "         'in_progress',?,?)",
+        (wo_id, project_id, now, now),
+    )
+    conn.execute(
+        "INSERT INTO business_tasks"
+        " (task_id, work_order_id, project_id, title, description, status, created_at, updated_at)"
+        " VALUES (?,?,?,'t','d','complete',?,?)",
+        (str(uuid.uuid4()), wo_id, project_id, now, now),
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.delenv("DREAM_STUDIO_VERIFY_MOCK", raising=False)
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    fake_paths.dream_studio_home = tmp_path
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        result = verify_work_order(
+            work_order_id=wo_id,
+            source_root=repo,
+            dream_studio_home=tmp_path,
+            planning_root=tmp_path / "planning",
+        )
+
+    summary = (result.get("summary") or "") + (result.get("warning") or "")
+    assert "unreviewable" in summary
+    # It must name what was tried, not just what was not found.
+    assert "recorded delivery boundary" in summary
+    assert "executable checks" in summary
+    # And it must offer the two distinct remedies.
+    assert "where it landed" in summary
+    assert "re-start the work order" in summary
+
+
+def test_the_locator_is_a_fallback_chain_not_a_concatenation(db, tmp_path):
+    """The boundary range REPLACES the grep when it has content, rather than being
+    appended to it.
+
+    The first cut made them additive, reasoning that a rebase can move work outside
+    the recorded range so both together see more. That is a universal cost for a
+    conditional benefit: for any WO whose commits DO mention it, both layers return
+    the same commits and the grader input roughly doubles.
+
+    The change was originally committed blaming a completion-grader timeout, and
+    that attribution was wrong — measurement showed the WO in question predates
+    boundary stamping, so this layer contributed zero characters to its prompt. The
+    design still stands on the cost/benefit argument; it simply did not fix the
+    timeout it was credited with.
+    """
+    import inspect
+
+    from core.work_orders import verify_main
+
+    src = inspect.getsource(verify_main.verify_work_order)
+    assert "_boundary_diff or _collect_git_commits(" in src, (
+        "the locator must be a fallback chain — range first, grep only when the " "range is empty"
+    )
+    assert 'f"{_boundary_diff}\n\n{git_diff}"' not in src, (
+        "concatenating both locators doubles the grader input for every WO whose "
+        "commits mention it"
+    )

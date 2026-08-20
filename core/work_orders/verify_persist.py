@@ -10,8 +10,44 @@ original module.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
+
+
+def _atomic_write(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` so readers see all of it or none of it.
+
+    WO-VERDICT-PARTIAL-WRITE. A plain ``write_text`` interrupted mid-flush leaves
+    whatever reached disk, and for a review verdict that is worse than leaving
+    nothing: an absent verdict is recoverable (re-run verify) while a truncated one
+    reads as ``passed: False`` with no summary and BLOCKS a close on work that
+    actually passed. Observed live — a killed verify left exactly that artifact and
+    the next close reported "independent review: review failed — no summary."
+
+    Same-directory temp file plus ``os.replace``, which is atomic on POSIX and on
+    Windows for same-volume renames. The temp file is removed if anything fails, so
+    an interrupted write leaves neither a partial verdict nor a stray file.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())  # the rename is atomic; the CONTENT must be durable first
+        os.replace(tmp_name, str(path))
+    except BaseException:
+        # BaseException, not Exception: a KeyboardInterrupt mid-write is the exact
+        # scenario this exists for, and it must not leave the temp file behind.
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
 
 # ── Verdict persistence ─────────────────────────────────────────────────────────
 
@@ -154,8 +190,10 @@ def _persist_unverified_ledger(
             except OSError:
                 pass  # a stale copy that cannot be removed is still shadowed by the authority
         return None
-    ledger_path.parent.mkdir(parents=True, exist_ok=True)
-    ledger_path.write_text(payload, encoding="utf-8")
+    # Atomic (WO-VERDICT-PARTIAL-WRITE): a half-written residual-risk ledger
+    # would read as a shorter list of risks, which is the silence this stage
+    # exists to remove.
+    _atomic_write(ledger_path, payload)
     return ledger_path
 
 
@@ -255,8 +293,6 @@ def _persist_review_verdict(
     wrapped = wrap(payload, generator=generator, head_commit_sha=git_head_sha(project_root))
     if set_wo_artifact(work_order_id, "review_verdict", wrapped, db_path=db_path):
         return None
-    verdict_dir = planning_root / "work-orders" / work_order_id
-    verdict_dir.mkdir(parents=True, exist_ok=True)
-    verdict_path = verdict_dir / "review-verdict.json"
-    verdict_path.write_text(wrapped, encoding="utf-8")
+    verdict_path = planning_root / "work-orders" / work_order_id / "review-verdict.json"
+    _atomic_write(verdict_path, wrapped)
     return verdict_path

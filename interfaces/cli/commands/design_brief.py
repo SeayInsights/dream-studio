@@ -54,6 +54,23 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
     db_update.add_argument("--field", required=True, help="Field to update")
     db_update.add_argument("--value", required=True, help="New value")
 
+    # WO-BRIEF-CURRENCY: the operator-reachable half of the escape hatch. Its own
+    # verify found declare_reviewed_no_change existed "only as a Python function
+    # with no operator-reachable caller" — the skill text documented two remedies
+    # and only one could actually be performed.
+    db_rnc = db_sub.add_parser(
+        "reviewed-no-change",
+        help="Declare that a locked brief still holds despite UI work closing since "
+        "— satisfies design_brief_locked currency without re-locking",
+    )
+    db_rnc.add_argument("project_id", help="Project UUID")
+    db_rnc.add_argument(
+        "--note",
+        required=True,
+        help="Why the brief still holds (recorded with the declaration — a bare "
+        "override with no reason is what this deliberately is not)",
+    )
+
     db_set_system = db_sub.add_parser("set-system", help="Set the design system for a brief")
     db_set_system.add_argument("brief_id", help="Brief UUID")
     db_set_system.add_argument("system_name", help="Design system name")
@@ -93,6 +110,13 @@ def dispatch(
             brief_id=args.brief_id,
             field=args.field,
             value=args.value,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+    if args.design_brief_command == "reviewed-no-change":
+        return _design_brief_reviewed_no_change(
+            project_id=args.project_id,
+            note=args.note,
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )
@@ -197,3 +221,52 @@ def _design_brief_set_system(
     )
     print(json.dumps(result, indent=2))
     return 0 if result.get("ok") else 1
+
+
+def _design_brief_reviewed_no_change(
+    *,
+    project_id: str,
+    note: str,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """Declare a locked brief still current despite UI work closing since.
+
+    WO-BRIEF-CURRENCY. The gate now asks whether a locked brief is CURRENT, not
+    merely that one exists. Where the design surface moved but the brief genuinely
+    still holds, this records that judgement WITH its reason and its own timestamp —
+    so it ages exactly like a lock, and further UI work stales the brief again. A
+    boolean "ignore staleness" would disable the gate permanently; this cannot.
+    """
+    import json as _json
+    from datetime import UTC, datetime
+
+    from core.gates.brief_currency import brief_currency, declare_reviewed_no_change
+    from core.event_store.studio_db import _connect
+    from core.installed_runtime import resolve_installed_runtime_paths
+
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root, dream_studio_home=dream_studio_home
+    )
+    now = datetime.now(UTC).isoformat()
+    ok = declare_reviewed_no_change(project_id, note=note, when=now, db_path=paths.sqlite_path)
+    result: dict[str, object] = {
+        "ok": bool(ok),
+        "project_id": project_id,
+        "reviewed_at": now,
+        "note": note,
+    }
+    if not ok:
+        result["error"] = "declaration not stored (ds_config unavailable?)"
+    else:
+        # Report the resulting currency so the operator sees the effect, not just
+        # that a row was written.
+        try:
+            with _connect(paths.sqlite_path) as conn:
+                result["currency"] = brief_currency(
+                    project_id, conn=conn, db_path=paths.sqlite_path
+                )
+        except Exception as exc:  # noqa: BLE001 - reporting must not fail the write
+            result["currency_error"] = f"{type(exc).__name__}: {exc}"
+    print(_json.dumps(result, indent=2, default=str))
+    return 0 if ok else 1

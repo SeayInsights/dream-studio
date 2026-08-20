@@ -17,6 +17,55 @@ from typing import Any
 
 from .close_shared import _artifact_text, _artifact_with_envelope
 
+# WO-VERDICT-PARTIAL-WRITE task 2. Provenance envelopes were introduced by
+# WO-VERIFY-PROVENANCE on 2026-08-19; artifacts stored before that date have no
+# envelope through no fault of their own, and the gates accept them so historical
+# WOs stay closeable. That exception was written as "any artifact lacking an
+# envelope", which is broader than the fact it was meant to accommodate — and it
+# is what let a partial write made TODAY through, where it was read as a failed
+# review and blocked a close on work that had passed.
+#
+# A work order created after the cutover has no legacy claim: its artifacts were
+# always going to be enveloped, so an envelope-less one is either hand-written or
+# half-written, and both should be rejected rather than believed.
+_PROVENANCE_CUTOVER = "2026-08-19"
+
+
+def _envelope_absence_is_legacy(conn: Any, work_order_id: str) -> bool:
+    """True when this WO predates provenance envelopes, so a missing one is expected.
+
+    Fails OPEN (returns True) when the WO's creation date cannot be read: refusing
+    to close a work order because its own timestamp is unreadable would be a worse
+    failure than accepting one envelope-less artifact, and the staleness check still
+    applies to everything that does carry an envelope.
+    """
+    created = _wo_created_at(conn, work_order_id)
+    if not isinstance(created, str) or not created:
+        return True
+    return created[:10] < _PROVENANCE_CUTOVER
+
+
+def _envelope_required(
+    conn: Any, work_order_id: str, envelope: dict[str, Any] | None, artifact: str, remedy: str
+) -> str | None:
+    """Reject an envelope-less artifact unless this WO predates provenance.
+
+    WO-VERDICT-PARTIAL-WRITE task 2, widened after its own verify found the fix had
+    been applied to ONE of the three envelope-aware gates while the comment claimed
+    all of them. A comment describing a broader fix than the code performs is worse
+    than no comment: it makes the remaining hole look closed. One helper, three call
+    sites, so the rule cannot drift apart again.
+    """
+    if envelope:
+        return None
+    if _envelope_absence_is_legacy(conn, work_order_id):
+        return None
+    return (
+        f"{artifact} lacks a provenance envelope. This work order postdates the"
+        f" provenance cutover ({_PROVENANCE_CUTOVER}), so its artifact should carry"
+        f" one — an envelope-less artifact is hand-written or half-written. {remedy}"
+    )
+
 
 def _provenance_staleness(
     envelope: dict[str, Any] | None,
@@ -99,6 +148,17 @@ def run_gate_check(
                 row = None
         if row is None:
             return False, "design_brief_locked: no locked design brief found for this project"
+        # WO-BRIEF-CURRENCY: existence is not currency. A brief locked in May
+        # satisfied this gate in August, after months of UI work had moved the
+        # surfaces it describes — so a UI work order could close against a brief
+        # that no longer described the design. Currency is derived from authority
+        # state (UI-class work orders closing after the lock), which needs no repo
+        # introspection and so works for an external project too.
+        from core.gates.brief_currency import currency_failure
+
+        _stale_brief = currency_failure(project_id, conn=conn, db_path=db_path)
+        if _stale_brief:
+            return False, f"design_brief_locked: {_stale_brief}"
         return True, ""
 
     if gate_name == "api_contract_exists":
@@ -107,6 +167,15 @@ def run_gate_check(
         contract, _contract_env = _artifact_with_envelope(
             work_order_id, wo_dir, "api_contract", db_path
         )
+        _missing_env = _envelope_required(
+            conn,
+            work_order_id,
+            _contract_env,
+            "api-contract.md",
+            "Regenerate the contract and store it via set_wo_artifact.",
+        )
+        if _missing_env and contract is not None:
+            return False, f"api_contract_exists: {_missing_env}"
         _stale = _provenance_staleness(
             _contract_env, work_order_id=work_order_id, conn=conn, db_path=db_path
         )
@@ -150,11 +219,39 @@ def run_gate_check(
                 _test_checks.extend(c for c in _task_checks if c.get("kind") == "TEST-CHECK")
             if _test_checks:
                 _failed = [c for c in _test_checks if not c.get("passed")]
+                # MISADDRESSED IS NOT FAILED (WO-VERIFY-GRADES-DELIVERY). A check that
+                # could not FIND its target (pytest exit 4/5) says nothing about the
+                # work: on 2026-08-19 three TEST-CHECKs reported FAILED for work that
+                # was merged and green on three platforms, purely because the working
+                # tree was on another branch. Reported as its own state so the
+                # operator is told to fix the ADDRESS, not the code — and so this
+                # never reads as a false verdict about the work either way.
+                _unaddressed = [c for c in _failed if c.get("unaddressed")]
+                if _unaddressed and len(_unaddressed) == len(_failed):
+                    _detail = "; ".join(
+                        f"{c['expr']!r}: {c.get('error') or 'target not found'}"
+                        for c in _unaddressed[:3]
+                    )
+                    return False, (
+                        f"all_tests_pass: UNVERIFIED — {len(_unaddressed)} TEST-CHECK(s)"
+                        f" could not be RUN (target not found), none actually failed."
+                        f" This is not a verdict about the work: verify from the"
+                        f" branch/commit where it landed, or repoint the criterion —"
+                        f" {_detail}{_delivered_state_hint(work_order_id, _proot, db_path)}"
+                    )
                 if _failed:
                     _detail = "; ".join(
                         c.get("error") or f"TEST-CHECK {c['expr']!r} failed" for c in _failed[:3]
                     )
-                    return False, f"all_tests_pass: {len(_failed)} TEST-CHECK(s) failed — {_detail}"
+                    _note = (
+                        f" ({len(_unaddressed)} of these could not be run at all —"
+                        " misaddressed rather than failing)"
+                        if _unaddressed
+                        else ""
+                    )
+                    return False, (
+                        f"all_tests_pass: {len(_failed)} TEST-CHECK(s) failed{_note} — {_detail}"
+                    )
                 return True, ""
         # WO-CI-COMPLETENESS: the legacy Path B fallback (test-results.md containing
         # the string "PASSED" — a hand-writable, never-freshness-checked file) is
@@ -177,6 +274,15 @@ def run_gate_check(
         from core.work_orders.artifact_envelope import unwrap as _unwrap
 
         content, _critique_env = _unwrap(critique_path.read_text(encoding="utf-8"))
+        _missing_env = _envelope_required(
+            conn,
+            work_order_id,
+            _critique_env,
+            "design-critique.md",
+            "Re-run website:critique and store the result via set_wo_artifact.",
+        )
+        if _missing_env:
+            return False, f"design_critique: {_missing_env}"
         _stale = _provenance_staleness(
             _critique_env, work_order_id=work_order_id, conn=conn, db_path=db_path
         )
@@ -201,8 +307,24 @@ def run_gate_check(
         )
         if content is None:
             return False, "security_scan: security-scan.md not found"
+        # WO-VERDICT-PARTIAL-WRITE task 2: the envelope-less exception is scoped to
+        # ACTUAL legacy artifacts. independent_review already rejects an
+        # envelope-less verdict outright (measured, not assumed), but this gate and
+        # the other artifact gates accept one — which means a hand-written or
+        # half-written security scan passes today. A WO created after the provenance
+        # cutover has no legacy claim: its scan was always going to be enveloped, so
+        # an envelope-less one is either hand-authored or interrupted, and both
+        # should be rejected rather than believed.
+        _missing_env = _envelope_required(
+            conn,
+            work_order_id,
+            _scan_env,
+            "security-scan.md",
+            "Re-run the security audit and store the result via set_wo_artifact.",
+        )
+        if _missing_env:
+            return False, f"security_scan: {_missing_env}"
         # WO-VERIFY-PROVENANCE: enveloped scans must not predate newer WO commits.
-        # Legacy (envelope-less) scans keep their historical acceptance.
         _stale = _provenance_staleness(
             _scan_env, work_order_id=work_order_id, conn=conn, db_path=db_path
         )
@@ -308,12 +430,86 @@ def run_gate_check(
                 return False, reason
             gap_ids = [w.get("work_order_id", "") for w in verdict.get("spawned_work_orders", [])]
             gap_msg = f" Gap WOs: {', '.join(gap_ids)}" if gap_ids else ""
+            # AN INCOMPLETE RECORD IS NOT A FAILED REVIEW (WO-VERDICT-PARTIAL-WRITE
+            # task 3). A verdict with passed=False but NO summary and NO failure
+            # reasons is not a review that failed — it is a review whose record never
+            # finished being written. This exact artifact appeared after a verify was
+            # killed mid-write, and the gate reported "review failed — no summary",
+            # blocking a close on work that had passed. Same corrupt-is-not-absent
+            # distinction read_unverified_ledger already makes: say the record is
+            # unusable and name the remedy, rather than converting missing
+            # information into a verdict against the work.
+            from .close_shared import verdict_evidence
+
+            _summary, _reasons = verdict_evidence(verdict)
+            if not _summary and not _reasons:
+                return False, (
+                    "independent_review: UNREVIEWABLE — the stored verdict says passed=False"
+                    " but carries no summary and no failure reasons, which is an incomplete"
+                    " record rather than a review that failed (a verify killed mid-write"
+                    " leaves exactly this). Re-run: py -m interfaces.cli.ds work-order"
+                    f" verify {work_order_id}"
+                )
             return False, (
-                f"independent_review: review failed — {verdict.get('summary', 'no summary')}.{gap_msg}"
+                f"independent_review: review failed — {_summary or 'no summary'}.{gap_msg}"
             )
         return True, ""
 
     return True, ""
+
+
+def _delivered_state_hint(
+    work_order_id: str, project_root: Path | None, db_path: Path | None
+) -> str:
+    """Name the WO's recorded delivery point vs the current checkout, or "".
+
+    WO-VERIFY-GRADES-DELIVERY task 6. `executable_ac` runs its checks against
+    whatever is checked out, so a WO whose work is merged and green can report
+    FAILED purely because the tree sits elsewhere — which happened on 2026-08-19
+    and produced a wrong root-cause write-up.
+
+    The gate deliberately does NOT check out the recorded commit to fix this: a
+    gate that mutates the working tree could destroy uncommitted work, which is a
+    far worse failure than an unclear message. What it can do is tell the operator
+    exactly where the delivered state is and where they are, so "wrong checkout" is
+    self-evident instead of being mistaken for "the work is broken".
+
+    Silent when there is nothing useful to say — no boundary, no git, or the
+    checkout already matches. A hint that fires on the happy path is noise.
+    """
+    try:
+        from core.work_orders.delivery_boundary import read_delivery_boundary
+
+        boundary = read_delivery_boundary(work_order_id, db_path=db_path)
+        if not boundary:
+            return (
+                " No delivery boundary was recorded for this work order, so the gate"
+                " cannot tell which commit its checks were meant to run against."
+            )
+        start = boundary.get("start_commit")
+        if not isinstance(start, str) or not start:
+            return ""
+        import subprocess
+
+        proc = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(project_root) if project_root else None,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+        )
+        head = (proc.stdout if isinstance(proc.stdout, str) else "").strip()
+        if not head or head == start:
+            return ""
+        return (
+            f" This work order began at {start[:8]}; this checkout is at {head[:8]}."
+            " The gate does not switch commits for you (that could discard"
+            " uncommitted work) — run the checks where the work landed."
+        )
+    except Exception:
+        return ""
 
 
 def _wo_created_at(conn: Any, work_order_id: str) -> str | None:
@@ -385,6 +581,7 @@ def _run_ac_gate(
     *,
     work_order_id: str,
     db_path: Path,
+    stats: dict[str, Any] | None = None,
 ) -> list[str]:
     """Run all executable checks across a WO's tasks.  Return list of failure reasons.
 
@@ -393,6 +590,12 @@ def _run_ac_gate(
       (at least one check is required unless ``force=True``).
     - If any checks fail → returns a failure reason per failing check (up to 5).
     - If all checks pass → returns ``[]``.
+
+    ``stats``, when given, is filled with ``{"test_checks_executed": int}`` — how many
+    TEST-CHECKs this gate actually RAN. WO-SEPARATE-TEST-RUNNER needs that fact and
+    cannot re-derive it: re-running the checks to count them would pay the whole test
+    suite twice. The failure-reason list is unchanged, so existing callers are not
+    affected by asking.
     """
     from core.work_orders.verify import resolve_project_root, run_executable_checks
 
@@ -405,6 +608,16 @@ def _run_ac_gate(
     all_checks: list[dict[str, Any]] = []
     for task_checks in ac_results.values():
         all_checks.extend(task_checks)
+
+    if stats is not None:
+        # THIS gate is what executes a work order's tests at close time — not the
+        # type-specific `all_tests_pass`, which many WO types do not list. Deriving
+        # "did anything run here" from the type's gate list produced a FALSE caveat on
+        # e3a17189's own clean close: it reported "none ran during verify" moments
+        # after this gate had run all three.
+        stats["test_checks_executed"] = sum(
+            1 for c in all_checks if c.get("kind") == "TEST-CHECK" and c.get("executed")
+        )
 
     if not all_checks:
         # Design-only WOs whose deliverable is an operator-local docstore artifact (a spec, an

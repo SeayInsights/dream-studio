@@ -75,6 +75,7 @@ Close is report-only: after a clean close on the interactive path, surface `next
         "bypassed_gates": [str, ...],          # populated when forced
         "verify_warning": str | absent,        # inline verify was unreviewable (no commit evidence) — surface verbatim
         "main_ci_warning": str | absent,       # post-merge Full CI for main is RED — surface verbatim, advisory
+        "test_execution_warning": str | absent, # the review certified by reading, not running — verbatim, advisory
         "main_ci": {...} | absent,             # the reading behind it (status/red/head_sha/run_url/as_of/age_seconds/local_head_includes_run)
         "next_work_order": {...} | absent,     # next open WO in same milestone
         "next_command": str | absent,          # explicit next-step hint
@@ -89,6 +90,30 @@ Close is report-only: after a clean close on the interactive path, surface `next
     # pick) and how to start it (`next_command`/`next_block`) but never starts it — there
     # is no `auto_started`/`auto_start_error` key. Starting the next WO is an explicit
     # operator action (or the execute-work-orders workflow's next-iteration node).
+
+## `design_brief_locked` failed on a brief that IS locked {#brief-currency}
+
+The gate asks two questions now, and the failure text says which one failed (WO-BRIEF-CURRENCY):
+
+| Failure text | Meaning | Remedy |
+|---|---|---|
+| `no locked design brief found` | none exists | `ds-project:brief` — fill and lock |
+| `existence but not currency` | one is locked, but UI work closed since | re-lock, **or** declare reviewed-no-change |
+
+**DON'T** send the operator to fill-and-lock a brief that is already locked. The second failure names the UI-class work orders that moved the surface — surface those, because they are what has to be reviewed against.
+
+**DO** pick the remedy by what actually changed:
+
+- **Re-lock** (`ds-project:brief`) when the design language moved. This does not require re-running the whole wizard.
+- **Declare no-change** when the surface moved but the brief still holds:
+  `ds design-brief reviewed-no-change <project_id> --note "<why it still holds>"`
+  The note is required and recorded, and the declaration carries its own timestamp — so later UI work stales the brief again. It is a judgement on the record, not a mute button.
+
+**DON'T** reach for the declaration to avoid a re-lock. A recorded "still holds" about a brief that no longer does is worse than a stale lock, because it looks like someone checked.
+
+## What the tests rest on {#separate-test-runner}
+
+`all_tests_pass` **executes** the TEST-CHECKs — no report is read, and the "a file containing PASSED" fallback is retired, so a self-reported pass cannot satisfy it. Two things still need your eyes. **What the review rested on:** close returns `test_execution_warning` when the verdict certified by reading rather than running (no TEST-CHECK registered, or none executed at verify) — print it verbatim; it never blocks, and `ds work-order merge-check` says the same thing earlier. **Who ran them:** whoever wrote the change does not run its own suite as the evidence — spawn a runner and hand it node ids, not a conclusion.
 
 ## After the merge: pr-smoke green is not proof main is green
 

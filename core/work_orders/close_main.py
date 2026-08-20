@@ -317,7 +317,10 @@ def close_work_order(
 
         # Always-on AC gate: run all executable checks across every task.
         # Runs regardless of WO type; additional to (not replacing) the existing gates.
-        ac_failures = _run_ac_gate(conn, work_order_id=work_order_id, db_path=db_path)
+        _ac_stats: dict[str, Any] = {}
+        ac_failures = _run_ac_gate(
+            conn, work_order_id=work_order_id, db_path=db_path, stats=_ac_stats
+        )
         gate_failures.extend(ac_failures)
 
         # Re-run the originating symptom SQL-CHECK (if captured at registration).
@@ -545,6 +548,35 @@ def close_work_order(
     }
     if _symptom_checks:
         result["symptom_checks"] = _symptom_checks
+
+    # WO-SEPARATE-TEST-RUNNER gap (e3a17189): a close whose review certified by
+    # READING must not read the same as one a test run backs. all_tests_pass
+    # executes the WO's own checks, but an attested WO or one with no TEST-CHECK
+    # registered can still reach here — and "closed" then implies execution that
+    # never happened. Advisory: it states the basis, it does not block.
+    try:
+        from core.gates.merge_readiness import work_order_execution_caveat
+
+        # checks_ran_here is EARNED, and it is measured at the place that actually
+        # runs them: the ALWAYS-ON AC gate above, which executes every TEST-CHECK on
+        # every close regardless of WO type. Two wrong versions preceded this one —
+        # asserting True unconditionally (a forced close bypasses execution and would
+        # have gone silent about it), then deriving it from the type's
+        # `all_tests_pass` gate, which most WO types do not list. The second printed
+        # a FALSE caveat on this feature's own clean close: "none ran during verify",
+        # moments after the AC gate had run all three. Counting what ran cannot be
+        # wrong in either direction.
+        _tests_gate_ran = int(_ac_stats.get("test_checks_executed") or 0) > 0
+        _exec_caveat = work_order_execution_caveat(
+            work_order_id,
+            db_path=db_path,
+            planning_root=p_root,
+            checks_ran_here=_tests_gate_ran,
+        )
+        if _exec_caveat:
+            result["test_execution_warning"] = _exec_caveat
+    except Exception:
+        pass  # an advisory must never affect a close
 
     # WO-MAINRED-VISIBILITY: a WO must not be declared done while its own merge
     # has main red without the operator seeing it. Advisory only — never blocks,

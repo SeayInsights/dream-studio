@@ -179,6 +179,19 @@ The verify grader enforces these as quality rules 7 (DURABLE_STATE_ADVERSARIAL)
 and 8 (CONFIG_AS_PROXY); independent review runs by default at close for every
 non-documentation WO (`--skip-verify` opts out and is recorded as a gate bypass).
 
+## The runner is not the author {#separate-test-runner}
+
+Verify exists because self-certification is not evidence, and the same rule binds
+the tests underneath it: whoever wrote the change does not run its suite as the
+proof it works. Hand a spawned runner the node ids, not your conclusion.
+
+A verdict records what it rests on. `test_execution.basis` is `executed` when a
+TEST-CHECK actually ran, `not_run_at_verify` when checks exist but this run did not
+execute them, and `none_registered` when the work order declares none — so a
+certification backed by a code read is distinguishable from one backed by a test
+run. `ds work-order merge-check` states the caveat, because merge happens before
+close ever executes anything.
+
 ## The falsification pass runs on every verify {#falsification-pass}
 
 `ds work-order verify` now runs a fifth grader — the **falsification analyst** —

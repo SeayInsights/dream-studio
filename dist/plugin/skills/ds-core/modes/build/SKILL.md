@@ -186,6 +186,22 @@ grader flags durable state shipped without crash/race/skew coverage (rule 7)
 and secrets guarded by config signals instead of actual reachability (rule 8);
 independent review runs by default at every non-documentation close.
 
+## Someone else runs your tests {#separate-test-runner}
+
+The agent that wrote a change does not run its own suite as the evidence it works.
+Spawn a runner, hand it the **node ids** — never your conclusion — and treat its
+report as the evidence. A green suite you ran yourself is agreement, not proof:
+your tests encode your assumptions, so running them confirms the assumption
+instead of the behaviour. Measured on 2026-08-20 — fourteen self-run tests passed
+against an invented review-verdict shape while the code under them softened every
+genuine failure into "re-run verify"; pointing it at a real stored verdict found
+three defects in minutes.
+
+Same rule for evals. And where a fixture stands in for a **durable artifact** (a
+review verdict, a provenance envelope, an unverified-risk ledger), derive it from a
+real stored one and say so in the file — a hand-authored shape tests your memory of
+the artifact, not the artifact.
+
 ## Answer the falsification questions before you implement {#falsification-first}
 
 The verify stage will enumerate the worst reachable states of your change and

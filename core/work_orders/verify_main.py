@@ -55,7 +55,7 @@ from .verify_db import (
     _run_sql_checks,
     _format_sql_checks,
 )
-from .verify_executor import resolve_project_root, run_executable_checks
+from .verify_executor import resolve_project_root, record_test_execution, run_executable_checks
 from .verify_gaps import (
     _falsification_to_gaps,
     normalise_falsification_scenarios,
@@ -326,7 +326,39 @@ def verify_work_order(
         originating_wo_id = _gap_marker.group(1) if _gap_marker else None
 
         _search_root = resolve_project_root(work_order_id, db_path) or source_root
-        git_diff = _collect_git_commits(_search_root, work_order_id, title=wo["title"])
+
+        # WO-VERIFY-GRADES-DELIVERY: the RECORDED boundary is the locator; the
+        # commit-message grep below is reinforcement. Grepping history for the WO's
+        # uuid or title fails for a squash merge, a reworded title, unpushed work,
+        # no remote, a commit naming the WO by its human tag, or a non-git target —
+        # and none of those mean nothing was delivered. Observed live on 758fbedd:
+        # "no commits found referencing 758fbedd", for work merged and green on all
+        # three platforms.
+        #
+        # The recorded boundary is the locator and the grep is the FALLBACK, not an
+        # addition. The first cut made them additive (reasoning: a rebase can move
+        # work outside the recorded range, so both together see more). That is a
+        # universal cost for a conditional benefit: for any WO whose commits DO
+        # mention it, both layers return the same commits and the grader input
+        # roughly doubles, charged to a budget WO-FALSIFY-TIMEOUT already showed to
+        # be tight. So: range when it has content, else the grep. The rare rebase
+        # case degrades to exactly what it was before this WO.
+        #
+        # HONEST CORRECTION: this change was first committed blaming a completion-
+        # grader timeout on 2206774f's own verify. That attribution was wrong and
+        # measurement disproved it — that WO predates boundary stamping, so this
+        # layer contributed ZERO characters to its prompt (5,785 chars total). The
+        # timeout was provider-side, exactly as the grader-failure message said
+        # before I reached past it for a better story. The fallback design stands on
+        # the cost/benefit argument above; it fixed nothing about that timeout.
+        from .delivery_boundary import boundary_diff_text
+
+        _boundary_diff, _boundary_note = boundary_diff_text(
+            work_order_id, repo_root=Path(_search_root), db_path=db_path
+        )
+        git_diff = _boundary_diff or _collect_git_commits(
+            _search_root, work_order_id, title=wo["title"]
+        )
         if git_diff is None and originating_wo_id:
             git_diff = _collect_git_commits(_search_root, originating_wo_id)
 
@@ -381,6 +413,10 @@ def verify_work_order(
         _is_escalated = read_escalation(work_order_id, db_path=db_path) is not None
 
         authority_certified = False
+        # WO-SEPARATE-TEST-RUNNER: only the authority-evidence path runs the checks, so
+        # this stays None on the git-diff path and the verdict records `not_run_at_verify`
+        # rather than implying execution it did not do.
+        ac_results: dict[str, list[dict[str, Any]]] | None = None
         if git_diff is None and not _is_escalated:
             ac_results = run_executable_checks(
                 tasks, db_path, project_root=resolve_project_root(work_order_id, db_path)
@@ -391,10 +427,29 @@ def verify_work_order(
                 authority_certified = True
 
         if git_diff is None and not os.environ.get(_MOCK_ENV):
+            # WO-VERIFY-GRADES-DELIVERY task 5: NO FALSE-UNREVIEWABLE. Reaching here
+            # now means every layer was empty — the recorded commit range, the
+            # boundary-scoped working tree, the boundary files themselves, the
+            # commit-message grep, and the WO's own executable checks. That is a
+            # finding about the WORK (a work order that delivered nothing findable),
+            # not the metadata artifact this message used to describe.
+            #
+            # The old wording blamed the work for a bookkeeping miss: "no commits
+            # found referencing <id> or '<title>'" told an operator to go looking
+            # for commits when the real problem was often that nothing had recorded
+            # where to look. It must now say what was actually tried, so the reader
+            # can tell "nothing was delivered" from "the boundary was never
+            # stamped" — which have opposite remedies.
             token = wo["title"].split(" - ")[0].strip()
+            _why = _boundary_note or "no delivery boundary recorded for this work order"
             warning = (
-                f"independent review unreviewable: no commits found referencing "
-                f"{work_order_id[:8]} or '{token}'. Work is NOT certified — review manually."
+                "independent review unreviewable: no delivered change could be located"
+                f" for {work_order_id[:8]}. Tried: recorded delivery boundary"
+                f" ({_why}); commit-message search for {work_order_id[:8]} or"
+                f" '{token}'; and this work order's own executable checks."
+                " Work is NOT certified — if the work exists, verify from the"
+                " branch/commit where it landed; if the boundary was never stamped,"
+                " re-start the work order so it is."
             )
             scores = {
                 "completion_score": 0.0,
@@ -784,6 +839,10 @@ def verify_work_order(
             "graded_commits": _graded_commits,
             "resolved_gaps": resolved_gap_wos,
             "verified_at": completed_at,
+            # WO-SEPARATE-TEST-RUNNER: whether this certification rests on running the
+            # work order's tests or on reading its code. Merge consults the verdict
+            # before close ever executes anything, so the distinction has to ride here.
+            "test_execution": record_test_execution(tasks, ac_results),
         }
         # WO-FALSIFY-FIRST-PASS: the falsification section and the UNVERIFIED
         # ledger ride the verdict. A falsification grader that could not run is

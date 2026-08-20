@@ -79,6 +79,40 @@ def _run_one_sql_check(expr: str, db_path: Path) -> dict[str, Any]:
     return check
 
 
+# pytest's documented exit codes. 4 (usage error) and 5 (no tests collected) mean
+# the check never reached the work: a renamed test, a typo in a node id, a file
+# that moved. Reporting those as "exited with code N" — identical to 1, which means
+# assertions genuinely failed — is what sent a real diagnosis down the wrong path
+# on 2026-08-19: three TEST-CHECKs read as FAILED for delivered, merged, green work
+# because the checkout did not contain the tests. A gate that cannot find its
+# target is evidence about the gate, not about the work.
+_PYTEST_EXIT_MEANING = {
+    1: "tests ran and FAILED",
+    2: "pytest was interrupted (Ctrl-C or internal error)",
+    3: "internal pytest error",
+    4: "pytest USAGE ERROR — the node id is wrong or the file does not exist here",
+    5: "NO TESTS COLLECTED — nothing matched this node id in this checkout",
+}
+_UNADDRESSED_EXITS = frozenset({4, 5})
+
+
+def _test_check_failure_reason(code: int, *, is_pytest: bool) -> str:
+    """Human-meaningful reason for a non-zero TEST-CHECK exit."""
+    if not is_pytest:
+        return f"TEST-CHECK command exited with code {code}"
+    meaning = _PYTEST_EXIT_MEANING.get(code)
+    if meaning is None:
+        return f"TEST-CHECK exited with code {code}"
+    if code in _UNADDRESSED_EXITS:
+        return (
+            f"TEST-CHECK could not run: {meaning} (exit {code}). This is NOT a test "
+            "failure — the check is misaddressed, or this checkout does not contain "
+            "the delivered work. Verify from the branch/commit where the work landed, "
+            "or repoint the acceptance criterion."
+        )
+    return f"TEST-CHECK failed: {meaning} (exit {code})"
+
+
 def _run_one_test_check(expr: str, project_root: Path | None = None) -> dict[str, Any]:
     """Run a TEST-CHECK in the work order's TARGET repo and gate on its exit code.
 
@@ -106,13 +140,18 @@ def _run_one_test_check(expr: str, project_root: Path | None = None) -> dict[str
         "passed": False,
         "result": None,
         "error": None,
+        # Set True only when the check actually ran (see the note at the exit-code
+        # handling below). Present on every result so a consumer never has to guess
+        # whether execution happened.
+        "executed": False,
     }
 
     # cwd = the WO's target repo (falls back to the current process dir = DS repo).
     cwd = str(project_root) if project_root else None
 
     stripped = expr.strip()
-    if stripped[:4].lower() == "cmd:":
+    is_cmd = stripped[:4].lower() == "cmd:"
+    if is_cmd:
         raw = stripped[4:].strip()
         # Split into argv (no shell). Use POSIX rules on every platform: realistic test
         # commands (`pytest platform/tests`, `npm test`, `go test ./...`) have no
@@ -122,9 +161,11 @@ def _run_one_test_check(expr: str, project_root: Path | None = None) -> dict[str
             argv = shlex.split(raw)
         except ValueError as exc:
             check["error"] = f"TEST-CHECK cmd: unparseable command {raw!r} — {exc}"
+            check["not_executed_reason"] = "the command could not be parsed into argv"
             return check
         if not argv:
             check["error"] = "TEST-CHECK cmd: empty command"
+            check["not_executed_reason"] = "the command was empty"
             return check
     else:
         argv = [sys.executable, "-m", "pytest", stripped, "-q", "--tb=short", "--no-header"]
@@ -142,14 +183,39 @@ def _run_one_test_check(expr: str, project_root: Path | None = None) -> dict[str
         stdout = (result.stdout or "") + (result.stderr or "")
         check["result"] = stdout[:2000]
         check["passed"] = result.returncode == 0
+        check["exit_code"] = result.returncode
+        # WO-SEPARATE-TEST-RUNNER: how the claim was established, structured rather
+        # than left to prose. A grader that could not execute pytest said so in its
+        # summary on 2026-08-20 ("running pytest was denied by the sandbox, so the
+        # tests are not confirmed green by execution") — a verdict resting on a code
+        # read is materially weaker than one resting on execution, and downstream the
+        # two were indistinguishable. `executed` makes them distinguishable, and the
+        # substrate sets it: the gate runs the check itself, so this is not the
+        # author's claim about their own work.
+        check["executed"] = True
         if result.returncode != 0:
-            check["error"] = f"TEST-CHECK command exited with code {result.returncode}"
+            check["error"] = _test_check_failure_reason(result.returncode, is_pytest=not is_cmd)
+            # MISADDRESSED IS NOT FAILED (WO-VERIFY-GRADES-DELIVERY): a check whose
+            # target does not exist says nothing about the work, so it must not be
+            # reported as though the work failed. Marked separately from a genuine
+            # assertion failure so callers can tell "the gate is pointed at the
+            # wrong thing" from "the work is wrong".
+            check["unaddressed"] = result.returncode in _UNADDRESSED_EXITS and not is_cmd
     except subprocess.TimeoutExpired:
         check["error"] = f"TEST-CHECK timed out after {_TEST_CHECK_TIMEOUT}s"
+        check["executed"] = False
+        check["not_executed_reason"] = "timed out before producing a verdict"
     except FileNotFoundError as exc:
         check["error"] = f"TEST-CHECK command not found (cwd={cwd or '.'}) — {exc}"
+        check["executed"] = False
+        check["not_executed_reason"] = "the command does not exist here"
     except Exception as exc:
+        # executed is re-forced rather than left to the default: it is set True the
+        # moment subprocess.run returns, so a future edit that raises after that point
+        # must not leave a verdict-less result claiming execution.
         check["error"] = str(exc)
+        check["executed"] = False
+        check["not_executed_reason"] = f"{type(exc).__name__} before the check produced a verdict"
     return check
 
 
@@ -377,3 +443,59 @@ def run_executable_checks(
             _emit_validation_result_event(check)
 
     return results
+
+
+def record_test_execution(
+    tasks: list[dict[str, Any]],
+    ac_results: dict[str, list[dict[str, Any]]] | None = None,
+) -> dict[str, Any]:
+    """Did this verdict's certification rest on RUNNING tests, or on reading code?
+
+    NOT named ``test_*`` — pytest collects any module-level ``test_``-prefixed
+    callable it imports, and the first name here (``test_execution_record``) was
+    collected as a test case erroring with "fixture 'tasks' not found". Found by the
+    independent runner, not by the author.
+
+    WO-SEPARATE-TEST-RUNNER. A grader on 2026-08-20 reported honestly that "running
+    pytest was denied by the sandbox, so the tests are not confirmed green by
+    execution" — a real distinction that lived only in prose, so downstream a verdict
+    backed by execution and one backed by a code read were identical. Merge happens
+    BEFORE close, so the close-time ``all_tests_pass`` execution comes too late to
+    inform the merge; the merge reader needs this fact from the verdict itself.
+
+    Counting registered checks needs no execution — it is a read of the acceptance
+    criteria already loaded — so this is honest on every verify path, including the
+    ones that do not run the checks.
+
+    ``basis`` is one of:
+
+    - ``executed``          — a TEST-CHECK actually ran during this verify
+    - ``not_run_at_verify`` — TEST-CHECKs are registered but this path did not run them
+      (close's ``all_tests_pass`` will; the verdict itself is not execution-backed)
+    - ``none_registered``   — the work order declares no TEST-CHECK at all, so no
+      verdict on it can rest on execution
+    """
+    import re as _re
+
+    registered = 0
+    for task in tasks:
+        for raw_line in (task.get("acceptance_criteria", "") or "").splitlines():
+            if _re.match(r"^\s*TEST-CHECK:", raw_line, _re.IGNORECASE):
+                registered += 1
+
+    executed = passed = 0
+    for task_checks in (ac_results or {}).values():
+        for check in task_checks:
+            if check.get("kind") != "TEST-CHECK" or not check.get("executed"):
+                continue
+            executed += 1
+            if check.get("passed"):
+                passed += 1
+
+    if registered == 0:
+        basis = "none_registered"
+    elif executed:
+        basis = "executed"
+    else:
+        basis = "not_run_at_verify"
+    return {"registered": registered, "executed": executed, "passed": passed, "basis": basis}
