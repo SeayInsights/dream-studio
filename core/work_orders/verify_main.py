@@ -336,16 +336,21 @@ def verify_work_order(
         # three platforms.
         #
         # The recorded boundary is the locator and the grep is the FALLBACK, not an
-        # addition. The first cut of this made them additive (reasoning: a rebase can
-        # move work outside the recorded range, so both together see more). Its own
-        # verify then timed out the completion grader at 360s — because for any WO
-        # whose commits DO mention it, both layers return the same commits and the
-        # grader input roughly doubles. A universal cost to cover a rare case, paid
-        # in the one budget that was already tight.
+        # addition. The first cut made them additive (reasoning: a rebase can move
+        # work outside the recorded range, so both together see more). That is a
+        # universal cost for a conditional benefit: for any WO whose commits DO
+        # mention it, both layers return the same commits and the grader input
+        # roughly doubles, charged to a budget WO-FALSIFY-TIMEOUT already showed to
+        # be tight. So: range when it has content, else the grep. The rare rebase
+        # case degrades to exactly what it was before this WO.
         #
-        # So: use the range when it produced something, else fall back to the grep.
-        # The rare rebase case degrades to what it was before this WO — the grep —
-        # rather than costing every WO double input.
+        # HONEST CORRECTION: this change was first committed blaming a completion-
+        # grader timeout on 2206774f's own verify. That attribution was wrong and
+        # measurement disproved it — that WO predates boundary stamping, so this
+        # layer contributed ZERO characters to its prompt (5,785 chars total). The
+        # timeout was provider-side, exactly as the grader-failure message said
+        # before I reached past it for a better story. The fallback design stands on
+        # the cost/benefit argument above; it fixed nothing about that timeout.
         from .delivery_boundary import boundary_diff_text
 
         _boundary_diff, _boundary_note = boundary_diff_text(

@@ -730,14 +730,15 @@ def test_the_locator_is_a_fallback_chain_not_a_concatenation(db, tmp_path):
     appended to it.
 
     The first cut made them additive, reasoning that a rebase can move work outside
-    the recorded range so both together see more. That WO's own verify then timed
-    out the completion grader at 360s: for any WO whose commits DO mention it, both
-    layers return the same commits and the grader input roughly doubles — a
-    universal cost to cover a rare case, paid from the one budget already tight.
+    the recorded range so both together see more. That is a universal cost for a
+    conditional benefit: for any WO whose commits DO mention it, both layers return
+    the same commits and the grader input roughly doubles.
 
-    So the range wins when it has content, and the rare rebase case degrades to
-    exactly what it was before this work order (the grep) rather than charging
-    every WO double.
+    The change was originally committed blaming a completion-grader timeout, and
+    that attribution was wrong — measurement showed the WO in question predates
+    boundary stamping, so this layer contributed zero characters to its prompt. The
+    design still stands on the cost/benefit argument; it simply did not fix the
+    timeout it was credited with.
     """
     import inspect
 
