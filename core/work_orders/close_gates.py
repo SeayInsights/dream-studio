@@ -439,8 +439,9 @@ def run_gate_check(
             # distinction read_unverified_ledger already makes: say the record is
             # unusable and name the remedy, rather than converting missing
             # information into a verdict against the work.
-            _summary = (verdict.get("summary") or "").strip()
-            _reasons = verdict.get("failure_reasons") or []
+            from .close_shared import verdict_evidence
+
+            _summary, _reasons = verdict_evidence(verdict)
             if not _summary and not _reasons:
                 return False, (
                     "independent_review: UNREVIEWABLE — the stored verdict says passed=False"

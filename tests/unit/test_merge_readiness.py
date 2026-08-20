@@ -317,3 +317,119 @@ def test_the_override_still_appears_under_its_gate_name(db):
     audit = bypass_audit(db)
     assert "merge_before_verify" in audit["gate_bypasses"]
     assert audit["gate_bypasses"]["merge_before_verify"]["count"] == 1
+
+
+# ── The REAL verdict shape (not the one I invented) ────────────────────────────
+
+# Copied from an actual stored review-verdict.json, not hand-designed. The first
+# version of this module assumed top-level `summary` and `failure_reasons`; real
+# verdicts carry NEITHER — the prose is under completion.summary and the findings
+# under gaps / spawned_work_orders. Fourteen tests passed against the invented
+# shape, which is exactly why they proved nothing.
+_REAL_FAILED_VERDICT = {
+    "passed": False,
+    "work_order_id": "6a4c21d1",
+    "certification_basis": "git_diff",
+    "scores": {
+        "completion_score": 0.75,
+        "correctness_score": 1.0,
+        "quality_score": 0.59,
+        "composite_score": 0.793,
+    },
+    "completion": {
+        "summary": (
+            "The verdict reader is complete and careful ... The gap is that none of it is "
+            "reachable: merge_readiness() and record_merge_override() have no production "
+            "call sites. Note: it separates never-run from failed from unreviewable."
+        ),
+        "passed": False,
+    },
+    "gaps": [{"title": "Wire the merge-readiness check into a surface that runs before a merge"}],
+    "spawned_work_orders": [{"work_order_id": "659671b4"}],
+}
+
+
+def test_a_real_failed_verdict_is_classified_failed_not_unreviewable(db):
+    """The severest defect this module shipped: a verdict with three concrete gaps
+    and a 0.793 composite was reported UNREVIEWABLE, telling an operator to re-run
+    verify instead of showing them the gaps. Two causes, both here:
+
+    1. the shape was invented — real verdicts have no top-level summary;
+    2. the classifier substring-matched the word "unreviewable" in prose, and this
+       verdict's own summary contains it while describing the distinction.
+    """
+    wo_id = _wo(db)
+    _store_verdict(db, wo_id, _REAL_FAILED_VERDICT)
+    out = merge_readiness(work_order_id=wo_id, db_path=db)
+    assert out["state"] == "failed", f"a real failing verdict is FAILED: {out}"
+    assert out["ready"] is False
+    assert "no production call sites" in (out["summary"] or ""), "read the prose where it lives"
+    assert "Fix them" in out["advice"], "advice must point at the gaps, not at a retry"
+
+
+def test_the_word_unreviewable_in_prose_does_not_classify(db):
+    """Classifying a judgement by a word appearing inside it is how a real failure
+    gets softened into 'we could not tell'."""
+    wo_id = _wo(db)
+    _store_verdict(
+        db,
+        wo_id,
+        {
+            "passed": False,
+            "completion": {"summary": "discusses unreviewable states at length"},
+            "gaps": [{"title": "a real gap"}],
+        },
+    )
+    assert merge_readiness(work_order_id=wo_id, db_path=db)["state"] == "failed"
+
+
+def test_a_genuine_unreviewable_verdict_still_classifies(db):
+    """verify opens its own warning with this phrase — a prefix, not a substring."""
+    wo_id = _wo(db)
+    _store_verdict(
+        db,
+        wo_id,
+        {"passed": False, "summary": "independent review unreviewable: grader timed out"},
+    )
+    assert merge_readiness(work_order_id=wo_id, db_path=db)["state"] == "unreviewable"
+
+
+def test_a_disk_stored_verdict_is_not_reported_as_never_run(db, tmp_path):
+    """First smoke test against real data found this: the reader consulted only the
+    authority, so a verdict on the disk fallback read as 'verify has not run' —
+    opposite remedies (fix the gaps vs run it at all)."""
+    import json as _json
+
+    wo_id = _wo(db)
+    vdir = tmp_path / "work-orders" / wo_id
+    vdir.mkdir(parents=True)
+    from core.work_orders.artifact_envelope import wrap
+
+    (vdir / "review-verdict.json").write_text(
+        wrap(
+            _json.dumps(_REAL_FAILED_VERDICT),
+            generator="ds work-order verify",
+            head_commit_sha=None,
+        ),
+        encoding="utf-8",
+    )
+    out = merge_readiness(work_order_id=wo_id, db_path=db, planning_root=tmp_path)
+    assert out["state"] == "failed", f"a disk-stored verdict must be read: {out}"
+
+
+def test_the_cli_surface_exists_and_is_wired(db):
+    """The finding that mattered most: merge_readiness had NO production call site,
+    so the WO's own diagnosis ('a gate that sits where it cannot stop the thing it
+    was built to stop') applied to its own fix. A checker nobody can invoke is not
+    a check."""
+    from interfaces.cli.commands.work_order_query import _work_order_merge_check
+
+    assert callable(_work_order_merge_check)
+
+    import inspect
+
+    from interfaces.cli.commands import work_order_dispatch
+
+    src = inspect.getsource(work_order_dispatch)
+    assert '"merge-check"' in src, "the subcommand must be registered"
+    assert "_work_order_merge_check(" in src, "and dispatched"

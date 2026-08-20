@@ -88,7 +88,9 @@ def resolve_work_order(
     return None, f"no work order matches {candidates[0]!r}"
 
 
-def verdict_state(work_order_id: str, *, db_path: Path | None = None) -> dict[str, Any]:
+def verdict_state(
+    work_order_id: str, *, db_path: Path | None = None, planning_root: Path | None = None
+) -> dict[str, Any]:
     """The work order's stored review verdict, classified for a merge decision.
 
     ``state`` is one of:
@@ -111,10 +113,19 @@ def verdict_state(work_order_id: str, *, db_path: Path | None = None) -> dict[st
         "reason": None,
         "generator": None,
     }
+    # BOTH STORES, via the reader the close gate already uses. The first cut called
+    # get_wo_artifact_envelope directly — authority only — so a verdict that landed
+    # on the disk fallback read as "absent". Caught by the very first smoke test
+    # against real data: 6a4c21d1 had a FAILING verdict on disk and this reported
+    # "verify has not run", which are opposite remedies (fix the gaps vs run it at
+    # all). Reusing _artifact_with_envelope means there is one reader for one
+    # artifact rather than a second implementation that can disagree — the same
+    # single-source argument as the grader-payload normaliser and the envelope rule.
     try:
-        from core.work_orders.artifacts import get_wo_artifact_envelope
+        from core.work_orders.close_shared import _artifact_with_envelope
 
-        raw, envelope = get_wo_artifact_envelope(work_order_id, "review_verdict", db_path=db_path)
+        wo_dir = (planning_root or Path.cwd() / ".planning") / "work-orders" / work_order_id
+        raw, envelope = _artifact_with_envelope(work_order_id, wo_dir, "review_verdict", db_path)
     except Exception as exc:  # noqa: BLE001 - a reader must not raise into a merge check
         result["reason"] = f"verdict unreadable: {type(exc).__name__}: {exc}"[:200]
         result["state"] = "unreadable"
@@ -141,9 +152,22 @@ def verdict_state(work_order_id: str, *, db_path: Path | None = None) -> dict[st
         result["reason"] = "stored verdict is not a JSON object"
         return result
 
-    summary = (verdict.get("summary") or "").strip()
+    from core.work_orders.close_shared import verdict_evidence
+
+    summary, findings = verdict_evidence(verdict)
     result["summary"] = summary or None
-    if verdict.get("unreviewable") or "unreviewable" in summary.lower():
+    # STRUCTURED SIGNAL, NOT A KEYWORD IN PROSE. The first cut asked whether
+    # "unreviewable" appeared ANYWHERE in the summary — and a real verdict whose
+    # prose read "it separates never-run from failed from unreviewable" was
+    # therefore classified unreviewable, despite carrying three concrete gaps and a
+    # 0.793 composite. Classifying a judgement by a word inside it is how a real
+    # failure gets softened into "we could not tell", which is the inversion this
+    # module is supposed to prevent.
+    #
+    # verify marks an unjudgeable run two ways, both checkable without reading
+    # prose: an `unreviewable` key, and a summary that OPENS with its own warning
+    # phrase. A prefix, not a substring.
+    if verdict.get("unreviewable") or summary.lower().startswith("independent review unreviewable"):
         result["state"] = "unreviewable"
         result["reason"] = summary or "verify could not judge the work"
         return result
@@ -151,7 +175,7 @@ def verdict_state(work_order_id: str, *, db_path: Path | None = None) -> dict[st
         result["state"] = "passed"
         return result
 
-    reasons = verdict.get("failure_reasons") or []
+    reasons = findings
     if not summary and not reasons:
         # WO-VERDICT-PARTIAL-WRITE's lesson: an empty record is not a judgement.
         result["state"] = "unreviewable"
@@ -167,6 +191,7 @@ def merge_readiness(
     work_order_id: str | None = None,
     branch: str | None = None,
     db_path: Path | None = None,
+    planning_root: Path | None = None,
 ) -> dict[str, Any]:
     """Report whether this change's work order has a green verdict.
 
@@ -193,7 +218,7 @@ def merge_readiness(
             ),
         }
 
-    info = verdict_state(resolved, db_path=db_path)
+    info = verdict_state(resolved, db_path=db_path, planning_root=planning_root)
     state = info["state"]
     ready = state == "passed"
     advice = {

@@ -38,6 +38,39 @@ def _artifact_text(work_order_id: str, wo_dir: Path, kind: str, db_path: Path | 
     return content
 
 
+def verdict_evidence(verdict: dict[str, Any]) -> tuple[str, list[Any]]:
+    """``(summary, findings)`` from a verify verdict, read where verify WRITES them.
+
+    THE SHAPE WAS INVENTED, THEN MEASURED. WO-VERDICT-PARTIAL-WRITE task 3 checked
+    top-level ``summary`` / ``failure_reasons`` and treated their absence as an
+    incomplete record. Real verdicts carry NEITHER key: the prose lives under
+    ``completion.summary`` and the findings under ``gaps`` /
+    ``spawned_work_orders``. So a verdict with three real gaps and a 0.793 composite
+    was reported as "UNREVIEWABLE - incomplete record", telling an operator to
+    re-run verify instead of showing them the gaps.
+
+    That is the inversion the same commit called "worse than the defect": a real
+    failure softened into inconclusive. It shipped because the shape was assumed
+    rather than read from a stored verdict.
+
+    Top-level keys are still accepted first, since attestations and hand-built
+    verdicts in tests do use them.
+    """
+    summary = (verdict.get("summary") or "").strip()
+    if not summary:
+        for section in ("completion", "correctness", "quality"):
+            part = verdict.get(section)
+            if isinstance(part, dict) and (part.get("summary") or "").strip():
+                summary = str(part["summary"]).strip()
+                break
+    findings: list[Any] = []
+    for key in ("failure_reasons", "gaps", "spawned_work_orders"):
+        value = verdict.get(key)
+        if isinstance(value, list):
+            findings.extend(value)
+    return summary, findings
+
+
 def _artifact_with_envelope(
     work_order_id: str, wo_dir: Path, kind: str, db_path: Path | None
 ) -> tuple[str | None, dict[str, Any] | None]:

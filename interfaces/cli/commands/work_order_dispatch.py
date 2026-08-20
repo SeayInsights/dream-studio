@@ -23,6 +23,7 @@ from interfaces.cli.commands.work_order_lifecycle import (
 from interfaces.cli.commands.work_order_query import (
     _work_order_artifact,
     _work_order_executor,
+    _work_order_merge_check,
     _work_order_list,
     _work_order_next,
     _work_order_packet,
@@ -172,6 +173,33 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
     wo_affirm.add_argument("--changelog", action="store_true", help="Change is changelog-worthy")
     wo_affirm.add_argument("--note", default="", help="Optional context for the affirmation")
 
+    # WO-MERGE-BEFORE-VERIFY: the operator-reachable surface. Its own verify found
+    # the checker had NO production call site — "a gate that exists, is correct, and
+    # sits where it cannot stop the thing it was built to stop", which is the very
+    # diagnosis the work order was registered on. A checker nobody can invoke is
+    # not a check.
+    wo_merge_check = work_order_sub.add_parser(
+        "merge-check",
+        help="Is this change's work order verdict green? Reports before a merge; "
+        "never blocks. Use --override to record a deliberate merge past a red one.",
+    )
+    wo_merge_check.add_argument(
+        "work_order_id", nargs="?", default=None, help="Work order UUID (or use --branch)"
+    )
+    wo_merge_check.add_argument(
+        "--branch", default=None, help="Resolve the work order from a branch name"
+    )
+    wo_merge_check.add_argument(
+        "--override",
+        default=None,
+        metavar="REASON",
+        help="Record a deliberate merge past a non-green verdict, with this reason "
+        "(emits a gate.bypassed event — the count surfaces in ds doctor)",
+    )
+    wo_merge_check.add_argument(
+        "--pr", type=int, default=None, help="PR number, recorded with an override"
+    )
+
     wo_executor = work_order_sub.add_parser(
         "executor", help="Resolve which model should execute this WO (escalation-aware)"
     )
@@ -316,6 +344,15 @@ def dispatch(
             work_order_id=args.work_order_id,
             touched=_touched,
             note=args.note,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+    if args.work_order_command == "merge-check":
+        return _work_order_merge_check(
+            work_order_id=args.work_order_id,
+            branch=args.branch,
+            override=args.override,
+            pull_request=args.pr,
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )
