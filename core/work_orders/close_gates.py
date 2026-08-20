@@ -150,11 +150,38 @@ def run_gate_check(
                 _test_checks.extend(c for c in _task_checks if c.get("kind") == "TEST-CHECK")
             if _test_checks:
                 _failed = [c for c in _test_checks if not c.get("passed")]
+                # MISADDRESSED IS NOT FAILED (WO-VERIFY-GRADES-DELIVERY). A check that
+                # could not FIND its target (pytest exit 4/5) says nothing about the
+                # work: on 2026-08-19 three TEST-CHECKs reported FAILED for work that
+                # was merged and green on three platforms, purely because the working
+                # tree was on another branch. Reported as its own state so the
+                # operator is told to fix the ADDRESS, not the code — and so this
+                # never reads as a false verdict about the work either way.
+                _unaddressed = [c for c in _failed if c.get("unaddressed")]
+                if _unaddressed and len(_unaddressed) == len(_failed):
+                    _detail = "; ".join(
+                        f"{c['expr']!r}: {c.get('error') or 'target not found'}"
+                        for c in _unaddressed[:3]
+                    )
+                    return False, (
+                        f"all_tests_pass: UNVERIFIED — {len(_unaddressed)} TEST-CHECK(s)"
+                        f" could not be RUN (target not found), none actually failed."
+                        f" This is not a verdict about the work: verify from the"
+                        f" branch/commit where it landed, or repoint the criterion — {_detail}"
+                    )
                 if _failed:
                     _detail = "; ".join(
                         c.get("error") or f"TEST-CHECK {c['expr']!r} failed" for c in _failed[:3]
                     )
-                    return False, f"all_tests_pass: {len(_failed)} TEST-CHECK(s) failed — {_detail}"
+                    _note = (
+                        f" ({len(_unaddressed)} of these could not be run at all —"
+                        " misaddressed rather than failing)"
+                        if _unaddressed
+                        else ""
+                    )
+                    return False, (
+                        f"all_tests_pass: {len(_failed)} TEST-CHECK(s) failed{_note} — {_detail}"
+                    )
                 return True, ""
         # WO-CI-COMPLETENESS: the legacy Path B fallback (test-results.md containing
         # the string "PASSED" — a hand-writable, never-freshness-checked file) is

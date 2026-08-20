@@ -79,6 +79,40 @@ def _run_one_sql_check(expr: str, db_path: Path) -> dict[str, Any]:
     return check
 
 
+# pytest's documented exit codes. 4 (usage error) and 5 (no tests collected) mean
+# the check never reached the work: a renamed test, a typo in a node id, a file
+# that moved. Reporting those as "exited with code N" — identical to 1, which means
+# assertions genuinely failed — is what sent a real diagnosis down the wrong path
+# on 2026-08-19: three TEST-CHECKs read as FAILED for delivered, merged, green work
+# because the checkout did not contain the tests. A gate that cannot find its
+# target is evidence about the gate, not about the work.
+_PYTEST_EXIT_MEANING = {
+    1: "tests ran and FAILED",
+    2: "pytest was interrupted (Ctrl-C or internal error)",
+    3: "internal pytest error",
+    4: "pytest USAGE ERROR — the node id is wrong or the file does not exist here",
+    5: "NO TESTS COLLECTED — nothing matched this node id in this checkout",
+}
+_UNADDRESSED_EXITS = frozenset({4, 5})
+
+
+def _test_check_failure_reason(code: int, *, is_pytest: bool) -> str:
+    """Human-meaningful reason for a non-zero TEST-CHECK exit."""
+    if not is_pytest:
+        return f"TEST-CHECK command exited with code {code}"
+    meaning = _PYTEST_EXIT_MEANING.get(code)
+    if meaning is None:
+        return f"TEST-CHECK exited with code {code}"
+    if code in _UNADDRESSED_EXITS:
+        return (
+            f"TEST-CHECK could not run: {meaning} (exit {code}). This is NOT a test "
+            "failure — the check is misaddressed, or this checkout does not contain "
+            "the delivered work. Verify from the branch/commit where the work landed, "
+            "or repoint the acceptance criterion."
+        )
+    return f"TEST-CHECK failed: {meaning} (exit {code})"
+
+
 def _run_one_test_check(expr: str, project_root: Path | None = None) -> dict[str, Any]:
     """Run a TEST-CHECK in the work order's TARGET repo and gate on its exit code.
 
@@ -112,7 +146,8 @@ def _run_one_test_check(expr: str, project_root: Path | None = None) -> dict[str
     cwd = str(project_root) if project_root else None
 
     stripped = expr.strip()
-    if stripped[:4].lower() == "cmd:":
+    is_cmd = stripped[:4].lower() == "cmd:"
+    if is_cmd:
         raw = stripped[4:].strip()
         # Split into argv (no shell). Use POSIX rules on every platform: realistic test
         # commands (`pytest platform/tests`, `npm test`, `go test ./...`) have no
@@ -142,8 +177,15 @@ def _run_one_test_check(expr: str, project_root: Path | None = None) -> dict[str
         stdout = (result.stdout or "") + (result.stderr or "")
         check["result"] = stdout[:2000]
         check["passed"] = result.returncode == 0
+        check["exit_code"] = result.returncode
         if result.returncode != 0:
-            check["error"] = f"TEST-CHECK command exited with code {result.returncode}"
+            check["error"] = _test_check_failure_reason(result.returncode, is_pytest=not is_cmd)
+            # MISADDRESSED IS NOT FAILED (WO-VERIFY-GRADES-DELIVERY): a check whose
+            # target does not exist says nothing about the work, so it must not be
+            # reported as though the work failed. Marked separately from a genuine
+            # assertion failure so callers can tell "the gate is pointed at the
+            # wrong thing" from "the work is wrong".
+            check["unaddressed"] = result.returncode in _UNADDRESSED_EXITS and not is_cmd
     except subprocess.TimeoutExpired:
         check["error"] = f"TEST-CHECK timed out after {_TEST_CHECK_TIMEOUT}s"
     except FileNotFoundError as exc:
