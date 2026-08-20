@@ -326,9 +326,30 @@ def verify_work_order(
         originating_wo_id = _gap_marker.group(1) if _gap_marker else None
 
         _search_root = resolve_project_root(work_order_id, db_path) or source_root
+
+        # WO-VERIFY-GRADES-DELIVERY: the RECORDED boundary is the locator; the
+        # commit-message grep below is reinforcement. Grepping history for the WO's
+        # uuid or title fails for a squash merge, a reworded title, unpushed work,
+        # no remote, a commit naming the WO by its human tag, or a non-git target —
+        # and none of those mean nothing was delivered. Observed live on 758fbedd:
+        # "no commits found referencing 758fbedd", for work merged and green on all
+        # three platforms.
+        #
+        # Order matters: range first (a real diff, no message convention needed),
+        # then the grep (which adds commits the range might miss when work landed
+        # outside it, e.g. a rebase), so the two are additive rather than
+        # exclusive. `boundary_diff_text` returns None when it has nothing, leaving
+        # the old path exactly as it was for WOs that predate boundaries.
+        from .delivery_boundary import boundary_diff_text
+
+        _boundary_diff, _boundary_note = boundary_diff_text(
+            work_order_id, repo_root=Path(_search_root), db_path=db_path
+        )
         git_diff = _collect_git_commits(_search_root, work_order_id, title=wo["title"])
         if git_diff is None and originating_wo_id:
             git_diff = _collect_git_commits(_search_root, originating_wo_id)
+        if _boundary_diff:
+            git_diff = f"{_boundary_diff}\n\n{git_diff}" if git_diff else _boundary_diff
 
         # WO-GAP-EVIDENCE: remediation for THIS WO's review gaps is committed under
         # the spawned gap WOs' own ids — invisible to the parent-id collection above,

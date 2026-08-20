@@ -346,6 +346,95 @@ def boundary_file_contents(
     return text[:_MAX_FALLBACK_BYTES], reason
 
 
+def boundary_diff_text(
+    work_order_id: str,
+    *,
+    repo_root: Path | None,
+    db_path: Path | None = None,
+) -> tuple[str | None, str | None]:
+    """The WO's delivered change, from RECORDED state. ``(text, note)``.
+
+    The locator that replaces commit-message archaeology. Layers, strongest first,
+    and additive rather than exclusive because each answers a different question:
+
+    1. ``start_commit..HEAD`` — the actual diff of what landed since the WO began.
+    2. the uncommitted working tree, boundary-scoped — work in progress is still
+       delivered work.
+    3. current boundary-file content — the floor that needs no VCS at all.
+
+    Returns ``(None, reason)`` when every layer is empty, which is the ONLY honest
+    "nothing to look at". That is a finding about the work (a WO that delivered
+    nothing) rather than the metadata artifact "unreviewable" used to mean.
+
+    ``note`` carries every caveat encountered — a truncated fallback, an
+    unplaceable path, a missing boundary — so a partial view is never presented as
+    a whole one.
+    """
+    notes: list[str] = []
+    sections: list[str] = []
+
+    expr, why = boundary_commit_range(work_order_id, db_path=db_path)
+    if expr and repo_root is not None:
+        try:
+            proc = subprocess.run(
+                ["git", "diff", expr],
+                cwd=str(repo_root),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=60,
+            )
+            if isinstance(proc.returncode, int) and proc.returncode == 0:
+                body = (proc.stdout if isinstance(proc.stdout, str) else "").strip()
+                if body:
+                    sections.append(f"=== commit range {expr} ===\n{body}\n")
+            else:
+                notes.append(f"git diff {expr} failed")
+        except (OSError, subprocess.SubprocessError) as exc:
+            notes.append(f"git diff unavailable: {type(exc).__name__}")
+    elif why:
+        notes.append(why)
+
+    paths, why_tree = working_tree_changes(work_order_id, repo_root=repo_root, db_path=db_path)
+    if why_tree:
+        notes.append(why_tree)
+    if paths and repo_root is not None:
+        try:
+            proc = subprocess.run(
+                ["git", "diff", "HEAD", "--", *paths],
+                cwd=str(repo_root),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=60,
+            )
+            tracked = (proc.stdout if isinstance(proc.stdout, str) else "").strip()
+        except (OSError, subprocess.SubprocessError):
+            tracked = ""
+        listing = "\n".join(f"  {p}" for p in paths)
+        sections.append(
+            f"=== uncommitted, within this work order's module boundary ===\n{listing}\n"
+            + (f"{tracked}\n" if tracked else "")
+        )
+
+    if not sections:
+        # Only now is the no-VCS floor worth reading: it shows current state rather
+        # than the change, so it must never displace a diff that exists.
+        content, why_content = boundary_file_contents(
+            work_order_id, repo_root=repo_root, db_path=db_path
+        )
+        if why_content:
+            notes.append(why_content)
+        if content:
+            sections.append(content)
+
+    if not sections:
+        return None, "; ".join(notes) if notes else "no recorded delivery for this work order"
+    return "".join(sections), ("; ".join(notes) if notes else None)
+
+
 def boundary_commit_range(
     work_order_id: str, *, db_path: Path | None = None
 ) -> tuple[str | None, str | None]:

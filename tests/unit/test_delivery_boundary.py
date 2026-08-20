@@ -564,3 +564,92 @@ def test_undecodable_bytes_do_not_break_the_read(db, tmp_path):
     text, reason = boundary_file_contents(wo_id, repo_root=plain, db_path=db)
     assert reason is None
     assert "ok" in text and "done" in text
+
+
+# ── The locator (task 4): recorded state first, grep as reinforcement ──────────
+
+
+def test_the_range_diff_is_the_primary_evidence(db, tmp_path):
+    """A real commit made after start is found by RANGE, with no mention of the WO
+    anywhere in the commit message."""
+    from core.work_orders.delivery_boundary import boundary_diff_text, record_delivery_boundary
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    wo_id = _wo_with_boundary(db, repo, "core/")
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+
+    # Land work AFTER the boundary, naming the WO nowhere.
+    (repo / "core").mkdir()
+    (repo / "core" / "feature.py").write_text("def shipped():\n    return 42\n", encoding="utf-8")
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@e",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@e",
+    }
+    for args in (["add", "."], ["commit", "-qm", "totally unrelated subject line"]):
+        subprocess.run(
+            ["git", *args], cwd=str(repo), capture_output=True, text=True, env=env, timeout=30
+        )
+
+    text, note = boundary_diff_text(wo_id, repo_root=repo, db_path=db)
+    assert text, f"the range must find the work: note={note}"
+    assert "def shipped()" in text
+    assert "commit range" in text
+    assert wo_id not in text, "found without any reference to the work order at all"
+
+
+def test_uncommitted_work_appears_when_there_is_no_commit(db, tmp_path):
+    from core.work_orders.delivery_boundary import boundary_diff_text, record_delivery_boundary
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    wo_id = _wo_with_boundary(db, repo, "core/")
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+
+    (repo / "core").mkdir()
+    (repo / "core" / "wip.py").write_text("draft = True\n", encoding="utf-8")
+
+    text, _note = boundary_diff_text(wo_id, repo_root=repo, db_path=db)
+    assert text and "core/wip.py" in text
+    assert "module boundary" in text
+
+
+def test_the_no_vcs_floor_is_used_only_when_nothing_else_exists(db, tmp_path):
+    """Content shows current state rather than the change, so it must never
+    displace a diff that exists."""
+    from core.work_orders.delivery_boundary import boundary_diff_text
+
+    plain = tmp_path / "no-vcs"
+    (plain / "core").mkdir(parents=True)
+    (plain / "core" / "only.py").write_text("FLOOR = 1\n", encoding="utf-8")
+    wo_id = _wo_with_boundary(db, plain, "core/")
+
+    text, _note = boundary_diff_text(wo_id, repo_root=plain, db_path=db)
+    assert text and "FLOOR = 1" in text
+    assert "boundary file core/only.py" in text
+
+
+def test_nothing_delivered_is_reported_as_a_finding_not_as_missing_metadata(db, tmp_path):
+    """The only honest 'nothing to look at': every layer empty. That is a finding
+    about the WORK, not the metadata artifact 'unreviewable' used to mean."""
+    from core.work_orders.delivery_boundary import boundary_diff_text, record_delivery_boundary
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    wo_id = _wo_with_boundary(db, repo, "core/")
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+    # No commits after start, nothing uncommitted, boundary path never created.
+    text, note = boundary_diff_text(wo_id, repo_root=repo, db_path=db)
+    assert text is None
+    assert note, "an empty result must always say why"
+
+
+def test_caveats_are_carried_so_a_partial_view_is_never_presented_as_whole(db, tmp_path):
+    from core.work_orders.delivery_boundary import boundary_diff_text
+
+    plain = tmp_path / "nb"
+    plain.mkdir()
+    wo_id = _wo_with_boundary(db, plain, None)  # no boundary declared
+    text, note = boundary_diff_text(wo_id, repo_root=plain, db_path=db)
+    assert text is None
+    assert note and "Module boundary" in note
