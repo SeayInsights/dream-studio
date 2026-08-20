@@ -229,3 +229,51 @@ def test_a_pre_cutover_security_scan_keeps_its_historical_acceptance(db, tmp_pat
 
     passed, reason = _gate("security_scan", db, tmp_path, wo_id)
     assert passed is True, f"pre-cutover artifacts stay acceptable: {reason}"
+
+
+def test_close_reads_the_last_good_verdict_after_an_interruption(db, tmp_path):
+    """The half of task 4 the first version omitted, caught by this WO's own verify.
+
+    "Nothing appears at the path" and "the previous good verdict is still readable
+    through the close gate" are different guarantees, and only the second is what
+    actually unblocks a close. Asserting the first alone proves atomicity but not
+    the property that matters to an operator.
+    """
+    from core.work_orders.artifacts import set_wo_artifact
+    from core.work_orders.verify_persist import _atomic_write
+
+    wo_id = _wo(db)
+    # A good, enveloped verdict from run N-1 — the state we must not lose.
+    set_wo_artifact(
+        wo_id,
+        "review_verdict",
+        json.dumps({"passed": True, "summary": "run N-1 certified this work"}),
+        db_path=db,
+        generator="ds work-order verify",
+        project_root=Path("."),
+    )
+    passed_before, _ = _gate("independent_review", db, tmp_path, wo_id)
+    assert passed_before is True, "precondition: the gate accepts the good verdict"
+
+    # Run N is interrupted mid-write on the disk fallback path.
+    disk = tmp_path / "work-orders" / wo_id / "review-verdict.json"
+
+    class Boom(BaseException):
+        pass
+
+    import core.work_orders.verify_persist as vp
+
+    real_fsync = vp.os.fsync
+    vp.os.fsync = lambda *_a, **_k: (_ for _ in ()).throw(Boom())
+    try:
+        with pytest.raises(Boom):
+            _atomic_write(disk, json.dumps({"passed": False}))
+    finally:
+        vp.os.fsync = real_fsync
+
+    assert not disk.exists(), "the interrupted write left nothing behind"
+
+    # And the close gate still reads the LAST GOOD verdict — the property that
+    # actually matters, since a truncated file would have blocked this close.
+    passed_after, reason = _gate("independent_review", db, tmp_path, wo_id)
+    assert passed_after is True, f"the previous good verdict must survive: {reason}"

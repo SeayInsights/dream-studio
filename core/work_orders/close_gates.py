@@ -45,6 +45,28 @@ def _envelope_absence_is_legacy(conn: Any, work_order_id: str) -> bool:
     return created[:10] < _PROVENANCE_CUTOVER
 
 
+def _envelope_required(
+    conn: Any, work_order_id: str, envelope: dict[str, Any] | None, artifact: str, remedy: str
+) -> str | None:
+    """Reject an envelope-less artifact unless this WO predates provenance.
+
+    WO-VERDICT-PARTIAL-WRITE task 2, widened after its own verify found the fix had
+    been applied to ONE of the three envelope-aware gates while the comment claimed
+    all of them. A comment describing a broader fix than the code performs is worse
+    than no comment: it makes the remaining hole look closed. One helper, three call
+    sites, so the rule cannot drift apart again.
+    """
+    if envelope:
+        return None
+    if _envelope_absence_is_legacy(conn, work_order_id):
+        return None
+    return (
+        f"{artifact} lacks a provenance envelope. This work order postdates the"
+        f" provenance cutover ({_PROVENANCE_CUTOVER}), so its artifact should carry"
+        f" one — an envelope-less artifact is hand-written or half-written. {remedy}"
+    )
+
+
 def _provenance_staleness(
     envelope: dict[str, Any] | None,
     *,
@@ -134,6 +156,15 @@ def run_gate_check(
         contract, _contract_env = _artifact_with_envelope(
             work_order_id, wo_dir, "api_contract", db_path
         )
+        _missing_env = _envelope_required(
+            conn,
+            work_order_id,
+            _contract_env,
+            "api-contract.md",
+            "Regenerate the contract and store it via set_wo_artifact.",
+        )
+        if _missing_env and contract is not None:
+            return False, f"api_contract_exists: {_missing_env}"
         _stale = _provenance_staleness(
             _contract_env, work_order_id=work_order_id, conn=conn, db_path=db_path
         )
@@ -232,6 +263,15 @@ def run_gate_check(
         from core.work_orders.artifact_envelope import unwrap as _unwrap
 
         content, _critique_env = _unwrap(critique_path.read_text(encoding="utf-8"))
+        _missing_env = _envelope_required(
+            conn,
+            work_order_id,
+            _critique_env,
+            "design-critique.md",
+            "Re-run website:critique and store the result via set_wo_artifact.",
+        )
+        if _missing_env:
+            return False, f"design_critique: {_missing_env}"
         _stale = _provenance_staleness(
             _critique_env, work_order_id=work_order_id, conn=conn, db_path=db_path
         )
@@ -264,14 +304,15 @@ def run_gate_check(
         # cutover has no legacy claim: its scan was always going to be enveloped, so
         # an envelope-less one is either hand-authored or interrupted, and both
         # should be rejected rather than believed.
-        if not _scan_env and not _envelope_absence_is_legacy(conn, work_order_id):
-            return False, (
-                "security_scan: security-scan.md lacks a provenance envelope."
-                " This work order postdates the provenance cutover"
-                f" ({_PROVENANCE_CUTOVER}), so its scan should carry one — an"
-                " envelope-less artifact is hand-written or half-written. Re-run the"
-                " security audit and store the result via set_wo_artifact."
-            )
+        _missing_env = _envelope_required(
+            conn,
+            work_order_id,
+            _scan_env,
+            "security-scan.md",
+            "Re-run the security audit and store the result via set_wo_artifact.",
+        )
+        if _missing_env:
+            return False, f"security_scan: {_missing_env}"
         # WO-VERIFY-PROVENANCE: enveloped scans must not predate newer WO commits.
         _stale = _provenance_staleness(
             _scan_env, work_order_id=work_order_id, conn=conn, db_path=db_path
