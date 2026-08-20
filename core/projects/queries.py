@@ -243,9 +243,14 @@ def get_project_state(
     # WO-MAINRED-VISIBILITY: the post-merge full-ci verdict for main, surfaced
     # where operators and agents orient. Advisory; unknown stays unknown.
     try:
-        from core.health.main_ci import main_ci_status, main_ci_warning
+        from core.health.main_ci import CACHE_MAX_AGE_SECONDS, main_ci_status, main_ci_warning
 
-        main_ci: dict[str, Any] = main_ci_status(repo_root=source_root)
+        # WO-MAINCI-CACHE: project state runs on every resume, so it accepts a
+        # recent cached answer rather than paying a gh round trip each time. A
+        # cached result carries its age; `close` still reads live.
+        main_ci: dict[str, Any] = main_ci_status(
+            repo_root=source_root, max_age_seconds=CACHE_MAX_AGE_SECONDS
+        )
         _mc_warning = main_ci_warning(main_ci)
         if _mc_warning:
             main_ci["warning"] = _mc_warning
