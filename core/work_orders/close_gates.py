@@ -17,6 +17,33 @@ from typing import Any
 
 from .close_shared import _artifact_text, _artifact_with_envelope
 
+# WO-VERDICT-PARTIAL-WRITE task 2. Provenance envelopes were introduced by
+# WO-VERIFY-PROVENANCE on 2026-08-19; artifacts stored before that date have no
+# envelope through no fault of their own, and the gates accept them so historical
+# WOs stay closeable. That exception was written as "any artifact lacking an
+# envelope", which is broader than the fact it was meant to accommodate — and it
+# is what let a partial write made TODAY through, where it was read as a failed
+# review and blocked a close on work that had passed.
+#
+# A work order created after the cutover has no legacy claim: its artifacts were
+# always going to be enveloped, so an envelope-less one is either hand-written or
+# half-written, and both should be rejected rather than believed.
+_PROVENANCE_CUTOVER = "2026-08-19"
+
+
+def _envelope_absence_is_legacy(conn: Any, work_order_id: str) -> bool:
+    """True when this WO predates provenance envelopes, so a missing one is expected.
+
+    Fails OPEN (returns True) when the WO's creation date cannot be read: refusing
+    to close a work order because its own timestamp is unreadable would be a worse
+    failure than accepting one envelope-less artifact, and the staleness check still
+    applies to everything that does carry an envelope.
+    """
+    created = _wo_created_at(conn, work_order_id)
+    if not isinstance(created, str) or not created:
+        return True
+    return created[:10] < _PROVENANCE_CUTOVER
+
 
 def _provenance_staleness(
     envelope: dict[str, Any] | None,
@@ -229,8 +256,23 @@ def run_gate_check(
         )
         if content is None:
             return False, "security_scan: security-scan.md not found"
+        # WO-VERDICT-PARTIAL-WRITE task 2: the envelope-less exception is scoped to
+        # ACTUAL legacy artifacts. independent_review already rejects an
+        # envelope-less verdict outright (measured, not assumed), but this gate and
+        # the other artifact gates accept one — which means a hand-written or
+        # half-written security scan passes today. A WO created after the provenance
+        # cutover has no legacy claim: its scan was always going to be enveloped, so
+        # an envelope-less one is either hand-authored or interrupted, and both
+        # should be rejected rather than believed.
+        if not _scan_env and not _envelope_absence_is_legacy(conn, work_order_id):
+            return False, (
+                "security_scan: security-scan.md lacks a provenance envelope."
+                " This work order postdates the provenance cutover"
+                f" ({_PROVENANCE_CUTOVER}), so its scan should carry one — an"
+                " envelope-less artifact is hand-written or half-written. Re-run the"
+                " security audit and store the result via set_wo_artifact."
+            )
         # WO-VERIFY-PROVENANCE: enveloped scans must not predate newer WO commits.
-        # Legacy (envelope-less) scans keep their historical acceptance.
         _stale = _provenance_staleness(
             _scan_env, work_order_id=work_order_id, conn=conn, db_path=db_path
         )
@@ -336,8 +378,27 @@ def run_gate_check(
                 return False, reason
             gap_ids = [w.get("work_order_id", "") for w in verdict.get("spawned_work_orders", [])]
             gap_msg = f" Gap WOs: {', '.join(gap_ids)}" if gap_ids else ""
+            # AN INCOMPLETE RECORD IS NOT A FAILED REVIEW (WO-VERDICT-PARTIAL-WRITE
+            # task 3). A verdict with passed=False but NO summary and NO failure
+            # reasons is not a review that failed — it is a review whose record never
+            # finished being written. This exact artifact appeared after a verify was
+            # killed mid-write, and the gate reported "review failed — no summary",
+            # blocking a close on work that had passed. Same corrupt-is-not-absent
+            # distinction read_unverified_ledger already makes: say the record is
+            # unusable and name the remedy, rather than converting missing
+            # information into a verdict against the work.
+            _summary = (verdict.get("summary") or "").strip()
+            _reasons = verdict.get("failure_reasons") or []
+            if not _summary and not _reasons:
+                return False, (
+                    "independent_review: UNREVIEWABLE — the stored verdict says passed=False"
+                    " but carries no summary and no failure reasons, which is an incomplete"
+                    " record rather than a review that failed (a verify killed mid-write"
+                    " leaves exactly this). Re-run: py -m interfaces.cli.ds work-order"
+                    f" verify {work_order_id}"
+                )
             return False, (
-                f"independent_review: review failed — {verdict.get('summary', 'no summary')}.{gap_msg}"
+                f"independent_review: review failed — {_summary or 'no summary'}.{gap_msg}"
             )
         return True, ""
 
