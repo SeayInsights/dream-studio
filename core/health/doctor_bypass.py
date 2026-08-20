@@ -88,6 +88,30 @@ def bypass_audit(db_path: Path, *, since_days: int = 7) -> dict[str, Any]:
             if len(bucket["samples"]) < 5:
                 bucket["samples"].append({"when": row["event_timestamp"], "reason": row["reason"]})
         result["total"] += len(grows)
+
+        # WO-MERGE-BEFORE-VERIFY task 4: the PATTERN is the finding, not the
+        # instance. Merging past a work order's own verdict already lands in
+        # gate_bypasses by reusing the gate.bypassed family — but a count sitting
+        # among a dozen other gates is not the same signal as "you did this N times
+        # this week". Every red on main on 2026-08-19 was one instance of this; what
+        # made it a defect was the repetition, and the operator noticing "CI KEEPS
+        # failing" is precisely the observation DS should have produced first.
+        _merge = result["gate_bypasses"].get("merge_before_verify")
+        if _merge:
+            count = _merge["count"]
+            summary: dict[str, Any] = {
+                "count": count,
+                "since": since_iso,
+                "recurring": count > 1,
+            }
+            if count > 1:
+                summary["note"] = (
+                    f"{count} merges past a work order's own verify verdict in the last"
+                    f" {since_days} days. One is a judgement call; a pattern is a"
+                    " process gap — every red on main on 2026-08-19 was an instance of"
+                    " this, and the repetition is what made it a defect."
+                )
+            result["merge_before_verify"] = summary
     finally:
         conn.close()
     return result

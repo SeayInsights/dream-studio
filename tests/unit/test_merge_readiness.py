@@ -238,3 +238,82 @@ def test_the_override_uses_the_existing_bypass_family(db):
     src = inspect.getsource(mod.record_merge_override)
     assert "record_gate_bypass" in src
     assert 'gate="merge_before_verify"' in src
+
+
+# ── Task 4: the pattern is surfaced, not just the instance ─────────────────────
+
+
+def _emit_bypass(db: Path, when: str, reason: str = "urgent hotfix") -> None:
+    """Write a gate.bypassed row directly — the audit reads business_canonical_events,
+    and this test is about the READER, not the spool round trip."""
+    conn = sqlite3.connect(str(db))
+    try:
+        conn.execute(
+            "INSERT INTO business_canonical_events"
+            " (event_id, event_type, event_timestamp, payload)"
+            " VALUES (?,?,?,?)",
+            (
+                str(uuid.uuid4()),
+                "gate.bypassed",
+                when,
+                json.dumps({"gate": "merge_before_verify", "reason": reason}),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _now_iso() -> str:
+    from datetime import UTC, datetime
+
+    return datetime.now(UTC).isoformat()
+
+
+def test_a_single_override_is_counted_without_being_called_a_pattern(db):
+    """One is a judgement call. Labelling it a process gap would train an operator
+    to ignore the line."""
+    from core.health.doctor_bypass import bypass_audit
+
+    _emit_bypass(db, _now_iso())
+    audit = bypass_audit(db)
+    summary = audit.get("merge_before_verify")
+    assert summary, "a merge override must be surfaced on its own, not only by gate name"
+    assert summary["count"] == 1
+    assert summary["recurring"] is False
+    assert "note" not in summary
+
+
+def test_repeated_overrides_are_named_as_a_pattern(db):
+    """The observation DS should have produced before an operator said "CI keeps
+    failing on main" — every red that day was one instance of this."""
+    from core.health.doctor_bypass import bypass_audit
+
+    for _ in range(3):
+        _emit_bypass(db, _now_iso())
+    audit = bypass_audit(db)
+    summary = audit["merge_before_verify"]
+    assert summary["count"] == 3
+    assert summary["recurring"] is True
+    assert "process gap" in summary["note"]
+    assert "2026-08-19" in summary["note"], "the note should cite the incident it came from"
+
+
+def test_no_overrides_means_no_merge_section_at_all(db):
+    """A section that always renders becomes furniture. Absent when clean."""
+    from core.health.doctor_bypass import bypass_audit
+
+    audit = bypass_audit(db)
+    assert "merge_before_verify" not in audit
+    assert audit["total"] == 0
+
+
+def test_the_override_still_appears_under_its_gate_name(db):
+    """The focused summary is additive — it must not replace the general
+    aggregation that bypass_report and the doctor already consume."""
+    from core.health.doctor_bypass import bypass_audit
+
+    _emit_bypass(db, _now_iso())
+    audit = bypass_audit(db)
+    assert "merge_before_verify" in audit["gate_bypasses"]
+    assert audit["gate_bypasses"]["merge_before_verify"]["count"] == 1
