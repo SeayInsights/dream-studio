@@ -140,6 +140,10 @@ def _run_one_test_check(expr: str, project_root: Path | None = None) -> dict[str
         "passed": False,
         "result": None,
         "error": None,
+        # Set True only when the check actually ran (see the note at the exit-code
+        # handling below). Present on every result so a consumer never has to guess
+        # whether execution happened.
+        "executed": False,
     }
 
     # cwd = the WO's target repo (falls back to the current process dir = DS repo).
@@ -178,6 +182,15 @@ def _run_one_test_check(expr: str, project_root: Path | None = None) -> dict[str
         check["result"] = stdout[:2000]
         check["passed"] = result.returncode == 0
         check["exit_code"] = result.returncode
+        # WO-SEPARATE-TEST-RUNNER: how the claim was established, structured rather
+        # than left to prose. A grader that could not execute pytest said so in its
+        # summary on 2026-08-20 ("running pytest was denied by the sandbox, so the
+        # tests are not confirmed green by execution") — a verdict resting on a code
+        # read is materially weaker than one resting on execution, and downstream the
+        # two were indistinguishable. `executed` makes them distinguishable, and the
+        # substrate sets it: the gate runs the check itself, so this is not the
+        # author's claim about their own work.
+        check["executed"] = True
         if result.returncode != 0:
             check["error"] = _test_check_failure_reason(result.returncode, is_pytest=not is_cmd)
             # MISADDRESSED IS NOT FAILED (WO-VERIFY-GRADES-DELIVERY): a check whose
@@ -188,10 +201,15 @@ def _run_one_test_check(expr: str, project_root: Path | None = None) -> dict[str
             check["unaddressed"] = result.returncode in _UNADDRESSED_EXITS and not is_cmd
     except subprocess.TimeoutExpired:
         check["error"] = f"TEST-CHECK timed out after {_TEST_CHECK_TIMEOUT}s"
+        check["executed"] = False
+        check["not_executed_reason"] = "timed out before producing a verdict"
     except FileNotFoundError as exc:
         check["error"] = f"TEST-CHECK command not found (cwd={cwd or '.'}) — {exc}"
+        check["executed"] = False
+        check["not_executed_reason"] = "the command does not exist here"
     except Exception as exc:
         check["error"] = str(exc)
+        check["not_executed_reason"] = f"{type(exc).__name__} before the check produced a verdict"
     return check
 
 
@@ -419,3 +437,59 @@ def run_executable_checks(
             _emit_validation_result_event(check)
 
     return results
+
+
+def record_test_execution(
+    tasks: list[dict[str, Any]],
+    ac_results: dict[str, list[dict[str, Any]]] | None = None,
+) -> dict[str, Any]:
+    """Did this verdict's certification rest on RUNNING tests, or on reading code?
+
+    NOT named ``test_*`` — pytest collects any module-level ``test_``-prefixed
+    callable it imports, and the first name here (``test_execution_record``) was
+    collected as a test case erroring with "fixture 'tasks' not found". Found by the
+    independent runner, not by the author.
+
+    WO-SEPARATE-TEST-RUNNER. A grader on 2026-08-20 reported honestly that "running
+    pytest was denied by the sandbox, so the tests are not confirmed green by
+    execution" — a real distinction that lived only in prose, so downstream a verdict
+    backed by execution and one backed by a code read were identical. Merge happens
+    BEFORE close, so the close-time ``all_tests_pass`` execution comes too late to
+    inform the merge; the merge reader needs this fact from the verdict itself.
+
+    Counting registered checks needs no execution — it is a read of the acceptance
+    criteria already loaded — so this is honest on every verify path, including the
+    ones that do not run the checks.
+
+    ``basis`` is one of:
+
+    - ``executed``          — a TEST-CHECK actually ran during this verify
+    - ``not_run_at_verify`` — TEST-CHECKs are registered but this path did not run them
+      (close's ``all_tests_pass`` will; the verdict itself is not execution-backed)
+    - ``none_registered``   — the work order declares no TEST-CHECK at all, so no
+      verdict on it can rest on execution
+    """
+    import re as _re
+
+    registered = 0
+    for task in tasks:
+        for raw_line in (task.get("acceptance_criteria", "") or "").splitlines():
+            if _re.match(r"^\s*TEST-CHECK:", raw_line, _re.IGNORECASE):
+                registered += 1
+
+    executed = passed = 0
+    for task_checks in (ac_results or {}).values():
+        for check in task_checks:
+            if check.get("kind") != "TEST-CHECK" or not check.get("executed"):
+                continue
+            executed += 1
+            if check.get("passed"):
+                passed += 1
+
+    if registered == 0:
+        basis = "none_registered"
+    elif executed:
+        basis = "executed"
+    else:
+        basis = "not_run_at_verify"
+    return {"registered": registered, "executed": executed, "passed": passed, "basis": basis}

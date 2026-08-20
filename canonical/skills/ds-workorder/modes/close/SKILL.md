@@ -110,6 +110,10 @@ The gate asks two questions now, and the failure text says which one failed (WO-
 
 **DON'T** reach for the declaration to avoid a re-lock. A recorded "still holds" about a brief that no longer does is worse than a stale lock, because it looks like someone checked.
 
+## What the tests rest on {#separate-test-runner}
+
+`all_tests_pass` **executes** the TEST-CHECKs — no report is read, and the "a file containing PASSED" fallback is retired, so a self-reported pass cannot satisfy it. Two things still need your eyes: the verdict's `test_execution.basis` (`none_registered` or `not_run_at_verify` means the review certified by reading rather than running — `ds work-order merge-check` says so, and merge lands before this close executes anything), and **who ran them** — whoever wrote the change does not run its own suite as the evidence; spawn a runner and hand it node ids, not a conclusion.
+
 ## After the merge: pr-smoke green is not proof main is green
 
 **DO** check the post-merge Full CI run for `main` after every merge:

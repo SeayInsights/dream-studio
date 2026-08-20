@@ -55,7 +55,7 @@ from .verify_db import (
     _run_sql_checks,
     _format_sql_checks,
 )
-from .verify_executor import resolve_project_root, run_executable_checks
+from .verify_executor import resolve_project_root, record_test_execution, run_executable_checks
 from .verify_gaps import (
     _falsification_to_gaps,
     normalise_falsification_scenarios,
@@ -413,6 +413,10 @@ def verify_work_order(
         _is_escalated = read_escalation(work_order_id, db_path=db_path) is not None
 
         authority_certified = False
+        # WO-SEPARATE-TEST-RUNNER: only the authority-evidence path runs the checks, so
+        # this stays None on the git-diff path and the verdict records `not_run_at_verify`
+        # rather than implying execution it did not do.
+        ac_results: dict[str, list[dict[str, Any]]] | None = None
         if git_diff is None and not _is_escalated:
             ac_results = run_executable_checks(
                 tasks, db_path, project_root=resolve_project_root(work_order_id, db_path)
@@ -835,6 +839,10 @@ def verify_work_order(
             "graded_commits": _graded_commits,
             "resolved_gaps": resolved_gap_wos,
             "verified_at": completed_at,
+            # WO-SEPARATE-TEST-RUNNER: whether this certification rests on running the
+            # work order's tests or on reading its code. Merge consults the verdict
+            # before close ever executes anything, so the distinction has to ride here.
+            "test_execution": record_test_execution(tasks, ac_results),
         }
         # WO-FALSIFY-FIRST-PASS: the falsification section and the UNVERIFIED
         # ledger ride the verdict. A falsification grader that could not run is

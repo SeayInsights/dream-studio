@@ -12,7 +12,7 @@ A task within the active work order is done — either the user said so ("mark t
 
 1. **Resolve the task_id.** Call `core.work_orders.queries.list_tasks(work_order_id=<wo>, source_root=..., dream_studio_home=...)`. The returned dict has a `tasks` list with each task's `task_id`, `title`, `description`, and `status`. Match the completed task to a row whose `status == 'pending'`. If the user named the task and multiple pending tasks match by title, ask the user to choose. If none match, surface the available pending titles.
 
-2. **Confirm only when acting on the user's words.** When the *user* asked to mark a task done, show the matched task's `title` and confirm: *"Mark this task complete? (yes/no)"* — one line, no extra prose. When the *agent* is executing inside an already-started WO, the start was the authorization: call `mark_task_done` directly after the task's work is verifiably done, with no per-task confirmation.
+2. **Confirm only when acting on the user's words.** When the *user* asked to mark a task done, show the matched task's `title` and confirm: *"Mark this task complete? (yes/no)"* — one line, no extra prose. When the *agent* is executing inside an already-started WO, the start was the authorization: call `mark_task_done` directly after the task's work is verifiably done, with no per-task confirmation. **"Verifiably done" means someone other than the author ran the tests** — spawn a runner, give it the node ids rather than your conclusion, and treat its report as the evidence. Your own green run confirms your assumptions, not the behaviour.
 
 3. **Call `mark_task_done(work_order_id=<wo>, task_id=<task>, source_root=..., dream_studio_home=...)`.**
    - On `{"ok": False, "error": ...}`, surface the error verbatim.

@@ -171,6 +171,13 @@ def verdict_state(
         result["state"] = "unreviewable"
         result["reason"] = summary or "verify could not judge the work"
         return result
+    # WO-SEPARATE-TEST-RUNNER: what the certification RESTS ON, carried through so a
+    # merge reader can tell a verdict backed by running the tests from one backed by
+    # reading the code. Absent on verdicts written before verify recorded it.
+    _exec = verdict.get("test_execution")
+    if isinstance(_exec, dict):
+        result["execution"] = _exec
+
     if verdict.get("passed") is True:
         result["state"] = "passed"
         return result
@@ -239,12 +246,31 @@ def merge_readiness(
         ),
         "unreadable": "The stored verdict cannot be parsed. Re-run verify.",
     }.get(state, "Unknown verdict state — treat as not ready.")
+
+    # WO-SEPARATE-TEST-RUNNER: a green verdict that nothing executed is weaker than one
+    # a test run backs, and merge is the last point where that matters — close's
+    # all_tests_pass runs afterwards. Say so instead of letting both read as certified.
+    execution = info.get("execution")
+    if state == "passed" and isinstance(execution, dict):
+        basis = execution.get("basis")
+        if basis == "none_registered":
+            advice += (
+                " CAVEAT: this work order registers no TEST-CHECK, so the verdict rests"
+                " on reading the code, not on running it. Nothing has executed."
+            )
+        elif basis == "not_run_at_verify":
+            advice += (
+                f" CAVEAT: {execution.get('registered')} TEST-CHECK(s) are registered but"
+                " none ran during verify, so this verdict is not execution-backed yet."
+            )
+
     return {
         "ready": ready,
         "state": state,
         "work_order_id": resolved,
         "reason": info.get("reason"),
         "summary": info.get("summary"),
+        "execution": execution,
         "advice": advice,
     }
 
