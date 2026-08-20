@@ -78,9 +78,13 @@ def run_doctor_checks(
     # across eight merges on 2026-08-19 because nothing reported it. Advisory:
     # a red main never fails the doctor (someone else's red must not block work),
     # it just stops being invisible.
-    from core.health.main_ci import main_ci_status, main_ci_warning
+    from core.health.main_ci import CACHE_MAX_AGE_SECONDS, main_ci_status, main_ci_warning
 
-    main_ci_info = main_ci_status(repo_root=source_root)
+    # WO-MAINCI-CACHE: the doctor accepts a recent cached answer. It is run often
+    # and is otherwise entirely local, so paying a gh round trip (up to 25s when
+    # gh is unreachable) every time was the wrong trade for a signal that changes
+    # on the order of tens of minutes. A cached result states its age.
+    main_ci_info = main_ci_status(repo_root=source_root, max_age_seconds=CACHE_MAX_AGE_SECONDS)
     _main_ci_warning = main_ci_warning(main_ci_info)
     if _main_ci_warning:
         main_ci_info["warning"] = _main_ci_warning
