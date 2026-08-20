@@ -17,6 +17,30 @@ from typing import Any
 # ── Gap generation helpers ──────────────────────────────────────────────────────
 
 
+def normalise_falsification_scenarios(payload: Any) -> tuple[list[dict[str, Any]], int]:
+    """Coerce a falsification grader's ``scenarios`` into ``(well_formed, malformed_count)``.
+
+    ONE shared normaliser because the payload has TWO readers, and the first fix
+    hardened only one of them (gap WO 66e7ebc8): ``_falsification_to_gaps`` was
+    guarded while ``verify_main``'s ``_unverified`` comprehension still called
+    ``.get()`` on every element, so the very reply the WO was about still raised
+    AttributeError inside verify's OPEN authority transaction. Two copies of a
+    shape contract is how one of them stays wrong.
+
+    A live grader can return prose (``["crash mid write is untested"]``), a bare
+    scenario object instead of a list, or another command's JSON entirely. Non-dict
+    entries are skipped and COUNTED — the count is reported downstream, because
+    silently dropping unparseable entries makes a narrowed enumeration
+    indistinguishable from a complete one.
+    """
+    if isinstance(payload, dict):  # a single scenario object, not a list
+        payload = [payload]
+    elif not isinstance(payload, list):
+        return [], 0
+    well_formed = [s for s in payload if isinstance(s, dict)]
+    return well_formed, len(payload) - len(well_formed)
+
+
 def _falsification_to_gaps(scenarios: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Error-severity PROPOSED scenarios → one gap WO carrying the missing tests.
 
@@ -26,20 +50,11 @@ def _falsification_to_gaps(scenarios: list[dict[str, Any]]) -> list[dict[str, An
     and is recorded in the unverified-risks ledger instead (named, not silent).
     The gap category is stable (``missing-adversarial-tests``) so re-verifies
     dedup against the same spawn rather than breeding duplicates.
+
+    Shape-tolerant via the shared normaliser above — see its docstring for why
+    that is shared rather than inlined here.
     """
-    # MALFORMED INPUT (falsification analyst finding on this function): a live
-    # grader can return `"scenarios": ["crash mid write is untested"]` — strings,
-    # or a bare object instead of a list. Calling .get() on those raised
-    # AttributeError INSIDE verify's open authority transaction, taking down the
-    # whole verify rather than degrading. Non-dict entries are skipped, and the
-    # skip is reported in the gap description so a malformed grader reply is
-    # visible rather than silently narrowing the enumeration.
-    if isinstance(scenarios, dict):  # a single scenario object, not a list
-        scenarios = [scenarios]
-    elif not isinstance(scenarios, list):
-        return []
-    well_formed = [s for s in scenarios if isinstance(s, dict)]
-    malformed_count = len(scenarios) - len(well_formed)
+    well_formed, malformed_count = normalise_falsification_scenarios(scenarios)
     actionable = [
         s for s in well_formed if s.get("status") == "PROPOSED" and s.get("severity") == "error"
     ]

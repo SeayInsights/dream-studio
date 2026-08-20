@@ -27,7 +27,7 @@ import sqlite3
 import time
 import uuid
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -144,6 +144,82 @@ def test_malformed_entries_are_reported_not_silently_dropped():
     assert any("crash_mid_write" in t["title"] for t in gaps[0]["tasks"])
 
 
+@pytest.mark.parametrize(
+    ("payload", "expect_well_formed", "expect_malformed"),
+    [
+        (["crash mid write is untested"], 0, 1),
+        ([_SCENARIO, "prose", 42], 1, 2),
+        ({"scenario_class": "x", "status": "UNVERIFIED", "severity": "error"}, 1, 0),
+        ("not a list", 0, 0),
+        (None, 0, 0),
+        (42, 0, 0),
+        ([None, {"status": "UNVERIFIED"}], 1, 1),
+        ([], 0, 0),
+    ],
+)
+def test_the_shared_normaliser_is_the_one_shape_contract(
+    payload, expect_well_formed, expect_malformed
+):
+    """The SECOND surface, found by this WO's own verify — twice.
+
+    First pass: _falsification_to_gaps was hardened while verify_main's
+    `_unverified` comprehension read the SAME untrusted payload and still called
+    ``.get()`` on every element, so the reply task 2 describes still raised
+    AttributeError inside verify's OPEN authority transaction.
+
+    Second pass: the fix guarded verify_main, but the tests written for it COPIED
+    the normalisation into the test body — so deleting the production guard would
+    not have failed anything. The grader called that out as the exact shape the
+    commit message had just criticised, and it was right. The contract now lives
+    in one production function that both readers call, and this test calls THAT.
+    """
+    from core.work_orders.verify_gaps import normalise_falsification_scenarios
+
+    well_formed, malformed = normalise_falsification_scenarios(payload)
+    assert [type(s) for s in well_formed] == [dict] * expect_well_formed
+    assert malformed == expect_malformed
+    # Whatever survives is safe for the .get() both readers perform.
+    assert isinstance(_falsification_to_gaps(well_formed), list)
+    assert isinstance([s for s in well_formed if s.get("status") == "UNVERIFIED"], list)
+
+
+def test_verify_main_reads_the_payload_through_the_shared_normaliser():
+    """Pins the guard at its real call site rather than re-deriving it.
+
+    ``verify_main`` must obtain its scenario list from the shared normaliser — if
+    someone reverts to reading ``falsification["scenarios"]`` directly, the second
+    surface is unguarded again and this fails.
+    """
+    import inspect
+
+    from core.work_orders import verify_gaps, verify_main
+
+    assert verify_main.normalise_falsification_scenarios is (
+        verify_gaps.normalise_falsification_scenarios
+    ), "verify_main must use the SHARED normaliser, not a private copy"
+
+    source = inspect.getsource(verify_main.verify_work_order)
+    assert "normalise_falsification_scenarios(" in source, (
+        "verify_work_order must route the grader payload through the shared "
+        "normaliser — a direct read of falsification['scenarios'] is the defect"
+    )
+
+
+def test_removing_the_guard_would_break_the_readers():
+    """States the failure the guard prevents, so the guard's value is asserted and
+    not merely asserted-about: the raw payload really does raise on the operations
+    both readers perform."""
+    raw_prose = ["crash mid write is untested", 42]
+    with pytest.raises(AttributeError):
+        [s for s in raw_prose if s.get("status") == "UNVERIFIED"]  # type: ignore[union-attr]
+
+    from core.work_orders.verify_gaps import normalise_falsification_scenarios
+
+    safe, malformed = normalise_falsification_scenarios(raw_prose)
+    assert safe == [] and malformed == 2
+    assert [s for s in safe if s.get("status") == "UNVERIFIED"] == []
+
+
 # ── 3. empty_absent_state: evidence must not crowd out the WO's own commits ─────
 
 
@@ -184,12 +260,40 @@ def test_commits_are_budgeted_before_evidence_but_order_is_preserved():
 # ── 4. partial_failure: a truncated analysis says so downstream ─────────────────
 
 
+def _seed_closeable_wo(db: Path) -> str:
+    """A minimal in_progress WO with no tasks, closeable with force=True."""
+    project_id, wo_id = str(uuid.uuid4()), str(uuid.uuid4())
+    now = "2026-08-19T00:00:00+00:00"
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+        (project_id, "P", "", "active", now, now),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+        "  status, created_at, updated_at) VALUES (?,?,NULL,'WO','d','cleanup','in_progress',?,?)",
+        (wo_id, project_id, now, now),
+    )
+    conn.commit()
+    conn.close()
+    return wo_id
+
+
 def test_truncation_caveat_reaches_the_ledger_and_close_note(tmp_path):
     """The caveat used to live only in the verdict, so close and project state
-    reported a PARTIAL enumeration as if it were complete."""
+    reported a PARTIAL enumeration as if it were complete.
+
+    This test originally stopped at the ledger despite its name, leaving the close
+    note — the operator-visible half, and the whole point of the scenario —
+    unpinned. Its own WO's verify caught the overclaim: a test whose name promises
+    more than it asserts is worse than a missing test, because the coverage looks
+    present. It now drives the real close_work_order.
+    """
     db = _db(tmp_path)
     planning = tmp_path / "planning"
-    wo_id = str(uuid.uuid4())
+    wo_id = _seed_closeable_wo(db)
 
     _persist_unverified_ledger(
         wo_id,
@@ -204,6 +308,59 @@ def test_truncation_caveat_reaches_the_ledger_and_close_note(tmp_path):
     assert "budget" in ledger["truncated"]
     # And the run stamp travels with it (see the pairing test below).
     assert ledger["verified_at"] == "2026-08-19T20:00:00+00:00"
+
+    # The half the name promised: close must say the list may be incomplete.
+    from core.work_orders.close import close_work_order
+
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        result = close_work_order(
+            work_order_id=wo_id,
+            force=True,  # gates are not under test; the advisory note is
+            source_root=tmp_path,
+            dream_studio_home=tmp_path,
+            planning_root=planning,
+        )
+    assert result["ok"] is True, result
+    note = result.get("unverified_risks_note") or ""
+    assert note, "close must surface the WO's open UNVERIFIED residual risk"
+    assert "PARTIAL" in note, (
+        "a truncated enumeration must be declared partial at close — otherwise an "
+        f"incomplete list reads as the complete one: {note!r}"
+    )
+
+
+def test_close_note_is_not_marked_partial_when_the_analysis_was_complete(tmp_path):
+    """The converse, so PARTIAL means something: a full enumeration must not be
+    hedged, or the caveat becomes noise operators learn to skip."""
+    db = _db(tmp_path)
+    planning = tmp_path / "planning"
+    wo_id = _seed_closeable_wo(db)
+
+    _persist_unverified_ledger(
+        wo_id,
+        [{**_SCENARIO, "status": "UNVERIFIED"}],
+        planning_root=planning,
+        db_path=db,
+        verified_at="2026-08-19T20:00:00+00:00",
+    )  # no truncated=
+
+    from core.work_orders.close import close_work_order
+
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        result = close_work_order(
+            work_order_id=wo_id,
+            force=True,
+            source_root=tmp_path,
+            dream_studio_home=tmp_path,
+            planning_root=planning,
+        )
+    note = result.get("unverified_risks_note") or ""
+    assert note, "the residual risk itself must still be surfaced"
+    assert "PARTIAL" not in note, f"a complete analysis must not be hedged: {note!r}"
 
 
 # ── 5. crash_mid_write: a mismatched ledger/verdict pair is detectable ──────────
@@ -244,6 +401,126 @@ def test_ledger_carries_the_run_stamp_so_a_mismatched_pair_is_detectable(tmp_pat
     assert (
         second["verified_at"] != stale_verdict_verified_at
     ), "the ledger must carry its own run stamp so a mismatched pair is detectable"
+
+
+def test_a_mismatched_pair_is_actually_DETECTED_at_close(tmp_path):
+    """Gap WO 72b19987 task 3, second pass.
+
+    The first fix carried ``verified_at`` on the ledger so a ledger/verdict pair
+    from different runs would be *recordable*. Its own re-verify pointed out that
+    nothing READ it: "detectable" was latent data, and the mismatch stayed exactly
+    as invisible as before — the engine-key-with-no-reader shape again. A signal
+    nobody consumes is not a detection.
+
+    So close now compares the two stamps and says so. This drives the real close.
+    """
+    db = _db(tmp_path)
+    planning = tmp_path / "planning"
+    wo_id = _seed_closeable_wo(db)
+
+    # Verdict from run N-1 ...
+    verdict_dir = planning / "work-orders" / wo_id
+    verdict_dir.mkdir(parents=True, exist_ok=True)
+    (verdict_dir / "review-verdict.json").write_text(
+        json.dumps({"passed": True, "summary": "ok", "completed_at": "2026-08-19T10:00:00+00:00"}),
+        encoding="utf-8",
+    )
+    # ... paired with a ledger from run N.
+    _persist_unverified_ledger(
+        wo_id,
+        [{**_SCENARIO, "status": "UNVERIFIED"}],
+        planning_root=planning,
+        db_path=db,
+        verified_at="2026-08-19T11:00:00+00:00",
+    )
+
+    from core.work_orders.close import close_work_order
+
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        result = close_work_order(
+            work_order_id=wo_id,
+            force=True,
+            source_root=tmp_path,
+            dream_studio_home=tmp_path,
+            planning_root=planning,
+        )
+    note = result.get("unverified_risks_note") or ""
+    assert "different verify run" in note, (
+        "a ledger paired with another run's verdict must be reported, not merely "
+        f"recorded: {note!r}"
+    )
+    assert "10:00:00" in note and "11:00:00" in note, "both stamps must be named"
+
+
+def test_a_matched_pair_is_silent(tmp_path):
+    """The converse, so the mismatch note means something: identical stamps must
+    not produce a warning, or the note becomes noise on every close."""
+    db = _db(tmp_path)
+    planning = tmp_path / "planning"
+    wo_id = _seed_closeable_wo(db)
+    stamp = "2026-08-19T12:00:00+00:00"
+
+    verdict_dir = planning / "work-orders" / wo_id
+    verdict_dir.mkdir(parents=True, exist_ok=True)
+    (verdict_dir / "review-verdict.json").write_text(
+        json.dumps({"passed": True, "summary": "ok", "completed_at": stamp}), encoding="utf-8"
+    )
+    _persist_unverified_ledger(
+        wo_id,
+        [{**_SCENARIO, "status": "UNVERIFIED"}],
+        planning_root=planning,
+        db_path=db,
+        verified_at=stamp,
+    )
+
+    from core.work_orders.close import close_work_order
+
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        result = close_work_order(
+            work_order_id=wo_id,
+            force=True,
+            source_root=tmp_path,
+            dream_studio_home=tmp_path,
+            planning_root=planning,
+        )
+    note = result.get("unverified_risks_note") or ""
+    assert note, "the residual risk itself is still surfaced"
+    assert "different verify run" not in note, f"a matched pair must be silent: {note!r}"
+
+
+def test_a_pre_stamp_ledger_does_not_read_as_a_mismatch(tmp_path):
+    """Absence of a stamp is a pre-stamp artifact, not evidence of a mismatch —
+    otherwise every historical ledger would cry wolf."""
+    db = _db(tmp_path)
+    planning = tmp_path / "planning"
+    wo_id = _seed_closeable_wo(db)
+
+    verdict_dir = planning / "work-orders" / wo_id
+    verdict_dir.mkdir(parents=True, exist_ok=True)
+    (verdict_dir / "review-verdict.json").write_text(
+        json.dumps({"passed": True, "completed_at": "2026-08-19T10:00:00+00:00"}), encoding="utf-8"
+    )
+    _persist_unverified_ledger(
+        wo_id, [{**_SCENARIO, "status": "UNVERIFIED"}], planning_root=planning, db_path=db
+    )  # no verified_at
+
+    from core.work_orders.close import close_work_order
+
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        result = close_work_order(
+            work_order_id=wo_id,
+            force=True,
+            source_root=tmp_path,
+            dream_studio_home=tmp_path,
+            planning_root=planning,
+        )
+    assert "different verify run" not in (result.get("unverified_risks_note") or "")
 
 
 def test_ledger_without_a_run_stamp_is_still_readable(tmp_path):
