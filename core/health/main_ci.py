@@ -206,6 +206,50 @@ def _gh_json(args: list[str], cwd: Path | None) -> tuple[Any, str | None]:
         return None, f"gh returned non-JSON: {exc}"
 
 
+def _local_head_includes(
+    run_sha: str | None, repo_root: Path | None
+) -> tuple[bool | None, str | None]:
+    """Does the local HEAD contain ``run_sha``? Returns ``(answer, reason)``.
+
+    Gap WO ebbd529c. "main is RED" is not actionable on its own: an operator needs
+    to know whether the failing run includes their own merge or predates it, which
+    is exactly the distinction the close-ceremony advisory ("its own merge has main
+    red") leans on. Answered with ``merge-base --is-ancestor``, so a HEAD that is
+    the run's commit or any descendant of it counts as including it.
+
+    ``None`` with a reason for every case we cannot answer — no git, not a repo,
+    unknown sha, a shallow clone that lacks the object. Same posture as the rest of
+    this module: never guess, and never let an advisory read raise into a caller.
+    """
+    if not run_sha:
+        return None, "run sha unknown"
+    try:
+        probe = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", run_sha, "HEAD"],
+            cwd=str(repo_root) if repo_root else None,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+        )
+    except FileNotFoundError:
+        return None, "git not installed"
+    except subprocess.TimeoutExpired:
+        return None, "git merge-base timed out"
+    except OSError as exc:
+        return None, f"git could not run: {exc}"
+    code = probe.returncode if isinstance(probe.returncode, int) else None
+    if code == 0:
+        return True, None
+    if code == 1:
+        return False, None
+    # Any other exit is git declining to answer (unknown object in a shallow
+    # clone, not a repository, bad sha) — not evidence either way.
+    detail = (probe.stderr if isinstance(probe.stderr, str) else "").strip().splitlines()
+    return None, (detail[0][:160] if detail else f"git merge-base exited {code}")
+
+
 def main_ci_status(
     *,
     repo_root: Path | None = None,
@@ -225,7 +269,9 @@ def main_ci_status(
          "red": bool,                    # True only on a definite failure
          "reason": str | None,           # why status is unknown
          "as_of": str,                   # ISO time the status was READ from gh
-         "age_seconds": int}             # 0 when live, >0 when served from cache
+         "age_seconds": int,             # 0 when live, >0 when served from cache
+         "local_head_includes_run": bool | None,   # is the run's commit in local HEAD?
+         "local_head_reason": str | None}          # why that is None
 
     ``red`` is deliberately False when the status is unknown: an unreadable
     signal is reported as unreadable, never as a failure (nor as a pass).
@@ -263,6 +309,15 @@ def main_ci_status(
     def _finish(payload: dict[str, Any]) -> dict[str, Any]:
         payload["as_of"] = datetime.now(UTC).isoformat()
         payload["age_seconds"] = 0
+        # Gap WO ebbd529c: only worth asking when there IS a run to locate, and
+        # only worth the subprocess when the answer changes what an operator does —
+        # i.e. when main is red. A green or unknown main needs no "was it mine".
+        if payload.get("red") and payload.get("head_sha"):
+            includes, why = _local_head_includes(payload.get("head_sha"), repo_root)
+        else:
+            includes, why = None, None if not payload.get("head_sha") else "not applicable"
+        payload["local_head_includes_run"] = includes
+        payload["local_head_reason"] = why
         if max_age_seconds > 0:
             _write_cache(payload, repo_root, db_path)
         return payload
@@ -292,7 +347,30 @@ def main_ci_status(
             }
         )
 
-    latest = runs[0]
+    # Gap WO 094f3c12 (malformed_input, named by the falsification analyst and
+    # confirmed by test): valid JSON is not the same as the shape we asked for. gh
+    # can exit 0 with an API error object (`{"message": "Not Found"}`), and a caller
+    # that blanket-patches subprocess.run can hand back another command's JSON
+    # entirely — the exact trigger of WO-MAINRED-GH-NONSTR. `runs[0]` then raises
+    # KeyError on a dict, TypeError on a scalar, and `latest.get` raises
+    # AttributeError on a string or int. Parsing succeeded, so the guard in
+    # _gh_json never saw any of it.
+    latest = runs[0] if isinstance(runs, list) else None
+    if not isinstance(latest, dict):
+        return _finish(
+            {
+                "status": "unknown",
+                "conclusion": None,
+                "head_sha": None,
+                "run_url": None,
+                "title": None,
+                "red": False,
+                "reason": (
+                    f"gh returned JSON that is not a list of {_WORKFLOW} runs "
+                    f"({type(runs).__name__})"
+                ),
+            }
+        )
     raw_status = (latest.get("status") or "").lower()
     conclusion = (latest.get("conclusion") or "").lower() or None
     if raw_status in ("queued", "in_progress", "waiting", "pending", "requested"):
@@ -340,6 +418,12 @@ def main_ci_warning(status: dict[str, Any] | None) -> str | None:
     as current would trade the latency win for a smaller version of the problem the
     surface exists to solve. A red that has since been fixed is exactly the case
     that must be distinguishable.
+
+    It also says whether the failing run is IN the local HEAD (gap WO ebbd529c).
+    "main is RED" prompts different action depending on whether the operator's own
+    merge is in that run or predates it, and an advisory that cannot tell them
+    which just adds noise to a close they were right to make. Unknown says
+    unknown — the relationship is never guessed from the sha alone.
     """
     if not status or not status.get("red"):
         return None
@@ -350,9 +434,21 @@ def main_ci_warning(status: dict[str, Any] | None) -> str | None:
         age = int(status.get("age_seconds") or 0)
     except (TypeError, ValueError):
         age = 0
+    includes = status.get("local_head_includes_run")
+    if includes is True:
+        whose = " That run INCLUDES your local HEAD — your own work is in it."
+    elif includes is False:
+        whose = " That run PREDATES your local HEAD — it is not your change."
+    else:
+        reason = status.get("local_head_reason")
+        whose = (
+            f" Whether it includes your HEAD is unknown ({reason})."
+            if isinstance(reason, str) and reason and reason != "not applicable"
+            else ""
+        )
     return (
         f"main is RED: the latest {_WORKFLOW} run failed at {sha}"
-        f"{f' ({title[:70]})' if title else ''}.{_age_phrase(age)}"
+        f"{f' ({title[:70]})' if title else ''}.{_age_phrase(age)}{whose}"
         f"{f' See {url}' if url else ''}"
         " pr-smoke green is merge authorization, not proof main is green."
     )

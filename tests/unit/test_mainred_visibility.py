@@ -14,6 +14,7 @@ pass, never as a failure.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -243,6 +244,192 @@ def test_empty_gh_output_is_not_confused_with_unreadable_output():
         status = main_ci_status(repo_root=Path("."))
     assert status["status"] == "unknown"
     assert "no Full CI runs" in status["reason"], "empty output is an absence, not a read failure"
+
+
+# ── Is the failing run MINE? (gap WO ebbd529c) ─────────────────────────────────
+
+
+def _red_run(sha: str = "deadbeef1234") -> list[dict]:
+    return [
+        {
+            "conclusion": "failure",
+            "status": "completed",
+            "headSha": sha,
+            "url": "https://github.com/x/y/actions/runs/9",
+            "displayTitle": "some merge",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    ("includes", "reason", "expect"),
+    [
+        (True, None, "INCLUDES your local HEAD"),
+        (False, None, "PREDATES your local HEAD"),
+        (None, "git not installed", "unknown (git not installed)"),
+    ],
+)
+def test_local_head_relationship_is_reported(includes, reason, expect):
+    """'main is RED' prompts different action depending on whether the operator's
+    own merge is in that run. An advisory that cannot say which just adds noise to
+    a close that may have been entirely correct."""
+    with patch("subprocess.run", return_value=_gh(_red_run())):
+        with patch("core.health.main_ci._local_head_includes", return_value=(includes, reason)):
+            status = main_ci_status(repo_root=Path("."))
+    assert status["local_head_includes_run"] is includes
+    assert status["local_head_reason"] == reason
+    warning = main_ci_warning(status)
+    assert warning and expect in warning
+
+
+def test_local_head_ancestry_is_computed_against_a_real_repository(tmp_path):
+    """Driven against a real git repo rather than a mocked exit code — the value of
+    this check is that it answers correctly, and a mocked returncode would only
+    prove the branching, not the question."""
+    from core.health.main_ci import _local_head_includes
+
+    repo = tmp_path / "r"
+    repo.mkdir()
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@e",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@e",
+    }
+
+    def git(*args: str) -> str:
+        out = subprocess.run(
+            ["git", *args],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            timeout=30,
+        )
+        assert out.returncode == 0, f"git {args}: {out.stderr}"
+        return out.stdout.strip()
+
+    git("init", "-q")
+    (repo / "a.txt").write_text("1", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-qm", "first")
+    first = git("rev-parse", "HEAD")
+    (repo / "a.txt").write_text("2", encoding="utf-8")
+    git("commit", "-aqm", "second")
+
+    # An ancestor of HEAD is included.
+    assert _local_head_includes(first, repo) == (True, None)
+    # HEAD itself counts as included (merge-base --is-ancestor is inclusive).
+    assert _local_head_includes(git("rev-parse", "HEAD"), repo) == (True, None)
+
+    # A commit on a divergent branch is NOT in HEAD.
+    git("checkout", "-qb", "side", first)
+    (repo / "b.txt").write_text("x", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-qm", "side")
+    side = git("rev-parse", "HEAD")
+    git("checkout", "-q", "-")
+    assert _local_head_includes(side, repo) == (False, None)
+
+    # A sha this repo has never heard of is UNKNOWN, not False — absence of the
+    # object is not evidence about ancestry.
+    answer, why = _local_head_includes("0" * 40, repo)
+    assert answer is None and why
+
+
+def test_local_head_is_unknown_when_git_cannot_answer():
+    from core.health.main_ci import _local_head_includes
+
+    assert _local_head_includes(None, Path(".")) == (None, "run sha unknown")
+    with patch("subprocess.run", side_effect=FileNotFoundError("git")):
+        assert _local_head_includes("abc", Path(".")) == (None, "git not installed")
+    with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="git", timeout=10)):
+        answer, why = _local_head_includes("abc", Path("."))
+    assert answer is None and "timed out" in why
+
+
+def test_the_relationship_is_only_asked_when_main_is_red():
+    """A green or unknown main needs no "was it mine", so the subprocess is not
+    spent on it. Advisory checks earn their keep by being cheap."""
+    green = [{**_red_run()[0], "conclusion": "success"}]
+    with patch("subprocess.run", return_value=_gh(green)):
+        with patch("core.health.main_ci._local_head_includes") as probe:
+            status = main_ci_status(repo_root=Path("."))
+    assert probe.call_count == 0
+    assert status["local_head_includes_run"] is None
+
+
+# ── Adversarial: worst cases the falsification analyst named (gap WO 094f3c12) ──
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"message": "Not Found"},  # a gh/GitHub API error object
+        {"runs": []},  # a differently-shaped payload
+        [1, 2, 3],  # a list, but not of objects
+        ["a string"],
+        "just a quoted string",
+        42,
+        None,
+    ],
+)
+def test_malformed_runs_payload_never_raises(body):
+    """gh can exit 0 with valid JSON that is not a list of run objects — an API
+    error object, or another command's output when a caller blanket-patches
+    subprocess.run (the exact trigger of WO-MAINRED-GH-NONSTR). ``runs[0]`` and
+    ``latest.get`` raise KeyError/TypeError/AttributeError on those."""
+    proc = MagicMock()
+    proc.returncode = 0
+    proc.stdout = json.dumps(body)
+    proc.stderr = ""
+    with patch("subprocess.run", return_value=proc):
+        status = main_ci_status(repo_root=Path("."))  # must not raise
+    assert status["status"] in ("unknown", "success", "failure", "running")
+    assert status["red"] is False or status["status"] == "failure"
+    if status["status"] == "unknown":
+        assert status["reason"], "an unknown must always say why"
+
+
+def test_doctor_survives_a_raising_main_ci_read(tmp_path):
+    """run_doctor_checks completes every prior check and then reads main's CI. If
+    that advisory step can abort the report, the operator gets a traceback instead
+    of a partial payload — which is precisely how main stayed red for a day."""
+    from core.health.doctor import run_doctor_checks
+
+    with patch("core.health.main_ci.main_ci_status", side_effect=RuntimeError("gh exploded")):
+        report = run_doctor_checks(source_root=Path("."), dream_studio_home=tmp_path)
+    assert report["status"] in ("pass", "warn", "attention_required", "fail")
+    main_ci = report["checks"].get("main_ci")
+    assert main_ci is not None, "the key must still be present"
+    assert main_ci.get("status") == "unknown"
+    assert main_ci.get("red") is False
+    assert main_ci.get("reason"), "a failed advisory read must say why, not vanish"
+
+
+def test_the_workflow_name_matches_the_ci_workflow_file():
+    """version_skew: this module finds runs by the workflow's DISPLAY NAME. Rename
+    `name:` in full-ci.yml and `gh run list --workflow "Full CI"` returns [] forever
+    — the reader reports "no Full CI runs found", which is indistinguishable from a
+    repo that has simply never run it, and post-merge red goes silently invisible
+    again. Two files, one string, no compiler to tie them together: so a test does.
+    """
+    from core.health.main_ci import _WORKFLOW
+
+    workflow = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "full-ci.yml"
+    assert workflow.is_file(), f"the workflow this module reads is missing: {workflow}"
+    declared = None
+    for line in workflow.read_text(encoding="utf-8").splitlines():
+        if line.startswith("name:"):
+            declared = line.split(":", 1)[1].strip().strip("\"'")
+            break
+    assert declared == _WORKFLOW, (
+        f"main_ci.py looks for workflow {_WORKFLOW!r} but full-ci.yml declares "
+        f"{declared!r} — post-merge red would become invisible. Update both together."
+    )
 
 
 # ── close-ceremony advisory ─────────────────────────────────────────────────────
