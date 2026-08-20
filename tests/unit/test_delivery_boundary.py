@@ -333,3 +333,145 @@ def test_start_says_so_when_no_boundary_could_be_stamped(db, tmp_path):
     note = result.get("delivery_boundary_note") or ""
     assert "no start commit was stamped" in note
     assert "commit-message search" in note, "the operator must learn what verify will do instead"
+
+
+# ── Working-tree layer (task 2) ────────────────────────────────────────────────
+
+
+def _wo_with_boundary(db: Path, repo: Path, boundary: str | None) -> str:
+    import sqlite3
+
+    project_id, wo_id = str(uuid.uuid4()), str(uuid.uuid4())
+    now = "2026-08-20T00:00:00+00:00"
+    desc = f"Module boundary: {boundary}." if boundary else "No boundary declared here"
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at, project_path)"
+        " VALUES (?,?,?,?,?,?,?)",
+        (project_id, "P", "", "active", now, now, str(repo)),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+        "  status, created_at, updated_at) VALUES (?,?,NULL,'WO',?,'infrastructure','in_progress',?,?)",
+        (wo_id, project_id, desc, now, now),
+    )
+    conn.commit()
+    conn.close()
+    return wo_id
+
+
+def test_uncommitted_work_is_visible(db, tmp_path):
+    """Work in progress is still delivered work — grading only committed state is
+    why an uncommitted deliverable reads as nothing delivered."""
+    from core.work_orders.delivery_boundary import working_tree_changes
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    (repo / "core").mkdir()
+    (repo / "core" / "thing.py").write_text("x = 1\n", encoding="utf-8")  # untracked
+    (repo / "a.txt").write_text("modified\n", encoding="utf-8")  # tracked, dirty
+
+    wo_id = _wo_with_boundary(db, repo, "core/")
+    paths, reason = working_tree_changes(wo_id, repo_root=repo, db_path=db)
+    assert reason is None
+    assert "core/thing.py" in paths, "a brand-new module is exactly what a tracked-only diff misses"
+    assert "a.txt" not in paths, "outside the declared boundary"
+
+
+def test_dirty_files_outside_the_boundary_are_not_attributed(db, tmp_path):
+    """The reverse hazard, and worse than the defect it fixes: sweeping in every
+    unrelated dirty file would let a WO be certified by work it never did."""
+    from core.work_orders.delivery_boundary import working_tree_changes
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    (repo / "mine").mkdir()
+    (repo / "mine" / "x.py").write_text("1\n", encoding="utf-8")
+    (repo / "theirs").mkdir()
+    (repo / "theirs" / "y.py").write_text("2\n", encoding="utf-8")
+
+    wo_id = _wo_with_boundary(db, repo, "mine/")
+    paths, reason = working_tree_changes(wo_id, repo_root=repo, db_path=db)
+    assert reason is None
+    assert paths == ["mine/x.py"], f"only the WO's own boundary: {paths}"
+
+
+def test_no_declared_boundary_attributes_nothing_and_says_why(db, tmp_path):
+    """Without a boundary there is no basis for attribution. Returning everything
+    would be the certified-by-someone-else's-work failure; returning nothing
+    silently would hide it."""
+    from core.work_orders.delivery_boundary import working_tree_changes
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    (repo / "z.py").write_text("1\n", encoding="utf-8")
+
+    wo_id = _wo_with_boundary(db, repo, None)
+    paths, reason = working_tree_changes(wo_id, repo_root=repo, db_path=db)
+    assert paths == []
+    assert reason and "declares no 'Module boundary:'" in reason
+
+
+def test_a_clean_tree_is_empty_without_a_reason(db, tmp_path):
+    """Nothing uncommitted is a real answer, not a failure to look."""
+    from core.work_orders.delivery_boundary import working_tree_changes
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    wo_id = _wo_with_boundary(db, repo, "core/")
+    paths, reason = working_tree_changes(wo_id, repo_root=repo, db_path=db)
+    assert paths == [] and reason is None
+
+
+def test_git_unavailable_reports_a_reason_rather_than_claiming_clean(db, tmp_path):
+    from core.work_orders.delivery_boundary import working_tree_changes
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    wo_id = _wo_with_boundary(db, repo, "core/")
+    with patch("subprocess.run", side_effect=FileNotFoundError("git")):
+        paths, reason = working_tree_changes(wo_id, repo_root=repo, db_path=db)
+    assert paths == []
+    assert reason == "git not installed", "an unreadable tree must not read as a clean one"
+
+
+def test_the_boundary_rule_is_the_enforcement_lib_s(db, tmp_path):
+    """One boundary rule, one implementation. Two would let the on-edit hook and
+    verify disagree about what a WO owns."""
+    from core.work_orders import delivery_boundary as mod
+
+    src = Path(mod.__file__).read_text(encoding="utf-8")
+    assert "from runtime.lib.enforcement import boundary_globs" in src
+    assert "from runtime.lib.enforcement import path_in_boundary" in src
+
+
+def test_attribution_fails_closed_where_enforcement_fails_open(db, tmp_path):
+    """The same predicate needs opposite defaults on either side of the boundary.
+
+    runtime.lib.enforcement.path_in_boundary returns True for a path it cannot
+    resolve — correct for the on-edit hook, whose job is to avoid BLOCKING an edit
+    it cannot classify. For attribution that default is inverted: a path we cannot
+    place must not be CLAIMED as this WO's delivery, or an unresolvable path
+    silently certifies a WO with work it never did.
+
+    Documented here because inheriting the wrong default is invisible: the reused
+    helper would simply return more matches, and nothing would look broken.
+    """
+    from runtime.lib.enforcement import boundary_globs, path_in_boundary
+
+    globs = boundary_globs("Module boundary: mine/.")
+    assert globs == ["mine/"]
+    # The helper's own behaviour, unchanged: an unplaceable path matches.
+    assert path_in_boundary("theirs/y.py", "/definitely/not/here", globs) is True
+
+    # Attribution must not inherit that. A file outside the boundary in a real
+    # repo is excluded, and the caller resolves paths before asking.
+    from core.work_orders.delivery_boundary import working_tree_changes
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    (repo / "mine").mkdir()
+    (repo / "mine" / "x.py").write_text("1\n", encoding="utf-8")
+    (repo / "theirs").mkdir()
+    (repo / "theirs" / "y.py").write_text("2\n", encoding="utf-8")
+    wo_id = _wo_with_boundary(db, repo, "mine/")
+
+    paths, reason = working_tree_changes(wo_id, repo_root=repo, db_path=db)
+    assert paths == ["mine/x.py"], f"attribution must fail closed: {paths}"
+    assert reason is None

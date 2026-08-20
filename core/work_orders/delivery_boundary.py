@@ -137,6 +137,132 @@ def read_delivery_boundary(
         return None
 
 
+def _module_boundary_globs(work_order_id: str, db_path: Path | None) -> list[str]:
+    """The WO's declared ``Module boundary:`` prefixes, or [] when none.
+
+    Reuses the enforcement lib's parser and matcher rather than re-deriving them:
+    two implementations of one boundary rule is how the on-edit hook and verify
+    would come to disagree about what a WO owns — the same
+    two-copies-one-stale shape this milestone keeps finding.
+    """
+    try:
+        import sqlite3
+
+        from runtime.lib.enforcement import boundary_globs
+
+        conn = sqlite3.connect(str(db_path)) if db_path else None
+        if conn is None:
+            return []
+        try:
+            row = conn.execute(
+                "SELECT description FROM business_work_orders WHERE work_order_id = ?",
+                (work_order_id,),
+            ).fetchone()
+        finally:
+            conn.close()
+        return boundary_globs(row[0] if row else "") or []
+    except Exception:
+        return []
+
+
+def working_tree_changes(
+    work_order_id: str,
+    *,
+    repo_root: Path | None,
+    db_path: Path | None = None,
+) -> tuple[list[str], str | None]:
+    """Uncommitted paths attributable to this WO. Returns ``(paths, reason)``.
+
+    Work in progress is still delivered work: grading only committed state is why
+    an uncommitted deliverable reads as nothing delivered. Covers both tracked
+    modifications (``git diff --name-only HEAD``) and untracked files
+    (``git ls-files --others --exclude-standard``), because a brand-new module is
+    exactly the case a tracked-only diff misses.
+
+    SCOPED to the WO's ``Module boundary:`` when it declares one. Without that
+    scoping this layer would sweep in every unrelated dirty file in the same
+    checkout and grade it as this WO's delivery — the reverse hazard, and worse
+    than the defect it fixes, because it would let a WO be certified by work it
+    never did.
+    """
+    if repo_root is None:
+        return [], "no repo root resolved for this work order"
+
+    def _git_lines(args: list[str]) -> tuple[list[str], str | None]:
+        try:
+            proc = subprocess.run(
+                ["git", *args],
+                cwd=str(repo_root),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=_GIT_TIMEOUT,
+            )
+        except FileNotFoundError:
+            return [], "git not installed"
+        except subprocess.TimeoutExpired:
+            return [], f"git {args[0]} timed out"
+        except OSError as exc:
+            return [], f"git could not run: {exc}"
+        if not isinstance(proc.returncode, int) or proc.returncode != 0:
+            return [], f"git {args[0]} failed"
+        out = proc.stdout if isinstance(proc.stdout, str) else ""
+        return [ln.strip() for ln in out.splitlines() if ln.strip()], None
+
+    tracked, why_tracked = _git_lines(["diff", "--name-only", "HEAD"])
+    untracked, why_untracked = _git_lines(["ls-files", "--others", "--exclude-standard"])
+    if why_tracked and why_untracked:
+        return [], why_tracked
+
+    paths = sorted(set(tracked) | set(untracked))
+    if not paths:
+        return [], None
+
+    globs = _module_boundary_globs(work_order_id, db_path)
+    if not globs:
+        # No declared boundary means no basis for attributing a dirty file to this
+        # WO. Reported rather than silently returning everything: attributing the
+        # whole working tree to a WO that never claimed it is how a WO gets
+        # certified by someone else's work.
+        return [], (
+            f"{len(paths)} uncommitted path(s) present but this work order declares no "
+            "'Module boundary:', so none can be attributed to it"
+        )
+
+    # FAIL-OPEN vs FAIL-CLOSED: the same predicate needs opposite defaults here.
+    # runtime.lib.enforcement.path_in_boundary returns True for a path it cannot
+    # resolve relative to the project root — correct for the on-edit hook, whose
+    # job is to avoid BLOCKING an edit it cannot classify. For attribution the
+    # safe default is inverted: a path we cannot place must not be CLAIMED as this
+    # WO's delivery, or an unresolvable path silently certifies a WO with work it
+    # never did. So paths are resolved against repo_root first (git reports them
+    # repo-relative), and anything still unplaceable is dropped and counted rather
+    # than inherited as a match.
+    try:
+        from runtime.lib.enforcement import path_in_boundary
+
+        scoped: list[str] = []
+        unplaceable = 0
+        for rel in paths:
+            absolute = (Path(repo_root) / rel).as_posix()
+            try:
+                (Path(repo_root) / rel).resolve().relative_to(Path(repo_root).resolve())
+            except (OSError, ValueError):
+                unplaceable += 1
+                continue
+            if path_in_boundary(absolute, str(repo_root), globs):
+                scoped.append(rel)
+    except Exception as exc:
+        return [], f"boundary matching unavailable: {type(exc).__name__}"
+    if unplaceable:
+        return scoped, (
+            f"{unplaceable} uncommitted path(s) could not be placed relative to the repo"
+            " root and were NOT attributed to this work order"
+        )
+    return scoped, None
+
+
 def boundary_commit_range(
     work_order_id: str, *, db_path: Path | None = None
 ) -> tuple[str | None, str | None]:
