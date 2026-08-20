@@ -15,6 +15,7 @@ the same string cannot be reasoned from — and the pressure it creates is towar
 from __future__ import annotations
 
 import sqlite3
+import subprocess
 import uuid
 from pathlib import Path
 
@@ -196,3 +197,112 @@ def test_gate_still_fails_plainly_when_a_check_really_fails(db, tmp_path):
         "misaddressed one — softening it would invert the defect"
     )
     assert "UNVERIFIED" not in reason, "a real failure must not be softened to inconclusive"
+
+
+# ── Delivered state vs current checkout (task 6) ───────────────────────────────
+
+
+def test_the_gate_names_the_delivery_point_and_the_checkout(db, tmp_path):
+    """WO-VERIFY-GRADES-DELIVERY task 6. The gate runs checks against whatever is
+    checked out, so a WO whose work is merged and green can report FAILED purely
+    because the tree sits elsewhere — which happened on 2026-08-19 and produced a
+    wrong root-cause write-up.
+
+    The gate deliberately does NOT switch commits to fix this: mutating the working
+    tree could discard uncommitted work, a far worse failure than an unclear
+    message. It tells the operator where the delivered state is and where they are,
+    so "wrong checkout" is self-evident rather than mistaken for "work is broken".
+    """
+    import os as _os
+
+    from core.work_orders.close_gates import run_gate_check
+    from core.work_orders.delivery_boundary import record_delivery_boundary
+
+    # A real repo whose HEAD moves after the boundary is stamped.
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    env = {
+        **_os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@e",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@e",
+    }
+
+    def git(*args: str) -> str:
+        out = subprocess.run(
+            ["git", *args],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            timeout=30,
+        )
+        assert out.returncode == 0, out.stderr
+        return out.stdout.strip()
+
+    git("init", "-q")
+    (repo / "a.txt").write_text("1", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-qm", "first")
+    start = git("rev-parse", "HEAD")
+
+    wo_id = _wo_with_check(db, "tests/unit/test_absent_target_xyz.py::test_nope")
+    # Point the WO's project at this repo so the gate resolves it.
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "UPDATE business_projects SET project_path = ?"
+        " WHERE project_id = (SELECT project_id FROM business_work_orders WHERE work_order_id = ?)",
+        (str(repo), wo_id),
+    )
+    conn.commit()
+    conn.close()
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+
+    (repo / "b.txt").write_text("2", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-qm", "second")
+    head = git("rev-parse", "HEAD")
+    assert head != start
+
+    conn = sqlite3.connect(str(db))
+    conn.row_factory = sqlite3.Row
+    _passed, reason = run_gate_check(
+        "all_tests_pass",
+        planning_root=tmp_path,
+        work_order_id=wo_id,
+        project_id="",
+        conn=conn,
+        db_path=db,
+    )
+    conn.close()
+
+    assert "could not be RUN" in reason
+    assert start[:8] in reason, "the recorded delivery point must be named"
+    assert head[:8] in reason, "the current checkout must be named"
+    assert "does not switch commits" in reason, (
+        "the gate must say it will not mutate the tree — a gate that checks out "
+        "commits could discard uncommitted work"
+    )
+
+
+def test_no_recorded_boundary_says_so_rather_than_going_quiet(db, tmp_path):
+    """A WO with no boundary cannot be told where its checks belong, and that is
+    itself the actionable fact."""
+    from core.work_orders.close_gates import run_gate_check
+
+    wo_id = _wo_with_check(db, "tests/unit/test_absent_target_xyz.py::test_nope")
+    conn = sqlite3.connect(str(db))
+    conn.row_factory = sqlite3.Row
+    _passed, reason = run_gate_check(
+        "all_tests_pass",
+        planning_root=tmp_path,
+        work_order_id=wo_id,
+        project_id="",
+        conn=conn,
+        db_path=db,
+    )
+    conn.close()
+    assert "No delivery boundary was recorded" in reason

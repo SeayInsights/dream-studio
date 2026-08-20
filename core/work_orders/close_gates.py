@@ -167,7 +167,8 @@ def run_gate_check(
                         f"all_tests_pass: UNVERIFIED — {len(_unaddressed)} TEST-CHECK(s)"
                         f" could not be RUN (target not found), none actually failed."
                         f" This is not a verdict about the work: verify from the"
-                        f" branch/commit where it landed, or repoint the criterion — {_detail}"
+                        f" branch/commit where it landed, or repoint the criterion —"
+                        f" {_detail}{_delivered_state_hint(work_order_id, _proot, db_path)}"
                     )
                 if _failed:
                     _detail = "; ".join(
@@ -341,6 +342,60 @@ def run_gate_check(
         return True, ""
 
     return True, ""
+
+
+def _delivered_state_hint(
+    work_order_id: str, project_root: Path | None, db_path: Path | None
+) -> str:
+    """Name the WO's recorded delivery point vs the current checkout, or "".
+
+    WO-VERIFY-GRADES-DELIVERY task 6. `executable_ac` runs its checks against
+    whatever is checked out, so a WO whose work is merged and green can report
+    FAILED purely because the tree sits elsewhere — which happened on 2026-08-19
+    and produced a wrong root-cause write-up.
+
+    The gate deliberately does NOT check out the recorded commit to fix this: a
+    gate that mutates the working tree could destroy uncommitted work, which is a
+    far worse failure than an unclear message. What it can do is tell the operator
+    exactly where the delivered state is and where they are, so "wrong checkout" is
+    self-evident instead of being mistaken for "the work is broken".
+
+    Silent when there is nothing useful to say — no boundary, no git, or the
+    checkout already matches. A hint that fires on the happy path is noise.
+    """
+    try:
+        from core.work_orders.delivery_boundary import read_delivery_boundary
+
+        boundary = read_delivery_boundary(work_order_id, db_path=db_path)
+        if not boundary:
+            return (
+                " No delivery boundary was recorded for this work order, so the gate"
+                " cannot tell which commit its checks were meant to run against."
+            )
+        start = boundary.get("start_commit")
+        if not isinstance(start, str) or not start:
+            return ""
+        import subprocess
+
+        proc = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(project_root) if project_root else None,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+        )
+        head = (proc.stdout if isinstance(proc.stdout, str) else "").strip()
+        if not head or head == start:
+            return ""
+        return (
+            f" This work order began at {start[:8]}; this checkout is at {head[:8]}."
+            " The gate does not switch commits for you (that could discard"
+            " uncommitted work) — run the checks where the work landed."
+        )
+    except Exception:
+        return ""
 
 
 def _wo_created_at(conn: Any, work_order_id: str) -> str | None:
