@@ -105,6 +105,24 @@ gates:
       .github/workflows/ci.yml no longer exists — remove or repoint the entry
       in the SAME change set as the rename/delete.
 
+  - id: locale-decode
+    tier: blocking
+    description: >
+      A subprocess call with text=True and no encoding= decodes the child's
+      output with the platform locale codec — cp1252 on Windows. Every gate
+      here emits UTF-8, so one unmapped byte (a cross mark or a left arrow is
+      enough) kills subprocess's reader thread; run() then returns
+      returncode=0 with stdout=None and the caller is handed success plus no
+      output (WO-LOCALE-DECODE-SILENT-LOSS). 62 product sites across eleven
+      gate files had accumulated, because nothing checked. AST-based, so
+      text=True in a string or a multi-line call is judged correctly.
+    command: [py, -m, core.gates.locale_decode_gate]
+    fail_hint: >
+      Add encoding="utf-8", errors="replace" to the named subprocess call. If the
+      call is deliberately unguarded (only the gate's own test should be), mark
+      its line `# locale-decode-gate: intentional — <why>`; the gate prints every
+      exemption, so it stays visible.
+
   - id: atlas-leak
     tier: blocking
     description: >

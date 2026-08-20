@@ -112,6 +112,17 @@ def run_gate(
             cwd=str(repo_root),
             capture_output=True,
             text=True,
+            # WO-LOCALE-DECODE-SILENT-LOSS: text=True alone decodes with
+            # locale.getpreferredencoding(False) — cp1252 on Windows. Gates emit UTF-8,
+            # so a byte cp1252 leaves unmapped (a ❌ or ← is enough) raised
+            # UnicodeDecodeError in subprocess's reader THREAD; this call then returned
+            # returncode=0 with stdout=None, and the tails below silently became empty.
+            # Exit codes still decided the verdict, so what was lost was the gate's
+            # diagnostic — a failure with no reason attached. errors="replace" because a
+            # gate must report on odd bytes, not vanish on them. (The TimeoutExpired
+            # handler below already decoded UTF-8 explicitly; this path was missed.)
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout_seconds,
             env=run_env,
         )
@@ -264,12 +275,20 @@ def format_report(report: PrePushReport) -> str:
             hint = gate.warn_hint if gate.is_advisory else gate.fail_hint
             if hint:
                 lines.append(f"   {'advisory' if gate.is_advisory else 'hint'}: {hint}")
+            # Both streams, not stderr-or-stdout. The `elif` here dropped stdout
+            # whenever stderr held anything at all, and for a pytest gate that is
+            # backwards: the failing assertion is on stdout while stderr carries
+            # only an unrelated import warning. A pin-tests failure therefore
+            # printed its hint and nothing else, and the only way to learn WHICH
+            # pin drifted was to re-run the gate by hand — the same
+            # failure-with-no-reason-attached shape as the codec defect this WO
+            # started from (WO-LOCALE-DECODE-SILENT-LOSS).
+            if gate.stdout_tail:
+                lines.append("   stdout tail:")
+                lines.extend(f"     {line}" for line in gate.stdout_tail.splitlines())
             if gate.stderr_tail:
                 lines.append("   stderr tail:")
                 lines.extend(f"     {line}" for line in gate.stderr_tail.splitlines())
-            elif gate.stdout_tail:
-                lines.append("   stdout tail:")
-                lines.extend(f"     {line}" for line in gate.stdout_tail.splitlines())
     lines.append("")
     lines.append("Overall: " + ("PASS" if report.overall_passed else "FAIL"))
     if report.advisory_warnings:

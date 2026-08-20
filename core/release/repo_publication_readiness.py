@@ -585,6 +585,8 @@ def _run_git(repo_root: Path, *args: str) -> subprocess.CompletedProcess[str]:
         cwd=repo_root,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
 

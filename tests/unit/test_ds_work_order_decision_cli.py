@@ -58,6 +58,8 @@ def _run(args: list[str], *, fake_home: Path, storage_root: Path) -> subprocess.
         env=_env(fake_home, storage_root),
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=30,
     )
 

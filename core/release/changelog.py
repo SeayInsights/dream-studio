@@ -127,6 +127,8 @@ def _commits_since(ref: str | None) -> list[str]:
             ["git", "log", "--format=%s", rng],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=REPO_ROOT,
             timeout=15,
         )
@@ -143,6 +145,8 @@ def _last_release_tag() -> str | None:
             ["git", "describe", "--tags", "--abbrev=0"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=REPO_ROOT,
             timeout=15,
         )

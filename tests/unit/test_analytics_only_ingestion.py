@@ -180,6 +180,8 @@ def test_ds_analytics_ingest_runs_from_outside_repo_against_rehearsal_home(
         cwd=outside,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=True,
     )
     dry_run = subprocess.run(
@@ -197,6 +199,8 @@ def test_ds_analytics_ingest_runs_from_outside_repo_against_rehearsal_home(
         cwd=outside,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=True,
     )
     execute = subprocess.run(
@@ -215,6 +219,8 @@ def test_ds_analytics_ingest_runs_from_outside_repo_against_rehearsal_home(
         cwd=outside,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=True,
     )
 

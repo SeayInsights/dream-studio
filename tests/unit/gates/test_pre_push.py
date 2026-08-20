@@ -177,6 +177,94 @@ def test_format_report_renders_pass_and_fail() -> None:
     assert "Overall: FAIL" in out
 
 
+def test_a_failing_gate_shows_stdout_even_when_stderr_is_noisy() -> None:
+    """WO-LOCALE-DECODE-SILENT-LOSS task 6. The renderer used
+    ``if stderr_tail ... elif stdout_tail``, so any stderr content at all
+    suppressed stdout. For a pytest gate that is exactly backwards: the failing
+    assertion is on stdout while stderr carries an unrelated import warning.
+
+    Observed live and twice on one branch — a pin-tests failure printed its hint
+    and nothing else, and the only way to learn WHICH pin had drifted was to
+    re-run the gate by hand.
+    """
+    from core.gates.pre_push import GateResult
+
+    report = PrePushReport(
+        overall_passed=False,
+        gates=[
+            GateResult(
+                gate_id="pin-tests",
+                passed=False,
+                exit_code=1,
+                duration_seconds=151.5,
+                fail_hint="a schema/contract pin drifted",
+                stdout_tail="AssertionError: dist/plugin/skills/x.py is stale — rebuild it",
+                stderr_tail="RequestsDependencyWarning: urllib3 doesn't match a supported version",
+            )
+        ],
+    )
+    out = format_report(report)
+    assert (
+        "dist/plugin/skills/x.py is stale" in out
+    ), "the actual failure lives on stdout; a warning on stderr must not hide it"
+
+
+def test_both_streams_are_shown_when_both_have_content() -> None:
+    from core.gates.pre_push import GateResult
+
+    report = PrePushReport(
+        overall_passed=False,
+        gates=[
+            GateResult(
+                gate_id="g",
+                passed=False,
+                exit_code=1,
+                duration_seconds=1.0,
+                stdout_tail="OUT-MARKER",
+                stderr_tail="ERR-MARKER",
+            )
+        ],
+    )
+    out = format_report(report)
+    assert "stdout tail:" in out and "OUT-MARKER" in out
+    assert "stderr tail:" in out and "ERR-MARKER" in out
+    # stdout first: for the gates here it is the more informative stream.
+    assert out.index("OUT-MARKER") < out.index("ERR-MARKER")
+
+
+def test_a_gate_with_only_stderr_still_reports_it() -> None:
+    """Reordering must not lose the single-stream cases either way."""
+    from core.gates.pre_push import GateResult
+
+    only_err = PrePushReport(
+        overall_passed=False,
+        gates=[
+            GateResult(
+                gate_id="g",
+                passed=False,
+                exit_code=1,
+                duration_seconds=1.0,
+                stderr_tail="ERR-ONLY",
+            )
+        ],
+    )
+    assert "ERR-ONLY" in format_report(only_err)
+
+    only_out = PrePushReport(
+        overall_passed=False,
+        gates=[
+            GateResult(
+                gate_id="g",
+                passed=False,
+                exit_code=1,
+                duration_seconds=1.0,
+                stdout_tail="OUT-ONLY",
+            )
+        ],
+    )
+    assert "OUT-ONLY" in format_report(only_out)
+
+
 # ── Advisory tier (AD-3) ──────────────────────────────────────────────────────
 
 

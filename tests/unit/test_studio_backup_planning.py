@@ -82,6 +82,8 @@ def test_plan_backup_json_cli_uses_fake_home_without_creating_backup(tmp_path: P
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=30,
         cwd=str(REPO_ROOT),
         env=env,

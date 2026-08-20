@@ -74,6 +74,8 @@ def _git_log_messages(repo_root: Path, range_args: list[str]) -> list[str]:
             cwd=repo_root,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
     except OSError:

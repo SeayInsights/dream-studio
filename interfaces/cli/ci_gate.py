@@ -118,6 +118,8 @@ def run_check(name: str, cmd: list[str]) -> dict:
             cmd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=REPO_ROOT,
             env=env,
         )
@@ -140,6 +142,8 @@ def run_advisory() -> dict | None:
             ["claude", "--print", "review: check PR for regressions"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=60,
         )
         return {

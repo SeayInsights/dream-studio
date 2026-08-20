@@ -17,6 +17,8 @@ def test_ds_spool_ingest_no_events(tmp_path):
         [sys.executable, str(REPO_ROOT / "interfaces" / "cli" / "ds.py"), "spool", "ingest"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         env=env,
     )
     assert result.returncode == 0

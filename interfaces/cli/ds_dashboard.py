@@ -84,6 +84,8 @@ def _find_pid_netstat(port: int) -> int | None:
             ["netstat", "-ano"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=10,
         )
         target = f":{port} "
@@ -107,6 +109,8 @@ def _find_pid_lsof(port: int) -> int | None:
             ["lsof", "-ti", f"tcp:{port}"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=10,
         )
         pid_str = result.stdout.strip().split()[0] if result.stdout.strip() else ""
@@ -120,6 +124,8 @@ def _find_pid_lsof(port: int) -> int | None:
             ["ss", "-tlnp", f"sport = :{port}"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=10,
         )
         # ss output: pid=<N>,fd=... inside the last column

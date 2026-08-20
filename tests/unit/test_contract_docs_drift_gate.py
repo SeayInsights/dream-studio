@@ -113,6 +113,8 @@ def test_contract_docs_drift_cli_uses_explicit_changed_files() -> None:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
 
@@ -134,6 +136,8 @@ def test_contract_docs_drift_cli_fails_on_missing_impacted_docs() -> None:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
 
@@ -257,6 +261,8 @@ def test_contract_docs_drift_cli_accepts_reviewed_no_change() -> None:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
 
@@ -285,6 +291,8 @@ def test_reviewed_no_change_env_var_reaches_blocking_lane() -> None:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
         env=env,
     )

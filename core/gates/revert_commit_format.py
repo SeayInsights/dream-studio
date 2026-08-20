@@ -42,6 +42,8 @@ def _commit_subjects(base_ref: str) -> list[str]:
             ["git", "log", "--format=%s", f"{base_ref}..HEAD"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=REPO_ROOT,
             timeout=15,
         )

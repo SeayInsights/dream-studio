@@ -31,7 +31,9 @@ SRC = [
 
 
 def _run(cmd: list[str]) -> str:
-    return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True).stdout
+    return subprocess.run(
+        cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace"
+    ).stdout
 
 
 def main() -> int:

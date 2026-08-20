@@ -11,6 +11,8 @@ def _help(subcmd: str) -> str:
         [sys.executable, "-m", "interfaces.cli.ds", subcmd, "--help"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     return result.stdout + result.stderr
 

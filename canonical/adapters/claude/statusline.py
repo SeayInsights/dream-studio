@@ -89,6 +89,8 @@ if cwd and os.path.isdir(cwd):
             ["git", "-C", cwd, "rev-parse", "--show-toplevel"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=2,
         )
         toplevel = top.stdout.strip() if top.returncode == 0 else ""
@@ -100,6 +102,8 @@ if cwd and os.path.isdir(cwd):
                 ["git", "-C", cwd, "branch", "--show-current"],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=2,
             )
             if b.returncode == 0:
@@ -108,6 +112,8 @@ if cwd and os.path.isdir(cwd):
                 ["git", "-C", cwd, "status", "--porcelain"],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=2,
             )
             if s.returncode == 0 and s.stdout.strip():
@@ -116,6 +122,8 @@ if cwd and os.path.isdir(cwd):
                 ["git", "-C", cwd, "remote", "get-url", "origin"],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=2,
             )
             if r.returncode == 0:

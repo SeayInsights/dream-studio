@@ -200,6 +200,8 @@ def _write_handoff_packet_to_db(
                 cwd=cwd,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=5,
             )
             branch = result.stdout.strip()

@@ -455,6 +455,8 @@ def _windows_pid_exists(pid: int) -> bool:
             ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
             stderr=subprocess.DEVNULL,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         return str(pid) in out
     except Exception:

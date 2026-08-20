@@ -116,6 +116,8 @@ class TestSetupReadOnly:
             [sys.executable, str(REPO_ROOT / "interfaces" / "cli" / "setup.py"), "--help"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
             cwd=str(REPO_ROOT),
         )
@@ -126,6 +128,8 @@ class TestSetupReadOnly:
             [sys.executable, str(REPO_ROOT / "interfaces" / "cli" / "setup.py"), "--check"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
             cwd=str(REPO_ROOT),
         )
@@ -136,6 +140,8 @@ class TestSetupReadOnly:
             [sys.executable, str(REPO_ROOT / "scripts" / "setup.py"), "--help"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
             cwd=str(REPO_ROOT),
         )
@@ -146,6 +152,8 @@ class TestSetupReadOnly:
             [sys.executable, str(REPO_ROOT / "scripts" / "setup.py"), "--check"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
             cwd=str(REPO_ROOT),
         )
@@ -162,6 +170,8 @@ class TestDashboardReadOnly:
             [sys.executable, str(REPO_ROOT / "interfaces" / "cli" / "ds_dashboard.py"), "--help"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
             cwd=str(REPO_ROOT),
         )
@@ -172,6 +182,8 @@ class TestDashboardReadOnly:
             [sys.executable, str(REPO_ROOT / "interfaces" / "cli" / "ds_dashboard.py"), "--check"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
             cwd=str(REPO_ROOT),
         )
@@ -183,6 +195,8 @@ class TestDashboardReadOnly:
             [sys.executable, str(REPO_ROOT / "interfaces" / "cli" / "ds_dashboard.py"), "--check"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
             cwd=str(REPO_ROOT),
         )
@@ -200,6 +214,8 @@ class TestDashboardShimCheck:
             [sys.executable, str(REPO_ROOT / "scripts" / "ds_dashboard.py"), "--help"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
             cwd=str(REPO_ROOT),
         )
@@ -210,6 +226,8 @@ class TestDashboardShimCheck:
             [sys.executable, str(REPO_ROOT / "scripts" / "ds_dashboard.py"), "--check"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
             cwd=str(REPO_ROOT),
         )

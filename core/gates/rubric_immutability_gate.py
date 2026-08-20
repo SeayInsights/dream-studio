@@ -24,6 +24,8 @@ def _changed_files() -> list[str]:
         ["git", "diff", "--name-only", "origin/main...HEAD"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     return result.stdout.splitlines()
 
@@ -34,6 +36,8 @@ def _commit_messages() -> str:
         ["git", "log", "--format=%B", "origin/main...HEAD"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     return result.stdout
 

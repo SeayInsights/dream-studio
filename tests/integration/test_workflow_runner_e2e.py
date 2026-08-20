@@ -199,6 +199,8 @@ def test_cli_workflow_start_help():
         [sys.executable, "-m", "interfaces.cli.ds", "workflow", "start", "--help"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     assert result.returncode == 0
     assert "yaml_path" in result.stdout
@@ -209,6 +211,8 @@ def test_cli_workflow_advance_help():
         [sys.executable, "-m", "interfaces.cli.ds", "workflow", "advance", "--help"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     assert result.returncode == 0
     assert "dry-run" in result.stdout
@@ -219,5 +223,7 @@ def test_cli_workflow_list_help():
         [sys.executable, "-m", "interfaces.cli.ds", "workflow", "list", "--help"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     assert result.returncode == 0

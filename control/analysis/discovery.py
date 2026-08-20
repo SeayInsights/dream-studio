@@ -273,7 +273,13 @@ def _get_git_metadata(path: Path) -> dict[str, Any]:
     try:
         # Check if git repo
         result = subprocess.run(
-            ["git", "rev-parse", "--git-dir"], cwd=path, capture_output=True, text=True, timeout=5
+            ["git", "rev-parse", "--git-dir"],
+            cwd=path,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=5,
         )
         if result.returncode != 0:
             return {"is_git_repo": False}
@@ -284,13 +290,21 @@ def _get_git_metadata(path: Path) -> dict[str, Any]:
             cwd=path,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=5,
         )
         total_commits = int(commits_result.stdout.strip()) if commits_result.returncode == 0 else 0
 
         # Get contributors
         contributors_result = subprocess.run(
-            ["git", "shortlog", "-sn", "HEAD"], cwd=path, capture_output=True, text=True, timeout=5
+            ["git", "shortlog", "-sn", "HEAD"],
+            cwd=path,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=5,
         )
         contributors = []
         if contributors_result.returncode == 0:
@@ -307,6 +321,8 @@ def _get_git_metadata(path: Path) -> dict[str, Any]:
             cwd=path,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=5,
         )
         first_commit_date = (
@@ -318,6 +334,8 @@ def _get_git_metadata(path: Path) -> dict[str, Any]:
             cwd=path,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=5,
         )
         last_commit_date = (

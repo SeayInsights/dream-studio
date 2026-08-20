@@ -232,6 +232,8 @@ class TestDashboardCheck:
             [sys.executable, str(REPO_ROOT / "interfaces" / "cli" / "ds_dashboard.py"), "--check"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=DASHBOARD_CHECK_TIMEOUT_SECONDS,
             cwd=str(REPO_ROOT),
         )
@@ -244,6 +246,8 @@ class TestDashboardCheck:
             [sys.executable, str(REPO_ROOT / "interfaces" / "cli" / "ds_dashboard.py"), "--check"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=DASHBOARD_CHECK_TIMEOUT_SECONDS,
             cwd=str(REPO_ROOT),
         )
@@ -269,6 +273,8 @@ class TestDashboardSmokeCommand:
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=60,
             cwd=str(REPO_ROOT),
         )
@@ -292,6 +298,8 @@ class TestDashboardSmokeCommand:
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=60,
             cwd=str(REPO_ROOT),
         )
@@ -309,6 +317,8 @@ class TestScriptShimCheck:
             [sys.executable, str(REPO_ROOT / "scripts" / "ds_dashboard.py"), "--check"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=DASHBOARD_CHECK_TIMEOUT_SECONDS,
             cwd=str(REPO_ROOT),
         )
@@ -327,6 +337,8 @@ class TestScriptShimCheck:
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=60,
             cwd=str(REPO_ROOT),
         )
