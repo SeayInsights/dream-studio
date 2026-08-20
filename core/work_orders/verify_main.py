@@ -641,9 +641,21 @@ def verify_work_order(
         # this is what turns "what should have been tested" into a work order.
         # UNVERIFIED scenarios do NOT spawn (there is nothing to write yet); they
         # land in the ledger below so the residual risk is named, never silent.
-        _fals_scenarios: list[dict[str, Any]] = (
-            falsification.get("scenarios", []) if falsification else []
-        )
+        # MALFORMED GRADER REPLY, second surface (gap WO 66e7ebc8 task 2, caught by
+        # that WO's own verify): _falsification_to_gaps was hardened against a
+        # grader returning prose or a bare object, but this comprehension was left
+        # calling .get() on every element — so the very reply the task describes
+        # still raised AttributeError here, INSIDE verify's open authority
+        # transaction, taking down the whole verify. Hardening one of two readers of
+        # the same untrusted payload leaves the failure exactly where it was; both
+        # normalise the shape now.
+        _raw_scenarios = falsification.get("scenarios") if falsification else None
+        if isinstance(_raw_scenarios, dict):  # a single scenario object, not a list
+            _raw_scenarios = [_raw_scenarios]
+        elif not isinstance(_raw_scenarios, list):
+            _raw_scenarios = []
+        _fals_scenarios: list[dict[str, Any]] = [s for s in _raw_scenarios if isinstance(s, dict)]
+        _fals_malformed = len(_raw_scenarios) - len(_fals_scenarios)
         all_gaps.extend(_falsification_to_gaps(_fals_scenarios))
         _unverified = [s for s in _fals_scenarios if s.get("status") == "UNVERIFIED"]
 
@@ -788,6 +800,14 @@ def verify_work_order(
                     f"diff exceeded the {_FALSIFICATION_DIFF_BUDGET}-char falsification budget;"
                     " the analyst saw the newest commits only — surfaces in older commits of"
                     " this work order may be unenumerated."
+                )
+            if _fals_malformed:
+                # A grader reply that partly failed to parse narrows the enumeration.
+                # Skipping the unparseable entries silently would make a degraded
+                # analysis indistinguishable from a clean one.
+                full_verdict["falsification_malformed_entries"] = (
+                    f"{_fals_malformed} scenario entr(ies) were not objects and could not be"
+                    " classified — the enumeration may be incomplete."
                 )
             if falsification.get("_grader_error") or falsification.get("unreviewable"):
                 full_verdict["falsification_unavailable"] = str(
