@@ -248,6 +248,23 @@ gates:
     command: [py, -m, core.gates.dependency_rules, rule4]
     fail_hint: "Rule 4 violation — INSERT INTO canonical_events found outside spool/ingestor.py. Use the spool/emitter path instead."
 
+  - id: reachability
+    tier: blocking
+    description: >
+      Dead-on-arrival check. For every public function/class this change set ADDS
+      under a production tree, is its name referenced anywhere in production code?
+      Reference-based (AST identifier uses, so a lazy import inside a function body
+      counts) rather than import-based, because DS uses lazy imports deliberately for
+      test patchability. Diff-scoped, so the 387 pre-existing advisory leanness
+      findings stay advisory and this stays actionable. Catches the shape five verify
+      findings kept reporting after the fact: a mechanism written, its wiring omitted,
+      and the mechanism then described as the outcome.
+    command: [py, -m, core.gates.reachability]
+    fail_hint: >
+      Added code has no production caller. Wire it to the surface that should use it,
+      or delete it. If the definition genuinely precedes its caller, say why inline
+      with '# reachability-gate: intentional: <reason>' (every exemption is printed).
+
   - id: leanness
     tier: advisory
     description: >
