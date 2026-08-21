@@ -138,7 +138,7 @@ def test_the_real_lazy_import_case_from_this_repo():
     target = "core/gates/brief_currency.py"
     assert target in sources, "the real module must be in the production corpus"
 
-    lazy = reference_count("currency_failure", sources, defining_file=target)
+    lazy = reference_count("currency_failure", sources)
     assert lazy > 0, "currency_failure is called via a lazy import — it is reachable"
 
 
@@ -220,7 +220,7 @@ def test_an_unparseable_file_falls_back_rather_than_blocking():
     """Over-counting yields a false negative; under-counting blocks a push over a file
     the gate merely failed to read, which is how a gate gets routed around."""
     broken = "def f(:\n    pass\n"
-    count = reference_count("thing", {"core/broken.py": "thing()\n" + broken}, defining_file="x.py")
+    count = reference_count("thing", {"core/broken.py": "thing()\n" + broken})
     assert count >= 1, "an unparseable file is text-searched rather than skipped"
 
 
@@ -524,3 +524,65 @@ def test_an_untracked_new_file_is_not_invisible():
         "_untracked_production_python()" in source
     ), "main() must fold untracked production files into the added-symbol set"
     assert "ls-files" in inspect.getsource(reachability._untracked_production_python)
+
+
+def test_a_symbol_called_only_from_its_own_module_is_reachable():
+    """Pins the semantic the removed `defining_file` parameter pretended to control.
+
+    That parameter was advertised in the signature, documented, and changed no answer —
+    its `if path == defining_file: continue` sat at the end of the loop body, a no-op.
+    An argument that alters nothing is the same dead-on-arrival shape this module blocks,
+    one level down where the module cannot see it: it checks symbols, not parameters.
+    Found by this work order's own verify, not by the gate and not by me.
+
+    The decision it was groping at, now stated once and tested: a sibling function
+    calling a symbol means the code runs, so the defining module counts.
+    """
+    module = _dedent("""
+        def helper():
+            return 1
+
+
+        def entry_point():
+            return helper()
+        """)
+    caller = _dedent("""
+        from core.mod import entry_point
+
+        def surface():
+            return entry_point()
+        """)
+    findings = unreachable_symbols(
+        changed_sources={"core/mod.py": module},
+        added_names={"helper", "entry_point"},
+        search_sources={"core/mod.py": module, "interfaces/cli/s.py": caller},
+    )
+    assert findings == [], "a same-module caller makes the symbol reachable"
+
+    assert reference_count("helper", {"core/mod.py": module}) == 1
+    assert reference_count("absent_everywhere", {"core/mod.py": module}) == 0
+
+
+def test_the_module_states_the_rule_it_enforces():
+    """Gap 343d15aa. The correction — test-only production code is dead and gets
+    flagged, not blessed as a fixture seam — landed in these test names and bodies but
+    NOT in the module's own PRODUCTION_ROOTS comment, which still asserted the
+    superseded claim and contradicted itself mid-sentence.
+
+    A comment left stating the opposite of the code is read as the specification by the
+    next person, which is how the conflict would have come back. Deterministic to
+    check, so checked rather than trusted.
+    """
+    import inspect
+
+    from core.gates import reachability
+
+    source = inspect.getsource(reachability)
+    head = source[: source.index("PRODUCTION_ROOTS = (")]
+    assert (
+        "test-only must be REMOVED" in head
+    ), "the module must state the rule it enforces, next to the constant that enforces it"
+    assert "2026-06-29" in head, "cite the standing operator rule, not just the behaviour"
+    assert "may be a deliberate fixture seam" not in head.replace(
+        '("it may be a deliberate', ""
+    ), "the superseded claim must not read as the specification"

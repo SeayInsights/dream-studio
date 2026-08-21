@@ -47,10 +47,16 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# Directories whose Python is product code. A symbol referenced only by tests is NOT
-# dead on arrival — it may be a deliberate fixture seam — so tests are excluded from
-# the ADDED set, but they are also excluded from the reference search: a helper whose
-# only caller is a test is exactly the case this gate must not bless.
+# Directories whose Python is product code. `tests/` is NOT among them, and that is the
+# rule this gate enforces: a public symbol here whose only caller lives in tests/ IS
+# flagged. Standing operator rule (2026-06-29) — anything test-only must be REMOVED,
+# because test-only production code is dead weight that masquerades as a feature and
+# lies about what the system does. A genuine fixture seam is expressible with the
+# exemption marker below, which makes it an audited claim rather than a silent one.
+#
+# An earlier version of this comment asserted the opposite ("it may be a deliberate
+# fixture seam") and then contradicted itself in the same sentence. Left uncorrected it
+# would have been read as the specification.
 PRODUCTION_ROOTS = (
     "control",
     "core",
@@ -197,12 +203,21 @@ def code_identifiers(source: str) -> list[str]:
     return names
 
 
-def reference_count(name: str, sources: dict[str, str], *, defining_file: str) -> int:
+def reference_count(name: str, sources: dict[str, str]) -> int:
     """How many times ``name`` is referenced in production CODE.
 
-    The symbol's own ``def``/``class`` statement is not a use of itself, so the defining
-    module is counted by its identifier uses only — a recursive call or a sibling
-    function's call still counts, which is correct: both mean the code is reachable.
+    NO ``defining_file`` PARAMETER, deliberately. The first cut took one and did nothing
+    with it: its ``if path == defining_file: continue`` sat at the END of the loop body,
+    a no-op, under a comment correctly explaining that there was nothing to subtract —
+    ``ast.FunctionDef``/``ClassDef`` carry the name as an attribute, not as a ``Name``
+    node, so a definition never enters ``code_identifiers`` in the first place. An
+    advertised argument that changes no answer is the same dead-on-arrival shape this
+    module was built to block, one level down where the module cannot see it (it checks
+    symbols, not parameters). Found by this work order's own verify.
+
+    A symbol's own module DOES count toward reachability: a sibling function calling it
+    means the code runs. Self-reference through recursion alone is the pathological case
+    and is rare enough not to warrant a parameter nobody could use correctly.
 
     A file that cannot be parsed falls back to a whole-word text count. That direction
     is deliberate: over-counting yields a false NEGATIVE (a dead symbol slips through),
@@ -211,17 +226,13 @@ def reference_count(name: str, sources: dict[str, str], *, defining_file: str) -
     """
     word = re.compile(r"\b" + re.escape(name) + r"\b")
     total = 0
-    for path, source in sources.items():
+    for source in sources.values():
         try:
             identifiers = code_identifiers(source)
         except SyntaxError:
             total += sum(len(word.findall(line)) for line in source.splitlines())
             continue
         total += sum(1 for identifier in identifiers if identifier == name)
-        if path == defining_file:
-            # ast.FunctionDef/ClassDef carry the name as an attribute, not as a Name
-            # node, so the definition never entered `identifiers` — nothing to subtract.
-            continue
     return total
 
 
@@ -242,7 +253,7 @@ def unreachable_symbols(
         for name, kind, lineno, exempt, reason in module_level_public_symbols(source, path=path):
             if name not in added_names:
                 continue  # pre-existing; out of scope by design
-            if reference_count(name, search_sources, defining_file=path) == 0:
+            if reference_count(name, search_sources) == 0:
                 findings.append(
                     UnreachableSymbol(
                         file=path,
