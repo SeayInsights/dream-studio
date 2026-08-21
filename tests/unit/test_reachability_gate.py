@@ -227,32 +227,87 @@ def test_an_unparseable_file_falls_back_rather_than_blocking():
 # ── Task 2: private and test-only symbols are out of scope ────────────────────
 
 
-def test_private_and_test_only_symbols_are_not_flagged():
-    """A helper used once inside its own module is normal, and one referenced only by
-    tests may be a deliberate fixture seam. A gate that flags normal code gets routed
-    around — the failure mode that made leanness advisory in the first place."""
+def test_a_private_symbol_is_out_of_scope():
+    """A helper used once inside its own module is normal. A gate that flags normal
+    code gets routed around — the failure mode that made leanness advisory."""
     defining = _dedent("""
         def _private_helper():
             return 1
 
 
-        def public_but_test_only():
+        def public_and_wired():
             return _private_helper()
         """)
-    # A test file is NOT in the search corpus — production roots only.
+    caller = _dedent("""
+        from core.mod import public_and_wired
+
+        def surface():
+            return public_and_wired()
+        """)
     findings = unreachable_symbols(
         changed_sources={"core/mod.py": defining},
-        added_names={"_private_helper", "public_but_test_only"},
+        added_names={"_private_helper", "public_and_wired"},
+        search_sources={"core/mod.py": defining, "interfaces/cli/s.py": caller},
+    )
+    assert findings == [], "underscore-private is out of scope; the public one is wired"
+
+
+def test_a_public_symbol_reached_only_by_tests_is_flagged():
+    """DELIBERATE DIVERGENCE FROM THIS WORK ORDER'S OWN TASK TEXT, and the task text
+    was wrong.
+
+    Task 2 as written said a helper referenced only by tests "is not dead on arrival
+    (it may be a fixture seam)". That contradicts a standing operator rule (2026-06-29):
+    anything test-only must be REMOVED — production code under core/, projections/,
+    interfaces/, spool/, control/, runtime/ reachable only from `tests/` is dead and
+    gets deleted, because test-only production code is dead weight that masquerades as
+    a feature and lies about what the system does.
+
+    So `tests/` is excluded from the reference corpus on purpose: a symbol whose only
+    caller is a test is exactly the case this gate must not bless. The earlier name of
+    this test claimed the opposite of what its body asserted, which hid the conflict
+    instead of resolving it — caught by this work order's own verify.
+
+    A genuine fixture seam is still expressible: mark it with the exemption marker and
+    say so, which the gate prints on every run.
+    """
+    defining = _dedent("""
+        def helper_only_tests_call():
+            return 1
+        """)
+    findings = unreachable_symbols(
+        changed_sources={"core/mod.py": defining},
+        added_names={"helper_only_tests_call"},
+        # A test file is NOT in the corpus — production roots only (PRODUCTION_ROOTS).
         search_sources={"core/mod.py": defining},
     )
-    assert [f.name for f in findings] == [
-        "public_but_test_only"
-    ], "the underscore-private symbol is out of scope; the public one is not"
+    assert [f.name for f in findings] == ["helper_only_tests_call"]
 
     assert is_production_python("core/mod.py") is True
-    assert is_production_python("tests/unit/test_mod.py") is False
+    assert (
+        is_production_python("tests/unit/test_mod.py") is False
+    ), "tests are not production, so they cannot make production code reachable"
     assert is_production_python("core/mod.pyi") is False
     assert is_production_python("docs/README.md") is False
+
+
+def test_a_declared_fixture_seam_is_allowed_and_visible():
+    """The escape hatch for the case task 2 was reaching for: a deliberate seam says so
+    inline and the gate prints it on every run, so 'fixture seam' is an audited claim
+    rather than a silent exception."""
+    defining = _dedent(f"""
+        # {EXEMPT_MARKER}: injection seam, driven only from tests by design
+        def seam_for_tests():
+            return 1
+        """)
+    findings = unreachable_symbols(
+        changed_sources={"core/mod.py": defining},
+        added_names={"seam_for_tests"},
+        search_sources={"core/mod.py": defining},
+    )
+    assert len(findings) == 1
+    assert findings[0].exempt is True
+    assert "injection seam" in findings[0].exempt_reason
 
 
 def test_a_decorated_definition_is_not_flagged():
