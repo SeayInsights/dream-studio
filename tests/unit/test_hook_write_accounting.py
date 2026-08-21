@@ -44,6 +44,11 @@ if str(_REPO) not in sys.path:
 
 from runtime.lib import enforcement  # noqa: E402
 
+# Written as byte values, not escapes: an escaped form of these two literals was
+# mangled twice by shell quoting while this file was being authored.
+CRLF = bytes([13, 10])
+LF = bytes([10])
+
 # The session started an hour ago; "since" is that instant.
 _SESSION_START = datetime(2026, 8, 20, 12, 0, 0, tzinfo=UTC)
 _SINCE = _SESSION_START.isoformat()
@@ -388,6 +393,54 @@ def test_a_missing_authority_fails_open(tmp_path, monkeypatch):
     assert enforcement.authority_write_since(str(uuid.uuid4()), _SINCE) is True
 
 
+# ── Task 4 (completed): the widened reader still rejects what it must ─────────
+
+
+def test_a_non_counting_event_in_the_window_is_not_a_write(authority):
+    """The gap this WO's own verify named: the true-positive test only exercised
+    STALE rows, so nothing proved the widened reader still rejects an in-window state
+    it must not admit. `work_order.started` lands inside the session window and is not
+    a record that work was completed."""
+    db, wo_id = authority
+    _exec(
+        db,
+        "INSERT INTO business_canonical_events"
+        " (event_id, work_order_id, event_type, event_timestamp, received_at)"
+        " VALUES (?,?,'work_order.started',?,?)",
+        (str(uuid.uuid4()), wo_id, _DURING, _DURING),
+    )
+    assert enforcement.authority_write_since(wo_id, _SINCE) is False
+
+
+def test_an_in_window_artifact_of_a_non_counting_kind_is_not_a_write(authority):
+    """Same shape on the artifact side. Every fix in this WO widens what counts; if
+    any widened it to "anything in the window", the hook would be decorative."""
+    db, wo_id = authority
+    for kind in ("report", "context", "review_verdict"):
+        _exec(
+            db,
+            "INSERT INTO business_work_order_artifacts"
+            " (work_order_id, kind, instance_key, content, created_at, updated_at)"
+            " VALUES (?,?,?,'{}',?,?)",
+            (wo_id, kind, kind, _DURING, _DURING),
+        )
+    assert enforcement.authority_write_since(wo_id, _SINCE) is False
+
+
+def test_an_in_window_task_in_a_non_done_status_is_not_a_write(authority):
+    """And on the task side: a task touched this session but not COMPLETED is work in
+    progress, not recorded work."""
+    db, wo_id = authority
+    for status in ("pending", "in_progress", "blocked"):
+        _exec(
+            db,
+            "INSERT INTO business_tasks (task_id, work_order_id, status, updated_at)"
+            " VALUES (?,?,?,?)",
+            (str(uuid.uuid4()), wo_id, status, _DURING),
+        )
+    assert enforcement.authority_write_since(wo_id, _SINCE) is False
+
+
 # ── Task 5: the fix must exist where the hooks actually run ───────────────────
 
 
@@ -397,25 +450,53 @@ def test_the_projected_hook_copies_carry_this_fix():
     WO 46fe128b lesson, where deployed copies had silently gone stale. A fix that
     exists only in canonical/ is a fix that never fires.
 
-    The repo-scope projection is tracked in git, so this half is a real assertion
-    everywhere. The user-scope tree (``~/.claude/hooks``) is operator-local and cannot
-    be asserted in CI; when it is present it is checked, and when it is absent the
-    test says so rather than passing quietly on a claim it did not test.
+    EXISTENCE OF A PROJECTION CANNOT BE ASSERTED. ``.gitignore`` line 150 ignores
+    ``.claude/`` outright — ``git ls-files .claude/hooks`` returns nothing — so a fresh
+    checkout has no projected tree at all, and the first version of this test
+    (``assert repo_copy.is_file()``) would have hard-failed in Full CI on main while
+    passing here, on the one machine that had already been projected. Caught by static
+    review, not by running it: executing this suite on a projected machine can never
+    reveal it. Same shape as the gitignored ``verify_*.py`` siblings that made a
+    committed facade import phantom modules.
+
+    So the portable guarantees are asserted hard, and the machine-local one only where
+    it exists:
+
+    1. canonical carries the fix;
+    2. the file is in the projection MANIFEST, so any install will carry it;
+    3. every projection tree present on this machine matches canonical byte-for-byte.
     """
-    canonical = (_REPO / "runtime" / "lib" / "enforcement.py").read_bytes().replace(b"\r\n", b"\n")
-    assert b"TASK_DONE_STATUSES" in canonical, "precondition: the fix is in canonical"
+    from core.health.doctor_shared import projected_hook_relpaths
 
-    repo_copy = _REPO / ".claude" / "hooks" / "runtime" / "lib" / "enforcement.py"
-    assert repo_copy.is_file(), f"repo-scope hook projection missing at {repo_copy}"
-    assert repo_copy.read_bytes().replace(b"\r\n", b"\n") == canonical, (
-        "the repo-scope hook projection is stale — re-project it "
-        "(py -m interfaces.cli.ds doctor --fix)"
+    def _norm(path: Path) -> bytes:
+        return path.read_bytes().replace(CRLF, LF)
+
+    canonical = _norm(_REPO / "runtime" / "lib" / "enforcement.py")
+    assert b"TASK_DONE_STATUSES" in canonical, "the fix must be in the canonical module"
+    assert b"AUTHORITY_ARTIFACT_KINDS" in canonical
+
+    # (2) The projection manifest is the mechanism that carries it to an install.
+    # Without this the fix could be correct, tracked, and deployed nowhere.
+    rels = {r.replace("\\", "/") for r in projected_hook_relpaths(_REPO)}
+    assert "runtime/lib/enforcement.py" in rels, (
+        "enforcement.py is not in the hook projection manifest — the fix would never"
+        f" reach an install (manifest has {len(rels)} paths)"
     )
 
-    user_copy = Path.home() / ".claude" / "hooks" / "runtime" / "lib" / "enforcement.py"
-    if not user_copy.is_file():
-        pytest.skip(f"no user-scope hook projection on this machine ({user_copy})")
-    assert user_copy.read_bytes().replace(b"\r\n", b"\n") == canonical, (
-        "the USER-scope hook projection is stale and it fires too — "
-        "`ds doctor --fix` only re-projects the project scope (see WO-HOOK-SCOPE-BLINDSPOT)"
-    )
+    # (3) Whatever IS deployed here must match. Both trees fire, so both are checked.
+    checked = 0
+    for tree in (_REPO / ".claude" / "hooks", Path.home() / ".claude" / "hooks"):
+        deployed = tree / "runtime" / "lib" / "enforcement.py"
+        if not deployed.is_file():
+            continue
+        checked += 1
+        assert _norm(deployed) == canonical, (
+            f"the hook projection at {deployed} is STALE and it fires — re-project it."
+            " Note `ds doctor --fix` only re-projects the project scope"
+            " (WO-HOOK-SCOPE-BLINDSPOT)."
+        )
+    if not checked:
+        pytest.skip(
+            "no hook projection on this machine (.claude/ is gitignored, so a fresh"
+            " checkout has none) — the manifest assertion above is the portable guard"
+        )
