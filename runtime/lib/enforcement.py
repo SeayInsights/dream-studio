@@ -528,8 +528,44 @@ def next_created_work_order(project_id: str) -> dict | None:
     return {"work_order_id": row[0], "title": row[1]} if row else None
 
 
+# WO-HOOK-WRITE-ACCOUNTING. The statuses a completed task actually carries.
+#
+# The reader asked for status = 'done' while `ds work-order task-done` writes
+# 'complete' (core/projections/task_projection.py). In the live authority that is
+# 2,058 'complete' rows against 27 'done' — all legacy, last written 2026-06-29 — so
+# the row fallback had matched nothing for months. Four consecutive successful
+# task-done calls on befde290 were then reported as "no authority write was recorded
+# this session": the writes landed and the reader could not see them.
+#
+# BOTH are accepted, not one literal swapped for another: 'complete' for current
+# writes, 'done' so the historical rows keep counting. This is not imported from
+# core because this module is copied verbatim into the installed hook trees and may
+# only use the stdlib — so drift is prevented by a test that drives the REAL
+# mark_task_done and asserts the status it produces is in this set, rather than by an
+# import that cannot exist here.
+TASK_DONE_STATUSES = ("complete", "done")
+
+# Artifact kinds that ARE an authority write. `ds work-order affirm-impact` stores an
+# impact_affirmation and satisfies the change_impact_affirmed close gate, so it is
+# unambiguously recorded work — but the reader did not count it, and a session whose
+# only honest remaining write is an affirmation then had NO truthful way to satisfy
+# the hook: every task already complete, and close blocked on a gate. Hit three times
+# on 2026-08-19/20 (758fbedd, c14c2eea, 66e7ebc8). Deliberately narrow — a verdict or
+# a report is evidence ABOUT work, not a record that work was completed.
+AUTHORITY_ARTIFACT_KINDS = ("impact_affirmation",)
+
+
 def authority_write_since(work_order_id: str, since_iso: str) -> bool:
-    """True if any authority write for the WO landed at/after since_iso."""
+    """True if any authority write for the WO landed at/after since_iso.
+
+    DURABLE ROW STATE IS THE PRIMARY SIGNAL, canonical events are reinforcement.
+    The original order asked the event stream first, and events arrive only once
+    spool ingestion has run — so the check partly measured "did ingestion keep up"
+    rather than "did the operator record work", and a compliant session was blocked
+    whenever ingestion lagged. The rows are written by the mutation itself and cannot
+    lag it. Same demotion the verify locator got: read the state, treat the stream as
+    corroboration.
+    """
     since = parse_ts(since_iso)
     if since is None:
         return True  # unusable window — fail open
@@ -537,6 +573,44 @@ def authority_write_since(work_order_id: str, since_iso: str) -> bool:
     if conn is None:
         return True
     try:
+        # 1. A completed task — the most common authority write by far.
+        placeholders = ",".join("?" for _ in TASK_DONE_STATUSES)
+        rows = conn.execute(
+            "SELECT updated_at FROM business_tasks"
+            f" WHERE work_order_id = ? AND status IN ({placeholders})",
+            (work_order_id, *TASK_DONE_STATUSES),
+        ).fetchall()
+        for row in rows:
+            ts = parse_ts(row[0])
+            if ts is not None and ts >= since:
+                return True
+
+        # 2. An artifact whose existence records completed work (impact affirmation).
+        placeholders = ",".join("?" for _ in AUTHORITY_ARTIFACT_KINDS)
+        try:
+            rows = conn.execute(
+                "SELECT updated_at, created_at FROM business_work_order_artifacts"
+                f" WHERE work_order_id = ? AND kind IN ({placeholders})",
+                (work_order_id, *AUTHORITY_ARTIFACT_KINDS),
+            ).fetchall()
+        except sqlite3.Error:
+            rows = []  # table absent on an old authority — not a reason to block
+        for row in rows:
+            ts = parse_ts(row[0]) or parse_ts(row[1])
+            if ts is not None and ts >= since:
+                return True
+
+        # 3. The work order itself reached a terminal state.
+        row = conn.execute(
+            "SELECT status, closed_at FROM business_work_orders WHERE work_order_id = ?",
+            (work_order_id,),
+        ).fetchone()
+        if row is not None and row[0] in ("closed", "cancelled"):
+            return True
+
+        # 4. Reinforcement: the canonical event stream, which lags behind the rows
+        # above by however long spool ingestion takes. Last because a write that has
+        # not been ingested yet is still a write.
         rows = conn.execute(
             "SELECT event_timestamp, received_at FROM business_canonical_events"
             " WHERE work_order_id = ?"
@@ -547,20 +621,6 @@ def authority_write_since(work_order_id: str, since_iso: str) -> bool:
             ts = parse_ts(row[0]) or parse_ts(row[1])
             if ts is not None and ts >= since:
                 return True
-        rows = conn.execute(
-            "SELECT updated_at FROM business_tasks" " WHERE work_order_id = ? AND status = 'done'",
-            (work_order_id,),
-        ).fetchall()
-        for row in rows:
-            ts = parse_ts(row[0])
-            if ts is not None and ts >= since:
-                return True
-        row = conn.execute(
-            "SELECT status, closed_at FROM business_work_orders WHERE work_order_id = ?",
-            (work_order_id,),
-        ).fetchone()
-        if row is not None and row[0] in ("closed", "cancelled"):
-            return True
     except sqlite3.Error:
         return True
     finally:
