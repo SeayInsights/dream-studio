@@ -583,6 +583,6 @@ def test_the_module_states_the_rule_it_enforces():
         "test-only must be REMOVED" in head
     ), "the module must state the rule it enforces, next to the constant that enforces it"
     assert "2026-06-29" in head, "cite the standing operator rule, not just the behaviour"
-    assert "may be a deliberate fixture seam" not in head.replace(
-        '("it may be a deliberate', ""
-    ), "the superseded claim must not read as the specification"
+    assert (
+        "may be a deliberate fixture seam" not in head
+    ), "the superseded claim must not appear in the module at all — git history holds it"

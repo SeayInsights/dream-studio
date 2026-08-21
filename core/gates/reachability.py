@@ -53,10 +53,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # because test-only production code is dead weight that masquerades as a feature and
 # lies about what the system does. A genuine fixture seam is expressible with the
 # exemption marker below, which makes it an audited claim rather than a silent one.
-#
-# An earlier version of this comment asserted the opposite ("it may be a deliberate
-# fixture seam") and then contradicted itself in the same sentence. Left uncorrected it
-# would have been read as the specification.
 PRODUCTION_ROOTS = (
     "control",
     "core",
