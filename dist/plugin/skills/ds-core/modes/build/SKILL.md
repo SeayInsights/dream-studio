@@ -186,6 +186,26 @@ grader flags durable state shipped without crash/race/skew coverage (rule 7)
 and secrets guarded by config signals instead of actual reachability (rule 8);
 independent review runs by default at every non-documentation close.
 
+## If it can be computed, compute it {#deterministic-first}
+
+A claim with an exact answer never goes to a judgement call. **A grep is not a drive**
+— asserting a symbol appears in a file's source proves the line was typed, not that it
+runs; import it and call it. A remembered artifact shape is not a read one — derive the
+fixture from a real stored artifact. And a symbol's existence is not its reachability —
+search for a reference, don't assume the caller.
+
+Measured on 2026-08-21: verify graders were being asked "do these node ids exist",
+"does dist/plugin match canonical", "does the skill text name the check" — each one a
+function call. Meanwhile six grader timeouts blocked three finished work orders, because
+judgement is unavailable more often than computation is. Verify now computes those facts
+and hands them to the graders as ground truth.
+
+**DO** state what is uncomputable as UNKNOWN with its reason. **DON'T** let a computed
+layer imply coverage it lacks: execution proves behaviour, and it cannot notice that an
+argument is inert, that a comment contradicts the code, or that a test name misdescribes
+what its body asserts — four such defects passed a green 26-test suite the day this rule
+was written.
+
 ## Someone else runs your tests {#separate-test-runner}
 
 The agent that wrote a change does not run its own suite as the evidence it works.
