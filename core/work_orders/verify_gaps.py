@@ -375,9 +375,13 @@ def _attached_gap_keys(conn: Any, work_order_id: str) -> set[str]:
         text = desc or ""
         start = text.find(marker)
         if start >= 0:
-            end = text.find("]", start)
-            if end > start:
-                keys.add(text[start + len(marker) : end])
+            # Bound the key with named indices rather than an expression inside the
+            # slice: black formats `text[a + b : c]` with spaces around the colon, which
+            # flake8 reports as E203, and the two tools cannot both be satisfied inline.
+            begin = start + len(marker)
+            end = text.find("]", begin)
+            if end > begin:
+                keys.add(text[begin:end])
     return keys
 
 
