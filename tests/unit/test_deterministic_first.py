@@ -442,3 +442,52 @@ def test_an_unparseable_test_file_is_raised_not_skipped():
 
     with pytest.raises(SourceUnreadable):
         source_reading_tests("def broken(:\n    pass\n", path="tests/unit/test_broken.py")
+
+
+def test_the_sweep_is_registered_as_an_advisory_pre_push_gate():
+    """The reachability gate BLOCKED the push that added `source_reading_tests` with no
+    call site — task 4 said "report it" and the first cut built a reporter with no
+    reporting surface. The fifth instance of mechanism-without-wiring in this milestone,
+    and the first caught by a machine before the push instead of a grader after the
+    merge. This assertion is why it cannot recur silently."""
+    import yaml
+
+    manifest = yaml.safe_load(
+        (_REPO / "canonical" / "workflows" / "pre-push.yaml").read_text(encoding="utf-8")
+    )
+    gates = manifest["gates"] if isinstance(manifest, dict) else manifest
+    entry = next((g for g in gates if g.get("id") == "deterministic-first"), None)
+    assert entry is not None, "the sweep is not registered in pre-push.yaml"
+    assert entry["command"] == ["py", "-m", "core.gates.deterministic_evidence"]
+    assert (
+        entry["tier"] == "advisory"
+    ), "a contextual judgement must not block — that is how a gate gets routed around"
+    assert "warn_hint" in entry
+
+
+def test_the_sweep_reports_a_suspect_and_never_blocks(tmp_path, monkeypatch, capsys):
+    """Drives main() against a throwaway repo containing one grep-shaped test. Advisory
+    means exit 0 even when it has something to say — asserted, not assumed."""
+    import subprocess
+
+    from core.gates import deterministic_evidence as de
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True, timeout=60)
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_greppy.py").write_text(
+        "def test_it_is_wired():\n"
+        "    import inspect\n"
+        "    from core import thing\n"
+        "    assert 'needle' in inspect.getsource(thing)\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(de, "REPO_ROOT", tmp_path)
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.setenv("DREAM_STUDIO_BASE_REF", "HEAD")
+
+    exit_code = de.main()
+    out = capsys.readouterr().out
+    assert exit_code == 0, "advisory: it must never block a push"
+    assert "test_it_is_wired" in out, f"and it must name the suspect; output:\n{out}"
+    assert "grep proves the line was typed" in out.replace("\n", " ")

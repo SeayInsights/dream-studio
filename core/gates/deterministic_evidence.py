@@ -41,6 +41,7 @@ which is why every fact here can be ``unknown`` WITH a reason and never a silent
 from __future__ import annotations
 
 import ast
+import os
 import re
 import subprocess
 import sys
@@ -463,3 +464,103 @@ def source_reading_tests(source: str, *, path: str) -> list[dict[str, Any]]:
             }
         )
     return suspects
+
+
+def main() -> int:
+    """Advisory sweep: which tests in this change set offer source text as evidence?
+
+    WIRED BECAUSE THE REACHABILITY GATE BLOCKED THE PUSH THAT ADDED
+    ``source_reading_tests`` with no call site. Task 4 said "report it"; the first cut
+    built the reporter and gave it no reporting surface — the fifth instance of
+    mechanism-without-wiring in this milestone, and the first one caught by a machine
+    before the push rather than by a grader after the merge. The gate shipped an hour
+    earlier caught its author.
+
+    ADVISORY, always exit 0. Some structural claims have no drivable surface, the
+    judgement is contextual, and a blocking gate on a contextual judgement is one people
+    route around — the same reason ``leanness`` is advisory. Diff-scoped so the report
+    stays about what this change set added.
+    """
+    if os.environ.get("GITHUB_ACTIONS"):
+        return 0
+
+    base_ref = os.environ.get("DREAM_STUDIO_BASE_REF", "origin/main")
+    changed = _changed_test_files(base_ref)
+    if not changed:
+        print("deterministic-first: no test files changed — nothing to sweep")
+        return 0
+
+    suspects: list[dict[str, Any]] = []
+    exempted: list[dict[str, Any]] = []
+    for rel in changed:
+        path = REPO_ROOT / rel
+        if not path.is_file():
+            continue
+        try:
+            found = source_reading_tests(
+                path.read_text(encoding="utf-8", errors="replace"), path=rel
+            )
+        except SourceUnreadable as exc:
+            print(f"deterministic-first: could not parse {rel} — {exc}")
+            continue
+        for item in found:
+            item["file"] = rel
+            (exempted if item["exempt"] else suspects).append(item)
+
+    for item in exempted:
+        print(
+            f"deterministic-first: DECLARED {item['file']}:{item['line']} {item['test']}"
+            f" — {item['exempt_reason']}"
+        )
+    if not suspects:
+        print(f"deterministic-first: OK — {len(changed)} changed test file(s) swept")
+        return 0
+
+    print()
+    print("deterministic-first: these tests offer SOURCE TEXT as their evidence:")
+    for item in suspects:
+        print(
+            f"  {item['file']}:{item['line']}  {item['test']}  (reads {', '.join(item['reads'])})"
+        )
+    print()
+    print("  A grep proves the line was typed; only a drive proves it runs. Import the")
+    print("  thing and call it, or — if the claim genuinely has no drivable surface —")
+    print(f"  declare it inline: # {GREP_EXEMPT_MARKER}: <why>")
+    print("  Advisory: this never blocks a push.")
+    return 0
+
+
+def _changed_test_files(base_ref: str) -> list[str]:
+    """Test files this change set touched, including ones git does not track yet."""
+    diff = _git(["diff", "--name-only", f"{base_ref}...HEAD"]) or _git(
+        ["diff", "--name-only", "HEAD"]
+    )
+    untracked = _git(["ls-files", "--others", "--exclude-standard"])
+    seen: list[str] = []
+    for line in (diff + "\n" + untracked).splitlines():
+        rel = line.strip().replace("\\", "/")
+        if rel.endswith(".py") and "/test_" in f"/{rel}" and rel not in seen:
+            seen.append(rel)
+    return seen
+
+
+def _git(args: list[str]) -> str:
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=REPO_ROOT,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if not isinstance(result.returncode, int) or result.returncode != 0:
+        return ""
+    return result.stdout or ""
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
