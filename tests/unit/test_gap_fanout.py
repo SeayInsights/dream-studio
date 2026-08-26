@@ -37,6 +37,7 @@ import pytest
 from core.config.sqlite_bootstrap import bootstrap_database
 from core.work_orders.verify_gaps import (
     _ADVISORY_PROJECT_WIDE_CATEGORIES,
+    _ATTACH_ROUNDS_BEFORE_PRESSURE,
     _PROJECT_WIDE_AFTER_N_OPEN_SPAWNS,
     _falsification_to_gaps,
     _gap_key,
@@ -427,3 +428,130 @@ def test_a_passing_verdicts_advisory_gap_does_not_block_the_close_it_approved(db
     ).fetchone()[0]
     assert blocking == 0, "the certified work order stays closable"
     conn.close()
+
+
+# ── The attach loop is bounded, and the bound is visible ──────────────────────
+
+
+def _attach(conn, project_id, reviewed, gap_title, task_title):
+    return _insert_gap_work_orders(
+        conn,
+        gaps=[
+            {
+                "title": gap_title,
+                "description": "d",
+                "work_order_type": "cleanup",
+                "tasks": [{"title": task_title, "description": ""}],
+            }
+        ],
+        project_id=project_id,
+        milestone_id=None,
+        reviewed_work_order_id=reviewed,
+        reviewed_wo_title="reviewed",
+        reviewed_wo_sequence=1,
+        reviewed_wo_incomplete=True,
+    )
+
+
+def test_attached_tasks_carry_their_gap_key(db):
+    """Rounds have to be countable, and title dedup cannot count them: it stops the SAME
+    finding repeating and says nothing about a NEW finding each round. The key rides the
+    task so the loop can be measured."""
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+    reviewed = _reviewed_wo(conn, project_id, status="in_progress")
+    _attach(conn, project_id, reviewed, "Finding one", "Do thing one")
+    conn.commit()
+
+    desc = conn.execute(
+        "SELECT description FROM business_tasks WHERE work_order_id=? AND title=?",
+        (reviewed, "Do thing one"),
+    ).fetchone()[0]
+    assert "[gap-attached: " in desc, f"the attached task must carry its gap key; got {desc!r}"
+    assert reviewed in desc or "::" in desc
+    conn.close()
+
+
+def test_a_first_attachment_raises_no_pressure_warning(db):
+    """A work order absorbing its own first finding is normal. Warning on it would make
+    the signal noise, which is the failure mode this whole work order is about."""
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+    reviewed = _reviewed_wo(conn, project_id, status="in_progress")
+    result = _attach(conn, project_id, reviewed, "Finding one", "Do thing one")
+    conn.commit()
+    assert "attachment_pressure" not in result[0]
+    conn.close()
+
+
+def test_repeated_attachment_rounds_are_counted_and_surfaced(db):
+    """THE TRADEOFF THIS BOUNDS. Attaching makes a failing verdict block the close via
+    tasks_done -- honest, because the work order genuinely is not done. But
+    verify -> attach -> fix -> verify -> attach a NEW finding is the original complaint
+    ("something else always gets surfaced") wearing a blocking face instead of an
+    inflating one.
+
+    Attaching still happens; the growth stops being silent, and the honest exit is
+    named.
+    """
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+    reviewed = _reviewed_wo(conn, project_id, status="in_progress")
+
+    results = []
+    for i in range(_ATTACH_ROUNDS_BEFORE_PRESSURE):
+        results.append(_attach(conn, project_id, reviewed, f"Finding {i}", f"Do thing {i}"))
+        conn.commit()
+
+    early = [r[0] for r in results[:-1]]
+    assert all("attachment_pressure" not in r for r in early), "quiet below the bound"
+
+    final = results[-1][0]
+    assert (
+        "attachment_pressure" in final
+    ), f"round {_ATTACH_ROUNDS_BEFORE_PRESSURE} must surface the loop; got {final}"
+    message = final["attachment_pressure"]
+    assert str(_ATTACH_ROUNDS_BEFORE_PRESSURE) in message, "name how many rounds"
+    assert "carry" in message.lower(), "and name the honest exit"
+
+    # Attaching CONTINUES -- this bounds visibility, it does not block the work.
+    assert final["tasks_added"] == 1
+    total = conn.execute(
+        "SELECT COUNT(*) FROM business_tasks WHERE work_order_id=?", (reviewed,)
+    ).fetchone()[0]
+    assert total == _ATTACH_ROUNDS_BEFORE_PRESSURE
+    conn.close()
+
+
+def test_the_same_finding_repeating_does_not_count_as_a_new_round(db):
+    """Pressure must measure DISTINCT findings. Re-running verify on an unchanged work
+    order re-reports the same gap; counting that as escalation would fire the warning on
+    a work order nobody added anything to."""
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+    reviewed = _reviewed_wo(conn, project_id, status="in_progress")
+    for _ in range(_ATTACH_ROUNDS_BEFORE_PRESSURE + 2):
+        result = _attach(conn, project_id, reviewed, "One finding", "Do the one thing")
+        conn.commit()
+    assert "attachment_pressure" not in result[0], "one finding re-reported is not N rounds"
+    total = conn.execute(
+        "SELECT COUNT(*) FROM business_tasks WHERE work_order_id=?", (reviewed,)
+    ).fetchone()[0]
+    assert total == 1, "and it stays one task"
+    conn.close()
+
+
+def test_the_verdict_carries_the_pressure_signal():
+    """A bound nobody can see is the same defect as no bound. verify_main must compute it
+    unconditionally and record it, or this is a value with no reader -- the exact shape
+    this milestone keeps finding."""
+    import inspect
+
+    from core.work_orders import verify_main
+
+    # deterministic-first: structural assertion -- driving verify_work_order needs four
+    # grader subprocesses, a live authority and a git history; the wiring is what is
+    # under test.
+    src = inspect.getsource(verify_main)
+    assert "attachment_pressure = _pressure[0] if _pressure else None" in src
+    assert '"attachment_pressure": attachment_pressure,' in src, "it must ride the verdict"

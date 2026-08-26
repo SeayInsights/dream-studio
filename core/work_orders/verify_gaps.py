@@ -351,6 +351,36 @@ def _gap_key_marker(gap_key: str) -> str:
     return f"[gap-key: {gap_key}]"
 
 
+# How many distinct gap rounds a work order may absorb before the attach loop is called
+# out. Chosen to bound, not to block: attaching keeps working past this, but silence does
+# not. A bound nobody can see is the same defect as no bound.
+_ATTACH_ROUNDS_BEFORE_PRESSURE = 3
+
+# Written with an explicit newline escape in a named constant: an inline f-string with
+# escaped newlines was mangled twice by shell quoting while this module was authored.
+_GAP_ATTACHED_STAMP = "\n\n[gap-attached: {gap_key}]"
+
+
+def _attached_gap_keys(conn: Any, work_order_id: str) -> set[str]:
+    """Distinct gap keys already attached to this work order as tasks."""
+    marker = "[gap-attached: "
+    try:
+        rows = conn.execute(
+            "SELECT description FROM business_tasks WHERE work_order_id = ?", (work_order_id,)
+        ).fetchall()
+    except Exception:  # noqa: BLE001 - counting must never break a verify
+        return set()
+    keys: set[str] = set()
+    for (desc,) in rows:
+        text = desc or ""
+        start = text.find(marker)
+        if start >= 0:
+            end = text.find("]", start)
+            if end > start:
+                keys.add(text[start + len(marker) : end])
+    return keys
+
+
 def _attach_gap_tasks(
     conn: Any,
     *,
@@ -358,6 +388,7 @@ def _attach_gap_tasks(
     project_id: str,
     tasks: list[dict[str, Any]],
     now: str,
+    gap_key: str = "",
 ) -> int:
     """Add a gap's tasks to an existing work order. Returns how many were added.
 
@@ -390,7 +421,11 @@ def _attach_gap_tasks(
                 work_order_id,
                 project_id,
                 title,
-                task.get("description", ""),
+                # The key rides the task so repeated attachment rounds are countable —
+                # title dedup stops the SAME finding repeating, but says nothing about a
+                # NEW finding every round, which is the loop this bounds.
+                (task.get("description", "") or "")
+                + (_GAP_ATTACHED_STAMP.format(gap_key=gap_key) if gap_key else ""),
                 now,
                 now,
             ),
@@ -499,6 +534,7 @@ def _insert_gap_work_orders(
         # A closed reviewed work order also spawns a sibling: it has nowhere to put a
         # task.
         if reviewed_wo_incomplete and _work_order_is_open(conn, reviewed_work_order_id):
+            prior_rounds = _attached_gap_keys(conn, reviewed_work_order_id)
             added = _attach_gap_tasks(
                 conn,
                 work_order_id=reviewed_work_order_id,
@@ -506,17 +542,35 @@ def _insert_gap_work_orders(
                 tasks=gap.get("tasks", [])
                 or [{"title": gap_title, "description": gap["description"]}],
                 now=now,
+                gap_key=gap_key,
             )
-            spawned.append(
-                {
-                    "work_order_id": reviewed_work_order_id,
-                    "title": gap_title,
-                    "type": wo_type,
-                    "gap_key": gap_key,
-                    "attached_to_reviewed": True,
-                    "tasks_added": added,
-                }
-            )
+            record: dict[str, Any] = {
+                "work_order_id": reviewed_work_order_id,
+                "title": gap_title,
+                "type": wo_type,
+                "gap_key": gap_key,
+                "attached_to_reviewed": True,
+                "tasks_added": added,
+            }
+            # BOUND THE ATTACH LOOP, VISIBLY. Attaching makes a failing verdict block the
+            # close through tasks_done, which is honest — the work order genuinely is not
+            # done. But verify -> attach -> fix -> verify -> attach a NEW finding is the
+            # original complaint ("something else always gets surfaced") wearing a
+            # blocking face instead of an inflating one. Title dedup stops the SAME
+            # finding repeating and says nothing about a new one each round.
+            #
+            # This does not stop attaching. It stops the growth being SILENT, and names
+            # the honest exit: carry the remainder rather than let one work order absorb
+            # an unbounded number of reviews.
+            rounds = len(prior_rounds | {gap_key})
+            if rounds >= _ATTACH_ROUNDS_BEFORE_PRESSURE:
+                record["attachment_pressure"] = (
+                    f"this work order has absorbed gaps on {rounds} separate reviews."
+                    " Consider carrying the remainder into a new work order and closing"
+                    " this one at its true scope, rather than letting one work order"
+                    " grow without bound."
+                )
+            spawned.append(record)
             continue
 
         # Dedup on the stable gap key, NOT the free-text title, scoped by project_id
