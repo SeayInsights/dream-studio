@@ -237,10 +237,57 @@ def _gap_category(gap: dict[str, Any]) -> str:
 # project-wide by category alone, so the class spawns at most one open tracking WO
 # instead of a near-duplicate per reviewed WO. Content-specific categories
 # (missing-tests, task-N-incomplete, …) stay scoped to the reviewed WO.
-_ADVISORY_PROJECT_WIDE_CATEGORIES = frozenset({"missing-behavioral-ac"})
+_ADVISORY_PROJECT_WIDE_CATEGORIES = frozenset(
+    {
+        "missing-behavioral-ac",
+        # MEASURED 2026-08-21 on the live authority. These two classes produced 19 of
+        # the 25 auto-spawned work orders since 08-19 — x11 and x8 — each with a
+        # DISTINCT gap key differing only in the reviewed-WO id before the "::".
+        # Verify created 118 work orders and closed 43 over three days; this is where
+        # most of the difference came from.
+        "add-missing-adversarial-tests-for-durable-reachable-failure-modes",
+        "add-missing-test-coverage",
+    }
+)
+
+# How many open spawns of one category, across DIFFERENT reviewed work orders, before
+# the class is treated as project-wide regardless of the allowlist above.
+#
+# The allowlist alone cannot hold: it enumerates the grader's canned phrasings, and a
+# rephrasing produces a new category that fans out again — which is exactly what
+# happened after WO-GAP-DEDUPE-CLASS added the first entry and two later phrasings
+# sailed past it. At 2, an unrecognised class spawns at most twice before it
+# self-corrects, whatever it is called next.
+_PROJECT_WIDE_AFTER_N_OPEN_SPAWNS = 2
 
 
-def _gap_key(reviewed_work_order_id: str, gap: dict[str, Any]) -> str:
+def _category_open_spawn_count(conn: Any, project_id: str, category: str) -> int:
+    """Open spawned WOs for this category across DIFFERENT reviewed work orders.
+
+    Counts by the category half of the ``[gap-key: <reviewed>::<category>]`` marker, so
+    it answers "has this class already fanned out" without needing to know which
+    reviewed WOs produced it. Failure to query returns 0 — a backstop that raises would
+    break verify, and losing the backstop is a smaller harm than that.
+    """
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM business_work_orders"
+            " WHERE project_id = ? AND status IN ('created', 'in_progress')"
+            "   AND instr(description, ?) > 0",
+            (project_id, f"::{category}]"),
+        ).fetchone()
+    except Exception:  # noqa: BLE001 - a dedup backstop must never break a verify
+        return 0
+    return int(row[0]) if row and row[0] is not None else 0
+
+
+def _gap_key(
+    reviewed_work_order_id: str,
+    gap: dict[str, Any],
+    *,
+    conn: Any = None,
+    project_id: str | None = None,
+) -> str:
     """Stable dedup key for a spawned gap.
 
     Normally (reviewed WO id + gap category), stored as a ``[gap-key: ...]`` marker
@@ -249,10 +296,28 @@ def _gap_key(reviewed_work_order_id: str, gap: dict[str, Any]) -> str:
     (``_ADVISORY_PROJECT_WIDE_CATEGORIES``) the reviewed-WO id is dropped so the
     class dedups project-wide — otherwise the same advisory finding respawns a
     near-duplicate WO on every reviewed WO (WO-GAP-DEDUPE-CLASS).
+
+    WO-GAP-FANOUT adds the backstop the allowlist needed. Given ``conn`` and
+    ``project_id``, a category that ALREADY has
+    ``_PROJECT_WIDE_AFTER_N_OPEN_SPAWNS`` open spawns across different reviewed work
+    orders becomes project-wide even when it is not on the list. Measured cause: the
+    list held one entry while two unlisted classes produced 19 of 25 spawns in three
+    days, each with its own reviewed-WO-scoped key.
+
+    A CONTENT-SPECIFIC GAP STAYS SCOPED, and that is the point of the original design:
+    "task 3 was never implemented" is about ONE work order and must not dedup against
+    another's. The backstop only fires on a class that has demonstrably repeated, so a
+    genuine per-WO finding is never merged away on its first or second appearance.
     """
     category = _gap_category(gap)
     if category in _ADVISORY_PROJECT_WIDE_CATEGORIES:
         return f"advisory::{category}"
+    if conn is not None and project_id:
+        if (
+            _category_open_spawn_count(conn, project_id, category)
+            >= _PROJECT_WIDE_AFTER_N_OPEN_SPAWNS
+        ):
+            return f"advisory::{category}"
     return f"{reviewed_work_order_id}::{category}"
 
 
@@ -316,8 +381,19 @@ def _insert_gap_work_orders(
     for gap in gaps:
         wo_type = gap.get("work_order_type", "cleanup")
         gap_title = gap["title"]
-        gap_key = _gap_key(reviewed_work_order_id, gap)
+        gap_key = _gap_key(reviewed_work_order_id, gap, conn=conn, project_id=project_id)
         marker = _gap_key_marker(gap_key)
+
+        # A PROJECT-WIDE key searches by the CATEGORY SUFFIX, not the whole marker, so
+        # it merges into a prior scoped spawn of the same class instead of adding one
+        # more beside it. Without this the class stabilised at THREE open work orders,
+        # not two: at the moment the backstop flips, no `advisory::` marker exists yet,
+        # so the lookup missed the two scoped siblings and minted a third. Measured by
+        # the test, not reasoned about — it asserted 2 and got 3.
+        #
+        # It is also what drains the duplicates already in the queue: the next spawn of
+        # a class that fanned out merges into one of them rather than extending the run.
+        search_needle = f"::{_gap_category(gap)}]" if gap_key.startswith("advisory::") else marker
 
         # Dedup on the stable gap key, NOT the free-text title, scoped by project_id
         # so null-milestone gaps still dedup (T3). Match across ANY status so a closed
@@ -327,9 +403,10 @@ def _insert_gap_work_orders(
             "SELECT work_order_id, status FROM business_work_orders"
             " WHERE project_id = ? AND instr(description, ?) > 0"
             " ORDER BY CASE status"
-            "   WHEN 'in_progress' THEN 0 WHEN 'created' THEN 1 ELSE 2 END"
+            "   WHEN 'in_progress' THEN 0 WHEN 'created' THEN 1 ELSE 2 END,"
+            "   created_at ASC"
             " LIMIT 1",
-            (project_id, marker),
+            (project_id, search_needle),
         ).fetchone()
 
         if existing_row and existing_row[1] not in ("created", "in_progress"):
