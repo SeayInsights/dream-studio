@@ -153,11 +153,29 @@ def _work_order_verify(
     for tv in result.get("tasks_verified", []):
         indicator = "✓" if tv["verdict"] == "pass" else ("~" if tv["verdict"] == "partial" else "✗")
         print(f"  {indicator} [{tv['verdict']}] {tv['task_title']}: {tv['evidence']}")
+    # WO-GAP-FANOUT: a gap found in an OPEN work order is now attached to it as tasks
+    # rather than spawned as a sibling, so this output must say which happened. Printing
+    # "Gap work orders created" for an attached gap names a work order that was never
+    # created and hides where the work actually went.
     spawned = result.get("spawned_work_orders", [])
-    if spawned:
-        print(f"\nGap work orders created ({len(spawned)}):")
-        for wo in spawned:
+    attached = [g for g in spawned if g.get("attached_to_reviewed")]
+    created = [g for g in spawned if not g.get("attached_to_reviewed")]
+    if attached:
+        total = sum(int(g.get("tasks_added") or 0) for g in attached)
+        print(f"\nGaps added as tasks on this work order ({total}):")
+        for gap in attached:
+            print(f"  [{gap['type']}] {gap['title']}")
+        print("  These are this work order's own remaining work — it cannot close until")
+        print("  they are done. That is the tasks_done gate, not a separate backlog.")
+    if created:
+        print(f"\nGap work orders created ({len(created)}):")
+        for wo in created:
             print(f"  [{wo['type']}] {wo['title']}  (id: {wo['work_order_id']})")
+
+    # The bound on the attach loop is only a bound if someone can see it.
+    pressure = result.get("attachment_pressure")
+    if pressure:
+        print(f"\nATTACHMENT PRESSURE: {pressure}")
     # WO-FILESDB-C2: verdict_path is None when the verdict was stored in the authority
     # (read it via `ds work-order artifact <id> review_verdict`).
     _vp = result.get("verdict_path")

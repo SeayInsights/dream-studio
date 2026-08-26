@@ -575,6 +575,15 @@ def close_work_order(
         )
         if _exec_caveat:
             result["test_execution_warning"] = _exec_caveat
+
+        # WO-GAP-FANOUT: the attach-loop bound, surfaced where work is declared done.
+        from core.gates.merge_readiness import work_order_attachment_pressure
+
+        _pressure = work_order_attachment_pressure(
+            work_order_id, db_path=db_path, planning_root=p_root
+        )
+        if _pressure:
+            result["attachment_pressure"] = _pressure
     except Exception:
         pass  # an advisory must never affect a close
 

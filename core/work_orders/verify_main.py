@@ -917,6 +917,9 @@ def verify_work_order(
         "work_order_id": work_order_id,
         "passed": passed,
         "summary": completion.get("summary", ""),
+        # WO-GAP-FANOUT: the attach-loop bound reaches the CLI, not just the stored
+        # verdict — a bound nobody can see is not a bound.
+        "attachment_pressure": attachment_pressure,
         "completion": completion,
         "correctness": correctness,
         "quality": quality,

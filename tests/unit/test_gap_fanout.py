@@ -28,6 +28,7 @@ unreasonable. It is 2.7 work orders created per one closed.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import uuid
 from pathlib import Path
@@ -555,3 +556,45 @@ def test_the_verdict_carries_the_pressure_signal():
     src = inspect.getsource(verify_main)
     assert "attachment_pressure = _pressure[0] if _pressure else None" in src
     assert '"attachment_pressure": attachment_pressure,' in src, "it must ride the verdict"
+
+
+def test_the_verify_cli_says_attached_not_created(db):
+    """The reviewer caught this on my own code: after gap-as-task the CLI still printed
+    "Gap work orders created (N)" and listed ids for gaps that were ATTACHED, naming work
+    orders that were never created and hiding where the work actually went."""
+    import inspect
+
+    from interfaces.cli.commands import work_order_query
+
+    # deterministic-first: structural assertion — the print path needs a completed verify
+    # with four grader subprocesses; the branch selection is what is under test.
+    src = inspect.getsource(work_order_query)
+    assert "Gaps added as tasks on this work order" in src
+    assert "attached_to_reviewed" in src, "the two cases must be distinguished"
+    assert "ATTACHMENT PRESSURE" in src, "the bound must reach the operator"
+
+
+def test_the_pressure_signal_reaches_close_through_the_shared_reader(db):
+    """A bound nobody can see is not a bound. Close reads it via verdict_state — the same
+    reader the merge check uses — rather than a second implementation that could
+    disagree."""
+    from core.gates.merge_readiness import work_order_attachment_pressure
+    from core.work_orders.artifacts import set_wo_artifact
+
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+    wo = _reviewed_wo(conn, project_id, status="in_progress")
+    conn.commit()
+    conn.close()
+
+    assert work_order_attachment_pressure(wo, db_path=db) is None, "silent with no verdict"
+
+    set_wo_artifact(
+        wo,
+        "review_verdict",
+        json.dumps({"passed": False, "attachment_pressure": "absorbed gaps on 3 reviews"}),
+        db_path=db,
+        generator="ds work-order verify",
+        project_root=Path("."),
+    )
+    assert work_order_attachment_pressure(wo, db_path=db) == "absorbed gaps on 3 reviews"
