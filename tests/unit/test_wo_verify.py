@@ -211,27 +211,36 @@ def test_verify_gap_creates_work_orders(tmp_path: pytest.TempPathFactory) -> Non
                     planning_root=planning_root,
                 )
 
+    # CONTRACT CHANGED (WO-GAP-FANOUT, operator ruling 2026-08-26). A FAILING verdict on
+    # an OPEN work order means the gap is that work order's own unfinished work, so it
+    # lands as a TASK on it instead of a sibling work order. Spawning a sibling declared
+    # the reviewed work order complete and re-homed its remainder, routing around the
+    # tasks_done gate. The guarantee this test protects — a gap produces trackable work
+    # attached to the right thing — is unchanged; only its shape is.
     assert result["ok"] is True
     assert result["passed"] is False
     assert len(result["spawned_work_orders"]) == 1
-    spawned_id = result["spawned_work_orders"][0]["work_order_id"]
+    record = result["spawned_work_orders"][0]
+    assert record["attached_to_reviewed"] is True
+    assert record["work_order_id"] == work_order_id, "the gap belongs to the reviewed WO"
+    assert record["tasks_added"] >= 1
 
-    # Verify the gap WO and its task are in the DB under the same milestone.
     conn = sqlite3.connect(str(db_path))
-    wo_row = conn.execute(
-        "SELECT milestone_id, work_order_type FROM business_work_orders WHERE work_order_id = ?",
-        (spawned_id,),
-    ).fetchone()
-    assert wo_row is not None
-    assert wo_row[0] == milestone_id
-    assert wo_row[1] == "cleanup"
+    # NO sibling was created for this project.
+    siblings = conn.execute(
+        "SELECT COUNT(*) FROM business_work_orders WHERE project_id = ? AND work_order_id != ?",
+        (project_id, work_order_id),
+    ).fetchone()[0]
+    assert siblings == 0
 
-    task_row = conn.execute(
-        "SELECT title FROM business_tasks WHERE work_order_id = ?",
-        (spawned_id,),
-    ).fetchone()
-    assert task_row is not None
-    assert task_row[0] == "Implement T1"
+    # And the gap's task is on the reviewed work order, alongside its original task.
+    titles = {
+        r[0]
+        for r in conn.execute(
+            "SELECT title FROM business_tasks WHERE work_order_id = ?", (work_order_id,)
+        ).fetchall()
+    }
+    assert "Implement T1" in titles, f"the gap task must be attached; got {titles}"
     conn.close()
 
 
@@ -408,19 +417,33 @@ def test_spawned_gap_wos_visible_in_project(tmp_path: pytest.TempPathFactory) ->
                     planning_root=planning_root,
                 )
 
-    assert result["spawned_work_orders"][0]["work_order_id"]
+    # CONTRACT CHANGED (WO-GAP-FANOUT): a failing verdict on an open work order attaches
+    # the gap as a task rather than spawning a sibling, so the project still holds ONE
+    # work order. Visibility is preserved — the work is on the work order it belongs to.
+    assert result["spawned_work_orders"][0]["work_order_id"] == work_order_id
     conn = sqlite3.connect(str(db_path))
     count = conn.execute(
         "SELECT COUNT(*) FROM business_work_orders WHERE project_id = ?",
         (project_id,),
     ).fetchone()[0]
-    assert count == 2  # original + gap
+    assert count == 1  # the reviewed WO absorbed its own gap
 
-    titles = conn.execute(
-        "SELECT title FROM business_work_orders WHERE project_id = ? ORDER BY sequence_order",
-        (project_id,),
-    ).fetchall()
-    assert any("Gap WO Alpha" in r[0] for r in titles)
+    # The gap is visible as a TASK on the reviewed work order rather than as a sibling
+    # work order title. Same guarantee — the finding is trackable and attached to the
+    # thing it is about — asserted where it now lives.
+    task_titles = [
+        r[0]
+        for r in conn.execute(
+            "SELECT title FROM business_tasks WHERE work_order_id = ?", (work_order_id,)
+        ).fetchall()
+    ]
+    # "Gap WO Alpha" was the CONTAINER's title when a gap became a sibling work order.
+    # Attached, the gap contributes its TASKS — so the thing to assert is the work
+    # itself ("Fix alpha"), sitting beside the work order's original task.
+    assert (
+        "Fix alpha" in task_titles
+    ), f"the gap's work must be attached to the reviewed WO; got {task_titles}"
+    assert "T1" in task_titles, "and the work order's own original task is still there"
     conn.close()
 
 

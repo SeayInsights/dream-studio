@@ -93,12 +93,38 @@ def _falsification_to_gaps(scenarios: list[dict[str, Any]]) -> list[dict[str, An
     ]
 
 
+# A grader reports "I could not judge this" through these values. None of them locate a
+# defect, and a finding that cannot be located cannot be fixed.
+_UNLOCATABLE = frozenset({"", "n/a", "na", "none", "null", "unknown", "-"})
+
+
+def _violation_is_locatable(violation: dict[str, Any]) -> bool:
+    """Does this violation name something a person could go and fix?
+
+    Requires a real rule OR a real file. Both blank/"N/A" means the grader is reporting
+    its own inability, not a defect in the work — see the note in ``_violations_to_gaps``.
+    """
+    rule = str(violation.get("rule") or "").strip().lower()
+    file = str(violation.get("file") or "").strip().lower()
+    return rule not in _UNLOCATABLE or file not in _UNLOCATABLE
+
+
 def _violations_to_gaps(
     violations: list[dict[str, Any]],
     coverage_gaps: list[dict[str, Any]],
     migration_gaps: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     gaps: list[dict[str, Any]] = []
+    # AN UNREVIEWABLE FINDING IS NOT WORK. Measured: the correctness grader reported
+    # "independent review unverifiable — no diff provided" because it could not reach the
+    # target repo, and the spawner turned that into work order 58e21003 with the task
+    # "Fix N/A: independent review unverifiable — no diff provided in N/A". The
+    # reviewer's INABILITY to review was laundered into scheduled work.
+    #
+    # A violation with no locatable target — no rule, no file, or the literal "N/A" —
+    # is the grader saying it could not judge. It belongs on the verdict, not in the
+    # queue. A violation that names a real rule or file is untouched.
+    violations = [v for v in violations if _violation_is_locatable(v)]
     if violations:
         tasks = [
             {
@@ -325,6 +351,66 @@ def _gap_key_marker(gap_key: str) -> str:
     return f"[gap-key: {gap_key}]"
 
 
+def _attach_gap_tasks(
+    conn: Any,
+    *,
+    work_order_id: str,
+    project_id: str,
+    tasks: list[dict[str, Any]],
+    now: str,
+) -> int:
+    """Add a gap's tasks to an existing work order. Returns how many were added.
+
+    Skips a task whose title is already on that work order, so re-reviewing does not
+    accumulate duplicates of the same finding — the per-work-order equivalent of the
+    gap-key dedup one level up.
+    """
+    try:
+        existing = {
+            (r[0] or "").strip().lower()
+            for r in conn.execute(
+                "SELECT title FROM business_tasks WHERE work_order_id = ?", (work_order_id,)
+            ).fetchall()
+        }
+    except Exception:  # noqa: BLE001 - never break a verify over dedup bookkeeping
+        existing = set()
+
+    added = 0
+    for task in tasks:
+        title = str(task.get("title", "") or "")
+        if title.strip().lower() in existing:
+            continue
+        conn.execute(
+            "INSERT INTO business_tasks"
+            " (task_id, work_order_id, project_id, title, description,"
+            "  status, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)",
+            (
+                str(uuid.uuid4()),
+                work_order_id,
+                project_id,
+                title,
+                task.get("description", ""),
+                now,
+                now,
+            ),
+        )
+        existing.add(title.strip().lower())
+        added += 1
+    return added
+
+
+def _work_order_is_open(conn: Any, work_order_id: str) -> bool:
+    """Is this work order still open, i.e. can a task be added to it?"""
+    try:
+        row = conn.execute(
+            "SELECT status FROM business_work_orders WHERE work_order_id = ?", (work_order_id,)
+        ).fetchone()
+    except Exception:  # noqa: BLE001 - fall back to the spawning path rather than raise
+        return False
+    return bool(row) and row[0] in ("created", "in_progress")
+
+
 def _filter_invented_threshold_gaps(
     gaps: list[dict[str, Any]], acceptance_text: str
 ) -> list[dict[str, Any]]:
@@ -364,6 +450,7 @@ def _insert_gap_work_orders(
     reviewed_work_order_id: str,
     reviewed_wo_title: str,
     reviewed_wo_sequence: int | None,
+    reviewed_wo_incomplete: bool = False,
 ) -> list[dict[str, Any]]:
     now = datetime.now(UTC).isoformat()
     spawned: list[dict[str, Any]] = []
@@ -395,6 +482,43 @@ def _insert_gap_work_orders(
         # a class that fanned out merges into one of them rather than extending the run.
         search_needle = f"::{_gap_category(gap)}]" if gap_key.startswith("advisory::") else marker
 
+        # A GAP IN AN OPEN, INCOMPLETE WORK ORDER IS THAT WORK ORDER'S OWN UNFINISHED
+        # WORK, so it becomes a TASK on it rather than a sibling (operator ruling,
+        # 2026-08-26). Measured: of the 10 open reviewer spawns, five were findings
+        # about the very work order under review. Spawning a sibling declares the
+        # reviewed work order complete and re-homes its remainder — routing AROUND the
+        # tasks_done gate that already refuses to close a work order with open tasks.
+        #
+        # TWO CONDITIONS, and the second was missing from the first cut. An existing
+        # test caught it: a PASSING verify carrying a warning-severity gap would have
+        # had blocking tasks attached to the work order it had just certified, so the
+        # review's own approval could not be acted on. Attach only when the verdict says
+        # the work is NOT done — that is what makes the gap "its own unfinished work"
+        # rather than an advisory note about finished work.
+        #
+        # A closed reviewed work order also spawns a sibling: it has nowhere to put a
+        # task.
+        if reviewed_wo_incomplete and _work_order_is_open(conn, reviewed_work_order_id):
+            added = _attach_gap_tasks(
+                conn,
+                work_order_id=reviewed_work_order_id,
+                project_id=project_id,
+                tasks=gap.get("tasks", [])
+                or [{"title": gap_title, "description": gap["description"]}],
+                now=now,
+            )
+            spawned.append(
+                {
+                    "work_order_id": reviewed_work_order_id,
+                    "title": gap_title,
+                    "type": wo_type,
+                    "gap_key": gap_key,
+                    "attached_to_reviewed": True,
+                    "tasks_added": added,
+                }
+            )
+            continue
+
         # Dedup on the stable gap key, NOT the free-text title, scoped by project_id
         # so null-milestone gaps still dedup (T3). Match across ANY status so a closed
         # prior spawn is never re-spawned (T4 respawn cap). Prefer an open WO so we can
@@ -425,23 +549,13 @@ def _insert_gap_work_orders(
 
         if existing_row:
             target_wo_id = existing_row[0]
-            for task in gap.get("tasks", []):
-                task_id = str(uuid.uuid4())
-                conn.execute(
-                    "INSERT INTO business_tasks"
-                    " (task_id, work_order_id, project_id, title, description,"
-                    "  status, created_at, updated_at)"
-                    " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)",
-                    (
-                        task_id,
-                        target_wo_id,
-                        project_id,
-                        task.get("title", ""),
-                        task.get("description", ""),
-                        now,
-                        now,
-                    ),
-                )
+            _attach_gap_tasks(
+                conn,
+                work_order_id=target_wo_id,
+                project_id=project_id,
+                tasks=gap.get("tasks", []),
+                now=now,
+            )
             spawned.append(
                 {
                     "work_order_id": target_wo_id,

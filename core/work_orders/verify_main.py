@@ -761,6 +761,11 @@ def verify_work_order(
                 reviewed_work_order_id=work_order_id,
                 reviewed_wo_title=wo["title"],
                 reviewed_wo_sequence=wo.get("sequence_order"),
+                # WO-GAP-FANOUT: a FAILED verdict means the reviewed work order is not
+                # done, so its gaps are its own remaining work and belong on it as
+                # tasks. A passing verdict's advisory gaps must not block the close it
+                # just approved.
+                reviewed_wo_incomplete=not passed,
             )
 
         # WO-VERIFY-GAP-RESOLUTION: a gap whose remediation WO is already CLOSED is

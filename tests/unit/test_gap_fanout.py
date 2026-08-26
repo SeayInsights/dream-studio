@@ -41,6 +41,7 @@ from core.work_orders.verify_gaps import (
     _falsification_to_gaps,
     _gap_key,
     _insert_gap_work_orders,
+    _violations_to_gaps,
 )
 
 _NOW = "2026-08-21T00:00:00+00:00"
@@ -69,14 +70,16 @@ def _project(conn: sqlite3.Connection) -> str:
     return project_id
 
 
-def _reviewed_wo(conn: sqlite3.Connection, project_id: str) -> str:
+def _reviewed_wo(conn: sqlite3.Connection, project_id: str, status: str = "closed") -> str:
+    """A reviewed work order. CLOSED by default, because spawning a sibling only happens
+    for a closed reviewed work order — an OPEN one absorbs the gap as a task instead."""
     wo_id = str(uuid.uuid4())
     conn.execute(
         "INSERT INTO business_work_orders"
         " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
         "  status, created_at, updated_at)"
-        " VALUES (?,?,NULL,'reviewed','d','infrastructure','in_progress',?,?)",
-        (wo_id, project_id, _NOW, _NOW),
+        " VALUES (?,?,NULL,'reviewed','d','infrastructure',?,?,?)",
+        (wo_id, project_id, status, _NOW, _NOW),
     )
     return wo_id
 
@@ -194,7 +197,7 @@ def test_the_same_specific_gap_on_the_same_work_order_still_dedups(db):
     guarantee, unchanged by this fix."""
     conn = sqlite3.connect(str(db))
     project_id = _project(conn)
-    reviewed = _reviewed_wo(conn, project_id)
+    reviewed = _reviewed_wo(conn, project_id)  # closed: exercises the spawn path
     title = "Wire the specific thing this one work order missed"
     _spawn(conn, project_id, reviewed, title)
     _spawn(conn, project_id, reviewed, title)
@@ -245,3 +248,182 @@ def test_a_warning_severity_finding_does_not_spawn_a_work_order():
         {"status": "PROPOSED", "severity": "error", "scenario": "crash mid-write is untested"},
     ]
     assert _falsification_to_gaps(with_error), "an error-severity testable gap still spawns"
+
+
+# ── Gaps belong on the work order they were found in ──────────────────────────
+
+
+def test_a_gap_on_an_open_work_order_becomes_a_task_on_it(db):
+    """Operator ruling: stop registering work orders where tasks belong.
+
+    Measured on the ten open reviewer spawns: five were findings about the very work
+    order under review — its own unfinished work. Spawning a sibling declares the
+    reviewed work order complete and re-homes its remainder, routing AROUND the
+    tasks_done gate that already refuses to close a work order with open tasks.
+    """
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+    reviewed = _reviewed_wo(conn, project_id, status="in_progress")
+
+    before = conn.execute(
+        "SELECT COUNT(*) FROM business_tasks WHERE work_order_id=?", (reviewed,)
+    ).fetchone()[0]
+    result = _insert_gap_work_orders(
+        conn,
+        gaps=[
+            {
+                "title": "Task 3 was never implemented",
+                "description": "d",
+                "work_order_type": "cleanup",
+                "tasks": [{"title": "Implement task 3", "description": "the remainder"}],
+            }
+        ],
+        project_id=project_id,
+        milestone_id=None,
+        reviewed_work_order_id=reviewed,
+        reviewed_wo_title="reviewed",
+        reviewed_wo_sequence=1,
+        reviewed_wo_incomplete=True,  # the verdict said the work is not done
+    )
+    conn.commit()
+
+    assert result and result[0]["attached_to_reviewed"] is True
+    assert result[0]["work_order_id"] == reviewed, "the task lands on the reviewed work order"
+
+    after = conn.execute(
+        "SELECT COUNT(*) FROM business_tasks WHERE work_order_id=?", (reviewed,)
+    ).fetchone()[0]
+    assert after == before + 1, "one task added to the reviewed work order"
+
+    siblings = conn.execute(
+        "SELECT COUNT(*) FROM business_work_orders WHERE project_id=? AND work_order_id != ?",
+        (project_id, reviewed),
+    ).fetchone()[0]
+    assert siblings == 0, "and NO sibling work order was created"
+    conn.close()
+
+
+def test_a_gap_on_a_closed_work_order_still_spawns_a_sibling(db):
+    """The converse, and the reason the spawning path must stay: a closed work order has
+    nowhere to put a task, so its findings need somewhere to live."""
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+    reviewed = _reviewed_wo(conn, project_id)  # closed by default
+
+    result = _spawn(conn, project_id, reviewed, "A finding on already-closed work")
+    conn.commit()
+
+    assert not result[0].get("attached_to_reviewed")
+    assert result[0]["work_order_id"] != reviewed, "a closed WO cannot absorb the task"
+    assert _open_count(conn, "A finding on already-closed work") == 1
+    conn.close()
+
+
+def test_re_reviewing_does_not_duplicate_an_attached_task(db):
+    """Re-running verify on the same open work order must not accumulate copies of the
+    same finding — the per-work-order equivalent of the gap-key dedup one level up."""
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+    reviewed = _reviewed_wo(conn, project_id, status="in_progress")
+    gap = {
+        "title": "A repeated finding",
+        "description": "d",
+        "work_order_type": "cleanup",
+        "tasks": [{"title": "Do the missing thing", "description": ""}],
+    }
+    for _ in range(4):
+        _insert_gap_work_orders(
+            conn,
+            gaps=[gap],
+            project_id=project_id,
+            milestone_id=None,
+            reviewed_work_order_id=reviewed,
+            reviewed_wo_title="reviewed",
+            reviewed_wo_sequence=1,
+            reviewed_wo_incomplete=True,
+        )
+    conn.commit()
+
+    n = conn.execute(
+        "SELECT COUNT(*) FROM business_tasks WHERE work_order_id=? AND title=?",
+        (reviewed, "Do the missing thing"),
+    ).fetchone()[0]
+    assert n == 1, f"four reviews, one task — got {n}"
+    conn.close()
+
+
+# ── An unreviewable finding is not work ───────────────────────────────────────
+
+
+def test_an_unlocatable_violation_does_not_become_work():
+    """THE MEASURED NONSENSE CASE, verbatim from the authority.
+
+    The correctness grader reported "independent review unverifiable — no diff
+    provided" because it could not reach the target repo. The spawner turned that into
+    work order 58e21003, "Fix architectural violations flagged by correctness grader",
+    whose single task read "Fix N/A: independent review unverifiable — no diff provided
+    in N/A". The reviewer's INABILITY to review was laundered into scheduled work.
+    """
+    unlocatable = [
+        {"rule": "N/A", "file": "N/A", "detail": "independent review unverifiable — no diff"},
+        {"rule": "", "file": None, "detail": "could not read the repo"},
+    ]
+    assert (
+        _violations_to_gaps(unlocatable, [], []) == []
+    ), "a grader reporting it could not judge must not create work"
+
+
+def test_a_locatable_violation_still_becomes_work():
+    """The converse — this filter must not swallow real findings."""
+    real = [{"rule": "Rule 3: business_* writes", "file": "core/x.py", "detail": "ad-hoc write"}]
+    gaps = _violations_to_gaps(real, [], [])
+    assert len(gaps) == 1
+    assert gaps[0]["tasks"][0]["title"] == "Fix Rule 3: business_* writes in core/x.py"
+
+
+def test_a_partially_locatable_violation_is_kept():
+    """A rule with no file, or a file with no rule, still points somewhere. Only BOTH
+    missing means the grader could not judge."""
+    assert _violations_to_gaps([{"rule": "SECURITY", "file": "N/A", "detail": "d"}], [], [])
+    assert _violations_to_gaps([{"rule": "", "file": "core/y.py", "detail": "d"}], [], [])
+
+
+def test_a_passing_verdicts_advisory_gap_does_not_block_the_close_it_approved(db):
+    """Caught by an EXISTING test, not by me: the first cut attached tasks whenever the
+    reviewed work order was open, so a PASSING verify carrying a warning-severity gap
+    would have added blocking tasks to the work order it had just certified — the
+    review's own approval could not then be acted on. Attaching is for work the verdict
+    says is NOT done."""
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+    reviewed = _reviewed_wo(conn, project_id, status="in_progress")
+
+    result = _insert_gap_work_orders(
+        conn,
+        gaps=[
+            {
+                "title": "An advisory note about finished work",
+                "description": "d",
+                "work_order_type": "documentation",
+                "tasks": [{"title": "Consider documenting this", "description": ""}],
+            }
+        ],
+        project_id=project_id,
+        milestone_id=None,
+        reviewed_work_order_id=reviewed,
+        reviewed_wo_title="reviewed",
+        reviewed_wo_sequence=1,
+        reviewed_wo_incomplete=False,  # the verdict PASSED
+    )
+    conn.commit()
+
+    assert not result[0].get(
+        "attached_to_reviewed"
+    ), "a passing verdict must not add blocking tasks"
+    assert result[0]["work_order_id"] != reviewed
+    blocking = conn.execute(
+        "SELECT COUNT(*) FROM business_tasks WHERE work_order_id=? AND status='pending'",
+        (reviewed,),
+    ).fetchone()[0]
+    assert blocking == 0, "the certified work order stays closable"
+    conn.close()
