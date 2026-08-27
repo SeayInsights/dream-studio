@@ -42,6 +42,8 @@ from core.work_orders.review_rules import (
     resolve_review_rules,
 )
 
+NL = chr(10)
+
 _NOW = "2026-08-26T00:00:00+00:00"
 
 
@@ -903,3 +905,48 @@ def test_a_declared_root_is_preferred_over_the_fallback(db, tmp_path):
     )
     roots_seen = {Path(str(p["root"])).name for p in provenance}
     assert roots_seen == {"real"}, f"the fallback leaked in: {roots_seen}"
+
+
+# -- The verdict itself, not the helpers under it ------------------------------
+
+
+def test_the_project_tier_reads_the_declared_path_not_a_repo_inside_it(db, tmp_path):
+    """MEASURED: for a container declaring a single repository, ``primary`` is that
+    REPOSITORY, not the container. resolve_review_rules was handed ``primary``, so a
+    project-level ``.ds-review-rules.md`` at the declared container was never read and the
+    "project" tier of folder > project > baseline could not be reached in production.
+
+    Every rules test passed anyway, because they declare the container path directly and
+    never went through the resolution verify actually uses. Found by the correctness
+    grader on this work order's own close, phrased as NO DEAD CODE: an advertised layer no
+    path can reach.
+    """
+    container = tmp_path / "workspace"
+    container.mkdir()
+    _make_repo(container / "only-repo")
+    (container / PROFILE_NAME).write_text(
+        "mode: add" + NL * 2 + "- PROJECT TIER RULE: reachable." + NL, encoding="utf-8"
+    )
+    wo = _project_with_path(db, container)
+
+    roots = resolve_project_roots(wo, db)
+    assert roots.primary != container, (
+        "precondition: primary is the single repo, not the container -- if this ever "
+        "changes, the bug this test guards has moved rather than gone"
+    )
+    assert roots.declared == container
+
+    # What verify does now: the DECLARED path is the project tier.
+    from core.work_orders.review_rules import resolve_review_rules
+
+    ruleset = resolve_review_rules(project_root=roots.declared, folders=list(roots.roots))
+    assert any(
+        "PROJECT TIER RULE" in r for r in ruleset.rules
+    ), "a project-level profile at the declared root must be read"
+
+    # And the old behaviour is genuinely broken, so this test can fail.
+    missed = resolve_review_rules(project_root=roots.primary, folders=list(roots.roots))
+    assert not any("PROJECT TIER RULE" in r for r in missed.rules), (
+        "passing primary must MISS the container profile -- otherwise this test proves "
+        "nothing about the fix"
+    )

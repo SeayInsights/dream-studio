@@ -347,8 +347,19 @@ def verify_work_order(
         # Resolved HERE because a folder profile is per root, so it needs the roots.
         from .review_rules import render_rules_block, resolve_review_rules
 
+        # THE PROJECT TIER MUST READ THE PROJECT'S OWN PATH, not a repository inside it.
+        #
+        # This passed project_root=_search_root, which is _project_roots.primary -- and
+        # for a container declaring a single repo, primary is that REPO, not the declared
+        # container. So a project-level .ds-review-rules.md at the container was never
+        # read and the "project" tier of folder > project > baseline was unreachable in
+        # production, while every test passed because they declare the container directly.
+        #
+        # Found by the correctness grader on this work order's own close, phrased as a
+        # NO DEAD CODE violation: an advertised layer that no path can reach.
+        _declared_root = _project_roots.declared or (Path(_search_root) if _search_root else None)
         _ruleset = resolve_review_rules(
-            project_root=Path(_search_root) if _search_root else None,
+            project_root=_declared_root,
             folders=list(_project_roots.roots),
         )
         _rules_provenance = _ruleset.provenance

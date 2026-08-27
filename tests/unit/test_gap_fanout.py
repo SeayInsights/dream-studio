@@ -37,6 +37,7 @@ import pytest
 
 from core.config.sqlite_bootstrap import bootstrap_database
 from core.work_orders.verify_gaps import (
+    _violation_task_title,
     _ADVISORY_PROJECT_WIDE_CATEGORIES,
     _ATTACH_ROUNDS_BEFORE_PRESSURE,
     _PROJECT_WIDE_AFTER_N_OPEN_SPAWNS,
@@ -851,3 +852,105 @@ def test_the_verify_help_no_longer_promises_only_new_work_orders():
     verify_block = source.split('"verify",', 1)[1][:400]
     assert "gaps become new work orders" not in verify_block
     assert "become tasks on this work" in verify_block
+
+
+# -- A task title names the defect, not the rule that caught it -----------------
+
+
+# Copied verbatim from what the grader stored on work order 82bd56f2. The old template
+# turned each of these into "Fix <the whole rule name> in <file>".
+_REAL_FINDINGS = [
+    {
+        "rule": "Rule 6: NO DEAD CODE (a mechanism that cannot be invoked by the surface "
+        "it was built for)",
+        "file": "core/work_orders/verify_main.py",
+        "detail": "verify passes `project_root=_search_root` (which is "
+        "`_project_roots.primary`, i.e. one of the repositories) instead of the project's "
+        "declared path, so for a multi-root project a `.ds-review-rules.md` at the "
+        "declared container root is never read.",
+    },
+    {
+        "rule": "Rule 1: TEST COVERAGE FOR CHANGED BEHAVIOUR (a test that cannot fail is "
+        "not coverage)",
+        "file": "core/work_orders/verify_main.py",
+        "detail": "Every new test drives `resolve_review_rules` directly. None asserts "
+        "anything about the value returned by `verify_work_order()`.",
+    },
+]
+
+
+def test_a_violation_title_names_the_defect_not_the_rule():
+    """MEASURED on real grader output. Five findings on one close were titled with the
+    rule NAME, e.g. "Fix Rule 6: NO DEAD CODE (a mechanism that cannot be invoked by the
+    surface it was built for) in core/work_orders/verify_main.py".
+
+    Every one of those findings was correct -- one of them identified that the project tier
+    of folder > project > baseline was unreachable in production. The label made a severe
+    finding indistinguishable from noise in the only view an operator triages by.
+    """
+    for finding in _REAL_FINDINGS:
+        title = _violation_task_title(finding)
+
+        assert not title.startswith("Fix Rule"), f"still titled by rule name: {title}"
+        assert "NO DEAD CODE" not in title, "the rule's descriptive clause must not lead"
+        assert "a test that cannot fail is not coverage" not in title
+        # It must say something about the ACTUAL defect.
+        assert (
+            title.split()[0] in finding["detail"]
+        ), f"the title must lead with the finding, got {title!r}"
+        assert len(title) <= 96, f"a title an operator scans must stay short: {len(title)}"
+
+
+def test_the_rule_and_file_survive_in_the_description():
+    """Moving the rule out of the title must not lose it. Length is useful in a
+    description and harmful in a title -- that is the whole distinction."""
+    gaps = _violations_to_gaps([_REAL_FINDINGS[0]], [], [])
+    assert gaps, "a locatable violation must still produce a gap"
+    task = gaps[0]["tasks"][0]
+    assert "NO DEAD CODE" in task["description"], "the rule must be recorded somewhere"
+    assert "core/work_orders/verify_main.py" in task["description"]
+
+
+def test_a_short_rule_name_keeps_the_informative_old_title():
+    """A SHORT rule name IS the informative part. "Fix Rule 3: business_* writes in
+    core/x.py" names exactly what to look at; leading with the detail ("ad-hoc write") is
+    strictly vaguer.
+
+    An existing test objected when this change first led with detail unconditionally, and
+    it was right. The defect was never rule names in titles -- it was DESCRIBED standards
+    used as names, so the threshold is on length and the short case is untouched.
+    """
+    title = _violation_task_title(
+        {"rule": "Rule 3: business_* writes", "file": "core/x.py", "detail": "ad-hoc write"}
+    )
+    assert title == "Fix Rule 3: business_* writes in core/x.py", title
+
+
+def test_a_long_rule_with_no_detail_still_yields_a_bounded_title():
+    """The awkward corner: a described standard AND no detail. There is nothing good to
+    lead with, so it must still produce something short rather than a paragraph."""
+    title = _violation_task_title(
+        {
+            "rule": "Rule 6: NO DEAD CODE (a mechanism that cannot be invoked by the "
+            "surface it was built for)",
+            "file": "core/y.py",
+            "detail": "",
+        }
+    )
+    assert 0 < len(title) <= 96, f"unbounded title: {len(title)}"
+    assert "core/y.py" in title, "with no detail, the file is the only locator left"
+
+
+def test_a_long_single_sentence_detail_is_truncated_not_dropped():
+    """A grader that writes one very long sentence must still yield a usable title rather
+    than an empty one or a paragraph."""
+    # The rule must be LONG, or the short-rule path takes over and the detail is never
+    # reached. My first version used "SOME RULE: x" (12 chars) and asserted a detail-led
+    # title -- a fixture that could not exercise the branch it was written for. Third time
+    # this session a fixture failed to satisfy its own precondition.
+    long_rule = "CONCURRENCY AND RESOURCE SAFETY (shared state mutated without synchronisation)"
+    assert len(long_rule) > 48, "precondition: long enough to take the detail-led path"
+    long_detail = "the same problem " * 40
+    title = _violation_task_title({"rule": long_rule, "file": "core/y.py", "detail": long_detail})
+    assert 0 < len(title) <= 96
+    assert title.startswith("the same problem")

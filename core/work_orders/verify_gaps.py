@@ -140,6 +140,74 @@ def _violation_is_locatable(violation: dict[str, Any]) -> bool:
     return bool(token) and token not in _UNLOCATABLE
 
 
+# WO-MULTIROOT-REVIEW: a task title names the DEFECT, not the rule that caught it.
+#
+# `f"Fix {rule} in {file}"` was fine while rules were short identifiers ("Rule 3:
+# business_* writes"). The SDLC baseline replaced them with descriptive standards, so the
+# same template pasted a paragraph into a title:
+#
+#   "Fix Rule 6: NO DEAD CODE (a mechanism that cannot be invoked by the surface it was
+#    built for) in core/work_orders/verify_main.py"
+#
+# The finding underneath was correct and severe. The label made it look like noise, which
+# is the operator's "reviewer surfaces nonsense" complaint arriving from the other
+# direction: not a bad finding, an unreadable one.
+_TITLE_MAX = 96
+# Above this, a rule name is a described standard rather than an identifier, and
+# belongs in the description instead of the title.
+_SHORT_RULE_MAX = 48
+
+
+def _short_rule(rule: str) -> str:
+    """The rule's IDENTIFIER, dropping the descriptive clause after the first colon.
+
+    "NO DEAD CODE: code added with no caller, ..." -> "NO DEAD CODE"
+    "Rule 3: business_* writes"                    -> "Rule 3"
+
+    Both forms appear: DS's own profile uses the second, the SDLC baseline the first.
+    """
+    head = rule.split(":", 1)[0].strip()
+    # A leading "(clause)" or stray punctuation is not an identifier.
+    return head if head and len(head) <= 48 else rule[:48].strip()
+
+
+def _violation_task_title(violation: dict[str, Any]) -> str:
+    """A triageable title: what is wrong, and where.
+
+    Prefers the grader's ``detail`` -- a sentence about the actual defect -- over the rule
+    name. Falls back to the rule identifier when no detail was supplied, because a short
+    rule name plus a file still beats "violation".
+    """
+    detail = str(violation.get("detail") or "").strip()
+    file_name = str(violation.get("file") or "").strip()
+    rule = str(violation.get("rule") or "").strip()
+
+    # A SHORT rule name IS the informative part -- "Fix Rule 3: business_* writes in
+    # core/x.py" tells an operator exactly what to look at, and leading with the detail
+    # instead ("ad-hoc write (core/x.py)") is strictly vaguer. Caught by an existing test
+    # objecting to this change, and the test was right.
+    #
+    # The defect was never "rule names in titles". It was DESCRIPTIVE rule names: the SDLC
+    # baseline states each standard as a sentence, so the same template pasted a paragraph
+    # into a title. So the threshold is on length, and the short case is left alone.
+    if rule and len(rule) <= _SHORT_RULE_MAX:
+        return f"Fix {rule} in {file_name or 'unknown'}"[:_TITLE_MAX]
+
+    if detail:
+        # First sentence or clause, whichever comes first — graders write both.
+        lead = detail.split(". ")[0].split(" -- ")[0].strip().rstrip(".")
+        if lead:
+            suffix = f" ({file_name})" if file_name and file_name not in lead else ""
+            budget = _TITLE_MAX - len(suffix)
+            if len(lead) > budget:
+                lead = lead[: max(0, budget - 1)].rstrip() + "\u2026"
+            return f"{lead}{suffix}"
+
+    short = _short_rule(rule) if rule else "violation"
+    where = file_name or "unknown"
+    return f"Fix {short} in {where}"[:_TITLE_MAX]
+
+
 def _violations_to_gaps(
     violations: list[dict[str, Any]],
     coverage_gaps: list[dict[str, Any]],
@@ -159,8 +227,13 @@ def _violations_to_gaps(
     if violations:
         tasks = [
             {
-                "title": f"Fix {v.get('rule', 'violation')} in {v.get('file', 'unknown')}",
-                "description": v.get("detail", ""),
+                "title": _violation_task_title(v),
+                # The rule keeps its place HERE, where length is useful rather than
+                # harmful — an operator triaging a list reads titles, not descriptions.
+                "description": (
+                    f"{v.get('detail', '')}\n\nRule: {v.get('rule', 'unspecified')}"
+                    f"\nFile: {v.get('file', 'unspecified')}"
+                ).strip(),
             }
             for v in violations
         ]
