@@ -788,15 +788,13 @@ def _insert_gap_work_orders(
         # so null-milestone gaps still dedup (T3). Match across ANY status so a closed
         # prior spawn is never re-spawned (T4 respawn cap). Prefer an open WO so we can
         # merge tasks into it; a closed match means skip-and-log.
-        existing_row = conn.execute(
-            "SELECT work_order_id, status FROM business_work_orders"
-            " WHERE project_id = ? AND instr(description, ?) > 0"
-            " ORDER BY CASE status"
-            "   WHEN 'in_progress' THEN 0 WHEN 'created' THEN 1 ELSE 2 END,"
-            "   created_at ASC"
-            " LIMIT 1",
-            (project_id, search_needle),
-        ).fetchone()
+        #
+        # ONE LOOKUP, REUSED. This repeated the _prior query above verbatim. Two copies of
+        # the same lookup can drift, and then the attach decision and the dedup decision
+        # would disagree about what "prior" means -- while both still passed every test,
+        # each being self-consistent. Same shape as the defects this work order exists to
+        # fix, so it does not get to stay.
+        existing_row = _prior
 
         _project_wide = gap_key.startswith("advisory::")
         if existing_row and existing_row[1] not in ("created", "in_progress") and not _project_wide:
