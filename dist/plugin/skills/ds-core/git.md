@@ -110,6 +110,50 @@ git push -u origin <branch-name>
 git push
 ```
 
+## Every outbound claim shows its evidence
+
+**Operator ruling 2026-08-27:** anything pushed to GitHub as a comment or review must be
+backed by evidence, show that evidence, and be verified — detailed and based on facts, so
+no reader is ever guessing.
+
+This applies to pull-request bodies, PR review comments, issue comments, commit messages,
+and release notes. A claim is evidence-backed when it carries at least one of:
+
+- a command and its output
+- a test count with its unit (`306 passed, 0 failed`) or a test node id
+- a `file.py:line` reference
+- a measured number together with its source
+- a named artifact — commit sha, CI run id, verdict path
+
+**DO NOT** write a claim that cites none of those. In particular, never tick a checklist
+box for something that has not happened yet. Measured when this rule was written: all four
+PR bodies authored that day carried
+
+```
+- [x] PR smoke is expected to pass
+```
+
+a forecast inside a **checked** box, and three of those pull requests were already merged.
+Leave the box unchecked and say what is still unrun, or state the evidence you do have
+(`Overall: PASS` from the local gate) and report the remote result when it lands.
+
+**DO** state what you could not verify, and why. "Command 3 produced no output — the pipe
+buffered until a timeout killed it, so the result is unknown, not clean" is worth more than
+a total that quietly omits it.
+
+Check any outbound document before publishing it:
+
+```bash
+py -m core.gates.evidence_backed_output <pr-body.md>
+
+# What this push publishes — commit messages plus added CHANGELOG lines
+py -m core.gates.evidence_backed_output --staged
+```
+
+The `evidence-backed-output` pre-push gate runs `--staged` on every push. It reports the
+evidence a document *does* carry alongside what is missing, so the gap is visible rather
+than something to guess at.
+
 ## gh CLI Detection
 
 Skills should detect whether `gh` CLI is available before attempting GitHub operations. If unavailable, fall back to GitHub API or prompt user for manual action.
