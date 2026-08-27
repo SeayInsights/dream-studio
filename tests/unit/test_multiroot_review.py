@@ -773,6 +773,11 @@ def test_ds_layer_map_is_scoped_to_the_dream_studio_project():
         ["git", "ls-files", "--error-unmatch", str(ds_profile)],
         capture_output=True,
         text=True,
+        # text=True with no encoding decodes as cp1252 on Windows, so a single non-cp1252
+        # byte in git's output raises UnicodeDecodeError in the reader thread. The
+        # locale-decode gate exists for exactly this and caught this line.
+        encoding="utf-8",
+        errors="replace",
     )
     assert tracked.returncode == 0, (
         f"{ds_profile} exists on disk but git does not track it, so it will not ship: "
