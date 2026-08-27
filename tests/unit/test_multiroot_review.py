@@ -372,3 +372,231 @@ def test_primary_is_none_only_when_there_is_genuinely_nothing(db, tmp_path):
     roots = resolve_project_roots(wo, db)
     assert roots.roots == []
     assert roots.primary is None
+
+
+# -- Task 3: grade the union of roots, and say which contributed ---------------
+
+
+def _fake_collector(found_in: set[str]):
+    """A collector that reports commits only for the named root basenames."""
+
+    def _collect(root, work_order_id, title=None):
+        return f"diff from {Path(root).name}" if Path(root).name in found_in else None
+
+    return _collect
+
+
+def test_the_verdict_records_which_roots_contributed(db, tmp_path):
+    """MEASURED on the live authority: Fulcrum resolves to 6 repositories and exactly
+    ONE of them (platform) holds the commits. Before this, verify collected from a single
+    root, found nothing, and graded all 28 open Fulcrum work orders with no diff at all.
+
+    A verdict that silently graded 1 of 6 repositories is worse than one that says so,
+    because "no violations found" and "nothing was read" are indistinguishable in a
+    score. So the ratio is recorded, per root, with a reason for every empty one.
+    """
+    from core.work_orders.verify_git import collect_union_evidence, union_evidence_summary
+
+    container = tmp_path / "workspace"
+    container.mkdir()
+    for name in ("alpha", "beta", "gamma"):
+        _make_repo(container / name)
+    wo = _project_with_path(db, container)
+
+    roots = resolve_project_roots(wo, db)
+    assert len(roots.roots) == 3, f"precondition: three repositories, got {len(roots.roots)}"
+
+    diff, provenance = collect_union_evidence(wo, roots, collector=_fake_collector({"beta"}))
+
+    assert diff is not None, "the one root with commits must still produce evidence"
+    assert "diff from beta" in diff
+
+    by_name = {Path(str(p["root"])).name: p for p in provenance}
+    assert set(by_name) == {"alpha", "beta", "gamma"}, "every root must be accounted for"
+    assert by_name["beta"]["contributed"] is True
+    assert by_name["alpha"]["contributed"] is False
+    assert by_name["gamma"]["contributed"] is False
+
+    # An empty root must say WHY it was empty. "read fine, no commits" and "could not be
+    # read" are different facts and only one of them is a problem.
+    assert by_name["alpha"]["reason"], "an empty root with no reason is unattributable"
+    assert "no commits reference" in str(by_name["alpha"]["reason"])
+
+    assert "1 of 3" in union_evidence_summary(provenance)
+    assert "beta" in union_evidence_summary(provenance)
+
+
+def test_a_root_that_contributed_nothing_is_not_reported_as_a_failure(db, tmp_path):
+    """Most roots of a multi-repo project legitimately hold nothing for a given work
+    order. Reporting those as errors would make the summary useless noise."""
+    from core.work_orders.verify_git import collect_union_evidence
+
+    container = tmp_path / "workspace"
+    container.mkdir()
+    _make_repo(container / "one")
+    _make_repo(container / "two")
+    wo = _project_with_path(db, container)
+
+    _diff, provenance = collect_union_evidence(
+        wo, resolve_project_roots(wo, db), collector=_fake_collector(set())
+    )
+
+    for entry in provenance:
+        reason = str(entry["reason"])
+        assert "could not be read" not in reason, f"a readable empty root called an error: {reason}"
+
+
+def test_no_root_producing_evidence_returns_none_not_an_empty_string(db, tmp_path):
+    """The existing contract: None means "no evidence", and callers must treat it as
+    neither a certified pass nor an auto-zero. An empty string would read as "a diff was
+    collected and it was empty", which is a different and wrong claim.
+    """
+    from core.work_orders.verify_git import collect_union_evidence
+
+    container = tmp_path / "workspace"
+    container.mkdir()
+    _make_repo(container / "solo")
+    wo = _project_with_path(db, container)
+
+    diff, provenance = collect_union_evidence(
+        wo, resolve_project_roots(wo, db), collector=_fake_collector(set())
+    )
+    assert diff is None, "no evidence must be None, never an empty string"
+    assert provenance, "and it must still say which roots were examined"
+
+
+def test_a_root_that_raises_does_not_lose_the_readable_ones(db, tmp_path):
+    """One unreadable repository in a six-repository project must not cost the evidence
+    from the other five -- that would turn a partial read into a total blackout."""
+    from core.work_orders.verify_git import collect_union_evidence
+
+    container = tmp_path / "workspace"
+    container.mkdir()
+    _make_repo(container / "good")
+    _make_repo(container / "broken")
+    wo = _project_with_path(db, container)
+
+    def _collect(root, work_order_id, title=None):
+        if Path(root).name == "broken":
+            raise OSError("git exploded")
+        return "diff from good"
+
+    diff, provenance = collect_union_evidence(wo, resolve_project_roots(wo, db), collector=_collect)
+
+    assert diff and "diff from good" in diff, "the readable root's evidence was lost"
+    broken = next(p for p in provenance if Path(str(p["root"])).name == "broken")
+    assert broken["contributed"] is False
+    assert "could not be read" in str(broken["reason"])
+    assert "OSError" in str(broken["reason"]), "name the failure so it can be fixed"
+
+
+def test_a_single_root_project_is_not_labeled_per_root(db, tmp_path):
+    """The common case must read exactly as it did before. Labeling a lone root's diff
+    with "=== evidence from root ... ===" would add noise to every single-repo verdict
+    and change the grader's input for no reason."""
+    from core.work_orders.verify_git import collect_union_evidence
+
+    repo = _make_repo(tmp_path / "solo")
+    wo = _project_with_path(db, repo)
+
+    diff, provenance = collect_union_evidence(
+        wo, resolve_project_roots(wo, db), collector=_fake_collector({"solo"})
+    )
+    assert diff == "diff from solo", f"a single root must not be relabeled; got {diff!r}"
+    assert len(provenance) == 1
+
+
+def test_an_unversioned_root_says_git_evidence_is_unavailable(db, tmp_path):
+    """Operator: "not everything will always be pushed to a github."
+
+    A root with no .git is not a failure and not an absence of work -- it is an absence
+    of THIS evidence layer. Saying so is what lets a later task pick a different layer
+    instead of scoring zero.
+    """
+    from core.work_orders.verify_git import collect_union_evidence
+
+    plain = tmp_path / "no_git_here"
+    plain.mkdir()
+    (plain / "main.py").write_text("print('real work, never pushed')\n", encoding="utf-8")
+    wo = _project_with_path(db, plain)
+
+    roots = resolve_project_roots(wo, db)
+    if not roots.roots:
+        pytest.skip("an unversioned declared path resolves to no root in this build")
+
+    _diff, provenance = collect_union_evidence(wo, roots, collector=_fake_collector(set()))
+    reasons = " ".join(str(p["reason"]) for p in provenance)
+    assert "not a git repository" in reasons
+    assert "not the same as no work" in reasons, "absence of git must not read as absence of work"
+
+
+# -- Task 4: an executable check names the root it ran in ----------------------
+
+
+def test_a_check_result_names_its_root(db, tmp_path):
+    """With six roots, "1 failed" cannot be located without knowing which repository ran
+    it. Extends the executed/not_executed_reason provenance already on each check."""
+    from core.work_orders.verify_executor import run_executable_checks
+
+    repo = _make_repo(tmp_path / "target")
+    tasks = [{"title": "T", "acceptance_criteria": "SQL-CHECK: SELECT 1"}]
+
+    results = run_executable_checks(tasks, db, repo)
+    check = results["T"][0]
+    assert "ran_in" in check, "every check result must say where it executed"
+    assert check["ran_in"], "an empty ran_in is the same as not having it"
+
+
+def test_a_test_check_names_the_repo_it_ran_in(db, tmp_path):
+    """The kind that actually has a root. A TEST-CHECK runs with the project root as cwd,
+    so that path is the locator for a failure."""
+    from core.work_orders.verify_executor import run_executable_checks
+
+    repo = _make_repo(tmp_path / "target")
+    tasks = [{"title": "T", "acceptance_criteria": "TEST-CHECK: cmd: python -c pass"}]
+
+    check = run_executable_checks(tasks, db, repo)["T"][0]
+    assert str(repo) == check["ran_in"], f"expected the repo path, got {check['ran_in']!r}"
+
+
+def test_a_test_check_with_no_resolved_root_says_it_ran_in_the_ds_repo(db, tmp_path):
+    """The dangerous case, stated plainly. project_root=None runs in the current process
+    directory -- the Dream Studio repo -- which is how a Fulcrum work order came to be
+    graded against Dream Studio. Silence here is what made that invisible.
+    """
+    from core.work_orders.verify_executor import run_executable_checks
+
+    tasks = [{"title": "T", "acceptance_criteria": "TEST-CHECK: cmd: python -c pass"}]
+    check = run_executable_checks(tasks, db, None)["T"][0]
+
+    assert "Dream Studio repo" in check["ran_in"]
+    assert (
+        "did NOT run in the work order" in check["ran_in"]
+    ), "it must say the work order's own repo was not used, not merely name a directory"
+
+
+def test_a_sql_check_does_not_claim_to_have_run_in_a_repo(db, tmp_path):
+    """Stamping project_root on all three kinds would be convenient and false: a
+    SQL-CHECK runs against the authority database, not a repository."""
+    from core.work_orders.verify_executor import run_executable_checks
+
+    repo = _make_repo(tmp_path / "target")
+    tasks = [{"title": "T", "acceptance_criteria": "SQL-CHECK: SELECT 1"}]
+
+    check = run_executable_checks(tasks, db, repo)["T"][0]
+    assert str(repo) != check["ran_in"], "a SQL-CHECK must not claim the repo as its context"
+    assert "authority database" in check["ran_in"]
+    assert "not a repository root" in check["ran_in"]
+
+
+def test_an_unknown_check_kind_still_carries_a_context(db, tmp_path):
+    """Fail-closed results are consumed by the same readers. A missing key there means a
+    consumer has to branch on kind before it can read provenance."""
+    from core.work_orders.verify_executor import run_executable_checks
+
+    tasks = [{"title": "T", "acceptance_criteria": "UNKNOWN-CHECK: whatever"}]
+    check = run_executable_checks(tasks, db, None)["T"][0]
+
+    assert check["passed"] is False
+    assert "ran_in" in check
+    assert "nothing was executed" in check["ran_in"]

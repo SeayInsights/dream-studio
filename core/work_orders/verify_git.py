@@ -15,6 +15,11 @@ from typing import Any
 # ── Git diff collection ─────────────────────────────────────────────────────────
 
 
+from typing import Callable
+
+from core.work_orders.project_roots import ProjectRoots, git_kind
+
+
 def _collect_git_commits(
     source_root: Path, work_order_id: str, title: str | None = None
 ) -> str | None:
@@ -168,3 +173,103 @@ def _find_migration_files(source_root: Path, git_diff: str) -> list[Path]:
         if resolved.is_file() and resolved not in found:
             found.append(resolved)
     return found
+
+
+# WO-MULTIROOT-REVIEW task 3: collect evidence from EVERY root, and record which ones
+# answered.
+#
+# Before this, verify collected from exactly one root:
+#     _search_root = resolve_project_root(work_order_id, db_path) or source_root
+#
+# For Fulcrum -- a working folder holding 6 repositories and 29 worktrees, with no .git
+# of its own -- that single call found nothing, and all 28 open Fulcrum work orders were
+# graded with no diff at all. A verdict that silently graded 1 of 6 repositories is
+# worse than one that says so, because "no violations found" and "nothing was read" are
+# indistinguishable in the output.
+#
+# The provenance is the deliverable as much as the diff is. Each root reports whether it
+# contributed, and an empty result is attributed: unreadable, not a repository, or read
+# fine and simply had no commits for this work order. Those are three different facts and
+# only one of them is a problem.
+
+
+def collect_union_evidence(
+    work_order_id: str,
+    roots: "ProjectRoots",
+    *,
+    title: str | None = None,
+    collector: Callable[..., str | None] | None = None,
+) -> tuple[str | None, list[dict[str, object]]]:
+    """Return ``(combined_diff, provenance)`` across every root of a project.
+
+    ``combined_diff`` is None when NO root produced evidence -- preserving the existing
+    contract that None means "no evidence", never a certified pass and never an
+    auto-zero. When several roots contribute, each block is labeled with its root so a
+    grader reading the diff can tell which repository a change came from.
+
+    ``provenance`` has one entry per root plus one per unreachable declared path, each
+    carrying ``root``, ``kind``, ``contributed`` and ``reason``. A caller records it on
+    the verdict; nothing here decides a score.
+    """
+    collect = collector or _collect_git_commits
+    parts: list[str] = []
+    provenance: list[dict[str, object]] = []
+    multi = len(roots.roots) > 1
+
+    for root in roots.roots:
+        kind = git_kind(root) or "unversioned"
+        entry: dict[str, object] = {"root": str(root), "kind": kind, "contributed": False}
+        try:
+            diff = collect(root, work_order_id, title=title)
+        except Exception as exc:  # a broken root must not lose the readable ones
+            entry["reason"] = f"could not be read: {type(exc).__name__}: {exc}"
+            provenance.append(entry)
+            continue
+
+        if diff:
+            entry["contributed"] = True
+            entry["chars"] = len(diff)
+            entry["reason"] = "commits found for this work order"
+            parts.append(f"=== evidence from root {root} ===\n{diff}" if multi else diff)
+        elif kind == "unversioned":
+            entry["reason"] = (
+                "not a git repository -- git evidence is unavailable here, which is not "
+                "the same as no work having been done"
+            )
+        else:
+            entry["reason"] = "read successfully; no commits reference this work order"
+        provenance.append(entry)
+
+    for path, why in roots.unreachable:
+        provenance.append(
+            {"root": str(path), "kind": "unreachable", "contributed": False, "reason": why}
+        )
+
+    if not roots.roots:
+        provenance.append(
+            {
+                "root": str(roots.declared) if roots.declared else "(none declared)",
+                "kind": "none",
+                "contributed": False,
+                "reason": roots.reason or "the project resolved to no usable root",
+            }
+        )
+
+    return ("\n\n".join(parts) if parts else None), provenance
+
+
+def union_evidence_summary(provenance: list[dict[str, object]]) -> str:
+    """One line an operator can read without opening the verdict JSON.
+
+    Says the ratio first, because "1 of 6" is the fact that was invisible.
+    """
+    if not provenance:
+        return "no roots were examined"
+    contributed = [p for p in provenance if p.get("contributed")]
+    total = len([p for p in provenance if p.get("kind") != "unreachable"])
+    head = f"{len(contributed)} of {total} root(s) contributed evidence"
+    if not contributed:
+        reasons = {str(p.get("reason", "")) for p in provenance}
+        return head + " -- " + "; ".join(sorted(r for r in reasons if r))
+    names = ", ".join(Path(str(p["root"])).name for p in contributed)
+    return f"{head}: {names}"

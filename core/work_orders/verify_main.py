@@ -250,6 +250,12 @@ def verify_work_order(
     p_root = planning_root or Path.cwd() / ".planning"
     db_path = _require_db(source_root, dream_studio_home)
 
+    # WO-MULTIROOT-REVIEW task 3: which roots the review read. Initialised here, at
+    # function scope, because the result dict references them and this function returns
+    # early in several places -- the same scoping bug attachment_pressure had.
+    _root_provenance: list[dict[str, object]] = []
+    _union_summary: str = "not determined"
+
     with _connect(db_path) as conn:
         wo = _read_work_order(conn, work_order_id)
         if wo is None:
@@ -325,7 +331,15 @@ def verify_work_order(
         _gap_marker = _re.search(r"\[gap-key:\s*([^\s:\]]+)::", wo.get("description") or "")
         originating_wo_id = _gap_marker.group(1) if _gap_marker else None
 
-        _search_root = resolve_project_root(work_order_id, db_path) or source_root
+        # WO-MULTIROOT-REVIEW task 3: a project resolves to every root its code lives
+        # in, so evidence is collected from all of them and the verdict records which
+        # ones answered. _search_root remains the single anchor for the recorded
+        # delivery boundary (a boundary is stamped against one repo), while the commit
+        # search spans the union.
+        from .project_roots import resolve_project_roots
+
+        _project_roots = resolve_project_roots(work_order_id, db_path)
+        _search_root = _project_roots.primary or source_root
 
         # WO-VERIFY-GRADES-DELIVERY: the RECORDED boundary is the locator; the
         # commit-message grep below is reinforcement. Grepping history for the WO's
@@ -356,9 +370,19 @@ def verify_work_order(
         _boundary_diff, _boundary_note = boundary_diff_text(
             work_order_id, repo_root=Path(_search_root), db_path=db_path
         )
-        git_diff = _boundary_diff or _collect_git_commits(
-            _search_root, work_order_id, title=wo["title"]
-        )
+        if _boundary_diff:
+            git_diff = _boundary_diff
+            _union_summary = (
+                f"recorded delivery boundary in {_search_root} (roots not searched: the "
+                "stamped boundary is the locator when it has content)"
+            )
+        else:
+            from .verify_git import collect_union_evidence, union_evidence_summary
+
+            git_diff, _root_provenance = collect_union_evidence(
+                work_order_id, _project_roots, title=wo["title"]
+            )
+            _union_summary = union_evidence_summary(_root_provenance)
         if git_diff is None and originating_wo_id:
             git_diff = _collect_git_commits(_search_root, originating_wo_id)
 
@@ -870,6 +894,12 @@ def verify_work_order(
             # several reviews, so the honest exit (carry the remainder) is visible
             # instead of the work order quietly growing.
             "attachment_pressure": attachment_pressure,
+            # WO-MULTIROOT-REVIEW task 3: which roots this verdict actually read.
+            # "no violations found" and "nothing was read" are indistinguishable in a
+            # score, so the ratio rides the verdict: all 28 open Fulcrum work orders
+            # were graded against 1 of 6 repositories and nothing said so.
+            "roots_examined": _root_provenance,
+            "roots_summary": _union_summary,
         }
         # WO-FALSIFY-FIRST-PASS: the falsification section and the UNVERIFIED
         # ledger ride the verdict. A falsification grader that could not run is
@@ -931,6 +961,9 @@ def verify_work_order(
         # WO-GAP-FANOUT: the attach-loop bound reaches the CLI, not just the stored
         # verdict — a bound nobody can see is not a bound.
         "attachment_pressure": attachment_pressure,
+        # WO-MULTIROOT-REVIEW task 3: same rule for root coverage.
+        "roots_summary": _union_summary,
+        "roots_examined": _root_provenance,
         "completion": completion,
         "correctness": correctness,
         "quality": quality,
