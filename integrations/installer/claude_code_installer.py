@@ -12,7 +12,11 @@ import stat
 from pathlib import Path
 from typing import Any, Literal
 
-from integrations.compiler.claude_code import compile_pack
+from integrations.compiler.claude_code import (
+    CLAUDE_MD_REFUSED,
+    compile_pack,
+    merge_claude_md,
+)
 from integrations.installer.base import FileOp, FileOpPlan, InstallerBase, RefusalError
 from integrations.installer.file_ops import atomic_copy, atomic_write, backup_before_write
 from integrations.manifest import (
@@ -125,25 +129,64 @@ class ClaudeCodeInstaller(InstallerBase):
                 target_dir = self.config_root / "skills" / skill_id
                 ops.extend(_collect_skill_dir_ops(skill_dir, target_dir, skill_id, backup_base))
 
-        # 2. CLAUDE.md — create (enforcement block + adapter projection)
+        # 2. CLAUDE.md — spliced between the AUTO-ROUTING markers, never truncated.
+        #
+        # WO-CLAUDEMD-CLOBBER. This was op="create" carrying the whole generated file,
+        # and the apply loop atomic_writes anything with source_content — so
+        # ~/.claude/CLAUDE.md, the operator's GLOBAL personal instruction file for every
+        # project, was a full overwrite target with no protected region. Operator report:
+        # "when it builds it rewrites all of claude.md."
+        #
+        # merge_claude_md is the contract that already existed in generate_routing and
+        # was bypassed here. Merging at PLAN time is the settings.json precedent
+        # (merge_settings, a few lines below): the apply loop still writes a whole
+        # document, it is simply the right document now.
         claude_md_content = pack["files"].get("CLAUDE.md")
         if claude_md_content is not None:
             claude_target = self.config_root / "CLAUDE.md"
-            ops.append(
-                FileOp(
-                    target=claude_target,
-                    op="create",
-                    backup_required=claude_target.exists(),
-                    source_hash=compute_hash(claude_md_content),
-                    source_content=claude_md_content,
-                    reason="Install Dream Studio enforcement block into CLAUDE.md projection",
-                    safety_notes=(
-                        "Overwrites CLAUDE.md with enforcement block prepended to adapter projection. "
-                        "Existing file is backed up before write."
-                    ),
-                    backup_path=backup_base if claude_target.exists() else None,
-                )
+            existing_claude_md = (
+                claude_target.read_text(encoding="utf-8") if claude_target.is_file() else None
             )
+            merged_claude_md, disposition, detail = merge_claude_md(
+                existing_claude_md, claude_md_content
+            )
+            if disposition == CLAUDE_MD_REFUSED:
+                # A hand-written instruction file is not a projection. Skip it and say
+                # so — an install that quietly destroys the operator's own notes is
+                # worse than an install that reports one file it would not touch.
+                ops.append(
+                    FileOp(
+                        target=claude_target,
+                        op="skip",
+                        backup_required=False,
+                        source_hash=compute_hash(claude_md_content),
+                        source_content=None,
+                        reason=f"CLAUDE.md {detail}",
+                        safety_notes=(
+                            "Hand-written content is never overwritten. Nothing was written "
+                            "to this file."
+                        ),
+                    )
+                )
+            else:
+                ops.append(
+                    FileOp(
+                        target=claude_target,
+                        op="create",
+                        backup_required=claude_target.exists(),
+                        source_hash=compute_hash(merged_claude_md or ""),
+                        source_content=merged_claude_md,
+                        reason=f"CLAUDE.md {detail}",
+                        safety_notes=(
+                            "Only the region between the AUTO-ROUTING markers is replaced; "
+                            "every byte outside it is preserved. The prior file is backed up "
+                            f"to {backup_base} before the write."
+                            if disposition != "created"
+                            else "No existing CLAUDE.md; the projection was written whole."
+                        ),
+                        backup_path=backup_base if claude_target.exists() else None,
+                    )
+                )
 
         # 2b. AGENTS.md — create (routing table target of CLAUDE.md's @AGENTS.md
         # import; without it the installed routing surface has no trigger keywords)

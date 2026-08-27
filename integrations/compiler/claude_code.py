@@ -390,6 +390,110 @@ _AGENTS_IMPORT_BLOCK = (
 )
 
 
+# WO-CLAUDEMD-CLOBBER: the one owner of "how a generated block enters a CLAUDE.md".
+#
+# The installer used to emit op="create" with the whole generated file as content, and
+# the apply loop calls atomic_write for anything carrying source_content -- so
+# ~/.claude/CLAUDE.md, the operator's GLOBAL personal instruction file for every
+# project, was a full overwrite target. Operator report: "when it builds it rewrites all
+# of claude.md."
+#
+# The correct contract already existed in interfaces/cli/generate_routing.py
+# (update_claude_md: replace only between the markers, refuse a file that has neither)
+# and the installer simply did not use it. This is that contract, placed where both
+# callers can reach it.
+#
+# It follows the settings.json precedent exactly: MERGE AT PLAN TIME, write whole at
+# apply time. merge_settings() reads the existing file and hands the apply loop a fully
+# merged document; nothing about the write path needed to change, and nothing about it
+# changes here either.
+CLAUDE_MD_REFUSED = "refused"
+CLAUDE_MD_CREATED = "created"
+CLAUDE_MD_SPLICED = "spliced"
+CLAUDE_MD_UNCHANGED = "unchanged"
+
+
+def merge_claude_md(existing: str | None, generated: str) -> tuple[str | None, str, str]:
+    """Return ``(text_to_write, disposition, detail)`` for a CLAUDE.md projection write.
+
+    ``text_to_write`` is None when the write must NOT happen -- the caller skips it.
+
+    Three cases, and the third is the defect:
+
+    * no file yet -> write the generated content whole. Nothing can be lost, and the
+      generated content carries the markers, so the file is self-maintaining after.
+    * file has both markers -> replace ONLY the span between them. Every byte outside
+      is preserved, which is the property that was violated.
+    * file has neither (or only one) -> REFUSE. A hand-written file is not a projection
+      and this writer must not guess where the boundary is. The repo-root CLAUDE.md is
+      205 lines with no markers and survived only because a DIFFERENT code path happened
+      to refuse it; that safety was an accident, and this makes it a rule.
+
+    Appending the block to an unmarked file would also preserve content, and was
+    considered. It is not done here: an unmarked file may already hold a hand-pasted
+    copy of an older projection, and appending would silently install a second,
+    conflicting set of instructions. Refusing is the only option that cannot make the
+    operator's instruction file wrong.
+    """
+    if existing is None:
+        return generated, CLAUDE_MD_CREATED, "no existing file; wrote the projection whole"
+
+    begin_idx = existing.find(_ROUTING_BEGIN)
+    end_idx = existing.find(_ROUTING_END)
+
+    if begin_idx == -1 or end_idx == -1:
+        missing = []
+        if begin_idx == -1:
+            missing.append(_ROUTING_BEGIN)
+        if end_idx == -1:
+            missing.append(_ROUTING_END)
+        return (
+            None,
+            CLAUDE_MD_REFUSED,
+            (
+                "left untouched: this file has no generated region to replace (missing "
+                + " and ".join(missing)
+                + "). Dream Studio will not overwrite hand-written instructions. To let it "
+                "manage a section, add the two markers around the region it should own."
+            ),
+        )
+
+    if end_idx < begin_idx:
+        return (
+            None,
+            CLAUDE_MD_REFUSED,
+            (
+                "left untouched: the end marker appears before the begin marker, so the "
+                "generated region is not well formed. Fix the marker order first."
+            ),
+        )
+
+    # The generated content's own region is what gets spliced in. If the generated text
+    # is not itself marked, treat all of it as the region -- the caller's content is the
+    # projection either way.
+    gen_begin = generated.find(_ROUTING_BEGIN)
+    gen_end = generated.find(_ROUTING_END)
+    if gen_begin != -1 and gen_end != -1 and gen_end >= gen_begin:
+        block_start = gen_begin + len(_ROUTING_BEGIN)
+        block = generated[block_start:gen_end]
+    else:
+        block = "\n" + generated + "\n"
+
+    keep_before = existing[: begin_idx + len(_ROUTING_BEGIN)]
+    keep_after = existing[end_idx:]
+    merged = keep_before + block + keep_after
+
+    if merged == existing:
+        return existing, CLAUDE_MD_UNCHANGED, "generated region already current"
+
+    outside_bytes = len(keep_before) + len(keep_after)
+    return (
+        merged,
+        CLAUDE_MD_SPLICED,
+        f"replaced only the generated region; {outside_bytes} byte(s) outside it preserved",
+    )
+
+
 def _build_claude_md(
     adapter_projection_path: Path,
     canonical_root: Path,
