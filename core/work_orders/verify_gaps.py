@@ -712,7 +712,39 @@ def _insert_gap_work_orders(
         #
         # A closed reviewed work order also spawns a sibling: it has nowhere to put a
         # task.
-        if reviewed_wo_incomplete and _work_order_is_open(conn, reviewed_work_order_id):
+        # WO-GAP-FANOUT REGRESSION FIX (caught by full CI on main, not by pre-push).
+        #
+        # PRIOR REMEDIATION IS CONSULTED FIRST. A gap whose earlier remediation work order
+        # is CLOSED is already answered: that work order was gate-checked and
+        # independently reviewed, and it is completion evidence the parent's own diff
+        # cannot carry. Attaching the same finding again would re-open settled work and
+        # loop forever.
+        #
+        # This lookup used to sit BELOW the attach branch, so once attaching was possible
+        # it was unreachable, and test_closed_spawn_resolves_completion_gap plus
+        # test_closed_gap_wo_resolves_verdict both broke. The attach behaviour is right;
+        # its precedence was not.
+        _prior = conn.execute(
+            "SELECT work_order_id, status FROM business_work_orders"
+            " WHERE project_id = ? AND instr(description, ?) > 0"
+            " ORDER BY CASE status"
+            "   WHEN 'in_progress' THEN 0 WHEN 'created' THEN 1 ELSE 2 END,"
+            "   created_at ASC"
+            " LIMIT 1",
+            (project_id, search_needle),
+        ).fetchone()
+        _prior_is_settled = bool(
+            _prior
+            and _prior[1] not in ("created", "in_progress")
+            and not gap_key.startswith("advisory::")
+            and _prior[0] != reviewed_work_order_id
+        )
+
+        if (
+            not _prior_is_settled
+            and reviewed_wo_incomplete
+            and _work_order_is_open(conn, reviewed_work_order_id)
+        ):
             prior_rounds = _attached_gap_keys(conn, reviewed_work_order_id)
             added = _attach_gap_tasks(
                 conn,
@@ -756,15 +788,13 @@ def _insert_gap_work_orders(
         # so null-milestone gaps still dedup (T3). Match across ANY status so a closed
         # prior spawn is never re-spawned (T4 respawn cap). Prefer an open WO so we can
         # merge tasks into it; a closed match means skip-and-log.
-        existing_row = conn.execute(
-            "SELECT work_order_id, status FROM business_work_orders"
-            " WHERE project_id = ? AND instr(description, ?) > 0"
-            " ORDER BY CASE status"
-            "   WHEN 'in_progress' THEN 0 WHEN 'created' THEN 1 ELSE 2 END,"
-            "   created_at ASC"
-            " LIMIT 1",
-            (project_id, search_needle),
-        ).fetchone()
+        #
+        # ONE LOOKUP, REUSED. This repeated the _prior query above verbatim. Two copies of
+        # the same lookup can drift, and then the attach decision and the dedup decision
+        # would disagree about what "prior" means -- while both still passed every test,
+        # each being self-consistent. Same shape as the defects this work order exists to
+        # fix, so it does not get to stay.
+        existing_row = _prior
 
         _project_wide = gap_key.startswith("advisory::")
         if existing_row and existing_row[1] not in ("created", "in_progress") and not _project_wide:

@@ -4,7 +4,7 @@ Dream Studio modelled a project as exactly one folder — ``business_projects.pr
 a single TEXT column read by a resolver returning a single ``Path``. Real development is
 not shaped that way, and the cost was measured rather than argued:
 
-    project_path for "Fulcrum Skill Library" = C:\\Users\\Dannis Seay\\Fulcrum
+    project_path for "Fulcrum Skill Library" = <operator home>/Fulcrum  (a container)
     that folder has NO .git of its own — it is a working folder holding, at one level:
       6 repositories   (demo, dogfood-appliances, fulcrum-gateway, planning, platform,
                         release-92)

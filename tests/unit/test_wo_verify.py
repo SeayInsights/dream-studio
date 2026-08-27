@@ -219,8 +219,13 @@ def test_verify_gap_creates_work_orders(tmp_path: pytest.TempPathFactory) -> Non
     # attached to the right thing — is unchanged; only its shape is.
     assert result["ok"] is True
     assert result["passed"] is False
-    assert len(result["spawned_work_orders"]) == 1
-    record = result["spawned_work_orders"][0]
+    # ATTACHED, AND IN THE LIST THAT SAYS SO. When this test was first updated for the
+    # new contract it asserted the parent's id inside spawned_work_orders -- documenting
+    # the change in a comment while encoding the conflation in the assertion. Nothing was
+    # spawned, so spawned_work_orders is empty and the record lives in attached_gap_tasks.
+    assert result["spawned_work_orders"] == [], "nothing was spawned; nothing may claim to be"
+    assert len(result["attached_gap_tasks"]) == 1
+    record = result["attached_gap_tasks"][0]
     assert record["attached_to_reviewed"] is True
     assert record["work_order_id"] == work_order_id, "the gap belongs to the reviewed WO"
     assert record["tasks_added"] >= 1
@@ -420,7 +425,12 @@ def test_spawned_gap_wos_visible_in_project(tmp_path: pytest.TempPathFactory) ->
     # CONTRACT CHANGED (WO-GAP-FANOUT): a failing verdict on an open work order attaches
     # the gap as a task rather than spawning a sibling, so the project still holds ONE
     # work order. Visibility is preserved — the work is on the work order it belongs to.
-    assert result["spawned_work_orders"][0]["work_order_id"] == work_order_id
+    #
+    # And it is visible in the RIGHT place. close_gates prints spawned_work_orders as
+    # "Gap WOs", so the reviewed work order appearing there made a close name the work
+    # order being closed as its own blocking gap.
+    assert result["spawned_work_orders"] == [], "the reviewed WO must not appear as its own spawn"
+    assert result["attached_gap_tasks"][0]["work_order_id"] == work_order_id
     conn = sqlite3.connect(str(db_path))
     count = conn.execute(
         "SELECT COUNT(*) FROM business_work_orders WHERE project_id = ?",
