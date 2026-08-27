@@ -265,3 +265,32 @@ def test_a_relative_repo_root_still_finds_the_defect(tmp_path, monkeypatch):
     findings = find_phantom_references(["r.py"], repo_root=Path("."))
     assert findings, "a relative repo_root must not silently skip every candidate"
     assert findings[0].referenced_path == "hidden/f.md"
+
+
+def test_the_gate_is_in_the_pre_push_set():
+    """A gate nobody runs is not a gate.
+
+    Reads the manifest the pre-push runner actually loads, not a hardcoded path: a test
+    that inspects a different file from the one the runner reads can pass while the gate
+    never fires. The drain proved the failure mode -- written, called "repeatable", and
+    reachable only from its own tests.
+    """
+    import yaml
+
+    from core.gates.pre_push import DEFAULT_MANIFEST
+
+    manifest = yaml.safe_load(Path(DEFAULT_MANIFEST).read_text(encoding="utf-8"))
+    entries = {g["id"]: g for g in (manifest.get("gates") or [])}
+
+    assert (
+        "gitignore-phantom" in entries
+    ), f"the gate is not registered in {DEFAULT_MANIFEST}; registered: {sorted(entries)}"
+    entry = entries["gitignore-phantom"]
+    assert entry["tier"] == "blocking", "a shippability defect must block, not advise"
+    assert entry["command"] == ["py", "-m", "core.gates.gitignore_phantom"], entry["command"]
+    assert entry.get("fail_hint"), "a blocking gate must say how to resolve it"
+    # The hint has to name the trap that makes this hard to fix by hand.
+    assert "PARENT DIRECTORY" in entry["fail_hint"], (
+        "git cannot re-include a file under an excluded directory -- an author who does "
+        "not know that will try a negation pattern and be baffled when it does nothing"
+    )

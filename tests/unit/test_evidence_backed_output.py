@@ -242,3 +242,34 @@ def test_the_quoting_evasion_hole_is_real_and_visible_here():
         "if this now FAILS, the evasion hole has been closed -- delete this test and say "
         "so in the module docstring, which currently documents the hole as accepted"
     )
+
+
+def test_the_gate_is_in_the_pre_push_set():
+    """The rule is only enforced if the gate actually runs on every push."""
+    import yaml
+
+    from core.gates.pre_push import DEFAULT_MANIFEST
+
+    manifest = yaml.safe_load(Path(DEFAULT_MANIFEST).read_text(encoding="utf-8"))
+    entries = {g["id"]: g for g in (manifest.get("gates") or [])}
+
+    assert (
+        "evidence-backed-output" in entries
+    ), f"not registered in {DEFAULT_MANIFEST}; registered: {sorted(entries)}"
+    entry = entries["evidence-backed-output"]
+    assert entry["tier"] == "blocking"
+    assert entry["command"] == [
+        "py",
+        "-m",
+        "core.gates.evidence_backed_output",
+        "--staged",
+    ], entry["command"]
+
+    # THE ENTRY MUST NOT OVERCLAIM. It briefly said it audits "pull-request bodies staged
+    # for this push" -- which it cannot, because a PR body is not in the repository. A
+    # gate description that asserts a reach it does not have is the very defect this gate
+    # exists to catch, in the gate's own registration.
+    description = " ".join(entry["description"].split())
+    assert "Audits pull-request bodies" not in description
+    assert "COMMIT MESSAGES" in description, "it must say what it actually reads"
+    assert "does not live" in description, "and admit what it cannot reach"
