@@ -29,6 +29,7 @@ from interfaces.cli.commands.work_order_query import (
     _work_order_packet,
     _work_order_attest,
     _work_order_affirm_impact,
+    _work_order_drain_gaps,
     _work_order_verify,
 )
 from interfaces.cli.commands.work_order_tasks import (
@@ -136,13 +137,31 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
     wo_next.add_argument("project_id", help="Project UUID")
 
     wo_verify = work_order_sub.add_parser(
-        "verify", help="Run independent fresh-context review; gaps become new work orders"
+        "verify",
+        help="Run independent fresh-context review; gaps become tasks on this work "
+        "order while it is open, or a sibling work order once it is closed",
     )
     wo_verify.add_argument("work_order_id", help="Work order UUID")
     wo_verify.add_argument(
         "--protocol",
         default=None,
         help="Verification protocol name (docs/verification-protocols/<name>.md) to review under",
+    )
+
+    # WO-GAP-FANOUT: the drain's operator surface. Written as "the repeatable
+    # replacement for a one-off script" and shipped with no call site -- caught on
+    # the push by the reachability gate added in this same milestone. Preview is the
+    # default; --apply is the deliberate act.
+    wo_drain_gaps = work_order_sub.add_parser(
+        "drain-gaps",
+        help="Collapse open duplicate gap spawns of one category down to the earliest. "
+        "Previews by default; --apply to cancel.",
+    )
+    wo_drain_gaps.add_argument("project_id", help="Project UUID")
+    wo_drain_gaps.add_argument(
+        "--apply",
+        action="store_true",
+        help="Actually cancel the duplicates (default is preview, which changes nothing)",
     )
 
     wo_attest = work_order_sub.add_parser(
@@ -328,6 +347,13 @@ def dispatch(
             source_root=source_root,
             dream_studio_home=dream_studio_home,
             protocol=args.protocol,
+        )
+    if args.work_order_command == "drain-gaps":
+        return _work_order_drain_gaps(
+            project_id=args.project_id,
+            apply=args.apply,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
         )
     if args.work_order_command == "attest":
         return _work_order_attest(

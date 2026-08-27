@@ -298,6 +298,60 @@ def _work_order_merge_check(
     return 0 if (result.get("ready") or override) else 1
 
 
+def _work_order_drain_gaps(
+    *,
+    project_id: str,
+    apply: bool,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """THE DRAIN, REACHABLE.
+
+    ``drain_fanned_out_categories`` was written as the repeatable replacement for a
+    one-off script, and the PR describing it called it repeatable -- while giving it no
+    call site at all. The reachability gate this same milestone added caught it on the
+    push: "a mechanism with no call site cannot do the thing it was built to do." Its
+    only callers were its own tests, which is the definition the gate exists to reject.
+
+    Preview is the default. A destructive maintenance action reports what it WOULD
+    cancel and changes nothing until --apply, because the operator should be able to
+    read the consolidation before it happens.
+    """
+    from core.event_store.studio_db import _connect
+    from core.installed_runtime import resolve_installed_runtime_paths
+    from core.work_orders.verify_gaps import drain_fanned_out_categories
+
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root, dream_studio_home=dream_studio_home
+    )
+    with _connect(paths.sqlite_path) as conn:
+        result = drain_fanned_out_categories(conn, project_id, apply=apply)
+        if apply:
+            conn.commit()
+
+    print(json.dumps(result, indent=2))
+    if not result["categories_fanned_out"]:
+        print()
+        print("No gap category has more than one open spawn. Nothing to drain.")
+        return 0
+
+    verb = "Cancelled" if apply else "Would cancel"
+    count = result.get("cancelled" if apply else "would_cancel", 0)
+    print()
+    print(
+        f"{verb} {count} duplicate spawn(s) across {result['categories_fanned_out']} category(ies)."
+    )
+    for item in result["plan"]:
+        print(f"  {item['category']}")
+        print(f"    keep    {item['keep'][:8]}  {item['title']}")
+        for wo_id in item["cancel"]:
+            print(f"    cancel  {wo_id[:8]}")
+    if not apply:
+        print()
+        print("Preview only -- nothing changed. Re-run with --apply to collapse these.")
+    return 0
+
+
 def _work_order_next(
     *,
     project_id: str,

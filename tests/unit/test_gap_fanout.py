@@ -807,3 +807,47 @@ def test_the_drain_is_idempotent_and_records_why(db):
     assert row and "[DRAINED" in row[0]
     assert "consolidated into" in row[0]
     conn.close()
+
+
+# -- The drain is reachable from the CLI ---------------------------------------
+
+
+def test_the_drain_has_an_operator_reachable_call_site():
+    """The reachability gate caught this on the push, not in review.
+
+    drain_fanned_out_categories was written as "the repeatable replacement for a one-off
+    script" and shipped with its only callers in this very file. The PR body called it
+    repeatable; nothing could invoke it. The gate added in this same milestone printed:
+    "a mechanism with no call site cannot do the thing it was built to do."
+
+    This test pins the call site rather than the gate, because the gate only looks at
+    ADDED code -- once the function stops being new, deleting its caller would sail
+    straight through.
+    """
+    import argparse
+
+    from interfaces.cli.commands.work_order_dispatch import register
+
+    parser = argparse.ArgumentParser()
+    register(parser.add_subparsers(dest="command"))
+    parsed = parser.parse_args(["work-order", "drain-gaps", "some-project-id"])
+
+    assert parsed.work_order_command == "drain-gaps"
+    assert parsed.project_id == "some-project-id"
+    assert parsed.apply is False, "preview must be the default for a destructive action"
+
+    parsed = parser.parse_args(["work-order", "drain-gaps", "p", "--apply"])
+    assert parsed.apply is True
+
+    source = Path("interfaces/cli/commands/work_order_dispatch.py").read_text(encoding="utf-8")
+    assert "_work_order_drain_gaps(" in source, "parsed but never dispatched is still unreachable"
+
+
+def test_the_verify_help_no_longer_promises_only_new_work_orders():
+    """The help text said "gaps become new work orders" -- true before this milestone and
+    false after it, since a gap on an OPEN work order becomes a task on that work order.
+    Stale help is how an operator learns the wrong model of their own tool."""
+    source = Path("interfaces/cli/commands/work_order_dispatch.py").read_text(encoding="utf-8")
+    verify_block = source.split('"verify",', 1)[1][:400]
+    assert "gaps become new work orders" not in verify_block
+    assert "become tasks on this work" in verify_block
