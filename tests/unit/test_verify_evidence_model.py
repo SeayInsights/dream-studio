@@ -163,10 +163,20 @@ def test_non_gap_wo_spawns_but_gap_wo_does_not(env, monkeypatch):
     plain = _verify(env, "wo-c-plain")
     gapwo = _verify(env, "wo-c-gap")
 
-    assert plain["spawned_work_orders"], "a normal WO with gaps should spawn a remediation WO"
+    # CONTRACT NARROWED (WO-GAP-FANOUT): a gap on an OPEN work order becomes a TASK on
+    # it, so a normal work order's gap produces trackable work without a sibling. Both
+    # work orders here are seeded in_progress, so neither spawns -- and "spawns" was
+    # never the guarantee worth protecting.
+    #
+    # THE GUARANTEE IS NO CASCADE, and it is stated as such: a gap-spawned work order
+    # must not create a NEW work order from its own review, or remediation breeds
+    # remediation without end. Attaching a task to itself is not a cascade, which is why
+    # only spawning is forbidden.
+    assert plain["attached_gap_tasks"], "a normal WO's gap must produce trackable work on it"
     assert (
         gapwo["spawned_work_orders"] == []
     ), "a gap-spawned WO must NOT recursively spawn (cascade)"
+    assert plain["spawned_work_orders"] == [], "an open WO's gap needs no sibling"
 
 
 # ── ii: operator-attested close ──────────────────────────────────────────────
