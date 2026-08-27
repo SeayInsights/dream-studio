@@ -510,6 +510,30 @@ def close_work_order(
             (now, now, now, work_order_id),
         )
 
+        # WO-BOUNDARY-OPEN-END: pin the far end of this work order's delivery boundary.
+        #
+        # The boundary recorded only a start, and boundary_commit_range returned
+        # "<start>..HEAD". Correct while the work is underway; once later work lands the
+        # range absorbs it. Measured on 3e6cf265, whose change merged in PR #682: its
+        # range was 84d26359..HEAD with HEAD thirteen commits later, assembling 217,524
+        # chars and timing the grader out at 360 seconds twice. The same open range is how
+        # another work order's findings came to be attached here.
+        #
+        # Best-effort, like the start stamp: a close must not fail on bookkeeping. A
+        # boundary that cannot be pinned keeps its open range AND now says so.
+        try:
+            from .delivery_boundary import record_delivery_boundary_end
+            from .verify_executor import resolve_project_root
+
+            record_delivery_boundary_end(
+                work_order_id,
+                repo_root=resolve_project_root(work_order_id, db_path),
+                db_path=db_path,
+                now=now,
+            )
+        except Exception:  # noqa: BLE001 - closing must not fail on bookkeeping
+            pass
+
         next_wo: dict[str, Any] | None = None
         milestone_complete = False
         if wo_milestone_id:

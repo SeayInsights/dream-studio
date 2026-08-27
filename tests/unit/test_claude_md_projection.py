@@ -130,8 +130,18 @@ def test_hand_written_content_outside_the_sentinels_survives_a_write(
     assert after.count(END) == 1
 
 
-def test_a_file_with_no_markers_is_left_completely_untouched(config_root, canonical_root, ds_home):
-    """The repo-root CLAUDE.md is 205 lines with no markers. It survived only because a
+def test_a_target_without_sentinels_is_refused_not_overwritten(
+    config_root, canonical_root, ds_home
+):
+    """NAME MATTERS HERE: this node id is the work order's acceptance criterion.
+
+    The behaviour was tested under a different name, so the AC's TEST-CHECK pointed at
+    a node id that did not exist and pytest exited 4 (usage error, node not found).
+    That is MISADDRESSED, not failed -- the all_tests_pass gate keyed to it could never
+    pass, and an independent review caught it. Renaming to the AC is the fix; the AC is
+    the published contract and the test is the thing that must match it.
+
+    The repo-root CLAUDE.md is 205 lines with no markers. It survived only because a
     DIFFERENT code path happened to refuse it -- an accident of routing, not a rule.
 
     A hand-written file is not a projection, and this writer must refuse rather than
