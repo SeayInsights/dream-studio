@@ -121,11 +121,22 @@ def _set_status(db_path: Path, work_order_id: str, status: str) -> None:
 
 
 def test_closed_gap_wo_resolves_verdict(tmp_path: pytest.TempPathFactory) -> None:
-    """Run 1 spawns a coverage-gap WO and fails; while that WO is open a re-run
-    still fails; once it is CLOSED the re-run passes with resolved_gaps."""
+    """A CLOSED work order's coverage gap spawns a sibling, and closing that sibling
+    resolves the verdict.
+
+    SCENARIO NARROWED BY WO-GAP-FANOUT. This test used to seed an OPEN parent, because
+    every gap spawned a sibling regardless. A gap on an open, incomplete work order is now
+    a TASK on that work order -- operator: "why are we registering more work orders
+    instead of adding the appropriate tasks." So the spawn-and-resolve path is exercised
+    where it is still the right behaviour: a closed work order has nowhere to put a task.
+
+    The mechanism is unchanged and still covered; only the precondition that reaches it is
+    stated explicitly now instead of being incidental.
+    """
     db_path = _make_db(tmp_path)
     project_id, milestone_id, work_order_id = (str(uuid.uuid4()) for _ in range(3))
     _seed(db_path, project_id=project_id, milestone_id=milestone_id, work_order_id=work_order_id)
+    _set_status(db_path, work_order_id, "closed")
     graders = _grader_results(
         coverage_gaps=[{"function": "helper_fn", "file": "core/x.py"}],
     )
@@ -133,17 +144,78 @@ def test_closed_gap_wo_resolves_verdict(tmp_path: pytest.TempPathFactory) -> Non
     first = _run_verify(db_path, tmp_path, work_order_id, graders)
     assert first["passed"] is False
     assert first["resolved_gaps"] == []
-    spawned_id = first["spawned_work_orders"][0]["work_order_id"]
+    spawned = first["spawned_work_orders"]
+    assert spawned, "a closed work order must spawn a sibling; it cannot hold a task"
+    spawned_id = spawned[0]["work_order_id"]
+    assert spawned_id != work_order_id, "a spawn must be a SIBLING, not the reviewed WO"
 
     # Gap WO still open: no discount.
     second = _run_verify(db_path, tmp_path, work_order_id, graders)
     assert second["passed"] is False
 
-    # Gap WO closed: the gap is resolved, the verdict passes and names the WO.
+    # AND CLOSING IT STILL DOES NOT RESOLVE -- because "add missing test coverage" is a
+    # PROJECT-WIDE class, not this work order's finding.
+    #
+    # This is the assertion that changed, and it is worth stating why the obvious one is
+    # wrong. Two mechanisms collide for a project-wide class:
+    #
+    #   resolve-on-closed-remediation   "this was dealt with, pass the parent"
+    #   do-not-swallow-new-occurrences  "this class recurs, keep reporting it"
+    #
+    # The second wins. Once the class was made project-wide, a closed tracker made every
+    # future gap of that class take the suppression branch -- tasks inserted nowhere, the
+    # finding silently lost (WO-GAP-FANOUT defect 6). A tracker closing says nothing about
+    # the NEXT occurrence, and the grader here is still reporting the gap.
+    #
+    # Resolution by closed remediation keeps full coverage in
+    # test_closed_spawn_resolves_completion_gap, which uses a work-order-specific gap --
+    # the case where "this was dealt with" is actually true of this work order.
     _set_status(db_path, spawned_id, "closed")
     third = _run_verify(db_path, tmp_path, work_order_id, graders)
-    assert third["passed"] is True, third.get("gaps")
-    assert third["resolved_gaps"] == [spawned_id]
+    assert (
+        third["passed"] is False
+    ), "a closed PROJECT-WIDE tracker must not resolve a still-reported finding"
+    assert third["resolved_gaps"] == []
+    fresh = [w["work_order_id"] for w in third["spawned_work_orders"]]
+    assert (
+        fresh and spawned_id not in fresh
+    ), "a new occurrence of a project-wide class gets a FRESH tracker, never the closed one"
+
+
+def test_an_open_work_orders_coverage_gap_becomes_its_own_task(
+    tmp_path: pytest.TempPathFactory,
+) -> None:
+    """THE NEW PRECEDENCE, asserted rather than assumed.
+
+    The counterpart to the test above: the same coverage gap on an OPEN work order
+    attaches to it instead of spawning. Spawning a sibling declared the parent complete
+    and routed around the tasks_done gate, which is how a work order could be certified
+    while its own reviewer-found work sat elsewhere.
+
+    And an attached gap must NOT appear in spawned_work_orders. It used to, carrying the
+    reviewed work order's own id -- close_gates.py prints that list as "Gap WOs", so the
+    close named the work order being closed as its own blocking gap.
+    """
+    db_path = _make_db(tmp_path)
+    project_id, milestone_id, work_order_id = (str(uuid.uuid4()) for _ in range(3))
+    _seed(db_path, project_id=project_id, milestone_id=milestone_id, work_order_id=work_order_id)
+    graders = _grader_results(
+        coverage_gaps=[{"function": "helper_fn", "file": "core/x.py"}],
+    )
+
+    result = _run_verify(db_path, tmp_path, work_order_id, graders)
+
+    assert result["passed"] is False
+    attached = result.get("attached_gap_tasks", [])
+    assert attached, "an open, incomplete work order's gap must become a task on it"
+    assert attached[0]["work_order_id"] == work_order_id
+    assert attached[0].get("attached_to_reviewed") is True
+
+    for entry in result["spawned_work_orders"]:
+        assert entry["work_order_id"] != work_order_id, (
+            "the reviewed work order must never appear as its own spawned gap WO -- "
+            "close_gates prints that list as 'Gap WOs'"
+        )
 
 
 def test_blocked_gap_wo_never_resolves_verdict(tmp_path: pytest.TempPathFactory) -> None:
@@ -156,10 +228,19 @@ def test_blocked_gap_wo_never_resolves_verdict(tmp_path: pytest.TempPathFactory)
     graders = _grader_results(
         coverage_gaps=[{"function": "helper_fn", "file": "core/x.py"}],
     )
+    # A CLOSED reviewed work order is what reaches the spawn path at all: an OPEN one
+    # takes the gap as a task on itself (WO-GAP-FANOUT). Without this the spawn list is
+    # empty and the test failed with IndexError -- which is the split of
+    # spawned_work_orders from attached_gap_tasks doing its job, since this line used to
+    # be handed the REVIEWED work order's own id and carry on regardless.
+    _set_status(db_path, work_order_id, "closed")
 
     first = _run_verify(db_path, tmp_path, work_order_id, graders)
     assert first["passed"] is False
-    spawned_id = first["spawned_work_orders"][0]["work_order_id"]
+    spawned = first["spawned_work_orders"]
+    assert spawned, "a closed work order must spawn a sibling; it cannot hold a task"
+    spawned_id = spawned[0]["work_order_id"]
+    assert spawned_id != work_order_id, "a spawn must be a SIBLING, not the reviewed WO"
 
     for not_done_status in ("blocked", "cancelled"):
         _set_status(db_path, spawned_id, not_done_status)
@@ -208,9 +289,17 @@ def test_closed_spawn_resolves_completion_gap(tmp_path: pytest.TempPathFactory) 
     _seed(db_path, project_id=project_id, milestone_id=milestone_id, work_order_id=work_order_id)
     graders = _graders_completion_gap()
 
+    # A CLOSED reviewed work order is the precondition that reaches this path: an OPEN
+    # one now takes the completion gap as a task on itself (WO-GAP-FANOUT), so a sibling
+    # is only spawned when there is nowhere to put one.
+    _set_status(db_path, work_order_id, "closed")
+
     first = _run_verify(db_path, tmp_path, work_order_id, graders)
     assert first["passed"] is False
-    spawned_id = first["spawned_work_orders"][0]["work_order_id"]
+    spawned = first["spawned_work_orders"]
+    assert spawned, "a closed work order must spawn a sibling for its completion gap"
+    spawned_id = spawned[0]["work_order_id"]
+    assert spawned_id != work_order_id, "a spawn must be a SIBLING, not the reviewed WO"
 
     # Blocked or cancelled remediation: never discounts.
     for not_done in ("blocked", "cancelled"):

@@ -784,6 +784,13 @@ def verify_work_order(
         # evidence the parent diff cannot carry, so completion_passed is not required.
         # Rule violations, migration gaps, and non-closed spawns never discount
         # (no-false-done preserved; the status=='closed' check is below).
+        # An attached gap is not a spawned work order. Splitting here, once, keeps
+        # every downstream consumer honest -- close_gates prints spawned_work_orders as
+        # "Gap WOs", and an attached record put the reviewed work order's own id in that
+        # list.
+        _genuine_spawns = [s for s in spawned if not s.get("attached_to_reviewed")]
+        _attached_gaps = [s for s in spawned if s.get("attached_to_reviewed")]
+
         resolved_gap_wos: list[str] = []
         if (
             not passed
@@ -846,7 +853,11 @@ def verify_work_order(
             "correctness": correctness,
             "quality": quality,
             "gaps": all_gaps,
-            "spawned_work_orders": spawned,
+            "spawned_work_orders": _genuine_spawns,
+            # WO-GAP-FANOUT: gaps that became TASKS on the reviewed work order. Kept
+            # separate because a consumer reading spawned_work_orders is looking for a
+            # sibling work order to chase, and an attached gap has none.
+            "attached_gap_tasks": _attached_gaps,
             "certification_basis": "authority_evidence" if authority_certified else "git_diff",
             "graded_commits": _graded_commits,
             "resolved_gaps": resolved_gap_wos,
@@ -927,7 +938,8 @@ def verify_work_order(
         "scores": scores,
         "auto_continue_warning": auto_continue_warning,
         "gaps": all_gaps,
-        "spawned_work_orders": spawned,
+        "spawned_work_orders": _genuine_spawns,
+        "attached_gap_tasks": _attached_gaps,
         "certification_basis": "authority_evidence" if authority_certified else "git_diff",
         "resolved_gaps": resolved_gap_wos,
         "falsification": falsification,

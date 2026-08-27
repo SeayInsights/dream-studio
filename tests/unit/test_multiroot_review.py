@@ -3,7 +3,7 @@
 Dream Studio modelled a project as exactly one folder. Real development is not shaped
 that way, and the cost was measured on the live authority rather than argued:
 
-    project_path for "Fulcrum Skill Library" = C:\\Users\\Dannis Seay\\Fulcrum
+    project_path for "Fulcrum Skill Library" = <operator home>/Fulcrum  (a container)
     that folder has NO .git of its own — it is a working folder holding many repos
 
     _collect_git_commits(Fulcrum,          <wo>) -> None          nothing to grade
