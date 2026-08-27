@@ -598,3 +598,212 @@ def test_the_pressure_signal_reaches_close_through_the_shared_reader(db):
         project_root=Path("."),
     )
     assert work_order_attachment_pressure(wo, db_path=db) == "absorbed gaps on 3 reviews"
+
+
+# ── Adversarial: the four worst cases the falsification analyst found in this diff ──
+#
+# All four were REAL defects in code written the same night, and two were severe. The
+# analyst read the diff; running the suite would not have found any of them.
+
+
+def test_an_attached_task_emits_a_canonical_event_so_it_survives_a_rebuild(db, monkeypatch):
+    """partial_failure. business_tasks is a PROJECTION:
+    TaskProjection.target_tables == ["business_tasks"], and the framework's default
+    pre_rebuild does `DELETE FROM business_tasks` before replaying canonical events.
+
+    _attach_gap_tasks wrote rows DIRECTLY with no event, so every attached gap task would
+    have been permanently deleted by the next projection rebuild — silently taking the
+    reviewed work order's remaining work with it. Normal task creation has always emitted
+    task.created (mutations.py); I copied the sibling-spawn INSERT instead.
+    """
+    emitted: list[dict] = []
+
+    import spool.writer as _writer
+
+    monkeypatch.setattr(
+        _writer, "write_event", lambda envelope: emitted.append({"type": envelope.event_type})
+    )
+
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+    reviewed = _reviewed_wo(conn, project_id, status="in_progress")
+    _attach(conn, project_id, reviewed, "A finding", "Do the thing")
+    conn.commit()
+
+    assert any(
+        e["type"] == "task.created" for e in emitted
+    ), f"an attached task must emit task.created or a rebuild deletes it; got {emitted}"
+    conn.close()
+
+
+def test_a_task_whose_event_could_not_be_emitted_says_it_is_rebuild_fragile(db, monkeypatch):
+    """The converse: if the spool cannot be written, the row is still created (losing the
+    task would be worse) but must not LOOK durable."""
+    import spool.writer as _writer
+
+    def _boom(_envelope):
+        raise OSError("spool unwritable")
+
+    monkeypatch.setattr(_writer, "write_event", _boom)
+
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+    reviewed = _reviewed_wo(conn, project_id, status="in_progress")
+    _attach(conn, project_id, reviewed, "A finding", "Do the thing")
+    conn.commit()
+
+    desc = conn.execute(
+        "SELECT description FROM business_tasks WHERE work_order_id=? AND title=?",
+        (reviewed, "Do the thing"),
+    ).fetchone()[0]
+    assert "will not survive a projection rebuild" in desc, desc
+    conn.close()
+
+
+def test_the_real_unreviewable_value_does_not_become_work():
+    """malformed_input, and the sharpest miss of the night. The first filter matched
+    sentinels EXACTLY. The live grader writes the sentinel as the start of a SENTENCE —
+    the stored value was rule="N/A: independent review unverifiable - no diff provided",
+    file="N/A" — so it passed and the nonsense work order stayed reachable.
+
+    Driven against that exact stored value, the old filter reproduced work order
+    58e21003's task title verbatim: "Fix N/A: independent review unverifiable - no diff
+    provided in N/A". My own test had used rule="N/A", a simplification I invented, which
+    is precisely the derive-the-fixture-from-the-real-artifact rule I had been enforcing
+    on everyone else.
+    """
+    real = {
+        "rule": "N/A: independent review unverifiable - no diff provided",
+        "file": "N/A",
+        "detail": "The review input contained no git diff or code content",
+    }
+    assert (
+        _violations_to_gaps([real], [], []) == []
+    ), "the grader reporting its own inability must not become scheduled work"
+
+    for rule, file in [
+        ("unknown - could not read the repo", "none"),
+        ("", None),
+        ("N/A", "N/A"),
+    ]:
+        assert _violations_to_gaps([{"rule": rule, "file": file}], [], []) == []
+
+
+def test_a_locatable_violation_survives_the_stricter_filter():
+    """The filter must not swallow real findings — a rule name, a path, or either alone."""
+    for rule, file in [
+        ("Rule 3: business_* writes", "core/x.py"),
+        ("SECURITY", "N/A"),
+        ("", "core/y.py"),
+        ("N/A", "core\\gates\\z.py"),
+    ]:
+        assert _violations_to_gaps(
+            [{"rule": rule, "file": file, "detail": "d"}], [], []
+        ), f"real finding dropped: rule={rule!r} file={file!r}"
+
+
+def test_a_closed_project_wide_tracker_does_not_swallow_a_new_occurrence(db):
+    """empty_absent_state. Once a category is project-wide the lookup matches ANY status,
+    so as soon as its single tracking work order was CLOSED every future gap of that class
+    took the respawn_suppressed branch — tasks inserted nowhere, finding silently lost.
+
+    Before the project-wide key existed the reviewed-WO id kept keys distinct and a new
+    occurrence always spawned; making the class dedup project-wide opened the hole. A
+    resolution is only true for the instance that closed it.
+    """
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+
+    first = _spawn(conn, project_id, _reviewed_wo(conn, project_id), _ADVERSARIAL)
+    conn.commit()
+    tracker = first[0]["work_order_id"]
+    conn.execute(
+        "UPDATE business_work_orders SET status='closed' WHERE work_order_id=?", (tracker,)
+    )
+    conn.commit()
+    assert _open_count(conn, _ADVERSARIAL) == 0, "precondition: the only tracker is closed"
+
+    again = _spawn(conn, project_id, _reviewed_wo(conn, project_id), _ADVERSARIAL)
+    conn.commit()
+
+    assert not again[0].get("respawn_suppressed"), "a new occurrence must not be swallowed"
+    assert _open_count(conn, _ADVERSARIAL) == 1, "a fresh tracker exists for the new finding"
+    conn.close()
+
+
+def test_a_closed_work_order_specific_finding_is_still_suppressed(db):
+    """The half of the respawn cap that must survive: THIS work order's finding was
+    resolved and closed, so re-reporting it is not new information."""
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+    reviewed = _reviewed_wo(conn, project_id)
+    title = "A finding specific to one work order"
+    first = _spawn(conn, project_id, reviewed, title)
+    conn.commit()
+    conn.execute(
+        "UPDATE business_work_orders SET status='closed' WHERE work_order_id=?",
+        (first[0]["work_order_id"],),
+    )
+    conn.commit()
+
+    again = _spawn(conn, project_id, reviewed, title)
+    assert again[0].get("respawn_suppressed") is True
+    conn.close()
+
+
+# ── The drain, repeatable ─────────────────────────────────────────────────────
+
+
+def test_the_drain_previews_before_it_changes_anything(db):
+    """The first drain was a one-off script run by hand. A destructive maintenance action
+    should be previewable, and re-runnable when the next class fans out before the
+    backstop trips."""
+    from core.work_orders.verify_gaps import drain_fanned_out_categories
+
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+    # Two open spawns of one category, as a pre-backstop fan-out would leave them.
+    for _ in range(2):
+        _spawn(conn, project_id, _reviewed_wo(conn, project_id), "Some fanned out class")
+    conn.commit()
+    before = _open_count(conn, "Some fanned out class")
+    assert before == 2, f"precondition: two open spawns, got {before}"
+
+    preview = drain_fanned_out_categories(conn, project_id, apply=False)
+    assert preview["applied"] is False
+    assert preview["categories_fanned_out"] == 1
+    assert preview["would_cancel"] == 1
+    assert _open_count(conn, "Some fanned out class") == 2, "preview must change nothing"
+
+    applied = drain_fanned_out_categories(conn, project_id, apply=True)
+    conn.commit()
+    assert applied["applied"] is True
+    assert applied["cancelled"] == 1
+    assert _open_count(conn, "Some fanned out class") == 1, "collapsed to the earliest"
+    conn.close()
+
+
+def test_the_drain_is_idempotent_and_records_why(db):
+    """Re-running must be safe, and a cancelled duplicate must say what absorbed it —
+    a consolidation nobody can trace is indistinguishable from lost work."""
+    from core.work_orders.verify_gaps import drain_fanned_out_categories
+
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+    for _ in range(3):
+        _spawn(conn, project_id, _reviewed_wo(conn, project_id), "Another fanned out class")
+    conn.commit()
+
+    drain_fanned_out_categories(conn, project_id, apply=True)
+    conn.commit()
+    second = drain_fanned_out_categories(conn, project_id, apply=True)
+    conn.commit()
+    assert second["categories_fanned_out"] == 0, "nothing left to drain"
+
+    row = conn.execute(
+        "SELECT description FROM business_work_orders"
+        " WHERE title='Another fanned out class' AND status='cancelled' LIMIT 1"
+    ).fetchone()
+    assert row and "[DRAINED" in row[0]
+    assert "consolidated into" in row[0]
+    conn.close()

@@ -75,14 +75,36 @@ class ProjectRoots:
 
     @property
     def primary(self) -> Path | None:
-        """The one root a single-path caller should use — or None rather than a guess.
+        """The one path a single-path caller should use.
 
-        NEVER PICKS ONE OUT OF MANY, and the first cut did: it returned ``roots[0]``,
-        handing every legacy caller Fulcrum's alphabetically first folder. That is worse
-        than the useless-but-honest folder the old resolver returned, because a
-        TEST-CHECK would then RUN there and report a result about the wrong code.
+        THREE ANSWERS, and the first two cuts each got one of them wrong.
+
+        1. ONE root -> that root. Unchanged, and the common case.
+        2. MANY roots -> the DECLARED container path, not a pick from among them. Cut one
+           returned ``roots[0]``, handing every legacy caller Fulcrum's alphabetically
+           first folder — an arbitrary wrong repo a TEST-CHECK would then RUN in.
+        3. NONE -> None.
+
+        CUT TWO RETURNED None FOR CASE 2, AND THAT WAS WORSE. Every caller does
+        ``resolve_project_root(...) or source_root``, so None sent a Fulcrum work order to
+        grade against the DREAM STUDIO repo — the operator's original "reviewing against
+        dream studio" complaint, reintroduced by the fix meant to be careful. Verified:
+        ``resolve_project_root`` returned None, ``_search_root`` became the DS repo, and
+        ``run_executable_checks(project_root=None)`` documents its cwd as "the current
+        process dir (the DS repo)".
+
+        The declared path keeps every caller inside the RIGHT project. Git finds no
+        commits there, so verify reports "no diff located" and a TEST-CHECK reports
+        "could not run" — honestly unreviewable, rather than a confident verdict about
+        somebody else's code. That is also exactly what the pre-multi-root resolver
+        returned, so this is no regression on the old behaviour; the roots list is the new
+        information, and grading their union is WO-MULTIROOT-REVIEW task 3.
         """
-        return self.roots[0] if len(self.roots) == 1 else None
+        if len(self.roots) == 1:
+            return self.roots[0]
+        if self.roots and self.declared is not None:
+            return self.declared
+        return None
 
     def describe(self) -> str:
         """One line a human or a grader can act on."""

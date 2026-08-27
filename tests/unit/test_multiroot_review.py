@@ -295,7 +295,14 @@ def test_primary_never_guesses_between_many_roots(db, tmp_path):
     roots = resolve_project_roots(wo, db)
 
     assert len(roots.roots) == 2
-    assert roots.primary is None, "no guessing — the caller falls back instead"
+    # UPDATED: primary is the DECLARED path, not None and not one of the repositories.
+    # Asserting None here was correct about the guessing and wrong about the remedy —
+    # every caller does `resolve_project_root(...) or source_root`, so None sent a Fulcrum
+    # work order to grade against the Dream Studio repo. The declared path keeps the
+    # caller inside the right project; see
+    # test_a_container_project_never_resolves_to_the_dream_studio_repo.
+    assert roots.primary not in roots.roots, "still no guessing between the repositories"
+    assert roots.primary == container, "and it stays inside the declared project"
 
 
 def test_the_legacy_resolver_is_unchanged_for_single_repo_projects(db, tmp_path):
@@ -315,3 +322,53 @@ def test_a_broken_authority_yields_a_reason_not_an_exception(tmp_path):
     assert isinstance(roots, ProjectRoots)
     assert roots.roots == []
     assert roots.reason
+
+
+# ── Adversarial: primary must never send a caller to the wrong project ────────
+
+
+def test_a_container_project_never_resolves_to_the_dream_studio_repo(db, tmp_path):
+    """reachability_vs_config, and the operator's original complaint reintroduced by my
+    own fix.
+
+    Every caller does ``resolve_project_root(...) or source_root``. Returning None for a
+    container therefore sent a Fulcrum work order to grade against the DREAM STUDIO repo,
+    and ``run_executable_checks(project_root=None)`` documents its cwd as "the current
+    process dir (the DS repo)". Verified on the live authority before the fix:
+    resolve_project_root returned None and _search_root became the DS repo.
+
+    The declared path keeps the caller inside the right project. Git finds no commits
+    there, so verify reports "no diff located" and a TEST-CHECK reports "could not run" —
+    honestly unreviewable, rather than a confident verdict about someone else's code.
+    """
+    from core.work_orders.verify_executor import resolve_project_root
+
+    container = tmp_path / "workspace"
+    container.mkdir()
+    _make_repo(container / "alpha")
+    _make_repo(container / "beta")
+    wo = _project_with_path(db, container)
+
+    roots = resolve_project_roots(wo, db)
+    assert len(roots.roots) == 2, "precondition: ambiguous, several repositories"
+
+    resolved = resolve_project_root(wo, db)
+    assert resolved is not None, "None would make every caller fall back to the DS repo"
+    assert resolved == container, "the declared path — inside the right project"
+    assert resolved not in roots.roots, "and not a guess between the repositories"
+
+
+def test_primary_still_returns_the_one_root_when_there_is_only_one(db, tmp_path):
+    """The common case must be untouched by the ambiguity handling."""
+    repo = _make_repo(tmp_path / "solo")
+    wo = _project_with_path(db, repo)
+    assert resolve_project_roots(wo, db).primary == repo
+
+
+def test_primary_is_none_only_when_there_is_genuinely_nothing(db, tmp_path):
+    """A project with no usable path is the ONLY case where falling back to the caller's
+    own root is defensible — a Dream-Studio-self work order."""
+    wo = _project_with_path(db, tmp_path / "absent")
+    roots = resolve_project_roots(wo, db)
+    assert roots.roots == []
+    assert roots.primary is None

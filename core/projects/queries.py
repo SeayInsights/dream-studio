@@ -8,6 +8,7 @@ or `ds project state`. Each function returns a dict; the CLI wrapper in
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -202,7 +203,23 @@ def _match_cwd_project(conn: Any, cwd: Path) -> dict[str, Any] | None:
     }
 
 
-def ready_work_orders(conn: Any, project_id: str) -> list[dict[str, Any]]:
+def _project_root_for(conn: Any, project_id: str) -> Path | None:
+    """The project's declared code root, for checkout-presence checks."""
+    try:
+        row = conn.execute(
+            "SELECT project_path FROM business_projects WHERE project_id = ?", (project_id,)
+        ).fetchone()
+    except Exception:  # noqa: BLE001 - an advisory must never break project state
+        return None
+    if not row or not row[0]:
+        return None
+    candidate = Path(row[0])
+    return candidate if candidate.is_dir() else None
+
+
+def ready_work_orders(
+    conn: Any, project_id: str, *, project_root: Path | None = None
+) -> list[dict[str, Any]]:
     """Every work order that could be worked right now, across ALL milestones.
 
     WO-WO-LIFECYCLE-SURFACE. Operator: walking down a straight line does not always make
@@ -303,6 +320,57 @@ def ready_work_orders(conn: Any, project_id: str) -> list[dict[str, Any]]:
                 f"shares declared boundary with {'; '.join(clash)}"
                 " — running these together may collide on the same files"
             )
+
+    # IS THE DELIVERABLE EVEN IN THIS CHECKOUT? Operator: add that piece.
+    #
+    # The set told me eac7f657 had 0 pending tasks, I read that as closable, and the close
+    # correctly refused — its TEST-CHECKs reported "could not run: pytest USAGE ERROR"
+    # because tests/unit/test_deterministic_first.py lives on a parked branch and is not
+    # present here. "Finished" and "closable from where you are standing" are different
+    # facts, and the set was only reporting the first.
+    #
+    # Checked by FILE EXISTENCE of the paths its TEST-CHECKs name — cheap, deterministic,
+    # and exactly the thing that failed. No pytest collection: this runs on every project
+    # state, and a subprocess per work order would make the surface too slow to use.
+    root = Path(project_root) if project_root else None
+    for entry in ready:
+        files: set[str] = set()
+        for (criteria,) in conn.execute(
+            "SELECT acceptance_criteria FROM business_tasks WHERE work_order_id = ?",
+            (entry["work_order_id"],),
+        ).fetchall():
+            for line in (criteria or "").splitlines():
+                match = re.match(r"\s*TEST-CHECK:\s*([^\s:]+\.py)", line, re.IGNORECASE)
+                if match:
+                    files.add(match.group(1))
+        if not files:
+            entry["checkout"] = "unknown — no file-bearing TEST-CHECK declared"
+            continue
+        if root is None:
+            entry["checkout"] = "unknown — no project root resolved for this project"
+            continue
+        missing = sorted(f for f in files if not (root / f).is_file())
+        if not missing:
+            entry["checkout"] = "present"
+            continue
+
+        # ABSENT MEANS TWO DIFFERENT THINGS, and the first wording conflated them —
+        # 27 of 43 entries were told their work "lives elsewhere" when most simply had
+        # not been written yet. For an unstarted work order with nothing completed, a
+        # missing test file is the expected state, not a warning.
+        done = conn.execute(
+            "SELECT COUNT(*) FROM business_tasks"
+            " WHERE work_order_id = ? AND status = 'complete'",
+            (entry["work_order_id"],),
+        ).fetchone()[0]
+        names = ", ".join(missing[:3])
+        if done:
+            entry["checkout"] = (
+                f"NOT in this checkout: {names} — but {done} task(s) are complete, so the"
+                " work exists on another branch or worktree. It cannot close from here."
+            )
+        else:
+            entry["checkout"] = f"not written yet: {names} — expected for work that has not started"
     return ready
 
 
@@ -575,7 +643,9 @@ def get_project_state(
                     # orders or milestones is visible rather than merely possible. The
                     # capability already existed — 8 work orders are in_progress right
                     # now — but nothing surfaced it, so it read as unavailable.
-                    "ready_set": ready_work_orders(conn, pid),
+                    "ready_set": ready_work_orders(
+                        conn, pid, project_root=_project_root_for(conn, pid)
+                    ),
                     "next_action": next_action,
                     "unverified_risks": _unverified_for(pid),
                 }
