@@ -392,7 +392,10 @@ def verify_work_order(
             from .verify_git import collect_union_evidence, union_evidence_summary
 
             git_diff, _root_provenance = collect_union_evidence(
-                work_order_id, _project_roots, title=wo["title"]
+                work_order_id,
+                _project_roots,
+                title=wo["title"],
+                fallback_root=_search_root,
             )
             _union_summary = union_evidence_summary(_root_provenance)
         if git_diff is None and originating_wo_id:

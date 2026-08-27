@@ -831,5 +831,75 @@ def test_the_prompt_tells_the_grader_its_inability_is_not_a_violation():
     emitting them."""
     from core.work_orders.verify_prompts import _CORRECTNESS_PROMPT_TEMPLATE
 
-    assert "not a violation" in _CORRECTNESS_PROMPT_TEMPLATE
-    assert "never become scheduled work" in _CORRECTNESS_PROMPT_TEMPLATE
+    # Case-insensitive: the template writes "NOT a violation" for emphasis, and this
+    # asserted the lowercase form. My own check confirmed the OTHER half of the phrase
+    # ("never become scheduled work") and passed, so the mismatch survived -- verifying
+    # the half that matched is the same shortcut this whole work order is about.
+    lowered = _CORRECTNESS_PROMPT_TEMPLATE.lower()
+    assert "not a violation" in lowered
+    assert "never become scheduled work" in lowered
+
+
+def test_a_project_with_no_declared_root_still_gets_its_own_diff(db, tmp_path):
+    """THE FALLBACK THIS WORK ORDER DROPPED AND PUT BACK.
+
+    The single-root code read ``resolve_project_root(...) or source_root``, and that
+    ``or`` was load-bearing. A work order whose project declares no path resolves to ZERO
+    roots, so iterating roots.roots collected nothing and the parent's own diff vanished
+    from the grader input.
+
+    Caught by test_closed_child_diffs_join_parent_evidence, which failed in the worst
+    possible shape: the CHILD's remediation evidence still arrived while the parent's own
+    change did not. A verdict built on remediation alone looks substantive, so nothing in
+    the output would have said the parent was never read.
+    """
+    from core.work_orders.verify_git import collect_union_evidence
+
+    wo = _project_with_path(db, tmp_path / "declared-nothing-usable")
+    roots = resolve_project_roots(wo, db)
+    assert roots.roots == [], "precondition: the project resolves to no root"
+
+    caller_root = _make_repo(tmp_path / "callers-own-repo")
+    diff, provenance = collect_union_evidence(
+        wo, roots, fallback_root=caller_root, collector=lambda r, w, title=None: "the diff"
+    )
+
+    assert diff == "the diff", "with no declared root, the caller's root must still be read"
+    assert provenance, "and the fallback must be recorded, not silent"
+    assert provenance[0].get("fallback") is True
+    assert "declared none" in str(
+        provenance[0]["kind"]
+    ), "a reader must be able to tell a fallback from a declared root"
+
+
+def test_no_fallback_offered_means_the_absence_is_reported(db, tmp_path):
+    """The converse: a caller that offers no fallback gets an honest empty result with a
+    reason, never a silent None."""
+    from core.work_orders.verify_git import collect_union_evidence
+
+    wo = _project_with_path(db, tmp_path / "nothing-here")
+    roots = resolve_project_roots(wo, db)
+
+    diff, provenance = collect_union_evidence(wo, roots)
+    assert diff is None
+    assert provenance, "the absence must still be described"
+    assert not provenance[0].get("fallback")
+
+
+def test_a_declared_root_is_preferred_over_the_fallback(db, tmp_path):
+    """The fallback must not shadow real roots -- offering one must change nothing when
+    the project resolves properly."""
+    from core.work_orders.verify_git import collect_union_evidence
+
+    repo = _make_repo(tmp_path / "real")
+    wo = _project_with_path(db, repo)
+    other = _make_repo(tmp_path / "unrelated")
+
+    _diff, provenance = collect_union_evidence(
+        wo,
+        resolve_project_roots(wo, db),
+        fallback_root=other,
+        collector=lambda r, w, title=None: f"from {Path(r).name}",
+    )
+    roots_seen = {Path(str(p["root"])).name for p in provenance}
+    assert roots_seen == {"real"}, f"the fallback leaked in: {roots_seen}"

@@ -198,6 +198,7 @@ def collect_union_evidence(
     roots: "ProjectRoots",
     *,
     title: str | None = None,
+    fallback_root: Path | None = None,
     collector: Callable[..., str | None] | None = None,
 ) -> tuple[str | None, list[dict[str, object]]]:
     """Return ``(combined_diff, provenance)`` across every root of a project.
@@ -214,11 +215,33 @@ def collect_union_evidence(
     collect = collector or _collect_git_commits
     parts: list[str] = []
     provenance: list[dict[str, object]] = []
-    multi = len(roots.roots) > 1
+    # THE FALLBACK THIS DROPPED, RESTORED. The single-root code it replaced read
+    # ``resolve_project_root(...) or source_root``, and that ``or`` was load-bearing: a
+    # work order whose project declares no path resolves to ZERO roots, so iterating
+    # roots.roots collected nothing and the parent's diff vanished from the grader input
+    # entirely. Caught by test_closed_child_diffs_join_parent_evidence, whose child
+    # remediation evidence still arrived while the parent's own change did not -- the
+    # worst shape of this bug, since a verdict built on remediation alone looks
+    # substantive.
+    #
+    # project_roots.py already documents this as the one defensible fallback: a project
+    # with no usable path is a Dream-Studio-self work order, where the caller's own root
+    # IS the right place to look. Recorded in provenance as a fallback so a reader can
+    # tell it from a declared root.
+    search_roots = list(roots.roots)
+    used_fallback = False
+    if not search_roots and fallback_root is not None:
+        search_roots = [Path(fallback_root)]
+        used_fallback = True
 
-    for root in roots.roots:
+    multi = len(search_roots) > 1
+
+    for root in search_roots:
         kind = git_kind(root) or "unversioned"
         entry: dict[str, object] = {"root": str(root), "kind": kind, "contributed": False}
+        if used_fallback:
+            entry["fallback"] = True
+            entry["kind"] = f"{kind} (caller's root; the project declared none)"
         try:
             diff = collect(root, work_order_id, title=title)
         except Exception as exc:  # a broken root must not lose the readable ones
@@ -245,7 +268,7 @@ def collect_union_evidence(
             {"root": str(path), "kind": "unreachable", "contributed": False, "reason": why}
         )
 
-    if not roots.roots:
+    if not roots.roots and not used_fallback:
         provenance.append(
             {
                 "root": str(roots.declared) if roots.declared else "(none declared)",
