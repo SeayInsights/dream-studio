@@ -8,6 +8,7 @@ or `ds project state`. Each function returns a dict; the CLI wrapper in
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -130,13 +131,13 @@ def get_next_work_order(
                 "SELECT wo.work_order_id, wo.title, wo.work_order_type, m.title AS milestone_title"
                 " FROM business_work_orders wo"
                 " INNER JOIN business_milestones m ON wo.milestone_id = m.milestone_id"
+                # WO-WO-LIFECYCLE-SURFACE: the MIN(order_index) filter is GONE. It
+                # restricted every answer to the single lowest-numbered milestone with
+                # open work, so independent milestones were invisible no matter what the
+                # dependency graph said — the straight line, imposed on top of a graph
+                # that already knew better. Dependencies still gate (NOT EXISTS below);
+                # order_index is now only a tie-break in the ORDER BY.
                 " WHERE wo.project_id = ? AND wo.status = 'created'"
-                " AND m.order_index = ("
-                "   SELECT MIN(m2.order_index)"
-                "   FROM business_work_orders wo2"
-                "   INNER JOIN business_milestones m2 ON wo2.milestone_id = m2.milestone_id"
-                "   WHERE wo2.project_id = ? AND wo2.status IN ('created', 'in_progress')"
-                " )"
                 " AND NOT EXISTS ("
                 "   SELECT 1 FROM work_order_dependencies dep"
                 "   INNER JOIN business_work_orders dep_wo"
@@ -144,8 +145,9 @@ def get_next_work_order(
                 "   WHERE dep.work_order_id = wo.work_order_id"
                 "     AND dep_wo.status != 'closed'"
                 " )"
-                " ORDER BY wo.sequence_order ASC NULLS LAST, wo.created_at ASC LIMIT 1",
-                (project_id, project_id),
+                " ORDER BY m.order_index ASC, wo.sequence_order ASC NULLS LAST,"
+                "          wo.created_at ASC LIMIT 1",
+                (project_id,),
             ).fetchone()
     if row is None:
         return {"ok": True, "work_order": None, "message": "No open work orders"}
@@ -199,6 +201,177 @@ def _match_cwd_project(conn: Any, cwd: Path) -> dict[str, Any] | None:
         "name": best["name"],
         "project_path": best["project_path"],
     }
+
+
+def _project_root_for(conn: Any, project_id: str) -> Path | None:
+    """The project's declared code root, for checkout-presence checks."""
+    try:
+        row = conn.execute(
+            "SELECT project_path FROM business_projects WHERE project_id = ?", (project_id,)
+        ).fetchone()
+    except Exception:  # noqa: BLE001 - an advisory must never break project state
+        return None
+    if not row or not row[0]:
+        return None
+    candidate = Path(row[0])
+    return candidate if candidate.is_dir() else None
+
+
+def ready_work_orders(
+    conn: Any, project_id: str, *, project_root: Path | None = None
+) -> list[dict[str, Any]]:
+    """Every work order that could be worked right now, across ALL milestones.
+
+    WO-WO-LIFECYCLE-SURFACE. Operator: walking down a straight line does not always make
+    sense — fan out across separate milestones or work orders where they are independent.
+
+    THE STRAIGHT LINE WAS IMPOSED, NOT DERIVED. Two places enforced it and neither
+    consulted independence:
+
+      - ``get_next_work_order`` filtered to ``m.order_index = (SELECT MIN(...))``, so only
+        the lowest-numbered milestone with open work was ever offered;
+      - ``start_work_order`` REFUSED while any earlier milestone had open work — it
+        refused to let this work order start, "17 work order(s) in earlier milestones are
+        incomplete", which is the plainest possible demonstration.
+
+    The dependency graph was already correct and already honoured (88 edges); milestone
+    ordering sat on top and overrode it. Dependencies are the constraint; ``order_index``
+    is a tie-break hint.
+
+    ABSENT DEPENDENCIES ARE NOT VERIFIED INDEPENDENCE. 88 edges across 481 sequenced work
+    orders means most declare none, so ``declared_dependencies: 0`` means "nothing was
+    declared", NOT "checked and safe to parallelise". Each entry reports it rather than
+    implying it — the absent-is-not-clean rule this milestone keeps relearning.
+    """
+    rows = conn.execute(
+        "SELECT wo.work_order_id, wo.title, wo.status, wo.work_order_type,"
+        " wo.sequence_order, wo.description,"
+        " m.milestone_id, m.title AS milestone_title, m.order_index,"
+        " (SELECT COUNT(*) FROM business_tasks t"
+        "  WHERE t.work_order_id = wo.work_order_id AND t.status = 'pending') AS pending_tasks,"
+        " (SELECT COUNT(*) FROM work_order_dependencies dep"
+        "  WHERE dep.work_order_id = wo.work_order_id) AS declared_dependencies"
+        " FROM business_work_orders wo"
+        " LEFT JOIN business_milestones m ON wo.milestone_id = m.milestone_id"
+        " WHERE wo.project_id = ? AND wo.status IN ('created', 'in_progress')"
+        " AND (wo.status = 'in_progress' OR NOT EXISTS ("
+        "   SELECT 1 FROM work_order_dependencies dep"
+        "   INNER JOIN business_work_orders dep_wo"
+        "     ON dep.depends_on_id = dep_wo.work_order_id"
+        "   WHERE dep.work_order_id = wo.work_order_id"
+        "     AND dep_wo.status != 'closed'"
+        " ))"
+        " ORDER BY wo.status DESC, m.order_index ASC NULLS LAST,"
+        "          wo.sequence_order ASC NULLS LAST, wo.created_at ASC",
+        (project_id,),
+    ).fetchall()
+
+    ready: list[dict[str, Any]] = []
+    for r in rows:
+        ready.append(
+            {
+                "work_order_id": r[0],
+                "title": r[1],
+                "status": r[2],
+                "type": r[3],
+                "sequence_order": r[4],
+                "_description": r[5],
+                "milestone_id": r[6],
+                "milestone": r[7],
+                "milestone_order": r[8],
+                "pending_tasks": r[9],
+                "declared_dependencies": r[10],
+                "independence": (
+                    "unblocked; no declared dependencies — independence NOT verified"
+                    if not r[10]
+                    else f"unblocked; {r[10]} declared dependenc(y/ies), all closed"
+                ),
+            }
+        )
+
+    # Overlapping module boundaries between concurrently-runnable work orders. Independent
+    # in the dependency graph can still mean the same files, and fan-out makes that likely
+    # rather than theoretical. Advisory: a shared file is sometimes fine, and a gate that
+    # refused would make fan-out unusable.
+    #
+    # There is NO module_boundary COLUMN — the boundary is declared in the description as
+    # "Module boundary: a, b, c." and parsed by runtime.lib.enforcement.boundary_globs,
+    # which the on-edit hook and verify already share. I assumed a column and the query
+    # raised `no such column: wo.module_boundary`; reusing the one parser is both correct
+    # and the reason those two consumers cannot drift apart.
+    try:
+        from runtime.lib.enforcement import boundary_globs
+    except Exception:  # noqa: BLE001 - the advisory must never break project state
+        return ready
+
+    for entry in ready:
+        entry["module_boundary"] = boundary_globs(entry.pop("_description", "") or "")
+    for entry in ready:
+        mine = set(entry["module_boundary"])
+        if not mine:
+            continue
+        clash = [
+            f"{other['work_order_id'][:8]} ({', '.join(sorted(mine & set(other['module_boundary'])))})"
+            for other in ready
+            if other is not entry and mine & set(other["module_boundary"])
+        ]
+        if clash:
+            entry["boundary_overlap"] = (
+                f"shares declared boundary with {'; '.join(clash)}"
+                " — running these together may collide on the same files"
+            )
+
+    # IS THE DELIVERABLE EVEN IN THIS CHECKOUT? Operator: add that piece.
+    #
+    # The set told me eac7f657 had 0 pending tasks, I read that as closable, and the close
+    # correctly refused — its TEST-CHECKs reported "could not run: pytest USAGE ERROR"
+    # because tests/unit/test_deterministic_first.py lives on a parked branch and is not
+    # present here. "Finished" and "closable from where you are standing" are different
+    # facts, and the set was only reporting the first.
+    #
+    # Checked by FILE EXISTENCE of the paths its TEST-CHECKs name — cheap, deterministic,
+    # and exactly the thing that failed. No pytest collection: this runs on every project
+    # state, and a subprocess per work order would make the surface too slow to use.
+    root = Path(project_root) if project_root else None
+    for entry in ready:
+        files: set[str] = set()
+        for (criteria,) in conn.execute(
+            "SELECT acceptance_criteria FROM business_tasks WHERE work_order_id = ?",
+            (entry["work_order_id"],),
+        ).fetchall():
+            for line in (criteria or "").splitlines():
+                match = re.match(r"\s*TEST-CHECK:\s*([^\s:]+\.py)", line, re.IGNORECASE)
+                if match:
+                    files.add(match.group(1))
+        if not files:
+            entry["checkout"] = "unknown — no file-bearing TEST-CHECK declared"
+            continue
+        if root is None:
+            entry["checkout"] = "unknown — no project root resolved for this project"
+            continue
+        missing = sorted(f for f in files if not (root / f).is_file())
+        if not missing:
+            entry["checkout"] = "present"
+            continue
+
+        # ABSENT MEANS TWO DIFFERENT THINGS, and the first wording conflated them —
+        # 27 of 43 entries were told their work "lives elsewhere" when most simply had
+        # not been written yet. For an unstarted work order with nothing completed, a
+        # missing test file is the expected state, not a warning.
+        done = conn.execute(
+            "SELECT COUNT(*) FROM business_tasks"
+            " WHERE work_order_id = ? AND status = 'complete'",
+            (entry["work_order_id"],),
+        ).fetchone()[0]
+        names = ", ".join(missing[:3])
+        if done:
+            entry["checkout"] = (
+                f"NOT in this checkout: {names} — but {done} task(s) are complete, so the"
+                " work exists on another branch or worktree. It cannot close from here."
+            )
+        else:
+            entry["checkout"] = f"not written yet: {names} — expected for work that has not started"
+    return ready
 
 
 def get_project_state(
@@ -466,6 +639,13 @@ def get_project_state(
                     "name": proj["name"],
                     "status": proj["status"],
                     "next_work_order": wo_info,
+                    # WO-WO-LIFECYCLE-SURFACE: the whole ready set, so switching work
+                    # orders or milestones is visible rather than merely possible. The
+                    # capability already existed — 8 work orders are in_progress right
+                    # now — but nothing surfaced it, so it read as unavailable.
+                    "ready_set": ready_work_orders(
+                        conn, pid, project_root=_project_root_for(conn, pid)
+                    ),
                     "next_action": next_action,
                     "unverified_risks": _unverified_for(pid),
                 }

@@ -761,7 +761,19 @@ def verify_work_order(
                 reviewed_work_order_id=work_order_id,
                 reviewed_wo_title=wo["title"],
                 reviewed_wo_sequence=wo.get("sequence_order"),
+                # WO-GAP-FANOUT: a FAILED verdict means the reviewed work order is not
+                # done, so its gaps are its own remaining work and belong on it as
+                # tasks. A passing verdict's advisory gaps must not block the close it
+                # just approved.
+                reviewed_wo_incomplete=not passed,
             )
+
+        # WO-GAP-FANOUT: a work order absorbing gaps review after review is the
+        # inflation problem wearing a blocking face. The bound is visible or it is not a
+        # bound — surface it on the result and the verdict rather than letting one work
+        # order grow silently.
+        _pressure = [s["attachment_pressure"] for s in spawned if s.get("attachment_pressure")]
+        attachment_pressure = _pressure[0] if _pressure else None
 
         # WO-VERIFY-GAP-RESOLUTION: a gap whose remediation WO is already CLOSED is
         # resolved, not open. Verify grades only WO-attributed commits, so remediation
@@ -843,6 +855,10 @@ def verify_work_order(
             # work order's tests or on reading its code. Merge consults the verdict
             # before close ever executes anything, so the distinction has to ride here.
             "test_execution": record_test_execution(tasks, ac_results),
+            # WO-GAP-FANOUT: named when this work order has absorbed gaps across
+            # several reviews, so the honest exit (carry the remainder) is visible
+            # instead of the work order quietly growing.
+            "attachment_pressure": attachment_pressure,
         }
         # WO-FALSIFY-FIRST-PASS: the falsification section and the UNVERIFIED
         # ledger ride the verdict. A falsification grader that could not run is
@@ -901,6 +917,9 @@ def verify_work_order(
         "work_order_id": work_order_id,
         "passed": passed,
         "summary": completion.get("summary", ""),
+        # WO-GAP-FANOUT: the attach-loop bound reaches the CLI, not just the stored
+        # verdict — a bound nobody can see is not a bound.
+        "attachment_pressure": attachment_pressure,
         "completion": completion,
         "correctness": correctness,
         "quality": quality,

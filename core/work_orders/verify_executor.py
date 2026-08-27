@@ -342,35 +342,27 @@ def _emit_validation_result_event(check: dict[str, Any]) -> None:
 
 
 def resolve_project_root(work_order_id: str, db_path: Path) -> Path | None:
-    """Resolve the repo a work order's work targets: its project's ``project_path``.
+    """The single repo a work order's work targets — its project's primary code root.
 
-    This is what makes the executable-check gate verify the RIGHT repo — an external
-    project's WO runs its TEST-CHECKs in that project's own repo, not the
-    Dream Studio repo.  Returns None when the project has no ``project_path``, the row
-    is missing, or the path does not exist on disk — callers then fall back to the
-    current process directory (the DS repo for a DS-self WO).
+    This is what makes the executable-check gate verify the RIGHT repo: an external
+    project's WO runs its TEST-CHECKs in that project's own repo, not the Dream Studio
+    repo. Returns None when nothing resolves, and callers fall back to the current
+    process directory (the DS repo for a DS-self WO).
+
+    NOW DELEGATES to ``resolve_project_roots`` (WO-MULTIROOT-REVIEW), which is what makes
+    a container project work at all. The old body read ``project_path`` and returned it
+    if it was a directory — so Fulcrum, whose declared path is a working folder holding
+    six repos and no ``.git`` of its own, resolved to a path with no commits, and all 28
+    of its work orders were graded with no code in front of the reviewer.
+
+    Single-repo projects are unaffected: a declared path that IS a repo resolves to
+    itself, exactly as before. A container now resolves to its first discovered repo
+    instead of to a folder git cannot read — a strictly better answer for every existing
+    caller, and the multi-root callers use ``resolve_project_roots`` directly.
     """
-    import sqlite3 as _sqlite3
+    from core.work_orders.project_roots import resolve_project_roots
 
-    try:
-        conn = _sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-    except Exception:
-        return None
-    try:
-        row = conn.execute(
-            "SELECT p.project_path FROM business_work_orders w"
-            " JOIN business_projects p ON w.project_id = p.project_id"
-            " WHERE w.work_order_id = ?",
-            (work_order_id,),
-        ).fetchone()
-    except Exception:
-        return None
-    finally:
-        conn.close()
-    if not row or not row[0]:
-        return None
-    candidate = Path(row[0])
-    return candidate if candidate.is_dir() else None
+    return resolve_project_roots(work_order_id, db_path).primary
 
 
 def run_executable_checks(

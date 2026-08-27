@@ -233,7 +233,7 @@ def test_start_work_order_blocks_ui_without_brief_unless_accepted(
     assert accepted["ok"] is True
 
 
-def test_start_work_order_blocks_when_earlier_milestone_incomplete(
+def test_start_work_order_allows_out_of_milestone_order_and_reports_it(
     patched_paths, db_path: Path, tmp_path: Path
 ) -> None:
     from core.work_orders.start import start_work_order
@@ -274,8 +274,70 @@ def test_start_work_order_blocks_when_earlier_milestone_incomplete(
         dream_studio_home=tmp_path,
         planning_root=tmp_path / ".planning",
     )
+    # CONTRACT CHANGED (WO-WO-LIFECYCLE-SURFACE, operator ruling 2026-08-26). Out-of-
+    # milestone-order work is ALLOWED and REPORTED, not refused. The old gate refused
+    # whenever any earlier milestone had open work, which kept a project of independent
+    # milestones single-file — and refused to let the work order that removes the
+    # constraint start at all ("17 work order(s) in earlier milestones are incomplete").
+    #
+    # Milestone order is a hint; a DECLARED DEPENDENCY is the constraint, and the test
+    # below proves that half still refuses.
+    assert result["ok"] is True, f"out-of-order start is allowed now: {result.get('error')}"
+    assert "earlier milestones are still open" in result["out_of_milestone_order"]
+    assert "add-dep" in result["out_of_milestone_order"], "and it names how to make it real"
+
+
+def test_start_work_order_blocks_on_an_open_declared_dependency(
+    patched_paths, db_path: Path, tmp_path: Path
+) -> None:
+    """The half of the gate that IS real, and must not have been lost with the other.
+
+    Removing milestone ordering must not remove dependency enforcement — that would trade
+    a false constraint for no constraint.
+    """
+    from core.work_orders.start import start_work_order
+
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, status,"
+        " work_order_type, created_at, updated_at)"
+        " VALUES (?, ?, NULL, ?, '', 'created', 'api_endpoint', ?, ?)",
+        ("wo-dep-blocker", "p1", "Must finish first", NOW, NOW),
+    )
+    conn.execute(
+        "INSERT INTO work_order_dependencies (work_order_id, depends_on_id, created_at)"
+        " VALUES (?, ?, ?)",
+        (WO_ID, "wo-dep-blocker", NOW),
+    )
+    conn.commit()
+    conn.close()
+
+    result = start_work_order(
+        work_order_id=WO_ID,
+        source_root=REPO_ROOT,
+        dream_studio_home=tmp_path,
+        planning_root=tmp_path / ".planning",
+    )
     assert result["ok"] is False
-    assert "earlier milestones are incomplete" in result["error"]
+    assert "declared dependenc" in result["error"]
+
+    # And it releases once the dependency closes.
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "UPDATE business_work_orders SET status='closed' WHERE work_order_id='wo-dep-blocker'"
+    )
+    conn.commit()
+    conn.close()
+    assert (
+        start_work_order(
+            work_order_id=WO_ID,
+            source_root=REPO_ROOT,
+            dream_studio_home=tmp_path,
+            planning_root=tmp_path / ".planning",
+        )["ok"]
+        is True
+    )
 
 
 def test_start_work_order_unknown_returns_error(patched_paths, tmp_path: Path) -> None:

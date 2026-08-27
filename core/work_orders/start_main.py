@@ -95,17 +95,29 @@ def start_work_order(
             "work_order_id": work_order_id,
         }
 
-    blocking = brief_data.get("blocking_milestone_count", 0)
-    if blocking > 0:
+    # WO-WO-LIFECYCLE-SURFACE: A DECLARED DEPENDENCY BLOCKS; MILESTONE ORDER INFORMS.
+    #
+    # This gate used to refuse whenever ANY work order in ANY earlier milestone was
+    # incomplete. It refused to let the work order that removes the constraint be
+    # started — "17 work order(s) in earlier milestones are incomplete" — which is the
+    # clearest possible demonstration of the problem. Operator: walking down a straight
+    # line does not always make sense.
+    #
+    # A dependency edge is a real statement that this work cannot proceed yet, and the
+    # ready-set query already honours 88 of them. An earlier milestone merely having open
+    # work is not: 45 open milestones exist and most are independent. So dependencies
+    # refuse, and out-of-order milestone work is REPORTED and allowed.
+    blocking_deps = brief_data.get("blocking_dependency_count", 0)
+    if blocking_deps > 0:
         return {
             "ok": False,
             "error": (
-                f"Cannot start this work order — {blocking} work order(s) in "
-                f"earlier milestones are incomplete. "
-                f"Run 'ds project next {brief_data['project_id']}' to see what "
-                f"should be worked on first."
+                f"Cannot start this work order — {blocking_deps} declared dependenc(y/ies) "
+                f"are not closed yet. See 'ds work-order list' for their status, or "
+                f"'ds work-order remove-dep' if the dependency no longer holds."
             ),
         }
+    _out_of_order = brief_data.get("blocking_milestone_count", 0)
 
     # Sequence-order check: warn (or abort if in_sequence) when lower-seq WOs
     # in the same milestone are not yet closed.
@@ -219,6 +231,16 @@ def start_work_order(
         "context_path": str(context_path) if context_path else None,
         "context_in_authority": context_path is None,
     }
+    # Out-of-milestone-order work is now allowed and REPORTED. Removing the signal
+    # entirely would lose something useful ("you are ahead of the sequence"); keeping it
+    # as a refusal kept a project of independent milestones single-file.
+    if _out_of_order:
+        result["out_of_milestone_order"] = (
+            f"{_out_of_order} work order(s) in earlier milestones are still open. That is"
+            " allowed — milestone order is a hint, declared dependencies are the"
+            " constraint — but if this work truly depends on any of them, record it with"
+            " 'ds work-order add-dep' so the gate can enforce it."
+        )
 
     # WO-ESCALATION-LADDER T5: the manual path honors the escalation capability flag.
     # An escalated WO routes its (re)try to a more capable model; surface the resolved

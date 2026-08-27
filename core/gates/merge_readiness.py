@@ -177,6 +177,11 @@ def verdict_state(
     _exec = verdict.get("test_execution")
     if isinstance(_exec, dict):
         result["execution"] = _exec
+    # WO-GAP-FANOUT: the attach-loop bound rides the same verdict, read by the same
+    # reader — one reader for one artifact, rather than a second implementation that can
+    # disagree with this one.
+    if verdict.get("attachment_pressure"):
+        result["attachment_pressure"] = verdict["attachment_pressure"]
 
     if verdict.get("passed") is True:
         result["state"] = "passed"
@@ -229,6 +234,23 @@ def execution_caveat(
             " during verify, so the review is not execution-backed yet."
         )
     return None
+
+
+def work_order_attachment_pressure(
+    work_order_id: str, *, db_path: Path | None = None, planning_root: Path | None = None
+) -> str | None:
+    """The attach-loop pressure note from this work order's verdict, or None.
+
+    A work order that has absorbed gaps across several reviews should be split rather
+    than silently grown, and close is where that decision gets made — so the bound has to
+    be readable there, not only in the verify output that produced it.
+    """
+    try:
+        info = verdict_state(work_order_id, db_path=db_path, planning_root=planning_root)
+    except Exception:  # noqa: BLE001 - an advisory must never break its caller
+        return None
+    value = info.get("attachment_pressure")
+    return str(value) if value else None
 
 
 def work_order_execution_caveat(
