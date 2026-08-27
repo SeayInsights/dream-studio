@@ -375,14 +375,36 @@ Then end with this exact gate — no variations:
 - If `next_work_order` is null: "All work orders complete. Check milestone status with `ds milestone list <project_id>`."
 - If `next_action` mentions a gate blocker: surface it before offering "start".
 
-**Step 3 — Start only on explicit confirmation:**
+**Step 3 — Start on clear intent; ask only when intent is genuinely unclear:**
 
-Only proceed if the user typed "start" or gave an unambiguous instruction naming
-the action (e.g., "begin this work order", "run the start command").
+Proceed when the user's reply clearly means "begin this work order". "start",
+"go ahead", "continue", "yes let's do it", "handle it", "begin" all clearly mean
+that. So does any instruction naming the action ("run the start command").
 
-Do NOT treat the following as confirmation: "yes", "ok", "sure", "continue",
-"let's go", "sounds good", "go ahead". Respond with:
-> "Just to confirm — type **start** to run `ds work-order start` on [title]."
+Ask only when the reply is genuinely ambiguous about *what* to do — a question,
+a change of subject, a preference between options, or a comment that could as
+easily mean "not yet" ("hm", "interesting", "what about the other one?"). Then:
+> "To confirm — start `[title]`, or did you want something else first?"
+
+WHY THIS IS NOT A LOOSENING (WO-MULTIROOT-REVIEW task 10). The previous rule
+demanded the literal word "start" and explicitly refused "yes", "ok", "sure",
+"continue", "let's go", "sounds good", "go ahead". That was deterministic about
+the *string* and blind to the *intent* — the inversion of the deterministic-first
+directive, which puts determinism where a fact can be computed and judgement
+where intent must be read. It also contradicted itself: it accepted "an
+unambiguous instruction naming the action" while listing "go ahead" as a refusal.
+
+Measured against real usage: in one session the operator said "handle it",
+"continue on now", "go ahead when ready", and "then do what is needed next" —
+every one unambiguous, not one of them would have passed. A gate that rejects
+clear instructions trains the operator to repeat themselves, which is friction
+without safety.
+
+The safety property is real but it lives elsewhere, and already holds:
+`start_work_order` is an explicit, recorded, and reversible authority write. It
+emits an event, it is visible in `ds project state`, and a wrongly started work
+order costs one command to correct. The cost of a false start is low; the cost of
+refusing clear intent is paid every session.
 
 When confirmed, follow the `next_action` from the state response:
 - If gate is blocked → invoke the `precondition_skill` listed in the gates object

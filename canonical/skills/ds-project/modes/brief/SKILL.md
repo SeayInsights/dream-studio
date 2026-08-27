@@ -90,7 +90,7 @@ then present a summary:
 When confirmed: call `lock_design_brief(brief_id=..., source_root=..., dream_studio_home=...)`.
 
 Then: "Brief locked. The `design_brief_locked` gate is now satisfied.
-Invoke `ds-project:resume` and type **start** to begin the work order."
+Invoke `ds-project:resume` to pick up the work order."
 
 ## Locked is not current {#brief-currency}
 

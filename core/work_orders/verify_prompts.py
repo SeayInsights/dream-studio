@@ -85,25 +85,32 @@ feature/infrastructure, or (c) the gap would duplicate a task-level gap already 
 
 _CORRECTNESS_PROMPT_TEMPLATE = """You are an independent architectural reviewer.
 You have NO information about what tasks were supposed to be completed.
-Grade the diff below ONLY against the architectural rules listed here.
+Grade the diff below ONLY against the rules listed here.
+
+WO-MULTIROOT-REVIEW tasks 5-6: these rules are RESOLVED, not hardcoded. Seven of the
+eight rules that used to be baked into this template named Dream Studio files by path,
+and every other project was graded against them -- which is why reviewing Fulcrum
+produced nonsense. The baseline is now industry-standard SDLC practice, and a project or
+folder may add to it or replace it.
+
+Rules in force for this review ({rules_provenance}):
+{rules_block}
+
+Grade against THOSE rules and no others. Do not import rules from your own knowledge of
+how a project "should" be laid out: if a boundary is not stated above, crossing it is not
+a violation here.
+
+A rule that does not apply to this diff is NOT a violation. Say nothing about it rather
+than reporting an absence -- the reviewer's inability to check something is not the
+author's defect, and it must never become scheduled work.
 
 Git diff to review:
 {git_diff}
 
-Rules to check (flag violations, not warnings — be precise):
-(1) THREE-STORE ARCHITECTURE: SQLite studio.db is for business_* and event-spine tables only. DuckDB is for analytics projections. files.db is for artifact blobs. Flag: analytics code reading from SQLite instead of DuckDB. NOTE: core/projections/ modules are EXPECTED to write to business_* tables — they materialize canonical events into business read models. Do NOT flag projection writes to business_* as violations.
-(2) LAYER-MAP Rule 1: runtime/hooks/ must not write to authority tables (business_*, raw_*).
-(3) LAYER-MAP Rule 2: projections/ modules must be read-only against CANONICAL EVENT tables (business_canonical_events, ai_canonical_events). Projections may and should write to business_* read-model tables as part of event materialization.
-(4) LAYER-MAP Rule 3: business_* writes must come only from interfaces/cli/, core/work_orders/, OR core/projections/ (canonical event handlers only — not ad-hoc writes outside an event handler method).
-(5) LAYER-MAP Rule 4: canonical_events must only be written by spool/ingestor.py.
-(6) TEST COVERAGE: new public functions or CLI commands added without corresponding tests; existing tests deleted without replacement.
-(7) MIGRATION HYGIENE (only if the diff adds a migration file): migration file added? released_version bumped? aspirational-schema-debt.md updated?
-(8) DEAD TABLE RESURRECTION: test diffs that add CREATE TABLE (or CREATE TABLE IF NOT EXISTS) for any table explicitly dropped in a numbered migration file are a violation. A dropped table has no production code creating it; the fixture would simulate a DB state that can never exist in reality. The correct fix is to DELETE the test (dead subject) or fix the root cause in the migration — never feed dead-table fixtures to keep the test alive.
-
 Return ONLY valid JSON (no prose, no markdown fences):
 {{
   "correctness_passed": <bool: true only if violations, coverage_gaps, and migration_gaps are ALL empty>,
-  "correctness_score": <float 0.0-1.0: 1.0 if no violations, else max(0.0, 1.0 - violation_count / 7.0)>,
+  "correctness_score": <float 0.0-1.0: 1.0 if no violations, else max(0.0, 1.0 - violation_count / {rule_count})>,
   "violations": [
     {{
       "rule": "<rule number and name, e.g. 'Rule 3: business_* writes'>",

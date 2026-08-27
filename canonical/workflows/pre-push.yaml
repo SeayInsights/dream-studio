@@ -265,6 +265,48 @@ gates:
       or delete it. If the definition genuinely precedes its caller, say why inline
       with '# reachability-gate: intentional: <reason>' (every exemption is printed).
 
+  - id: gitignore-phantom
+    tier: blocking
+    description: >
+      A committed file must not reference a path git will not ship. Green locally, where
+      the file is on disk, and broken on a fresh checkout for everyone else -- the
+      out-of-the-box failure mode. Observed twice: nine verify_*.py split siblings
+      untracked under the '.gitignore' rule 'verify_*.py' (the committed facade imported
+      them, so a clean clone raised ModuleNotFoundError), and a review-rules profile
+      authored under '.dream-studio/', which .gitignore excludes as private runtime state
+      (a committed test asserted it exists, which passed locally and would have failed in
+      CI while Dream Studio silently shipped without its own layer map). Both were caught
+      by someone remembering to look. git ls-files and git check-ignore answer this
+      exactly, so it belongs here rather than in an operator's memory.
+    command: [py, -m, core.gates.gitignore_phantom]
+    fail_hint: >
+      A changed file reads or asserts a path that git will not ship. Either 'git add' the
+      path and drop the .gitignore rule excluding it, or stop depending on it. Note that
+      git cannot re-include a file whose PARENT DIRECTORY is excluded -- if the rule names
+      a directory, the file has to move.
+
+  - id: evidence-backed-output
+    tier: blocking
+    description: >
+      Operator ruling 2026-08-27: anything pushed to GitHub as a comment or review must be
+      backed by evidence, show that evidence, and be verified -- so no reader is ever
+      guessing. Flags claims that cite
+      nothing checkable: a command and its output, a test count with its unit, a
+      file:line, a commit sha, a run id, or a named artifact. Measured when written: all
+      four PR bodies authored that day carried '- [x] PR smoke is expected to pass', a
+      prediction inside a CHECKED box, and three of those pull requests were already
+      merged. Audits what a push actually publishes: the COMMIT MESSAGES of the
+      commits being pushed and the lines ADDED to CHANGELOG.md. A PR body does not live
+      in the repository, so this cannot discover one -- it is auditable by path through
+      the CLI, and saying so beats pretending otherwise. The report also lists the
+      evidence each document DOES carry, so the author sees the gap instead of guessing.
+    command: [py, -m, core.gates.evidence_backed_output, --staged]
+    fail_hint: >
+      A claim in an outbound document cites nothing a reader can check. Replace it with
+      the fact it rests on -- a command and its output, a test count, a file:line, a
+      commit sha, a run id -- or delete the claim. A checked box that says 'expected to'
+      is a forecast, not a check.
+
   - id: leanness
     tier: advisory
     description: >

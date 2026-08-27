@@ -34,6 +34,15 @@ import pytest
 
 from core.config.sqlite_bootstrap import bootstrap_database
 from core.work_orders.project_roots import ProjectRoots, resolve_project_roots
+from core.work_orders.review_rules import (
+    PROFILE_NAME,
+    SDLC_BASELINE,
+    parse_profile,
+    render_rules_block,
+    resolve_review_rules,
+)
+
+NL = chr(10)
 
 _NOW = "2026-08-26T00:00:00+00:00"
 
@@ -372,3 +381,577 @@ def test_primary_is_none_only_when_there_is_genuinely_nothing(db, tmp_path):
     roots = resolve_project_roots(wo, db)
     assert roots.roots == []
     assert roots.primary is None
+
+
+# -- Task 3: grade the union of roots, and say which contributed ---------------
+
+
+def _fake_collector(found_in: set[str]):
+    """A collector that reports commits only for the named root basenames."""
+
+    def _collect(root, work_order_id, title=None):
+        return f"diff from {Path(root).name}" if Path(root).name in found_in else None
+
+    return _collect
+
+
+def test_the_verdict_records_which_roots_contributed(db, tmp_path):
+    """MEASURED on the live authority: Fulcrum resolves to 6 repositories and exactly
+    ONE of them (platform) holds the commits. Before this, verify collected from a single
+    root, found nothing, and graded all 28 open Fulcrum work orders with no diff at all.
+
+    A verdict that silently graded 1 of 6 repositories is worse than one that says so,
+    because "no violations found" and "nothing was read" are indistinguishable in a
+    score. So the ratio is recorded, per root, with a reason for every empty one.
+    """
+    from core.work_orders.verify_git import collect_union_evidence, union_evidence_summary
+
+    container = tmp_path / "workspace"
+    container.mkdir()
+    for name in ("alpha", "beta", "gamma"):
+        _make_repo(container / name)
+    wo = _project_with_path(db, container)
+
+    roots = resolve_project_roots(wo, db)
+    assert len(roots.roots) == 3, f"precondition: three repositories, got {len(roots.roots)}"
+
+    diff, provenance = collect_union_evidence(wo, roots, collector=_fake_collector({"beta"}))
+
+    assert diff is not None, "the one root with commits must still produce evidence"
+    assert "diff from beta" in diff
+
+    by_name = {Path(str(p["root"])).name: p for p in provenance}
+    assert set(by_name) == {"alpha", "beta", "gamma"}, "every root must be accounted for"
+    assert by_name["beta"]["contributed"] is True
+    assert by_name["alpha"]["contributed"] is False
+    assert by_name["gamma"]["contributed"] is False
+
+    # An empty root must say WHY it was empty. "read fine, no commits" and "could not be
+    # read" are different facts and only one of them is a problem.
+    assert by_name["alpha"]["reason"], "an empty root with no reason is unattributable"
+    assert "no commits reference" in str(by_name["alpha"]["reason"])
+
+    assert "1 of 3" in union_evidence_summary(provenance)
+    assert "beta" in union_evidence_summary(provenance)
+
+
+def test_a_root_that_contributed_nothing_is_not_reported_as_a_failure(db, tmp_path):
+    """Most roots of a multi-repo project legitimately hold nothing for a given work
+    order. Reporting those as errors would make the summary useless noise."""
+    from core.work_orders.verify_git import collect_union_evidence
+
+    container = tmp_path / "workspace"
+    container.mkdir()
+    _make_repo(container / "one")
+    _make_repo(container / "two")
+    wo = _project_with_path(db, container)
+
+    _diff, provenance = collect_union_evidence(
+        wo, resolve_project_roots(wo, db), collector=_fake_collector(set())
+    )
+
+    for entry in provenance:
+        reason = str(entry["reason"])
+        assert "could not be read" not in reason, f"a readable empty root called an error: {reason}"
+
+
+def test_no_root_producing_evidence_returns_none_not_an_empty_string(db, tmp_path):
+    """The existing contract: None means "no evidence", and callers must treat it as
+    neither a certified pass nor an auto-zero. An empty string would read as "a diff was
+    collected and it was empty", which is a different and wrong claim.
+    """
+    from core.work_orders.verify_git import collect_union_evidence
+
+    container = tmp_path / "workspace"
+    container.mkdir()
+    _make_repo(container / "solo")
+    wo = _project_with_path(db, container)
+
+    diff, provenance = collect_union_evidence(
+        wo, resolve_project_roots(wo, db), collector=_fake_collector(set())
+    )
+    assert diff is None, "no evidence must be None, never an empty string"
+    assert provenance, "and it must still say which roots were examined"
+
+
+def test_a_root_that_raises_does_not_lose_the_readable_ones(db, tmp_path):
+    """One unreadable repository in a six-repository project must not cost the evidence
+    from the other five -- that would turn a partial read into a total blackout."""
+    from core.work_orders.verify_git import collect_union_evidence
+
+    container = tmp_path / "workspace"
+    container.mkdir()
+    _make_repo(container / "good")
+    _make_repo(container / "broken")
+    wo = _project_with_path(db, container)
+
+    def _collect(root, work_order_id, title=None):
+        if Path(root).name == "broken":
+            raise OSError("git exploded")
+        return "diff from good"
+
+    diff, provenance = collect_union_evidence(wo, resolve_project_roots(wo, db), collector=_collect)
+
+    assert diff and "diff from good" in diff, "the readable root's evidence was lost"
+    broken = next(p for p in provenance if Path(str(p["root"])).name == "broken")
+    assert broken["contributed"] is False
+    assert "could not be read" in str(broken["reason"])
+    assert "OSError" in str(broken["reason"]), "name the failure so it can be fixed"
+
+
+def test_a_single_root_project_is_not_labeled_per_root(db, tmp_path):
+    """The common case must read exactly as it did before. Labeling a lone root's diff
+    with "=== evidence from root ... ===" would add noise to every single-repo verdict
+    and change the grader's input for no reason."""
+    from core.work_orders.verify_git import collect_union_evidence
+
+    repo = _make_repo(tmp_path / "solo")
+    wo = _project_with_path(db, repo)
+
+    diff, provenance = collect_union_evidence(
+        wo, resolve_project_roots(wo, db), collector=_fake_collector({"solo"})
+    )
+    assert diff == "diff from solo", f"a single root must not be relabeled; got {diff!r}"
+    assert len(provenance) == 1
+
+
+def test_an_unversioned_root_says_git_evidence_is_unavailable(db, tmp_path):
+    """Operator: "not everything will always be pushed to a github."
+
+    A root with no .git is not a failure and not an absence of work -- it is an absence
+    of THIS evidence layer. Saying so is what lets a later task pick a different layer
+    instead of scoring zero.
+    """
+    from core.work_orders.verify_git import collect_union_evidence
+
+    plain = tmp_path / "no_git_here"
+    plain.mkdir()
+    (plain / "main.py").write_text("print('real work, never pushed')\n", encoding="utf-8")
+    wo = _project_with_path(db, plain)
+
+    roots = resolve_project_roots(wo, db)
+    if not roots.roots:
+        pytest.skip("an unversioned declared path resolves to no root in this build")
+
+    _diff, provenance = collect_union_evidence(wo, roots, collector=_fake_collector(set()))
+    reasons = " ".join(str(p["reason"]) for p in provenance)
+    assert "not a git repository" in reasons
+    assert "not the same as no work" in reasons, "absence of git must not read as absence of work"
+
+
+# -- Task 4: an executable check names the root it ran in ----------------------
+
+
+def test_a_check_result_names_its_root(db, tmp_path):
+    """With six roots, "1 failed" cannot be located without knowing which repository ran
+    it. Extends the executed/not_executed_reason provenance already on each check."""
+    from core.work_orders.verify_executor import run_executable_checks
+
+    repo = _make_repo(tmp_path / "target")
+    tasks = [{"title": "T", "acceptance_criteria": "SQL-CHECK: SELECT 1"}]
+
+    results = run_executable_checks(tasks, db, repo)
+    check = results["T"][0]
+    assert "ran_in" in check, "every check result must say where it executed"
+    assert check["ran_in"], "an empty ran_in is the same as not having it"
+
+
+def test_a_test_check_names_the_repo_it_ran_in(db, tmp_path):
+    """The kind that actually has a root. A TEST-CHECK runs with the project root as cwd,
+    so that path is the locator for a failure."""
+    from core.work_orders.verify_executor import run_executable_checks
+
+    repo = _make_repo(tmp_path / "target")
+    tasks = [{"title": "T", "acceptance_criteria": "TEST-CHECK: cmd: python -c pass"}]
+
+    check = run_executable_checks(tasks, db, repo)["T"][0]
+    assert str(repo) == check["ran_in"], f"expected the repo path, got {check['ran_in']!r}"
+
+
+def test_a_test_check_with_no_resolved_root_says_it_ran_in_the_ds_repo(db, tmp_path):
+    """The dangerous case, stated plainly. project_root=None runs in the current process
+    directory -- the Dream Studio repo -- which is how a Fulcrum work order came to be
+    graded against Dream Studio. Silence here is what made that invisible.
+    """
+    from core.work_orders.verify_executor import run_executable_checks
+
+    tasks = [{"title": "T", "acceptance_criteria": "TEST-CHECK: cmd: python -c pass"}]
+    check = run_executable_checks(tasks, db, None)["T"][0]
+
+    assert "Dream Studio repo" in check["ran_in"]
+    assert (
+        "did NOT run in the work order" in check["ran_in"]
+    ), "it must say the work order's own repo was not used, not merely name a directory"
+
+
+def test_a_sql_check_does_not_claim_to_have_run_in_a_repo(db, tmp_path):
+    """Stamping project_root on all three kinds would be convenient and false: a
+    SQL-CHECK runs against the authority database, not a repository."""
+    from core.work_orders.verify_executor import run_executable_checks
+
+    repo = _make_repo(tmp_path / "target")
+    tasks = [{"title": "T", "acceptance_criteria": "SQL-CHECK: SELECT 1"}]
+
+    check = run_executable_checks(tasks, db, repo)["T"][0]
+    assert str(repo) != check["ran_in"], "a SQL-CHECK must not claim the repo as its context"
+    assert "authority database" in check["ran_in"]
+    assert "not a repository root" in check["ran_in"]
+
+
+def test_an_unknown_check_kind_still_carries_a_context(db, tmp_path):
+    """Fail-closed results are consumed by the same readers. A missing key there means a
+    consumer has to branch on kind before it can read provenance."""
+    from core.work_orders.verify_executor import run_executable_checks
+
+    tasks = [{"title": "T", "acceptance_criteria": "UNKNOWN-CHECK: whatever"}]
+    check = run_executable_checks(tasks, db, None)["T"][0]
+
+    assert check["passed"] is False
+    assert "ran_in" in check
+    assert "nothing was executed" in check["ran_in"]
+
+
+# -- Tasks 5-6: the rules layer ------------------------------------------------
+
+
+def _write_profile(root: Path, body: str) -> Path:
+    path = root / PROFILE_NAME
+    path.write_text(body, encoding="utf-8")
+    return path
+
+
+def test_nothing_declared_gets_the_dream_studio_default(tmp_path):
+    """Operator: "out of the box it works with ours and until otherwise stated that will
+    remain." A project that declares nothing is graded against the DS baseline -- not
+    against nothing, and not against a guess."""
+    plain = tmp_path / "some_project"
+    plain.mkdir()
+
+    ruleset = resolve_review_rules(project_root=plain)
+
+    assert ruleset.mode == "default"
+    assert list(ruleset.rules) == list(SDLC_BASELINE), "the baseline, unmodified"
+    assert "no project or folder profile declared" in ruleset.provenance
+
+
+def test_a_project_profile_can_add(tmp_path):
+    """ADD is the common case: keep the industry baseline, layer this project's own
+    rules on top."""
+    root = tmp_path / "proj"
+    root.mkdir()
+    _write_profile(root, "mode: add\n\n- HOUSE RULE: no raw SQL outside the dal module.\n")
+
+    ruleset = resolve_review_rules(project_root=root)
+
+    assert ruleset.mode == "add"
+    assert len(ruleset.rules) == len(SDLC_BASELINE) + 1
+    assert any("HOUSE RULE" in r for r in ruleset.rules)
+    assert all(b in ruleset.rules for b in SDLC_BASELINE), "adding must not drop a baseline rule"
+    assert "PLUS 1 rule(s) added by" in ruleset.provenance
+
+
+def test_a_project_profile_can_replace(tmp_path):
+    """Operator: "they should be able to replace per project or folder if they choose as
+    well." REPLACE means the baseline is gone -- that is the point of the word."""
+    root = tmp_path / "proj"
+    root.mkdir()
+    _write_profile(root, "mode: replace\n\n- ONLY RULE: ship it.\n")
+
+    ruleset = resolve_review_rules(project_root=root)
+
+    assert ruleset.mode == "replace"
+    assert ruleset.rules == ["ONLY RULE: ship it."]
+    for baseline_rule in SDLC_BASELINE:
+        assert baseline_rule not in ruleset.rules
+    assert "REPLACED the Dream Studio baseline" in ruleset.provenance
+
+
+def test_a_folder_profile_outranks_its_project(tmp_path):
+    """Per-FOLDER granularity is why multi-root needed this: six repositories under one
+    project may not want one rulebook, and the repository that declares its own rules is
+    nearer the code than the project is."""
+    project = tmp_path / "workspace"
+    folder = project / "special_repo"
+    folder.mkdir(parents=True)
+    _write_profile(project, "mode: add\n\n- PROJECT RULE: something.\n")
+    _write_profile(folder, "mode: replace\n\n- FOLDER RULE: only this.\n")
+
+    ruleset = resolve_review_rules(project_root=project, folders=[folder])
+
+    assert ruleset.mode == "replace"
+    assert ruleset.rules == ["FOLDER RULE: only this."]
+    assert not any("PROJECT RULE" in r for r in ruleset.rules), "the folder replace must win"
+
+
+def test_a_folder_add_layers_onto_a_project_replace(tmp_path):
+    """A replace at the project level and an add in one folder: the folder is nearer, so
+    its rules apply ON TOP of what the project replaced the baseline with, rather than
+    being discarded along with it."""
+    project = tmp_path / "workspace"
+    folder = project / "repo_a"
+    folder.mkdir(parents=True)
+    _write_profile(project, "mode: replace\n\n- PROJECT ONLY: a.\n")
+    _write_profile(folder, "mode: add\n\n- FOLDER EXTRA: b.\n")
+
+    ruleset = resolve_review_rules(project_root=project, folders=[folder])
+
+    assert any("PROJECT ONLY" in r for r in ruleset.rules)
+    assert any("FOLDER EXTRA" in r for r in ruleset.rules)
+    for baseline_rule in SDLC_BASELINE:
+        assert baseline_rule not in ruleset.rules, "a replace still discards the baseline"
+
+
+def test_a_profile_with_no_mode_adds_rather_than_replaces(tmp_path):
+    """The safe default. Someone writing a profile without reading the docs should EXTEND
+    the industry baseline, never silently discard it -- discarding has to be deliberate."""
+    root = tmp_path / "proj"
+    root.mkdir()
+    _write_profile(root, "- A RULE WITH NO MODE DECLARED: check something.\n")
+
+    ruleset = resolve_review_rules(project_root=root)
+
+    assert ruleset.mode == "add"
+    assert all(b in ruleset.rules for b in SDLC_BASELINE)
+
+
+def test_an_unreadable_or_empty_profile_falls_back_to_the_baseline(tmp_path):
+    """A typo in a profile must not silently disarm the review. Zero rules parsed means
+    the profile is ignored and the baseline stands -- failing toward MORE checking."""
+    root = tmp_path / "proj"
+    root.mkdir()
+    _write_profile(root, "mode: replace\n\nthis file has prose but no bullet rules at all\n")
+
+    ruleset = resolve_review_rules(project_root=root)
+
+    assert ruleset.mode == "default", "a ruleless profile must not disarm the review"
+    assert list(ruleset.rules) == list(SDLC_BASELINE)
+
+
+def test_the_baseline_states_sdlc_standards_not_ds_paths():
+    """RULING 2. Seven of the old prompt's eight rules named Dream Studio files by path,
+    so the universal standards were never stated at all and every other project was
+    graded against one project's file layout.
+
+    The test for whether a rule belongs in the baseline: could it be applied to a
+    repository nobody on this team has ever seen?
+    """
+    joined = " ".join(SDLC_BASELINE)
+
+    for ds_token in (
+        "business_*",
+        "studio.db",
+        "DuckDB",
+        "files.db",
+        "spool/ingestor",
+        "runtime/hooks/",
+        "core/projections/",
+        "interfaces/cli/",
+        "released_version",
+        "canonical_events",
+        "aspirational-schema-debt",
+    ):
+        assert ds_token not in joined, f"baseline names a Dream Studio specific: {ds_token!r}"
+
+    # And it must actually STATE the standards, not merely omit DS's map.
+    for standard in ("TEST COVERAGE", "SECRET", "LAYERING", "DEAD CODE", "DATA SAFETY"):
+        assert standard in joined, f"baseline is missing the {standard} standard"
+
+
+def test_ds_layer_map_is_scoped_to_the_dream_studio_project():
+    """DS's own rules ship as a PROFILE in the DS repo, making Dream Studio the first
+    customer of the extension point rather than a hardcoded special case. If this file
+    cannot carry these rules, the mechanism cannot carry anyone else's.
+    """
+    ds_profile = Path(PROFILE_NAME)
+    assert ds_profile.is_file(), f"Dream Studio's own profile is missing at {ds_profile}"
+
+    # AND GIT MUST ACTUALLY SHIP IT. The first location was under .dream-studio/, which
+    # .gitignore excludes -- so this file existed locally, this test passed locally, and
+    # every other checkout would have silently fallen back to the bare SDLC baseline.
+    # Asserting is_file() alone cannot tell those apart.
+    tracked = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", str(ds_profile)],
+        capture_output=True,
+        text=True,
+        # text=True with no encoding decodes as cp1252 on Windows, so a single non-cp1252
+        # byte in git's output raises UnicodeDecodeError in the reader thread. The
+        # locale-decode gate exists for exactly this and caught this line.
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert tracked.returncode == 0, (
+        f"{ds_profile} exists on disk but git does not track it, so it will not ship: "
+        f"{tracked.stderr.strip()}"
+    )
+
+    mode, rules = parse_profile(ds_profile.read_text(encoding="utf-8"))
+    assert mode == "add", "DS's map extends the baseline; it does not replace it"
+    joined = " ".join(rules)
+    assert "LAYER-MAP Rule 4" in joined, "the layer map must survive the move into a profile"
+    assert "spool/ingestor.py" in joined
+
+
+def test_a_project_without_a_profile_is_never_graded_against_ds_rules(tmp_path):
+    """THE OPERATOR'S COMPLAINT, DIRECTLY: "the reviewer attempts to review against dream
+    studio when the code is addressing other work ... this is just bogus."
+
+    Verified as an absence, because that is what was wrong: the rules were present when
+    they had no business being present.
+    """
+    other = tmp_path / "someone_elses_project"
+    other.mkdir()
+
+    block = render_rules_block(resolve_review_rules(project_root=other))
+
+    for ds_token in ("LAYER-MAP", "business_*", "spool/ingestor", "studio.db", "DuckDB"):
+        assert ds_token not in block, f"a foreign project was handed a DS rule: {ds_token!r}"
+    assert "TEST COVERAGE FOR CHANGED BEHAVIOUR" in block, "but it still gets the baseline"
+
+
+def test_the_correctness_prompt_carries_the_resolved_rules_and_says_which(tmp_path):
+    """A ruleset resolved and then not used would be the attachment_pressure defect
+    again: computed, stored nowhere, reaching nothing. And a review that cannot say which
+    rulebook it used is not auditable."""
+    from core.work_orders.verify_prompts import _CORRECTNESS_PROMPT_TEMPLATE
+
+    root = tmp_path / "proj"
+    root.mkdir()
+    _write_profile(root, "mode: add\n\n- DISTINCTIVE HOUSE RULE: xyzzy.\n")
+    ruleset = resolve_review_rules(project_root=root)
+
+    prompt = _CORRECTNESS_PROMPT_TEMPLATE.format(
+        git_diff="<diff>",
+        rules_block=render_rules_block(ruleset),
+        rules_provenance=ruleset.provenance,
+        rule_count=float(len(ruleset.rules)),
+    )
+
+    assert "DISTINCTIVE HOUSE RULE: xyzzy." in prompt, "the resolved rules must reach the grader"
+    assert ruleset.provenance in prompt, "the prompt must name the rulebook in force"
+    assert "/ 7.0" not in prompt, "the score divisor must follow the rule count, not a constant"
+
+
+def test_the_prompt_tells_the_grader_its_inability_is_not_a_violation():
+    """WO-GAP-FANOUT found work order 58e21003 carrying the task "Fix N/A: independent
+    review unverifiable - no diff provided in N/A" -- the grader's own inability laundered
+    into scheduled work. The filter that drops those is downstream; this stops the grader
+    emitting them."""
+    from core.work_orders.verify_prompts import _CORRECTNESS_PROMPT_TEMPLATE
+
+    # Case-insensitive: the template writes "NOT a violation" for emphasis, and this
+    # asserted the lowercase form. My own check confirmed the OTHER half of the phrase
+    # ("never become scheduled work") and passed, so the mismatch survived -- verifying
+    # the half that matched is the same shortcut this whole work order is about.
+    lowered = _CORRECTNESS_PROMPT_TEMPLATE.lower()
+    assert "not a violation" in lowered
+    assert "never become scheduled work" in lowered
+
+
+def test_a_project_with_no_declared_root_still_gets_its_own_diff(db, tmp_path):
+    """THE FALLBACK THIS WORK ORDER DROPPED AND PUT BACK.
+
+    The single-root code read ``resolve_project_root(...) or source_root``, and that
+    ``or`` was load-bearing. A work order whose project declares no path resolves to ZERO
+    roots, so iterating roots.roots collected nothing and the parent's own diff vanished
+    from the grader input.
+
+    Caught by test_closed_child_diffs_join_parent_evidence, which failed in the worst
+    possible shape: the CHILD's remediation evidence still arrived while the parent's own
+    change did not. A verdict built on remediation alone looks substantive, so nothing in
+    the output would have said the parent was never read.
+    """
+    from core.work_orders.verify_git import collect_union_evidence
+
+    wo = _project_with_path(db, tmp_path / "declared-nothing-usable")
+    roots = resolve_project_roots(wo, db)
+    assert roots.roots == [], "precondition: the project resolves to no root"
+
+    caller_root = _make_repo(tmp_path / "callers-own-repo")
+    diff, provenance = collect_union_evidence(
+        wo, roots, fallback_root=caller_root, collector=lambda r, w, title=None: "the diff"
+    )
+
+    assert diff == "the diff", "with no declared root, the caller's root must still be read"
+    assert provenance, "and the fallback must be recorded, not silent"
+    assert provenance[0].get("fallback") is True
+    assert "declared none" in str(
+        provenance[0]["kind"]
+    ), "a reader must be able to tell a fallback from a declared root"
+
+
+def test_no_fallback_offered_means_the_absence_is_reported(db, tmp_path):
+    """The converse: a caller that offers no fallback gets an honest empty result with a
+    reason, never a silent None."""
+    from core.work_orders.verify_git import collect_union_evidence
+
+    wo = _project_with_path(db, tmp_path / "nothing-here")
+    roots = resolve_project_roots(wo, db)
+
+    diff, provenance = collect_union_evidence(wo, roots)
+    assert diff is None
+    assert provenance, "the absence must still be described"
+    assert not provenance[0].get("fallback")
+
+
+def test_a_declared_root_is_preferred_over_the_fallback(db, tmp_path):
+    """The fallback must not shadow real roots -- offering one must change nothing when
+    the project resolves properly."""
+    from core.work_orders.verify_git import collect_union_evidence
+
+    repo = _make_repo(tmp_path / "real")
+    wo = _project_with_path(db, repo)
+    other = _make_repo(tmp_path / "unrelated")
+
+    _diff, provenance = collect_union_evidence(
+        wo,
+        resolve_project_roots(wo, db),
+        fallback_root=other,
+        collector=lambda r, w, title=None: f"from {Path(r).name}",
+    )
+    roots_seen = {Path(str(p["root"])).name for p in provenance}
+    assert roots_seen == {"real"}, f"the fallback leaked in: {roots_seen}"
+
+
+# -- The verdict itself, not the helpers under it ------------------------------
+
+
+def test_the_project_tier_reads_the_declared_path_not_a_repo_inside_it(db, tmp_path):
+    """MEASURED: for a container declaring a single repository, ``primary`` is that
+    REPOSITORY, not the container. resolve_review_rules was handed ``primary``, so a
+    project-level ``.ds-review-rules.md`` at the declared container was never read and the
+    "project" tier of folder > project > baseline could not be reached in production.
+
+    Every rules test passed anyway, because they declare the container path directly and
+    never went through the resolution verify actually uses. Found by the correctness
+    grader on this work order's own close, phrased as NO DEAD CODE: an advertised layer no
+    path can reach.
+    """
+    container = tmp_path / "workspace"
+    container.mkdir()
+    _make_repo(container / "only-repo")
+    (container / PROFILE_NAME).write_text(
+        "mode: add" + NL * 2 + "- PROJECT TIER RULE: reachable." + NL, encoding="utf-8"
+    )
+    wo = _project_with_path(db, container)
+
+    roots = resolve_project_roots(wo, db)
+    assert roots.primary != container, (
+        "precondition: primary is the single repo, not the container -- if this ever "
+        "changes, the bug this test guards has moved rather than gone"
+    )
+    assert roots.declared == container
+
+    # What verify does now: the DECLARED path is the project tier.
+    from core.work_orders.review_rules import resolve_review_rules
+
+    ruleset = resolve_review_rules(project_root=roots.declared, folders=list(roots.roots))
+    assert any(
+        "PROJECT TIER RULE" in r for r in ruleset.rules
+    ), "a project-level profile at the declared root must be read"
+
+    # And the old behaviour is genuinely broken, so this test can fail.
+    missed = resolve_review_rules(project_root=roots.primary, folders=list(roots.roots))
+    assert not any("PROJECT TIER RULE" in r for r in missed.rules), (
+        "passing primary must MISS the container profile -- otherwise this test proves "
+        "nothing about the fix"
+    )

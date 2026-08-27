@@ -365,6 +365,32 @@ def resolve_project_root(work_order_id: str, db_path: Path) -> Path | None:
     return resolve_project_roots(work_order_id, db_path).primary
 
 
+# WO-MULTIROOT-REVIEW task 4: where did this check actually run?
+#
+# With one root the answer was implicit. With several -- Fulcrum resolves to 6
+# repositories -- a failing TEST-CHECK cannot be located without it: "1 failed" says
+# nothing about which repository to open.
+#
+# The value differs by kind, and stamping project_root on all three would be a
+# convenient lie. A TEST-CHECK runs in a repo; a SQL-CHECK runs against the authority
+# database, which is not a root at all; an API-CHECK runs against a URL. Each says what
+# is true of itself.
+def _execution_context(kind: str, project_root: Path | None, db_path: Path) -> str:
+    """Return a human-readable statement of where a check of this kind executed."""
+    if kind == "TEST-CHECK":
+        if project_root is None:
+            return (
+                "the current process directory (the Dream Studio repo) -- no project "
+                "root was resolved, so this did NOT run in the work order's own repo"
+            )
+        return str(project_root)
+    if kind == "SQL-CHECK":
+        return f"the authority database at {db_path} (not a repository root)"
+    if kind == "API-CHECK":
+        return "a network endpoint named by the check itself (not a repository root)"
+    return "unknown -- the check kind was not recognised, so nothing was executed"
+
+
 def run_executable_checks(
     tasks: list[dict[str, Any]],
     db_path: Path,
@@ -408,22 +434,27 @@ def run_executable_checks(
             expr = token_match.group(2).strip()
 
             if token == "SQL-CHECK":
-                checks.append(_run_one_sql_check(expr, db_path))
+                check = _run_one_sql_check(expr, db_path)
             elif token == "TEST-CHECK":
-                checks.append(_run_one_test_check(expr, project_root))
+                check = _run_one_test_check(expr, project_root)
             elif token == "API-CHECK":
-                checks.append(_run_one_api_check(expr))
+                check = _run_one_api_check(expr)
             else:
                 # Unknown *-CHECK token — fail-closed.
-                checks.append(
-                    {
-                        "kind": token,
-                        "expr": expr,
-                        "passed": False,
-                        "result": None,
-                        "error": f"Unknown check kind: {token!r} — fail-closed",
-                    }
-                )
+                check = {
+                    "kind": token,
+                    "expr": expr,
+                    "passed": False,
+                    "result": None,
+                    "error": f"Unknown check kind: {token!r} — fail-closed",
+                }
+
+            # WO-MULTIROOT-REVIEW task 4: stamped HERE, once, rather than in each of the
+            # three runners — one site cannot drift out of agreement with itself.
+            check["ran_in"] = _execution_context(
+                str(check.get("kind", token)), project_root, db_path
+            )
+            checks.append(check)
 
         if checks:
             results[task["title"]] = checks

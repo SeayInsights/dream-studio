@@ -250,6 +250,13 @@ def verify_work_order(
     p_root = planning_root or Path.cwd() / ".planning"
     db_path = _require_db(source_root, dream_studio_home)
 
+    # WO-MULTIROOT-REVIEW task 3: which roots the review read. Initialised here, at
+    # function scope, because the result dict references them and this function returns
+    # early in several places -- the same scoping bug attachment_pressure had.
+    _root_provenance: list[dict[str, object]] = []
+    _union_summary: str = "not determined"
+    _rules_provenance: str = "not determined"
+
     with _connect(db_path) as conn:
         wo = _read_work_order(conn, work_order_id)
         if wo is None:
@@ -325,7 +332,37 @@ def verify_work_order(
         _gap_marker = _re.search(r"\[gap-key:\s*([^\s:\]]+)::", wo.get("description") or "")
         originating_wo_id = _gap_marker.group(1) if _gap_marker else None
 
-        _search_root = resolve_project_root(work_order_id, db_path) or source_root
+        # WO-MULTIROOT-REVIEW task 3: a project resolves to every root its code lives
+        # in, so evidence is collected from all of them and the verdict records which
+        # ones answered. _search_root remains the single anchor for the recorded
+        # delivery boundary (a boundary is stamped against one repo), while the commit
+        # search spans the union.
+        from .project_roots import resolve_project_roots
+
+        _project_roots = resolve_project_roots(work_order_id, db_path)
+        _search_root = _project_roots.primary or source_root
+
+        # WO-MULTIROOT-REVIEW tasks 5-6: which rulebook this review grades against.
+        # folder > project > Dream Studio baseline; nothing declared means the baseline.
+        # Resolved HERE because a folder profile is per root, so it needs the roots.
+        from .review_rules import render_rules_block, resolve_review_rules
+
+        # THE PROJECT TIER MUST READ THE PROJECT'S OWN PATH, not a repository inside it.
+        #
+        # This passed project_root=_search_root, which is _project_roots.primary -- and
+        # for a container declaring a single repo, primary is that REPO, not the declared
+        # container. So a project-level .ds-review-rules.md at the container was never
+        # read and the "project" tier of folder > project > baseline was unreachable in
+        # production, while every test passed because they declare the container directly.
+        #
+        # Found by the correctness grader on this work order's own close, phrased as a
+        # NO DEAD CODE violation: an advertised layer that no path can reach.
+        _declared_root = _project_roots.declared or (Path(_search_root) if _search_root else None)
+        _ruleset = resolve_review_rules(
+            project_root=_declared_root,
+            folders=list(_project_roots.roots),
+        )
+        _rules_provenance = _ruleset.provenance
 
         # WO-VERIFY-GRADES-DELIVERY: the RECORDED boundary is the locator; the
         # commit-message grep below is reinforcement. Grepping history for the WO's
@@ -356,9 +393,22 @@ def verify_work_order(
         _boundary_diff, _boundary_note = boundary_diff_text(
             work_order_id, repo_root=Path(_search_root), db_path=db_path
         )
-        git_diff = _boundary_diff or _collect_git_commits(
-            _search_root, work_order_id, title=wo["title"]
-        )
+        if _boundary_diff:
+            git_diff = _boundary_diff
+            _union_summary = (
+                f"recorded delivery boundary in {_search_root} (roots not searched: the "
+                "stamped boundary is the locator when it has content)"
+            )
+        else:
+            from .verify_git import collect_union_evidence, union_evidence_summary
+
+            git_diff, _root_provenance = collect_union_evidence(
+                work_order_id,
+                _project_roots,
+                title=wo["title"],
+                fallback_root=_search_root,
+            )
+            _union_summary = union_evidence_summary(_root_provenance)
         if git_diff is None and originating_wo_id:
             git_diff = _collect_git_commits(_search_root, originating_wo_id)
 
@@ -520,7 +570,12 @@ def verify_work_order(
                 task_list=task_list_str,
                 git_diff=git_diff,
             ),
-            "correctness": _CORRECTNESS_PROMPT_TEMPLATE.format(git_diff=git_diff),
+            "correctness": _CORRECTNESS_PROMPT_TEMPLATE.format(
+                git_diff=git_diff,
+                rules_block=render_rules_block(_ruleset),
+                rules_provenance=_ruleset.provenance,
+                rule_count=float(max(1, len(_ruleset.rules))),
+            ),
             "quality": _QUALITY_PROMPT_TEMPLATE.format(git_diff=git_diff),
             # WO-FALSIFY-FIRST-PASS: the only grader that asks what SHOULD have
             # been tested and wasn't. Runs on every verify alongside the others.
@@ -870,6 +925,14 @@ def verify_work_order(
             # several reviews, so the honest exit (carry the remainder) is visible
             # instead of the work order quietly growing.
             "attachment_pressure": attachment_pressure,
+            # WO-MULTIROOT-REVIEW task 3: which roots this verdict actually read.
+            # "no violations found" and "nothing was read" are indistinguishable in a
+            # score, so the ratio rides the verdict: all 28 open Fulcrum work orders
+            # were graded against 1 of 6 repositories and nothing said so.
+            "roots_examined": _root_provenance,
+            "roots_summary": _union_summary,
+            # WO-MULTIROOT-REVIEW tasks 5-6: the rulebook this verdict used, named.
+            "rules_provenance": _rules_provenance,
         }
         # WO-FALSIFY-FIRST-PASS: the falsification section and the UNVERIFIED
         # ledger ride the verdict. A falsification grader that could not run is
@@ -931,6 +994,10 @@ def verify_work_order(
         # WO-GAP-FANOUT: the attach-loop bound reaches the CLI, not just the stored
         # verdict — a bound nobody can see is not a bound.
         "attachment_pressure": attachment_pressure,
+        # WO-MULTIROOT-REVIEW task 3: same rule for root coverage.
+        "roots_summary": _union_summary,
+        "roots_examined": _root_provenance,
+        "rules_provenance": _rules_provenance,
         "completion": completion,
         "correctness": correctness,
         "quality": quality,
