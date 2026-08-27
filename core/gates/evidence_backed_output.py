@@ -43,8 +43,13 @@ WHAT THIS DELIBERATELY DOES NOT CATCH:
     so an unrelated citation laundered the hedge beside it. So a well-evidenced claim
     written far from its evidence IS reported. Reported findings are cheap to dismiss;
     missed guesses are not.
-  * Prose ABOUT hedging -- a document explaining that "expected to" is forbidden trips its
-    own rule. Accepted: the alternative is a gate that can be evaded by quoting.
+  * A hedge inside a QUOTATION. Quoting the offending line is how a document explains
+    the rule -- this module's docstring, the pre-push gate entry, and the commit that
+    introduced the rule all quote "- [x] PR smoke is expected to pass" verbatim. Flagging
+    those made the gate refuse the documents explaining it. An author can therefore evade
+    it by wrapping a claim in quotes, which is a real hole and the accepted cost: a quoted
+    claim reads as attribution, and blocking every document that documents the rule is the
+    worse trade.
 """
 
 from __future__ import annotations
@@ -138,6 +143,51 @@ class Report:
         return "\n".join(lines)
 
 
+def _is_quoted(line: str, start: int, end: int) -> bool:
+    """Does the span ``[start:end)`` sit inside a quotation on this line?
+
+    A HEDGE INSIDE A QUOTATION IS EVIDENCE OF A DEFECT, NOT AN INSTANCE OF ONE. This
+    module's own docstring, the pre-push gate's description, and the commit that added the
+    rule all quote the real offending line -- "- [x] PR smoke is expected to pass" -- in
+    order to say what must not be written. Flagging those made the gate refuse the very
+    documents explaining it, which is unusable rather than strict.
+
+    The first version accepted that as a documented false positive on the grounds that the
+    alternative "can be evaded by quoting". That reasoning was wrong in one direction and
+    right in another: an author CAN wrap a claim in quotes to slip it past. But a quoted
+    claim reads as attribution -- "X reported Y" -- and an unattributed quotation of one's
+    own forecast is a different and rarer failure than the one this gate exists to stop.
+    Blocking every document that documents the rule is the worse trade.
+    """
+    before = line[:start]
+    after = line[end:]
+    for mark in ('"', "'", "`"):
+        if mark in before and mark in after:
+            return True
+    return False
+
+
+def _quote_open_at_line_start(lines: list[str], index: int) -> bool:
+    """Is a double quote still open when this line begins?
+
+    A MULTI-LINE QUOTATION IS THE NORMAL CASE, NOT AN EDGE CASE. Commit messages wrap at
+    72 characters, so quoting the offending line almost always splits it:
+
+        four PR bodies written the day this was built carried "- [x] PR smoke is
+        expected to pass", a forecast inside a checked box
+
+    The single-line check sees a closing quote after the hedge on the second line and no
+    opening one before it, so it reported the quotation as a claim -- and the gate refused
+    two of the commits that introduced it. Parity of double quotes over the preceding
+    lines answers this exactly for well-formed text.
+
+    Only double quotes are tracked. Apostrophes appear in ordinary prose ("doesn't"), so
+    parity on `'` would drift immediately, and backticks are handled per line because
+    inline code spans do not wrap.
+    """
+    return sum(line.count('"') for line in lines[:index]) % 2 == 1
+
+
 def _looks_like_output(line: str) -> bool:
     """Is this line the OUTPUT of the claim above it, rather than another claim?
 
@@ -208,7 +258,10 @@ def audit_text(text: str) -> Report:
         box = _CHECKED_BOX.match(line)
         if box:
             box_hedge = _HEDGE.search(box.group("text"))
-            if box_hedge and not _has_citation(lines, index):
+            box_quoted = box_hedge and (
+                _is_quoted(line, *box_hedge.span()) or _quote_open_at_line_start(lines, index)
+            )
+            if box_hedge and not box_quoted and not _has_citation(lines, index):
                 report.unbacked.append(
                     Claim(
                         line=index + 1,
@@ -219,7 +272,10 @@ def audit_text(text: str) -> Report:
                 )
             continue
 
-        if hedge and not _has_citation(lines, index):
+        quoted = _is_quoted(line, *hedge.span()) if hedge else False
+        if hedge and not quoted and _quote_open_at_line_start(lines, index):
+            quoted = True  # the quotation opened on an earlier line and has not closed
+        if hedge and not quoted and not _has_citation(lines, index):
             report.unbacked.append(
                 Claim(
                     line=index + 1,

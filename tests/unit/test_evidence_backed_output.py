@@ -178,3 +178,67 @@ def test_auditing_a_real_file_works(tmp_path: Path):
     report = audit_file(body)
     assert not report.passed
     assert report.unbacked[0].line == 3
+
+
+# -- Quotations: evidence of a defect, not an instance of one -------------------
+
+
+def test_a_quoted_hedge_on_one_line_is_not_a_claim():
+    """Quoting the offending line is how a document EXPLAINS the rule. Flagging it made
+    the gate refuse this module's own docstring, the pre-push manifest entry, and the
+    commits that introduced the rule."""
+    text = "The bad line was `- [x] PR smoke is expected to pass` and it shipped." + NL
+    assert audit_text(text).passed
+
+
+def test_a_quotation_split_across_lines_is_still_a_quotation():
+    """MULTI-LINE QUOTATION IS THE NORMAL CASE, NOT AN EDGE CASE. Commit messages wrap at
+    72 characters, so a quoted line almost always splits:
+
+        four PR bodies written the day this was built carried "- [x] PR smoke is
+        expected to pass", a forecast inside a checked box
+
+    The single-line check saw a closing quote after the hedge and no opening one before it,
+    so it reported the quotation as a claim -- and the gate refused two of the commits that
+    introduced it. Fixed by double-quote parity over the preceding lines.
+    """
+    text = (
+        'four PR bodies written the day this was built carried "- [x] PR smoke is'
+        + NL
+        + 'expected to pass", a forecast inside a checked box, three already merged.'
+        + NL
+    )
+    report = audit_text(text)
+    assert report.passed, f"a split quotation was read as a claim: {report.unbacked}"
+
+
+def test_an_unclosed_quote_does_not_swallow_the_rest_of_the_document():
+    """Parity is only correct for well-formed text. A stray unmatched quote makes every
+    later line read as quoted -- so this pins the blast radius of that failure rather than
+    pretending it cannot happen.
+
+    An author who leaves a dangling quote gets weaker checking from there on. Accepted:
+    the alternative is flagging every wrapped quotation, which made the gate unusable.
+    """
+    text = 'He said "something unclosed here' + NL + "The suite should pass." + NL
+    report = audit_text(text)
+    # Documenting the real behaviour: the second line reads as quoted, so it is NOT
+    # flagged. If this ever changes to flag it, that is an improvement -- update the test.
+    assert report.passed
+
+
+def test_the_quoting_evasion_hole_is_real_and_visible_here():
+    """THE ACCEPTED COST, ASSERTED SO IT IS VISIBLE IN THE SUITE AND NOT ONLY A DOCSTRING.
+
+    An author can wrap their own forecast in quotes and slip it past. That is a genuine
+    hole. It is accepted because a quoted claim reads as attribution, and because blocking
+    every document that documents the rule is the worse trade.
+
+    Written as a test rather than prose so that anyone tightening the rule finds it here,
+    with the reasoning attached, instead of rediscovering it as a surprise.
+    """
+    evasive = 'Status: "the smoke run is expected to pass".' + NL
+    assert audit_text(evasive).passed, (
+        "if this now FAILS, the evasion hole has been closed -- delete this test and say "
+        "so in the module docstring, which currently documents the hole as accepted"
+    )
