@@ -34,6 +34,13 @@ import pytest
 
 from core.config.sqlite_bootstrap import bootstrap_database
 from core.work_orders.project_roots import ProjectRoots, resolve_project_roots
+from core.work_orders.review_rules import (
+    PROFILE_NAME,
+    SDLC_BASELINE,
+    parse_profile,
+    render_rules_block,
+    resolve_review_rules,
+)
 
 _NOW = "2026-08-26T00:00:00+00:00"
 
@@ -600,3 +607,229 @@ def test_an_unknown_check_kind_still_carries_a_context(db, tmp_path):
     assert check["passed"] is False
     assert "ran_in" in check
     assert "nothing was executed" in check["ran_in"]
+
+
+# -- Tasks 5-6: the rules layer ------------------------------------------------
+
+
+def _write_profile(root: Path, body: str) -> Path:
+    path = root / PROFILE_NAME
+    path.write_text(body, encoding="utf-8")
+    return path
+
+
+def test_nothing_declared_gets_the_dream_studio_default(tmp_path):
+    """Operator: "out of the box it works with ours and until otherwise stated that will
+    remain." A project that declares nothing is graded against the DS baseline -- not
+    against nothing, and not against a guess."""
+    plain = tmp_path / "some_project"
+    plain.mkdir()
+
+    ruleset = resolve_review_rules(project_root=plain)
+
+    assert ruleset.mode == "default"
+    assert list(ruleset.rules) == list(SDLC_BASELINE), "the baseline, unmodified"
+    assert "no project or folder profile declared" in ruleset.provenance
+
+
+def test_a_project_profile_can_add(tmp_path):
+    """ADD is the common case: keep the industry baseline, layer this project's own
+    rules on top."""
+    root = tmp_path / "proj"
+    root.mkdir()
+    _write_profile(root, "mode: add\n\n- HOUSE RULE: no raw SQL outside the dal module.\n")
+
+    ruleset = resolve_review_rules(project_root=root)
+
+    assert ruleset.mode == "add"
+    assert len(ruleset.rules) == len(SDLC_BASELINE) + 1
+    assert any("HOUSE RULE" in r for r in ruleset.rules)
+    assert all(b in ruleset.rules for b in SDLC_BASELINE), "adding must not drop a baseline rule"
+    assert "PLUS 1 rule(s) added by" in ruleset.provenance
+
+
+def test_a_project_profile_can_replace(tmp_path):
+    """Operator: "they should be able to replace per project or folder if they choose as
+    well." REPLACE means the baseline is gone -- that is the point of the word."""
+    root = tmp_path / "proj"
+    root.mkdir()
+    _write_profile(root, "mode: replace\n\n- ONLY RULE: ship it.\n")
+
+    ruleset = resolve_review_rules(project_root=root)
+
+    assert ruleset.mode == "replace"
+    assert ruleset.rules == ["ONLY RULE: ship it."]
+    for baseline_rule in SDLC_BASELINE:
+        assert baseline_rule not in ruleset.rules
+    assert "REPLACED the Dream Studio baseline" in ruleset.provenance
+
+
+def test_a_folder_profile_outranks_its_project(tmp_path):
+    """Per-FOLDER granularity is why multi-root needed this: six repositories under one
+    project may not want one rulebook, and the repository that declares its own rules is
+    nearer the code than the project is."""
+    project = tmp_path / "workspace"
+    folder = project / "special_repo"
+    folder.mkdir(parents=True)
+    _write_profile(project, "mode: add\n\n- PROJECT RULE: something.\n")
+    _write_profile(folder, "mode: replace\n\n- FOLDER RULE: only this.\n")
+
+    ruleset = resolve_review_rules(project_root=project, folders=[folder])
+
+    assert ruleset.mode == "replace"
+    assert ruleset.rules == ["FOLDER RULE: only this."]
+    assert not any("PROJECT RULE" in r for r in ruleset.rules), "the folder replace must win"
+
+
+def test_a_folder_add_layers_onto_a_project_replace(tmp_path):
+    """A replace at the project level and an add in one folder: the folder is nearer, so
+    its rules apply ON TOP of what the project replaced the baseline with, rather than
+    being discarded along with it."""
+    project = tmp_path / "workspace"
+    folder = project / "repo_a"
+    folder.mkdir(parents=True)
+    _write_profile(project, "mode: replace\n\n- PROJECT ONLY: a.\n")
+    _write_profile(folder, "mode: add\n\n- FOLDER EXTRA: b.\n")
+
+    ruleset = resolve_review_rules(project_root=project, folders=[folder])
+
+    assert any("PROJECT ONLY" in r for r in ruleset.rules)
+    assert any("FOLDER EXTRA" in r for r in ruleset.rules)
+    for baseline_rule in SDLC_BASELINE:
+        assert baseline_rule not in ruleset.rules, "a replace still discards the baseline"
+
+
+def test_a_profile_with_no_mode_adds_rather_than_replaces(tmp_path):
+    """The safe default. Someone writing a profile without reading the docs should EXTEND
+    the industry baseline, never silently discard it -- discarding has to be deliberate."""
+    root = tmp_path / "proj"
+    root.mkdir()
+    _write_profile(root, "- A RULE WITH NO MODE DECLARED: check something.\n")
+
+    ruleset = resolve_review_rules(project_root=root)
+
+    assert ruleset.mode == "add"
+    assert all(b in ruleset.rules for b in SDLC_BASELINE)
+
+
+def test_an_unreadable_or_empty_profile_falls_back_to_the_baseline(tmp_path):
+    """A typo in a profile must not silently disarm the review. Zero rules parsed means
+    the profile is ignored and the baseline stands -- failing toward MORE checking."""
+    root = tmp_path / "proj"
+    root.mkdir()
+    _write_profile(root, "mode: replace\n\nthis file has prose but no bullet rules at all\n")
+
+    ruleset = resolve_review_rules(project_root=root)
+
+    assert ruleset.mode == "default", "a ruleless profile must not disarm the review"
+    assert list(ruleset.rules) == list(SDLC_BASELINE)
+
+
+def test_the_baseline_states_sdlc_standards_not_ds_paths():
+    """RULING 2. Seven of the old prompt's eight rules named Dream Studio files by path,
+    so the universal standards were never stated at all and every other project was
+    graded against one project's file layout.
+
+    The test for whether a rule belongs in the baseline: could it be applied to a
+    repository nobody on this team has ever seen?
+    """
+    joined = " ".join(SDLC_BASELINE)
+
+    for ds_token in (
+        "business_*",
+        "studio.db",
+        "DuckDB",
+        "files.db",
+        "spool/ingestor",
+        "runtime/hooks/",
+        "core/projections/",
+        "interfaces/cli/",
+        "released_version",
+        "canonical_events",
+        "aspirational-schema-debt",
+    ):
+        assert ds_token not in joined, f"baseline names a Dream Studio specific: {ds_token!r}"
+
+    # And it must actually STATE the standards, not merely omit DS's map.
+    for standard in ("TEST COVERAGE", "SECRET", "LAYERING", "DEAD CODE", "DATA SAFETY"):
+        assert standard in joined, f"baseline is missing the {standard} standard"
+
+
+def test_ds_layer_map_is_scoped_to_the_dream_studio_project():
+    """DS's own rules ship as a PROFILE in the DS repo, making Dream Studio the first
+    customer of the extension point rather than a hardcoded special case. If this file
+    cannot carry these rules, the mechanism cannot carry anyone else's.
+    """
+    ds_profile = Path(PROFILE_NAME)
+    assert ds_profile.is_file(), f"Dream Studio's own profile is missing at {ds_profile}"
+
+    # AND GIT MUST ACTUALLY SHIP IT. The first location was under .dream-studio/, which
+    # .gitignore excludes -- so this file existed locally, this test passed locally, and
+    # every other checkout would have silently fallen back to the bare SDLC baseline.
+    # Asserting is_file() alone cannot tell those apart.
+    tracked = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", str(ds_profile)],
+        capture_output=True,
+        text=True,
+    )
+    assert tracked.returncode == 0, (
+        f"{ds_profile} exists on disk but git does not track it, so it will not ship: "
+        f"{tracked.stderr.strip()}"
+    )
+
+    mode, rules = parse_profile(ds_profile.read_text(encoding="utf-8"))
+    assert mode == "add", "DS's map extends the baseline; it does not replace it"
+    joined = " ".join(rules)
+    assert "LAYER-MAP Rule 4" in joined, "the layer map must survive the move into a profile"
+    assert "spool/ingestor.py" in joined
+
+
+def test_a_project_without_a_profile_is_never_graded_against_ds_rules(tmp_path):
+    """THE OPERATOR'S COMPLAINT, DIRECTLY: "the reviewer attempts to review against dream
+    studio when the code is addressing other work ... this is just bogus."
+
+    Verified as an absence, because that is what was wrong: the rules were present when
+    they had no business being present.
+    """
+    other = tmp_path / "someone_elses_project"
+    other.mkdir()
+
+    block = render_rules_block(resolve_review_rules(project_root=other))
+
+    for ds_token in ("LAYER-MAP", "business_*", "spool/ingestor", "studio.db", "DuckDB"):
+        assert ds_token not in block, f"a foreign project was handed a DS rule: {ds_token!r}"
+    assert "TEST COVERAGE FOR CHANGED BEHAVIOUR" in block, "but it still gets the baseline"
+
+
+def test_the_correctness_prompt_carries_the_resolved_rules_and_says_which(tmp_path):
+    """A ruleset resolved and then not used would be the attachment_pressure defect
+    again: computed, stored nowhere, reaching nothing. And a review that cannot say which
+    rulebook it used is not auditable."""
+    from core.work_orders.verify_prompts import _CORRECTNESS_PROMPT_TEMPLATE
+
+    root = tmp_path / "proj"
+    root.mkdir()
+    _write_profile(root, "mode: add\n\n- DISTINCTIVE HOUSE RULE: xyzzy.\n")
+    ruleset = resolve_review_rules(project_root=root)
+
+    prompt = _CORRECTNESS_PROMPT_TEMPLATE.format(
+        git_diff="<diff>",
+        rules_block=render_rules_block(ruleset),
+        rules_provenance=ruleset.provenance,
+        rule_count=float(len(ruleset.rules)),
+    )
+
+    assert "DISTINCTIVE HOUSE RULE: xyzzy." in prompt, "the resolved rules must reach the grader"
+    assert ruleset.provenance in prompt, "the prompt must name the rulebook in force"
+    assert "/ 7.0" not in prompt, "the score divisor must follow the rule count, not a constant"
+
+
+def test_the_prompt_tells_the_grader_its_inability_is_not_a_violation():
+    """WO-GAP-FANOUT found work order 58e21003 carrying the task "Fix N/A: independent
+    review unverifiable - no diff provided in N/A" -- the grader's own inability laundered
+    into scheduled work. The filter that drops those is downstream; this stops the grader
+    emitting them."""
+    from core.work_orders.verify_prompts import _CORRECTNESS_PROMPT_TEMPLATE
+
+    assert "not a violation" in _CORRECTNESS_PROMPT_TEMPLATE
+    assert "never become scheduled work" in _CORRECTNESS_PROMPT_TEMPLATE

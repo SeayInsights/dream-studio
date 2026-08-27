@@ -255,6 +255,7 @@ def verify_work_order(
     # early in several places -- the same scoping bug attachment_pressure had.
     _root_provenance: list[dict[str, object]] = []
     _union_summary: str = "not determined"
+    _rules_provenance: str = "not determined"
 
     with _connect(db_path) as conn:
         wo = _read_work_order(conn, work_order_id)
@@ -340,6 +341,17 @@ def verify_work_order(
 
         _project_roots = resolve_project_roots(work_order_id, db_path)
         _search_root = _project_roots.primary or source_root
+
+        # WO-MULTIROOT-REVIEW tasks 5-6: which rulebook this review grades against.
+        # folder > project > Dream Studio baseline; nothing declared means the baseline.
+        # Resolved HERE because a folder profile is per root, so it needs the roots.
+        from .review_rules import render_rules_block, resolve_review_rules
+
+        _ruleset = resolve_review_rules(
+            project_root=Path(_search_root) if _search_root else None,
+            folders=list(_project_roots.roots),
+        )
+        _rules_provenance = _ruleset.provenance
 
         # WO-VERIFY-GRADES-DELIVERY: the RECORDED boundary is the locator; the
         # commit-message grep below is reinforcement. Grepping history for the WO's
@@ -544,7 +556,12 @@ def verify_work_order(
                 task_list=task_list_str,
                 git_diff=git_diff,
             ),
-            "correctness": _CORRECTNESS_PROMPT_TEMPLATE.format(git_diff=git_diff),
+            "correctness": _CORRECTNESS_PROMPT_TEMPLATE.format(
+                git_diff=git_diff,
+                rules_block=render_rules_block(_ruleset),
+                rules_provenance=_ruleset.provenance,
+                rule_count=float(max(1, len(_ruleset.rules))),
+            ),
             "quality": _QUALITY_PROMPT_TEMPLATE.format(git_diff=git_diff),
             # WO-FALSIFY-FIRST-PASS: the only grader that asks what SHOULD have
             # been tested and wasn't. Runs on every verify alongside the others.
@@ -900,6 +917,8 @@ def verify_work_order(
             # were graded against 1 of 6 repositories and nothing said so.
             "roots_examined": _root_provenance,
             "roots_summary": _union_summary,
+            # WO-MULTIROOT-REVIEW tasks 5-6: the rulebook this verdict used, named.
+            "rules_provenance": _rules_provenance,
         }
         # WO-FALSIFY-FIRST-PASS: the falsification section and the UNVERIFIED
         # ledger ride the verdict. A falsification grader that could not run is
@@ -964,6 +983,7 @@ def verify_work_order(
         # WO-MULTIROOT-REVIEW task 3: same rule for root coverage.
         "roots_summary": _union_summary,
         "roots_examined": _root_provenance,
+        "rules_provenance": _rules_provenance,
         "completion": completion,
         "correctness": correctness,
         "quality": quality,
