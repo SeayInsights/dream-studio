@@ -52,7 +52,8 @@ def read_work_order_brief(
             "brief_locked": dict | None,   # locked brief fields if UI type
             "brief_warning": bool,          # True if UI type and no locked brief
             "gotchas": list[{"severity", "title", "fix"}],
-            "blocking_milestone_count": int,  # earlier-milestone incomplete WOs
+            "blocking_dependency_count": int,  # DECLARED dependencies not yet closed — blocks
+            "blocking_milestone_count": int,  # earlier-milestone open WOs — ADVISORY only
         }
     """
 
@@ -168,6 +169,31 @@ def read_work_order_brief(
         except Exception:
             pass
 
+        # WO-WO-LIFECYCLE-SURFACE: DEPENDENCIES BLOCK, MILESTONE ORDER INFORMS.
+        #
+        # This count used to be "every incomplete work order in any earlier milestone",
+        # and start refused when it was non-zero. That is the straight line, and it
+        # refused to let this very work order be started: 17 work orders in earlier
+        # milestones were incomplete, so the change that removes the constraint could not
+        # begin under it. Operator: walking down a straight line does not always make
+        # sense.
+        #
+        # A declared dependency is a real statement that this work cannot proceed. An
+        # earlier milestone merely having open work is not — 45 open milestones exist,
+        # most independent of each other, and the dependency graph (88 edges, already
+        # honoured by the ready-set query) is what actually knows the difference.
+        #
+        # So: blocking_dependency_count is the hard gate, and blocking_milestone_count
+        # is kept as ADVISORY context — reported, never refused on. Removing it entirely
+        # would lose the useful signal "you are working out of milestone order"; leaving
+        # it as a gate keeps a project of independent milestones single-file.
+        blocking_dependency_count = conn.execute(
+            "SELECT COUNT(*) FROM work_order_dependencies dep"
+            " INNER JOIN business_work_orders dep_wo ON dep.depends_on_id = dep_wo.work_order_id"
+            " WHERE dep.work_order_id = ? AND dep_wo.status != 'closed'",
+            (wo_id,),
+        ).fetchone()[0]
+
         blocking_milestone_count = 0
         if milestone_id:
             ms_order_row = conn.execute(
@@ -194,6 +220,7 @@ def read_work_order_brief(
         "build_exec": build_exec,
         "post_gate": post_gate,
         "workflow_template": workflow_template,
+        "blocking_dependency_count": blocking_dependency_count,
         "precondition_skill": precondition_skill,
         "milestone_id": milestone_id,
         "milestone_title": milestone_title,
