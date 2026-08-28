@@ -34,9 +34,34 @@ def _apply_report_only_continuation(
     """
     if verify_ran and verify_result is not None and project_id_for_autostart:
         if has_gaps:
-            # Report the registered remediation WO(s); do not start them.
+            # Report where the gaps WENT; do not start anything.
+            #
+            # TWO DESTINATIONS, TWO MESSAGES (WO-GAP-FANOUT task 12, close half). A gap on
+            # an OPEN, incomplete work order becomes a task ON IT; only a closed one gets
+            # a sibling. Before the attached-vs-spawned split both landed in
+            # spawned_work_orders, so this block told the operator to
+            # `work-order start <the work order being closed>`. After the split it fired
+            # only for genuine spawns, so an attached gap produced no block at all -- the
+            # close reported gaps and then went quiet about them.
             spawned = verify_result.get("spawned_work_orders", [])
-            if spawned:
+            attached = verify_result.get("attached_gap_tasks", [])
+            if attached and not spawned:
+                gaps_list = verify_result.get("gaps", [])
+                tasks_str = "\n".join(f"  - {g.get('title', '')}" for g in gaps_list)
+                added = sum(int(a.get("tasks_added", 0) or 0) for a in attached)
+                _sep = "=" * 42
+                result["gaps_block"] = (
+                    f"\n{_sep}\n"
+                    f"=== GAPS FOUND IN {title} ===\n"
+                    f"Added as {added} task(s) ON THIS WORK ORDER -- this is its own\n"
+                    f"unfinished work, not a sibling to start.\n"
+                    f"Tasks:\n{tasks_str}\n"
+                    f"Run: py -m interfaces.cli.ds work-order tasks {work_order_id}\n"
+                    f"{_sep}\n"
+                )
+                result["attached_gap_tasks"] = attached
+                result["next_command"] = f"ds work-order tasks {work_order_id}"
+            elif spawned:
                 first_gap = spawned[0]
                 gap_wo_id = first_gap["work_order_id"]
                 gap_wo_title = first_gap["title"]

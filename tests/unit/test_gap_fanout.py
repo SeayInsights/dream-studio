@@ -954,3 +954,85 @@ def test_a_long_single_sentence_detail_is_truncated_not_dropped():
     title = _violation_task_title({"rule": long_rule, "file": "core/y.py", "detail": long_detail})
     assert 0 < len(title) <= 96
     assert title.startswith("the same problem")
+
+
+def test_an_attached_task_actually_survives_a_projection_rebuild(db, monkeypatch):
+    """THE PROPERTY, DRIVEN RATHER THAN INFERRED.
+
+    Asserting "a task.created event was emitted" is weaker than the task's own wording. An
+    event with a missing task_id, or the work_order_id in the payload instead of the trace,
+    satisfies that assertion and still vanishes on rebuild -- which is the precise
+    data-loss path this task exists to close.
+
+    So: attach a gap task, do what pre_rebuild does (DELETE FROM business_tasks), replay
+    the captured event through the real TaskProjection, and require the row back.
+    """
+    from core.projections.task_projection import TaskProjection
+
+    captured: list[dict] = []
+
+    import spool.writer as _writer
+
+    def _capture(envelope):
+        # Mirror the INGESTOR's mapping, not a convenient subset. The envelope carries
+        # `timestamp`; the canonical row and the projection read `event_timestamp`. My
+        # first capture omitted it and the replay raised KeyError -- a defect in the
+        # fixture, not the code, and exactly the derive-from-the-real-artifact rule this
+        # suite keeps relearning.
+        captured.append(
+            {
+                "event_id": getattr(envelope, "event_id", None) or str(uuid.uuid4()),
+                "event_type": envelope.event_type,
+                "event_timestamp": getattr(envelope, "timestamp", None),
+                "schema_version": getattr(envelope, "schema_version", 1),
+                "payload": envelope.payload,
+                "trace": getattr(envelope, "trace", {}) or {},
+            }
+        )
+
+    monkeypatch.setattr(_writer, "write_event", _capture)
+
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+    reviewed = _reviewed_wo(conn, project_id, status="in_progress")
+    _attach(conn, project_id, reviewed, "A finding", "Do the thing")
+    conn.commit()
+
+    before = conn.execute(
+        "SELECT COUNT(*) FROM business_tasks WHERE work_order_id=? AND title=?",
+        (reviewed, "Do the thing"),
+    ).fetchone()[0]
+    assert before == 1, "precondition: the attach wrote the row"
+
+    task_events = [e for e in captured if e["event_type"] == "task.created"]
+    assert task_events, f"nothing to replay -- no task.created captured: {captured}"
+
+    # What pre_rebuild does, verbatim: TaskProjection.target_tables == ["business_tasks"].
+    assert TaskProjection.target_tables == ["business_tasks"]
+    conn.execute("DELETE FROM business_tasks")
+    conn.commit()
+    assert (
+        conn.execute("SELECT COUNT(*) FROM business_tasks").fetchone()[0] == 0
+    ), "precondition: the rebuild truncated the projection"
+
+    projection = TaskProjection()
+    for event in task_events:
+        try:
+            projection.handle(event, conn)
+        except Exception as exc:  # a replay that raises loses the row just as surely
+            raise AssertionError(
+                f"replaying the emitted task.created raised {type(exc).__name__}: {exc} -- "
+                f"the event cannot reconstruct the row, so the attach is not durable"
+            ) from exc
+    conn.commit()
+
+    after = conn.execute(
+        "SELECT COUNT(*) FROM business_tasks WHERE work_order_id=? AND title=?",
+        (reviewed, "Do the thing"),
+    ).fetchone()[0]
+    conn.close()
+
+    assert after == 1, (
+        "the attached task did NOT survive the rebuild. The event was emitted but could "
+        "not reconstruct the row, which is the data-loss path this task exists to close."
+    )
