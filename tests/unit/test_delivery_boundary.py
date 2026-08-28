@@ -915,3 +915,111 @@ def test_the_open_range_caveat_reaches_the_caller(db, tmp_path):
 
     assert note, "the open-range caveat must reach the caller"
     assert "no recorded end" in note
+
+
+# -- The ordering is the point (found by this work order's own review) ---------
+
+
+def test_the_end_is_stamped_before_close_grades_anything():
+    """THE FIRST CUT PUT THE STAMP WHERE IT COULD NOT HELP.
+
+    close_work_order stamped the end after mutating status -- roughly 300 lines below the
+    auto-verify -- so the verify that GATES the close still graded an unbounded
+    `<start>..HEAD` range. That is the exact failure mode this work order exists to remove,
+    reproduced inside its own fix. Its independent review named it: "close runs verify
+    (:234) long before it stamps (:528)".
+
+    Asserted on source ORDER rather than behaviour because the ordering IS the property;
+    a behavioural test would need a full close with graders to observe it.
+    """
+    source = Path("core/work_orders/close_main.py").read_text(encoding="utf-8")
+
+    stamp = source.index("record_delivery_boundary_end")
+    verify = source.index("_verify_wo(")
+    mutate = source.index("SET status = 'closed'")
+
+    assert stamp < verify, (
+        "the boundary end must be pinned BEFORE the auto-verify, or the verify that gates "
+        "this close grades an unbounded range"
+    )
+    assert stamp < mutate, "and before the status mutation"
+    assert (
+        source.count("record_delivery_boundary_end(") == 1
+    ), "one call site -- two would let the close stamp twice and disagree with itself"
+
+
+def test_the_final_task_done_also_pins_the_boundary(db, tmp_path):
+    """THE SECOND HALF, which task 1 named and I first shipped without.
+
+    A work order is routinely verified BEFORE it is closed -- `ds work-order verify` is a
+    separate command an operator runs to decide whether to close at all. Without a stamp at
+    the last task-done, that verify still grades every commit since the work order started.
+    """
+    import sqlite3
+
+    from core.work_orders.delivery_boundary import (
+        read_delivery_boundary,
+        record_delivery_boundary,
+    )
+    from core.work_orders.mutations import mark_task_done
+
+    root, _head = _git_repo(tmp_path / "repo")
+    project_id, wo_id = str(uuid.uuid4()), str(uuid.uuid4())
+    t1, t2 = str(uuid.uuid4()), str(uuid.uuid4())
+    now = "2026-08-28T00:00:00+00:00"
+
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at, project_path)"
+        " VALUES (?,?,?,?,?,?,?)",
+        (project_id, "P", "", "active", now, now, str(root)),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+        "  status, created_at, updated_at)"
+        " VALUES (?,?,NULL,'WO','d','infrastructure','in_progress',?,?)",
+        (wo_id, project_id, now, now),
+    )
+    for tid, title in ((t1, "first"), (t2, "second")):
+        conn.execute(
+            "INSERT INTO business_tasks"
+            " (task_id, work_order_id, project_id, title, description, status,"
+            "  created_at, updated_at) VALUES (?,?,?,?,'d','pending',?,?)",
+            (tid, wo_id, project_id, title, now, now),
+        )
+    conn.commit()
+    conn.close()
+
+    record_delivery_boundary(wo_id, repo_root=root, db_path=db)
+    assert not read_delivery_boundary(wo_id, db_path=db).get("end_commit")
+
+    # mark_task_done derives its db from dream_studio_home; the `db` fixture lives at
+    # tmp_path/state/studio.db, which is exactly what _require_db resolves to.
+    mark_task_done(
+        work_order_id=wo_id, task_id=t1, source_root=tmp_path, dream_studio_home=tmp_path
+    )
+    assert not read_delivery_boundary(wo_id, db_path=db).get(
+        "end_commit"
+    ), "an earlier task-done is not the end of the work"
+
+    # mark_task_done emits task.completed and the TaskProjection applies it. In this
+    # fixture the projection cannot (FOREIGN KEY constraint failed -- the seeded rows
+    # do not satisfy its parents), so t1's status would stay 'pending', the next call
+    # would recount 2 remaining, and `remaining == 0` would never hold. Applying the
+    # status here is what the projection would have done. Without this the test fails
+    # for a reason that has nothing to do with the boundary -- verified by reproducing
+    # the same flow outside pytest, where the stamp landed correctly.
+    conn = sqlite3.connect(str(db))
+    conn.execute("UPDATE business_tasks SET status='complete' WHERE task_id=?", (t1,))
+    conn.commit()
+    conn.close()
+
+    mark_task_done(
+        work_order_id=wo_id, task_id=t2, source_root=tmp_path, dream_studio_home=tmp_path
+    )
+    boundary = read_delivery_boundary(wo_id, db_path=db)
+    assert boundary.get("end_commit"), (
+        "the LAST task-done must pin the end, or a pre-close verify grades an unbounded " "range"
+    )

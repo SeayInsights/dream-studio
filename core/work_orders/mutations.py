@@ -144,6 +144,43 @@ def mark_task_done(
         result["suggested_action"] = (
             f"All tasks complete. Close work order: ds work-order close {work_order_id}"
         )
+    # WO-BOUNDARY-OPEN-END task 1, second half: pin the boundary when the LAST task is
+    # done, not only at close.
+    #
+    # A work order is routinely verified BEFORE it is closed -- `ds work-order verify` is a
+    # separate command an operator runs to decide whether to close at all. Without a stamp
+    # here that verify still grades every commit since the work order started. Task 1 named
+    # both halves; shipping only the close half was a false-done, caught by this work
+    # order's own independent review.
+    #
+    # OUTSIDE the `with _connect(...)` block on purpose. The first attempt sat inside it,
+    # so record_delivery_boundary_end opened a SECOND connection to the same SQLite file
+    # while the outer transaction held it, the write failed, and a bare `except: pass`
+    # swallowed it -- the stamp silently never happened. That is the ERROR HANDLING
+    # HONESTY rule in this repo's own SDLC baseline, broken by the code enforcing it.
+    #
+    # Still best-effort, because finishing a task must not fail on bookkeeping -- but the
+    # failure is REPORTED on the result now instead of vanishing.
+    if remaining == 0:
+        try:
+            from core.work_orders.delivery_boundary import record_delivery_boundary_end
+            from core.work_orders.verify_executor import resolve_project_root
+
+            _boundary = record_delivery_boundary_end(
+                work_order_id,
+                repo_root=resolve_project_root(work_order_id, db_path),
+                db_path=db_path,
+                now=now,
+            )
+            if _boundary.get("end_commit"):
+                result["delivery_boundary_end"] = _boundary["end_commit"]
+            elif _boundary.get("reason") or _boundary.get("end_record_error"):
+                result["delivery_boundary_end_error"] = str(
+                    _boundary.get("end_record_error") or _boundary.get("reason")
+                )[:200]
+        except Exception as exc:  # noqa: BLE001 - a task-done must not fail on bookkeeping
+            result["delivery_boundary_end_error"] = f"{type(exc).__name__}: {exc}"[:200]
+
     return result
 
 
