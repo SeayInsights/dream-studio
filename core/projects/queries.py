@@ -108,6 +108,23 @@ def get_project_status(
         "open_work_order_count": open_work_order_count,
     }
 
+    # WO-LOOP-TEXT-STALE follow-on: LEFT JOIN, not INNER.
+    #
+    # ready_work_orders() was changed to a LEFT JOIN in PR #681 so milestone-less work
+    # orders stopped being dropped. THIS function was not, and it is the one the
+    # autonomous loop actually calls (`ds project state` -> next_work_order). So two
+    # milestone-less work orders on the live authority were invisible to the selector
+    # while being visible to the ready set -- the two readers disagreed about what work
+    # exists.
+    #
+    # Found by a test written to pin the loop's PROSE against the engine: the corrected
+    # prose claimed milestone-less work orders were included, the test checked the engine,
+    # and the engine said otherwise. The correction was false when written.
+    #
+    # NULL order_index sorts LAST (`m.order_index IS NULL` first in the ORDER BY). SQLite
+    # orders NULL first in ASC, which would have let a milestone-less work order jump
+    # ahead of every milestone -- the opposite of "milestone order is advisory".
+
 
 def get_next_work_order(
     *,
@@ -120,9 +137,9 @@ def get_next_work_order(
         row = conn.execute(
             "SELECT wo.work_order_id, wo.title, wo.work_order_type, m.title AS milestone_title"
             " FROM business_work_orders wo"
-            " INNER JOIN business_milestones m ON wo.milestone_id = m.milestone_id"
+            " LEFT JOIN business_milestones m ON wo.milestone_id = m.milestone_id"
             " WHERE wo.project_id = ? AND wo.status = 'in_progress'"
-            " ORDER BY m.order_index ASC, wo.sequence_order ASC NULLS LAST, wo.created_at ASC"
+            " ORDER BY m.order_index IS NULL, m.order_index ASC, wo.sequence_order ASC NULLS LAST, wo.created_at ASC"
             " LIMIT 1",
             (project_id,),
         ).fetchone()
@@ -130,7 +147,7 @@ def get_next_work_order(
             row = conn.execute(
                 "SELECT wo.work_order_id, wo.title, wo.work_order_type, m.title AS milestone_title"
                 " FROM business_work_orders wo"
-                " INNER JOIN business_milestones m ON wo.milestone_id = m.milestone_id"
+                " LEFT JOIN business_milestones m ON wo.milestone_id = m.milestone_id"
                 # WO-WO-LIFECYCLE-SURFACE: the MIN(order_index) filter is GONE. It
                 # restricted every answer to the single lowest-numbered milestone with
                 # open work, so independent milestones were invisible no matter what the
@@ -145,7 +162,7 @@ def get_next_work_order(
                 "   WHERE dep.work_order_id = wo.work_order_id"
                 "     AND dep_wo.status != 'closed'"
                 " )"
-                " ORDER BY m.order_index ASC, wo.sequence_order ASC NULLS LAST,"
+                " ORDER BY m.order_index IS NULL, m.order_index ASC, wo.sequence_order ASC NULLS LAST,"
                 "          wo.created_at ASC LIMIT 1",
                 (project_id,),
             ).fetchone()

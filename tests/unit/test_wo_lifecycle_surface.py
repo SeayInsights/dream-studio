@@ -287,3 +287,75 @@ def test_the_internal_description_does_not_leak_into_the_payload(db):
         assert "_description" not in entry
         assert "description" not in entry
     conn.close()
+
+
+# -- WO-LOOP-TEXT-STALE: prose about an engine is a second implementation of it -
+
+
+def _next_iteration_command() -> str:
+    """The autonomous loop's selector instructions, as an agent reads them."""
+    import yaml
+
+    data = yaml.safe_load(
+        Path("canonical/workflows/execute-work-orders.yaml").read_text(encoding="utf-8")
+    )
+    node = next(n for n in data["nodes"] if n["id"] == "next-iteration")
+    return node["command"]
+
+
+def _live_bullets(command: str) -> list[str]:
+    """Bullets are live claims. The correction note quotes the old text as history, so a
+    substring search over the whole block cannot tell an assertion from a citation -- the
+    same quotation problem the evidence-backed-output gate had to solve."""
+    return [ln.strip() for ln in command.splitlines() if ln.strip().startswith("- ")]
+
+
+def test_the_loop_text_matches_the_selector():
+    """MEASURED 2026-08-28. The node told an agent the selector was "scoped to the
+    milestone with the lowest order_index that has open WOs" and that "WOs without a valid
+    milestone are excluded (never surfaced)", then added "Trust the selector output
+    exactly".
+
+    PR #681 removed the `m.order_index = (SELECT MIN(...))` filter and changed the
+    milestone join to a LEFT JOIN, making both false. An agent following the old text
+    faithfully would have worked AGAINST the fan-out -- and the stale copy is the one an
+    agent reads.
+    """
+    command = _next_iteration_command()
+    bullets = " ".join(_live_bullets(command))
+
+    assert "lowest order_index" not in bullets, (
+        "a live bullet still claims milestone-scoped selection, which the engine no " "longer does"
+    )
+    assert "never surfaced" not in bullets, (
+        "a live bullet still claims milestone-less work orders are excluded; the join is "
+        "a LEFT JOIN and two such work orders exist on the live authority"
+    )
+    assert "EVERY open milestone" in command
+    assert "LEFT JOIN" in command
+
+
+def test_the_engine_still_matches_what_the_text_now_claims():
+    """THE OTHER DIRECTION, which is what makes this a pin rather than a one-off edit.
+    If someone reinstates milestone scoping in the query, this fails and points at the
+    prose that would then be lying."""
+    source = Path("core/projects/queries.py").read_text(encoding="utf-8")
+
+    body = source.split("def get_next_work_order", 1)[1].split("def ", 1)[0]
+    assert "order_index = (SELECT MIN" not in body, (
+        "get_next_work_order scopes to one milestone again -- the loop text now says every "
+        "open milestone is reachable, so one of the two is wrong"
+    )
+    assert "LEFT JOIN business_milestones" in body, (
+        "the milestone join is no longer a LEFT JOIN -- milestone-less work orders would "
+        "be dropped, which the loop text says does not happen"
+    )
+
+
+def test_the_correction_records_what_changed_and_why():
+    """A silent edit leaves the next reader unable to tell which of two contradictory
+    descriptions was ever true. The note names the PR and states the old text was false."""
+    command = _next_iteration_command()
+    assert "previously said" in command
+    assert "#681" in command
+    assert "making both statements false" in command
