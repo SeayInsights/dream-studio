@@ -14,6 +14,7 @@ on_failure: abort
 
 nodes:
   - id: capability-probe
+    completion_contains: "GITHUB:"
     command: |
       Run: py -m core.preflight.capability_probe
       OR call is_github_usable() from core.preflight.capability_probe.
@@ -28,6 +29,7 @@ nodes:
     timeout_seconds: 30
 
   - id: escalation-probe
+    completion_contains: "EXECUTOR:"
     depends_on: [capability-probe]
     command: |
       Resolve the executor (model) this work order must run on — escalation-aware.
@@ -47,6 +49,7 @@ nodes:
     timeout_seconds: 30
 
   - id: preflight-check
+    completion_contains: "PREFLIGHT: CLEAR"
     depends_on: [escalation-probe]
     command: |
       Call `py -m interfaces.cli.ds work-order tasks <active_work_order_id>`.
@@ -64,6 +67,7 @@ nodes:
     timeout_seconds: 60
 
   - id: migration-class-check
+    completion_contains: "MIGRATION_CLASS: clear"
     depends_on: [preflight-check]
     command: |
       Inspect the active work order's task list and description.
@@ -79,6 +83,7 @@ nodes:
     timeout_seconds: 30
 
   - id: implement-tasks
+    completion_contains: "TASKS_DONE"
     depends_on: [migration-class-check]
     skill: build
     model: sonnet
@@ -98,7 +103,12 @@ nodes:
         py -m interfaces.cli.ds work-order task-done <work_order_id> <task_id>
       Do not skip tasks. Do not mark a task done unless its acceptance criteria are verifiably met.
 
+      When EVERY task on the work order is marked done, print: TASKS_DONE
+      If any task remains open or you stopped early, print: TASKS_INCOMPLETE: <what stopped you>
+      Do not print TASKS_DONE unless `ds work-order tasks <work_order_id>` shows none remaining.
+
   - id: run-gates
+    completion_contains: "GATES: PASS"
     skill: verify
     depends_on: [implement-tasks]
     model: sonnet
@@ -118,6 +128,7 @@ nodes:
       Output: GATES: PASS or GATES: FAIL <reason>
 
   - id: create-branch
+    completion_contains: "BRANCH:"
     depends_on: [run-gates]
     condition: "{{capability-probe.output}} contains 'GITHUB: YES' and {{run-gates.output}} contains 'GATES: PASS'"
     command: |
@@ -136,6 +147,7 @@ nodes:
     timeout_seconds: 120
 
   - id: push-and-pr
+    completion_contains: "PR:"
     depends_on: [create-branch]
     condition: "{{capability-probe.output}} contains 'GITHUB: YES'"
     command: |
@@ -151,6 +163,7 @@ nodes:
     timeout_seconds: 120
 
   - id: watch-ci
+    completion_contains: "CI: ALL_GREEN"
     depends_on: [push-and-pr]
     condition: "{{capability-probe.output}} contains 'GITHUB: YES'"
     command: |
@@ -164,6 +177,7 @@ nodes:
     timeout_seconds: 600
 
   - id: merge
+    completion_contains: "MERGED:"
     depends_on: [watch-ci]
     condition: "{{capability-probe.output}} contains 'GITHUB: YES' and {{watch-ci.output}} contains 'CI: ALL_GREEN'"
     command: |
@@ -175,6 +189,7 @@ nodes:
     timeout_seconds: 60
 
   - id: independent-review
+    completion_contains: "REVIEW_PASS"
     depends_on: [run-gates]
     condition: "{{run-gates.output}} contains 'GATES: PASS'"
     command: |
@@ -217,6 +232,7 @@ nodes:
     timeout_seconds: 300
 
   - id: close-work-order-github
+    completion_contains: "WO_CLOSED:"
     depends_on: [merge, independent-review]
     condition: "{{capability-probe.output}} contains 'GITHUB: YES' and {{independent-review.output}} contains 'REVIEW_PASS'"
     command: |
@@ -228,6 +244,7 @@ nodes:
     timeout_seconds: 120
 
   - id: close-work-order-local
+    completion_contains: "WO_CLOSED_LOCAL:"
     depends_on: [run-gates, independent-review]
     condition: "{{capability-probe.output}} contains 'GITHUB: NO' and {{run-gates.output}} contains 'GATES: PASS' and {{independent-review.output}} contains 'REVIEW_PASS'"
     command: |
@@ -240,6 +257,7 @@ nodes:
     timeout_seconds: 120
 
   - id: next-iteration
+    completion_contains: "NEXT:"
     depends_on: [close-work-order-github, close-work-order-local]
     trigger_rule: any_done
     command: |
@@ -262,6 +280,8 @@ nodes:
 
       DO NOT fall back to created_at ordering or any manual list.
       Trust the selector output exactly — it is the authoritative sequence.
+
+      Print: NEXT: <work_order_id>   (or NEXT: none when the selector returns no work order)
 
       CORRECTED 2026-08-28 (WO-LOOP-TEXT-STALE). This block previously said the selector
       was "scoped to the milestone with the lowest order_index that has open WOs" and that

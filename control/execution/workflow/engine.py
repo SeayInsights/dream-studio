@@ -365,7 +365,15 @@ def _compute_ready_nodes(
         elif trigger_rule == "all_success":
             deps_met = all(s == "completed" for s in dep_statuses)
         elif trigger_rule == "all_done":
-            deps_met = all(s in ("completed", "failed", "skipped") for s in dep_statuses)
+            # `unverified` belongs here and `blocked` does not. all_done means "the
+            # dependency reached a terminal state, I do not care how it went" -- and
+            # unverified IS terminal: the node ran and nobody looked at the result.
+            # Leaving it out made unverified STRICTER than failed, which is incoherent:
+            # failed is a stronger negative and it satisfies this rule. `blocked` stays
+            # out because it is explicitly not-yet — the effect may still arrive.
+            deps_met = all(
+                s in ("completed", "failed", "skipped", "unverified") for s in dep_statuses
+            )
         elif trigger_rule == "one_success":
             deps_met = any(s == "completed" for s in dep_statuses)
 

@@ -146,6 +146,9 @@ class WorkflowRunner:
     def __init__(self, wf_key: str, dry_run: bool = False) -> None:
         self.wf_key = wf_key
         self.dry_run = dry_run
+        # Why the last run() stopped, when it stopped at "blocked". Always present, so a
+        # caller never has to guess whether the attribute exists before reading it.
+        self.blocked_on: str = ""
 
     # ── Public API ────────────────────────────────────────────────────────
 
@@ -195,6 +198,7 @@ class WorkflowRunner:
                     return "completed"
                 if all_statuses <= {"completed", "skipped", "failed"}:
                     return "completed_with_failures"
+                self.blocked_on = self._describe_blockage(state_nodes)
                 return "blocked"
 
             # Context budget guard for parallel waves
@@ -340,7 +344,7 @@ class WorkflowRunner:
                 # command-node branch -- referencing it for a skill node raised
                 # UnboundLocalError and broke four existing tests.
                 _node_yaml = (full_yaml_nodes or {}).get(node_id) or ynode
-                status, reason = self._verify_completion(node_id, _node_yaml)
+                status, reason = self._verify_completion(node_id, _node_yaml, output)
             if reason:
                 output = f"{output}\n\n[completion] {status.upper()}: {reason}"
             self._update_node(node_id, status, output, duration=duration)
@@ -442,14 +446,56 @@ class WorkflowRunner:
     # where a command succeeds but says the wrong thing (a gate that prints
     # "Overall: FAIL" and exits 0).
 
-    def _verify_completion(self, node_id: str, ynode: dict) -> tuple[str, str | None]:
+    def _describe_blockage(self, state_nodes: dict) -> str:
+        """Why the run stopped, in terms an operator can act on.
+
+        `run()` returned the bare string "blocked" and `ds workflow run` printed
+        "[workflow] final status: blocked". That is a status, not direction -- it names
+        no node, no reason, and nothing to do, so the loop hands back exactly the
+        question the operator started with. A driver that stops without saying what it
+        is waiting on has not removed the human from the loop; it has moved them to a
+        worse position, because now they must reconstruct the state themselves.
+        """
+        lines: list[str] = []
+        for nid, node in state_nodes.items():
+            status = node.get("status")
+            if status in ("completed", "skipped", "pending"):
+                continue
+            reason = (node.get("blocked_reason") or "").strip()
+            if not reason:
+                out = (node.get("output") or "").strip()
+                marker = "[completion] "
+                if marker in out:
+                    reason = out.split(marker, 1)[1].splitlines()[0]
+            lines.append(f"  {nid}: {status}" + (f" — {reason}" if reason else ""))
+        if not lines:
+            return "no node reports a blocking status; check for a dependency cycle"
+        return chr(10).join(lines)
+
+    def _verify_completion(
+        self, node_id: str, ynode: dict, output: str = ""
+    ) -> tuple[str, str | None]:
         """Return ``(status, reason)`` for a node whose prompt was delivered.
 
-        * no ``completion_check`` -> ``("unverified", why)``. NOT "completed": a node whose
+        Two kinds of evidence, because the nodes come in two kinds.
+
+        ``completion_contains`` ALONE checks the node's OWN output. Every node in
+        execute-work-orders ends by telling the agent to print a specific token --
+        "Print: GATES: PASS", "Print: BRANCH: <name>", "Print: REVIEW_PASS" -- so the
+        token is already the declared observable, and the agent either produced it or did
+        not. Requiring a subprocess to confirm that would mean inventing an external
+        effect for a node whose effect is a report.
+
+        ``completion_check`` runs a shell command whose exit status is the evidence, for
+        nodes with an effect worth confirming independently of what the agent claims --
+        a branch that exists, a work order the authority says is closed.
+        ``completion_contains`` then applies to THAT command's output.
+
+        * neither declared -> ``("unverified", why)``. NOT "completed": a node whose
           effect nobody looked at has not been shown to have happened, and reporting it as
           done is the exact claim this work order exists to stop.
-        * check passes -> ``("completed", None)``
-        * check fails  -> ``("blocked", what was expected and what was seen)``
+        * evidence holds -> ``("completed", None)``
+        * evidence absent -> ``("blocked", what was expected and what was seen)``
 
         BLOCKED IS NOT FAILED. Failed means the work was attempted and went wrong; blocked
         means the effect is not there yet, which for a prose node usually means the agent
@@ -463,11 +509,38 @@ class WorkflowRunner:
             return "completed", None
 
         check = (ynode.get("completion_check") or "").strip()
+        expected_raw = (ynode.get("completion_contains") or "").strip()
+        # A check that cannot name the thing it is checking can only assert generalities.
+        # `{{node.output}}` and `{{node.field}}` resolve here exactly as they do in a
+        # node's prompt -- without this, "does the PR exist" could not reference the PR
+        # number the previous node printed, and every check would have to be repo-global.
+        if "{{" in check or "{{" in expected_raw:
+            try:
+                from control.execution.workflow.engine import resolve_templates
+
+                wf = (self._load_state().get("active_workflows", {}) or {}).get(self.wf_key, {})
+                check = resolve_templates(check, wf).strip()
+                expected_raw = resolve_templates(expected_raw, wf).strip()
+            except Exception:
+                # An unresolvable template leaves the literal in place; the check then
+                # fails and the node blocks with the reason, which is the right outcome.
+                pass
         if not check:
+            if not expected_raw:
+                return (
+                    "unverified",
+                    "no completion_check or completion_contains declared, so the effect of "
+                    "this node was never observed -- its prompt was delivered and nothing "
+                    "confirms the work",
+                )
+            # The node's own report IS the declared observable. It said what it would
+            # print; either it printed it or it did not.
+            if expected_raw in (output or ""):
+                return "completed", None
             return (
-                "unverified",
-                "no completion_check declared, so the effect of this node was never "
-                "observed -- its prompt was delivered and nothing confirms the work",
+                "blocked",
+                f"the node did not report {expected_raw!r}, which its prompt says it "
+                f"prints on success",
             )
 
         try:
@@ -497,7 +570,7 @@ class WorkflowRunner:
                 f"completion_check exited {proc.returncode}: {check} -> {tail}",
             )
 
-        expected = (ynode.get("completion_contains") or "").strip()
+        expected = expected_raw
         if expected and expected not in out:
             return (
                 "blocked",

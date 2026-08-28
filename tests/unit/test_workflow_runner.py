@@ -641,3 +641,123 @@ def test_the_check_is_bounded():
     from control.execution.workflow.runner import _COMPLETION_CHECK_TIMEOUT
 
     assert 0 < _COMPLETION_CHECK_TIMEOUT <= 120, _COMPLETION_CHECK_TIMEOUT
+
+
+# -- WO-NODE-COMPLETION-EVIDENCE task 4: the driver stops where a human is needed ----
+
+
+def test_the_driver_stops_at_a_blocked_node():
+    """THE DRIVER ALREADY EXISTED. The task said to build `ds workflow run
+    --until-blocked`; `ds workflow run` was already a loop that advances waves and
+    returns when nothing is ready. What it could not do was say ANYTHING about why it
+    stopped -- `cmd_run` printed "[workflow] final status: blocked" and exited 1.
+
+    That is a status, not direction. It names no node, no reason, and nothing to do, so
+    the loop hands back exactly the question the operator started with. A driver that
+    stops without saying what it is waiting on has not taken the human out of the loop;
+    it has moved them somewhere worse, because now they must reconstruct the state.
+    """
+    from control.execution.workflow.runner import WorkflowRunner
+
+    r = WorkflowRunner.__new__(WorkflowRunner)
+    described = WorkflowRunner._describe_blockage(
+        r,
+        {
+            "capability-probe": {"status": "completed"},
+            "run-gates": {
+                "status": "blocked",
+                "output": "…\n\n[completion] BLOCKED: the node did not report 'GATES: PASS'",
+            },
+            "create-branch": {"status": "pending"},
+        },
+    )
+
+    assert "run-gates" in described, "the operator must be told WHICH node"
+    assert "GATES: PASS" in described, "and what it was waiting for"
+    assert "capability-probe" not in described, "a completed node is not what it waits on"
+    assert "create-branch" not in described, "a pending downstream node is noise, not a blocker"
+
+
+def test_a_blockage_with_no_blocking_node_says_so_rather_than_returning_empty():
+    """An empty string would print as "[workflow] waiting on:" followed by nothing --
+    the same non-answer in a longer form."""
+    from control.execution.workflow.runner import WorkflowRunner
+
+    r = WorkflowRunner.__new__(WorkflowRunner)
+    described = WorkflowRunner._describe_blockage(r, {"a": {"status": "pending"}})
+    assert described.strip()
+    assert "cycle" in described
+
+
+def test_unverified_satisfies_all_done_because_failed_does():
+    """MY OWN DEFECT, found by asking what the statuses mean rather than what they do.
+
+    `all_done` means "the dependency reached a terminal state, I do not care how it
+    went". I added `unverified` without adding it here, which made unverified STRICTER
+    than failed -- a stronger negative that this rule already accepts. `blocked` stays
+    out on purpose: it is explicitly not-yet, and the effect may still arrive.
+    """
+    from control.execution.workflow.engine import _compute_ready_nodes
+
+    ynodes = {"a": {"id": "a"}, "b": {"id": "b", "depends_on": ["a"], "trigger_rule": "all_done"}}
+
+    def _ready(status):
+        state = {"a": {"status": status}, "b": {"status": "pending"}}
+        return _compute_ready_nodes(ynodes, state, {})[0]
+
+    assert _ready("failed") == ["b"], "baseline: all_done accepts a failed dependency"
+    assert _ready("unverified") == ["b"], "so it must accept a weaker negative too"
+    assert _ready("blocked") == [], "but not-yet is not done"
+
+
+def test_every_orchestrator_node_declares_an_observable():
+    """MEASURED 2026-08-28: 14 nodes, 0 completion checks. With completion verified
+    rather than assumed, node 1 returned `unverified` and every downstream node became
+    unreachable -- the loop stopped at the first node. Before that it marched through all
+    14 declaring success on a prompt that merely loaded. Neither directs anything.
+    """
+    import yaml
+
+    path = (
+        Path(__file__).resolve().parents[2] / "canonical" / "workflows" / "execute-work-orders.yaml"
+    )
+    nodes = yaml.safe_load(path.read_text(encoding="utf-8"))["nodes"]
+
+    assert nodes, "the orchestrator has no nodes"
+    missing = [
+        n["id"] for n in nodes if not n.get("completion_contains") and not n.get("completion_check")
+    ]
+    assert missing == [], f"nodes that would report unverified forever: {missing}"
+
+
+def test_every_declared_token_is_one_its_own_prompt_asks_for():
+    """A token the prompt never tells the agent to print can never appear, so the node
+    blocks forever -- a check that always fails is as useless as one that never does.
+    Three of my first fourteen were exactly that: preflight-check prints
+    'PREFLIGHT: CLEAR' and I wrote PREFLIGHT_OK; implement-tasks and next-iteration
+    printed no token at all.
+
+    And MIGRATION_CLASS: matched BOTH 'operator go required' and 'clear', so halting for
+    an operator decision would have reported as completion -- the node succeeding at
+    stopping.
+    """
+    import yaml
+
+    path = (
+        Path(__file__).resolve().parents[2] / "canonical" / "workflows" / "execute-work-orders.yaml"
+    )
+    nodes = yaml.safe_load(path.read_text(encoding="utf-8"))["nodes"]
+
+    for node in nodes:
+        token = node.get("completion_contains")
+        if not token:
+            continue
+        prompt = (node.get("command") or "") + (node.get("input") or "")
+        assert (
+            token in prompt
+        ), f"{node['id']} waits for {token!r}, which its own prompt never asks it to print"
+
+    by_id = {n["id"]: n for n in nodes}
+    assert (
+        by_id["migration-class-check"]["completion_contains"] == "MIGRATION_CLASS: clear"
+    ), "the bare prefix also matches the halt line, so stopping would read as completing"
