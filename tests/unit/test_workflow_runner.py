@@ -502,3 +502,142 @@ def test_command_node_output_enables_downstream_templates(tmp_path):
     n2_output = state["active_workflows"]["wf-tmpl-1"]["nodes"]["n2"].get("output", "")
     assert n1_output, "n1 must have non-empty output after execution"
     assert n2_output, "n2 must have non-empty output after n1 completes"
+
+
+# -- WO-NODE-COMPLETION-EVIDENCE: a node is complete when its EFFECT is observable ---
+
+
+def _runner_for_verification():
+    """A runner instance whose only job is to answer _verify_completion.
+
+    Constructed without __init__ because the method reads exactly one attribute and
+    building a whole workflow to ask "is this node done" would test the harness, not the
+    behaviour.
+    """
+    from control.execution.workflow.runner import WorkflowRunner
+
+    r = WorkflowRunner.__new__(WorkflowRunner)
+    r.dry_run = False
+    return r
+
+
+def test_a_node_without_an_observable_condition_is_not_reported_completed():
+    """THE DEFECT THIS WORK ORDER EXISTS FOR.
+
+    _invoke_skill loads a node's text and returns it with the footer "The AI reading this
+    output has the skill instructions above and should now execute them". _execute_wave
+    then set `status = "completed" if success else "failed"` -- where success meant the
+    text LOADED. So a node was complete when its prompt was printed.
+
+    Measured: all 14 nodes of execute-work-orders.yaml are prose-for-an-agent, and none is
+    executable as written. A driver over that would march through fourteen nodes declaring
+    success with no work done.
+    """
+    from control.execution.workflow.runner import WorkflowRunner
+
+    status, reason = WorkflowRunner._verify_completion(_runner_for_verification(), "n1", {})
+
+    assert status == "unverified", f"a node whose effect nobody observed reported {status!r}"
+    assert status != "completed"
+    assert reason and "never observed" in reason
+    assert "completion_check" in reason, "the reason must name what would fix it"
+
+
+def test_a_loaded_prompt_leaves_the_node_pending():
+    """Task 2, stated as the runner sees it: loading is not completing. The wave must not
+    reach "completed" for a node that only declares prose."""
+    import inspect
+
+    from control.execution.workflow.runner import WorkflowRunner
+
+    src = inspect.getsource(WorkflowRunner._execute_wave)
+    assert (
+        '"completed" if success else "failed"' not in src
+    ), "the wave still equates a successful LOAD with completion"
+    assert "_verify_completion(" in src, "the wave must consult the completion check"
+
+
+def test_an_unmet_condition_blocks_with_a_reason():
+    """BLOCKED IS NOT FAILED. Failed means the work was attempted and went wrong; blocked
+    means the effect is not there yet -- for a prose node, usually that the agent has not
+    done it. A driver must stop at blocked without recording a failure."""
+    from control.execution.workflow.runner import WorkflowRunner
+
+    status, reason = WorkflowRunner._verify_completion(
+        _runner_for_verification(),
+        "n1",
+        {"completion_check": "git rev-parse --verify no-such-ref-exists-here"},
+    )
+
+    assert status == "blocked", f"an unmet condition reported {status!r}"
+    assert status != "failed", "the node was not attempted-and-broken; its effect is absent"
+    assert reason and "exited" in reason, "the reason must name what was observed"
+    assert "no-such-ref-exists-here" in reason, "and the check that was run"
+
+
+def test_a_met_condition_completes():
+    """The condition has to be satisfiable, or the gate is a wall rather than a check."""
+    from control.execution.workflow.runner import WorkflowRunner
+
+    status, reason = WorkflowRunner._verify_completion(
+        _runner_for_verification(),
+        "n1",
+        {"completion_check": "git rev-parse --abbrev-ref HEAD"},
+    )
+    assert status == "completed"
+    assert reason is None
+
+
+def test_a_check_that_exits_zero_while_saying_the_wrong_thing_blocks():
+    """The case completion_contains exists for. A gate can print "Overall: FAIL" and exit
+    0; an exit code alone would read that as success -- the same
+    absence-of-failure-is-not-evidence-of-success shape this milestone keeps finding."""
+    from control.execution.workflow.runner import WorkflowRunner
+
+    status, reason = WorkflowRunner._verify_completion(
+        _runner_for_verification(),
+        "n1",
+        {
+            "completion_check": "git rev-parse --abbrev-ref HEAD",
+            "completion_contains": "a-branch-name-that-is-not-checked-out",
+        },
+    )
+    assert status == "blocked"
+    assert reason and "does not contain" in reason
+
+
+def test_a_check_that_cannot_run_blocks_rather_than_completing():
+    """An unrunnable check has proved nothing. Treating it as success would make a broken
+    condition indistinguishable from a met one."""
+    from control.execution.workflow.runner import WorkflowRunner
+
+    status, reason = WorkflowRunner._verify_completion(
+        _runner_for_verification(),
+        "n1",
+        {"completion_check": "this-command-does-not-exist-anywhere --please"},
+    )
+    assert status == "blocked"
+    assert reason
+
+
+def test_dry_run_still_marks_nodes_completed():
+    """Dry run SIMULATES; nothing ran, so no condition can hold. Verifying one would make
+    every dry run report blocked -- turning a planning tool into a wall. The simulation
+    keeps its old meaning: this node WOULD complete."""
+    from control.execution.workflow.runner import WorkflowRunner
+
+    r = WorkflowRunner.__new__(WorkflowRunner)
+    r.dry_run = True
+
+    status, reason = WorkflowRunner._verify_completion(r, "n1", {})
+    assert status == "completed"
+    assert reason is None
+
+
+def test_the_check_is_bounded():
+    """A completion check observes an effect that already happened -- a git ref, a status
+    query. It must be a cheap read, never the work itself, or the orchestrator's own
+    timeout budget is spent proving what it just did."""
+    from control.execution.workflow.runner import _COMPLETION_CHECK_TIMEOUT
+
+    assert 0 < _COMPLETION_CHECK_TIMEOUT <= 120, _COMPLETION_CHECK_TIMEOUT

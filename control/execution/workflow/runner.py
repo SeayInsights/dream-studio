@@ -11,6 +11,7 @@ interpreter respawn).
 from __future__ import annotations
 
 import sys
+import subprocess
 import time
 from datetime import datetime, UTC
 from pathlib import Path
@@ -96,6 +97,10 @@ _NODE_TYPE_TO_MODE: dict[str, str] = {
     "plan": "plan",
 }
 _DEFAULT_COMMAND_MODE = "build"
+
+# A completion check observes an effect that ALREADY happened -- a git ref, a
+# status query, a gate's last line. It must be a cheap read, never the work itself.
+_COMPLETION_CHECK_TIMEOUT = 60
 
 
 def resolve_specifier(skill_raw: str) -> str:
@@ -326,7 +331,18 @@ class WorkflowRunner:
             if is_command_node and success:
                 output = f"{node_id} executed via {specifier}"
 
-            status = "completed" if success else "failed"
+            if not success:
+                status, reason = "failed", None
+            else:
+                # Read the FULL yaml node, not the parsed summary: completion_check
+                # is a block scalar and lives only in the full node. Resolved here
+                # rather than reusing `full_ynode`, which is assigned only inside the
+                # command-node branch -- referencing it for a skill node raised
+                # UnboundLocalError and broke four existing tests.
+                _node_yaml = (full_yaml_nodes or {}).get(node_id) or ynode
+                status, reason = self._verify_completion(node_id, _node_yaml)
+            if reason:
+                output = f"{output}\n\n[completion] {status.upper()}: {reason}"
             self._update_node(node_id, status, output, duration=duration)
             self._emit_node_event(node_id, status)
             self._emit_progress_event(wf_state)
@@ -401,6 +417,94 @@ class WorkflowRunner:
             return True, output[:2000]
         except Exception as exc:
             return False, str(exc)[:500]
+
+    # WO-NODE-COMPLETION-EVIDENCE: a node is complete when its effect is OBSERVABLE.
+    #
+    # Operator: "I'm tired of having to update you to move on ... register everything that
+    # is needed and an orchestrator continues on making sure everything moves along
+    # correctly."
+    #
+    # The orchestrator already exists -- execute-work-orders.yaml has 14 nodes covering the
+    # whole loop, and this runner computes ready nodes from real dependency logic. What was
+    # missing is not a driver. It is that completion was UNVERIFIED: _invoke_skill loads a
+    # node's text, returns it with the footer "The AI reading this output has the skill
+    # instructions above and should now execute them", and the wave then marked the node
+    # "completed" on a successful LOAD. All 14 nodes are prose-for-an-agent; none is
+    # executable as written.
+    #
+    # So a driver over this would march through fourteen nodes printing prompts and
+    # declaring success with no work done -- the assert-instead-of-verify defect at the
+    # orchestration layer, where it is hardest to notice. That is why the driver is
+    # sequenced AFTER this.
+    #
+    # A node may declare `completion_check`: a shell command whose exit status is the
+    # evidence. Optionally `completion_contains` requires text in its output, for the case
+    # where a command succeeds but says the wrong thing (a gate that prints
+    # "Overall: FAIL" and exits 0).
+
+    def _verify_completion(self, node_id: str, ynode: dict) -> tuple[str, str | None]:
+        """Return ``(status, reason)`` for a node whose prompt was delivered.
+
+        * no ``completion_check`` -> ``("unverified", why)``. NOT "completed": a node whose
+          effect nobody looked at has not been shown to have happened, and reporting it as
+          done is the exact claim this work order exists to stop.
+        * check passes -> ``("completed", None)``
+        * check fails  -> ``("blocked", what was expected and what was seen)``
+
+        BLOCKED IS NOT FAILED. Failed means the work was attempted and went wrong; blocked
+        means the effect is not there yet, which for a prose node usually means the agent
+        has not done it. A driver must stop at blocked without recording a failure.
+        """
+        # DRY RUN SIMULATES; it does not execute. Nothing ran, so no completion condition
+        # can hold, and verifying one would make every dry run report blocked -- turning a
+        # planning tool into a wall. The simulation keeps its old meaning: this node WOULD
+        # complete.
+        if self.dry_run:
+            return "completed", None
+
+        check = (ynode.get("completion_check") or "").strip()
+        if not check:
+            return (
+                "unverified",
+                "no completion_check declared, so the effect of this node was never "
+                "observed -- its prompt was delivered and nothing confirms the work",
+            )
+
+        try:
+            proc = subprocess.run(
+                check,
+                shell=True,
+                cwd=str(Path(__file__).resolve().parents[3]),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=_COMPLETION_CHECK_TIMEOUT,
+            )
+        except subprocess.TimeoutExpired:
+            return (
+                "blocked",
+                f"completion_check timed out after {_COMPLETION_CHECK_TIMEOUT}s: {check}",
+            )
+        except OSError as exc:
+            return "blocked", f"completion_check could not run ({type(exc).__name__}): {check}"
+
+        out = ((proc.stdout or "") + (proc.stderr or "")).strip()
+        if proc.returncode != 0:
+            tail = out.splitlines()[-1][:160] if out else "(no output)"
+            return (
+                "blocked",
+                f"completion_check exited {proc.returncode}: {check} -> {tail}",
+            )
+
+        expected = (ynode.get("completion_contains") or "").strip()
+        if expected and expected not in out:
+            return (
+                "blocked",
+                f"completion_check succeeded but its output does not contain "
+                f"{expected!r}: {check}",
+            )
+        return "completed", None
 
     def _update_node(
         self,
