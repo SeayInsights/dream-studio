@@ -359,3 +359,231 @@ def test_the_correction_records_what_changed_and_why():
     assert "previously said" in command
     assert "#681" in command
     assert "making both statements false" in command
+
+
+def _one(db: Path, sql: str, params: tuple) -> str | None:
+    """First column of the first row, or None."""
+    conn = sqlite3.connect(str(db))
+    try:
+        row = conn.execute(sql, params).fetchone()
+    finally:
+        conn.close()
+    return row[0] if row else None
+
+
+# -- Task 1: the authoring door --------------------------------------------------
+
+
+def _run(argv: list[str], home: Path) -> tuple[int, str]:
+    """Drive the REAL parser and dispatcher, not the handler functions.
+
+    Calling the handlers directly would prove they work while leaving the thing the task
+    is about -- that a person can type this -- unproven. A wrong `dest=`, a parser never
+    registered, or a dispatch branch that was never added would all pass a handler-level
+    test and fail a user.
+
+    THE ENV OVERRIDES ARE LOAD-BEARING. ``create_*`` accepts ``dream_studio_home`` but its
+    event path ignores it: ``write_event`` resolves ``get_spool_root()`` and ``sync_tick()``
+    builds a ``ProjectionRunner()`` with no path, so both follow process-wide environment
+    rather than the argument. conftest's autouse ``guard_real_homedir`` already keeps that
+    off the operator's authority -- measured, the live orphan count did not move across
+    these runs -- but its guard DB is a different temp file from the ``db`` fixture, so
+    without this the row materialises somewhere the test never looks. The underlying defect
+    is registered as ff7c6ccc, "A temp-database mutation must not emit to the live spool".
+    """
+    import argparse
+    import io
+    import os
+    from contextlib import redirect_stdout
+
+    from interfaces.cli.commands import milestone as milestone_cmd
+    from interfaces.cli.commands import work_order_dispatch as wo_cmd
+
+    parser = argparse.ArgumentParser(prog="ds")
+    sub = parser.add_subparsers(dest="command", required=True)
+    milestone_cmd.register(sub)
+    wo_cmd.register(sub)
+
+    args = parser.parse_args(argv)
+    module = milestone_cmd if args.command == "milestone" else wo_cmd
+
+    keys = ("DREAM_STUDIO_HOME", "DS_SPOOL_ROOT", "DREAM_STUDIO_DB_PATH")
+    prior = {k: os.environ.get(k) for k in keys}
+    os.environ["DREAM_STUDIO_HOME"] = str(home)
+    os.environ["DS_SPOOL_ROOT"] = str(home / "events")
+    os.environ["DREAM_STUDIO_DB_PATH"] = str(home / "state" / "studio.db")
+    buf = io.StringIO()
+    try:
+        with redirect_stdout(buf):
+            code = module.dispatch(args, source_root=home, dream_studio_home=home)
+    finally:
+        for key, value in prior.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+    return code, buf.getvalue()
+
+
+def test_a_milestone_work_order_and_task_can_be_created_from_the_cli(db, tmp_path):
+    """THE REASON THIS TASK EXISTS.
+
+    ``create_milestone``, ``create_work_order`` and ``create_task`` all existed and all
+    emitted canonical events. What did not exist was any way to reach them from the CLI:
+    ``ds milestone`` offered only close/list/status, and ``ds work-order`` offered
+    start/close/task-done but no create and no add-task.
+
+    So every authoring action was raw SQL by an adapter. That is a rule violation on its
+    own -- ``rule3-cli-business-state-writer`` says the CLI owns business-state writes --
+    and it is also why no structural invariant could be enforced: with no single door,
+    there was nowhere to put a check. Measured on the live authority 2026-08-28: 49 of 128
+    open work orders carry one task or none, and 29 of 45 open milestones carry one open
+    work order or none. Nothing could have refused those.
+    """
+    import sqlite3
+    import uuid
+
+    pid = str(uuid.uuid4())
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+        (pid, "P", "", "active", _NOW, _NOW),
+    )
+    conn.commit()
+    conn.close()
+
+    code, out = _run(
+        ["milestone", "create", pid, "--title", "Ship the authoring door", "--order", "1"],
+        tmp_path,
+    )
+    assert code == 0, out
+    mid = _one(db, "SELECT milestone_id FROM business_milestones WHERE project_id = ?", (pid,))
+    assert mid, "the milestone event did not reach the projection"
+
+    code, out = _run(
+        [
+            "work-order",
+            "create",
+            pid,
+            "--milestone",
+            mid,
+            "--title",
+            "Wire the CLI",
+            "--type",
+            "infrastructure",
+        ],
+        tmp_path,
+    )
+    assert code == 0, out
+    wid = _one(db, "SELECT work_order_id FROM business_work_orders WHERE milestone_id = ?", (mid,))
+    assert wid, "the work order event did not reach the projection"
+
+    code, out = _run(
+        [
+            "work-order",
+            "add-task",
+            wid,
+            "--title",
+            "Add the parser",
+            "--acceptance",
+            "TEST-CHECK: tests/unit/test_wo_lifecycle_surface.py",
+        ],
+        tmp_path,
+    )
+    assert code == 0, out
+    tid = _one(db, "SELECT task_id FROM business_tasks WHERE work_order_id = ?", (wid,))
+    assert tid, "the task event did not reach the projection"
+
+
+def test_creating_a_work_order_says_it_needs_more_than_one_task(db, tmp_path):
+    """A door is only worth having if it says what good work looks like on the way through.
+
+    49 of 128 open work orders carry one task or none -- not because anyone decided a
+    single-task work order was right, but because nothing ever said otherwise at the moment
+    of creation. Task 2 turns this into a refusal; the message has to be there first, or
+    the refusal arrives with no prior warning.
+    """
+    import sqlite3
+    import uuid
+
+    pid, mid = str(uuid.uuid4()), str(uuid.uuid4())
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+        (pid, "P", "", "active", _NOW, _NOW),
+    )
+    conn.execute(
+        "INSERT INTO business_milestones"
+        " (milestone_id, project_id, title, description, status, order_index,"
+        "  created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+        (mid, pid, "M", "", "active", 1, _NOW, _NOW),
+    )
+    conn.commit()
+    conn.close()
+
+    code, out = _run(
+        ["work-order", "create", pid, "--milestone", mid, "--title", "T"],
+        tmp_path,
+    )
+    assert code == 0, out
+    assert "MORE THAN ONE task" in out
+    assert "add-task" in out, "and it must name the command that fixes it"
+
+
+def test_a_task_with_no_executable_criterion_is_told_so(db, tmp_path):
+    """Close re-runs a task's acceptance criterion. A task without one cannot be verified
+    at close -- it can only be asserted done. Saying so at creation is the cheapest moment;
+    by close the author has moved on."""
+    import sqlite3
+    import uuid
+
+    pid, mid = str(uuid.uuid4()), str(uuid.uuid4())
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+        (pid, "P", "", "active", _NOW, _NOW),
+    )
+    conn.execute(
+        "INSERT INTO business_milestones"
+        " (milestone_id, project_id, title, description, status, order_index,"
+        "  created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+        (mid, pid, "M", "", "active", 1, _NOW, _NOW),
+    )
+    conn.commit()
+    conn.close()
+
+    _run(["work-order", "create", pid, "--milestone", mid, "--title", "T"], tmp_path)
+    wid = _one(db, "SELECT work_order_id FROM business_work_orders WHERE milestone_id = ?", (mid,))
+
+    _, bare = _run(["work-order", "add-task", wid, "--title", "T"], tmp_path)
+    assert "No executable acceptance criterion" in bare
+    assert "TEST-CHECK" in bare, "the message must name what would satisfy it"
+
+    _, withac = _run(
+        ["work-order", "add-task", wid, "--title", "T", "--acceptance", "TEST-CHECK: x::y"],
+        tmp_path,
+    )
+    assert (
+        "No executable acceptance criterion" not in withac
+    ), "the warning fired on a task that HAS one -- it would be noise and get ignored"
+
+
+def test_add_task_asks_for_the_project_rather_than_refusing_an_unprojected_work_order(db, tmp_path):
+    """``create_task`` deliberately tolerates a work order that was emitted but not yet
+    materialised -- the comment in ``mutations.py`` says so. It needs a project id it does
+    not derive, so the CLI reads one from the work order row. When the row is absent the
+    CLI must ASK, not refuse: refusing would reject exactly the just-created work order the
+    mutation goes out of its way to accept.
+    """
+    import uuid
+
+    code, out = _run(
+        ["work-order", "add-task", str(uuid.uuid4()), "--title", "T"],
+        tmp_path,
+    )
+    assert code == 1
+    assert "--project" in out, "the error must name the way through, not just the problem"
+    assert "not projected yet" in out

@@ -21,6 +21,8 @@ from interfaces.cli.commands.work_order_lifecycle import (
     _work_order_unblock,
 )
 from interfaces.cli.commands.work_order_query import (
+    _work_order_add_task,
+    _work_order_create,
     _work_order_artifact,
     _work_order_executor,
     _work_order_merge_check,
@@ -63,6 +65,48 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         default=False,
         dest="in_sequence",
         help="Abort (exit 1) if earlier-sequence WOs in the same milestone are not closed",
+    )
+
+    # WO-WO-LIFECYCLE-SURFACE task 1: the authoring door. Every authoring action was raw
+    # SQL by an adapter -- a rule violation on its own, and the reason no structural
+    # invariant could be enforced anywhere: there was no single place to enforce one.
+    # Measured 2026-08-28: 49 of 128 open work orders carry one task or none.
+    wo_create = work_order_sub.add_parser(
+        "create", help="Create a work order (the single authoring door)"
+    )
+    wo_create.add_argument("project_id", help="Project UUID")
+    wo_create.add_argument("--milestone", required=True, dest="milestone_id", help="Milestone UUID")
+    wo_create.add_argument("--title", required=True, help="Work order title")
+    wo_create.add_argument("--description", default="", help="Scope, boundary and reasoning")
+    wo_create.add_argument(
+        "--type",
+        dest="work_order_type",
+        default="infrastructure",
+        help="One of the declared work-order types (selects which standards review it)",
+    )
+    wo_create.add_argument(
+        "--originating-symptom",
+        default=None,
+        help="For a defect: the SQL/TEST check that reproduces it, re-run at close",
+    )
+
+    wo_add_task = work_order_sub.add_parser(
+        "add-task", help="Add a task to a work order (tasks live in SQLite, never in docs)"
+    )
+    wo_add_task.add_argument("work_order_id", help="Work order UUID")
+    wo_add_task.add_argument("--title", required=True, help="Task title")
+    wo_add_task.add_argument("--description", default="", help="What done looks like")
+    wo_add_task.add_argument(
+        "--acceptance",
+        dest="acceptance_criteria",
+        default=None,
+        help="Executable AC: TEST-CHECK / SQL-CHECK / API-CHECK plus what to run",
+    )
+    wo_add_task.add_argument(
+        "--project",
+        dest="project_id",
+        default=None,
+        help="Project UUID -- only needed when the work order is not yet projected",
     )
 
     wo_list = work_order_sub.add_parser("list", help="List work orders")
@@ -267,6 +311,27 @@ def dispatch(
             dream_studio_home=dream_studio_home,
             planning_root=planning_root,
             in_sequence=getattr(args, "in_sequence", False),
+        )
+    if args.work_order_command == "create":
+        return _work_order_create(
+            project_id=args.project_id,
+            milestone_id=args.milestone_id,
+            title=args.title,
+            description=args.description,
+            work_order_type=args.work_order_type,
+            originating_symptom=args.originating_symptom,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+    if args.work_order_command == "add-task":
+        return _work_order_add_task(
+            work_order_id=args.work_order_id,
+            title=args.title,
+            description=args.description,
+            acceptance_criteria=args.acceptance_criteria,
+            project_id=args.project_id,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
         )
     if args.work_order_command == "list":
         return _work_order_list(

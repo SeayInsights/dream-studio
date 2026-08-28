@@ -24,6 +24,17 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
     )
     ms_close.add_argument("--planning-root", default=None, help="Override .planning/ directory")
 
+    ms_create = ms_sub.add_parser(
+        "create",
+        help="Create a milestone (the single authoring door; adapters must not write SQL)",
+    )
+    ms_create.add_argument("project_id", help="Project UUID")
+    ms_create.add_argument("--title", required=True, help="Milestone title")
+    ms_create.add_argument("--description", default="", help="What this milestone delivers")
+    ms_create.add_argument(
+        "--order", type=int, default=0, dest="order_index", help="Sequence hint (advisory)"
+    )
+
     ms_list = ms_sub.add_parser("list", help="List milestones for a project")
     ms_list.add_argument("project_id", help="Project UUID")
 
@@ -48,6 +59,15 @@ def dispatch(
             milestone_id=args.milestone_id,
             force=args.force,
             planning_root=Path(args.planning_root) if args.planning_root else None,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+    if args.milestone_command == "create":
+        return _milestone_create(
+            project_id=args.project_id,
+            title=args.title,
+            description=args.description,
+            order_index=args.order_index,
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )
@@ -153,3 +173,41 @@ def _milestone_status(
     )
     print(json.dumps(result, indent=2))
     return 0 if result.get("ok") else 1
+
+
+def _milestone_create(
+    *,
+    project_id: str,
+    title: str,
+    description: str,
+    order_index: int,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """Create a milestone through the authority, not by hand.
+
+    WO-WO-LIFECYCLE-SURFACE task 1. Every authoring action was previously raw SQL by an
+    adapter. That is a rule violation on its own, and it is also why no structural
+    invariant could be enforced: there was no single place to enforce one.
+    """
+    from core.milestones.mutations import create_milestone
+
+    result = create_milestone(
+        project_id=project_id,
+        title=title,
+        description=description,
+        order_index=order_index,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    print(json.dumps(result, indent=2))
+    if not result.get("ok"):
+        return 1
+
+    milestone_id = result.get("milestone_id", "")
+    print(
+        f"\nMilestone created: {milestone_id[:8]}"
+        f"\nA milestone should carry MORE THAN ONE work order. Add them with:"
+        f"\n  ds work-order create {project_id} --milestone {milestone_id} --title ..."
+    )
+    return 0
