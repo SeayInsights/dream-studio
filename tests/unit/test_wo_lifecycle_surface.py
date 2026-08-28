@@ -959,3 +959,276 @@ def test_the_close_cli_records_the_reason_before_it_closes(db, tmp_path, monkeyp
     from core.work_orders.structural_invariants import recorded_exception
 
     assert "single constant" in (recorded_exception(wid, db_path=db) or "")
+
+
+# -- Task 6: an edit belongs to the work order whose boundary contains it --------
+
+
+def _enforcement(db: Path, monkeypatch):
+    """The enforcement lib pointed at a temp authority.
+
+    ``AUTHORITY_DB`` is a module constant precisely so tests can patch it -- the module
+    docstring says so -- and every read goes through it.
+    """
+    import importlib
+
+    enforcement = importlib.import_module("runtime.lib.enforcement")
+    monkeypatch.setattr(enforcement, "AUTHORITY_DB", db)
+    return enforcement
+
+
+def _wo_with_boundary(db: Path, project_id: str, title: str, boundary: str, started_at: str) -> str:
+    import sqlite3
+    import uuid
+
+    wid = str(uuid.uuid4())
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, status,"
+        "  work_order_type, created_at, updated_at, started_at)"
+        " VALUES (?,?,NULL,?,?,'in_progress','infrastructure',?,?,?)",
+        (wid, project_id, title, f"Module boundary: {boundary}.", _NOW, _NOW, started_at),
+    )
+    conn.commit()
+    conn.close()
+    return wid
+
+
+def test_an_edit_is_attributed_by_module_boundary_not_recency(db, tmp_path, monkeypatch):
+    """FAN-OUT'S FIRST CONSEQUENCE, and it fired on this very work order.
+
+    ``in_progress_work_order`` did ``ORDER BY started_at DESC LIMIT 1`` -- the most
+    recently STARTED work order was credited with every source edit. Correct when one work
+    order is active; a coin flip once fan-out makes several legitimate, and 3 were in
+    progress on the live authority.
+
+    OBSERVED while building this: a session whose authority writes all went to 877af544
+    was blocked by the stop hook demanding a write for 1db6de49, because 1db6de49 was
+    started later. The hook asked for work to be recorded on a work order the session had
+    not advanced. That is a false violation, and false violations are what push an operator
+    to DS_ENFORCE=0.
+    """
+    import sqlite3
+    import uuid
+
+    enforcement = _enforcement(db, monkeypatch)
+    pid = str(uuid.uuid4())
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+        (pid, "P", "", "active", _NOW, _NOW),
+    )
+    conn.commit()
+    conn.close()
+
+    owner = _wo_with_boundary(
+        db, pid, "owns the lifecycle", "core/work_orders", "2026-08-28T01:00:00Z"
+    )
+    newer = _wo_with_boundary(db, pid, "started later", "control/execution", "2026-08-28T09:00:00Z")
+
+    edited = tmp_path / "core" / "work_orders" / "structural_invariants.py"
+    edited.parent.mkdir(parents=True, exist_ok=True)
+    edited.write_text("x", encoding="utf-8")
+
+    picked = enforcement.in_progress_work_order(
+        pid, file_path=str(edited), project_path=str(tmp_path)
+    )
+
+    assert picked["work_order_id"] == owner, (
+        "the edit was credited to the newest-started work order, not the one whose "
+        "declared boundary contains the file"
+    )
+    assert picked["work_order_id"] != newer
+    assert picked["attribution"] == "module_boundary"
+
+    # And the reverse, so the test cannot pass by always preferring the older row.
+    other = tmp_path / "control" / "execution" / "runner.py"
+    other.parent.mkdir(parents=True, exist_ok=True)
+    other.write_text("x", encoding="utf-8")
+    assert (
+        enforcement.in_progress_work_order(pid, file_path=str(other), project_path=str(tmp_path))[
+            "work_order_id"
+        ]
+        == newer
+    )
+
+
+def test_an_unmatched_edit_falls_back_and_says_so(db, tmp_path, monkeypatch):
+    """A work order with no declared boundary is the common case -- most of the live
+    authority's work orders declare none. Refusing to attribute at all would turn a
+    mislabel into a block.
+
+    But the result must SAY WHICH, because a match and a guess are different claims and
+    reading them as the same one is how "attributed to X" stops meaning anything.
+    """
+    import sqlite3
+    import uuid
+
+    enforcement = _enforcement(db, monkeypatch)
+    pid = str(uuid.uuid4())
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+        (pid, "P", "", "active", _NOW, _NOW),
+    )
+    conn.commit()
+    conn.close()
+
+    newest = _wo_with_boundary(db, pid, "newest", "core/work_orders", "2026-08-28T09:00:00Z")
+    _wo_with_boundary(db, pid, "older", "docs", "2026-08-28T01:00:00Z")
+
+    stray = tmp_path / "spool" / "writer.py"
+    stray.parent.mkdir(parents=True, exist_ok=True)
+    stray.write_text("x", encoding="utf-8")
+
+    picked = enforcement.in_progress_work_order(
+        pid, file_path=str(stray), project_path=str(tmp_path)
+    )
+    assert picked["work_order_id"] == newest
+    assert (
+        picked["attribution"] == "most_recently_started"
+    ), "a fallback presented as a boundary match is a guess wearing a match's clothes"
+    assert "claimants" not in picked, "nothing claimed this path; an empty claim is not a claim"
+
+
+def test_a_boundaryless_work_order_does_not_claim_every_edit(db, tmp_path, monkeypatch):
+    """``path_in_boundary`` returns True when no boundary is declared -- vacuously, since
+    there is nothing to fail. Letting that count as a match would hand the first
+    boundaryless work order every edit in the project: the recency bug in a new costume."""
+    import sqlite3
+    import uuid
+
+    enforcement = _enforcement(db, monkeypatch)
+    pid = str(uuid.uuid4())
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+        (pid, "P", "", "active", _NOW, _NOW),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, status,"
+        "  work_order_type, created_at, updated_at, started_at)"
+        " VALUES (?,?,NULL,'no boundary','just prose','in_progress','infrastructure',?,?,?)",
+        (str(uuid.uuid4()), pid, _NOW, _NOW, "2026-08-28T09:00:00Z"),
+    )
+    conn.commit()
+    conn.close()
+    owner = _wo_with_boundary(db, pid, "declares one", "core/work_orders", "2026-08-28T01:00:00Z")
+
+    edited = tmp_path / "core" / "work_orders" / "close_main.py"
+    edited.parent.mkdir(parents=True, exist_ok=True)
+    edited.write_text("x", encoding="utf-8")
+
+    picked = enforcement.in_progress_work_order(
+        pid, file_path=str(edited), project_path=str(tmp_path)
+    )
+    assert picked["work_order_id"] == owner
+    assert picked["attribution"] == "module_boundary"
+
+
+def test_a_write_to_either_claimant_satisfies_an_ambiguous_edit(db, tmp_path, monkeypatch):
+    """AMBIGUITY IS NOT RESOLVED BY GUESSING. Where two in-progress work orders both
+    declare a boundary over a path, both are legitimately doing this work. Picking a winner
+    would manufacture a false violation against whichever one lost.
+
+    So every claimant is carried, and a write to ANY of them satisfies the stop check.
+    """
+    import importlib
+    import sqlite3
+    import uuid
+
+    enforcement = _enforcement(db, monkeypatch)
+    pid = str(uuid.uuid4())
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+        (pid, "P", "", "active", _NOW, _NOW),
+    )
+    conn.commit()
+    conn.close()
+
+    first = _wo_with_boundary(db, pid, "one", "core/work_orders", "2026-08-28T01:00:00Z")
+    second = _wo_with_boundary(db, pid, "two", "core/work_orders", "2026-08-28T09:00:00Z")
+
+    edited = tmp_path / "core" / "work_orders" / "close_main.py"
+    edited.parent.mkdir(parents=True, exist_ok=True)
+    edited.write_text("x", encoding="utf-8")
+
+    picked = enforcement.in_progress_work_order(
+        pid, file_path=str(edited), project_path=str(tmp_path)
+    )
+    assert set(picked["claimants"]) == {
+        first,
+        second,
+    }, "both work orders claim this path; carrying only one invents a winner"
+
+    stop = (
+        importlib.import_module("runtime.hooks.meta.on_stop_enforce_shim", None) if False else None
+    )
+    from importlib.machinery import SourceFileLoader
+    from importlib.util import module_from_spec, spec_from_loader
+
+    src = Path("runtime/hooks/meta/on-stop-enforce.py").resolve()
+    loader = SourceFileLoader("_on_stop_enforce", str(src))
+    spec = spec_from_loader(loader.name, loader)
+    stop = module_from_spec(spec)
+    loader.exec_module(stop)
+
+    session = {
+        "started_at": "2026-08-28T00:00:00Z",
+        "source_edits": [
+            {"path": str(edited), "work_order_id": first, "claimants": [first, second]}
+        ],
+    }
+
+    # Neither has a write yet: one violation, and it names both.
+    class _NoWrites:
+        @staticmethod
+        def authority_write_since(wo_id, since):
+            return False
+
+    violations = stop._authority_violations(_NoWrites, session)
+    assert len(violations) == 1
+    assert first in violations[0] and second in violations[0]
+    assert "ANY ONE" in violations[0], "the message must say a single write is enough"
+
+    # A write to the claimant the hook did NOT name still satisfies it.
+    class _SecondWrote:
+        @staticmethod
+        def authority_write_since(wo_id, since):
+            return wo_id == second
+
+    assert stop._authority_violations(_SecondWrote, session) == []
+
+
+def test_a_session_recorded_before_claimants_existed_still_checks(db, tmp_path):
+    """Session state files on disk predate this change and carry only work_order_id.
+    Reading them as "no claimants" would silently stop checking those edits -- a migration
+    that turns a gate off is worse than one that fails loudly."""
+    from importlib.machinery import SourceFileLoader
+    from importlib.util import module_from_spec, spec_from_loader
+
+    src = Path("runtime/hooks/meta/on-stop-enforce.py").resolve()
+    loader = SourceFileLoader("_on_stop_enforce_legacy", str(src))
+    spec = spec_from_loader(loader.name, loader)
+    stop = module_from_spec(spec)
+    loader.exec_module(stop)
+
+    class _NoWrites:
+        @staticmethod
+        def authority_write_since(wo_id, since):
+            return False
+
+    legacy = {
+        "started_at": "2026-08-28T00:00:00Z",
+        "source_edits": [{"path": "x.py", "work_order_id": "wo-legacy"}],
+    }
+    violations = stop._authority_violations(_NoWrites, legacy)
+    assert len(violations) == 1
+    assert "wo-legacy" in violations[0]
