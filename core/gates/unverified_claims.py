@@ -136,7 +136,8 @@ def audit_claims(text: str) -> Report:
         span = match.span()
         start, end = span
         before, after = line[:start], line[end:]
-        if any(q in before and q in after for q in ('"', "'", "`", "“", "”")):
+        quote_marks = ('"', "'", "`", "\u201c", "\u201d")
+        if any(q in before and q in after for q in quote_marks):
             continue
 
         window_end = min(len(lines), index + 3)
