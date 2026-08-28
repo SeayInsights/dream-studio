@@ -1180,3 +1180,218 @@ def test_a_project_profile_still_layers_on_top_of_the_selected_baseline():
         assert "HOUSE DOC RULE" in joined, "the profile must still apply"
         assert "NO STALE DESCRIPTION" in joined, "and the document standards must survive"
         assert "NO DEAD CODE" not in joined, "a profile must not re-widen the code rules"
+
+
+# -- Task 9: review against where the work is HEADED ---------------------------
+
+
+def _milestone_with_siblings(db, count: int = 3, milestone_title: str = "The Direction"):
+    """A work order in a milestone with open siblings and a dependency edge."""
+    conn = sqlite3.connect(str(db))
+    pid = str(uuid.uuid4())
+    mid = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+        (pid, "P", "", "active", _NOW_D, _NOW_D),
+    )
+    conn.execute(
+        "INSERT INTO business_milestones"
+        " (milestone_id, project_id, title, description, status, order_index,"
+        "  created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+        (mid, pid, milestone_title, "Where all of this is going.", "active", 1, _NOW_D, _NOW_D),
+    )
+
+    def _wo(title, status="created", seq=1):
+        wid = str(uuid.uuid4())
+        conn.execute(
+            "INSERT INTO business_work_orders"
+            " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+            "  status, created_at, updated_at, sequence_order)"
+            " VALUES (?,?,?,?,?,'infrastructure',?,?,?,?)",
+            (wid, pid, mid, title, "d", status, _NOW_D, _NOW_D, seq),
+        )
+        return wid
+
+    subject = _wo("The work order under review", status="in_progress", seq=1)
+    siblings = [_wo(f"Sibling number {i}", seq=i + 2) for i in range(count)]
+    blocker = _wo("The one this depends on", seq=99)
+    conn.execute(
+        "INSERT INTO work_order_dependencies (work_order_id, depends_on_id, created_at)"
+        " VALUES (?,?,?)",
+        (subject, blocker, _NOW_D),
+    )
+    conn.commit()
+    conn.close()
+    return subject, siblings, blocker, milestone_title
+
+
+_NOW_D = "2026-08-28T00:00:00+00:00"
+
+
+def test_the_grader_sees_its_milestone_and_sibling_work_orders(db):
+    """Operator: the reviewer should "take into account all relevant or connected pieces
+    ... for where we are headed and not where we are at."
+
+    Two grader judgements are not decidable from one diff. "Is this concise" -- a mechanism
+    that looks over-built for one work order is often the shared piece a sibling needs.
+    "Does it address the issue" -- the issue is frequently the MILESTONE's.
+    """
+    from core.work_orders.direction_context import build_direction_context
+
+    subject, siblings, blocker, ms_title = _milestone_with_siblings(db)
+
+    text, note = build_direction_context(subject, db_path=db)
+
+    assert ms_title in text, "the milestone this work order serves must be named"
+    assert "Where all of this is going." in text, "and its stated goal, not just its title"
+    for i in range(len(siblings)):
+        assert f"Sibling number {i}" in text, "open siblings must be listed"
+    assert "The one this depends on" in text, "declared dependency edges must be shown"
+    assert subject[:8] not in text, "the work order under review is not its own sibling"
+    assert note is None, f"nothing was truncated here: {note}"
+
+
+def test_the_context_explains_why_it_is_there():
+    """Handing a grader a list of titles invites it to widen its remit. The block has to
+    say what the context is FOR, or 'concise' becomes 'build for the siblings too'."""
+    from core.work_orders.verify_prompts import _COMPLETION_PROMPT_TEMPLATE
+
+    assert "{direction_context}" in _COMPLETION_PROMPT_TEMPLATE
+    assert "still" in _COMPLETION_PROMPT_TEMPLATE.split("{direction_context}")[0][-700:]
+    head = _COMPLETION_PROMPT_TEMPLATE.split("{direction_context}")[0]
+    assert (
+        "only thing you are grading" in head
+    ), "the block must state that the diff under review is still the sole subject"
+
+
+def test_a_truncated_sibling_list_says_so(db):
+    """An unmarked partial list reads as a complete one -- and a grader told 'these are
+    the siblings' will reason about the absence of the rest."""
+    from core.work_orders.direction_context import _MAX_SIBLINGS, build_direction_context
+
+    subject, siblings, _blocker, _t = _milestone_with_siblings(db, count=_MAX_SIBLINGS + 5)
+
+    _text, note = build_direction_context(subject, db_path=db)
+
+    assert note, "truncation must be reported"
+    assert "further open sibling(s) not listed" in note
+
+    # DERIVED, not hardcoded. My first version asserted "5" and got 6: the helper also
+    # creates the dependency blocker IN THIS MILESTONE, so it is an open sibling too. The
+    # code was right and the test's arithmetic was wrong -- so the expected number is now
+    # computed from the same authority the code reads.
+    conn = sqlite3.connect(str(db))
+    open_siblings = conn.execute(
+        "SELECT COUNT(*) FROM business_work_orders"
+        " WHERE milestone_id = (SELECT milestone_id FROM business_work_orders"
+        "                       WHERE work_order_id = ?)"
+        "   AND work_order_id != ? AND status IN ('created','in_progress')",
+        (subject, subject),
+    ).fetchone()[0]
+    conn.close()
+    expected_dropped = open_siblings - _MAX_SIBLINGS
+    assert expected_dropped > 0, "precondition: the list must actually be truncated"
+    assert f"{expected_dropped} further open sibling(s)" in note, note
+
+
+def test_in_progress_siblings_survive_truncation_first(db):
+    """If the list is cut, the work actually underway is what a diff most likely has to
+    interoperate with -- so that is what must survive."""
+    from core.work_orders.direction_context import _MAX_SIBLINGS, build_direction_context
+
+    conn = sqlite3.connect(str(db))
+    pid, mid = str(uuid.uuid4()), str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+        (pid, "P", "", "active", _NOW_D, _NOW_D),
+    )
+    conn.execute(
+        "INSERT INTO business_milestones"
+        " (milestone_id, project_id, title, description, status, order_index,"
+        "  created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+        (mid, pid, "M", "", "active", 1, _NOW_D, _NOW_D),
+    )
+    subject = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+        "  status, created_at, updated_at, sequence_order)"
+        " VALUES (?,?,?,'subject','d','infrastructure','in_progress',?,?,1)",
+        (subject, pid, mid, _NOW_D, _NOW_D),
+    )
+    # Many 'created' ahead of it in sequence, and one 'in_progress' far behind.
+    for i in range(_MAX_SIBLINGS + 4):
+        conn.execute(
+            "INSERT INTO business_work_orders"
+            " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+            "  status, created_at, updated_at, sequence_order)"
+            " VALUES (?,?,?,?,'d','infrastructure','created',?,?,?)",
+            (str(uuid.uuid4()), pid, mid, f"queued {i}", _NOW_D, _NOW_D, i + 2),
+        )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+        "  status, created_at, updated_at, sequence_order)"
+        " VALUES (?,?,?,'UNDERWAY LATE','d','infrastructure','in_progress',?,?,9999)",
+        (str(uuid.uuid4()), pid, mid, _NOW_D, _NOW_D),
+    )
+    conn.commit()
+    conn.close()
+
+    text, note = build_direction_context(subject, db_path=db)
+
+    assert note, "this list is truncated"
+    assert "UNDERWAY LATE" in text, (
+        "an in_progress sibling with the highest sequence must still survive truncation -- "
+        "underway work is what a diff has to interoperate with"
+    )
+
+
+def test_no_milestone_and_no_edges_says_so_rather_than_going_blank(db):
+    """A blank block reads as "no direction". An explicit line reads as "nothing recorded",
+    which is the honest and actionable version."""
+    from core.work_orders.direction_context import build_direction_context
+
+    conn = sqlite3.connect(str(db))
+    pid, wid = str(uuid.uuid4()), str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+        (pid, "P", "", "active", _NOW_D, _NOW_D),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+        "  status, created_at, updated_at) VALUES (?,?,NULL,'lonely','d','infrastructure',"
+        "'in_progress',?,?)",
+        (wid, pid, _NOW_D, _NOW_D),
+    )
+    conn.commit()
+    conn.close()
+
+    text, _note = build_direction_context(wid, db_path=db)
+
+    assert "MILESTONE: none recorded" in text
+    assert "DECLARED DEPENDENCIES: none" in text
+    assert "NOT verified" in text, "absence of edges is silence, not proof of independence"
+
+
+def test_a_missing_work_order_does_not_raise(db):
+    """Direction context decorates a prompt. It must never be able to break the verify it
+    is decorating."""
+    from core.work_orders.direction_context import build_direction_context
+
+    text, note = build_direction_context(str(uuid.uuid4()), db_path=db)
+    assert text == ""
+    assert note and "not found" in note
+
+
+def test_an_unreadable_authority_is_reported_not_raised(tmp_path):
+    """Same rule for an absent database."""
+    from core.work_orders.direction_context import build_direction_context
+
+    text, note = build_direction_context(str(uuid.uuid4()), db_path=tmp_path / "nope.db")
+    assert text == ""
+    assert note

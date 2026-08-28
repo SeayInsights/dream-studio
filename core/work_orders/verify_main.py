@@ -374,6 +374,13 @@ def verify_work_order(
         )
         _rules_provenance = _ruleset.provenance
 
+        # WO-MULTIROOT-REVIEW task 9: the milestone, open siblings and declared edges, so
+        # "concise" and "addresses the issue" have a referent beyond one diff. Bounded,
+        # and any truncation is carried on the verdict rather than silently elided.
+        from .direction_context import build_direction_context
+
+        _direction_text, _direction_note = build_direction_context(work_order_id, db_path=db_path)
+
         # WO-VERIFY-GRADES-DELIVERY: the RECORDED boundary is the locator; the
         # commit-message grep below is reinforcement. Grepping history for the WO's
         # uuid or title fails for a squash merge, a reworded title, unpushed work,
@@ -578,6 +585,9 @@ def verify_work_order(
         # Build grader prompts.
         prompts: dict[str, str] = {
             "completion": _COMPLETION_PROMPT_TEMPLATE.format(
+                direction_context=_direction_text
+                or "  (nothing recorded: no milestone, no open siblings, no declared "
+                "dependency edges)",
                 title=wo["title"],
                 work_order_id=work_order_id,
                 work_order_type=wo.get("work_order_type", "infrastructure"),
