@@ -797,6 +797,21 @@ def _evaluate_gates(
     return failures
 
 
+def _carry_db_path(conn: Any) -> Any:
+    """The file this connection is attached to, for readers that take a path.
+
+    `_check_tasks_done` receives a live connection, not a path, and the artifact reader
+    takes a path. Asking the connection avoids threading a second argument through every
+    caller and guarantees the two agree about which database is being judged.
+    """
+    from pathlib import Path
+
+    for _seq, name, filename in conn.execute("PRAGMA database_list").fetchall():
+        if name == "main" and filename:
+            return Path(filename)
+    return None
+
+
 def _check_tasks_done(conn: Any, work_order_id: str) -> list[str]:
     """T1: Task-completeness gate — NOTHING LEFT HANGING. A WO with any task that
     is not done (or deliberately cancelled) cannot close without force=True.
@@ -806,15 +821,30 @@ def _check_tasks_done(conn: Any, work_order_id: str) -> list[str]:
     blocks unless forced, and a forced close records it via the gate.bypassed path.
     """
     failures: list[str] = []
+    # WO-WO-LIFECYCLE-SURFACE task 3: a task CARRIED to another work order is no longer
+    # this work order's outstanding work, and the recorded split is what says so.
+    #
+    # Deliberately keyed on the RECORD, not on the task's status. `task.deleted` sets
+    # status='deleted', and excluding that status outright would make deleting a task a
+    # way to close a work order with its work undone -- the exact lie carry-over exists
+    # to avoid. No carry record, no exemption: an unrecorded deletion still blocks.
+    try:
+        from core.work_orders.carry_over import carried_task_ids
+
+        _carried = carried_task_ids(work_order_id, db_path=_carry_db_path(conn))
+    except Exception:
+        _carried = set()
+
     _incomplete_tasks = conn.execute(
-        "SELECT title, status FROM business_tasks"
+        "SELECT title, status, task_id FROM business_tasks"
         " WHERE work_order_id = ? AND status NOT IN ('complete', 'cancelled')"
         " ORDER BY created_at ASC",
         (work_order_id,),
     ).fetchall()
+    _incomplete_tasks = [row for row in _incomplete_tasks if row[2] not in _carried]
     if _incomplete_tasks:
         _n_incomplete = len(_incomplete_tasks)
-        _preview = "; ".join(f"{_t!r} [{_s}]" for _t, _s in _incomplete_tasks[:3])
+        _preview = "; ".join(f"{_t!r} [{_s}]" for _t, _s, _ in _incomplete_tasks[:3])
         _more = f"; …and {_n_incomplete - 3} more" if _n_incomplete > 3 else ""
         failures.append(f"tasks_done: {_n_incomplete} task(s) not marked done — {_preview}{_more}")
     return failures

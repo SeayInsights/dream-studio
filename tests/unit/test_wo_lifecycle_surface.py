@@ -1232,3 +1232,421 @@ def test_a_session_recorded_before_claimants_existed_still_checks(db, tmp_path):
     violations = stop._authority_violations(_NoWrites, legacy)
     assert len(violations) == 1
     assert "wo-legacy" in violations[0]
+
+
+# -- Task 5: one write path for a generated file ---------------------------------
+
+
+def test_the_installer_writes_through_the_guarded_path():
+    """ALREADY BUILT WHEN THIS TASK CAME UP, and this pins the part that could still rot.
+
+    Operator: "the installer should not be bypassing this, and we should use CLI commands
+    where necessary so it cannot happen again." The bypass itself is gone — the installer
+    calls merge_claude_md at plan time, and eleven behavioural tests in
+    test_claude_md_projection.py cover the outcome (hand-written content survives, a file
+    without sentinels is refused, a fresh install writes whole).
+
+    What those cannot catch is the risk generate_routing's own comment names: "two splice
+    implementations that can still drift apart". Both writers target the SAME operator
+    files, so if one tightened its refusal and the other did not, ~/.claude/CLAUDE.md
+    would be safe from one path and clobbered by the other — the original defect back
+    through the side door. A behavioural test on one path passes happily while the other
+    rots.
+
+    So this asserts the structural property instead: ONE implementation, and every writer
+    delegates to it.
+    """
+    import inspect
+
+    from integrations.compiler import claude_code
+    from integrations.installer import claude_code_installer
+    from interfaces.cli import generate_routing
+
+    # The splice lives in exactly one place.
+    assert hasattr(claude_code, "merge_claude_md")
+
+    for module, name in (
+        (generate_routing, "generate_routing"),
+        (claude_code_installer, "claude_code_installer"),
+    ):
+        src = inspect.getsource(module)
+        assert "merge_claude_md(" in src, (
+            f"{name} writes CLAUDE.md without going through the shared splice — "
+            f"a second implementation is how the clobber comes back"
+        )
+
+    # And neither reimplements the marker arithmetic itself.
+    from integrations.compiler.claude_code import _ROUTING_BEGIN
+
+    splice_src = inspect.getsource(claude_code.merge_claude_md)
+    assert _ROUTING_BEGIN in splice_src or "_ROUTING_BEGIN" in splice_src
+
+    for module, name in (
+        (generate_routing, "generate_routing"),
+        (claude_code_installer, "claude_code_installer"),
+    ):
+        src = inspect.getsource(module)
+        assert (
+            ".index(" not in src or "merge_claude_md(" in src
+        ), f"{name} appears to locate the markers itself rather than delegating"
+
+
+def test_a_wholly_generated_file_may_be_written_whole():
+    """AGENTS.md is NOT a second instance of the same defect, and treating it as one would
+    be wrong. It carries no sentinels at all — it is a projection with no hand-written
+    region by design, and its own header says so. Splicing a file that has no protected
+    span would refuse every write.
+
+    Pinned because "the installer overwrites a file in ~/.claude" looks identical to the
+    CLAUDE.md defect from the outside, and the difference is whether the file has a region
+    worth protecting.
+    """
+    from integrations.compiler.claude_code import _ROUTING_BEGIN
+
+    agents = Path(__file__).resolve().parents[2] / "AGENTS.md"
+    assert agents.is_file()
+    assert _ROUTING_BEGIN not in agents.read_text(encoding="utf-8"), (
+        "AGENTS.md grew sentinels — it now has a protected region and the installer's "
+        "whole-file write must be routed through the splice like CLAUDE.md's"
+    )
+
+
+# -- Task 4: status that drifts makes every other count untrustworthy -------------
+
+
+def test_completable_work_orders_and_milestones_are_surfaced(db):
+    """WHY THIS MATTERS MORE THAN IT LOOKS. Measured on the live authority 2026-08-28: 13
+    open work orders have every task complete, 25 open milestones have no open work order,
+    and 4 have been in_progress since May.
+
+    "49 of 128 open work orders carry one task or none" is only a fact if "open" means
+    something. If a tenth of the open set is actually finished, every ratio quoted from it
+    is quietly wrong — including the ones the structural invariants in this very work order
+    were sized against. Drift does not just lose track of work; it corrupts the
+    measurements the gates are built on.
+    """
+    import sqlite3
+
+    from core.work_orders.reconcile import find_drift
+
+    pid, mid, wid = _scaffold(db, tasks=2, siblings=2)
+    _complete_all_tasks(db, wid)
+
+    # A second milestone whose only work order is already closed.
+    conn = sqlite3.connect(str(db))
+    empty_ms = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO business_milestones"
+        " (milestone_id, project_id, title, description, status, order_index,"
+        "  created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+        (empty_ms, pid, "finished milestone", "", "active", 2, _NOW, _NOW),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, status,"
+        "  work_order_type, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+        (str(uuid.uuid4()), pid, empty_ms, "done", "", "closed", "infrastructure", _NOW, _NOW),
+    )
+    conn.commit()
+    conn.close()
+
+    drift = find_drift(db_path=db, project_id=pid)
+
+    assert wid in {
+        r["work_order_id"] for r in drift.completable_work_orders
+    }, "a work order whose every task is complete is not reported as closable"
+    assert empty_ms in {r["milestone_id"] for r in drift.completable_milestones}
+    assert mid not in {
+        r["milestone_id"] for r in drift.completable_milestones
+    }, "a milestone with open work is not drift"
+
+    rendered = drift.render()
+    assert "ds work-order close" in rendered, "reporting drift without the fix is half an answer"
+    assert "ds milestone close" in rendered
+
+
+def test_a_work_order_with_no_tasks_is_not_reported_as_closable(db):
+    """ABSENT IS NOT CLEAN — the error this repository keeps finding. A work order with
+    zero tasks is not finished, it is unstarted. Reporting it as closable would turn
+    "nobody has written the tasks yet" into "ready to close", and 49 such work orders exist
+    on the live authority.
+    """
+    from core.work_orders.reconcile import find_drift
+
+    pid, _, wid = _scaffold(db, tasks=0, siblings=2)
+    assert wid not in {
+        r["work_order_id"] for r in find_drift(db_path=db, project_id=pid).completable_work_orders
+    }
+
+
+def test_a_long_running_work_order_is_surfaced_without_being_judged(db):
+    """4 work orders have been in_progress since May. That is worth a look, and it is NOT
+    evidence of anything: a long-running work order may be genuinely long. It is reported
+    separately from the closable ones so the two are never conflated."""
+    import sqlite3
+
+    from core.work_orders.reconcile import find_drift
+
+    pid, _, wid = _scaffold(db, tasks=2, siblings=2)
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "UPDATE business_work_orders SET status='in_progress', started_at=? WHERE work_order_id=?",
+        ("2026-05-01T00:00:00+00:00", wid),
+    )
+    conn.commit()
+    conn.close()
+
+    drift = find_drift(db_path=db, project_id=pid, now="2026-08-28T00:00:00+00:00")
+    assert wid in {r["work_order_id"] for r in drift.stale_in_progress}
+    assert wid not in {
+        r["work_order_id"] for r in drift.completable_work_orders
+    }, "stale and closable are different claims and must not be merged"
+
+
+def test_reconcile_reports_and_never_closes(db):
+    """A reconciler that closed things on the operator's behalf would bypass independent
+    review, the executable-AC gate and the structural invariants — for exactly the work
+    orders nobody has looked at recently. That is the opposite of what it is for."""
+    import sqlite3
+
+    from core.work_orders.reconcile import find_drift
+
+    pid, _, wid = _scaffold(db, tasks=2, siblings=2)
+    _complete_all_tasks(db, wid)
+
+    before = _one(db, "SELECT status FROM business_work_orders WHERE work_order_id=?", (wid,))
+    rendered = find_drift(db_path=db, project_id=pid).render()
+    after = _one(db, "SELECT status FROM business_work_orders WHERE work_order_id=?", (wid,))
+
+    assert before == after == "created", "reconcile mutated a record it was only meant to report"
+    assert "Nothing above was changed" in rendered
+
+
+def test_a_null_title_is_named_rather_than_crashing_or_blanking(db):
+    """FOUND BY RUNNING IT, not by imagining inputs. Several work_order rows on the live
+    authority carry a NULL title — projection orphans whose project no longer exists. The
+    first version crashed on them, which would make the tool unusable exactly where the
+    data is worst. Printing an empty string would be worse: it hides the one property that
+    identifies them."""
+    import sqlite3
+
+    from core.work_orders.reconcile import find_drift
+
+    pid, _, wid = _scaffold(db, tasks=2, siblings=2)
+    _complete_all_tasks(db, wid)
+    conn = sqlite3.connect(str(db))
+    conn.execute("UPDATE business_work_orders SET title=NULL WHERE work_order_id=?", (wid,))
+    conn.commit()
+    conn.close()
+
+    rendered = find_drift(db_path=db, project_id=pid).render()
+    assert "projection orphan" in rendered
+    assert wid[:8] in rendered
+
+
+# -- Task 3: honest partial close ------------------------------------------------
+
+
+def _tasks_of(db: Path, work_order_id: str) -> list[tuple[str, str, str]]:
+    import sqlite3
+
+    conn = sqlite3.connect(str(db))
+    try:
+        return [
+            (r[0], r[1], r[2])
+            for r in conn.execute(
+                "SELECT task_id, title, status FROM business_tasks"
+                " WHERE work_order_id = ? ORDER BY created_at",
+                (work_order_id,),
+            ).fetchall()
+        ]
+    finally:
+        conn.close()
+
+
+def test_carry_over_closes_the_original_at_its_true_scope(db, tmp_path, monkeypatch):
+    """THE THIRD OPTION THAT DID NOT EXIST.
+
+    A work order turns out to be mis-scoped: some tasks belong to different work. The only
+    ways to express that were --force (which records a bypass for something that is not a
+    bypass) and cancelling the tasks (a lie -- the work still needs doing). Carry-over
+    moves them to a linked work order and lets the original close at what it delivered.
+
+    NARROW BY OPERATOR RULING: this is not for "I want to work on something else". Tasks
+    that belong to a work order stay on it and you switch work orders instead.
+    """
+    from core.work_orders.carry_over import carry_over
+    from core.work_orders.close import close_work_order
+
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "events"))
+    _, _, wid = _scaffold(db, tasks=3, siblings=2)
+    tasks = _tasks_of(db, wid)
+    carry = [t[0] for t in tasks[1:]]
+
+    result = carry_over(
+        work_order_id=wid,
+        task_ids=carry,
+        reason="These two turned out to belong to the projection work, not this one.",
+        title="Projection remainder",
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+    )
+    assert result["ok"] is True, result
+    new_wo = result["carried_to"]
+    assert result["remaining_tasks"] == 1
+
+    # The remainder exists as real work somewhere else -- not cancelled, not lost.
+    moved_titles = {t[1] for t in _tasks_of(db, new_wo)}
+    assert moved_titles == {"T1", "T2"}
+    assert all(
+        status == "pending" for _, _, status in _tasks_of(db, new_wo)
+    ), "carried work must arrive as work to do, not as already-settled"
+
+    # The original can now close at its true scope, through the gates.
+    _complete_all_tasks(db, wid)
+    closed = close_work_order(
+        work_order_id=wid, source_root=tmp_path, dream_studio_home=tmp_path, skip_verify=True
+    )
+    failures = " ".join(closed.get("failures", []))
+    assert "tasks_done" not in failures, failures
+
+
+def test_carry_over_is_not_recorded_as_a_gate_bypass(db, tmp_path, monkeypatch):
+    """THE WHOLE POINT OF BUILDING THIS RATHER THAN USING --force.
+
+    --force closes past EVERY gate at once and records a gate.bypassed event. Using it for
+    a scope change fills the bypass audit with entries that are not bypasses, which makes
+    the audit useless for finding the ones that are.
+
+    A carry-over is not a bypass: the tasks did not go unfinished, they went somewhere. So
+    the close that follows must be an ordinary close -- no force, no bypassed_gates, and
+    tasks_done still running on what remains.
+    """
+    from core.work_orders.carry_over import carry_over
+    from core.work_orders.close import close_work_order
+
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "events"))
+    _, _, wid = _scaffold(db, tasks=3, siblings=2)
+    tasks = _tasks_of(db, wid)
+
+    carry_over(
+        work_order_id=wid,
+        task_ids=[tasks[2][0]],
+        reason="Authored here by mistake; it belongs to the installer work order.",
+        title="Installer remainder",
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+    )
+    _complete_all_tasks(db, wid)
+
+    closed = close_work_order(
+        work_order_id=wid, source_root=tmp_path, dream_studio_home=tmp_path, skip_verify=True
+    )
+
+    assert closed.get("forced") is not True, "a carry-over close must not be a forced close"
+    assert not closed.get("bypassed_gates"), closed.get("bypassed_gates")
+    assert "tasks_done" not in " ".join(closed.get("failures", []))
+
+
+def test_a_deleted_task_with_no_recorded_split_still_blocks_the_close(db, tmp_path):
+    """THE HOLE THIS DESIGN CLOSES.
+
+    The obvious implementation excludes status='deleted' from tasks_done. That would make
+    deleting a task a way to close a work order with its work undone -- the lie carry-over
+    exists to replace, reachable in one more step.
+
+    So the gate keys on the RECORDED SPLIT, not the status. A task deleted with no carry
+    record blocks exactly as before.
+    """
+    import sqlite3
+
+    from core.work_orders.close import close_work_order
+
+    _, _, wid = _scaffold(db, tasks=2, siblings=2)
+    conn = sqlite3.connect(str(db))
+    conn.execute("UPDATE business_tasks SET status='deleted' WHERE work_order_id=?", (wid,))
+    conn.commit()
+    conn.close()
+
+    closed = close_work_order(
+        work_order_id=wid, source_root=tmp_path, dream_studio_home=tmp_path, skip_verify=True
+    )
+    assert "tasks_done" in " ".join(
+        closed.get("failures", [])
+    ), "deleting every task closed the work order -- carry-over became a bypass"
+
+
+def test_carrying_everything_away_is_refused(db, tmp_path, monkeypatch):
+    """A work order that carries away all its tasks was not re-scoped, it was abandoned.
+    Closing it afterwards would assert that work happened here when none did. The refusal
+    names the honest alternatives so the reader does not go looking for --force."""
+    from core.work_orders.carry_over import carry_over
+
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "events"))
+    _, _, wid = _scaffold(db, tasks=2, siblings=2)
+
+    result = carry_over(
+        work_order_id=wid,
+        task_ids=[t[0] for t in _tasks_of(db, wid)],
+        reason="Everything here belongs to a different work order entirely.",
+        title="All of it",
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+    )
+    assert result["ok"] is False
+    assert "abandonment" in result["error"]
+    assert "ds work-order block" in result["error"]
+
+
+def test_a_carry_over_without_a_real_reason_is_refused(db, tmp_path, monkeypatch):
+    """The reason is the only thing distinguishing a re-scope from moving work you would
+    rather do later, and no gate can read intent. An unweighable reason recorded in the
+    authority is worse than none -- it looks like a decision was made."""
+    from core.work_orders.carry_over import carry_over
+
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+    _, _, wid = _scaffold(db, tasks=3, siblings=2)
+
+    result = carry_over(
+        work_order_id=wid,
+        task_ids=[_tasks_of(db, wid)[0][0]],
+        reason="later",
+        title="Later",
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+    )
+    assert result["ok"] is False
+    assert (
+        "switch work orders instead" in result["error"]
+    ), "the refusal must name what to do instead, or it reads as an obstacle"
+
+
+def test_the_split_is_recorded_on_both_work_orders(db, tmp_path, monkeypatch):
+    """A one-way link is how provenance is lost. The original needs the record because the
+    close gate reads it; the new work order needs it because a reader who lands there must
+    be able to get back to where the work came from."""
+    from core.work_orders.artifacts import get_wo_artifact
+    from core.work_orders.carry_over import CARRY_KEY, CARRY_KIND, carry_over
+
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "events"))
+    _, _, wid = _scaffold(db, tasks=3, siblings=2)
+
+    result = carry_over(
+        work_order_id=wid,
+        task_ids=[_tasks_of(db, wid)[0][0]],
+        reason="Belongs to the reconcile work order, not this one.",
+        title="Reconcile remainder",
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+    )
+    assert result["ok"] is True
+
+    for side in (wid, result["carried_to"]):
+        raw = get_wo_artifact(side, CARRY_KIND, instance_key=CARRY_KEY, db_path=db)
+        assert raw, f"no split recorded on {side}"
+        assert "Belongs to the reconcile work order" in raw
+        assert wid in raw and result["carried_to"] in raw, "the record must name both ends"

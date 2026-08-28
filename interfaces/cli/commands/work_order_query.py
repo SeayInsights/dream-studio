@@ -493,3 +493,61 @@ def _work_order_add_task(
             f"something to run."
         )
     return 0
+
+
+def _work_order_reconcile(
+    *,
+    project_id: str | None,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """Report open records whose work looks finished. Never closes anything.
+
+    Exit 0 whether or not drift is found: drift is a report, not a failure, and making it
+    exit non-zero would put it on the wrong side of every `&&` an operator writes.
+    """
+    from core.installed_runtime import resolve_installed_runtime_paths
+    from core.work_orders.reconcile import find_drift
+
+    db_path = resolve_installed_runtime_paths(
+        source_root=source_root, dream_studio_home=dream_studio_home
+    ).sqlite_path
+    print(find_drift(db_path=db_path, project_id=project_id).render())
+    return 0
+
+
+def _work_order_carry_over(
+    *,
+    work_order_id: str,
+    task_ids: list[str],
+    title: str,
+    reason: str,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """Carry out-of-scope tasks to a new linked work order.
+
+    Deliberately does not then close the original. Closing here would make carry-over a
+    close path of its own, which is how a narrow escape hatch turns into the wide one --
+    the operator runs the normal close afterwards and every gate still applies.
+    """
+    from core.work_orders.carry_over import carry_over
+
+    result = carry_over(
+        work_order_id=work_order_id,
+        task_ids=task_ids,
+        reason=reason,
+        title=title,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    print(json.dumps(result, indent=2))
+    if not result.get("ok"):
+        return 1
+    print(
+        f"{chr(10)}Carried {len(result['moved'])} task(s) to "
+        f"{result['carried_to'][:8]}; {result['remaining_tasks']} remain here."
+        f"{chr(10)}The original is NOT closed. Close it through the normal gates:"
+        f"{chr(10)}  {result['next_command']}"
+    )
+    return 0

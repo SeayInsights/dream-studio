@@ -21,6 +21,8 @@ from interfaces.cli.commands.work_order_lifecycle import (
     _work_order_unblock,
 )
 from interfaces.cli.commands.work_order_query import (
+    _work_order_carry_over,
+    _work_order_reconcile,
     _work_order_add_task,
     _work_order_create,
     _work_order_artifact,
@@ -117,6 +119,44 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         dest="project_id",
         default=None,
         help="Project UUID -- only needed when the work order is not yet projected",
+    )
+
+    # WO-WO-LIFECYCLE-SURFACE task 4: status that drifts makes every other count
+    # untrustworthy -- including the ones this milestone is measured by.
+    wo_reconcile = work_order_sub.add_parser(
+        "reconcile",
+        help="Show records the authority holds open whose work looks finished",
+    )
+    wo_reconcile.add_argument(
+        "project_id", nargs="?", default=None, help="Limit to one project (default: all)"
+    )
+
+    # WO-WO-LIFECYCLE-SURFACE task 3. NOT for "I want to work on something else" --
+    # tasks that belong to a work order stay on it and you switch work orders instead.
+    # This is for a genuine scope change, where the alternatives were --force (which
+    # pollutes the bypass audit with something that is not a bypass) or cancelling the
+    # tasks (a lie -- the work still needs doing).
+    wo_carry = work_order_sub.add_parser(
+        "carry-over",
+        help="Move out-of-scope tasks to a new linked work order and record the split",
+    )
+    wo_carry.add_argument("work_order_id", help="Work order the tasks were authored on")
+    wo_carry.add_argument(
+        "--task",
+        action="append",
+        default=[],
+        dest="task_ids",
+        required=True,
+        metavar="TASK_ID",
+        help="An open task to carry. Repeat for each one",
+    )
+    wo_carry.add_argument(
+        "--title", required=True, help="Title for the work order that receives them"
+    )
+    wo_carry.add_argument(
+        "--reason",
+        required=True,
+        help="What changed about the scope, or how this work order was mis-scoped",
     )
 
     wo_list = work_order_sub.add_parser("list", help="List work orders")
@@ -353,6 +393,21 @@ def dispatch(
             description=args.description,
             acceptance_criteria=args.acceptance_criteria,
             project_id=args.project_id,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+    if args.work_order_command == "reconcile":
+        return _work_order_reconcile(
+            project_id=args.project_id,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+    if args.work_order_command == "carry-over":
+        return _work_order_carry_over(
+            work_order_id=args.work_order_id,
+            task_ids=args.task_ids,
+            title=args.title,
+            reason=args.reason,
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )
