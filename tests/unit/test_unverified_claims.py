@@ -220,3 +220,28 @@ def test_a_task_description_is_audited_too(db, tmp_path):
     )
     assert result["ok"] is True
     assert result.get("unverified_claims"), "a task's claims must be audited too"
+
+
+def test_a_quoted_claim_is_reported_not_asserted():
+    """FOUND BY RUNNING THIS GATE ON THE PULL REQUEST THAT INTRODUCES IT.
+
+    A "Claim | Reality" table quoting my own false statements was flagged as making them.
+    Quoting a claim in order to correct it is the behaviour this gate wants; penalising it
+    would teach authors to stop recording what they got wrong.
+
+    Same accepted hole as the evidence gate's quotation exemption: an author can wrap an
+    assertion in quotes to slip it past. A quoted claim reads as attribution, and flagging
+    every correction table is the worse trade.
+    """
+    table_row = '| *"a projection ... retries forever"* | the framework already dead-lettered |'
+    assert audit_claims(table_row).passed
+
+    inline = 'The work order said "no gate covers this" and two gates partly did.'
+    assert audit_claims(inline).passed
+
+
+def test_an_unquoted_claim_on_the_same_line_is_still_caught():
+    """The exemption must be narrow: a quotation elsewhere on the line must not launder an
+    assertion made in the author's own voice."""
+    mixed = 'He said "hello" and nothing checks this today.'
+    assert not audit_claims(mixed).passed

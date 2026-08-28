@@ -125,6 +125,20 @@ def audit_claims(text: str) -> Report:
         if _ATTRIBUTED.search(line):
             continue  # reporting someone else's claim, or correcting one's own
 
+        # A QUOTED claim is being reported, not made. Found by running this gate on the
+        # pull-request body that introduces it: a "Claim | Reality" table quoting my own
+        # false statements was flagged as making them. The evidence-backed-output gate had
+        # to draw the same distinction for hedges inside quotations.
+        #
+        # It is the same accepted hole: an author can wrap an assertion in quotes to slip
+        # it past. A quoted claim reads as attribution, and flagging every correction table
+        # would penalise exactly the behaviour this gate exists to encourage.
+        span = match.span()
+        start, end = span
+        before, after = line[:start], line[end:]
+        if any(q in before and q in after for q in ('"', "'", "`", "“", "”")):
+            continue
+
         window_end = min(len(lines), index + 3)
         window = lines[index:window_end]
         if any(_CITATION.search(candidate) for candidate in window):
