@@ -104,6 +104,10 @@ class EventType(str, Enum):
     TASK_CREATED = "task.created"
     TASK_STARTED = "task.started"
     TASK_DELETED = "task.deleted"
+    # A task's acceptance_criteria is write-once in the projection (COALESCE), so a
+    # typo in a check was permanently uncorrectable except by --force. This event is
+    # the correction, and it carries what the criterion USED to be.
+    TASK_AC_REPOINTED = "task.ac_repointed"
 
     # Design brief lifecycle events (18.2.4)
     DESIGN_BRIEF_CREATED = "design_brief.created"

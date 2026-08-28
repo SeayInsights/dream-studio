@@ -21,6 +21,7 @@ from interfaces.cli.commands.work_order_lifecycle import (
     _work_order_unblock,
 )
 from interfaces.cli.commands.work_order_query import (
+    _work_order_repoint_ac,
     _work_order_carry_over,
     _work_order_reconcile,
     _work_order_add_task,
@@ -157,6 +158,21 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         "--reason",
         required=True,
         help="What changed about the scope, or how this work order was mis-scoped",
+    )
+
+    # WO 17f20d48: acceptance_criteria is write-once in the projection, so a typo in a
+    # check was only fixable with --force — bypassing every other gate to correct one
+    # string.
+    wo_repoint = work_order_sub.add_parser(
+        "repoint-ac",
+        help="Correct a task's acceptance criterion, recording the prior value and why",
+    )
+    wo_repoint.add_argument("task_id", help="Task UUID")
+    wo_repoint.add_argument(
+        "--acceptance", required=True, dest="acceptance_criteria", help="The corrected criterion"
+    )
+    wo_repoint.add_argument(
+        "--reason", required=True, help="Enough to tell a typo fix from a moved goalpost"
     )
 
     wo_list = work_order_sub.add_parser("list", help="List work orders")
@@ -407,6 +423,14 @@ def dispatch(
             work_order_id=args.work_order_id,
             task_ids=args.task_ids,
             title=args.title,
+            reason=args.reason,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+    if args.work_order_command == "repoint-ac":
+        return _work_order_repoint_ac(
+            task_id=args.task_id,
+            acceptance_criteria=args.acceptance_criteria,
             reason=args.reason,
             source_root=source_root,
             dream_studio_home=dream_studio_home,

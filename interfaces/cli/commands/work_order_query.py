@@ -551,3 +551,25 @@ def _work_order_carry_over(
         f"{chr(10)}  {result['next_command']}"
     )
     return 0
+
+
+def _work_order_repoint_ac(
+    *,
+    task_id: str,
+    acceptance_criteria: str,
+    reason: str,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """Correct a task's acceptance criterion through the recorded path."""
+    from core.work_orders.repoint_ac import repoint_acceptance_criteria
+
+    result = repoint_acceptance_criteria(
+        task_id=task_id,
+        acceptance_criteria=acceptance_criteria,
+        reason=reason,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1

@@ -1650,3 +1650,183 @@ def test_the_split_is_recorded_on_both_work_orders(db, tmp_path, monkeypatch):
         assert raw, f"no split recorded on {side}"
         assert "Belongs to the reconcile work order" in raw
         assert wid in raw and result["carried_to"] in raw, "the record must name both ends"
+
+
+# -- WO 17f20d48: a misaddressed criterion can be corrected without --force -------
+
+
+def _task_with_ac(db: Path, ac: str) -> tuple[str, str]:
+    """A project + milestone + work order + one task carrying *ac*. Returns (wo, task)."""
+    import sqlite3
+    import uuid
+
+    pid, mid, wid, tid = (str(uuid.uuid4()) for _ in range(4))
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+        (pid, "P", "", "active", _NOW, _NOW),
+    )
+    conn.execute(
+        "INSERT INTO business_milestones"
+        " (milestone_id, project_id, title, description, status, order_index,"
+        "  created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+        (mid, pid, "M", "", "active", 1, _NOW, _NOW),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, status,"
+        "  work_order_type, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+        (wid, pid, mid, "W", "", "in_progress", "infrastructure", _NOW, _NOW),
+    )
+    conn.execute(
+        "INSERT INTO business_tasks"
+        " (task_id, work_order_id, project_id, title, description, status,"
+        "  acceptance_criteria, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+        (tid, wid, pid, "T", "", "complete", ac, _NOW, _NOW),
+    )
+    conn.commit()
+    conn.close()
+    return wid, tid
+
+
+def test_an_acceptance_criterion_can_be_repointed(db, tmp_path, monkeypatch):
+    """THE DEFECT, FOUND BY THE GATE REFUSING TO LIE.
+
+    business_tasks.acceptance_criteria is COALESCEd at every write site, so it was
+    write-once: a replayed or re-emitted task.created never overwrites it and no update
+    mutation existed. WO 1db6de49 named
+    `...::test_a_node_without_an_observable_condition_is_not_reported_complete` where the
+    test is `..._is_not_reported_completed` — one character. The close gate correctly
+    reported MISADDRESSED (pytest exit 4) instead of treating a missing node id as a pass,
+    so a work order whose four tasks were done and shipped could not close.
+
+    The only remaining escape was --force, which bypasses EVERY other gate to fix one
+    string. That is the trade this removes.
+    """
+    from core.work_orders.repoint_ac import repoint_acceptance_criteria
+
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "events"))
+    _, tid = _task_with_ac(db, "SQL-CHECK: SELECT 1 WHERE 0")
+
+    result = repoint_acceptance_criteria(
+        task_id=tid,
+        acceptance_criteria="SQL-CHECK: SELECT 1",
+        reason="The original query had a typo in its predicate.",
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+    )
+    assert result["ok"] is True, result
+
+    stored = _one(db, "SELECT acceptance_criteria FROM business_tasks WHERE task_id=?", (tid,))
+    assert (
+        stored == "SQL-CHECK: SELECT 1"
+    ), "the projection still COALESCEd the value — the criterion is still write-once"
+
+
+def test_a_repointed_criterion_records_what_it_was(db, tmp_path, monkeypatch):
+    """AN EDITABLE CRITERION IS A MOVED GOALPOST WAITING TO HAPPEN.
+
+    Nothing can stop someone repointing a failing check at a trivially-passing one. What
+    the design CAN do is make it visible: the prior value and a reason ride in the event
+    payload, so both criteria are in the stream forever and a later reader can tell a typo
+    fix from a weakened target.
+
+    A silent correction would be strictly worse than the write-once column it replaces.
+    """
+    import json as _json
+    import sqlite3
+
+    from core.work_orders.repoint_ac import repoint_acceptance_criteria
+
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "events"))
+    _, tid = _task_with_ac(db, "SQL-CHECK: SELECT 1 WHERE 0")
+
+    result = repoint_acceptance_criteria(
+        task_id=tid,
+        acceptance_criteria="SQL-CHECK: SELECT 1",
+        reason="The original query had a typo in its predicate.",
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+    )
+    assert result["previous"] == "SQL-CHECK: SELECT 1 WHERE 0"
+
+    conn = sqlite3.connect(str(db))
+    try:
+        rows = conn.execute(
+            "SELECT payload FROM business_canonical_events WHERE event_type='task.ac_repointed'"
+        ).fetchall()
+    finally:
+        conn.close()
+    assert rows, "no task.ac_repointed event reached the canonical stream"
+    payload = _json.loads(rows[-1][0])
+    assert payload["previous"] == "SQL-CHECK: SELECT 1 WHERE 0"
+    assert payload["acceptance_criteria"] == "SQL-CHECK: SELECT 1"
+    assert "typo" in payload["reason"]
+
+
+def test_a_criterion_cannot_be_repointed_at_nothing(db, tmp_path, monkeypatch):
+    """THE GUARD THAT MAKES THIS A TYPO-FIXER RATHER THAN AN ESCAPE HATCH.
+
+    Without it, repointing would be a way to aim a check at a node id that does not exist —
+    which is precisely the MISADDRESSED state the close gate refuses to treat as a pass. The
+    mechanism built to fix that must not be able to recreate it.
+    """
+    from core.work_orders.repoint_ac import repoint_acceptance_criteria
+
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "events"))
+    _, tid = _task_with_ac(db, "SQL-CHECK: SELECT 1")
+
+    result = repoint_acceptance_criteria(
+        task_id=tid,
+        acceptance_criteria="TEST-CHECK: tests/unit/no_such_file.py::test_nothing",
+        reason="Pointing it somewhere that does not exist.",
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+    )
+    assert result["ok"] is False
+    assert "misaddressed" in result["error"]
+
+
+def test_repointing_without_a_reason_is_refused(db, tmp_path, monkeypatch):
+    """The reason is the only thing that lets a later reader weigh the correction. An
+    unweighable one recorded in the authority is worse than none — it looks like a
+    decision was made."""
+    from core.work_orders.repoint_ac import repoint_acceptance_criteria
+
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+    _, tid = _task_with_ac(db, "SQL-CHECK: SELECT 1 WHERE 0")
+
+    result = repoint_acceptance_criteria(
+        task_id=tid,
+        acceptance_criteria="SQL-CHECK: SELECT 1",
+        reason="typo",
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+    )
+    assert result["ok"] is False
+    assert "moved goalpost" in result["error"]
+
+
+def test_a_check_that_runs_and_fails_is_still_repointable_to(db, tmp_path, monkeypatch):
+    """FAILING IS NOT MISADDRESSED. A check that runs and reports failure is correctly
+    aimed — the work simply is not done yet. Refusing it would mean a criterion could only
+    ever be repointed at something already passing, which would turn the mechanism into a
+    way to guarantee green."""
+    from core.work_orders.repoint_ac import repoint_acceptance_criteria
+
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "events"))
+    _, tid = _task_with_ac(db, "SQL-CHECK: SELECT 1")
+
+    result = repoint_acceptance_criteria(
+        task_id=tid,
+        acceptance_criteria="SQL-CHECK: SELECT 1 WHERE 0",
+        reason="Repointing at a check that runs but does not pass yet.",
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+    )
+    assert result["ok"] is True, result
