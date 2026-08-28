@@ -1058,3 +1058,125 @@ def test_the_verdict_and_result_both_carry_the_layer():
     ]
     assert len(verdict) == 1, f"verdict occurrences: {len(verdict)}"
     assert len(result) == 1, f"result occurrences: {len(result)}"
+
+
+# -- Task 8: the type selects the standards ------------------------------------
+
+
+def test_a_documentation_work_order_is_not_graded_on_code_standards():
+    """Operator: "End users will use claude for anything and everything not just SDLC."
+
+    Telling a documentation work order its tests are missing is the same category error as
+    grading Fulcrum against Dream Studio's tables, and it is how a reviewer earns the
+    reputation of surfacing nonsense.
+    """
+    from core.work_orders.review_rules import resolve_review_rules
+
+    rules = resolve_review_rules(work_order_type="documentation").rules
+    joined = " ".join(rules)
+
+    for inapplicable in (
+        "TEST COVERAGE FOR CHANGED BEHAVIOUR",
+        "NO DEAD CODE",
+        "LAYERING AND DEPENDENCY DISCIPLINE",
+        "CONCURRENCY AND RESOURCE SAFETY",
+    ):
+        assert inapplicable not in joined, f"a document was graded on {inapplicable}"
+
+
+def test_a_documentation_work_order_is_reviewed_MORE_not_less():
+    """THE DISTINCTION THAT MATTERS. The previous handling was
+    ``_VERIFY_EXEMPT_TYPES = {"documentation"}`` in close_main -- documentation skipped
+    independent review altogether. THAT is weaker review.
+
+    Narrowing the code rules is only legitimate because document-specific standards
+    replace them. A documentation work order that ships a false statement about the system
+    has failed, and before this nothing was checking.
+    """
+    from core.work_orders.review_rules import DOCUMENT_STANDARDS, resolve_review_rules
+
+    doc = resolve_review_rules(work_order_type="documentation").rules
+    code = resolve_review_rules(work_order_type="api_endpoint").rules
+
+    gained = [r for r in doc if r not in code]
+    assert len(gained) == len(DOCUMENT_STANDARDS), f"document standards missing: {gained}"
+
+    joined = " ".join(doc)
+    assert "COMPLETENESS" in joined
+    assert "ACCURACY AGAINST THE SYSTEM" in joined
+    # The one this session kept finding in Dream Studio's own docs: a workflow node still
+    # described a selector that had been replaced.
+    assert "NO STALE DESCRIPTION" in joined
+
+
+def test_a_document_is_still_held_to_the_standards_that_do_apply():
+    """A document can leak a credential, and a document change can be unreviewable. Those
+    rules are not code-specific and must survive the narrowing."""
+    from core.work_orders.review_rules import resolve_review_rules
+
+    joined = " ".join(resolve_review_rules(work_order_type="documentation").rules)
+    assert "INPUT AND SECRET HANDLING" in joined
+    assert "CHANGE CONTROL AND REVIEWABILITY" in joined
+
+
+def test_a_code_work_order_still_gets_the_full_baseline():
+    """The common case must be untouched -- narrowing for documents must not narrow for
+    code."""
+    from core.work_orders.review_rules import SDLC_BASELINE, resolve_review_rules
+
+    for wo_type in ("api_endpoint", "ui_component", "authentication", "saas_feature"):
+        rules = resolve_review_rules(work_order_type=wo_type).rules
+        for baseline_rule in SDLC_BASELINE:
+            assert baseline_rule in rules, f"{wo_type} lost {baseline_rule.split(':')[0]}"
+
+
+def test_an_unknown_type_is_graded_as_code():
+    """Unknown-means-code errs toward MORE standards. Defaulting to DOCUMENT would
+    silently drop test-coverage and data-safety for any type added later without touching
+    the map -- a quiet weakening triggered by someone else's unrelated change."""
+    from core.work_orders.review_rules import (
+        CODE,
+        SDLC_BASELINE,
+        artifact_kind,
+        resolve_review_rules,
+    )
+
+    assert artifact_kind("some_type_nobody_has_added_yet") == CODE
+    assert artifact_kind(None) == CODE
+    assert artifact_kind("") == CODE
+    assert len(resolve_review_rules(work_order_type="brand_new_type").rules) == len(SDLC_BASELINE)
+
+
+def test_a_data_pipeline_gains_schema_and_replay_standards():
+    """A pipeline is not code and not a document. Its failure modes -- a contract change
+    with unnotified readers, a re-run that double-counts -- are named by neither."""
+    from core.work_orders.review_rules import resolve_review_rules
+
+    joined = " ".join(resolve_review_rules(work_order_type="data_pipeline").rules)
+    assert "SCHEMA AND CONTRACT" in joined
+    assert "IDEMPOTENCE AND REPLAY" in joined
+    # And it keeps the code standards that do apply to a transform.
+    assert "TEST COVERAGE FOR CHANGED BEHAVIOUR" in joined
+    assert "DATA SAFETY" in joined
+
+
+def test_a_project_profile_still_layers_on_top_of_the_selected_baseline():
+    """Type selection picks the BASELINE; a project or folder profile still adds to or
+    replaces whatever was selected. The two mechanisms have to compose, or declaring a
+    profile would silently re-widen a document's rules."""
+    from core.work_orders.review_rules import PROFILE_NAME, resolve_review_rules
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / PROFILE_NAME).write_text(
+            "mode: add" + NL * 2 + "- HOUSE DOC RULE: every page names its owner." + NL,
+            encoding="utf-8",
+        )
+        rules = resolve_review_rules(project_root=root, work_order_type="documentation").rules
+        joined = " ".join(rules)
+
+        assert "HOUSE DOC RULE" in joined, "the profile must still apply"
+        assert "NO STALE DESCRIPTION" in joined, "and the document standards must survive"
+        assert "NO DEAD CODE" not in joined, "a profile must not re-widen the code rules"

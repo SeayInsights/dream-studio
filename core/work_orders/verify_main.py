@@ -366,6 +366,11 @@ def verify_work_order(
         _ruleset = resolve_review_rules(
             project_root=_declared_root,
             folders=list(_project_roots.roots),
+            # WO-MULTIROOT-REVIEW task 8: the type selects which standards can fairly
+            # judge what was delivered. A documentation work order stops being told its
+            # tests are missing and starts being judged on completeness, accuracy against
+            # the system, and stale description -- narrower on code rules, not weaker.
+            work_order_type=wo.get("work_order_type"),
         )
         _rules_provenance = _ruleset.provenance
 
