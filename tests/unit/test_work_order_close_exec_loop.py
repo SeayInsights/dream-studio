@@ -71,6 +71,16 @@ def db_path(tmp_path: Path) -> Path:
             " VALUES (?, ?, ?, 'T1', 'do thing', 'SQL-CHECK: SELECT 1', 'complete', ?, ?)",
             ("task-exec-1", WO_INFRA, PROJECT_ID, NOW, NOW),
         )
+        # A second task, because the structural_invariants close gate refuses a work order
+        # that finishes with one. A one-task fixture would be asserting about a shape the
+        # authority no longer lets close.
+        conn.execute(
+            "INSERT INTO business_tasks"
+            " (task_id, work_order_id, project_id, title, description, acceptance_criteria,"
+            " status, created_at, updated_at)"
+            " VALUES (?, ?, ?, 'T2', 'do other thing', 'SQL-CHECK: SELECT 1', 'complete', ?, ?)",
+            ("task-exec-2", WO_INFRA, PROJECT_ID, NOW, NOW),
+        )
         # Next WO used by the pass-path auto-start.
         conn.execute(
             "INSERT INTO business_work_orders"

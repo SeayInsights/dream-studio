@@ -48,6 +48,7 @@ def start_work_order(
     accept_no_brief: bool = False,
     brief_data: dict[str, Any] | None = None,
     in_sequence: bool = False,
+    accept_structure: str | None = None,
 ) -> dict[str, Any]:
     """Compose read/write/mutate to start a work order.
 
@@ -145,6 +146,36 @@ def start_work_order(
         # Soft warning — callers receive the list and can surface it.
         # Execution continues: Proceeding.
 
+    # WO-WO-LIFECYCLE-SURFACE: THE TWO STRUCTURAL INVARIANTS — REPORTED HERE, REFUSED AT
+    # CLOSE.
+    #
+    # Start looks like the right place to refuse and is not. The scoping flow decomposes
+    # only the first work order of the first milestone; ds-project's own instructions say
+    # the rest "get tasks when they are started (by calling start_work_order())". So a work
+    # order legitimately arrives at start with zero tasks and acquires them immediately
+    # after — refusing here would block the documented authoring path, and it did: it broke
+    # 18 existing tests whose fixtures seed a work order and no tasks, which is exactly the
+    # shape start is supposed to accept.
+    #
+    # Close is where the claim is made. "This work order is done" with one task is a claim
+    # about a unit that was mis-sized, and by then the count is a fact rather than a
+    # not-yet. So start SAYS SO and proceeds; close refuses, with a recorded reason as the
+    # only way through.
+    #
+    # Measured 2026-08-28: of 128 open work orders, 49 carry one task or none and 4 sit in
+    # a milestone with no sibling — 52 distinct work orders the close gate would refuse.
+    from .structural_invariants import check_structure
+    from .structural_invariants import render as _render_structure
+
+    _structure = check_structure(work_order_id, db_path=_db_path_for_seq)
+    if accept_structure:
+        from .structural_invariants import record_exception
+
+        try:
+            record_exception(work_order_id, accept_structure, db_path=_db_path_for_seq)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc), "work_order_id": work_order_id}
+
     # Preflight gate removed migration 148 (WO-SCHEMALEAN): the
     # business_work_order_preflights stack was unwired (no writer, permanent no-op)
     # and duplicative of the live CI blast-radius gate.
@@ -234,6 +265,16 @@ def start_work_order(
     # Out-of-milestone-order work is now allowed and REPORTED. Removing the signal
     # entirely would lose something useful ("you are ahead of the sequence"); keeping it
     # as a refusal kept a project of independent milestones single-file.
+    # The structural invariants, said at the moment they are cheapest to satisfy. Not a
+    # refusal here — see the note above the check — but not silence either: a work order
+    # that reaches close still carrying one task will be refused there, and the author
+    # should hear it while adding a task is still the natural next thing to do.
+    if _structure:
+        result["structure_warning"] = _render_structure(_structure, work_order_id, refusing=False)
+        result["structure_violations"] = [
+            {"scope": v.scope, "found": v.found, "required": v.required} for v in _structure
+        ]
+
     if _out_of_order:
         result["out_of_milestone_order"] = (
             f"{_out_of_order} work order(s) in earlier milestones are still open. That is"

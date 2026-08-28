@@ -88,6 +88,20 @@ def check_close_gates(
 
         failures.extend(check_change_impact_affirmed(conn, work_order_id, db_path))
 
+        # WO-WO-LIFECYCLE-SURFACE: the structural invariants, previewed HERE as well as
+        # enforced in close_work_order. A preview that omits a blocking gate is worse than
+        # no preview: it tells an author they are ready to close and then the close
+        # refuses. See the rationale at the enforcement site below.
+        from core.work_orders.structural_invariants import (
+            check_structure,
+            recorded_exception,
+        )
+        from core.work_orders.structural_invariants import render as _render_structure
+
+        _structure_preview = check_structure(work_order_id, db_path=db_path)
+        if _structure_preview and not recorded_exception(work_order_id, db_path=db_path):
+            failures.append(_render_structure(_structure_preview, work_order_id))
+
     meta["gate_failures"] = failures
     meta["gates_pass"] = not failures
     return meta
@@ -407,6 +421,32 @@ def close_work_order(
         # bypass below — it always blocks unless forced, and a forced close records
         # it via the gate.bypassed path.
         gate_failures.extend(_check_tasks_done(conn, work_order_id))
+
+        # WO-WO-LIFECYCLE-SURFACE: THE TWO STRUCTURAL INVARIANTS. Operator ruling — a work
+        # order should ALWAYS have multiple tasks; a milestone should ALWAYS have more than
+        # one work order. Measured 2026-08-28 against THIS gate's own counting — every task,
+        # every sibling, not just the open ones: of 128 open work orders, 49 carry one task
+        # or none and 4 sit in a milestone with no sibling. 52 distinct work orders would be
+        # refused. Nothing had ever refused one.
+        #
+        # Refused HERE and not at creation or start. A work order has zero tasks when it is
+        # created and often still has zero when it is started — ds-project decomposes only
+        # the first work order of the first milestone and the rest "get tasks when they are
+        # started". Close is the first moment the count is a fact rather than a not-yet: it
+        # is where "this work order is done" gets claimed, and one task is a claim about a
+        # unit that was mis-sized.
+        #
+        # The escape is a recorded reason (`--accept-structure`), not `--force`, which
+        # bypasses every gate at once and records no reasoning about this one.
+        from core.work_orders.structural_invariants import (
+            check_structure,
+            recorded_exception,
+        )
+        from core.work_orders.structural_invariants import render as _render_structure
+
+        _structure = check_structure(work_order_id, db_path=db_path)
+        if _structure and not recorded_exception(work_order_id, db_path=db_path):
+            gate_failures.append(_render_structure(_structure, work_order_id))
 
         # R5 T1: change-impact affirmation — a WO created on/after the cutover must record
         # an impact affirmation (auth/contract/migration/changelog) before close. Universal

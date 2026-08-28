@@ -21,6 +21,7 @@ def _work_order_start(
     planning_root: Path | None = None,
     accept_no_brief: bool = False,
     in_sequence: bool = False,
+    accept_structure: str | None = None,
 ) -> int:
     """CLI wrapper around `core.work_orders.start.start_work_order`.
 
@@ -71,6 +72,7 @@ def _work_order_start(
         accept_no_brief=accept_no_brief,
         brief_data=brief_data,
         in_sequence=in_sequence,
+        accept_structure=accept_structure,
     )
     if result.get("ok") and result.get("sequence_warning"):
         print(result["sequence_warning"], file=sys.stderr)
@@ -86,15 +88,34 @@ def _work_order_close(
     source_root: Path,
     dream_studio_home: Path | None,
     planning_root: Path | None = None,
+    accept_structure: str | None = None,
 ) -> int:
     """CLI wrapper around `core.work_orders.close.close_work_order`.
 
     Preserves the legacy operator-terminal behaviour by re-emitting
     `[gate.bypassed] WARNING: <reason>` to stderr from the returned
     `bypassed_gates` list. Skills should call `close_work_order` directly.
+
+    ``accept_structure`` records why this work order may break a structural invariant.
+    It is recorded BEFORE the close is attempted, so the close that follows sees the
+    exception -- recording it afterwards would need a second close to take effect, which
+    is how an escape hatch becomes a thing people run twice without reading.
     """
 
     from core.work_orders.close import close_work_order
+
+    if accept_structure:
+        from core.installed_runtime import resolve_installed_runtime_paths
+        from core.work_orders.structural_invariants import record_exception
+
+        db_path = resolve_installed_runtime_paths(
+            source_root=source_root, dream_studio_home=dream_studio_home
+        ).sqlite_path
+        try:
+            record_exception(work_order_id, accept_structure, db_path=db_path)
+        except ValueError as exc:
+            print(json.dumps({"ok": False, "error": str(exc)}, indent=2))
+            return 1
 
     result = close_work_order(
         work_order_id=work_order_id,

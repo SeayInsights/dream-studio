@@ -587,3 +587,375 @@ def test_add_task_asks_for_the_project_rather_than_refusing_an_unprojected_work_
     assert code == 1
     assert "--project" in out, "the error must name the way through, not just the problem"
     assert "not projected yet" in out
+
+
+# -- Task 2: the two structural invariants ---------------------------------------
+
+
+def _scaffold(db: Path, *, tasks: int, siblings: int) -> tuple[str, str, str]:
+    """A project, a milestone with *siblings* work orders, the first carrying *tasks*."""
+    import sqlite3
+    import uuid
+
+    pid, mid = str(uuid.uuid4()), str(uuid.uuid4())
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+        (pid, "P", "", "active", _NOW, _NOW),
+    )
+    conn.execute(
+        "INSERT INTO business_milestones"
+        " (milestone_id, project_id, title, description, status, order_index,"
+        "  created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+        (mid, pid, "M", "", "active", 1, _NOW, _NOW),
+    )
+    first = ""
+    for index in range(siblings):
+        wid = str(uuid.uuid4())
+        first = first or wid
+        conn.execute(
+            "INSERT INTO business_work_orders"
+            " (work_order_id, project_id, milestone_id, title, description, status,"
+            "  work_order_type, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            (wid, pid, mid, f"W{index}", "", "created", "infrastructure", _NOW, _NOW),
+        )
+    for index in range(tasks):
+        conn.execute(
+            "INSERT INTO business_tasks"
+            " (task_id, work_order_id, project_id, title, description, status,"
+            "  created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+            (str(uuid.uuid4()), first, pid, f"T{index}", "", "pending", _NOW, _NOW),
+        )
+    conn.commit()
+    conn.close()
+    return pid, mid, first
+
+
+def test_a_single_task_work_order_is_refused(db):
+    """OPERATOR RULING: a work order should ALWAYS have multiple tasks.
+
+    Measured on the live authority 2026-08-28: 49 of 128 open work orders carry one task
+    or none. A single-task work order is a task wearing the wrong label -- it closes on
+    one check and gets almost none of the verification a work order is supposed to attract.
+
+    Judged at START, not at creation. A work order has zero tasks at the moment it is
+    created, always, including every correct one; a creation-time check could only refuse
+    everything or nothing. Start is where the authority treats the structure as final -- it
+    writes the context and hands the task list to whoever executes it -- and it is the last
+    point where adding a task is cheap.
+    """
+    from core.work_orders.structural_invariants import check_structure
+
+    _, _, wid = _scaffold(db, tasks=1, siblings=2)
+    violations = check_structure(wid, db_path=db)
+
+    assert [v.scope for v in violations] == [
+        "work_order"
+    ], f"expected only the task invariant to fire, got {[v.scope for v in violations]}"
+    assert violations[0].found == 1
+    assert "add-task" in violations[0].message, "a refusal must name the command that fixes it"
+
+    _, _, ok_wid = _scaffold(db, tasks=2, siblings=2)
+    assert check_structure(ok_wid, db_path=db) == [], "two tasks satisfies the invariant"
+
+
+def test_a_single_work_order_milestone_is_refused(db):
+    """OPERATOR RULING: a milestone should ALWAYS have more than one work order.
+
+    Measured 2026-08-28: 29 of 45 open milestones carry one open work order or none. A
+    one-work-order milestone is a work order with extra ceremony -- it sequences nothing,
+    and its close gates grade a single diff twice.
+    """
+    from core.work_orders.structural_invariants import check_structure
+
+    _, _, wid = _scaffold(db, tasks=3, siblings=1)
+    violations = check_structure(wid, db_path=db)
+
+    assert [v.scope for v in violations] == ["milestone"]
+    assert violations[0].found == 1
+    assert "ds work-order create" in violations[0].message
+
+
+def test_both_invariants_are_reported_together(db):
+    """Reporting one at a time would make the author fix, retry, and be refused again.
+    Every violation the check can see is returned in one pass."""
+    from core.work_orders.structural_invariants import check_structure
+
+    _, _, wid = _scaffold(db, tasks=0, siblings=1)
+    assert {v.scope for v in check_structure(wid, db_path=db)} == {"work_order", "milestone"}
+
+
+def test_closed_siblings_still_count_toward_the_milestone(db):
+    """Counting only OPEN siblings would call a finished milestone malformed: its work
+    orders are closed precisely because it went well."""
+    import sqlite3
+
+    from core.work_orders.structural_invariants import check_structure
+
+    _, mid, wid = _scaffold(db, tasks=2, siblings=2)
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "UPDATE business_work_orders SET status = 'closed'"
+        " WHERE milestone_id = ? AND work_order_id != ?",
+        (mid, wid),
+    )
+    conn.commit()
+    conn.close()
+
+    assert check_structure(wid, db_path=db) == []
+
+
+def test_a_work_order_with_no_milestone_is_not_judged_on_the_milestone_invariant(db):
+    """There is nothing to count. Inventing a verdict from missing data is the failure
+    this repository keeps finding elsewhere -- absent is not the same as violating."""
+    import sqlite3
+
+    from core.work_orders.structural_invariants import check_structure
+
+    _, _, wid = _scaffold(db, tasks=2, siblings=1)
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "UPDATE business_work_orders SET milestone_id = NULL WHERE work_order_id = ?", (wid,)
+    )
+    conn.commit()
+    conn.close()
+
+    assert check_structure(wid, db_path=db) == []
+
+
+def test_an_unprojected_work_order_is_not_judged(db):
+    """A work order created seconds ago may not be materialised yet. Refusing it would
+    reject exactly the case the create path goes out of its way to support."""
+    import uuid
+
+    from core.work_orders.structural_invariants import check_structure
+
+    assert check_structure(str(uuid.uuid4()), db_path=db) == []
+
+
+def test_the_escape_is_a_recorded_reason_not_a_flag(db):
+    """NEVER SILENTLY ALLOW. ``--force`` would be silent allowance under another name: it
+    leaves no trace a later reader can weigh. The exception is stored on the work order as
+    an operator_decision, so an exception is a thing that exists rather than an absence."""
+    import pytest as _pytest
+
+    from core.work_orders.structural_invariants import record_exception, recorded_exception
+
+    _, _, wid = _scaffold(db, tasks=1, siblings=2)
+    assert recorded_exception(wid, db_path=db) is None
+
+    with _pytest.raises(ValueError) as exc:
+        record_exception(wid, "n/a", db_path=db)
+    assert "weigh" in str(exc.value), "an empty reason must be refused, not stored"
+
+    record_exception(wid, "One task because the whole change is one line in one file.", db_path=db)
+    assert "one line in one file" in (recorded_exception(wid, db_path=db) or "")
+
+
+def _complete_all_tasks(db: Path, work_order_id: str) -> None:
+    """Satisfy tasks_done so the structural gate is what the close is judged on.
+
+    Without this the close fails on tasks_done and a test asserting "refused" would pass
+    for the wrong reason -- the failure this repository keeps finding in its own tests.
+    """
+    import sqlite3
+
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "UPDATE business_tasks SET status = 'complete' WHERE work_order_id = ?",
+        (work_order_id,),
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_start_reports_the_invariants_without_blocking(db, tmp_path, monkeypatch):
+    """START REPORTS; CLOSE REFUSES. Refusing here looked right and was wrong.
+
+    ds-project decomposes only the first work order of the first milestone; its own
+    instructions say the rest "get tasks when they are started (by calling
+    start_work_order())". So a work order legitimately arrives at start with zero tasks and
+    acquires them a moment later. Refusing here blocked the documented authoring path --
+    measured, it broke 18 existing tests whose fixtures seed a work order and no tasks,
+    which is exactly the shape start is supposed to accept.
+
+    Silence would be wrong too: the author is about to write tasks, which is the cheapest
+    possible moment to hear that one is not enough.
+    """
+    from core.work_orders.start_main import start_work_order
+
+    _, _, wid = _scaffold(db, tasks=1, siblings=1)
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+
+    result = start_work_order(
+        work_order_id=wid,
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+        planning_root=tmp_path / ".planning",
+    )
+
+    assert result["ok"] is True, result.get("error")
+    assert {v["scope"] for v in result["structure_violations"]} == {"work_order", "milestone"}
+    assert "does not block the start" in result["structure_warning"]
+    assert (
+        "block the close" in result["structure_warning"]
+    ), "a warning must say what it will cost later, or it reads as optional"
+
+
+def test_a_well_formed_work_order_starts_without_a_warning(db, tmp_path, monkeypatch):
+    """The warning must be silent when the invariants hold, or it is noise and gets
+    filtered out along with everything else printed at start."""
+    from core.work_orders.start_main import start_work_order
+
+    _, _, wid = _scaffold(db, tasks=2, siblings=2)
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+
+    result = start_work_order(
+        work_order_id=wid,
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+        planning_root=tmp_path / ".planning",
+    )
+    assert result["ok"] is True, result.get("error")
+    assert "structure_warning" not in result
+
+
+def test_closing_a_malformed_work_order_is_refused_with_the_escape_named(db, tmp_path):
+    """THE REFUSAL, at the moment the claim is made.
+
+    Close is where "this work order is done" gets asserted. One task then is not a
+    not-yet -- it is a finished unit that was mis-sized, and the count is a fact.
+
+    The message must name the escape. A refusal that only states the problem sends the
+    author looking for a way around it, and the way they find is --force, which bypasses
+    every gate at once and records no reasoning about this one.
+    """
+    from core.work_orders.close import close_work_order
+
+    _, _, wid = _scaffold(db, tasks=1, siblings=1)
+    _complete_all_tasks(db, wid)
+
+    result = close_work_order(
+        work_order_id=wid,
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+        skip_verify=True,
+    )
+
+    assert result["ok"] is False
+    failures = " ".join(result.get("failures", []))
+    assert "structural_invariants" in failures, result
+    assert "--accept-structure" in failures, "the refusal must name the escape"
+    assert "`--force` is not the answer" in failures
+
+
+def test_a_recorded_reason_lets_the_close_through(db, tmp_path):
+    """The escape has to actually work, or it is a wall with a sign on it -- and a wall
+    gets routed around by the next person who edits the check."""
+    from core.work_orders.close import close_work_order
+    from core.work_orders.structural_invariants import record_exception
+
+    _, _, wid = _scaffold(db, tasks=1, siblings=1)
+    _complete_all_tasks(db, wid)
+    record_exception(wid, "Single task: the change is one constant in one file.", db_path=db)
+
+    result = close_work_order(
+        work_order_id=wid,
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+        skip_verify=True,
+    )
+    failures = " ".join(result.get("failures", []))
+    assert "structural_invariants" not in failures, failures
+
+
+def test_a_well_formed_work_order_is_not_refused_at_close(db, tmp_path):
+    """The gate has to be satisfiable by doing the right thing, not only by the escape."""
+    from core.work_orders.close import close_work_order
+
+    _, _, wid = _scaffold(db, tasks=2, siblings=2)
+    _complete_all_tasks(db, wid)
+
+    result = close_work_order(
+        work_order_id=wid,
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+        skip_verify=True,
+    )
+    failures = " ".join(result.get("failures", []))
+    assert "structural_invariants" not in failures, failures
+
+
+def test_the_preview_and_the_close_agree_about_the_invariants(db, tmp_path):
+    """A preview that omits a blocking gate is worse than no preview: it tells an author
+    they are ready to close, and then the close refuses. `check_close_gates` builds its own
+    failure list rather than sharing one with `close_work_order`, so every gate has to be
+    added in two places -- the enumerate-the-call-sites failure this session already made
+    twice, once with a completion prompt formatter and once with a milestone join.
+    """
+    from core.work_orders.close import check_close_gates, close_work_order
+
+    _, _, wid = _scaffold(db, tasks=1, siblings=1)
+    _complete_all_tasks(db, wid)
+
+    preview = check_close_gates(work_order_id=wid, source_root=tmp_path, dream_studio_home=tmp_path)
+    closed = close_work_order(
+        work_order_id=wid, source_root=tmp_path, dream_studio_home=tmp_path, skip_verify=True
+    )
+
+    assert any("structural_invariants" in f for f in preview["gate_failures"]), preview
+    assert any("structural_invariants" in f for f in closed.get("failures", [])), closed
+    assert preview["gates_pass"] is False
+
+
+def test_the_refusal_names_the_command_it_can_actually_be_answered_with(db, tmp_path):
+    """The refusal happens at CLOSE, so it must name close. The first cut said
+    `ds work-order start <id> --accept-structure` -- telling someone trying to close a work
+    order to re-start it. A message that names the wrong command sends the reader to the
+    thing that IS reachable, which is `--force`.
+    """
+    from core.work_orders.close import close_work_order
+
+    _, _, wid = _scaffold(db, tasks=1, siblings=1)
+    _complete_all_tasks(db, wid)
+    result = close_work_order(
+        work_order_id=wid, source_root=tmp_path, dream_studio_home=tmp_path, skip_verify=True
+    )
+
+    failures = " ".join(result.get("failures", []))
+    assert "ds work-order close" in failures
+    assert "ds work-order start" not in failures
+
+
+def test_the_close_cli_records_the_reason_before_it_closes(db, tmp_path, monkeypatch):
+    """Recording the exception AFTER attempting the close would need a second close to take
+    effect -- which is how an escape hatch becomes a thing people run twice without reading
+    what it said the first time."""
+    import argparse
+
+    from interfaces.cli.commands import work_order_dispatch as wo_cmd
+
+    _, _, wid = _scaffold(db, tasks=1, siblings=1)
+    _complete_all_tasks(db, wid)
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "events"))
+
+    parser = argparse.ArgumentParser(prog="ds")
+    sub = parser.add_subparsers(dest="command", required=True)
+    wo_cmd.register(sub)
+    args = parser.parse_args(
+        [
+            "work-order",
+            "close",
+            wid,
+            "--skip-verify",
+            "--accept-structure",
+            "One task: the change is a single constant.",
+        ]
+    )
+    wo_cmd.dispatch(args, source_root=tmp_path, dream_studio_home=tmp_path)
+
+    from core.work_orders.structural_invariants import recorded_exception
+
+    assert "single constant" in (recorded_exception(wid, db_path=db) or "")

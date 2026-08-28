@@ -66,6 +66,16 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         dest="in_sequence",
         help="Abort (exit 1) if earlier-sequence WOs in the same milestone are not closed",
     )
+    wo_start.add_argument(
+        "--accept-structure",
+        default=None,
+        metavar="REASON",
+        dest="accept_structure",
+        help=(
+            "Record why this work order is correctly sized despite breaking a structural "
+            "invariant. Takes a reason, not a flag: the reason is stored on the work order"
+        ),
+    )
 
     # WO-WO-LIFECYCLE-SURFACE task 1: the authoring door. Every authoring action was raw
     # SQL by an adapter -- a rule violation on its own, and the reason no structural
@@ -125,6 +135,18 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         help=(
             "Skip the default-on independent review for this close"
             " (recorded as a gate.bypassed event — never silent)"
+        ),
+    )
+    wo_close.add_argument(
+        "--accept-structure",
+        default=None,
+        metavar="REASON",
+        dest="accept_structure",
+        help=(
+            "Record why this work order is correctly sized despite breaking a structural "
+            "invariant (fewer than 2 tasks, or no sibling in its milestone). Takes a "
+            "reason, not a flag — unlike --force it records reasoning about THIS gate "
+            "instead of bypassing every gate at once"
         ),
     )
     wo_close.add_argument(
@@ -311,6 +333,7 @@ def dispatch(
             dream_studio_home=dream_studio_home,
             planning_root=planning_root,
             in_sequence=getattr(args, "in_sequence", False),
+            accept_structure=getattr(args, "accept_structure", None),
         )
     if args.work_order_command == "create":
         return _work_order_create(
@@ -349,6 +372,7 @@ def dispatch(
             source_root=source_root,
             dream_studio_home=dream_studio_home,
             planning_root=planning_root,
+            accept_structure=getattr(args, "accept_structure", None),
         )
     if args.work_order_command == "block":
         return _work_order_block(

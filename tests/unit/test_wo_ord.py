@@ -284,12 +284,22 @@ def test_created_at_breaks_ties(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Ready-set selector: strays (no milestone) never surfaced
+# Ready-set selector: milestone work comes first, a stray is not lost
+#
+# These two tests used to assert that a work order with milestone_id=NULL was
+# never returned. That was an INNER JOIN's behaviour described as a rule, and it
+# meant a milestone-less work order was open, real, and invisible to the only
+# function the autonomous loop asks for work — silent work loss. The join is now
+# a LEFT JOIN and NULL order_index sorts last, so milestone work is still offered
+# ahead of a stray; the stray is offered when nothing else is, instead of the
+# project reporting it has no work at all.
 # ---------------------------------------------------------------------------
 
 
-def test_stray_wo_never_surfaced(tmp_path):
-    """A WO with milestone_id=NULL must never be returned by the selector."""
+def test_milestone_work_is_offered_ahead_of_a_stray(tmp_path):
+    """A stray does not jump the queue. SQLite sorts NULL FIRST in ASC, so without
+    the explicit `order_index IS NULL` term a milestone-less work order would come
+    out ahead of every milestone."""
     db_path = _make_db(tmp_path)
     pid = str(uuid.uuid4())
     mid = str(uuid.uuid4())
@@ -314,11 +324,19 @@ def test_stray_wo_never_surfaced(tmp_path):
     )
 
     selected = _get_next(db_path, pid)
-    assert selected == legit_id, f"Stray WO must not be selected; got {selected!r}"
+    assert selected == legit_id, f"milestone work must be offered first; got {selected!r}"
 
 
-def test_only_strays_returns_none(tmp_path):
-    """When only stray WOs exist, the selector returns no work order."""
+def test_a_stray_is_offered_when_nothing_else_is(tmp_path):
+    """THE DEFECT THIS REPLACES. The selector used to return None here, so a project
+    whose only open work order had no milestone reported that it had no work.
+
+    The work order was open, real, and appeared in `ready_work_orders` — which LEFT
+    JOINs — while `get_next_work_order`, the function the autonomous loop actually
+    calls, INNER JOINed and could not see it. One such work order was open on the live
+    authority when this was found. Invisible is worse than out-of-order: out-of-order
+    gets noticed and resequenced, invisible gets forgotten.
+    """
     db_path = _make_db(tmp_path)
     pid = str(uuid.uuid4())
     mid = str(uuid.uuid4())
@@ -333,8 +351,7 @@ def test_only_strays_returns_none(tmp_path):
         created_at=NOW_A,
     )
 
-    selected = _get_next(db_path, pid)
-    assert selected is None
+    assert _get_next(db_path, pid) == stray_id
 
 
 # ---------------------------------------------------------------------------

@@ -100,8 +100,13 @@ def _seed_closed_wo(db_path: Path, *, symptom: str | None, ac: str) -> str:
 
 def _seed_inprogress_wo(db_path: Path, *, ac: str) -> str:
     """Seed an in_progress infrastructure WO (post_build_gate=independent_review)
-    with one COMPLETE task carrying ``ac`` — i.e. everything passes except whatever
-    the independent_review gate decides."""
+    with COMPLETE tasks carrying ``ac`` — i.e. everything passes except whatever
+    the independent_review gate decides.
+
+    Two tasks and a closed sibling, not one task alone: the structural_invariants close
+    gate refuses a work order that finishes with a single task or with no sibling in its
+    milestone. A one-task fixture would make this test fail on structure while claiming to
+    be about independent review."""
     project_id = str(uuid.uuid4())
     milestone_id = str(uuid.uuid4())
     wo = str(uuid.uuid4())
@@ -130,6 +135,30 @@ def _seed_inprogress_wo(db_path: Path, *, ac: str) -> str:
             "  status, created_at, updated_at)"
             " VALUES (?,?,?,?,?,?, 'complete', ?, ?)",
             (str(uuid.uuid4()), wo, project_id, "T1", "d", ac, NOW, NOW),
+        )
+        conn.execute(
+            "INSERT INTO business_tasks"
+            " (task_id, work_order_id, project_id, title, description, acceptance_criteria,"
+            "  status, created_at, updated_at)"
+            " VALUES (?,?,?,?,?,?, 'complete', ?, ?)",
+            (str(uuid.uuid4()), wo, project_id, "T2", "d", ac, NOW, NOW),
+        )
+        conn.execute(
+            "INSERT INTO business_work_orders"
+            " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+            "  status, created_at, updated_at, last_updated_at)"
+            " VALUES (?,?,?,?,?,?, 'closed', ?, ?, ?)",
+            (
+                str(uuid.uuid4()),
+                project_id,
+                milestone_id,
+                "Sibling",
+                "d",
+                "infrastructure",
+                NOW,
+                NOW,
+                NOW,
+            ),
         )
         conn.commit()
     finally:
