@@ -187,30 +187,26 @@ def update_claude_md(claude_md_path: Path, skills_dir: Path, dry_run: bool = Fal
         return False
 
     text = claude_md_path.read_text(encoding="utf-8")
-    begin_idx = text.find(BEGIN_SENTINEL)
-    end_idx = text.find(END_SENTINEL)
-
-    if begin_idx < 0 or end_idx < 0:
-        print(
-            f"Error: sentinels not found in {claude_md_path}. "
-            f"Add '{BEGIN_SENTINEL}' and '{END_SENTINEL}' markers first.",
-            file=sys.stderr,
-        )
-        return False
-
-    if end_idx <= begin_idx:
-        print(
-            f"Error: END sentinel appears before BEGIN sentinel in {claude_md_path}",
-            file=sys.stderr,
-        )
-        return False
-
     skills = collect_skills(skills_dir)
     new_block = generate_routing_block(skills)
 
-    before = text[: begin_idx + len(BEGIN_SENTINEL)]
-    after = text[end_idx:]
-    new_text = f"{before}\n{new_block}\n{after}"
+    # ONE SPLICE IMPLEMENTATION, NOT TWO (WO-CLAUDEMD-CLOBBER follow-up).
+    #
+    # This function found the markers, checked their order, and sliced -- the same contract
+    # merge_claude_md implements for the installer. An independent review named the risk
+    # precisely: "the contract was re-implemented in the compiler rather than shared with
+    # generate_routing, leaving two splice implementations that can still drift apart."
+    #
+    # Drift here is not cosmetic. These two writers target the SAME files, so if one
+    # tightened its refusal and the other did not, the operator's CLAUDE.md would be safe
+    # from one path and clobbered by the other -- which is the defect the original work
+    # order existed to fix, reintroduced through the back door.
+    from integrations.compiler.claude_code import CLAUDE_MD_REFUSED, merge_claude_md
+
+    new_text, disposition, detail = merge_claude_md(text, new_block)
+    if disposition == CLAUDE_MD_REFUSED or new_text is None:
+        print(f"Error: {claude_md_path} {detail}", file=sys.stderr)
+        return False
 
     if new_text == text:
         if not dry_run:

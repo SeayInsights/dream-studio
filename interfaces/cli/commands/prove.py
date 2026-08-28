@@ -314,7 +314,20 @@ def _claim_graders_blind_to_tasks(_s: _Scratch) -> tuple[bool, str]:
         task_list=task_marker,
         git_diff=diff_marker,
     )
-    correctness = _CORRECTNESS_PROMPT_TEMPLATE.format(git_diff=diff_marker)
+    # WO-MULTIROOT-REVIEW made the correctness rules RESOLVED rather than hardcoded, so
+    # the template gained rules_block / rules_provenance / rule_count. Formatting it with
+    # git_diff alone now raises KeyError: 'rules_provenance', which is what turned this
+    # claim red on main.
+    #
+    # The claim under test is that the correctness grader never sees the task list, so the
+    # rules content is irrelevant here -- but it must be SOMETHING, and it must be
+    # something that could not be mistaken for a task list.
+    correctness = _CORRECTNESS_PROMPT_TEMPLATE.format(
+        git_diff=diff_marker,
+        rules_block="(1) a placeholder rule for this demonstration",
+        rules_provenance="prove harness: rules not resolved from a project",
+        rule_count=1.0,
+    )
     quality = _QUALITY_PROMPT_TEMPLATE.format(git_diff=diff_marker)
 
     task_asymmetry = (

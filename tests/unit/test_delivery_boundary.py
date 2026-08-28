@@ -93,7 +93,11 @@ def test_the_range_needs_no_commit_message_convention(db, tmp_path):
     record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
 
     expr, reason = boundary_commit_range(wo_id, db_path=db)
-    assert reason is None
+    # WO-BOUNDARY-OPEN-END: this range has NO recorded end, so it runs to a
+    # moving HEAD and now says so. Asserting `reason is None` read as though
+    # the range were tight when it was open by construction -- measured at
+    # 217,524 chars of three other work orders' changes on 3e6cf265.
+    assert reason and "no recorded end" in reason
     assert expr == f"{head}..HEAD"
     # Nothing in the range refers to the work order at all.
     assert wo_id not in expr
@@ -740,15 +744,174 @@ def test_the_locator_is_a_fallback_chain_not_a_concatenation(db, tmp_path):
     design still stands on the cost/benefit argument; it simply did not fix the
     timeout it was credited with.
     """
-    import inspect
+    # ASSERTED AS BEHAVIOUR, NOT AS SOURCE TEXT.
+    #
+    # This grepped verify_work_order's source for a literal `or` expression.
+    # WO-MULTIROOT-REVIEW rewrote that into an if/else so the union collector could
+    # return provenance alongside the diff. The PROPERTY was untouched -- the range
+    # still REPLACES the grep rather than being concatenated with it -- but the text
+    # moved, so this failed on main for a refactor that changed nothing it cared
+    # about. A source-text assertion cannot tell a regression from a rewrite.
+    #
+    # This one calls the thing: given a boundary with content, the union collector
+    # must not run at all.
+    #
+    # The old version needed no repo, because reading source text needs no subject.
+    # Asserting behaviour does, which is part of why it is the stronger test.
+    from unittest.mock import patch as _patch
 
-    from core.work_orders import verify_main
+    from core.work_orders import verify_git
+    from core.work_orders.delivery_boundary import boundary_diff_text
 
-    src = inspect.getsource(verify_main.verify_work_order)
-    assert "_boundary_diff or _collect_git_commits(" in src, (
-        "the locator must be a fallback chain — range first, grep only when the " "range is empty"
+    root, _head = _git_repo(tmp_path / "repo")
+    wo_id = str(uuid.uuid4())
+    record_delivery_boundary(wo_id, repo_root=root, db_path=db)
+    # A commit AFTER the stamp, or start..HEAD is empty and the precondition below
+    # cannot hold — the range needs something in it for "the range replaces the grep"
+    # to be a claim about anything.
+    _second_commit(root)
+
+    called: list[str] = []
+
+    def _must_not_run(*args, **kwargs):
+        called.append("collect_union_evidence")
+        return None, []
+
+    with _patch.object(verify_git, "collect_union_evidence", _must_not_run):
+        text, _note = boundary_diff_text(wo_id, repo_root=root, db_path=db)
+
+    assert text, "precondition: the boundary must have content to mean anything here"
+    assert called == [], (
+        "the locator must be a fallback chain - the range REPLACES the grep when it "
+        "has content. Running both doubles the grader input for every work order "
+        f"whose commits mention it. collect_union_evidence ran: {called}"
     )
-    assert 'f"{_boundary_diff}\n\n{git_diff}"' not in src, (
-        "concatenating both locators doubles the grader input for every WO whose "
-        "commits mention it"
-    )
+
+
+# -- WO-BOUNDARY-OPEN-END: a boundary needs an end -----------------------------
+
+
+def _second_commit(root: Path) -> str:
+    """Add a commit AFTER the work order's own change, the way later work lands."""
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@e",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@e",
+    }
+
+    def git(*args: str) -> str:
+        out = subprocess.run(
+            ["git", *args],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            timeout=30,
+        )
+        assert out.returncode == 0, f"git {args}: {out.stderr}"
+        return out.stdout.strip()
+
+    (root / "someone_elses_work.txt").write_text("not this work order", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-qm", "a later work order")
+    return git("rev-parse", "HEAD")
+
+
+def test_a_finished_work_order_records_its_end_commit(db, tmp_path):
+    """Without an end the range is unbounded BY CONSTRUCTION -- there is nothing to stop
+    it, not merely nothing stopping it today."""
+    from core.work_orders.delivery_boundary import record_delivery_boundary_end
+
+    root, _head = _git_repo(tmp_path / "repo")
+    wo = str(uuid.uuid4())
+    record_delivery_boundary(wo, repo_root=root, db_path=db)
+
+    end_sha = _second_commit(root)
+    result = record_delivery_boundary_end(wo, repo_root=root, db_path=db)
+
+    assert result.get("end_recorded") is True, f"end not stored: {result}"
+    stored = read_delivery_boundary(wo, db_path=db)
+    assert stored["end_commit"] == end_sha
+    assert stored["ended_at"], "an end with no timestamp cannot be audited"
+    assert stored["start_commit"], "stamping an end must not lose the start"
+
+
+def test_a_finished_boundary_does_not_range_to_head(db, tmp_path):
+    """THE DEFECT. Measured on work order 3e6cf265, whose change merged in PR #682: its
+    range was 84d26359..HEAD with HEAD thirteen commits later, assembling 217,524 chars of
+    three other work orders' changes and timing the grader out at 360s twice. Pinned to
+    the merge it actually landed in, the same evidence was 30,149 chars.
+    """
+    from core.work_orders.delivery_boundary import record_delivery_boundary_end
+
+    root, start = _git_repo(tmp_path / "repo")
+    wo = str(uuid.uuid4())
+    record_delivery_boundary(wo, repo_root=root, db_path=db)
+    end_sha = record_delivery_boundary_end(wo, repo_root=root, db_path=db)["end_commit"]
+
+    # Later work lands AFTER this work order finished.
+    later = _second_commit(root)
+    assert later != end_sha, "precondition: HEAD has moved past this work order"
+
+    expr, why = boundary_commit_range(wo, db_path=db)
+
+    assert expr == f"{start}..{end_sha}", expr
+    assert "HEAD" not in expr, "a finished work order must not range to a moving HEAD"
+    assert why is None, "a pinned range carries no open-range caveat"
+
+
+def test_an_unknown_end_is_reported_not_assumed(db, tmp_path):
+    """A work order that finished before end stamping existed has no end. Ranging to HEAD
+    is then the only option -- but the caller must be TOLD, because the alternative is a
+    range that quietly includes later work while reading as tight.
+
+    In-progress work is the case where ..HEAD is genuinely right, and it is not a fallback:
+    the work order is still moving, so HEAD is its end.
+    """
+    root, start = _git_repo(tmp_path / "repo")
+    wo = str(uuid.uuid4())
+    record_delivery_boundary(wo, repo_root=root, db_path=db)
+
+    expr, why = boundary_commit_range(wo, db_path=db)
+
+    assert expr == f"{start}..HEAD"
+    assert why, "an open range with no caveat is the defect this work order exists to fix"
+    assert "no recorded end" in why
+    assert "may include work done after" in why
+
+
+def test_stamping_an_end_on_a_work_order_with_no_boundary_says_so(db, tmp_path):
+    """A work order that started before boundaries were stamped has nothing to close.
+    Reporting that beats inventing a boundary, which would assert a range nobody recorded.
+    """
+    from core.work_orders.delivery_boundary import record_delivery_boundary_end
+
+    root, _ = _git_repo(tmp_path / "repo")
+    result = record_delivery_boundary_end(str(uuid.uuid4()), repo_root=root, db_path=db)
+
+    assert result.get("recorded") is False
+    assert "no delivery boundary to close" in result.get("reason", "")
+
+
+def test_the_open_range_caveat_reaches_the_caller(db, tmp_path):
+    """A caveat computed and dropped is the same defect as a value stored nowhere.
+
+    boundary_diff_text read `why` ONLY when there was no usable range, so a warning
+    arriving alongside a working range reached no reader. The open-range warning is
+    exactly that shape: it comes back WITH a valid expression.
+    """
+    from core.work_orders.delivery_boundary import boundary_diff_text
+
+    root, _ = _git_repo(tmp_path / "repo")
+    wo = str(uuid.uuid4())
+    record_delivery_boundary(wo, repo_root=root, db_path=db)
+    _second_commit(root)
+
+    _text, note = boundary_diff_text(wo, repo_root=root, db_path=db)
+
+    assert note, "the open-range caveat must reach the caller"
+    assert "no recorded end" in note

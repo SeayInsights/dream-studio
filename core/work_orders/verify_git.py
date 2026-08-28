@@ -193,6 +193,45 @@ def _find_migration_files(source_root: Path, git_diff: str) -> list[Path]:
 # only one of them is a problem.
 
 
+# WO-MULTIROOT-REVIEW task 7: the evidence ladder, stated in the order it is tried.
+#
+# "No git" is an ORDINARY SUPPORTED CASE here, not a fallback: an end user may be working
+# in a folder that was never a repository, and that is not a defect to route around.
+#
+# Named on the verdict because the rungs are not equally strong. A recorded diff shows what
+# this work order DID; the boundary files' current contents show only what the code IS. A
+# verdict grading the second while reading like the first is exactly the absent-looks-clean
+# failure this milestone exists to remove -- so the reader is told which one they have.
+EVIDENCE_LAYERS: tuple[tuple[str, str], ...] = (
+    (
+        "recorded_delivery_boundary",
+        "the work order's stamped delivery boundary -- its commit range, else the "
+        "boundary-scoped working tree, else the current contents of its boundary files "
+        "(the last of those needs no VCS, and shows current state rather than the change)",
+    ),
+    (
+        "commit_search_union",
+        "commits referencing this work order, searched across every root the project "
+        "resolves to",
+    ),
+    (
+        "authority_executable_checks",
+        "the work order's own executable acceptance criteria and their recorded results",
+    ),
+    (
+        "none",
+        "no layer produced evidence -- reported unreviewable, never a certified pass",
+    ),
+)
+
+_EVIDENCE_LAYER_NOTES = dict(EVIDENCE_LAYERS)
+
+
+def evidence_layer_note(layer: str) -> str:
+    """What a named evidence layer means, for a reader who has only the verdict."""
+    return _EVIDENCE_LAYER_NOTES.get(layer, f"unrecognised evidence layer: {layer!r}")
+
+
 def collect_union_evidence(
     work_order_id: str,
     roots: "ProjectRoots",

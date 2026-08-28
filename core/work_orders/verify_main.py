@@ -56,6 +56,7 @@ from .verify_db import (
     _format_sql_checks,
 )
 from .verify_executor import resolve_project_root, record_test_execution, run_executable_checks
+from .verify_git import evidence_layer_note
 from .verify_gaps import (
     _falsification_to_gaps,
     normalise_falsification_scenarios,
@@ -256,6 +257,10 @@ def verify_work_order(
     _root_provenance: list[dict[str, object]] = []
     _union_summary: str = "not determined"
     _rules_provenance: str = "not determined"
+    # WO-MULTIROOT-REVIEW task 7: which rung of the evidence ladder answered.
+    # Function-scope, before any early return, because the result dict reads it --
+    # the scoping bug attachment_pressure had.
+    _evidence_layer: str = "none"
 
     with _connect(db_path) as conn:
         wo = _read_work_order(conn, work_order_id)
@@ -395,6 +400,7 @@ def verify_work_order(
         )
         if _boundary_diff:
             git_diff = _boundary_diff
+            _evidence_layer = "recorded_delivery_boundary"
             _union_summary = (
                 f"recorded delivery boundary in {_search_root} (roots not searched: the "
                 "stamped boundary is the locator when it has content)"
@@ -409,6 +415,8 @@ def verify_work_order(
                 fallback_root=_search_root,
             )
             _union_summary = union_evidence_summary(_root_provenance)
+            if git_diff:
+                _evidence_layer = "commit_search_union"
         if git_diff is None and originating_wo_id:
             git_diff = _collect_git_commits(_search_root, originating_wo_id)
 
@@ -475,6 +483,7 @@ def verify_work_order(
             if has_passing:
                 git_diff = evidence_text
                 authority_certified = True
+                _evidence_layer = "authority_executable_checks"
 
         if git_diff is None and not os.environ.get(_MOCK_ENV):
             # WO-VERIFY-GRADES-DELIVERY task 5: NO FALSE-UNREVIEWABLE. Reaching here
@@ -933,6 +942,11 @@ def verify_work_order(
             "roots_summary": _union_summary,
             # WO-MULTIROOT-REVIEW tasks 5-6: the rulebook this verdict used, named.
             "rules_provenance": _rules_provenance,
+            # WO-MULTIROOT-REVIEW task 7: WHICH rung answered, and what that rung means.
+            # certification_basis has two values for four rungs, so it cannot tell a diff
+            # from the current contents of some files -- very different strengths.
+            "evidence_layer": _evidence_layer,
+            "evidence_layer_note": evidence_layer_note(_evidence_layer),
         }
         # WO-FALSIFY-FIRST-PASS: the falsification section and the UNVERIFIED
         # ledger ride the verdict. A falsification grader that could not run is
@@ -998,6 +1012,8 @@ def verify_work_order(
         "roots_summary": _union_summary,
         "roots_examined": _root_provenance,
         "rules_provenance": _rules_provenance,
+        "evidence_layer": _evidence_layer,
+        "evidence_layer_note": evidence_layer_note(_evidence_layer),
         "completion": completion,
         "correctness": correctness,
         "quality": quality,

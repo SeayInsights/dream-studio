@@ -113,6 +113,73 @@ def record_delivery_boundary(
     return boundary
 
 
+def record_delivery_boundary_end(
+    work_order_id: str,
+    *,
+    repo_root: Path | None,
+    db_path: Path | None = None,
+    now: str | None = None,
+) -> dict[str, Any]:
+    """Stamp where this work order's work FINISHED, closing its open range.
+
+    WHY THIS HAS TO EXIST. ``boundary_commit_range`` returns ``<start>..HEAD``, and the
+    stored boundary carried only a start. While a work order is genuinely in progress that
+    is the right answer. Once later work lands it silently absorbs it, because HEAD keeps
+    moving and nothing pins the far end.
+
+    MEASURED 2026-08-27 on work order 3e6cf265, whose own change merged in PR #682:
+
+        range        84d26359..HEAD
+        evidence     217,524 chars
+        grader       ['claude', '--print'] timed out after 360 seconds, twice
+
+    HEAD was thirteen commits past that work order, so its "delivery boundary" contained
+    three unrelated work orders. The timeout read as a provider problem -- the message even
+    says so -- and the real cause was that we sent 217KB.
+
+    The same open range is the mechanism behind gaps landing on the wrong work order: a
+    verify that ranges to HEAD sees every branch-mate's files and attaches their findings
+    here.
+
+    Best-effort by construction, like the start stamp: finishing work must not fail on
+    bookkeeping. A boundary that cannot be updated keeps its open range and says so, which
+    is worse than a pinned end and better than a silent wrong one.
+    """
+    boundary = read_delivery_boundary(work_order_id, db_path=db_path) or {}
+    if not boundary:
+        return {
+            "recorded": False,
+            "reason": (
+                "no delivery boundary to close -- this work order started before "
+                "boundaries were stamped"
+            ),
+        }
+
+    sha, reason = _git_head(repo_root)
+    boundary["end_commit"] = sha
+    boundary["ended_at"] = now or datetime.now(UTC).isoformat()
+    if reason:
+        boundary["end_commit_reason"] = reason
+
+    try:
+        from core.work_orders.artifacts import set_wo_artifact
+
+        stored = set_wo_artifact(
+            work_order_id,
+            "report",
+            json.dumps(boundary, indent=2),
+            instance_key=_INSTANCE_KEY,
+            db_path=db_path,
+            generator="ds work-order close (delivery boundary end)",
+            project_root=repo_root,
+        )
+        boundary["end_recorded"] = bool(stored)
+    except Exception as exc:  # noqa: BLE001 - finishing work must not fail on bookkeeping
+        boundary["end_recorded"] = False
+        boundary["end_record_error"] = f"{type(exc).__name__}: {exc}"[:200]
+    return boundary
+
+
 def read_delivery_boundary(
     work_order_id: str, *, db_path: Path | None = None
 ) -> dict[str, Any] | None:
@@ -374,6 +441,12 @@ def boundary_diff_text(
     sections: list[str] = []
 
     expr, why = boundary_commit_range(work_order_id, db_path=db_path)
+    # A caveat that comes back WITH a usable range used to be dropped on the floor: `why`
+    # was read only when expr was None. So "this range has no end and runs to HEAD" would
+    # have been computed and reported nowhere — the same shape as a value calculated,
+    # stored, and never surfaced. If the range is open, the reader is told.
+    if expr and why:
+        notes.append(why)
     if expr and repo_root is not None:
         try:
             proc = subprocess.run(
@@ -449,8 +522,22 @@ def boundary_commit_range(
     boundary = read_delivery_boundary(work_order_id, db_path=db_path)
     if boundary is None:
         return None, "no delivery boundary recorded (WO started before boundaries were stamped)"
+    end = boundary.get("end_commit")
     sha = boundary.get("start_commit")
     if not isinstance(sha, str) or not sha:
         why = boundary.get("start_commit_reason") or "no start commit recorded"
         return None, f"no commit range available: {why}"
-    return f"{sha}..HEAD", None
+    if end:
+        # PINNED. The work is finished, so the range is what it delivered and nothing
+        # after it.
+        return f"{sha}..{end}", None
+
+    # OPEN, and the caller is TOLD it is open. ..HEAD is correct while the work order is
+    # genuinely in progress. For a finished work order with no end stamped -- anything
+    # that closed before end stamping existed -- it silently absorbs every later commit,
+    # which is how one work order's boundary came to hold 217,524 chars of three other
+    # work orders' changes. Saying so beats implying the range is tight.
+    return f"{sha}..HEAD", (
+        "delivery boundary has no recorded end, so this range runs to HEAD and may "
+        "include work done after this work order finished"
+    )

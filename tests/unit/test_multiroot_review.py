@@ -955,3 +955,106 @@ def test_the_project_tier_reads_the_declared_path_not_a_repo_inside_it(db, tmp_p
         "passing primary must MISS the container profile -- otherwise this test proves "
         "nothing about the fix"
     )
+
+
+def _declare_boundary(db: Path, work_order_id: str, boundary: str) -> None:
+    """Give a work order a declared module boundary, the way a real one carries it."""
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "UPDATE business_work_orders SET description = ? WHERE work_order_id = ?",
+        (f"Module boundary: {boundary}.", work_order_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+# -- Task 7: evidence must not require git, and must name the layer -------------
+
+
+def test_a_project_with_no_git_still_yields_evidence(db, tmp_path):
+    """ "No git" is an ORDINARY SUPPORTED CASE, not a fallback. Operator: "not everything
+    will always be pushed to a github. End users will use claude for anything."
+
+    A folder that was never a repository still contains the work. The boundary-file rung
+    reads it directly, needing no VCS at all -- which is why the ladder's last usable rung
+    is file contents rather than a git operation.
+    """
+    from core.work_orders.delivery_boundary import boundary_file_contents
+
+    plain = tmp_path / "never_a_repo"
+    plain.mkdir()
+    (plain / "deliverable.py").write_text(
+        "def the_thing():" + NL + "    return 'real work, never pushed'" + NL,
+        encoding="utf-8",
+    )
+    assert not (plain / ".git").exists(), "precondition: no VCS here at all"
+
+    wo = _project_with_path(db, plain)
+    _declare_boundary(db, wo, "deliverable.py")
+
+    text, reason = boundary_file_contents(wo, repo_root=plain, db_path=db)
+
+    assert text, f"a non-git folder must still yield evidence; reason was {reason!r}"
+    assert "real work, never pushed" in text, "the delivered content itself is the evidence"
+
+
+def test_the_verdict_names_which_evidence_layer_answered():
+    """certification_basis has TWO values -- "authority_evidence" and "git_diff" -- for
+    FOUR rungs. So it cannot distinguish a real diff from the current contents of some
+    files, and those are very different strengths: a diff shows what this work order DID,
+    file contents show only what the code IS.
+
+    A verdict grading the second while reading like the first is the absent-looks-clean
+    shape this milestone exists to remove, so the rung is named and explained.
+    """
+    from core.work_orders.verify_git import EVIDENCE_LAYERS, evidence_layer_note
+
+    names = [name for name, _ in EVIDENCE_LAYERS]
+    assert names == [
+        "recorded_delivery_boundary",
+        "commit_search_union",
+        "authority_executable_checks",
+        "none",
+    ], f"the ladder's stated order changed: {names}"
+
+    for name, note in EVIDENCE_LAYERS:
+        assert note and len(note) > 20, f"{name} has no usable explanation"
+        assert evidence_layer_note(name) == note
+
+    # The reader must be told when the evidence is the weaker kind.
+    boundary = evidence_layer_note("recorded_delivery_boundary")
+    assert "needs no VCS" in boundary
+    assert (
+        "current state rather than the change" in boundary
+    ), "the weaker rung must SAY it is weaker -- that is the whole point of naming it"
+
+    # And 'none' must not read like a pass.
+    none_note = evidence_layer_note("none")
+    assert "unreviewable" in none_note
+    assert "never a certified pass" in none_note
+
+
+def test_an_unrecognised_layer_is_named_rather_than_swallowed():
+    """A layer value the vocabulary does not know must surface as itself. Returning a
+    bland default would hide a wiring mistake behind plausible prose."""
+    from core.work_orders.verify_git import evidence_layer_note
+
+    note = evidence_layer_note("something_new")
+    assert "unrecognised" in note
+    assert "something_new" in note, "the unknown value must appear so it can be traced"
+
+
+def test_the_verdict_and_result_both_carry_the_layer():
+    """A layer computed and recorded nowhere is the attachment_pressure defect again:
+    calculated, stored nowhere, reaching no reader."""
+    source = Path("core/work_orders/verify_main.py").read_text(encoding="utf-8")
+
+    # Once in the verdict dict (12-space indent) and once in the result dict (8-space).
+    verdict = [ln for ln in source.splitlines() if ln.startswith('            "evidence_layer"')]
+    result = [
+        ln
+        for ln in source.splitlines()
+        if ln.startswith('        "evidence_layer"') and not ln.startswith("            ")
+    ]
+    assert len(verdict) == 1, f"verdict occurrences: {len(verdict)}"
+    assert len(result) == 1, f"result occurrences: {len(result)}"
