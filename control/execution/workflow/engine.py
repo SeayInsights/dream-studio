@@ -363,7 +363,19 @@ def _compute_ready_nodes(
         if not deps:
             deps_met = True
         elif trigger_rule == "all_success":
-            deps_met = all(s == "completed" for s in dep_statuses)
+            # `unverified` passes here, and that is a deliberate, uncomfortable choice.
+            #
+            # It means "the prompt was delivered and nothing confirmed the effect". Treating
+            # that as failure made the orchestrator a wall: measured, `ds workflow run`
+            # stopped at node 1 of 14 because none of them can be confirmed by a runner that
+            # only delivers prompts. Treating it as success is the original defect -- a node
+            # reported complete because its text loaded.
+            #
+            # So it advances and is never called completed. The status stays `unverified` on
+            # the node, the final status is `completed_with_unverified` rather than
+            # `completed`, and the run lists exactly which nodes nobody observed. The
+            # workflow moves; the claim is not made.
+            deps_met = all(s in ("completed", "unverified") for s in dep_statuses)
         elif trigger_rule == "all_done":
             # `unverified` belongs here and `blocked` does not. all_done means "the
             # dependency reached a terminal state, I do not care how it went" -- and

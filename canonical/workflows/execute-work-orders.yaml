@@ -12,9 +12,23 @@ on_failure: abort
 # GitHub path is gated on: github_repo configured + gh CLI authenticated.
 # When the GitHub path is absent, work order closes on local gates only (no PR).
 
+# COMPLETION IS NOT YET OBSERVED FOR ANY NODE HERE, and that is recorded rather than
+# papered over. Each node below tells an agent to print a token (GATES: PASS, REVIEW_PASS,
+# ...), and a first cut declared those tokens as `completion_contains`. An independent
+# review found they could never match: `_invoke_skill` LOADS a skill and returns its
+# SKILL.md text, `_execute_wave` then replaces a command node's output with a synthetic
+# "<id> executed via <specifier>" string, and the agent that would actually print the token
+# reads the runner's output out of band. The runner has no execution result to inspect.
+#
+# So every node reports `unverified`: the prompt was delivered and nothing confirmed the
+# effect. The run advances (blocking every node made this a wall at node 1 of 14) and the
+# final status is `completed_with_unverified`, never `completed`.
+#
+# What each node NEEDS is a `completion_check` — a cheap shell read that observes the
+# effect from outside: a git ref for create-branch, `gh pr view` for push-and-pr, an
+# authority query for close-work-order. That is real work and it is tracked, not assumed.
 nodes:
   - id: capability-probe
-    completion_contains: "GITHUB:"
     command: |
       Run: py -m core.preflight.capability_probe
       OR call is_github_usable() from core.preflight.capability_probe.
@@ -29,7 +43,6 @@ nodes:
     timeout_seconds: 30
 
   - id: escalation-probe
-    completion_contains: "EXECUTOR:"
     depends_on: [capability-probe]
     command: |
       Resolve the executor (model) this work order must run on — escalation-aware.
@@ -49,7 +62,6 @@ nodes:
     timeout_seconds: 30
 
   - id: preflight-check
-    completion_contains: "PREFLIGHT: CLEAR"
     depends_on: [escalation-probe]
     command: |
       Call `py -m interfaces.cli.ds work-order tasks <active_work_order_id>`.
@@ -67,7 +79,6 @@ nodes:
     timeout_seconds: 60
 
   - id: migration-class-check
-    completion_contains: "MIGRATION_CLASS: clear"
     depends_on: [preflight-check]
     command: |
       Inspect the active work order's task list and description.
@@ -83,7 +94,6 @@ nodes:
     timeout_seconds: 30
 
   - id: implement-tasks
-    completion_contains: "TASKS_DONE"
     depends_on: [migration-class-check]
     skill: build
     model: sonnet
@@ -108,7 +118,6 @@ nodes:
       Do not print TASKS_DONE unless `ds work-order tasks <work_order_id>` shows none remaining.
 
   - id: run-gates
-    completion_contains: "GATES: PASS"
     skill: verify
     depends_on: [implement-tasks]
     model: sonnet
@@ -128,7 +137,6 @@ nodes:
       Output: GATES: PASS or GATES: FAIL <reason>
 
   - id: create-branch
-    completion_contains: "BRANCH:"
     depends_on: [run-gates]
     condition: "{{capability-probe.output}} contains 'GITHUB: YES' and {{run-gates.output}} contains 'GATES: PASS'"
     command: |
@@ -147,7 +155,6 @@ nodes:
     timeout_seconds: 120
 
   - id: push-and-pr
-    completion_contains: "PR:"
     depends_on: [create-branch]
     condition: "{{capability-probe.output}} contains 'GITHUB: YES'"
     command: |
@@ -163,7 +170,6 @@ nodes:
     timeout_seconds: 120
 
   - id: watch-ci
-    completion_contains: "CI: ALL_GREEN"
     depends_on: [push-and-pr]
     condition: "{{capability-probe.output}} contains 'GITHUB: YES'"
     command: |
@@ -177,7 +183,6 @@ nodes:
     timeout_seconds: 600
 
   - id: merge
-    completion_contains: "MERGED:"
     depends_on: [watch-ci]
     condition: "{{capability-probe.output}} contains 'GITHUB: YES' and {{watch-ci.output}} contains 'CI: ALL_GREEN'"
     command: |
@@ -189,7 +194,6 @@ nodes:
     timeout_seconds: 60
 
   - id: independent-review
-    completion_contains: "REVIEW_PASS"
     depends_on: [run-gates]
     condition: "{{run-gates.output}} contains 'GATES: PASS'"
     command: |
@@ -232,7 +236,6 @@ nodes:
     timeout_seconds: 300
 
   - id: close-work-order-github
-    completion_contains: "WO_CLOSED:"
     depends_on: [merge, independent-review]
     condition: "{{capability-probe.output}} contains 'GITHUB: YES' and {{independent-review.output}} contains 'REVIEW_PASS'"
     command: |
@@ -244,7 +247,6 @@ nodes:
     timeout_seconds: 120
 
   - id: close-work-order-local
-    completion_contains: "WO_CLOSED_LOCAL:"
     depends_on: [run-gates, independent-review]
     condition: "{{capability-probe.output}} contains 'GITHUB: NO' and {{run-gates.output}} contains 'GATES: PASS' and {{independent-review.output}} contains 'REVIEW_PASS'"
     command: |
@@ -257,7 +259,6 @@ nodes:
     timeout_seconds: 120
 
   - id: next-iteration
-    completion_contains: "NEXT:"
     depends_on: [close-work-order-github, close-work-order-local]
     trigger_rule: any_done
     command: |

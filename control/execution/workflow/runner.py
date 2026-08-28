@@ -196,7 +196,13 @@ class WorkflowRunner:
                 all_statuses = {n.get("status") for n in state_nodes.values()}
                 if all_statuses <= {"completed", "skipped"}:
                     return "completed"
-                if all_statuses <= {"completed", "skipped", "failed"}:
+                # A run that reached the end without observing some of its nodes did not
+                # complete -- it finished. Reporting "completed" here would restore the
+                # exact claim this work order exists to stop, one level up from the node.
+                if all_statuses <= {"completed", "skipped", "unverified"}:
+                    self.blocked_on = self._describe_unverified(state_nodes)
+                    return "completed_with_unverified"
+                if all_statuses <= {"completed", "skipped", "failed", "unverified"}:
                     return "completed_with_failures"
                 self.blocked_on = self._describe_blockage(state_nodes)
                 return "blocked"
@@ -332,6 +338,13 @@ class WorkflowRunner:
             success, output = self._invoke_skill(specifier, node_id)
             duration = round(time.monotonic() - t0, 2)
 
+            # The synthetic summary is what gets STORED for a command node (the loaded
+            # skill text is long and not worth keeping). Keep the real text for the
+            # completion check: replacing it first meant every declared token was
+            # checked against "<id> executed via <specifier>" and could never match --
+            # the independent review caught that `ds workflow run` therefore blocked
+            # unconditionally at node 1.
+            raw_output = output
             if is_command_node and success:
                 output = f"{node_id} executed via {specifier}"
 
@@ -344,7 +357,7 @@ class WorkflowRunner:
                 # command-node branch -- referencing it for a skill node raised
                 # UnboundLocalError and broke four existing tests.
                 _node_yaml = (full_yaml_nodes or {}).get(node_id) or ynode
-                status, reason = self._verify_completion(node_id, _node_yaml, output)
+                status, reason = self._verify_completion(node_id, _node_yaml, raw_output)
             if reason:
                 output = f"{output}\n\n[completion] {status.upper()}: {reason}"
             self._update_node(node_id, status, output, duration=duration)
@@ -446,6 +459,15 @@ class WorkflowRunner:
     # where a command succeeds but says the wrong thing (a gate that prints
     # "Overall: FAIL" and exits 0).
 
+    def _describe_unverified(self, state_nodes: dict) -> str:
+        """Which nodes finished without anyone observing their effect."""
+        lines = [
+            f"  {nid}: no completion_check, so nothing confirmed this node's effect"
+            for nid, node in state_nodes.items()
+            if node.get("status") == "unverified"
+        ]
+        return chr(10).join(lines)
+
     def _describe_blockage(self, state_nodes: dict) -> str:
         """Why the run stopped, in terms an operator can act on.
 
@@ -526,21 +548,26 @@ class WorkflowRunner:
                 # fails and the node blocks with the reason, which is the right outcome.
                 pass
         if not check:
-            if not expected_raw:
-                return (
-                    "unverified",
-                    "no completion_check or completion_contains declared, so the effect of "
-                    "this node was never observed -- its prompt was delivered and nothing "
-                    "confirms the work",
-                )
-            # The node's own report IS the declared observable. It said what it would
-            # print; either it printed it or it did not.
-            if expected_raw in (output or ""):
-                return "completed", None
+            # WHY completion_contains ALONE IS NOT ENOUGH, corrected after an independent
+            # review. I had it check "the node's own output", reasoning that each node
+            # ends by telling the agent to print a token. The runner has no such output:
+            # _invoke_skill LOADS a skill and returns its SKILL.md text plus a footer, and
+            # the agent that would produce a report reads that text out of band. There is
+            # no execution result here to inspect. Checking the loaded prompt instead would
+            # be worse than useless -- every token appears in its own prompt by
+            # construction, so every node would "complete" by reading its own instructions.
+            hint = (
+                " (completion_contains alone cannot be checked here: this runner delivers a"
+                " prompt and never sees what the agent then does. Pair it with a"
+                " completion_check that observes the effect -- a git ref, an authority"
+                " query -- or leave the node honestly unverified.)"
+                if expected_raw
+                else ""
+            )
             return (
-                "blocked",
-                f"the node did not report {expected_raw!r}, which its prompt says it "
-                f"prints on success",
+                "unverified",
+                "no completion_check declared, so the effect of this node was never "
+                "observed -- its prompt was delivered and nothing confirms the work" + hint,
             )
 
         try:

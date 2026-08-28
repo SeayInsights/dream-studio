@@ -710,11 +710,24 @@ def test_unverified_satisfies_all_done_because_failed_does():
     assert _ready("blocked") == [], "but not-yet is not done"
 
 
-def test_every_orchestrator_node_declares_an_observable():
-    """MEASURED 2026-08-28: 14 nodes, 0 completion checks. With completion verified
-    rather than assumed, node 1 returned `unverified` and every downstream node became
-    unreachable -- the loop stopped at the first node. Before that it marched through all
-    14 declaring success on a prompt that merely loaded. Neither directs anything.
+def test_no_orchestrator_node_claims_an_observable_it_cannot_have():
+    """CORRECTED AFTER AN INDEPENDENT REVIEW FOUND THE FIRST VERSION WRONG.
+
+    I gave all 14 nodes a `completion_contains` naming the token their prompt tells the
+    agent to print, and asserted here that every node declared an observable. It read as
+    progress and was not: `_invoke_skill` LOADS a skill and returns its SKILL.md text, and
+    `_execute_wave` then replaces a command node's output with "<id> executed via
+    <specifier>". The runner never holds an agent's report, so those tokens could never
+    match -- `ds workflow run` blocked unconditionally at node 1 of 14, which is a
+    REGRESSION on marching through, not a fix.
+
+    Worse, had the check been pointed at the loaded prompt instead, every token appears in
+    its own prompt by construction, so every node would have "completed" by reading its own
+    instructions -- the original defect with extra steps.
+
+    A completion_contains with no completion_check is therefore inert, and an inert
+    declaration is prose wearing a gate's clothes. The nodes are honestly `unverified`
+    until someone writes checks that observe the effect from outside.
     """
     import yaml
 
@@ -722,42 +735,37 @@ def test_every_orchestrator_node_declares_an_observable():
         Path(__file__).resolve().parents[2] / "canonical" / "workflows" / "execute-work-orders.yaml"
     )
     nodes = yaml.safe_load(path.read_text(encoding="utf-8"))["nodes"]
+    assert nodes
 
-    assert nodes, "the orchestrator has no nodes"
-    missing = [
-        n["id"] for n in nodes if not n.get("completion_contains") and not n.get("completion_check")
+    inert = [
+        n["id"] for n in nodes if n.get("completion_contains") and not n.get("completion_check")
     ]
-    assert missing == [], f"nodes that would report unverified forever: {missing}"
-
-
-def test_every_declared_token_is_one_its_own_prompt_asks_for():
-    """A token the prompt never tells the agent to print can never appear, so the node
-    blocks forever -- a check that always fails is as useless as one that never does.
-    Three of my first fourteen were exactly that: preflight-check prints
-    'PREFLIGHT: CLEAR' and I wrote PREFLIGHT_OK; implement-tasks and next-iteration
-    printed no token at all.
-
-    And MIGRATION_CLASS: matched BOTH 'operator go required' and 'clear', so halting for
-    an operator decision would have reported as completion -- the node succeeding at
-    stopping.
-    """
-    import yaml
-
-    path = (
-        Path(__file__).resolve().parents[2] / "canonical" / "workflows" / "execute-work-orders.yaml"
+    assert inert == [], (
+        f"these nodes declare a token nothing can check: {inert}. "
+        f"completion_contains qualifies a completion_check's output; alone it verifies "
+        f"nothing, and a declaration that verifies nothing is worse than an honest absence"
     )
-    nodes = yaml.safe_load(path.read_text(encoding="utf-8"))["nodes"]
 
-    for node in nodes:
-        token = node.get("completion_contains")
-        if not token:
-            continue
-        prompt = (node.get("command") or "") + (node.get("input") or "")
-        assert (
-            token in prompt
-        ), f"{node['id']} waits for {token!r}, which its own prompt never asks it to print"
 
-    by_id = {n["id"]: n for n in nodes}
+def test_the_wave_checks_the_real_output_not_its_own_summary():
+    """THE DEFECT THE REVIEW CAUGHT, pinned so it cannot return.
+
+    `_execute_wave` replaces a command node's output with "<id> executed via <specifier>"
+    before storing it. The first cut ran the completion check against that synthetic string,
+    so any declared condition compared against text the node never produced.
+
+    I had "demonstrated" the mechanism by calling _verify_completion with hand-written
+    output. That proved the helper worked and said nothing about the path -- the same
+    test-that-cannot-fail shape I have hit repeatedly this session, wearing a demo's
+    clothes instead of a test's.
+    """
+    import inspect
+
+    from control.execution.workflow.runner import WorkflowRunner
+
+    src = inspect.getsource(WorkflowRunner._execute_wave)
+    assert "raw_output = output" in src, "the real output is not preserved before the summary"
     assert (
-        by_id["migration-class-check"]["completion_contains"] == "MIGRATION_CLASS: clear"
-    ), "the bare prefix also matches the halt line, so stopping would read as completing"
+        "_verify_completion(node_id, _node_yaml, raw_output)" in src
+    ), "the completion check is being fed the synthetic summary again"
+    assert "_verify_completion(node_id, _node_yaml, output)" not in src

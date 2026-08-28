@@ -116,7 +116,15 @@ def cmd_run(args) -> int:
     if final_status == "blocked" and runner.blocked_on:
         print("[workflow] waiting on:")
         print(runner.blocked_on)
-    return 0 if final_status in ("completed", "running") else 1
+    if final_status == "completed_with_unverified" and runner.blocked_on:
+        print("[workflow] finished, but these nodes were never observed:")
+        print(runner.blocked_on)
+        print(
+            "[workflow] Declare a completion_check on each — a cheap read that observes"
+            " the effect (a git ref, an authority query). Until then this run advanced"
+            " without confirming the work."
+        )
+    return 0 if final_status in ("completed", "completed_with_unverified", "running") else 1
 
 
 def add_workflow_subcommand(subparsers) -> None:
