@@ -482,6 +482,11 @@ def test_completion_prompt_template_work_order_type_interpolates() -> None:
         work_order_type="infrastructure",
         task_list="- T1",
         git_diff="diff",
+        # WO-MULTIROOT-REVIEW task 9 added this placeholder. I enumerated the formatters
+        # before adding it and reported finding "all three" -- there were four, and this
+        # is the fourth. A grep for the template name found it; my enumeration had
+        # stopped at the non-test callers.
+        direction_context="  (test: no surrounding work orders)",
     )
     assert "infrastructure" in rendered
 

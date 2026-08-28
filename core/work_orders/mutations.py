@@ -394,6 +394,40 @@ def reopen_work_order(
     }
 
 
+def _unverified_claim_note(description: str) -> str | None:
+    """Asserted absences in a description that cite nothing, as one operator-facing line.
+
+    Operator ruling 2026-08-28: "those gates need to be adjusted so that you have to look
+    without assuming."
+
+    Stamped at the moment a claim ENTERS the authority, because that is when it is cheap to
+    settle. One work order in this session was registered claiming an unprojectable event
+    "retries forever and blocks the queue"; the projection framework already dead-lettered
+    after max retries, the live engine demonstrated it while the registration was being
+    written, and the task had to be retitled "NO WORK NEEDED". A single command would have
+    prevented it.
+
+    ADVISORY BY DESIGN. It never blocks: a defect must always be registerable, and refusing
+    a registration would trade a small error for a large one. It returns a note the caller
+    surfaces, so an unchecked assertion is visible rather than indistinguishable from a
+    verified one.
+    """
+    try:
+        from core.gates.unverified_claims import audit_claims
+
+        report = audit_claims(description or "")
+        if report.passed:
+            return None
+        triggers = ", ".join(sorted({c.trigger.lower() for c in report.unverified}))
+        return (
+            f"{len(report.unverified)} asserted absence(s) cite nothing ({triggers}). "
+            "These are claims about the existing system -- run the check and paste what it "
+            "said, or the claim reads as fact and nothing downstream questions it."
+        )
+    except Exception:
+        return None  # an advisory note must never break a registration
+
+
 def create_work_order(
     *,
     project_id: str,
@@ -483,6 +517,7 @@ def create_work_order(
     except Exception:
         pass
 
+    _claim_note = _unverified_claim_note(description)
     return {
         "ok": True,
         "work_order_id": work_order_id,
@@ -490,6 +525,7 @@ def create_work_order(
         "milestone_id": milestone_id,
         "title": title,
         "status": "created",
+        **({"unverified_claims": _claim_note} if _claim_note else {}),
     }
 
 
@@ -567,12 +603,14 @@ def create_task(
     except Exception:
         pass
 
+    _claim_note = _unverified_claim_note(description)
     result: dict[str, Any] = {
         "ok": True,
         "task_id": task_id,
         "work_order_id": work_order_id,
         "title": title,
         "status": "pending",
+        **({"unverified_claims": _claim_note} if _claim_note else {}),
     }
     if acceptance_criteria is not None:
         result["acceptance_criteria"] = acceptance_criteria

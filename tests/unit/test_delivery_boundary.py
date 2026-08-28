@@ -729,63 +729,65 @@ def test_the_unreviewable_message_names_every_layer_it_tried(db, tmp_path, monke
     assert "re-start the work order" in summary
 
 
-def test_the_locator_is_a_fallback_chain_not_a_concatenation(db, tmp_path):
-    """The boundary range REPLACES the grep when it has content, rather than being
-    appended to it.
+def test_the_locator_is_a_fallback_chain_not_a_concatenation():
+    """The recorded range REPLACES the commit grep; it is never joined to it.
 
-    The first cut made them additive, reasoning that a rebase can move work outside
-    the recorded range so both together see more. That is a universal cost for a
-    conditional benefit: for any WO whose commits DO mention it, both layers return
-    the same commits and the grader input roughly doubles.
+    THIS TEST HAS BEEN WRONG TWICE, and the second way was worse.
 
-    The change was originally committed blaming a completion-grader timeout, and
-    that attribution was wrong — measurement showed the WO in question predates
-    boundary stamping, so this layer contributed zero characters to its prompt. The
-    design still stands on the cost/benefit argument; it simply did not fix the
-    timeout it was credited with.
+    First it grepped verify_work_order's SOURCE for "_boundary_diff or
+    _collect_git_commits(". A refactor rewrote that `or` into an if/else without touching
+    the behaviour, and the guard broke -- a source-text assertion cannot tell a rewrite
+    from a regression.
+
+    Then I replaced it with one that patched verify_git.collect_union_evidence and called
+    delivery_boundary.boundary_diff_text -- which is NOT the function that chooses. The
+    patched collector was never reachable from that call, so `assert called == []` could
+    not fail under any code change. I described that as the stronger version. This work
+    order's own independent review caught it.
+
+    The choice now lives in verify_git.choose_locator, so it can be driven directly and
+    the assertion can actually fail: the collector here raises, and reaching it fails the
+    test rather than passing it.
+
+    Concatenating both was tried and rejected -- for any work order whose commits DO
+    mention it, both layers return the same commits and the grader input roughly doubles,
+    a universal cost for a conditional benefit against a budget that already timed a
+    grader out at 360s on 217,524 chars.
     """
-    # ASSERTED AS BEHAVIOUR, NOT AS SOURCE TEXT.
-    #
-    # This grepped verify_work_order's source for a literal `or` expression.
-    # WO-MULTIROOT-REVIEW rewrote that into an if/else so the union collector could
-    # return provenance alongside the diff. The PROPERTY was untouched -- the range
-    # still REPLACES the grep rather than being concatenated with it -- but the text
-    # moved, so this failed on main for a refactor that changed nothing it cared
-    # about. A source-text assertion cannot tell a regression from a rewrite.
-    #
-    # This one calls the thing: given a boundary with content, the union collector
-    # must not run at all.
-    #
-    # The old version needed no repo, because reading source text needs no subject.
-    # Asserting behaviour does, which is part of why it is the stronger test.
-    from unittest.mock import patch as _patch
+    from core.work_orders.verify_git import choose_locator
 
-    from core.work_orders import verify_git
-    from core.work_orders.delivery_boundary import boundary_diff_text
+    def _must_not_run():
+        raise AssertionError(
+            "the commit grep ran while the recorded range had content -- the range must "
+            "REPLACE it, not be concatenated with it"
+        )
 
-    root, _head = _git_repo(tmp_path / "repo")
-    wo_id = str(uuid.uuid4())
-    record_delivery_boundary(wo_id, repo_root=root, db_path=db)
-    # A commit AFTER the stamp, or start..HEAD is empty and the precondition below
-    # cannot hold — the range needs something in it for "the range replaces the grep"
-    # to be a claim about anything.
-    _second_commit(root)
+    _range = "=== commit range ===" + chr(10) + "diff --git a/x b/x"
+    diff, provenance, layer = choose_locator(_range, _must_not_run)
 
-    called: list[str] = []
+    assert diff.startswith("=== commit range ==="), "the range must be the locator"
+    assert provenance == [], "no roots were searched, so none may be claimed"
+    assert layer == "recorded_delivery_boundary"
 
-    def _must_not_run(*args, **kwargs):
-        called.append("collect_union_evidence")
-        return None, []
 
-    with _patch.object(verify_git, "collect_union_evidence", _must_not_run):
-        text, _note = boundary_diff_text(wo_id, repo_root=root, db_path=db)
+def test_the_grep_runs_only_when_the_range_is_empty():
+    """The other half: a fallback that never fires is not a fallback."""
+    from core.work_orders.verify_git import choose_locator
 
-    assert text, "precondition: the boundary must have content to mean anything here"
-    assert called == [], (
-        "the locator must be a fallback chain - the range REPLACES the grep when it "
-        "has content. Running both doubles the grader input for every work order "
-        f"whose commits mention it. collect_union_evidence ran: {called}"
-    )
+    diff, provenance, layer = choose_locator(None, lambda: ("grep found this", ["a-root"]))
+
+    assert diff == "grep found this"
+    assert provenance == ["a-root"], "the union collector's provenance must survive"
+    assert layer == "commit_search_union"
+
+
+def test_neither_locator_reports_none_rather_than_empty():
+    """None means "no evidence" and must never read as a certified pass or an auto-zero."""
+    from core.work_orders.verify_git import choose_locator
+
+    diff, _provenance, layer = choose_locator(None, lambda: (None, []))
+    assert diff is None
+    assert layer == "none"
 
 
 # -- WO-BOUNDARY-OPEN-END: a boundary needs an end -----------------------------

@@ -232,6 +232,33 @@ def evidence_layer_note(layer: str) -> str:
     return _EVIDENCE_LAYER_NOTES.get(layer, f"unrecognised evidence layer: {layer!r}")
 
 
+def choose_locator(boundary_diff, collect_union):
+    """Pick ONE locator: the recorded range REPLACES the commit grep, never joins it.
+
+    Returns ``(diff, root_provenance, evidence_layer)``.
+
+    WHY THIS IS A FUNCTION AND NOT AN IF/ELSE INLINE. The property -- range replaces grep
+    -- was guarded by a test that grepped verify_work_order's SOURCE for
+    ``"_boundary_diff or _collect_git_commits("``. A refactor rewrote that ``or`` into an
+    if/else and the guard broke without the behaviour changing, so I replaced it with a
+    test that patched ``collect_union_evidence`` and then called ``boundary_diff_text`` --
+    which is not the function that chooses. ``assert called == []`` could never fail.
+
+    A brittle guard became a vacuous one, and I described the replacement as stronger. The
+    review on this work order caught it. The choice now lives somewhere a test can drive
+    directly, which is what makes the assertion able to fail.
+
+    Concatenating both locators was tried and rejected: for any work order whose commits
+    DO mention it, both layers return the same commits and the grader input roughly
+    doubles -- a universal cost for a conditional benefit, charged to a budget that
+    already timed a grader out at 360s on 217,524 chars.
+    """
+    if boundary_diff:
+        return boundary_diff, [], "recorded_delivery_boundary"
+    diff, provenance = collect_union()
+    return diff, provenance, ("commit_search_union" if diff else "none")
+
+
 def collect_union_evidence(
     work_order_id: str,
     roots: "ProjectRoots",
