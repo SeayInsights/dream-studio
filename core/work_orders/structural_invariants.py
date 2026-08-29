@@ -62,6 +62,22 @@ def _connect(db_path: Path) -> sqlite3.Connection:
     return sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
 
 
+def _unevaluated(exc: Exception) -> Violation:
+    """The gate could not read the data. Blocks, and says why."""
+    return Violation(
+        scope="unevaluated",
+        found=-1,
+        required=-1,
+        message=(
+            f"The structural invariants could not be evaluated: "
+            f"{type(exc).__name__}: {exc}. This BLOCKS rather than passes — a gate that "
+            f"cannot read its data has not found the work order clean, it has found "
+            f"nothing. If this database predates the business_tasks table, record why "
+            f"this work order is exempt with --accept-structure."
+        ),
+    )
+
+
 def check_structure(work_order_id: str, *, db_path: Path) -> list[Violation]:
     """Return the invariants this work order breaks, empty when it breaks none.
 
@@ -76,8 +92,8 @@ def check_structure(work_order_id: str, *, db_path: Path) -> list[Violation]:
     violations: list[Violation] = []
     try:
         conn = _connect(db_path)
-    except sqlite3.Error:
-        return violations
+    except sqlite3.Error as exc:
+        return [_unevaluated(exc)]
 
     try:
         row = conn.execute(
@@ -134,9 +150,16 @@ def check_structure(work_order_id: str, *, db_path: Path) -> list[Violation]:
                         ),
                     )
                 )
-    except sqlite3.Error:
-        # A missing table means an old or partial database, not a malformed work order.
-        return []
+    except sqlite3.Error as exc:
+        # A GATE THAT CANNOT EVALUATE MUST NOT REPORT CLEAN. This returned [] -- no
+        # violations -- so a database error silently PASSED the gate, on exactly the work
+        # orders whose data is broken. An independent review caught it, and it is the
+        # absent-is-not-clean error this repository keeps finding, committed by the very
+        # module written to enforce the opposite.
+        #
+        # An old schema without business_tasks lands here too, so the message says which
+        # it cannot tell apart and names the escape rather than stranding the operator.
+        return [_unevaluated(exc)]
     finally:
         conn.close()
 

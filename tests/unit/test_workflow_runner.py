@@ -747,25 +747,34 @@ def test_no_orchestrator_node_claims_an_observable_it_cannot_have():
     )
 
 
-def test_the_wave_checks_the_real_output_not_its_own_summary():
-    """THE DEFECT THE REVIEW CAUGHT, pinned so it cannot return.
+def test_the_completion_decision_ignores_the_nodes_text_entirely():
+    """CORRECTED TWICE, AND THE SECOND CORRECTION IS THE POINT.
 
-    `_execute_wave` replaces a command node's output with "<id> executed via <specifier>"
-    before storing it. The first cut ran the completion check against that synthetic string,
-    so any declared condition compared against text the node never produced.
+    First cut: the completion check compared a declared token against the node's output,
+    while _execute_wave had already replaced a command node's output with a synthetic
+    "<id> executed via <specifier>" receipt. A review caught it.
 
-    I had "demonstrated" the mechanism by calling _verify_completion with hand-written
-    output. That proved the helper worked and said nothing about the path -- the same
-    test-that-cannot-fail shape I have hit repeatedly this session, wearing a demo's
-    clothes instead of a test's.
+    My fix threaded the real output through so the check would see it. A later review
+    caught THAT: by then _verify_completion no longer read its `output` parameter at all,
+    because the completion_contains-alone branch was gone. I had passed a value and
+    asserted the passing, not the reading -- the same computed-and-discarded shape as the
+    truncation note I dropped earlier this session.
+
+    The honest property is stronger and simpler: this runner cannot see what an agent
+    does, so the completion decision must not depend on any text the node produced. Only a
+    completion_check subprocess, observing state from outside, is evidence.
     """
     import inspect
 
     from control.execution.workflow.runner import WorkflowRunner
 
-    src = inspect.getsource(WorkflowRunner._execute_wave)
-    assert "raw_output = output" in src, "the real output is not preserved before the summary"
-    assert (
-        "_verify_completion(node_id, _node_yaml, raw_output)" in src
-    ), "the completion check is being fed the synthetic summary again"
-    assert "_verify_completion(node_id, _node_yaml, output)" not in src
+    sig = inspect.signature(WorkflowRunner._verify_completion)
+    assert list(sig.parameters) == ["self", "node_id", "ynode"], (
+        f"_verify_completion takes {list(sig.parameters)} — a text parameter here can only "
+        f"be the node's own report, which this runner never has"
+    )
+
+    body = inspect.getsource(WorkflowRunner._verify_completion)
+    body = body.split(chr(34) * 3)[2]  # past the docstring
+    for banned in ("raw_output", "expected in output", "in (output"):
+        assert banned not in body, f"the decision is reading node text again: {banned!r}"

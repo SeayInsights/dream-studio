@@ -1830,3 +1830,27 @@ def test_a_check_that_runs_and_fails_is_still_repointable_to(db, tmp_path, monke
         dream_studio_home=tmp_path,
     )
     assert result["ok"] is True, result
+
+
+def test_a_gate_that_cannot_read_its_data_blocks_rather_than_passing(db, tmp_path):
+    """FOUND BY AN INDEPENDENT REVIEW, IN THE MODULE WRITTEN TO ENFORCE THE OPPOSITE.
+
+    check_structure returned [] on sqlite3.Error — no violations, which the close gate
+    reads as clean. So a database error silently PASSED the structural gate, on exactly
+    the work orders whose data is broken.
+
+    That is absent-is-not-clean, the error this repository keeps finding, committed by the
+    gate module itself. A gate that cannot read its data has not found the work order
+    clean; it has found nothing.
+    """
+    from core.work_orders.structural_invariants import check_structure
+
+    missing = tmp_path / "nowhere" / "studio.db"
+    violations = check_structure("any-id", db_path=missing)
+
+    assert violations, "an unreadable database reported the work order clean"
+    assert violations[0].scope == "unevaluated"
+    assert "could not be evaluated" in violations[0].message
+    assert (
+        "--accept-structure" in violations[0].message
+    ), "blocking without naming the escape strands an operator on a legacy database"

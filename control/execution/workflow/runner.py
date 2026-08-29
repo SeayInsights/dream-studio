@@ -338,13 +338,12 @@ class WorkflowRunner:
             success, output = self._invoke_skill(specifier, node_id)
             duration = round(time.monotonic() - t0, 2)
 
-            # The synthetic summary is what gets STORED for a command node (the loaded
-            # skill text is long and not worth keeping). Keep the real text for the
-            # completion check: replacing it first meant every declared token was
-            # checked against "<id> executed via <specifier>" and could never match --
-            # the independent review caught that `ds workflow run` therefore blocked
-            # unconditionally at node 1.
-            raw_output = output
+            # THE COMPLETION DECISION DOES NOT LOOK AT THIS TEXT AT ALL, which is why
+            # the synthetic summary is harmless here. A previous cut threaded the real
+            # output into _verify_completion to stop it checking this receipt; a later
+            # review pointed out the method had by then stopped reading the parameter
+            # entirely, so the thread was ceremony. The only evidence available to this
+            # runner is a completion_check subprocess observing state from outside.
             if is_command_node and success:
                 output = f"{node_id} executed via {specifier}"
 
@@ -357,7 +356,7 @@ class WorkflowRunner:
                 # command-node branch -- referencing it for a skill node raised
                 # UnboundLocalError and broke four existing tests.
                 _node_yaml = (full_yaml_nodes or {}).get(node_id) or ynode
-                status, reason = self._verify_completion(node_id, _node_yaml, raw_output)
+                status, reason = self._verify_completion(node_id, _node_yaml)
             if reason:
                 output = f"{output}\n\n[completion] {status.upper()}: {reason}"
             self._update_node(node_id, status, output, duration=duration)
@@ -494,9 +493,7 @@ class WorkflowRunner:
             return "no node reports a blocking status; check for a dependency cycle"
         return chr(10).join(lines)
 
-    def _verify_completion(
-        self, node_id: str, ynode: dict, output: str = ""
-    ) -> tuple[str, str | None]:
+    def _verify_completion(self, node_id: str, ynode: dict) -> tuple[str, str | None]:
         """Return ``(status, reason)`` for a node whose prompt was delivered.
 
         Two kinds of evidence, because the nodes come in two kinds.
