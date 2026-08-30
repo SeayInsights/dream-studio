@@ -29,6 +29,7 @@ absent-is-not-clean rule this milestone keeps relearning.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import uuid
 from pathlib import Path
@@ -619,6 +620,30 @@ def _scaffold(db: Path, *, tasks: int, siblings: int) -> tuple[str, str, str]:
             " (work_order_id, project_id, milestone_id, title, description, status,"
             "  work_order_type, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
             (wid, pid, mid, f"W{index}", "", "created", "infrastructure", _NOW, _NOW),
+        )
+        # The structural invariants judge only work orders the AUTHORITY created, and
+        # `create_work_order` is what emits this event. Without it these rows are raw-SQL
+        # inserts -- exactly the hermetic-fixture shape the gate is now scoped to ignore --
+        # so the fixture has to look like what it is testing.
+        conn.execute(
+            "INSERT INTO business_canonical_events"
+            " (event_id, received_at, event_type, event_timestamp, schema_version,"
+            "  trace, payload, project_id, milestone_id, work_order_id, severity, source)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                str(uuid.uuid4()),
+                _NOW,
+                "work_order.created",
+                _NOW,
+                1,
+                json.dumps({"work_order_id": wid, "project_id": pid}),
+                json.dumps({"title": f"W{index}", "status": "created"}),
+                pid,
+                mid,
+                wid,
+                "info",
+                "test-fixture",
+            ),
         )
     for index in range(tasks):
         conn.execute(
@@ -1854,3 +1879,70 @@ def test_a_gate_that_cannot_read_its_data_blocks_rather_than_passing(db, tmp_pat
     assert (
         "--accept-structure" in violations[0].message
     ), "blocking without naming the escape strands an operator on a legacy database"
+
+
+def test_only_a_work_order_the_authority_created_is_judged(db):
+    """OPERATOR RULING 2026-08-30, after the gate turned main red twice.
+
+    The invariant is about how a human or agent SIZES real work. Applied to every close
+    path it also caught hermetic test fixtures, which are one-task by design because they
+    are exercising some other gate: 23 tests across 10 files, and repairing them meant
+    adding setup unrelated to what each test was about — one such addition then broke four
+    more, because a seeded acceptance criterion is not inert.
+
+    `create_work_order` emits `work_order.created`; a raw SQL insert emits nothing. That
+    event is the exact recorded line between a work order the authority authored and a row
+    someone put in a table — no heuristic, no new column.
+
+    NOT AN EVASION ROUTE: a row with no event is deleted by the next projection rebuild, so
+    a raw-SQL work order does not survive to be closed. And measured the day this was
+    scoped, the gate keeps almost all its reach: 101 of 132 open work orders are
+    event-backed and 45 of those still break an invariant, against 49 before.
+    """
+    import sqlite3
+
+    from core.work_orders.structural_invariants import check_structure
+
+    # _scaffold emits work_order.created, so this one IS judged.
+    _, _, authored = _scaffold(db, tasks=1, siblings=1)
+    assert check_structure(
+        authored, db_path=db
+    ), "a work order the authority created was not judged"
+
+    # The same malformed shape, inserted directly with no event.
+    conn = sqlite3.connect(str(db))
+    raw = str(uuid.uuid4())
+    pid = _one(db, "SELECT project_id FROM business_work_orders WHERE work_order_id=?", (authored,))
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, status,"
+        "  work_order_type, created_at, updated_at) VALUES (?,?,NULL,?,?,?,?,?,?)",
+        (raw, pid, "raw", "", "created", "infrastructure", _NOW, _NOW),
+    )
+    conn.commit()
+    conn.close()
+
+    assert check_structure(raw, db_path=db) == [], (
+        "a row inserted directly was judged — that is the hermetic-fixture case this "
+        "scoping exists to exclude"
+    )
+
+
+def test_a_database_with_no_canonical_events_is_not_judged(db, tmp_path):
+    """A database with no canonical event table is not a Dream Studio authority at all,
+    and a gate about how the authority sizes work has nothing to say about one.
+
+    Distinct from the unreadable-database case, which still BLOCKS: there the gate cannot
+    read data it should be able to read; here there is no authority to speak for.
+    """
+    import sqlite3
+
+    from core.work_orders.structural_invariants import check_structure
+
+    _, _, wid = _scaffold(db, tasks=1, siblings=1)
+    conn = sqlite3.connect(str(db))
+    conn.execute("DROP TABLE business_canonical_events")
+    conn.commit()
+    conn.close()
+
+    assert check_structure(wid, db_path=db) == []

@@ -78,6 +78,30 @@ def _unevaluated(exc: Exception) -> Violation:
     )
 
 
+def _authority_created(conn: sqlite3.Connection, work_order_id: str) -> bool | None:
+    """Did the authority author this work order? ``None`` when it cannot be told.
+
+    True only when a ``work_order.created`` canonical event names it. False for a row
+    someone inserted directly. None when the canonical event table is absent, which means
+    this database is not a Dream Studio authority at all -- and a gate about how the
+    authority sizes work has nothing to say about a database that is not one.
+
+    None and False are both "do not judge", but they are different facts and a later
+    reader should be able to tell them apart, so they are not collapsed into a bool.
+    """
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM business_canonical_events"
+            " WHERE event_type = 'work_order.created'"
+            "   AND json_extract(trace, '$.work_order_id') = ?"
+            " LIMIT 1",
+            (work_order_id,),
+        ).fetchone()
+    except sqlite3.Error:
+        return None
+    return row is not None
+
+
 def check_structure(work_order_id: str, *, db_path: Path) -> list[Violation]:
     """Return the invariants this work order breaks, empty when it breaks none.
 
@@ -96,6 +120,27 @@ def check_structure(work_order_id: str, *, db_path: Path) -> list[Violation]:
         return [_unevaluated(exc)]
 
     try:
+        # ONLY WORK ORDERS THE AUTHORITY CREATED ARE JUDGED (operator ruling 2026-08-30).
+        #
+        # The invariant is about how a human or agent SIZES real work. Applied to every
+        # close path it also caught hermetic test fixtures, which are one-task by design
+        # because they are exercising some other gate. Measured: it broke 23 tests on main
+        # across 10 files, and repairing them meant adding setup unrelated to what each
+        # test was about -- one such addition then broke four more, because a seeded
+        # acceptance criterion is not inert.
+        #
+        # `create_work_order` emits `work_order.created`; a row inserted by raw SQL emits
+        # nothing. That event is therefore the exact, recorded line between a work order
+        # the authority authored and a row someone put in a table -- no heuristic, and no
+        # new column. It is not an evasion route either: a row with no event is deleted by
+        # the next projection rebuild, so raw-SQL work orders do not survive to be closed.
+        #
+        # Measured on the live authority the day this was scoped: 101 of 132 open work
+        # orders are event-backed and 45 of those still break an invariant, so the gate
+        # keeps almost all of its reach (45 of 49) while fixtures fall outside it.
+        if _authority_created(conn, work_order_id) is not True:
+            return violations
+
         row = conn.execute(
             "SELECT milestone_id FROM business_work_orders WHERE work_order_id = ?",
             (work_order_id,),

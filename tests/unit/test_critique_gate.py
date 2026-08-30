@@ -50,17 +50,6 @@ def db_home(tmp_path):
             " VALUES (?, ?, ?, 'T1', 'do thing', 'SQL-CHECK: SELECT 1', 'complete', ?, ?)",
             ("task-critique-gate-t1", WO_UI_ID, PROJECT_ID, NOW, NOW),
         )
-        # A second task, carrying NO acceptance criteria: the structural_invariants close
-        # gate refuses a work order that finishes with one task. No AC on purpose — a
-        # seeded executable check would give the AC gate a pass this fixture should not
-        # get, which is how the same addition broke four other tests.
-        conn.execute(
-            "INSERT INTO business_tasks"
-            " (task_id, work_order_id, project_id, title, description, acceptance_criteria,"
-            " status, created_at, updated_at)"
-            " VALUES (?, ?, ?, 'T2', 'not single-task', NULL, 'complete', ?, ?)",
-            ("task-critique-gate-t2", WO_UI_ID, PROJECT_ID, NOW, NOW),
-        )
         # Locked design brief so the pre_build_gate (design_brief_locked) always passes
         conn.execute(
             "INSERT INTO business_design_briefs"
