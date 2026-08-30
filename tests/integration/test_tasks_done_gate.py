@@ -82,6 +82,43 @@ def _seed(db_path: Path, *, project_id: str, milestone_id: str, work_order_id: s
             " VALUES (?,?,?,?,?,'cleanup','in_progress',1,?,?,?)",
             (work_order_id, project_id, milestone_id, "Test WO", "desc", NOW, NOW, NOW),
         )
+        # A CLOSED sibling and a second complete task: the structural_invariants close gate
+        # refuses a work order that finishes with one task or whose milestone has no sibling.
+        # This fixture is about the tasks_done gate, so it satisfies this one rather than
+        # failing for a reason it is not testing. Closed, not open, so a test asserting "the
+        # last open work order in this milestone" still sees exactly one.
+        conn.execute(
+            "INSERT INTO business_work_orders"
+            " (work_order_id, project_id, milestone_id, title, description,"
+            "  work_order_type, status, created_at, updated_at)"
+            " VALUES (?,?,?,?,?,'cleanup','closed',?,?)",
+            (
+                "sib-" + str(work_order_id)[:8],
+                project_id,
+                milestone_id,
+                "Earlier WO",
+                "d",
+                NOW,
+                NOW,
+            ),
+        )
+        conn.execute(
+            "INSERT INTO business_tasks"
+            " (task_id, work_order_id, project_id, title, description, acceptance_criteria,"
+            "  status, created_at, updated_at)"
+            " VALUES (?,?,?,?,?,?, 'complete', ?, ?)",
+            (
+                "struct-" + str(work_order_id)[:8],
+                work_order_id,
+                project_id,
+                "T-structural",
+                "seeded so the work order is not single-task",
+                None,
+                NOW,
+                NOW,
+            ),
+        )
+
         conn.commit()
     finally:
         conn.close()
