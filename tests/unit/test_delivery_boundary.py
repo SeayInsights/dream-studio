@@ -1037,7 +1037,13 @@ def _repo(tmp_path: Path):
     root = tmp_path / "repo"
     root.mkdir()
     run = lambda *a: subprocess.run(  # noqa: E731
-        list(a), cwd=str(root), capture_output=True, text=True, check=False
+        list(a),
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
     )
     run("git", "init", "-q")
     run("git", "config", "user.email", "t@example.com")
@@ -1049,7 +1055,12 @@ def _repo(tmp_path: Path):
         run("git", "commit", "-q", "-m", f"c{i}")
         shas.append(
             subprocess.run(
-                ["git", "rev-parse", "HEAD"], cwd=str(root), capture_output=True, text=True
+                ["git", "rev-parse", "HEAD"],
+                cwd=str(root),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
             ).stdout.strip()
         )
     return root, shas
