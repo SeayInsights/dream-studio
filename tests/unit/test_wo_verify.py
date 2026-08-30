@@ -554,6 +554,32 @@ def test_unreviewable_with_passing_ac_proceeds(
             f"SQL-CHECK: SELECT COUNT(*) FROM business_projects WHERE project_id='{project_id}'"
         ),
     )
+    # A SECOND task and a CLOSED sibling work order: the structural_invariants close gate
+    # refuses a work order that finishes with one task, or whose milestone has no sibling.
+    # This test is about the unreviewable-grader flow, so the fixture has to satisfy the
+    # unrelated gates or it fails for a reason it is not testing.
+    _add_task(
+        db_path,
+        work_order_id=work_order_id,
+        project_id=project_id,
+        title="T2",
+        desc="do it too",
+        acceptance_criteria=(
+            f"SQL-CHECK: SELECT COUNT(*) FROM business_projects WHERE project_id='{project_id}'"
+        ),
+    )
+    _sibling = sqlite3.connect(str(db_path))
+    try:
+        _sibling.execute(
+            "INSERT INTO business_work_orders"
+            " (work_order_id, project_id, milestone_id, title, description, status,"
+            "  work_order_type, created_at, updated_at)"
+            " VALUES (?, ?, ?, 'Sibling', '', 'closed', 'infrastructure', ?, ?)",
+            (str(uuid.uuid4()), project_id, milestone_id, NOW, NOW),
+        )
+        _sibling.commit()
+    finally:
+        _sibling.close()
 
     planning_root = tmp_path / "planning"
     mock_no_summary = {"unreviewable": True, "reason": "grader_no_summary"}

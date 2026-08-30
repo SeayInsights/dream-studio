@@ -93,6 +93,24 @@ def _seed_wo(db_path: Path, *, wo_type: str = "cleanup") -> tuple[str, str, str]
         " VALUES (?,?,?,?,?,?, 'complete', ?, ?)",
         (str(uuid.uuid4()), work_order_id, project_id, "T1", "do", "SQL-CHECK: SELECT 1", NOW, NOW),
     )
+    # A CLOSED sibling and a second task: the structural_invariants close gate refuses a
+    # work order that finishes with one task or whose milestone has no sibling. This
+    # fixture is about grader rule 7, so it satisfies that gate rather than failing for a
+    # reason it is not testing.
+    conn.execute(
+        "INSERT INTO business_tasks"
+        " (task_id, work_order_id, project_id, title, description, acceptance_criteria,"
+        "  status, created_at, updated_at)"
+        " VALUES (?,?,?,?,?,?, 'complete', ?, ?)",
+        (str(uuid.uuid4()), work_order_id, project_id, "T2", "do", "SQL-CHECK: SELECT 1", NOW, NOW),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description,"
+        "  work_order_type, status, created_at, updated_at)"
+        " VALUES (?,?,?,?,?,?,'closed',?,?)",
+        (str(uuid.uuid4()), project_id, milestone_id, "Earlier WO", "d", wo_type, NOW, NOW),
+    )
     conn.commit()
     conn.close()
     return project_id, milestone_id, work_order_id

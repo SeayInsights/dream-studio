@@ -77,6 +77,43 @@ def _seed(
         " VALUES (?,?,?,?,?,?,'in_progress',1,?,?,?)",
         (work_order_id, project_id, milestone_id, title, "desc", wo_type, NOW, NOW, NOW),
     )
+    # A CLOSED sibling and a second complete task: the structural_invariants close gate
+    # refuses a work order that finishes with one task or whose milestone has no sibling.
+    # This fixture is about a different gate, so it satisfies this one rather than failing
+    # for a reason it is not testing. Closed, not open, so a test asserting "the last open
+    # work order in this milestone" still sees exactly one.
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description,"
+        "  work_order_type, status, created_at, updated_at)"
+        " VALUES (?,?,?,?,?,?,'closed',?,?)",
+        (
+            "sibling-" + str(work_order_id)[:8],
+            project_id,
+            milestone_id,
+            "Earlier WO",
+            "desc",
+            "infrastructure",
+            NOW,
+            NOW,
+        ),
+    )
+    conn.execute(
+        "INSERT INTO business_tasks"
+        " (task_id, work_order_id, project_id, title, description, acceptance_criteria,"
+        "  status, created_at, updated_at)"
+        " VALUES (?,?,?,?,?,?, 'complete', ?, ?)",
+        (
+            "structural-second-" + str(work_order_id)[:8],
+            work_order_id,
+            project_id,
+            "T-structural",
+            "seeded so the work order is not single-task",
+            None,
+            NOW,
+            NOW,
+        ),
+    )
     conn.commit()
     conn.close()
 
