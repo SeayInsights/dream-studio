@@ -55,6 +55,15 @@ _GOOD_PAYLOADS: dict[str, dict] = {
         "project_id": "proj-test",
         "forced": False,
     },
+    # WO 17f20d48. acceptance_criteria is write-once in the projection, so a typo in a
+    # check was only correctable with --force. task.ac_repointed is the one writer that
+    # SETs it, and it carries `previous` and `reason` so the correction is auditable —
+    # which is exactly why those two are required keys and belong in this fixture.
+    "task.ac_repointed": {
+        "acceptance_criteria": "TEST-CHECK: tests/unit/test_example.py::test_it",
+        "previous": "TEST-CHECK: tests/unit/test_example.py::test_i",
+        "reason": "Typo in the node id; same test, only the address corrected.",
+    },
     "design_brief.created": {
         "brief_id": str(uuid.uuid4()),
         "project_id": "proj-test",
