@@ -144,6 +144,25 @@ def mark_task_done(
         result["suggested_action"] = (
             f"All tasks complete. Close work order: ds work-order close {work_order_id}"
         )
+    # WO 80c0e61b: RECORD WHICH COMMITS THIS WORK ORDER OWNS, on EVERY task-done rather
+    # than only the last. A delivery boundary is a time window, and two work orders worked
+    # on in the same period have overlapping windows — measured, subtracting on them drops
+    # commits that really do belong. Per-commit ownership is the only signal that separates
+    # interleaved work, and it can only be captured while the work is happening.
+    try:
+        from core.work_orders.range_attribution import record_commit_ownership
+        from core.work_orders.verify_executor import resolve_project_root
+
+        _owned = record_commit_ownership(
+            work_order_id,
+            repo_root=resolve_project_root(work_order_id, db_path),
+            db_path=db_path,
+        )
+        if _owned:
+            result["commits_recorded"] = len(_owned)
+    except Exception as _exc:  # noqa: BLE001 - finishing a task must not fail on bookkeeping
+        result["commit_ownership_error"] = f"{type(_exc).__name__}: {_exc}"[:200]
+
     # WO-BOUNDARY-OPEN-END task 1, second half: pin the boundary when the LAST task is
     # done, not only at close.
     #

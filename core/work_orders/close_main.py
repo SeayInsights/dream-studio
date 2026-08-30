@@ -228,6 +228,16 @@ def close_work_order(
             repo_root=resolve_project_root(work_order_id, db_path),
             db_path=db_path,
         )
+        # WO 80c0e61b: and claim the commits, so a later reader can tell this work order's
+        # work from a branch neighbour's. Pinning the end alone narrows the WINDOW; only
+        # per-commit ownership survives two work orders sharing one.
+        from .range_attribution import record_commit_ownership
+
+        record_commit_ownership(
+            work_order_id,
+            repo_root=resolve_project_root(work_order_id, db_path),
+            db_path=db_path,
+        )
     except Exception:  # noqa: BLE001 - closing must not fail on bookkeeping
         pass
 

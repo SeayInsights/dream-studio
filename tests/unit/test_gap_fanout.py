@@ -1036,3 +1036,71 @@ def test_an_attached_task_actually_survives_a_projection_rebuild(db, monkeypatch
         "the attached task did NOT survive the rebuild. The event was emitted but could "
         "not reconstruct the row, which is the data-loss path this task exists to close."
     )
+
+
+def test_a_gap_already_attached_is_not_attached_again(db, monkeypatch):
+    """WO 80c0e61b task 3 — REGISTERED ON A PREMISE THAT TURNED OUT TO BE FALSE, and this
+    test is what settles it rather than a second dedupe nobody needed.
+
+    I registered the task believing repeated reviews re-attached the same findings, because
+    work order 1db6de49 grew 9 -> 29 -> 66 tasks across six review rounds. Measured on the
+    live authority afterwards: **71 tasks, 71 distinct titles, 0 repeated.** Nothing was
+    ever re-attached. Every one was a genuinely new finding, because each round graded a
+    commit range containing four other work orders' commits — the defect task 1 of this
+    work order fixes.
+
+    So the dedupe was never missing. What was missing is a test proving it, which is why
+    the wrong premise survived long enough to become a task. Building a second mechanism
+    here would have been duplication justified by a number I had not looked into.
+    """
+    emitted: list[dict] = []
+
+    import spool.writer as _writer
+
+    monkeypatch.setattr(
+        _writer, "write_event", lambda envelope: emitted.append({"type": envelope.event_type})
+    )
+
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+    reviewed = _reviewed_wo(conn, project_id, status="in_progress")
+
+    first = _attach(conn, project_id, reviewed, "A finding", "Do the thing")
+    second = _attach(conn, project_id, reviewed, "A finding", "Do the thing")
+    conn.commit()
+
+    added = lambda r: sum(x.get("tasks_added", 0) for x in r)  # noqa: E731
+    assert added(first) == 1, f"the first attach added {added(first)}"
+    assert added(second) == 0, "the same finding was attached twice on a re-review"
+
+    rows = conn.execute(
+        "SELECT COUNT(*) FROM business_tasks WHERE work_order_id=? AND title=?",
+        (reviewed, "Do the thing"),
+    ).fetchone()[0]
+    assert rows == 1, f"{rows} copies of one finding"
+    conn.close()
+
+
+def test_a_carried_away_task_still_blocks_its_finding_from_returning(db, monkeypatch):
+    """Carrying a gap task to another work order sets its row to 'deleted' on this one. The
+    dedupe reads every title regardless of status, so the finding does not come back on the
+    next review — which is what makes carry-over a durable answer rather than a delay."""
+    import spool.writer as _writer
+
+    monkeypatch.setattr(_writer, "write_event", lambda envelope: None)
+
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+    reviewed = _reviewed_wo(conn, project_id, status="in_progress")
+    _attach(conn, project_id, reviewed, "A finding", "Do the thing")
+    conn.execute(
+        "UPDATE business_tasks SET status='deleted' WHERE work_order_id=? AND title=?",
+        (reviewed, "Do the thing"),
+    )
+    conn.commit()
+
+    again = _attach(conn, project_id, reviewed, "A finding", "Do the thing")
+    assert (
+        sum(x.get("tasks_added", 0) for x in again) == 0
+    ), "a carried-away finding was re-attached, so carrying it only delayed it"
+    conn.close()
