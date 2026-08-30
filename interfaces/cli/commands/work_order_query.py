@@ -367,3 +367,209 @@ def _work_order_next(
     )
     print(json.dumps(result, indent=2))
     return 0 if result.get("ok") else 1
+
+
+def _work_order_create(
+    *,
+    project_id: str,
+    milestone_id: str,
+    title: str,
+    description: str,
+    work_order_type: str,
+    originating_symptom: str | None,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """Create a work order through the authority.
+
+    WO-WO-LIFECYCLE-SURFACE task 1. Until this existed every authoring action was raw SQL
+    by an adapter, which is both a rule violation and the reason no invariant could be
+    enforced in one place.
+
+    Surfaces two things the raw-SQL path could not. Any unverified claim in the
+    description is named back -- a work order registered this week asserted that an
+    unprojectable event "retries forever" when the framework already dead-lettered, and
+    had to be retitled NO WORK NEEDED. And the reminder that a work order carries more
+    than one task, because 49 of 128 open ones do not.
+    """
+    from core.work_orders.mutations import create_work_order
+
+    result = create_work_order(
+        project_id=project_id,
+        milestone_id=milestone_id,
+        title=title,
+        description=description,
+        work_order_type=work_order_type,
+        originating_symptom=originating_symptom,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    print(json.dumps(result, indent=2))
+    if not result.get("ok"):
+        return 1
+
+    wo_id = result.get("work_order_id", "")
+    nl = chr(10)
+    if result.get("unverified_claims"):
+        print(f"{nl}UNVERIFIED CLAIM: {result['unverified_claims']}")
+    print(
+        f"{nl}Work order created: {wo_id[:8]}"
+        f"{nl}A work order carries MORE THAN ONE task. Add them with:"
+        f"{nl}  ds work-order add-task {wo_id} --title ... --acceptance TEST-CHECK:..."
+    )
+    return 0
+
+
+def _work_order_add_task(
+    *,
+    work_order_id: str,
+    title: str,
+    description: str,
+    acceptance_criteria: str | None,
+    project_id: str | None,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """Add a task through the authority. Tasks live in SQLite, never in a document.
+
+    ``create_task`` requires a project id but does not derive one, and it deliberately
+    tolerates a work order that has been emitted but not yet projected. So this reads the
+    project from the work order row when the row is there and asks for ``--project`` when
+    it is not -- rather than refusing, which would reject exactly the just-created work
+    order the mutation goes out of its way to accept.
+    """
+    import sqlite3
+
+    from core.installed_runtime import resolve_installed_runtime_paths
+    from core.work_orders.mutations import create_task
+
+    nl = chr(10)
+    if project_id is None:
+        db_path = resolve_installed_runtime_paths(
+            source_root=source_root, dream_studio_home=dream_studio_home
+        ).sqlite_path
+        conn = sqlite3.connect(str(db_path))
+        try:
+            row = conn.execute(
+                "SELECT project_id FROM business_work_orders WHERE work_order_id = ?",
+                (work_order_id,),
+            ).fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": (
+                            f"Work order {work_order_id} is not projected yet, so its "
+                            f"project could not be read. Pass --project <project_id>."
+                        ),
+                    },
+                    indent=2,
+                )
+            )
+            return 1
+        project_id = row[0]
+
+    result = create_task(
+        work_order_id=work_order_id,
+        project_id=project_id,
+        title=title,
+        description=description,
+        acceptance_criteria=acceptance_criteria,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    print(json.dumps(result, indent=2))
+    if not result.get("ok"):
+        return 1
+    if result.get("unverified_claims"):
+        print(f"{nl}UNVERIFIED CLAIM: {result['unverified_claims']}")
+    if not acceptance_criteria:
+        print(
+            f"{nl}No executable acceptance criterion. Close cannot verify this task "
+            f"without one -- add TEST-CHECK, SQL-CHECK or API-CHECK so the gate has "
+            f"something to run."
+        )
+    return 0
+
+
+def _work_order_reconcile(
+    *,
+    project_id: str | None,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """Report open records whose work looks finished. Never closes anything.
+
+    Exit 0 whether or not drift is found: drift is a report, not a failure, and making it
+    exit non-zero would put it on the wrong side of every `&&` an operator writes.
+    """
+    from core.installed_runtime import resolve_installed_runtime_paths
+    from core.work_orders.reconcile import find_drift
+
+    db_path = resolve_installed_runtime_paths(
+        source_root=source_root, dream_studio_home=dream_studio_home
+    ).sqlite_path
+    print(find_drift(db_path=db_path, project_id=project_id).render())
+    return 0
+
+
+def _work_order_carry_over(
+    *,
+    work_order_id: str,
+    task_ids: list[str],
+    title: str,
+    reason: str,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """Carry out-of-scope tasks to a new linked work order.
+
+    Deliberately does not then close the original. Closing here would make carry-over a
+    close path of its own, which is how a narrow escape hatch turns into the wide one --
+    the operator runs the normal close afterwards and every gate still applies.
+    """
+    from core.work_orders.carry_over import carry_over
+
+    result = carry_over(
+        work_order_id=work_order_id,
+        task_ids=task_ids,
+        reason=reason,
+        title=title,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    print(json.dumps(result, indent=2))
+    if not result.get("ok"):
+        return 1
+    print(
+        f"{chr(10)}Carried {len(result['moved'])} task(s) to "
+        f"{result['carried_to'][:8]}; {result['remaining_tasks']} remain here."
+        f"{chr(10)}The original is NOT closed. Close it through the normal gates:"
+        f"{chr(10)}  {result['next_command']}"
+    )
+    return 0
+
+
+def _work_order_repoint_ac(
+    *,
+    task_id: str,
+    acceptance_criteria: str,
+    reason: str,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """Correct a task's acceptance criterion through the recorded path."""
+    from core.work_orders.repoint_ac import repoint_acceptance_criteria
+
+    result = repoint_acceptance_criteria(
+        task_id=task_id,
+        acceptance_criteria=acceptance_criteria,
+        reason=reason,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1

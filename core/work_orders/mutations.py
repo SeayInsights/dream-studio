@@ -144,6 +144,43 @@ def mark_task_done(
         result["suggested_action"] = (
             f"All tasks complete. Close work order: ds work-order close {work_order_id}"
         )
+    # WO-BOUNDARY-OPEN-END task 1, second half: pin the boundary when the LAST task is
+    # done, not only at close.
+    #
+    # A work order is routinely verified BEFORE it is closed -- `ds work-order verify` is a
+    # separate command an operator runs to decide whether to close at all. Without a stamp
+    # here that verify still grades every commit since the work order started. Task 1 named
+    # both halves; shipping only the close half was a false-done, caught by this work
+    # order's own independent review.
+    #
+    # OUTSIDE the `with _connect(...)` block on purpose. The first attempt sat inside it,
+    # so record_delivery_boundary_end opened a SECOND connection to the same SQLite file
+    # while the outer transaction held it, the write failed, and a bare `except: pass`
+    # swallowed it -- the stamp silently never happened. That is the ERROR HANDLING
+    # HONESTY rule in this repo's own SDLC baseline, broken by the code enforcing it.
+    #
+    # Still best-effort, because finishing a task must not fail on bookkeeping -- but the
+    # failure is REPORTED on the result now instead of vanishing.
+    if remaining == 0:
+        try:
+            from core.work_orders.delivery_boundary import record_delivery_boundary_end
+            from core.work_orders.verify_executor import resolve_project_root
+
+            _boundary = record_delivery_boundary_end(
+                work_order_id,
+                repo_root=resolve_project_root(work_order_id, db_path),
+                db_path=db_path,
+                now=now,
+            )
+            if _boundary.get("end_commit"):
+                result["delivery_boundary_end"] = _boundary["end_commit"]
+            elif _boundary.get("reason") or _boundary.get("end_record_error"):
+                result["delivery_boundary_end_error"] = str(
+                    _boundary.get("end_record_error") or _boundary.get("reason")
+                )[:200]
+        except Exception as exc:  # noqa: BLE001 - a task-done must not fail on bookkeeping
+            result["delivery_boundary_end_error"] = f"{type(exc).__name__}: {exc}"[:200]
+
     return result
 
 
@@ -357,6 +394,40 @@ def reopen_work_order(
     }
 
 
+def _unverified_claim_note(description: str) -> str | None:
+    """Asserted absences in a description that cite nothing, as one operator-facing line.
+
+    Operator ruling 2026-08-28: "those gates need to be adjusted so that you have to look
+    without assuming."
+
+    Stamped at the moment a claim ENTERS the authority, because that is when it is cheap to
+    settle. One work order in this session was registered claiming an unprojectable event
+    "retries forever and blocks the queue"; the projection framework already dead-lettered
+    after max retries, the live engine demonstrated it while the registration was being
+    written, and the task had to be retitled "NO WORK NEEDED". A single command would have
+    prevented it.
+
+    ADVISORY BY DESIGN. It never blocks: a defect must always be registerable, and refusing
+    a registration would trade a small error for a large one. It returns a note the caller
+    surfaces, so an unchecked assertion is visible rather than indistinguishable from a
+    verified one.
+    """
+    try:
+        from core.gates.unverified_claims import audit_claims
+
+        report = audit_claims(description or "")
+        if report.passed:
+            return None
+        triggers = ", ".join(sorted({c.trigger.lower() for c in report.unverified}))
+        return (
+            f"{len(report.unverified)} asserted absence(s) cite nothing ({triggers}). "
+            "These are claims about the existing system -- run the check and paste what it "
+            "said, or the claim reads as fact and nothing downstream questions it."
+        )
+    except Exception:
+        return None  # an advisory note must never break a registration
+
+
 def create_work_order(
     *,
     project_id: str,
@@ -446,6 +517,7 @@ def create_work_order(
     except Exception:
         pass
 
+    _claim_note = _unverified_claim_note(description)
     return {
         "ok": True,
         "work_order_id": work_order_id,
@@ -453,6 +525,7 @@ def create_work_order(
         "milestone_id": milestone_id,
         "title": title,
         "status": "created",
+        **({"unverified_claims": _claim_note} if _claim_note else {}),
     }
 
 
@@ -530,12 +603,14 @@ def create_task(
     except Exception:
         pass
 
+    _claim_note = _unverified_claim_note(description)
     result: dict[str, Any] = {
         "ok": True,
         "task_id": task_id,
         "work_order_id": work_order_id,
         "title": title,
         "status": "pending",
+        **({"unverified_claims": _claim_note} if _claim_note else {}),
     }
     if acceptance_criteria is not None:
         result["acceptance_criteria"] = acceptance_criteria

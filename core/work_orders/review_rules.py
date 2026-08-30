@@ -101,6 +101,111 @@ SDLC_BASELINE: tuple[str, ...] = (
 )
 
 
+# WO-MULTIROOT-REVIEW task 8: WHICH standards apply depends on what was delivered.
+#
+# Operator: "End users will use claude for anything and everything not just SDLC." A work
+# order may deliver a document, a dataset, a design, a configuration, a decision. Grading
+# a document against layering discipline is the same category error as grading Fulcrum
+# against Dream Studio's tables -- and telling a documentation work order its tests are
+# missing is how a reviewer earns the reputation of surfacing nonsense.
+#
+# THIS IS NOT WEAKER REVIEW, and the distinction matters. The existing handling was
+# `_VERIFY_EXEMPT_TYPES = {"documentation"}` in close_main -- documentation SKIPPED
+# independent review altogether. That is weaker. A document is still reviewed, against
+# standards that fit it: is it complete, is it accurate, does it describe behaviour that
+# still exists. A documentation work order that ships a false statement about the system
+# has failed, and nothing was checking.
+#
+# Rules carry the artifact kinds they can judge. A rule with no kinds applies to
+# everything, so adding a rule without thinking about kinds errs toward MORE checking.
+
+CODE = "code"
+CONFIG = "config"
+DOCUMENT = "document"
+DATA = "data"
+
+# The ten work-order types, mapped to what they actually deliver.
+_TYPE_ARTIFACT: dict[str, str] = {
+    "ui_component": CODE,
+    "ui_page": CODE,
+    "api_endpoint": CODE,
+    "authentication": CODE,
+    "saas_feature": CODE,
+    "game_mechanic": CODE,
+    "data_pipeline": DATA,
+    "deployment": CONFIG,
+    "infrastructure": CONFIG,
+    "documentation": DOCUMENT,
+}
+
+# Which baseline standards each artifact kind can be judged against. Absent from a
+# rule's set means the rule cannot fairly be applied -- not that the work is unreviewed.
+_RULE_KINDS: dict[str, frozenset[str]] = {
+    "TEST COVERAGE FOR CHANGED BEHAVIOUR": frozenset({CODE, DATA, CONFIG}),
+    "INPUT AND SECRET HANDLING": frozenset({CODE, CONFIG, DATA, DOCUMENT}),
+    "ERROR HANDLING HONESTY": frozenset({CODE, DATA, CONFIG}),
+    "LAYERING AND DEPENDENCY DISCIPLINE": frozenset({CODE, CONFIG}),
+    "CHANGE CONTROL AND REVIEWABILITY": frozenset({CODE, CONFIG, DATA, DOCUMENT}),
+    "NO DEAD CODE": frozenset({CODE}),
+    "DATA SAFETY": frozenset({CODE, DATA, CONFIG}),
+    "CONCURRENCY AND RESOURCE SAFETY": frozenset({CODE, DATA}),
+}
+
+# Standards a document must meet that code rules never state. Without these, narrowing
+# the code rules WOULD be weaker review -- these are what keeps it merely different.
+#
+# The third one is the defect this session kept finding in Dream Studio's own docs: a
+# workflow node still described a selector that had been replaced, and an agent following
+# it faithfully would have worked against the change.
+DOCUMENT_STANDARDS: tuple[str, ...] = (
+    "COMPLETENESS: the document does not claim coverage it lacks -- a section that "
+    "promises a procedure and gives none, a list presented as exhaustive that is not, an "
+    "example that does not run.",
+    "ACCURACY AGAINST THE SYSTEM: every statement about behaviour matches what the code "
+    "actually does. A document is the most trusted description of a system and the least "
+    "verified one.",
+    "NO STALE DESCRIPTION: the document does not describe behaviour that has been changed "
+    "or removed. Prose describing an engine is a second implementation of it, and the "
+    "stale copy is the one a reader acts on.",
+)
+
+DATA_STANDARDS: tuple[str, ...] = (
+    "SCHEMA AND CONTRACT: a column, type, or key change states what depends on it and "
+    "how those readers were updated.",
+    "IDEMPOTENCE AND REPLAY: re-running the pipeline over the same input produces the "
+    "same output, and a partial run can be resumed without double-counting.",
+)
+
+
+def artifact_kind(work_order_type: str | None) -> str:
+    """What this work-order type delivers. Unknown types are treated as CODE.
+
+    Unknown-means-code is deliberate: it errs toward MORE standards, which is the safe
+    direction. Erring toward DOCUMENT would silently drop test-coverage and data-safety
+    checks for any type someone adds later without touching this map.
+    """
+    if not work_order_type:
+        return CODE
+    return _TYPE_ARTIFACT.get(work_order_type.strip().lower(), CODE)
+
+
+def rules_for_kind(kind: str) -> list[str]:
+    """The baseline standards that can fairly judge this artifact kind, plus the
+    standards specific to it."""
+    selected = [
+        rule
+        for rule in SDLC_BASELINE
+        # A rule whose heading is not in the map applies everywhere -- adding a rule
+        # without classifying it errs toward more checking, not less.
+        if kind in _RULE_KINDS.get(rule.split(":", 1)[0].strip(), frozenset({kind}))
+    ]
+    if kind == DOCUMENT:
+        selected.extend(DOCUMENT_STANDARDS)
+    elif kind == DATA:
+        selected.extend(DATA_STANDARDS)
+    return selected
+
+
 @dataclass
 class RuleSet:
     """The rules one review will grade against, and where each came from."""
@@ -187,6 +292,7 @@ def resolve_review_rules(
     *,
     project_root: Path | None = None,
     folders: list[Path] | None = None,
+    work_order_type: str | None = None,
 ) -> RuleSet:
     """Resolve the ruleset for a review, applying folder > project > baseline.
 
@@ -232,15 +338,18 @@ def resolve_review_rules(
             profiles=profiles,
         )
 
+    kind = artifact_kind(work_order_type)
+    baseline = rules_for_kind(kind)
+
     if not layers:
         return RuleSet(
-            rules=list(SDLC_BASELINE),
+            rules=list(baseline),
             mode=MODE_DEFAULT,
             sources=["Dream Studio SDLC baseline"],
             profiles=[],
         )
 
-    combined = list(SDLC_BASELINE)
+    combined = list(baseline)
     profiles: list[Path] = []
     for _mode, rules, path in layers:
         combined.extend(rules)

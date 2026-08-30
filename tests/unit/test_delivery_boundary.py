@@ -729,63 +729,65 @@ def test_the_unreviewable_message_names_every_layer_it_tried(db, tmp_path, monke
     assert "re-start the work order" in summary
 
 
-def test_the_locator_is_a_fallback_chain_not_a_concatenation(db, tmp_path):
-    """The boundary range REPLACES the grep when it has content, rather than being
-    appended to it.
+def test_the_locator_is_a_fallback_chain_not_a_concatenation():
+    """The recorded range REPLACES the commit grep; it is never joined to it.
 
-    The first cut made them additive, reasoning that a rebase can move work outside
-    the recorded range so both together see more. That is a universal cost for a
-    conditional benefit: for any WO whose commits DO mention it, both layers return
-    the same commits and the grader input roughly doubles.
+    THIS TEST HAS BEEN WRONG TWICE, and the second way was worse.
 
-    The change was originally committed blaming a completion-grader timeout, and
-    that attribution was wrong — measurement showed the WO in question predates
-    boundary stamping, so this layer contributed zero characters to its prompt. The
-    design still stands on the cost/benefit argument; it simply did not fix the
-    timeout it was credited with.
+    First it grepped verify_work_order's SOURCE for "_boundary_diff or
+    _collect_git_commits(". A refactor rewrote that `or` into an if/else without touching
+    the behaviour, and the guard broke -- a source-text assertion cannot tell a rewrite
+    from a regression.
+
+    Then I replaced it with one that patched verify_git.collect_union_evidence and called
+    delivery_boundary.boundary_diff_text -- which is NOT the function that chooses. The
+    patched collector was never reachable from that call, so `assert called == []` could
+    not fail under any code change. I described that as the stronger version. This work
+    order's own independent review caught it.
+
+    The choice now lives in verify_git.choose_locator, so it can be driven directly and
+    the assertion can actually fail: the collector here raises, and reaching it fails the
+    test rather than passing it.
+
+    Concatenating both was tried and rejected -- for any work order whose commits DO
+    mention it, both layers return the same commits and the grader input roughly doubles,
+    a universal cost for a conditional benefit against a budget that already timed a
+    grader out at 360s on 217,524 chars.
     """
-    # ASSERTED AS BEHAVIOUR, NOT AS SOURCE TEXT.
-    #
-    # This grepped verify_work_order's source for a literal `or` expression.
-    # WO-MULTIROOT-REVIEW rewrote that into an if/else so the union collector could
-    # return provenance alongside the diff. The PROPERTY was untouched -- the range
-    # still REPLACES the grep rather than being concatenated with it -- but the text
-    # moved, so this failed on main for a refactor that changed nothing it cared
-    # about. A source-text assertion cannot tell a regression from a rewrite.
-    #
-    # This one calls the thing: given a boundary with content, the union collector
-    # must not run at all.
-    #
-    # The old version needed no repo, because reading source text needs no subject.
-    # Asserting behaviour does, which is part of why it is the stronger test.
-    from unittest.mock import patch as _patch
+    from core.work_orders.verify_git import choose_locator
 
-    from core.work_orders import verify_git
-    from core.work_orders.delivery_boundary import boundary_diff_text
+    def _must_not_run():
+        raise AssertionError(
+            "the commit grep ran while the recorded range had content -- the range must "
+            "REPLACE it, not be concatenated with it"
+        )
 
-    root, _head = _git_repo(tmp_path / "repo")
-    wo_id = str(uuid.uuid4())
-    record_delivery_boundary(wo_id, repo_root=root, db_path=db)
-    # A commit AFTER the stamp, or start..HEAD is empty and the precondition below
-    # cannot hold — the range needs something in it for "the range replaces the grep"
-    # to be a claim about anything.
-    _second_commit(root)
+    _range = "=== commit range ===" + chr(10) + "diff --git a/x b/x"
+    diff, provenance, layer = choose_locator(_range, _must_not_run)
 
-    called: list[str] = []
+    assert diff.startswith("=== commit range ==="), "the range must be the locator"
+    assert provenance == [], "no roots were searched, so none may be claimed"
+    assert layer == "recorded_delivery_boundary"
 
-    def _must_not_run(*args, **kwargs):
-        called.append("collect_union_evidence")
-        return None, []
 
-    with _patch.object(verify_git, "collect_union_evidence", _must_not_run):
-        text, _note = boundary_diff_text(wo_id, repo_root=root, db_path=db)
+def test_the_grep_runs_only_when_the_range_is_empty():
+    """The other half: a fallback that never fires is not a fallback."""
+    from core.work_orders.verify_git import choose_locator
 
-    assert text, "precondition: the boundary must have content to mean anything here"
-    assert called == [], (
-        "the locator must be a fallback chain - the range REPLACES the grep when it "
-        "has content. Running both doubles the grader input for every work order "
-        f"whose commits mention it. collect_union_evidence ran: {called}"
-    )
+    diff, provenance, layer = choose_locator(None, lambda: ("grep found this", ["a-root"]))
+
+    assert diff == "grep found this"
+    assert provenance == ["a-root"], "the union collector's provenance must survive"
+    assert layer == "commit_search_union"
+
+
+def test_neither_locator_reports_none_rather_than_empty():
+    """None means "no evidence" and must never read as a certified pass or an auto-zero."""
+    from core.work_orders.verify_git import choose_locator
+
+    diff, _provenance, layer = choose_locator(None, lambda: (None, []))
+    assert diff is None
+    assert layer == "none"
 
 
 # -- WO-BOUNDARY-OPEN-END: a boundary needs an end -----------------------------
@@ -915,3 +917,111 @@ def test_the_open_range_caveat_reaches_the_caller(db, tmp_path):
 
     assert note, "the open-range caveat must reach the caller"
     assert "no recorded end" in note
+
+
+# -- The ordering is the point (found by this work order's own review) ---------
+
+
+def test_the_end_is_stamped_before_close_grades_anything():
+    """THE FIRST CUT PUT THE STAMP WHERE IT COULD NOT HELP.
+
+    close_work_order stamped the end after mutating status -- roughly 300 lines below the
+    auto-verify -- so the verify that GATES the close still graded an unbounded
+    `<start>..HEAD` range. That is the exact failure mode this work order exists to remove,
+    reproduced inside its own fix. Its independent review named it: "close runs verify
+    (:234) long before it stamps (:528)".
+
+    Asserted on source ORDER rather than behaviour because the ordering IS the property;
+    a behavioural test would need a full close with graders to observe it.
+    """
+    source = Path("core/work_orders/close_main.py").read_text(encoding="utf-8")
+
+    stamp = source.index("record_delivery_boundary_end")
+    verify = source.index("_verify_wo(")
+    mutate = source.index("SET status = 'closed'")
+
+    assert stamp < verify, (
+        "the boundary end must be pinned BEFORE the auto-verify, or the verify that gates "
+        "this close grades an unbounded range"
+    )
+    assert stamp < mutate, "and before the status mutation"
+    assert (
+        source.count("record_delivery_boundary_end(") == 1
+    ), "one call site -- two would let the close stamp twice and disagree with itself"
+
+
+def test_the_final_task_done_also_pins_the_boundary(db, tmp_path):
+    """THE SECOND HALF, which task 1 named and I first shipped without.
+
+    A work order is routinely verified BEFORE it is closed -- `ds work-order verify` is a
+    separate command an operator runs to decide whether to close at all. Without a stamp at
+    the last task-done, that verify still grades every commit since the work order started.
+    """
+    import sqlite3
+
+    from core.work_orders.delivery_boundary import (
+        read_delivery_boundary,
+        record_delivery_boundary,
+    )
+    from core.work_orders.mutations import mark_task_done
+
+    root, _head = _git_repo(tmp_path / "repo")
+    project_id, wo_id = str(uuid.uuid4()), str(uuid.uuid4())
+    t1, t2 = str(uuid.uuid4()), str(uuid.uuid4())
+    now = "2026-08-28T00:00:00+00:00"
+
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at, project_path)"
+        " VALUES (?,?,?,?,?,?,?)",
+        (project_id, "P", "", "active", now, now, str(root)),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+        "  status, created_at, updated_at)"
+        " VALUES (?,?,NULL,'WO','d','infrastructure','in_progress',?,?)",
+        (wo_id, project_id, now, now),
+    )
+    for tid, title in ((t1, "first"), (t2, "second")):
+        conn.execute(
+            "INSERT INTO business_tasks"
+            " (task_id, work_order_id, project_id, title, description, status,"
+            "  created_at, updated_at) VALUES (?,?,?,?,'d','pending',?,?)",
+            (tid, wo_id, project_id, title, now, now),
+        )
+    conn.commit()
+    conn.close()
+
+    record_delivery_boundary(wo_id, repo_root=root, db_path=db)
+    assert not read_delivery_boundary(wo_id, db_path=db).get("end_commit")
+
+    # mark_task_done derives its db from dream_studio_home; the `db` fixture lives at
+    # tmp_path/state/studio.db, which is exactly what _require_db resolves to.
+    mark_task_done(
+        work_order_id=wo_id, task_id=t1, source_root=tmp_path, dream_studio_home=tmp_path
+    )
+    assert not read_delivery_boundary(wo_id, db_path=db).get(
+        "end_commit"
+    ), "an earlier task-done is not the end of the work"
+
+    # mark_task_done emits task.completed and the TaskProjection applies it. In this
+    # fixture the projection cannot (FOREIGN KEY constraint failed -- the seeded rows
+    # do not satisfy its parents), so t1's status would stay 'pending', the next call
+    # would recount 2 remaining, and `remaining == 0` would never hold. Applying the
+    # status here is what the projection would have done. Without this the test fails
+    # for a reason that has nothing to do with the boundary -- verified by reproducing
+    # the same flow outside pytest, where the stamp landed correctly.
+    conn = sqlite3.connect(str(db))
+    conn.execute("UPDATE business_tasks SET status='complete' WHERE task_id=?", (t1,))
+    conn.commit()
+    conn.close()
+
+    mark_task_done(
+        work_order_id=wo_id, task_id=t2, source_root=tmp_path, dream_studio_home=tmp_path
+    )
+    boundary = read_delivery_boundary(wo_id, db_path=db)
+    assert boundary.get("end_commit"), (
+        "the LAST task-done must pin the end, or a pre-close verify grades an unbounded " "range"
+    )

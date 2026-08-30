@@ -88,6 +88,20 @@ def check_close_gates(
 
         failures.extend(check_change_impact_affirmed(conn, work_order_id, db_path))
 
+        # WO-WO-LIFECYCLE-SURFACE: the structural invariants, previewed HERE as well as
+        # enforced in close_work_order. A preview that omits a blocking gate is worse than
+        # no preview: it tells an author they are ready to close and then the close
+        # refuses. See the rationale at the enforcement site below.
+        from core.work_orders.structural_invariants import (
+            check_structure,
+            recorded_exception,
+        )
+        from core.work_orders.structural_invariants import render as _render_structure
+
+        _structure_preview = check_structure(work_order_id, db_path=db_path)
+        if _structure_preview and not recorded_exception(work_order_id, db_path=db_path):
+            failures.append(_render_structure(_structure_preview, work_order_id))
+
     meta["gate_failures"] = failures
     meta["gates_pass"] = not failures
     return meta
@@ -191,6 +205,31 @@ def close_work_order(
     # need to call `ds work-order verify` separately.
     _verify_result: dict[str, Any] | None = None
     _verify_ran = False
+
+    # WO-BOUNDARY-OPEN-END: pin the boundary's end BEFORE anything grades this work order.
+    #
+    # THE ORDERING IS THE WHOLE POINT, and the first cut got it wrong. The stamp sat after
+    # the status mutation, ~300 lines below the auto-verify -- so the verify that GATES
+    # this close still graded an unbounded `<start>..HEAD` range, which is the exact
+    # failure mode this work order exists to remove. Its own independent review caught it:
+    # "close runs verify (:234) long before it stamps (:528)".
+    #
+    # Stamping here means the range is `<start>..<the commit the work finished at>` for
+    # the gating verify, for any re-verify, and for every later read of the boundary.
+    #
+    # Best-effort, like the start stamp: a close must not fail on bookkeeping. A boundary
+    # that cannot be pinned keeps its open range AND says so.
+    try:
+        from .delivery_boundary import record_delivery_boundary_end
+        from .verify_executor import resolve_project_root
+
+        record_delivery_boundary_end(
+            work_order_id,
+            repo_root=resolve_project_root(work_order_id, db_path),
+            db_path=db_path,
+        )
+    except Exception:  # noqa: BLE001 - closing must not fail on bookkeeping
+        pass
 
     with _connect(db_path) as _pre_conn:
         _pre_meta = _lookup_work_order_and_gates(_pre_conn, work_order_id)
@@ -383,6 +422,32 @@ def close_work_order(
         # it via the gate.bypassed path.
         gate_failures.extend(_check_tasks_done(conn, work_order_id))
 
+        # WO-WO-LIFECYCLE-SURFACE: THE TWO STRUCTURAL INVARIANTS. Operator ruling — a work
+        # order should ALWAYS have multiple tasks; a milestone should ALWAYS have more than
+        # one work order. Measured 2026-08-28 against THIS gate's own counting — every task,
+        # every sibling, not just the open ones: of 128 open work orders, 49 carry one task
+        # or none and 4 sit in a milestone with no sibling. 52 distinct work orders would be
+        # refused. Nothing had ever refused one.
+        #
+        # Refused HERE and not at creation or start. A work order has zero tasks when it is
+        # created and often still has zero when it is started — ds-project decomposes only
+        # the first work order of the first milestone and the rest "get tasks when they are
+        # started". Close is the first moment the count is a fact rather than a not-yet: it
+        # is where "this work order is done" gets claimed, and one task is a claim about a
+        # unit that was mis-sized.
+        #
+        # The escape is a recorded reason (`--accept-structure`), not `--force`, which
+        # bypasses every gate at once and records no reasoning about this one.
+        from core.work_orders.structural_invariants import (
+            check_structure,
+            recorded_exception,
+        )
+        from core.work_orders.structural_invariants import render as _render_structure
+
+        _structure = check_structure(work_order_id, db_path=db_path)
+        if _structure and not recorded_exception(work_order_id, db_path=db_path):
+            gate_failures.append(_render_structure(_structure, work_order_id))
+
         # R5 T1: change-impact affirmation — a WO created on/after the cutover must record
         # an impact affirmation (auth/contract/migration/changelog) before close. Universal
         # and WO-type agnostic; pre-cutover WOs are grandfathered. Like tasks_done it is not
@@ -509,30 +574,6 @@ def close_work_order(
             " WHERE work_order_id = ?",
             (now, now, now, work_order_id),
         )
-
-        # WO-BOUNDARY-OPEN-END: pin the far end of this work order's delivery boundary.
-        #
-        # The boundary recorded only a start, and boundary_commit_range returned
-        # "<start>..HEAD". Correct while the work is underway; once later work lands the
-        # range absorbs it. Measured on 3e6cf265, whose change merged in PR #682: its
-        # range was 84d26359..HEAD with HEAD thirteen commits later, assembling 217,524
-        # chars and timing the grader out at 360 seconds twice. The same open range is how
-        # another work order's findings came to be attached here.
-        #
-        # Best-effort, like the start stamp: a close must not fail on bookkeeping. A
-        # boundary that cannot be pinned keeps its open range AND now says so.
-        try:
-            from .delivery_boundary import record_delivery_boundary_end
-            from .verify_executor import resolve_project_root
-
-            record_delivery_boundary_end(
-                work_order_id,
-                repo_root=resolve_project_root(work_order_id, db_path),
-                db_path=db_path,
-                now=now,
-            )
-        except Exception:  # noqa: BLE001 - closing must not fail on bookkeeping
-            pass
 
         next_wo: dict[str, Any] | None = None
         milestone_complete = False

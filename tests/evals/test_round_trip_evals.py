@@ -74,6 +74,16 @@ def db_path(tmp_path: Path) -> Path:
             " VALUES (?, ?, ?, 'Write the doc', 'pending', 'SQL-CHECK: SELECT 1', ?, ?)",
             (TASK_ID, WO_DOCS_ID, PROJECT_ID, NOW, NOW),
         )
+        # A second task, because the structural_invariants close gate refuses a work order
+        # that finishes with one. The milestone already carries two work orders, so only
+        # the task invariant needed satisfying here.
+        conn.execute(
+            "INSERT INTO business_tasks"
+            " (task_id, work_order_id, project_id, title, status, acceptance_criteria,"
+            " created_at, updated_at)"
+            " VALUES (?, ?, ?, 'Review the doc', 'complete', 'SQL-CHECK: SELECT 1', ?, ?)",
+            (TASK_ID + "-2", WO_DOCS_ID, PROJECT_ID, NOW, NOW),
+        )
         conn.commit()
     finally:
         conn.close()

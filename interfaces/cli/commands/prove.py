@@ -313,6 +313,12 @@ def _claim_graders_blind_to_tasks(_s: _Scratch) -> tuple[bool, str]:
         work_order_type="cleanup",
         task_list=task_marker,
         git_diff=diff_marker,
+        # WO-MULTIROOT-REVIEW task 9 added this placeholder. Updating prove in the SAME
+        # commit is the lesson from #684: the correctness template gained three
+        # placeholders, prove still formatted it with git_diff alone, and main went red
+        # with KeyError: 'rules_provenance' -- past a unit sweep that never reached
+        # tests/integration.
+        direction_context="  (prove harness: no surrounding work orders)",
     )
     # WO-MULTIROOT-REVIEW made the correctness rules RESOLVED rather than hardcoded, so
     # the template gained rules_block / rules_provenance / rule_count. Formatting it with

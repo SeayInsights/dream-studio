@@ -75,6 +75,43 @@ def _seed_project_milestone_wo(db: Path) -> tuple[str, str, str]:
             " VALUES (?,?,?,?,?,'complete',?,?,?)",
             (str(uuid.uuid4()), wo_id, project_id, "T1", "do it", NOW, NOW, "SQL-CHECK: SELECT 1"),
         )
+        # A second task and a CLOSED sibling, because the structural_invariants close gate
+        # refuses a work order that finishes with one task or with no sibling in its
+        # milestone. Closed rather than open so this stays the milestone's last open work
+        # order, which is what the lag test is about.
+        conn.execute(
+            "INSERT INTO business_tasks"
+            " (task_id, work_order_id, project_id, title, description, status,"
+            "  created_at, updated_at, acceptance_criteria)"
+            " VALUES (?,?,?,?,?,'complete',?,?,?)",
+            (
+                str(uuid.uuid4()),
+                wo_id,
+                project_id,
+                "T2",
+                "do it too",
+                NOW,
+                NOW,
+                "SQL-CHECK: SELECT 1",
+            ),
+        )
+        conn.execute(
+            "INSERT INTO business_work_orders"
+            " (work_order_id, project_id, milestone_id, title, description,"
+            "  work_order_type, status, sequence_order, created_at, updated_at, last_updated_at)"
+            " VALUES (?,?,?,?,?,?,'closed',0,?,?,?)",
+            (
+                str(uuid.uuid4()),
+                project_id,
+                milestone_id,
+                "Earlier WO",
+                "desc",
+                "infrastructure",
+                NOW,
+                NOW,
+                NOW,
+            ),
+        )
         conn.commit()
     finally:
         conn.close()

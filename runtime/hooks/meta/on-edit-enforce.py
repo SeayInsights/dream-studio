@@ -192,7 +192,15 @@ def _enforce(tier: str) -> tuple[str, str | None]:
                 )
                 return (_apply(tier, "zero_disk_planning", reason, session_id), session_id)
 
-            wo = enforcement.in_progress_work_order(project["project_id"])
+            # WO-WO-LIFECYCLE-SURFACE: pass the path so attribution can go by declared
+            # module boundary. Without it the newest-started work order claims every
+            # edit, and the stop hook then demands an authority write against a work
+            # order the session never touched.
+            wo = enforcement.in_progress_work_order(
+                project["project_id"],
+                file_path=cand,
+                project_path=project["project_path"],
+            )
 
             if wo is None and kind == "source":
                 nxt = enforcement.next_created_work_order(project["project_id"])
@@ -248,6 +256,7 @@ def _enforce(tier: str) -> tuple[str, str | None]:
                     kind=kind,
                     project_id=project["project_id"],
                     work_order_id=wo["work_order_id"] if wo else None,
+                    claimants=(wo or {}).get("claimants"),
                 )
             decision = "allow"
         return (decision, session_id)

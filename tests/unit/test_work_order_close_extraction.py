@@ -77,6 +77,29 @@ def db_path(tmp_path: Path) -> Path:
             " VALUES (?, ?, ?, 'T1', 'doc task', 'SQL-CHECK: SELECT 1', 'complete', ?, ?)",
             ("task-close-ext-docs-t1", WO_DOCS, PROJECT_ID, NOW, NOW),
         )
+        # A CLOSED sibling in the same milestone, because the structural_invariants close
+        # gate also refuses a work order whose milestone has no sibling. Closed rather than
+        # open on purpose: the gate counts every sibling, so this satisfies it, while
+        # test_close_work_order_surfaces_milestone_complete_when_last_in_milestone still
+        # sees WO_DOCS as the last OPEN work order in the milestone.
+        conn.execute(
+            "INSERT INTO business_work_orders"
+            " (work_order_id, project_id, milestone_id, title, description, status,"
+            " work_order_type, created_at, updated_at)"
+            " VALUES (?, ?, ?, 'Earlier WO', '', 'closed', 'documentation', ?, ?)",
+            ("wo-close-ext-sibling", PROJECT_ID, MILESTONE_ID, NOW, NOW),
+        )
+        # A second task, because the structural_invariants close gate refuses a work order
+        # that finishes with one. A one-task fixture would be testing a shape the authority
+        # no longer lets close, so the fixture would be asserting about a thing that cannot
+        # happen.
+        conn.execute(
+            "INSERT INTO business_tasks"
+            " (task_id, work_order_id, project_id, title, description, acceptance_criteria,"
+            " status, created_at, updated_at)"
+            " VALUES (?, ?, ?, 'T2', 'doc task 2', 'SQL-CHECK: SELECT 1', 'complete', ?, ?)",
+            ("task-close-ext-docs-t2", WO_DOCS, PROJECT_ID, NOW, NOW),
+        )
         conn.commit()
     finally:
         conn.close()

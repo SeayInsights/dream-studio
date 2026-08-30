@@ -180,6 +180,13 @@ _BUSINESS_ENTRIES: tuple[RegistryEntry, ...] = (
         "task.completed", _BUSINESS, "meaningful-unit", "Task marked complete within a work order"
     ),
     RegistryEntry(
+        "task.ac_repointed",
+        _BUSINESS,
+        "meaningful-unit",
+        "A task's acceptance criterion was corrected; payload carries the prior value",
+        payload_required_keys=frozenset({"acceptance_criteria", "previous", "reason"}),
+    ),
+    RegistryEntry(
         "preflight.created",
         _BUSINESS,
         "meaningful-unit",

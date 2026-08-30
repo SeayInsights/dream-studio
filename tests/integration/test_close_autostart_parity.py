@@ -119,6 +119,16 @@ def _seed_wo(
                 " VALUES (?,?,?,?,?,?, 'complete', ?, ?)",
                 (str(uuid.uuid4()), wo, project_id, "T1", "d", "SQL-CHECK: SELECT 1", NOW, NOW),
             )
+            # A second task, because the structural_invariants close gate refuses a work
+            # order that finishes with one. `with_passing_task` means "this work order
+            # closes cleanly", and one task no longer does.
+            conn.execute(
+                "INSERT INTO business_tasks"
+                " (task_id, work_order_id, project_id, title, description, acceptance_criteria,"
+                "  status, created_at, updated_at)"
+                " VALUES (?,?,?,?,?,?, 'complete', ?, ?)",
+                (str(uuid.uuid4()), wo, project_id, "T2", "d", "SQL-CHECK: SELECT 1", NOW, NOW),
+            )
         conn.commit()
     finally:
         conn.close()
@@ -194,8 +204,13 @@ def test_end_to_end(tmp_path: Path) -> None:
     project = _seed_project(db)
     m1 = _seed_milestone(db, project, order_index=0)
     wo_c = _seed_wo(db, project_id=project, milestone_id=m1, status="created", sequence_order=10)
-    # Current milestone holds ONLY the WO we close — no further same-milestone WO.
+    # Current milestone holds no further OPEN WO after the one we close — that is the
+    # condition this test is about. It does hold a CLOSED sibling, because the
+    # structural_invariants close gate refuses a milestone with no sibling at all, and it
+    # counts every sibling rather than only the open ones. A milestone that finished its
+    # other work is exactly the shape the gate is meant to allow.
     m2 = _seed_milestone(db, project, order_index=1)
+    _seed_wo(db, project_id=project, milestone_id=m2, status="closed", sequence_order=5)
     wo_close = _seed_wo(
         db,
         project_id=project,

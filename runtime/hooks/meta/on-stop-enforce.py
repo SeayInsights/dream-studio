@@ -55,10 +55,31 @@ def _authority_violations(enforcement, session: dict) -> list[str]:
     violations: list[str] = []
     for entry in session.get("source_edits", []):
         wo_id = entry.get("work_order_id")
-        if not wo_id or wo_id in checked:
+        if not wo_id:
             continue
-        checked.add(wo_id)
-        if not enforcement.authority_write_since(wo_id, since):
+        # WO-WO-LIFECYCLE-SURFACE: AMBIGUITY IS SATISFIED BY EITHER CLAIMANT. When two
+        # in-progress work orders both declare a module boundary over the edited file,
+        # both are legitimately doing this work; demanding a write to the one the edit
+        # hook happened to name would be a false violation, and false violations are what
+        # push an operator to DS_ENFORCE=0. Pre-claimants session files carry only
+        # work_order_id, so fall back to it.
+        claimants = [c for c in (entry.get("claimants") or [wo_id]) if c]
+        key = "|".join(sorted(claimants))
+        if key in checked:
+            continue
+        checked.add(key)
+        if any(enforcement.authority_write_since(c, since) for c in claimants):
+            continue
+        if len(claimants) > 1:
+            others = ", ".join(claimants)
+            violations.append(
+                "Product source was edited under work orders whose module boundaries both"
+                f" cover it ({others}) but no authority write was recorded this session for"
+                " any of them. A write to ANY ONE satisfies this. Mark completed tasks:"
+                f" py -m interfaces.cli.ds work-order tasks {claimants[0]}"
+                f" then py -m interfaces.cli.ds work-order task-done {claimants[0]} <task_id>."
+            )
+        else:
             violations.append(
                 "Product source was edited under work order"
                 f" {wo_id} but no authority write was recorded this session."

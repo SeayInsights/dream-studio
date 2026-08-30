@@ -502,3 +502,279 @@ def test_command_node_output_enables_downstream_templates(tmp_path):
     n2_output = state["active_workflows"]["wf-tmpl-1"]["nodes"]["n2"].get("output", "")
     assert n1_output, "n1 must have non-empty output after execution"
     assert n2_output, "n2 must have non-empty output after n1 completes"
+
+
+# -- WO-NODE-COMPLETION-EVIDENCE: a node is complete when its EFFECT is observable ---
+
+
+def _runner_for_verification():
+    """A runner instance whose only job is to answer _verify_completion.
+
+    Constructed without __init__ because the method reads exactly one attribute and
+    building a whole workflow to ask "is this node done" would test the harness, not the
+    behaviour.
+    """
+    from control.execution.workflow.runner import WorkflowRunner
+
+    r = WorkflowRunner.__new__(WorkflowRunner)
+    r.dry_run = False
+    return r
+
+
+def test_a_node_without_an_observable_condition_is_not_reported_completed():
+    """THE DEFECT THIS WORK ORDER EXISTS FOR.
+
+    _invoke_skill loads a node's text and returns it with the footer "The AI reading this
+    output has the skill instructions above and should now execute them". _execute_wave
+    then set `status = "completed" if success else "failed"` -- where success meant the
+    text LOADED. So a node was complete when its prompt was printed.
+
+    Measured: all 14 nodes of execute-work-orders.yaml are prose-for-an-agent, and none is
+    executable as written. A driver over that would march through fourteen nodes declaring
+    success with no work done.
+    """
+    from control.execution.workflow.runner import WorkflowRunner
+
+    status, reason = WorkflowRunner._verify_completion(_runner_for_verification(), "n1", {})
+
+    assert status == "unverified", f"a node whose effect nobody observed reported {status!r}"
+    assert status != "completed"
+    assert reason and "never observed" in reason
+    assert "completion_check" in reason, "the reason must name what would fix it"
+
+
+def test_a_loaded_prompt_leaves_the_node_pending():
+    """Task 2, stated as the runner sees it: loading is not completing. The wave must not
+    reach "completed" for a node that only declares prose."""
+    import inspect
+
+    from control.execution.workflow.runner import WorkflowRunner
+
+    src = inspect.getsource(WorkflowRunner._execute_wave)
+    assert (
+        '"completed" if success else "failed"' not in src
+    ), "the wave still equates a successful LOAD with completion"
+    assert "_verify_completion(" in src, "the wave must consult the completion check"
+
+
+def test_an_unmet_condition_blocks_with_a_reason():
+    """BLOCKED IS NOT FAILED. Failed means the work was attempted and went wrong; blocked
+    means the effect is not there yet -- for a prose node, usually that the agent has not
+    done it. A driver must stop at blocked without recording a failure."""
+    from control.execution.workflow.runner import WorkflowRunner
+
+    status, reason = WorkflowRunner._verify_completion(
+        _runner_for_verification(),
+        "n1",
+        {"completion_check": "git rev-parse --verify no-such-ref-exists-here"},
+    )
+
+    assert status == "blocked", f"an unmet condition reported {status!r}"
+    assert status != "failed", "the node was not attempted-and-broken; its effect is absent"
+    assert reason and "exited" in reason, "the reason must name what was observed"
+    assert "no-such-ref-exists-here" in reason, "and the check that was run"
+
+
+def test_a_met_condition_completes():
+    """The condition has to be satisfiable, or the gate is a wall rather than a check."""
+    from control.execution.workflow.runner import WorkflowRunner
+
+    status, reason = WorkflowRunner._verify_completion(
+        _runner_for_verification(),
+        "n1",
+        {"completion_check": "git rev-parse --abbrev-ref HEAD"},
+    )
+    assert status == "completed"
+    assert reason is None
+
+
+def test_a_check_that_exits_zero_while_saying_the_wrong_thing_blocks():
+    """The case completion_contains exists for. A gate can print "Overall: FAIL" and exit
+    0; an exit code alone would read that as success -- the same
+    absence-of-failure-is-not-evidence-of-success shape this milestone keeps finding."""
+    from control.execution.workflow.runner import WorkflowRunner
+
+    status, reason = WorkflowRunner._verify_completion(
+        _runner_for_verification(),
+        "n1",
+        {
+            "completion_check": "git rev-parse --abbrev-ref HEAD",
+            "completion_contains": "a-branch-name-that-is-not-checked-out",
+        },
+    )
+    assert status == "blocked"
+    assert reason and "does not contain" in reason
+
+
+def test_a_check_that_cannot_run_blocks_rather_than_completing():
+    """An unrunnable check has proved nothing. Treating it as success would make a broken
+    condition indistinguishable from a met one."""
+    from control.execution.workflow.runner import WorkflowRunner
+
+    status, reason = WorkflowRunner._verify_completion(
+        _runner_for_verification(),
+        "n1",
+        {"completion_check": "this-command-does-not-exist-anywhere --please"},
+    )
+    assert status == "blocked"
+    assert reason
+
+
+def test_dry_run_still_marks_nodes_completed():
+    """Dry run SIMULATES; nothing ran, so no condition can hold. Verifying one would make
+    every dry run report blocked -- turning a planning tool into a wall. The simulation
+    keeps its old meaning: this node WOULD complete."""
+    from control.execution.workflow.runner import WorkflowRunner
+
+    r = WorkflowRunner.__new__(WorkflowRunner)
+    r.dry_run = True
+
+    status, reason = WorkflowRunner._verify_completion(r, "n1", {})
+    assert status == "completed"
+    assert reason is None
+
+
+def test_the_check_is_bounded():
+    """A completion check observes an effect that already happened -- a git ref, a status
+    query. It must be a cheap read, never the work itself, or the orchestrator's own
+    timeout budget is spent proving what it just did."""
+    from control.execution.workflow.runner import _COMPLETION_CHECK_TIMEOUT
+
+    assert 0 < _COMPLETION_CHECK_TIMEOUT <= 120, _COMPLETION_CHECK_TIMEOUT
+
+
+# -- WO-NODE-COMPLETION-EVIDENCE task 4: the driver stops where a human is needed ----
+
+
+def test_the_driver_stops_at_a_blocked_node():
+    """THE DRIVER ALREADY EXISTED. The task said to build `ds workflow run
+    --until-blocked`; `ds workflow run` was already a loop that advances waves and
+    returns when nothing is ready. What it could not do was say ANYTHING about why it
+    stopped -- `cmd_run` printed "[workflow] final status: blocked" and exited 1.
+
+    That is a status, not direction. It names no node, no reason, and nothing to do, so
+    the loop hands back exactly the question the operator started with. A driver that
+    stops without saying what it is waiting on has not taken the human out of the loop;
+    it has moved them somewhere worse, because now they must reconstruct the state.
+    """
+    from control.execution.workflow.runner import WorkflowRunner
+
+    r = WorkflowRunner.__new__(WorkflowRunner)
+    described = WorkflowRunner._describe_blockage(
+        r,
+        {
+            "capability-probe": {"status": "completed"},
+            "run-gates": {
+                "status": "blocked",
+                "output": "…\n\n[completion] BLOCKED: the node did not report 'GATES: PASS'",
+            },
+            "create-branch": {"status": "pending"},
+        },
+    )
+
+    assert "run-gates" in described, "the operator must be told WHICH node"
+    assert "GATES: PASS" in described, "and what it was waiting for"
+    assert "capability-probe" not in described, "a completed node is not what it waits on"
+    assert "create-branch" not in described, "a pending downstream node is noise, not a blocker"
+
+
+def test_a_blockage_with_no_blocking_node_says_so_rather_than_returning_empty():
+    """An empty string would print as "[workflow] waiting on:" followed by nothing --
+    the same non-answer in a longer form."""
+    from control.execution.workflow.runner import WorkflowRunner
+
+    r = WorkflowRunner.__new__(WorkflowRunner)
+    described = WorkflowRunner._describe_blockage(r, {"a": {"status": "pending"}})
+    assert described.strip()
+    assert "cycle" in described
+
+
+def test_unverified_satisfies_all_done_because_failed_does():
+    """MY OWN DEFECT, found by asking what the statuses mean rather than what they do.
+
+    `all_done` means "the dependency reached a terminal state, I do not care how it
+    went". I added `unverified` without adding it here, which made unverified STRICTER
+    than failed -- a stronger negative that this rule already accepts. `blocked` stays
+    out on purpose: it is explicitly not-yet, and the effect may still arrive.
+    """
+    from control.execution.workflow.engine import _compute_ready_nodes
+
+    ynodes = {"a": {"id": "a"}, "b": {"id": "b", "depends_on": ["a"], "trigger_rule": "all_done"}}
+
+    def _ready(status):
+        state = {"a": {"status": status}, "b": {"status": "pending"}}
+        return _compute_ready_nodes(ynodes, state, {})[0]
+
+    assert _ready("failed") == ["b"], "baseline: all_done accepts a failed dependency"
+    assert _ready("unverified") == ["b"], "so it must accept a weaker negative too"
+    assert _ready("blocked") == [], "but not-yet is not done"
+
+
+def test_no_orchestrator_node_claims_an_observable_it_cannot_have():
+    """CORRECTED AFTER AN INDEPENDENT REVIEW FOUND THE FIRST VERSION WRONG.
+
+    I gave all 14 nodes a `completion_contains` naming the token their prompt tells the
+    agent to print, and asserted here that every node declared an observable. It read as
+    progress and was not: `_invoke_skill` LOADS a skill and returns its SKILL.md text, and
+    `_execute_wave` then replaces a command node's output with "<id> executed via
+    <specifier>". The runner never holds an agent's report, so those tokens could never
+    match -- `ds workflow run` blocked unconditionally at node 1 of 14, which is a
+    REGRESSION on marching through, not a fix.
+
+    Worse, had the check been pointed at the loaded prompt instead, every token appears in
+    its own prompt by construction, so every node would have "completed" by reading its own
+    instructions -- the original defect with extra steps.
+
+    A completion_contains with no completion_check is therefore inert, and an inert
+    declaration is prose wearing a gate's clothes. The nodes are honestly `unverified`
+    until someone writes checks that observe the effect from outside.
+    """
+    import yaml
+
+    path = (
+        Path(__file__).resolve().parents[2] / "canonical" / "workflows" / "execute-work-orders.yaml"
+    )
+    nodes = yaml.safe_load(path.read_text(encoding="utf-8"))["nodes"]
+    assert nodes
+
+    inert = [
+        n["id"] for n in nodes if n.get("completion_contains") and not n.get("completion_check")
+    ]
+    assert inert == [], (
+        f"these nodes declare a token nothing can check: {inert}. "
+        f"completion_contains qualifies a completion_check's output; alone it verifies "
+        f"nothing, and a declaration that verifies nothing is worse than an honest absence"
+    )
+
+
+def test_the_completion_decision_ignores_the_nodes_text_entirely():
+    """CORRECTED TWICE, AND THE SECOND CORRECTION IS THE POINT.
+
+    First cut: the completion check compared a declared token against the node's output,
+    while _execute_wave had already replaced a command node's output with a synthetic
+    "<id> executed via <specifier>" receipt. A review caught it.
+
+    My fix threaded the real output through so the check would see it. A later review
+    caught THAT: by then _verify_completion no longer read its `output` parameter at all,
+    because the completion_contains-alone branch was gone. I had passed a value and
+    asserted the passing, not the reading -- the same computed-and-discarded shape as the
+    truncation note I dropped earlier this session.
+
+    The honest property is stronger and simpler: this runner cannot see what an agent
+    does, so the completion decision must not depend on any text the node produced. Only a
+    completion_check subprocess, observing state from outside, is evidence.
+    """
+    import inspect
+
+    from control.execution.workflow.runner import WorkflowRunner
+
+    sig = inspect.signature(WorkflowRunner._verify_completion)
+    assert list(sig.parameters) == ["self", "node_id", "ynode"], (
+        f"_verify_completion takes {list(sig.parameters)} — a text parameter here can only "
+        f"be the node's own report, which this runner never has"
+    )
+
+    body = inspect.getsource(WorkflowRunner._verify_completion)
+    body = body.split(chr(34) * 3)[2]  # past the docstring
+    for banned in ("raw_output", "expected in output", "in (output"):
+        assert banned not in body, f"the decision is reading node text again: {banned!r}"

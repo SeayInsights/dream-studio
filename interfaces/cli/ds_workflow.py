@@ -109,7 +109,22 @@ def cmd_run(args) -> int:
         return 1
 
     print(f"[workflow] final status: {final_status}")
-    return 0 if final_status in ("completed", "running") else 1
+    # A driver that stops without saying what it is waiting on has not taken the human
+    # out of the loop — it has moved them somewhere worse, because now they must
+    # reconstruct the state themselves. Computing the reason and not printing it would
+    # be the same defect one layer down.
+    if final_status == "blocked" and runner.blocked_on:
+        print("[workflow] waiting on:")
+        print(runner.blocked_on)
+    if final_status == "completed_with_unverified" and runner.blocked_on:
+        print("[workflow] finished, but these nodes were never observed:")
+        print(runner.blocked_on)
+        print(
+            "[workflow] Declare a completion_check on each — a cheap read that observes"
+            " the effect (a git ref, an authority query). Until then this run advanced"
+            " without confirming the work."
+        )
+    return 0 if final_status in ("completed", "completed_with_unverified", "running") else 1
 
 
 def add_workflow_subcommand(subparsers) -> None:

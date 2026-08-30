@@ -12,6 +12,21 @@ on_failure: abort
 # GitHub path is gated on: github_repo configured + gh CLI authenticated.
 # When the GitHub path is absent, work order closes on local gates only (no PR).
 
+# COMPLETION IS NOT YET OBSERVED FOR ANY NODE HERE, and that is recorded rather than
+# papered over. Each node below tells an agent to print a token (GATES: PASS, REVIEW_PASS,
+# ...), and a first cut declared those tokens as `completion_contains`. An independent
+# review found they could never match: `_invoke_skill` LOADS a skill and returns its
+# SKILL.md text, `_execute_wave` then replaces a command node's output with a synthetic
+# "<id> executed via <specifier>" string, and the agent that would actually print the token
+# reads the runner's output out of band. The runner has no execution result to inspect.
+#
+# So every node reports `unverified`: the prompt was delivered and nothing confirmed the
+# effect. The run advances (blocking every node made this a wall at node 1 of 14) and the
+# final status is `completed_with_unverified`, never `completed`.
+#
+# What each node NEEDS is a `completion_check` — a cheap shell read that observes the
+# effect from outside: a git ref for create-branch, `gh pr view` for push-and-pr, an
+# authority query for close-work-order. That is real work and it is tracked, not assumed.
 nodes:
   - id: capability-probe
     command: |
@@ -97,6 +112,10 @@ nodes:
       Implement each open task in order. After implementing each task, call:
         py -m interfaces.cli.ds work-order task-done <work_order_id> <task_id>
       Do not skip tasks. Do not mark a task done unless its acceptance criteria are verifiably met.
+
+      When EVERY task on the work order is marked done, print: TASKS_DONE
+      If any task remains open or you stopped early, print: TASKS_INCOMPLETE: <what stopped you>
+      Do not print TASKS_DONE unless `ds work-order tasks <work_order_id>` shows none remaining.
 
   - id: run-gates
     skill: verify
@@ -246,14 +265,32 @@ nodes:
       Run: py -m interfaces.cli.ds project state
       Parse next_work_order from the response for the active project.
 
-      The selector uses sequence_order + work_order_dependencies (WO-ORD ready-set):
+      The selector uses work_order_dependencies + sequence_order (WO-WO-LIFECYCLE-SURFACE):
         - Returns the lowest sequence_order in_progress WO first (resume in-flight work)
-        - Then the lowest sequence_order created WO whose dependencies are all closed
-        - Scoped to the milestone with the lowest order_index that has open WOs
-        - WOs without a valid milestone are excluded (never surfaced)
+        - Then the lowest sequence_order created WO whose declared dependencies are closed
+        - Work orders in EVERY open milestone are reachable, not just the lowest-numbered
+          one. A DECLARED DEPENDENCY blocks; milestone order is advisory and reported as
+          such. `ds work-order next` names `ds work-order add-dep` when a real constraint
+          needs recording.
+        - Work orders with NO milestone are included (a LEFT JOIN, not an INNER one) —
+          two exist on the live authority and were previously dropped silently.
+        - `ready_work_orders()` returns the whole set across milestones when you need to
+          pick rather than take the head. Each entry says whether its independence was
+          verified: most work orders declare no dependency edges, so "no blockers" there
+          means UNVERIFIED, not proven-parallel-safe.
 
       DO NOT fall back to created_at ordering or any manual list.
       Trust the selector output exactly — it is the authoritative sequence.
+
+      Print: NEXT: <work_order_id>   (or NEXT: none when the selector returns no work order)
+
+      CORRECTED 2026-08-28 (WO-LOOP-TEXT-STALE). This block previously said the selector
+      was "scoped to the milestone with the lowest order_index that has open WOs" and that
+      "WOs without a valid milestone are excluded (never surfaced)". PR #681 removed the
+      `m.order_index = (SELECT MIN(...))` filter and changed the milestone join to a LEFT
+      JOIN, making both statements false. An agent following the old text faithfully would
+      have worked AGAINST the fan-out it describes — prose about an engine is a second
+      implementation of it, and the stale copy is the one an agent reads.
 
       If next_work_order exists:
         Print: NEXT_WO: <work_order_id> — <title>

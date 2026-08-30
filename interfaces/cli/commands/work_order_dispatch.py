@@ -21,6 +21,11 @@ from interfaces.cli.commands.work_order_lifecycle import (
     _work_order_unblock,
 )
 from interfaces.cli.commands.work_order_query import (
+    _work_order_repoint_ac,
+    _work_order_carry_over,
+    _work_order_reconcile,
+    _work_order_add_task,
+    _work_order_create,
     _work_order_artifact,
     _work_order_executor,
     _work_order_merge_check,
@@ -64,6 +69,111 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         dest="in_sequence",
         help="Abort (exit 1) if earlier-sequence WOs in the same milestone are not closed",
     )
+    wo_start.add_argument(
+        "--accept-structure",
+        default=None,
+        metavar="REASON",
+        dest="accept_structure",
+        help=(
+            "Record why this work order is correctly sized despite breaking a structural "
+            "invariant. Takes a reason, not a flag: the reason is stored on the work order"
+        ),
+    )
+
+    # WO-WO-LIFECYCLE-SURFACE task 1: the authoring door. Every authoring action was raw
+    # SQL by an adapter -- a rule violation on its own, and the reason no structural
+    # invariant could be enforced anywhere: there was no single place to enforce one.
+    # Measured 2026-08-28: 49 of 128 open work orders carry one task or none.
+    wo_create = work_order_sub.add_parser(
+        "create", help="Create a work order (the single authoring door)"
+    )
+    wo_create.add_argument("project_id", help="Project UUID")
+    wo_create.add_argument("--milestone", required=True, dest="milestone_id", help="Milestone UUID")
+    wo_create.add_argument("--title", required=True, help="Work order title")
+    wo_create.add_argument("--description", default="", help="Scope, boundary and reasoning")
+    wo_create.add_argument(
+        "--type",
+        dest="work_order_type",
+        default="infrastructure",
+        help="One of the declared work-order types (selects which standards review it)",
+    )
+    wo_create.add_argument(
+        "--originating-symptom",
+        default=None,
+        help="For a defect: the SQL/TEST check that reproduces it, re-run at close",
+    )
+
+    wo_add_task = work_order_sub.add_parser(
+        "add-task", help="Add a task to a work order (tasks live in SQLite, never in docs)"
+    )
+    wo_add_task.add_argument("work_order_id", help="Work order UUID")
+    wo_add_task.add_argument("--title", required=True, help="Task title")
+    wo_add_task.add_argument("--description", default="", help="What done looks like")
+    wo_add_task.add_argument(
+        "--acceptance",
+        dest="acceptance_criteria",
+        default=None,
+        help="Executable AC: TEST-CHECK / SQL-CHECK / API-CHECK plus what to run",
+    )
+    wo_add_task.add_argument(
+        "--project",
+        dest="project_id",
+        default=None,
+        help="Project UUID -- only needed when the work order is not yet projected",
+    )
+
+    # WO-WO-LIFECYCLE-SURFACE task 4: status that drifts makes every other count
+    # untrustworthy -- including the ones this milestone is measured by.
+    wo_reconcile = work_order_sub.add_parser(
+        "reconcile",
+        help="Show records the authority holds open whose work looks finished",
+    )
+    wo_reconcile.add_argument(
+        "project_id", nargs="?", default=None, help="Limit to one project (default: all)"
+    )
+
+    # WO-WO-LIFECYCLE-SURFACE task 3. NOT for "I want to work on something else" --
+    # tasks that belong to a work order stay on it and you switch work orders instead.
+    # This is for a genuine scope change, where the alternatives were --force (which
+    # pollutes the bypass audit with something that is not a bypass) or cancelling the
+    # tasks (a lie -- the work still needs doing).
+    wo_carry = work_order_sub.add_parser(
+        "carry-over",
+        help="Move out-of-scope tasks to a new linked work order and record the split",
+    )
+    wo_carry.add_argument("work_order_id", help="Work order the tasks were authored on")
+    wo_carry.add_argument(
+        "--task",
+        action="append",
+        default=[],
+        dest="task_ids",
+        required=True,
+        metavar="TASK_ID",
+        help="An open task to carry. Repeat for each one",
+    )
+    wo_carry.add_argument(
+        "--title", required=True, help="Title for the work order that receives them"
+    )
+    wo_carry.add_argument(
+        "--reason",
+        required=True,
+        help="What changed about the scope, or how this work order was mis-scoped",
+    )
+
+    # WO 17f20d48: acceptance_criteria is write-once in the projection, so a typo in a
+    # check was only fixable with --force — bypassing every other gate to correct one
+    # string.
+    wo_repoint = work_order_sub.add_parser(
+        "repoint-ac",
+        help="Correct a task's acceptance criterion, recording the prior value and why",
+    )
+    wo_repoint.add_argument("task_id", help="Task UUID")
+    wo_repoint.add_argument(
+        "--acceptance", required=True, dest="acceptance_criteria", help="The corrected criterion"
+    )
+    wo_repoint.add_argument(
+        "--reason", required=True, help="Enough to tell a typo fix from a moved goalpost"
+    )
 
     wo_list = work_order_sub.add_parser("list", help="List work orders")
     wo_list.add_argument("--project", default=None, dest="project_id", help="Filter by project_id")
@@ -81,6 +191,18 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         help=(
             "Skip the default-on independent review for this close"
             " (recorded as a gate.bypassed event — never silent)"
+        ),
+    )
+    wo_close.add_argument(
+        "--accept-structure",
+        default=None,
+        metavar="REASON",
+        dest="accept_structure",
+        help=(
+            "Record why this work order is correctly sized despite breaking a structural "
+            "invariant (fewer than 2 tasks, or no sibling in its milestone). Takes a "
+            "reason, not a flag — unlike --force it records reasoning about THIS gate "
+            "instead of bypassing every gate at once"
         ),
     )
     wo_close.add_argument(
@@ -267,6 +389,51 @@ def dispatch(
             dream_studio_home=dream_studio_home,
             planning_root=planning_root,
             in_sequence=getattr(args, "in_sequence", False),
+            accept_structure=getattr(args, "accept_structure", None),
+        )
+    if args.work_order_command == "create":
+        return _work_order_create(
+            project_id=args.project_id,
+            milestone_id=args.milestone_id,
+            title=args.title,
+            description=args.description,
+            work_order_type=args.work_order_type,
+            originating_symptom=args.originating_symptom,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+    if args.work_order_command == "add-task":
+        return _work_order_add_task(
+            work_order_id=args.work_order_id,
+            title=args.title,
+            description=args.description,
+            acceptance_criteria=args.acceptance_criteria,
+            project_id=args.project_id,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+    if args.work_order_command == "reconcile":
+        return _work_order_reconcile(
+            project_id=args.project_id,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+    if args.work_order_command == "carry-over":
+        return _work_order_carry_over(
+            work_order_id=args.work_order_id,
+            task_ids=args.task_ids,
+            title=args.title,
+            reason=args.reason,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+    if args.work_order_command == "repoint-ac":
+        return _work_order_repoint_ac(
+            task_id=args.task_id,
+            acceptance_criteria=args.acceptance_criteria,
+            reason=args.reason,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
         )
     if args.work_order_command == "list":
         return _work_order_list(
@@ -284,6 +451,7 @@ def dispatch(
             source_root=source_root,
             dream_studio_home=dream_studio_home,
             planning_root=planning_root,
+            accept_structure=getattr(args, "accept_structure", None),
         )
     if args.work_order_command == "block":
         return _work_order_block(

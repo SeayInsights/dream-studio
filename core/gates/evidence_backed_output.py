@@ -84,6 +84,12 @@ _CITATION = re.compile(
     r"|\bid=\d+|\brun[s]?/\d+"  # run id
     r"|`[^`]+`"  # a named artifact or command
     r"|\bmeasured\b|\bverified by\b|\breproduced\b"  # an explicit provenance claim
+    # The commands people actually establish an ABSENCE with. Omitting these left the
+    # unverified-claims gate unable to recognise the most common form of looking:
+    # "grep -rn X core/ -> 0 hits" is precisely the evidence it exists to ask for, and it
+    # was being reported as an unchecked claim.
+    r"|\bgrep\b|\brg\b|\bls-files\b|\bcheck-ignore\b|\bfind \.|\bwc -l\b"
+    r"|->\s*\d+\s*(hits?|rows?|matches|files?)"
     r")",
     re.IGNORECASE,
 )

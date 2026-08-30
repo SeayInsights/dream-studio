@@ -40,6 +40,7 @@ class TaskProjection(Projection):
         "task.created",
         "task.completed",
         "task.deleted",
+        "task.ac_repointed",
     ]
     source_canonical = "business"
     target_tables = [_TABLE]
@@ -88,9 +89,35 @@ class TaskProjection(Projection):
             return self._handle_completed(conn, task_id, event_id, now)
         if event_type == "task.deleted":
             return self._handle_deleted(conn, task_id, event_id, now)
+        if event_type == "task.ac_repointed":
+            return self._handle_ac_repointed(conn, task_id, payload, event_id, now)
 
         logger.warning("TaskProjection: unhandled event_type '%s' for %s", event_type, task_id)
         return 0
+
+    def _handle_ac_repointed(
+        self, conn: Any, task_id: str, payload: dict, event_id: str, now: str
+    ) -> int:
+        """Correct a task's acceptance criterion.
+
+        The ONLY writer that overwrites ``acceptance_criteria``. Everywhere else the
+        column is COALESCEd, which made it write-once: a one-character typo in a
+        TEST-CHECK node id could not be fixed, the close gate correctly reported
+        MISADDRESSED rather than passing it, and the only remaining escape was --force --
+        bypassing every other gate to correct one string.
+
+        Replay-safe because the event carries the value rather than a delta, so replaying
+        the stream in order lands on the same final criterion.
+        """
+        new_ac = payload.get("acceptance_criteria")
+        if not new_ac:
+            return 0
+        conn.execute(
+            f"UPDATE {_TABLE} SET acceptance_criteria = ?, source_event_id = ?, updated_at = ?"
+            " WHERE task_id = ?",
+            (new_ac, event_id, now, task_id),
+        )
+        return 1
 
     # ── Event handlers ────────────────────────────────────────────────────────
 

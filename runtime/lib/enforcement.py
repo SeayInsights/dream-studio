@@ -402,22 +402,79 @@ def classify_path(file_path: str, project_path: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def in_progress_work_order(project_id: str) -> dict | None:
+def in_progress_work_order(
+    project_id: str,
+    *,
+    file_path: str | None = None,
+    project_path: str | None = None,
+) -> dict | None:
+    """The in-progress work order an edit belongs to.
+
+    WO-WO-LIFECYCLE-SURFACE: ATTRIBUTE BY BOUNDARY, NOT BY RECENCY. This took the newest
+    ``started_at`` and stopped there. With several work orders in progress at once -- which
+    the fan-out change made normal, and 3 were in progress on the live authority when this
+    was written -- every edit in the session was credited to whichever one happened to be
+    started last, regardless of which one's files were being touched.
+
+    That is not a cosmetic mislabel. The stop hook then demands an authority write against
+    a work order the session never touched, and the honest responses are both bad: mark a
+    task done that is not done, or bypass the hook. It happened while this very function
+    was being fixed -- edits to the lifecycle surface were attributed to the workflow-runner
+    work order started an hour earlier.
+
+    So when the edited path is known, prefer the in-progress work order whose declared
+    ``Module boundary:`` contains it. Recency remains the fallback, because a work order
+    with no declared boundary is the common case and refusing to attribute at all would
+    turn a mislabel into a block -- but the result SAYS WHICH, so a caller can tell a match
+    from a guess rather than reading both as the same claim.
+    """
     conn = _connect_ro(AUTHORITY_DB)
     if conn is None:
         return None
     try:
-        row = conn.execute(
+        rows = conn.execute(
             "SELECT work_order_id, title, description FROM business_work_orders"
             " WHERE project_id = ? AND status = 'in_progress'"
-            " ORDER BY started_at DESC LIMIT 1",
+            " ORDER BY started_at DESC",
             (project_id,),
-        ).fetchone()
+        ).fetchall()
     except sqlite3.Error:
         return None
     finally:
         conn.close()
-    return {"work_order_id": row[0], "title": row[1], "description": row[2] or ""} if row else None
+
+    if not rows:
+        return None
+
+    def _as_dict(row: tuple, attribution: str) -> dict:
+        return {
+            "work_order_id": row[0],
+            "title": row[1],
+            "description": row[2] or "",
+            "attribution": attribution,
+        }
+
+    if file_path and project_path:
+        matched = [
+            row
+            for row in rows
+            # An empty boundary makes path_in_boundary vacuously true, which would let the
+            # first boundaryless work order claim every edit -- exactly the recency bug in
+            # a new costume. Only a DECLARED boundary can win a match.
+            if boundary_globs(row[2] or "")
+            and path_in_boundary(file_path, project_path, boundary_globs(row[2] or ""))
+        ]
+        if matched:
+            chosen = _as_dict(matched[0], "module_boundary")
+            # AMBIGUITY IS NOT RESOLVED BY GUESSING. When two in-progress work orders both
+            # declare a boundary over this path, both are legitimately doing this work.
+            # Every claimant is carried forward so a later check can accept a write to
+            # ANY of them; picking a winner would manufacture a false violation against
+            # whichever one lost, and a gate that is wrong is a gate that gets disabled.
+            chosen["claimants"] = [row[0] for row in matched]
+            return chosen
+
+    return _as_dict(rows[0], "most_recently_started")
 
 
 # ---------------------------------------------------------------------------
@@ -705,8 +762,16 @@ def record_edit(
     kind: str,
     project_id: str,
     work_order_id: str | None,
+    claimants: list[str] | None = None,
 ) -> None:
-    """Record an allowed edit so on-stop-enforce can check the session's writes."""
+    """Record an allowed edit so on-stop-enforce can check the session's writes.
+
+    ``claimants`` is every in-progress work order whose declared module boundary contains
+    this path. The stop check is satisfied by an authority write to any of them: where two
+    work orders both legitimately claim a file, demanding a write to the one this hook
+    happened to name would be a false violation, and false violations are what push an
+    operator to DS_ENFORCE=0.
+    """
     data = load_session(session_id) or {
         "session_id": session_id,
         "started_at": now_iso(),
@@ -719,6 +784,7 @@ def record_edit(
     for entry in bucket:
         if entry.get("path") == normalized:
             entry["work_order_id"] = work_order_id
+            entry["claimants"] = list(claimants or ([work_order_id] if work_order_id else []))
             entry["ts"] = now_iso()
             break
     else:
@@ -728,6 +794,7 @@ def record_edit(
                     "path": normalized,
                     "project_id": project_id,
                     "work_order_id": work_order_id,
+                    "claimants": list(claimants or ([work_order_id] if work_order_id else [])),
                     "ts": now_iso(),
                 }
             )

@@ -366,8 +366,29 @@ def verify_work_order(
         _ruleset = resolve_review_rules(
             project_root=_declared_root,
             folders=list(_project_roots.roots),
+            # WO-MULTIROOT-REVIEW task 8: the type selects which standards can fairly
+            # judge what was delivered. A documentation work order stops being told its
+            # tests are missing and starts being judged on completeness, accuracy against
+            # the system, and stale description -- narrower on code rules, not weaker.
+            work_order_type=wo.get("work_order_type"),
         )
         _rules_provenance = _ruleset.provenance
+
+        # WO-MULTIROOT-REVIEW task 9: the milestone, open siblings and declared edges, so
+        # "concise" and "addresses the issue" have a referent beyond one diff. Bounded,
+        # and any truncation is carried on the verdict rather than silently elided.
+        from .direction_context import build_direction_context
+
+        _direction_text, _direction_note = build_direction_context(work_order_id, db_path=db_path)
+        # THE CAVEAT MUST TRAVEL WITH THE CONTEXT. This discarded _direction_note, so the
+        # truncation the module deliberately computes ("N further open sibling(s) not
+        # listed") reached neither the prompt nor the verdict, and a truncated sibling
+        # list was presented to the grader as complete. Found by this work order's own
+        # review -- the computed-but-unreached defect, inside the module whose docstring
+        # says an unmarked partial list reads as a complete one.
+        if _direction_note:
+            _prefix = _direction_text + chr(10) * 2 if _direction_text else ""
+            _direction_text = _prefix + "  INCOMPLETE: " + _direction_note
 
         # WO-VERIFY-GRADES-DELIVERY: the RECORDED boundary is the locator; the
         # commit-message grep below is reinforcement. Grepping history for the WO's
@@ -398,25 +419,31 @@ def verify_work_order(
         _boundary_diff, _boundary_note = boundary_diff_text(
             work_order_id, repo_root=Path(_search_root), db_path=db_path
         )
-        if _boundary_diff:
-            git_diff = _boundary_diff
-            _evidence_layer = "recorded_delivery_boundary"
-            _union_summary = (
-                f"recorded delivery boundary in {_search_root} (roots not searched: the "
-                "stamped boundary is the locator when it has content)"
-            )
-        else:
-            from .verify_git import collect_union_evidence, union_evidence_summary
+        # WO-BOUNDARY-OPEN-END review finding: the range-replaces-grep choice now
+        # lives in choose_locator, where a test can drive it. The guard that used to
+        # protect it grepped this function's source, broke on a refactor that changed
+        # nothing it cared about, and its replacement could never fail.
+        from .verify_git import (
+            choose_locator,
+            collect_union_evidence,
+            union_evidence_summary,
+        )
 
-            git_diff, _root_provenance = collect_union_evidence(
+        git_diff, _root_provenance, _evidence_layer = choose_locator(
+            _boundary_diff,
+            lambda: collect_union_evidence(
                 work_order_id,
                 _project_roots,
                 title=wo["title"],
                 fallback_root=_search_root,
-            )
-            _union_summary = union_evidence_summary(_root_provenance)
-            if git_diff:
-                _evidence_layer = "commit_search_union"
+            ),
+        )
+        _union_summary = (
+            f"recorded delivery boundary in {_search_root} (roots not searched: the "
+            "stamped boundary is the locator when it has content)"
+            if _evidence_layer == "recorded_delivery_boundary"
+            else union_evidence_summary(_root_provenance)
+        )
         if git_diff is None and originating_wo_id:
             git_diff = _collect_git_commits(_search_root, originating_wo_id)
 
@@ -573,6 +600,9 @@ def verify_work_order(
         # Build grader prompts.
         prompts: dict[str, str] = {
             "completion": _COMPLETION_PROMPT_TEMPLATE.format(
+                direction_context=_direction_text
+                or "  (nothing recorded: no milestone, no open siblings, no declared "
+                "dependency edges)",
                 title=wo["title"],
                 work_order_id=work_order_id,
                 work_order_type=wo.get("work_order_type", "infrastructure"),
