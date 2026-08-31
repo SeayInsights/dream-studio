@@ -162,6 +162,13 @@ _EXTENSION_ENTRIES: tuple[EventTypeMeta, ...] = (
         True,
         EventCategory.PRODUCTION_EMITTED,
     ),
+    EventTypeMeta(
+        EventType.TASK_AC_REPOINTED,
+        "sdlc",
+        "A task's acceptance criterion was corrected; the payload carries the prior value",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
     # Activity-log retirement (TA0c) — operational telemetry migrated from legacy store
     EventTypeMeta(
         EventType.WORKFLOW_COMPLETED,
