@@ -448,24 +448,28 @@ def boundary_diff_text(
     if expr and why:
         notes.append(why)
     if expr and repo_root is not None:
-        try:
-            proc = subprocess.run(
-                ["git", "diff", expr],
-                cwd=str(repo_root),
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=60,
-            )
-            if isinstance(proc.returncode, int) and proc.returncode == 0:
-                body = (proc.stdout if isinstance(proc.stdout, str) else "").strip()
-                if body:
-                    sections.append(f"=== commit range {expr} ===\n{body}\n")
-            else:
-                notes.append(f"git diff {expr} failed")
-        except (OSError, subprocess.SubprocessError) as exc:
-            notes.append(f"git diff unavailable: {type(exc).__name__}")
+        # WO 80c0e61b: A RANGE IS NOT AN ATTRIBUTION. `git diff start..end` is the whole
+        # contiguous span, so when work orders land sequentially on one branch this handed
+        # the grader every neighbour's work and asked it about one work order. Measured on
+        # 1db6de49: 10 commits from 5 work orders, and 6 review rounds attached ~30 tasks
+        # each while separately confirming that work order's own tasks had landed.
+        #
+        # attributed_diff removes only commits POSITIVELY claimed by another work order's
+        # CLOSED boundary, and says how many. It returns the plain range diff untouched
+        # when nothing was excluded, so the ordinary case is byte-identical to before.
+        from core.work_orders.artifacts import _resolve_db
+        from core.work_orders.range_attribution import attributed_diff
+
+        _attr_db = db_path if db_path is not None else _resolve_db(None)
+        body, attribution_note = attributed_diff(
+            work_order_id, expr, repo_root=repo_root, db_path=_attr_db
+        )
+        if attribution_note:
+            notes.append(attribution_note)
+        if body and body.strip():
+            sections.append(f"=== commit range {expr} ===\n{body.strip()}\n")
+        elif body is None:
+            notes.append(f"git diff {expr} produced no readable output")
     elif why:
         notes.append(why)
 

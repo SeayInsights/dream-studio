@@ -1025,3 +1025,175 @@ def test_the_final_task_done_also_pins_the_boundary(db, tmp_path):
     assert boundary.get("end_commit"), (
         "the LAST task-done must pin the end, or a pre-close verify grades an unbounded " "range"
     )
+
+
+# -- WO 80c0e61b: a range is not an attribution ----------------------------------
+
+
+def _repo(tmp_path: Path):
+    """A tiny git repo with a linear history. Returns (root, [sha, ...] oldest first)."""
+    import subprocess
+
+    root = tmp_path / "repo"
+    root.mkdir()
+    run = lambda *a: subprocess.run(  # noqa: E731
+        list(a),
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    run("git", "init", "-q")
+    run("git", "config", "user.email", "t@example.com")
+    run("git", "config", "user.name", "T")
+    shas = []
+    for i in range(6):
+        (root / f"f{i}.txt").write_text(str(i), encoding="utf-8")
+        run("git", "add", "-A")
+        run("git", "commit", "-q", "-m", f"c{i}")
+        shas.append(
+            subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=str(root),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            ).stdout.strip()
+        )
+    return root, shas
+
+
+def _own(db: Path, wo: str, shas: list) -> None:
+    import json as _json
+
+    from core.work_orders.artifacts import set_wo_artifact
+    from core.work_orders.range_attribution import OWNERSHIP_KEY, OWNERSHIP_KIND
+
+    set_wo_artifact(
+        wo, OWNERSHIP_KIND, _json.dumps({"commits": shas}), instance_key=OWNERSHIP_KEY, db_path=db
+    )
+
+
+def test_a_range_containing_a_neighbours_commits_grades_only_its_own(db, tmp_path):
+    """THE DEFECT, MEASURED. Work order 1db6de49's range 78b98c1a..38637543 held 10 commits
+    belonging to 5 different work orders, because a delivery boundary is contiguous history
+    and several work orders had landed on one branch. The grader read the whole diff and
+    attributed every finding to one of them: 6 review rounds attached 9, then 29, then 66
+    tasks — roughly 30 per run — while each round separately confirmed that work order's own
+    tasks had landed. It could not converge.
+    """
+    from core.work_orders.range_attribution import attribute_range
+
+    root, shas = _repo(tmp_path)
+    mine, theirs = "wo-mine", "wo-theirs"
+    _own(db, theirs, [shas[2], shas[3]])
+
+    result = attribute_range(mine, f"{shas[0]}..{shas[5]}", repo_root=root, db_path=db)
+
+    assert set(result.own) == {shas[1], shas[4], shas[5]}
+    assert set(result.excluded) == {shas[2], shas[3]}
+    assert all(wo == theirs for wo in result.excluded.values())
+
+
+def test_an_overlapping_boundary_alone_never_excludes_a_commit(db, tmp_path):
+    """MY FIRST FIX WAS ALSO WRONG, AND MEASURING IT IS WHAT SHOWED THAT.
+
+    It excluded any commit inside another work order's closed boundary. Run against the
+    real range that gave 10 -> 1 own, 9 excluded — and two of the nine were the work
+    order's OWN commits, dropped because a neighbour's boundary spanned them.
+
+    A boundary is a TIME WINDOW. Two work orders worked on in the same period have
+    legitimately overlapping windows, so no subtraction over them can separate interleaved
+    work: both windows genuinely contain both sets. A silently narrowed range is exactly as
+    dishonest as a silently wide one, and harder to notice, because it hides work.
+    """
+    import json as _json
+
+    from core.work_orders.artifacts import set_wo_artifact
+    from core.work_orders.range_attribution import attribute_range
+
+    root, shas = _repo(tmp_path)
+    # A neighbour whose BOUNDARY spans the whole history but which claims no commits.
+    set_wo_artifact(
+        "wo-neighbour",
+        "report",
+        _json.dumps({"start_commit": shas[0], "end_commit": shas[5]}),
+        instance_key="delivery_boundary",
+        db_path=db,
+    )
+
+    result = attribute_range("wo-mine", f"{shas[0]}..{shas[5]}", repo_root=root, db_path=db)
+
+    assert result.excluded == {}, (
+        "an overlapping boundary excluded commits — interleaved work orders share windows, "
+        "so this drops work that really does belong here"
+    )
+    assert len(result.own) == 5
+
+
+def test_a_commit_this_work_order_also_claims_is_kept(db, tmp_path):
+    """Two work orders can honestly touch the same commit. Dropping it would hide delivered
+    work, so this work order's own record wins over a neighbour's."""
+    from core.work_orders.range_attribution import attribute_range
+
+    root, shas = _repo(tmp_path)
+    _own(db, "wo-theirs", [shas[2], shas[3]])
+    _own(db, "wo-mine", [shas[3]])
+
+    result = attribute_range("wo-mine", f"{shas[0]}..{shas[5]}", repo_root=root, db_path=db)
+
+    assert shas[3] in result.own, "a commit this work order claims was dropped"
+    assert set(result.excluded) == {shas[2]}
+
+
+def test_a_verdict_names_what_it_graded(db, tmp_path):
+    """The failing verdicts carried graded_commits: [] while the range held 10 commits, so a
+    reader could not tell a stale verdict from a live one, nor a wide range from a narrow
+    one. The note has to say both counts and, when it did NOT narrow, why not."""
+    from core.work_orders.range_attribution import attribute_range
+
+    root, shas = _repo(tmp_path)
+
+    wide = attribute_range("wo-mine", f"{shas[0]}..{shas[5]}", repo_root=root, db_path=db)
+    assert "NOT narrowed" in wide.note
+    assert "5" in wide.note, "the note must state how many commits are being graded"
+    assert "branch neighbour" in wide.note, "and warn that they may not all belong here"
+
+    _own(db, "wo-theirs", [shas[2]])
+    narrow = attribute_range("wo-mine", f"{shas[0]}..{shas[5]}", repo_root=root, db_path=db)
+    assert "narrowed" in narrow.note
+    assert "4 of 5" in narrow.note
+    assert "wo-theirs"[:8] in narrow.note, "the note must name who the excluded work belongs to"
+
+
+def test_ownership_is_recorded_as_work_happens(db, tmp_path):
+    """Ownership can only be captured while the work is happening — a commit's owner is not
+    recoverable afterwards, which is why every historic range keeps its full width."""
+    import subprocess
+
+    from core.work_orders.range_attribution import read_owned_commits, record_commit_ownership
+
+    root, shas = _repo(tmp_path)
+    recorded = record_commit_ownership("wo-mine", repo_root=root, db_path=db, since=shas[2])
+    assert recorded == [shas[3], shas[4], shas[5]], recorded
+    assert read_owned_commits("wo-mine", db_path=db) == recorded
+
+    # A second call after another commit appends only the new one.
+    (root / "later.txt").write_text("x", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=str(root), capture_output=True)
+    subprocess.run(["git", "commit", "-q", "-m", "later"], cwd=str(root), capture_output=True)
+    again = record_commit_ownership("wo-mine", repo_root=root, db_path=db)
+    assert len(again) == 1
+    assert len(read_owned_commits("wo-mine", db_path=db)) == 4
+
+
+def test_recording_ownership_never_breaks_the_work(db, tmp_path):
+    """Best-effort by construction: finishing a task must not fail on bookkeeping. An
+    unrecorded commit is merely unattributed, which keeps a range wide rather than wrong."""
+    from core.work_orders.range_attribution import record_commit_ownership
+
+    assert record_commit_ownership("wo-mine", repo_root=None, db_path=db) == []
+    assert record_commit_ownership("wo-mine", repo_root=tmp_path / "nope", db_path=db) == []
