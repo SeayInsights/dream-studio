@@ -1946,3 +1946,33 @@ def test_a_database_with_no_canonical_events_is_not_judged(db, tmp_path):
     conn.close()
 
     assert check_structure(wid, db_path=db) == []
+
+
+def test_the_spool_guard_names_the_test_that_polluted():
+    """WO efe2ce9d task 1. The guard aborts the whole session when a test writes to the
+    operator's real ~/.dream-studio/events — correctly, that is its job. But it said only
+    "Test modified real ~/.dream-studio/events", and a session that ends at test 2,400 of
+    5,928 with no identifier leaves the reader to bisect by hand. I nearly did.
+
+    It is an autouse per-test fixture, so its teardown already KNOWS which test polluted;
+    the identifier was simply not in the message.
+
+    Asserted against the source rather than by polluting the spool for real: a test that
+    proves this by writing to the operator's events directory would be the very thing the
+    guard exists to stop. Verified once out-of-band with a throwaway probe, which produced
+    'FATAL: tests/unit/test_zz_guard_probe.py::test_this_one_pollutes_the_real_spool
+    modified real ~/.dream-studio/events'.
+    """
+    conftest = Path(__file__).resolve().parents[1] / "conftest.py"
+    src = conftest.read_text(encoding="utf-8")
+
+    assert (
+        "def guard_real_homedir(tmp_path, monkeypatch, request):" in src
+    ), "the guard cannot name the test without the request fixture"
+    for surface in ("events", "integrations"):
+        marker = f"modified real ~/.dream-studio/{surface}"
+        line = next((ln for ln in src.splitlines() if marker in ln), "")
+        assert line, f"no guard message for {surface}"
+        assert (
+            "request.node.nodeid" in line
+        ), f"the {surface} guard aborts the session without naming the test that did it"
