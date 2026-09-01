@@ -813,7 +813,8 @@ def test_the_orchestrator_declares_checks_that_observe_real_state():
             continue
         marker = f"- id: {node['id']}"
         start = raw.index(marker)
-        window = raw[start : start + 400]
+        window_end = start + 400
+        window = raw[start:window_end]
         assert (
             "NO completion_check:" in window
         ), f"{node['id']} has no check and no recorded reason — the gap looks accidental"
