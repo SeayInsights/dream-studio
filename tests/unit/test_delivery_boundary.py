@@ -1197,3 +1197,161 @@ def test_recording_ownership_never_breaks_the_work(db, tmp_path):
 
     assert record_commit_ownership("wo-mine", repo_root=None, db_path=db) == []
     assert record_commit_ownership("wo-mine", repo_root=tmp_path / "nope", db_path=db) == []
+
+
+# -- WO e439f287: ownership has to survive the merge that makes the work permanent ---
+
+
+def _squash_repo(tmp_path: Path):
+    """A repo where two commits were squashed into one, GitHub-style.
+
+    The squash commit's body carries each original subject as a ``* `` bullet, which is
+    what makes the mapping a RECORDED link rather than an inference.
+    """
+    import subprocess
+
+    root = tmp_path / "squashrepo"
+    root.mkdir()
+
+    def run(*a, **kw):
+        return subprocess.run(
+            list(a),
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            **kw,
+        )
+
+    run("git", "init", "-q")
+    run("git", "config", "user.email", "t@example.com")
+    run("git", "config", "user.name", "T")
+    (root / "base.txt").write_text("base", encoding="utf-8")
+    run("git", "add", "-A")
+    run("git", "commit", "-q", "-m", "base")
+
+    # Two commits that will be squashed away.
+    originals = []
+    for subject in ("feat: the first thing", "fix: the second thing"):
+        (root / f"{subject[:8].strip()}.txt").write_text(subject, encoding="utf-8")
+        run("git", "add", "-A")
+        run("git", "commit", "-q", "-m", subject)
+        originals.append(run("git", "rev-parse", "HEAD").stdout.strip())
+
+    # Rewind and land them as ONE commit, the way a squash merge does.
+    run("git", "reset", "-q", "--hard", "HEAD~2")
+    (root / "squashed.txt").write_text("both", encoding="utf-8")
+    run("git", "add", "-A")
+    body = "chore: land both (#42)\n\n* feat: the first thing\n\n* fix: the second thing\n"
+    run("git", "commit", "-q", "-m", body)
+    squash = run("git", "rev-parse", "HEAD").stdout.strip()
+    return root, originals, squash
+
+
+def test_ownership_survives_a_squash_merge(db, tmp_path):
+    """THE LIMIT THIS FIXES, found while cleaning up after the attribution work shipped.
+
+    record_commit_ownership records BRANCH shas, and this repo squash-merges every PR. So
+    the moment a branch lands, the commits a work order claimed stop being ancestors of
+    HEAD: `git merge-base --is-ancestor 4a5221cf main` returns non-zero because #687
+    squashed 18 commits into 14b8693c. Attribution was therefore correct for in-flight work
+    and inert for merged work — half the value, and silently so.
+
+    GitHub's squash writes each original subject into the merge body as a ``* `` bullet.
+    That is a recorded link, so the mapping is read rather than guessed.
+    """
+    from core.work_orders.range_attribution import reachable_ownership, resolve_squashed
+
+    root, originals, squash = _squash_repo(tmp_path)
+
+    assert resolve_squashed(originals[0], repo_root=root) == squash
+    reachable, squashed_into, lost = reachable_ownership(originals, repo_root=root)
+
+    assert reachable == [], "the originals should not be reachable after a squash"
+    assert set(squashed_into.values()) == {squash}
+    assert lost == [], f"a mappable commit was reported lost: {lost}"
+
+
+def test_a_neighbours_claim_still_applies_after_their_branch_merges(db, tmp_path):
+    """The consequence that actually matters. Exclusion reads another work order's recorded
+    ownership; if their shas stop resolving the moment they merge, their claim evaporates
+    and the range reads as having no neighbours — indistinguishable from a range that
+    genuinely has none."""
+    import json as _json
+
+    from core.work_orders.artifacts import set_wo_artifact
+    from core.work_orders.range_attribution import (
+        OWNERSHIP_KEY,
+        OWNERSHIP_KIND,
+        attribute_range,
+    )
+
+    root, originals, squash = _squash_repo(tmp_path)
+    set_wo_artifact(
+        "wo-neighbour",
+        OWNERSHIP_KIND,
+        _json.dumps({"commits": originals}),
+        instance_key=OWNERSHIP_KEY,
+        db_path=db,
+    )
+
+    result = attribute_range("wo-mine", f"{squash}~1..{squash}", repo_root=root, db_path=db)
+
+    assert squash in result.excluded, (
+        "the neighbour's claim did not follow their commits through the squash, so their "
+        "work would be graded against this work order"
+    )
+    assert result.excluded[squash] == "wo-neighbour"
+
+
+def test_unreachable_owned_commits_are_reported(db, tmp_path):
+    """A squash that cannot be followed is NOT the same as having no neighbours, and the
+    two rendered identically before this. Silent degradation to 'not narrowed' is the
+    absent-is-not-clean shape again: nothing looked wrong, and the reason was that nothing
+    could be seen."""
+    import json as _json
+
+    from core.work_orders.artifacts import set_wo_artifact
+    from core.work_orders.range_attribution import (
+        OWNERSHIP_KEY,
+        OWNERSHIP_KIND,
+        attribute_range,
+    )
+
+    root, originals, squash = _squash_repo(tmp_path)
+    # A recorded sha that never existed here: unreachable AND unmappable.
+    set_wo_artifact(
+        "wo-mine",
+        OWNERSHIP_KIND,
+        _json.dumps({"commits": ["0" * 40]}),
+        instance_key=OWNERSHIP_KEY,
+        db_path=db,
+    )
+
+    result = attribute_range("wo-mine", f"{squash}~1..{squash}", repo_root=root, db_path=db)
+
+    assert "no longer reachable" in result.note, result.note
+    assert "could not be mapped" in result.note
+
+
+def test_an_ambiguous_squash_is_not_resolved(db, tmp_path):
+    """Two merge commits carrying the same subject bullet cannot both be the answer.
+    Picking the first would be a guess wearing an answer's clothes, so it returns None and
+    the commit is reported unmappable instead."""
+    import subprocess
+
+    from core.work_orders.range_attribution import resolve_squashed
+
+    root, originals, _squash = _squash_repo(tmp_path)
+    # A SECOND commit claiming the same original subject.
+    (root / "again.txt").write_text("again", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=str(root), capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-q", "-m", "chore: land both again (#43)\n\n* feat: the first thing\n"],
+        cwd=str(root),
+        capture_output=True,
+    )
+
+    assert resolve_squashed(originals[0], repo_root=root) is None
