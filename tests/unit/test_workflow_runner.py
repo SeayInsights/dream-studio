@@ -778,3 +778,62 @@ def test_the_completion_decision_ignores_the_nodes_text_entirely():
     body = body.split(chr(34) * 3)[2]  # past the docstring
     for banned in ("raw_output", "expected in output", "in (output"):
         assert banned not in body, f"the decision is reading node text again: {banned!r}"
+
+
+def test_the_orchestrator_declares_checks_that_observe_real_state():
+    """WO e4e85949. Every node now either declares a completion_check that observes state
+    OUTSIDE the runner, or records why it cannot.
+
+    Each check here was RUN before it was written, because the two previous attempts were
+    not. The first declared `completion_contains` tokens the runner can never see — it
+    delivers a prompt and never holds the agent's output. The second invented
+    `ds work-order tasks-remaining --active --quiet`, a command that does not exist.
+
+    And the third nearly shipped: `implement-tasks` asked `ds project state` for the
+    substring `"pending_tasks": 0,`, which appears THIRTY times in that output, once per
+    work order in the ready set. It passed whenever any work order anywhere had nothing
+    pending — a check that could not fail for the reason it existed. Running it is what
+    caught that, which is why the assertion below names the script instead.
+    """
+    import yaml
+
+    path = (
+        Path(__file__).resolve().parents[2] / "canonical" / "workflows" / "execute-work-orders.yaml"
+    )
+    raw = path.read_text(encoding="utf-8")
+    nodes = yaml.safe_load(raw)["nodes"]
+    assert nodes
+
+    by_id = {n["id"]: n for n in nodes}
+
+    # A node without a check must SAY why. An unexplained gap reads as an oversight and
+    # invites the next author to fill it with something invented.
+    for node in nodes:
+        if node.get("completion_check"):
+            continue
+        marker = f"- id: {node['id']}"
+        start = raw.index(marker)
+        window = raw[start : start + 400]
+        assert (
+            "NO completion_check:" in window
+        ), f"{node['id']} has no check and no recorded reason — the gap looks accidental"
+
+    # The scoped check, not the substring that matched the whole ready set.
+    implement = by_id["implement-tasks"]["completion_check"]
+    assert "active_wo_tasks_complete.py" in implement, implement
+    assert "pending_tasks" not in implement, (
+        "implement-tasks is matching a substring of `ds project state` again; that marker "
+        "appears once per work order in the ready set and cannot fail for this node"
+    )
+    script = Path(__file__).resolve().parents[2] / "scripts" / "active_wo_tasks_complete.py"
+    assert script.is_file(), "the check names a script that does not exist"
+
+    # A check must observe something outside the runner. `echo`-shaped checks assert
+    # nothing; these each shell out to git, gh, or the authority.
+    checked = [n for n in nodes if n.get("completion_check")]
+    assert len(checked) >= 6, f"only {len(checked)} nodes declare a check"
+    for node in checked:
+        cmd = node["completion_check"]
+        assert any(
+            cmd.startswith(p) for p in ("git ", "gh ", "python ")
+        ), f"{node['id']} declares {cmd!r}, which does not invoke an external observer"
