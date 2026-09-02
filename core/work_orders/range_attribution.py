@@ -46,6 +46,16 @@ OWNERSHIP_KIND = "report"
 OWNERSHIP_KEY = "owned_commits"
 
 
+class CommitOwnershipNotRecorded(RuntimeError):
+    """Ownership could not be written. Distinct from having nothing to write.
+
+    record_commit_ownership returns the commits it recorded, so an empty list used to mean
+    both "nothing new since the last stamp" and "the write failed" -- and the caller
+    reports commits_recorded only when non-empty, so a failure looked like a quiet no-op
+    while attribution kept grading the range at full width.
+    """
+
+
 @dataclass
 class Attribution:
     """Which commits in a range belong to the work order, and which demonstrably do not."""
@@ -228,8 +238,13 @@ def record_commit_ownership(
     if not fresh:
         return []
 
+    # RETURNING [] MEANT TWO THINGS AND ONLY ONE WAS TRUE. The caller reports
+    # `commits_recorded` when this is non-empty, so a failed write rendered exactly like
+    # "no new commits since the last stamp" -- and attribution silently kept the range
+    # wide. Best-effort is still right (a task-done must not fail on bookkeeping), but the
+    # failure has to be distinguishable from nothing-to-do.
     try:
-        set_wo_artifact(
+        stored = set_wo_artifact(
             work_order_id,
             OWNERSHIP_KIND,
             json.dumps({"commits": known + fresh}, indent=2),
@@ -238,8 +253,17 @@ def record_commit_ownership(
             generator="ds work-order (commit ownership)",
             project_root=repo_root,
         )
-    except Exception:
-        return []
+    except Exception as exc:  # noqa: BLE001 - progress must not fail on bookkeeping
+        raise CommitOwnershipNotRecorded(
+            f"{len(fresh)} commit(s) could not be recorded as owned "
+            f"({type(exc).__name__}: {exc}). Attribution will grade this range at full "
+            f"width until they are."
+        ) from exc
+    if not stored:
+        raise CommitOwnershipNotRecorded(
+            f"{len(fresh)} commit(s) could not be recorded as owned: the artifact table "
+            f"is absent on this authority."
+        )
     return fresh
 
 

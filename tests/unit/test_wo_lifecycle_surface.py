@@ -778,6 +778,55 @@ def test_the_escape_is_a_recorded_reason_not_a_flag(db):
     assert "one line in one file" in (recorded_exception(wid, db_path=db) or "")
 
 
+def test_an_exception_that_could_not_be_recorded_is_not_reported_as_recorded(db):
+    """A RECORDED REASON THAT WAS NOT RECORDED IS WORSE THAN NO ESCAPE AT ALL.
+
+    ``record_exception`` used to return False when the artifact write no-op'd, and both
+    callers (``start_work_order`` and the close CLI) catch only ValueError -- so
+    ``--accept-structure`` printed success, stored nothing, and the next close refused
+    with the identical message. The operator's reasonable conclusion is that the flag
+    does not work.
+
+    Simulated with an authority whose artifact table is absent, which is the real
+    condition that produced the False (migration unreleased).
+    """
+    import pytest as _pytest
+
+    from core.work_orders.structural_invariants import record_exception, recorded_exception
+
+    _, _, wid = _scaffold(db, tasks=1, siblings=2)
+    conn = sqlite3.connect(str(db))
+    conn.execute("DROP TABLE IF EXISTS business_work_order_artifacts")
+    conn.commit()
+    conn.close()
+
+    reason = "One task because the whole change is one line in one file."
+    with _pytest.raises(ValueError) as exc:
+        record_exception(wid, reason, db_path=db)
+    assert "could not be recorded" in str(exc.value)
+    # And it says what to do about it rather than leaving the operator to find --force.
+    assert "refuse again" in str(exc.value)
+    assert recorded_exception(wid, db_path=db) is None
+
+
+def test_a_gate_that_cannot_read_its_data_does_not_report_clean(db):
+    """ABSENT IS NOT CLEAN. ``check_structure`` returned [] on a database error -- no
+    violations -- so a broken authority silently PASSED the gate, on exactly the work
+    orders whose data is broken. It must block and say it could not evaluate."""
+    from core.work_orders.structural_invariants import check_structure
+
+    _, _, wid = _scaffold(db, tasks=1, siblings=2)
+    conn = sqlite3.connect(str(db))
+    conn.execute("DROP TABLE business_tasks")
+    conn.commit()
+    conn.close()
+
+    violations = check_structure(wid, db_path=db)
+    assert violations, "a gate that cannot count tasks has not found the WO clean"
+    assert violations[0].scope == "unevaluated"
+    assert "BLOCKS rather than passes" in violations[0].message
+
+
 def _complete_all_tasks(db: Path, work_order_id: str) -> None:
     """Satisfy tasks_done so the structural gate is what the close is judged on.
 
@@ -1535,6 +1584,48 @@ def test_carry_over_closes_the_original_at_its_true_scope(db, tmp_path, monkeypa
     )
     failures = " ".join(closed.get("failures", []))
     assert "tasks_done" not in failures, failures
+
+
+def test_a_carry_over_whose_split_was_not_recorded_does_not_report_success(
+    db, tmp_path, monkeypatch
+):
+    """THE RECORD IS LOAD-BEARING, SO ITS FAILURE CANNOT BE SILENT.
+
+    ``_check_tasks_done`` reads the carry-over artifact to exempt the carried tasks.
+    By the time it is written the tasks are ALREADY gone -- task.deleted is emitted and
+    the new work order exists -- so reporting ok:True on a failed write leaves the
+    original PERMANENTLY UNCLOSABLE while telling the operator the carry succeeded. Both
+    ``set_wo_artifact`` results were being discarded here, which is the same discarded
+    return that sent 154 review verdicts to disk.
+
+    The failure must name where the work went, because the tasks are not recoverable
+    from the error alone.
+    """
+    from core.work_orders.carry_over import carry_over
+
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "events"))
+    _, _, wid = _scaffold(db, tasks=3, siblings=2)
+    carry = [t[0] for t in _tasks_of(db, wid)[1:]]
+
+    conn = sqlite3.connect(str(db))
+    conn.execute("DROP TABLE IF EXISTS business_work_order_artifacts")
+    conn.commit()
+    conn.close()
+
+    result = carry_over(
+        work_order_id=wid,
+        task_ids=carry,
+        reason="These two turned out to belong to the projection work, not this one.",
+        title="Projection remainder",
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+    )
+    assert result["ok"] is False, "an unrecorded split must not be reported as a carry"
+    assert "not recorded" in result["error"] or "could not be recorded" in result["error"]
+    # The operator has to be able to find the tasks that already moved.
+    assert result.get("carried_to"), "the error must name where the work went"
+    assert result.get("moved"), "the error must list what was moved"
 
 
 def test_carry_over_is_not_recorded_as_a_gate_bypass(db, tmp_path, monkeypatch):

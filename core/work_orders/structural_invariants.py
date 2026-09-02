@@ -235,13 +235,25 @@ def record_exception(work_order_id: str, reason: str, *, db_path: Path) -> bool:
             "A structural exception needs a reason a later reader can weigh. "
             "Say why this work order is correctly sized despite the invariant."
         )
-    return set_wo_artifact(
+    # A RECORDED REASON THAT WAS NOT RECORDED IS WORSE THAN NO ESCAPE AT ALL. Both callers
+    # (start_work_order and the close CLI) catch only ValueError, so a False return meant
+    # --accept-structure printed success, stored nothing, and the next close refused with
+    # the identical message -- leaving the operator to conclude the flag does not work.
+    # Raise instead: an escape hatch must either take effect or say it did not.
+    stored = set_wo_artifact(
         work_order_id,
         EXCEPTION_KIND,
         text,
         instance_key=EXCEPTION_KEY,
         db_path=db_path,
     )
+    if not stored:
+        raise ValueError(
+            "The structural exception could not be recorded: the artifact table is absent "
+            "on this authority. Without the record the close gate will refuse again, so "
+            "the reason has to land before --accept-structure means anything."
+        )
+    return True
 
 
 def render(violations: list[Violation], work_order_id: str, *, refusing: bool = True) -> str:

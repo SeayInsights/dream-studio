@@ -1199,6 +1199,79 @@ def test_recording_ownership_never_breaks_the_work(db, tmp_path):
     assert record_commit_ownership("wo-mine", repo_root=tmp_path / "nope", db_path=db) == []
 
 
+def test_close_reports_bookkeeping_that_did_not_land(db, tmp_path, monkeypatch):
+    """BEST-EFFORT MEANS THE CLOSE PROCEEDS, NOT THAT NOBODY IS TOLD.
+
+    Both the boundary pin and the ownership record sat in ONE ``except Exception: pass``.
+    Two consequences, both silent: a pin that raised skipped the ownership record
+    entirely (they are unrelated operations), and neither failure reached the operator --
+    while the comment directly above claimed a boundary that cannot be pinned "keeps its
+    open range AND says so".
+
+    It matters because the cost is deferred and invisible: an unrecorded boundary makes
+    the NEXT verify grade a wider range than it should. ``mark_task_done`` already
+    reports its equivalent as ``commit_ownership_error``; close was the quiet one.
+    """
+    from core.work_orders.close import close_work_order
+
+    def _explode(*_a, **_kw):
+        raise RuntimeError("authority unwritable")
+
+    monkeypatch.setattr("core.work_orders.delivery_boundary.record_delivery_boundary_end", _explode)
+    monkeypatch.setattr("core.work_orders.range_attribution.record_commit_ownership", _explode)
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    wid = _wo_with_boundary(db, repo, "core/")
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "events"))
+    # force=True only to get PAST the gates to the code under test -- a hermetic WO has
+    # no verdict and no affirmation, and this test is about the bookkeeping report, not
+    # about the gates. It is not a claim that forcing is acceptable in real use.
+    result = close_work_order(
+        work_order_id=wid,
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+        skip_verify=True,
+        force=True,
+    )
+    assert result.get("ok") is True, f"bookkeeping must not fail the close: {result}"
+    # Each is reported separately, which is also what proves they no longer share a try:
+    # under one block the second never ran and could not have an error to report.
+    assert "delivery_boundary_error" in result, result
+    assert "commit_ownership_error" in result, result
+
+
+def test_ownership_that_could_not_be_stored_is_not_reported_as_recorded(db, tmp_path):
+    """BEST-EFFORT IS ABOUT THE REPO, NOT ABOUT THE WRITE.
+
+    Missing repo, no new commits: nothing to record, and ``[]`` is the honest answer --
+    the test above pins that. A FAILED WRITE is different. ``[]`` there is
+    indistinguishable from "this task produced no commits", so the shas are silently
+    dropped and the attributed range stays wide forever, while the caller believes
+    ownership was captured.
+
+    An unrecorded commit keeps a range wide rather than wrong, which is why this does not
+    fail the task -- but the caller has to be able to tell it happened.
+    """
+    import sqlite3
+
+    import pytest as _pytest
+
+    from core.work_orders.range_attribution import (
+        CommitOwnershipNotRecorded,
+        record_commit_ownership,
+    )
+
+    root, shas = _repo(tmp_path)
+    conn = sqlite3.connect(str(db))
+    conn.execute("DROP TABLE IF EXISTS business_work_order_artifacts")
+    conn.commit()
+    conn.close()
+
+    with _pytest.raises(CommitOwnershipNotRecorded):
+        record_commit_ownership("wo-mine", repo_root=root, db_path=db, since=shas[0])
+
+
 # -- WO e439f287: ownership has to survive the merge that makes the work permanent ---
 
 

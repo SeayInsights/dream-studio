@@ -221,8 +221,43 @@ def carry_over(
     # BOTH SIDES. The original needs it because the close gate reads it; the new work
     # order needs it because a reader who lands there must be able to get back to where
     # the work came from, and a one-way link is how provenance is lost.
-    set_wo_artifact(work_order_id, CARRY_KIND, record, instance_key=CARRY_KEY, db_path=db_path)
-    set_wo_artifact(new_wo_id, CARRY_KIND, record, instance_key=CARRY_KEY, db_path=db_path)
+    # THE RECORD IS LOAD-BEARING, SO ITS FAILURE CANNOT BE SILENT. `_check_tasks_done`
+    # reads this artifact to exempt the carried tasks; without it the close gate refuses
+    # forever. And by this point the tasks are ALREADY moved -- task.deleted is emitted and
+    # the new work order exists -- so reporting ok:True on a failed write would leave the
+    # original permanently unclosable while telling the operator the carry succeeded.
+    #
+    # Measured 2026-09-02: set_wo_artifact returned False on a locked database and every
+    # caller here ignored it. That is how 154 review verdicts went to disk unnoticed.
+    try:
+        stored_from = set_wo_artifact(
+            work_order_id, CARRY_KIND, record, instance_key=CARRY_KEY, db_path=db_path
+        )
+        stored_to = set_wo_artifact(
+            new_wo_id, CARRY_KIND, record, instance_key=CARRY_KEY, db_path=db_path
+        )
+    except Exception as exc:  # noqa: BLE001 - surface it; never claim a carry that is half done
+        return {
+            "ok": False,
+            "error": (
+                f"The tasks were moved to {new_wo_id} but the split could not be recorded "
+                f"({type(exc).__name__}: {exc}). The close gate reads that record to exempt "
+                f"them, so {work_order_id} would refuse to close with the work already gone. "
+                f"Re-run this carry-over once the authority is writable; it is idempotent."
+            ),
+            "carried_to": new_wo_id,
+            "moved": moved,
+        }
+    if not (stored_from and stored_to):
+        return {
+            "ok": False,
+            "error": (
+                f"The tasks were moved to {new_wo_id} but the artifact table is absent, so "
+                f"the split was not recorded. {work_order_id} cannot close until it is."
+            ),
+            "carried_to": new_wo_id,
+            "moved": moved,
+        }
 
     return {
         "ok": True,
