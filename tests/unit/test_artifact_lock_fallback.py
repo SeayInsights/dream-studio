@@ -235,6 +235,13 @@ def test_a_disk_fallback_is_counted_rather_than_silent(tmp_path, monkeypatch):
     answer "are verdicts reaching the authority?" without comparing a directory listing
     to a table by hand. ``observations_report`` groups these by rule, which is the count
     that question needs.
+
+    THIS TEST ONLY PROVES THE CALL, and that is not the same as proving the count. It is
+    deliberately paired with
+    ``tests/integration/test_enforcement_tiers.py::test_an_artifact_disk_fallback_reaches_the_observations_report``,
+    which runs the real spool -> sync_tick -> report path. Do not read this one as
+    coverage of the landing: written alone it passed while the observation was going to
+    the WRONG authority, because db_path was not being threaded.
     """
     from core.work_orders.artifacts import FALLBACK_RULE
     from core.work_orders.verify_persist import _persist_review_verdict

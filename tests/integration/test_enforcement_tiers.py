@@ -210,3 +210,45 @@ def test_warn_tier_allows_but_surfaces_message():
     proc = _run_edit_hook("warn", home, project_dir, src)
     assert "deny" not in proc.stdout  # allowed, not blocked
     assert "work-order start" in proc.stderr  # the message is surfaced on stderr
+
+
+# ── WO-ARTIFACT-LOCK-FALLBACK / fd981a32: the artifact fallback counter ─────────
+
+
+def test_an_artifact_disk_fallback_reaches_the_observations_report(tmp_path, monkeypatch):
+    """THE FULL ROUND TRIP, not "the function was called".
+
+    The unit test for this asserts that ``record_observation`` was invoked -- a
+    monkeypatched proxy that would pass even if nothing ever landed. And something DID
+    not land: ``record_artifact_fallback`` was not threading ``db_path``, so the count
+    went to the DEFAULT authority regardless of which database lost the write. Testing
+    the call rather than the landing is what let that through, and it is the same shape as
+    the defect being fixed -- a write believed to have happened.
+
+    So this asserts the count is readable from the authority it belongs to, through the
+    real emit path: spool -> ``sync_tick`` -> ``observations_report``.
+    """
+    from core.work_orders.artifacts import FALLBACK_RULE, record_artifact_fallback
+
+    db = tmp_path / "state" / "studio.db"
+    db.parent.mkdir(parents=True, exist_ok=True)
+    bootstrap_database(db)
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "events"))
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+
+    record_artifact_fallback(
+        "wo-fell-back", "review_verdict", reason="authority write no-op", db_path=db
+    )
+    from core.projections.runner import sync_tick
+
+    sync_tick()
+
+    report = enforcement.observations_report(db_path=db)
+    entry = report.get("by_rule", {}).get(FALLBACK_RULE)
+    assert entry, f"the fallback was not countable from this authority: {report}"
+    assert entry["count"] >= 1
+    sample = entry["samples"][0]["reason"]
+    # The record must carry the consequence and the recovery, since the operator reading
+    # this report is being told an artifact is missing from the store their gates read.
+    assert "invisible" in sample
+    assert "backfill-artifacts" in sample

@@ -197,7 +197,10 @@ def _persist_unverified_ledger(
                 pass  # a stale copy that cannot be removed is still shadowed by the authority
         return None
     record_artifact_fallback(
-        work_order_id, "report", reason="unverified_risks authority write no-op"
+        work_order_id,
+        "report",
+        reason="unverified_risks authority write no-op",
+        db_path=db_path,
     )
     # Atomic (WO-VERDICT-PARTIAL-WRITE): a half-written residual-risk ledger
     # would read as a shorter list of risks, which is the silence this stage
@@ -310,7 +313,9 @@ def _persist_review_verdict(
     # COUNT THE FALLBACK. It is legitimate on an authority whose artifact migration is
     # unreleased, but a verdict on disk is invisible to the independent_review gate and
     # to `ds project state`, and that invisibility went unnoticed 154 times.
-    record_artifact_fallback(work_order_id, "review_verdict", reason="authority write no-op")
+    record_artifact_fallback(
+        work_order_id, "review_verdict", reason="authority write no-op", db_path=db_path
+    )
     verdict_path = planning_root / "work-orders" / work_order_id / "review-verdict.json"
     _atomic_write(verdict_path, wrapped)
     return verdict_path

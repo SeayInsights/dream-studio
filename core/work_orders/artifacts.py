@@ -91,7 +91,9 @@ def _is_locked(exc: sqlite3.OperationalError) -> bool:
 FALLBACK_RULE = "artifact_disk_fallback"
 
 
-def record_artifact_fallback(work_order_id: str, kind: str, *, reason: str) -> None:
+def record_artifact_fallback(
+    work_order_id: str, kind: str, *, reason: str, db_path: Path | None = None
+) -> None:
     """Count a disk fallback so somebody can ask how often it fires.
 
     THIS IS THE PART THAT WAS MISSING, and it is why the lock bug survived a month. The
@@ -125,6 +127,12 @@ def record_artifact_fallback(work_order_id: str, kind: str, *, reason: str) -> N
                 f"`ds work-order backfill-artifacts`."
             ),
             tier="warn",
+            # THE COUNT BELONGS TO THE AUTHORITY THAT LOST THE WRITE. Without this the
+            # observation lands in the DEFAULT authority no matter which database the
+            # fallback happened on -- so a count attributed to the operator's live DB
+            # could have come from anywhere, which is the same "invisible where it
+            # matters" failure one level up. Found by trying to test the round-trip.
+            db_path=db_path,
         )
     except Exception:  # noqa: BLE001 - telemetry must never cost a stored artifact
         pass
