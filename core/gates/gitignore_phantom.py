@@ -142,6 +142,37 @@ def _string_literals_in_call(node: ast.Call) -> list[tuple[str, int]]:
     return found
 
 
+def _literals_asserted_absent(tree: ast.AST) -> set[tuple[str, int]]:
+    """``(literal, lineno)`` pairs this source asserts are NOT there.
+
+    Covers ``assert "x" not in y``, ``assert "x" != y`` and ``assert not <anything
+    mentioning "x">``. A source that asserts absence does not depend on presence, so it
+    cannot break on a fresh checkout for the reason this gate exists -- and asserting
+    absence is exactly how a zero-disk rule gets tested, so collecting those literals made
+    the gate refuse the tests enforcing the rule it supports.
+
+    Deliberately narrow, in two ways. A literal is exempt only when a NEGATED assertion
+    mentions it -- ``assert Path("x").is_file()`` and ``assert "x" in y`` still count,
+    because those do break on a clean clone. And the exemption is keyed by LINE, so
+    asserting a path absent in one test does not excuse depending on it in another; a
+    set of bare strings did exactly that, which is a hole in a blocking gate.
+    """
+    absent: set[tuple[str, int]] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assert):
+            continue
+        for inner in ast.walk(node):
+            negated = isinstance(inner, ast.UnaryOp) and isinstance(inner.op, ast.Not)
+            if isinstance(inner, ast.Compare):
+                negated = any(isinstance(op, (ast.NotIn, ast.NotEq, ast.IsNot)) for op in inner.ops)
+            if not negated:
+                continue
+            for child in ast.walk(inner):
+                if isinstance(child, ast.Constant) and isinstance(child.value, str):
+                    absent.add((child.value, getattr(child, "lineno", node.lineno)))
+    return absent
+
+
 def referenced_literals(source: str) -> list[tuple[str, int]]:
     """Path-like string literals this source RELIES ON existing.
 
@@ -166,6 +197,19 @@ def referenced_literals(source: str) -> list[tuple[str, int]]:
             if node.func.id == "open":
                 out.extend(_string_literals_in_call(node))
         elif isinstance(node, ast.Assert):
+            # AN ASSERTION OF ABSENCE IS THE OPPOSITE OF A DEPENDENCY.
+            #
+            # Every string literal under an `assert` was collected as "this source relies
+            # on the path existing", which is backwards for `assert ".planning" not in
+            # str(p)` -- that asserts the path is NOT used, and it is exactly how you test
+            # a zero-disk rule. The gate failed the push for the tests that enforce the
+            # rule the gate exists to support. Found by it firing on
+            # tests/unit/test_workflow_runner.py's zero-disk tests, which pass on a fresh
+            # checkout precisely because the path is absent.
+            #
+            # Narrow on purpose: only literals inside a negated comparison are skipped.
+            # `assert Path(".planning/x").is_file()` and `assert "x" in y` still count,
+            # which are the shapes that really do break on a clean clone.
             for child in ast.walk(node):
                 if isinstance(child, ast.Constant) and isinstance(child.value, str):
                     out.append((child.value, getattr(child, "lineno", node.lineno)))
@@ -174,6 +218,18 @@ def referenced_literals(source: str) -> list[tuple[str, int]]:
     # shape, so the same literal was reported twice. One defect should print once, or the
     # count in the failure message lies about how much is wrong.
     out = list(dict.fromkeys(out))
+
+    # AND DROP WHAT IS ASSERTED ABSENT. Applied here rather than inside the Assert branch
+    # because `assert not Path(".planning/x").exists()` is collected by the READ-CALL
+    # branch, which cannot see the enclosing assert -- filtering in one branch missed it.
+    # KEYED BY OCCURRENCE, NOT BY STRING. The first cut returned a set of strings, so one
+    # `assert "x" not in y` anywhere in a file exempted every REAL dependency on "x"
+    # elsewhere in that same file -- a hole punched straight through a blocking gate by
+    # the change meant to reduce its false positives. Measured: a file asserting absence
+    # in one test and calling `open(".planning/x.md")` in another reported clean.
+    # (value, lineno) scopes the exemption to the assertion that earned it.
+    absent = _literals_asserted_absent(tree)
+    out = [(text, line) for text, line in out if (text, line) not in absent]
 
     # Only things that could plausibly be a repo-relative path.
     return [

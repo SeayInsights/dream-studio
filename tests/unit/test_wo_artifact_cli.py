@@ -167,3 +167,88 @@ def test_packet_command_not_found_returns_1(tmp_path, capsys):
     )
     assert rc == 1
     assert "not found" in capsys.readouterr().err.lower()
+
+
+# ── WO-ARTIFACT-LOCK-FALLBACK / fd981a32: the recovery path needs a caller ─────
+
+
+def test_backfill_command_recovers_disk_resident_artifacts(tmp_path, monkeypatch, capsys):
+    """``backfill_wo_artifacts`` existed since WO-FILESDB-P1 with NO production caller.
+
+    Only a test invoked it, so the recovery it performs never happened. Measured
+    2026-09-02 on the live authority: 24 review verdicts stored, 170 sitting in
+    ``.planning/work-orders/``, 162 of them nowhere else -- invisible to
+    ``ds project state`` and to the ``independent_review`` close gate, both of which read
+    only the authority. A repair function nobody can invoke is not a repair.
+    """
+    from core.work_orders.artifacts import get_wo_artifact
+
+    db = _db_with_table(tmp_path)
+    _point_cli_at_db(monkeypatch, db)
+    planning = tmp_path / ".planning"
+    wo_dir = planning / "work-orders" / "wo-backfill"
+    wo_dir.mkdir(parents=True)
+    (wo_dir / "review-verdict.json").write_text('{"passed": true}', encoding="utf-8")
+    (wo_dir / "api-contract.md").write_text("# contract", encoding="utf-8")
+
+    rc = wo_cli._work_order_backfill_artifacts(
+        planning_root=planning, source_root=tmp_path, dream_studio_home=tmp_path
+    )
+    assert rc == 0
+    assert "Backfilled 2" in capsys.readouterr().out
+    assert get_wo_artifact("wo-backfill", "review_verdict", db_path=db) == '{"passed": true}'
+    assert get_wo_artifact("wo-backfill", "api_contract", db_path=db) == "# contract"
+
+
+def test_backfill_dry_run_counts_without_writing(tmp_path, monkeypatch, capsys):
+    """A backfill about to write 171 rows to the live authority is worth previewing."""
+    from core.work_orders.artifacts import get_wo_artifact
+
+    db = _db_with_table(tmp_path)
+    _point_cli_at_db(monkeypatch, db)
+    planning = tmp_path / ".planning"
+    wo_dir = planning / "work-orders" / "wo-dry"
+    wo_dir.mkdir(parents=True)
+    (wo_dir / "review-verdict.json").write_text("{}", encoding="utf-8")
+
+    rc = wo_cli._work_order_backfill_artifacts(
+        planning_root=planning, source_root=tmp_path, dream_studio_home=tmp_path, dry_run=True
+    )
+    assert rc == 0
+    assert "1 artifact file(s)" in capsys.readouterr().out
+    assert get_wo_artifact("wo-dry", "review_verdict", db_path=db) is None, "dry run wrote"
+
+
+def test_backfill_reports_zero_written_as_a_failure(tmp_path, monkeypatch, capsys):
+    """ZERO IS AMBIGUOUS AND MUST NOT READ AS SUCCESS.
+
+    "Nothing to do" and "the artifact table is absent so every write no-op'd" print the
+    same count. An operator running this to recover stranded verdicts, on an authority
+    whose migration is unreleased, would otherwise see ``Backfilled 0`` and exit 0 and
+    conclude the recovery was complete -- the same silence the lock fix removes.
+    """
+    db = tmp_path / "studio.db"
+    sqlite3.connect(str(db)).close()  # no artifact table
+    _point_cli_at_db(monkeypatch, db)
+    planning = tmp_path / ".planning"
+    wo_dir = planning / "work-orders" / "wo-none"
+    wo_dir.mkdir(parents=True)
+    (wo_dir / "review-verdict.json").write_text("{}", encoding="utf-8")
+
+    rc = wo_cli._work_order_backfill_artifacts(
+        planning_root=planning, source_root=tmp_path, dream_studio_home=tmp_path
+    )
+    assert rc == 1, "0 written must not exit 0"
+    err = capsys.readouterr().err
+    assert "artifact table is absent" in err
+    assert "ds migrate activate" in err
+
+
+def test_backfill_says_so_when_there_is_nothing_to_read(tmp_path, monkeypatch):
+    """A planning root with no work-orders directory is named, not silently counted as 0."""
+    db = _db_with_table(tmp_path)
+    _point_cli_at_db(monkeypatch, db)
+    rc = wo_cli._work_order_backfill_artifacts(
+        planning_root=tmp_path / "empty", source_root=tmp_path, dream_studio_home=tmp_path
+    )
+    assert rc == 1

@@ -72,6 +72,7 @@ from .verify_persist import (
     _persist_unverified_ledger,
     _write_eval_run,
 )
+from .scenario_taxonomy import SCENARIO_TAXONOMY
 from .verify_prompts import (
     _COMPLETION_PROMPT_TEMPLATE,
     _CORRECTNESS_PROMPT_TEMPLATE,
@@ -573,6 +574,7 @@ def verify_work_order(
                 planning_root=p_root,
                 db_path=db_path,
                 project_root=_search_root,
+                conn=conn,
             )
             return {
                 "ok": True,
@@ -624,6 +626,7 @@ def verify_work_order(
                 title=wo["title"],
                 task_list=task_list_str,
                 git_diff=_falsification_diff,
+                scenario_taxonomy=SCENARIO_TAXONOMY,
             ),
         }
 
@@ -738,6 +741,7 @@ def verify_work_order(
                 planning_root=p_root,
                 db_path=db_path,
                 project_root=_search_root,
+                conn=conn,
             )
             return {
                 "ok": True,
@@ -1017,6 +1021,9 @@ def verify_work_order(
                     # ledger/verdict pair from different runs.
                     truncated=full_verdict.get("falsification_diff_truncated"),
                     verified_at=completed_at,
+                    # This runs inside the `with _connect(db_path)` opened above;
+                    # a second connection would block on its write lock.
+                    conn=conn,
                 )
         else:
             full_verdict["falsification_unavailable"] = "falsification grader produced no result"
@@ -1028,6 +1035,7 @@ def verify_work_order(
             planning_root=p_root,
             db_path=db_path,
             project_root=_search_root,
+            conn=conn,
         )
 
     return {
@@ -1112,6 +1120,7 @@ def attest_work_order(
             db_path=db_path,
             project_root=resolve_project_root(work_order_id, db_path) or source_root,
             generator="ds work-order attest",
+            conn=conn,
         )
     return {
         "ok": True,

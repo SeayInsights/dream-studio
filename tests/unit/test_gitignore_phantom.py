@@ -294,3 +294,68 @@ def test_the_gate_is_in_the_pre_push_set():
         "git cannot re-include a file under an excluded directory -- an author who does "
         "not know that will try a negation pattern and be baffled when it does nothing"
     )
+
+
+def test_an_assertion_of_absence_is_not_a_dependency():
+    """The gate refused the tests that enforce the rule it exists to support.
+
+    Every string literal under an `assert` was collected as "this source relies on the
+    path existing", which is backwards for `assert ".planning" not in str(p)` -- that
+    asserts the path is NOT used, and it is exactly how a zero-disk rule gets tested. The
+    gate failed a push over two such assertions in
+    `tests/unit/test_workflow_runner.py`, both of which pass on a fresh checkout
+    *because* the path is absent.
+
+    Narrow on purpose, so the shapes that really do break on a clean clone still fail.
+    """
+    from core.gates.gitignore_phantom import referenced_literals
+
+    def collected(source: str) -> bool:
+        return bool([t for t, _ in referenced_literals(source) if ".planning" in t])
+
+    # Asserting absence: not a dependency.
+    assert not collected('assert ".planning" not in str(p)')
+    assert not collected('assert ".planning/x" != other')
+    # Also covered when the read-call shape picks it up -- filtering only inside the
+    # Assert branch missed this one, because `exists()` is collected by a different branch
+    # that cannot see the enclosing assert.
+    assert not collected('assert not Path(".planning/x.md").exists()')
+
+    # Real dependencies: still caught, or the narrowing broke the gate.
+    assert collected('assert Path(".planning/x.md").is_file()')
+    assert collected('assert ".planning/x.md" in listing')
+    assert collected('open(".planning/x.md").read()')
+    assert collected('Path(".planning/x.md").read_text()')
+
+
+def test_asserting_a_path_absent_in_one_test_does_not_excuse_depending_on_it_in_another():
+    """THE HOLE THE ABSENCE EXEMPTION PUNCHED, ten minutes after adding it.
+
+    `_literals_asserted_absent` first returned a set of bare STRINGS, so a single
+    `assert "x" not in y` anywhere in a file exempted every genuine dependency on `"x"`
+    elsewhere in that same file -- a hole straight through a blocking gate, created by the
+    change meant to reduce its false positives. Measured: a file asserting absence in one
+    test and calling `open(".planning/x.md")` in another reported clean.
+
+    The exemption is keyed by `(literal, lineno)` now, so it covers only the assertion
+    that earned it.
+    """
+    from core.gates.gitignore_phantom import referenced_literals
+
+    source = (
+        "def test_a():\n"
+        '    assert ".planning/x.md" not in str(p)\n'
+        "\n"
+        "def test_b():\n"
+        '    assert Path(".planning/x.md").is_file()\n'
+        '    content = open(".planning/x.md").read()\n'
+    )
+    found = [(text, line) for text, line in referenced_literals(source) if ".planning" in text]
+    assert found, (
+        "the absence assertion in test_a exempted the real dependency in test_b -- one "
+        "assertion must not excuse a whole file"
+    )
+    # And it is the DEPENDENCY's lines that are reported, not the assertion's.
+    reported_lines = {line for _text, line in found}
+    assert 2 not in reported_lines, f"the absence assertion itself was reported: {found}"
+    assert reported_lines <= {5, 6}, found

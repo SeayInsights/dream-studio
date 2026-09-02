@@ -219,6 +219,17 @@ def close_work_order(
     #
     # Best-effort, like the start stamp: a close must not fail on bookkeeping. A boundary
     # that cannot be pinned keeps its open range AND says so.
+    # TWO INDEPENDENT OPERATIONS, TWO TRY BLOCKS. They shared one, so a boundary pin that
+    # raised skipped the ownership record entirely -- and the two are not related: one
+    # narrows the window, the other claims the commits inside it.
+    #
+    # AND THE FAILURES ARE REPORTED. The comment above already promised that a boundary
+    # which cannot be pinned "keeps its open range AND says so", while the code said
+    # nothing at all: `except Exception: pass`. Best-effort means the close proceeds, not
+    # that the operator is left to discover an unattributed work order later, from a
+    # verify that grades the wrong range. mark_task_done already reports its equivalent
+    # failure as `commit_ownership_error`; close was the site that stayed quiet.
+    _bookkeeping_errors: dict[str, str] = {}
     try:
         from .delivery_boundary import record_delivery_boundary_end
         from .verify_executor import resolve_project_root
@@ -228,23 +239,35 @@ def close_work_order(
             repo_root=resolve_project_root(work_order_id, db_path),
             db_path=db_path,
         )
-        # WO 80c0e61b: and claim the commits, so a later reader can tell this work order's
-        # work from a branch neighbour's. Pinning the end alone narrows the WINDOW; only
-        # per-commit ownership survives two work orders sharing one.
+    except Exception as _exc:  # noqa: BLE001 - closing must not fail on bookkeeping
+        _bookkeeping_errors["delivery_boundary_error"] = f"{type(_exc).__name__}: {_exc}"[:200]
+
+    # WO 80c0e61b: claim the commits, so a later reader can tell this work order's work
+    # from a branch neighbour's. Pinning the end alone narrows the WINDOW; only per-commit
+    # ownership survives two work orders sharing one.
+    try:
         from .range_attribution import record_commit_ownership
+        from .verify_executor import resolve_project_root
 
         record_commit_ownership(
             work_order_id,
             repo_root=resolve_project_root(work_order_id, db_path),
             db_path=db_path,
         )
-    except Exception:  # noqa: BLE001 - closing must not fail on bookkeeping
-        pass
+    except Exception as _exc:  # noqa: BLE001 - closing must not fail on bookkeeping
+        _bookkeeping_errors["commit_ownership_error"] = f"{type(_exc).__name__}: {_exc}"[:200]
 
+    # BOOKKEEPING FAILURES TRAVEL WITH EVERY EXIT, not only the successful one.
+    # `_bookkeeping_errors` was merged into the success result ~400 lines below and five
+    # returns sit in between -- including `if gate_failures and not force`, the NORMAL
+    # blocked-close outcome. So an unpinned boundary or unrecorded ownership was reported
+    # only on a close that had already succeeded: the case where it matters least. The
+    # test meant to cover this passed force=True to get past the gates, which is the one
+    # path that already worked (WO b302834b task cb64fa0a).
     with _connect(db_path) as _pre_conn:
         _pre_meta = _lookup_work_order_and_gates(_pre_conn, work_order_id)
     if not _pre_meta.get("ok"):
-        return _pre_meta
+        return {**_pre_meta, **_bookkeeping_errors}
 
     _post_gate_str = _pre_meta.get("post_gate") or ""
     _ir_in_post = "independent_review" in [
@@ -291,6 +314,7 @@ def close_work_order(
                 )
             except Exception as exc:
                 return {
+                    **_bookkeeping_errors,
                     "ok": False,
                     "error": f"Auto-verify raised an exception: {exc}",
                 }
@@ -329,7 +353,7 @@ def close_work_order(
     with _connect(db_path) as conn:
         meta = _lookup_work_order_and_gates(conn, work_order_id)
         if not meta.get("ok"):
-            return meta
+            return {**meta, **_bookkeeping_errors}
 
         project_id = meta["project_id"]
         wo_milestone_id = meta["milestone_id"]
@@ -503,6 +527,7 @@ def close_work_order(
             _ir_failures = [f for f in gate_failures if f.startswith("independent_review")]
             if _ir_failures:
                 return {
+                    **_bookkeeping_errors,
                     "ok": False,
                     "error": (
                         "Escalated work order requires a passing independent review before "
@@ -514,6 +539,7 @@ def close_work_order(
 
         if gate_failures and not force:
             return {
+                **_bookkeeping_errors,
                 "ok": False,
                 "error": "Gate check failed",
                 "failures": gate_failures,
@@ -623,6 +649,10 @@ def close_work_order(
     }
     if _symptom_checks:
         result["symptom_checks"] = _symptom_checks
+    # Bookkeeping that did not land is stated, not swallowed. An unrecorded boundary or
+    # ownership set does not block the close -- it makes a later verify grade a wider
+    # range than it should, which is a thing the operator can only act on if told.
+    result.update(_bookkeeping_errors)
 
     # WO-SEPARATE-TEST-RUNNER gap (e3a17189): a close whose review certified by
     # READING must not read the same as one a test run backs. all_tests_pass

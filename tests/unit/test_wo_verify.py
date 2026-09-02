@@ -39,6 +39,30 @@ def _patch_db(db_path: Path):
         yield
 
 
+def _stored_verdict(work_order_id: str, planning_root: Path, tmp_path: Path) -> str:
+    """The verdict as the close gate would find it, from whichever store holds it.
+
+    Tests must assert the CONTRACT ("a gate can read this work order's verdict"),
+    not the STORE. Asserting the disk file specifically is how the artifact write
+    losing a lock race stayed invisible for a month: the fallback kept the disk
+    assertion green while the authority stayed empty, and `ds project state` --
+    which reads only the authority -- saw nothing.
+    """
+    from core.work_orders.close_shared import _artifact_with_envelope
+
+    content, _envelope = _artifact_with_envelope(
+        work_order_id,
+        planning_root / "work-orders" / work_order_id,
+        "review_verdict",
+        tmp_path / "state" / "studio.db",
+    )
+    assert content is not None, (
+        f"no review_verdict for {work_order_id} in the authority OR on disk -- "
+        f"the close gate would refuse this work order"
+    )
+    return content
+
+
 def _seed(
     db_path: Path,
     *,
@@ -136,12 +160,12 @@ def test_verify_no_commits_mock_gap(tmp_path: pytest.TempPathFactory) -> None:
     assert result["ok"] is True
     assert result["passed"] is True
     assert result["spawned_work_orders"] == []
-    # verdict file must be written
-    verdict_path = planning_root / "work-orders" / work_order_id / "review-verdict.json"
-    assert verdict_path.is_file()
-    # WO-VERIFY-PROVENANCE: _persist_review_verdict wraps the verdict in a
-    # provenance envelope — unwrap before parsing the verdict body.
-    data = json.loads(unwrap(verdict_path.read_text())[0])
+    # THE VERDICT MUST BE READABLE BY THE GATE THAT CONSULTS IT -- asserted through
+    # `_artifact_with_envelope`, the same dual-store reader close_gates uses, rather
+    # than against one store. This test used to require the DISK file specifically,
+    # which passed only because the authority write was losing a lock race and
+    # falling back (WO-ARTIFACT-LOCK-FALLBACK / fd981a32). It pinned the symptom.
+    data = json.loads(_stored_verdict(work_order_id, planning_root, tmp_path))
     assert data["passed"] is True
 
 
@@ -586,12 +610,9 @@ def test_unreviewable_with_passing_ac_proceeds(
     assert result.get("forced") is False
     assert "verify_warning" in result
 
-    # Verdict file must record unreviewable_graders
-    verdict_path = planning_root / "work-orders" / work_order_id / "review-verdict.json"
-    assert verdict_path.is_file()
-    # WO-VERIFY-PROVENANCE: _persist_review_verdict wraps the verdict in a
-    # provenance envelope — unwrap before parsing the verdict body.
-    data = json.loads(unwrap(verdict_path.read_text())[0])
+    # The verdict must record unreviewable_graders -- read through the gate's reader,
+    # not from a chosen store (see _stored_verdict).
+    data = json.loads(_stored_verdict(work_order_id, planning_root, tmp_path))
     assert data["unreviewable"] is True
     assert "unreviewable_graders" in data
     assert len(data["unreviewable_graders"]) > 0

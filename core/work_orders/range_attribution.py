@@ -36,6 +36,7 @@ was never captured.
 from __future__ import annotations
 
 import json
+import re as _re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -43,6 +44,16 @@ from pathlib import Path
 _GIT_TIMEOUT = 15
 OWNERSHIP_KIND = "report"
 OWNERSHIP_KEY = "owned_commits"
+
+
+class CommitOwnershipNotRecorded(RuntimeError):
+    """Ownership could not be written. Distinct from having nothing to write.
+
+    record_commit_ownership returns the commits it recorded, so an empty list used to mean
+    both "nothing new since the last stamp" and "the write failed" -- and the caller
+    reports commits_recorded only when non-empty, so a failure looked like a quiet no-op
+    while attribution kept grading the range at full width.
+    """
 
 
 @dataclass
@@ -75,6 +86,108 @@ def _commits_in(expr: str, repo_root: Path) -> list[str]:
     if proc.returncode != 0:
         return []
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+
+
+def _subject(sha: str, repo_root: Path) -> str:
+    """One commit's subject line, or "" when it cannot be read."""
+    try:
+        proc = subprocess.run(
+            ["git", "log", "-1", "--format=%s", sha],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=_GIT_TIMEOUT,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return proc.stdout.strip() if proc.returncode == 0 else ""
+
+
+def _is_reachable(sha: str, repo_root: Path) -> bool:
+    """Is this commit an ancestor of HEAD? A squash merge makes the originals not."""
+    try:
+        proc = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", sha, "HEAD"],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=_GIT_TIMEOUT,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return proc.returncode == 0
+
+
+def resolve_squashed(sha: str, *, repo_root: Path) -> str | None:
+    """The commit on HEAD that absorbed ``sha``, when a squash merge replaced it.
+
+    GitHub's squash writes each original commit's subject into the merge commit body as a
+    ``* <subject>`` bullet. That is a RECORDED link, not an inference, so this searches for
+    the commit whose body carries this one's subject as such a bullet.
+
+    Returns None when the subject cannot be read, nothing matches, or MORE THAN ONE commit
+    matches -- an ambiguous mapping is not a mapping, and picking the first would be a
+    guess wearing an answer's clothes.
+    """
+    subject = _subject(sha, repo_root)
+    if not subject:
+        return None
+    try:
+        proc = subprocess.run(
+            [
+                "git",
+                "log",
+                "--format=%H",
+                f"--grep=^\\* {_re.escape(subject)}$",
+                "--extended-regexp",
+                "HEAD",
+            ],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=_GIT_TIMEOUT,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    hits = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    return hits[0] if len(hits) == 1 else None
+
+
+def reachable_ownership(
+    owned: list[str], *, repo_root: Path
+) -> tuple[list[str], dict[str, str], list[str]]:
+    """Split recorded ownership into what git can still see.
+
+    Returns ``(reachable, squashed_into, lost)``:
+
+    * ``reachable``  -- still ancestors of HEAD, usable as-is.
+    * ``squashed_into`` -- ``{original: squash_commit}`` where the merge commit that
+      absorbed it could be identified from its own recorded body.
+    * ``lost`` -- recorded, unreachable, and unmappable. Named rather than dropped,
+      because "we cannot see this work order's commits any more" and "this work order has
+      no neighbours" are different facts that otherwise render identically.
+    """
+    reachable: list[str] = []
+    squashed: dict[str, str] = {}
+    lost: list[str] = []
+    for sha in owned:
+        if _is_reachable(sha, repo_root):
+            reachable.append(sha)
+            continue
+        target = resolve_squashed(sha, repo_root=repo_root)
+        if target:
+            squashed[sha] = target
+        else:
+            lost.append(sha)
+    return reachable, squashed, lost
 
 
 def read_owned_commits(work_order_id: str, *, db_path: Path) -> list[str]:
@@ -125,8 +238,13 @@ def record_commit_ownership(
     if not fresh:
         return []
 
+    # RETURNING [] MEANT TWO THINGS AND ONLY ONE WAS TRUE. The caller reports
+    # `commits_recorded` when this is non-empty, so a failed write rendered exactly like
+    # "no new commits since the last stamp" -- and attribution silently kept the range
+    # wide. Best-effort is still right (a task-done must not fail on bookkeeping), but the
+    # failure has to be distinguishable from nothing-to-do.
     try:
-        set_wo_artifact(
+        stored = set_wo_artifact(
             work_order_id,
             OWNERSHIP_KIND,
             json.dumps({"commits": known + fresh}, indent=2),
@@ -135,8 +253,17 @@ def record_commit_ownership(
             generator="ds work-order (commit ownership)",
             project_root=repo_root,
         )
-    except Exception:
-        return []
+    except Exception as exc:  # noqa: BLE001 - progress must not fail on bookkeeping
+        raise CommitOwnershipNotRecorded(
+            f"{len(fresh)} commit(s) could not be recorded as owned "
+            f"({type(exc).__name__}: {exc}). Attribution will grade this range at full "
+            f"width until they are."
+        ) from exc
+    if not stored:
+        raise CommitOwnershipNotRecorded(
+            f"{len(fresh)} commit(s) could not be recorded as owned: the artifact table "
+            f"is absent on this authority."
+        )
     return fresh
 
 
@@ -175,6 +302,52 @@ def _ownership_index(db_path: Path, exclude: str) -> dict[str, str]:
     return index
 
 
+def _squash_aware_index(
+    index: dict[str, str], in_range: set[str], repo_root: Path
+) -> tuple[dict[str, str], list[str]]:
+    """Extend a neighbour's ownership through the squash that absorbed it.
+
+    Returns ``(extended_index, unmappable)``.
+
+    Without the extension a neighbour's claim silently stops applying the moment their
+    branch merges: their recorded SHAs are no longer ancestors of HEAD, so nothing in the
+    range matches them and the range reads as having no neighbours at all. Measured on
+    1db6de49, whose three commits were squashed into 14b8693c by #687.
+
+    THE SECOND RETURN VALUE EXISTS BECAUSE AN INDEPENDENT REVIEW CAUGHT THE ASYMMETRY.
+    This dropped a neighbour's unreachable-and-unmappable commits on the floor while
+    ``attribute_range`` went on to report "none of the N commits is recorded as belonging
+    to another work order" -- an absence it had not established. The same diff's
+    ``reachable_ownership`` insisted on naming exactly that distinction for THIS work
+    order's own commits. Candid on one side and silent on the other is worse than either,
+    because the silence is invisible next to the candour.
+    """
+    extended = dict(index)
+    unmappable: list[str] = []
+    for sha, wo_id in index.items():
+        if sha in in_range or _is_reachable(sha, repo_root):
+            continue
+        target = resolve_squashed(sha, repo_root=repo_root)
+        if target is None:
+            # GENUINELY UNKNOWN, so the range cannot be called clean: this sha might be
+            # inside it under a name nothing here can resolve.
+            unmappable.append(sha)
+            continue
+        if target in in_range:
+            extended.setdefault(target, wo_id)
+        # ELSE: RESOLVED, AND IT LANDED SOMEWHERE ELSE. This used to join `unmappable`,
+        # so the caveat "a neighbour's work may be graded here" fired on every verify --
+        # measured on this branch, 11 long-merged commits that could not possibly be in a
+        # 17-commit range. An alarm that is always on is one a grader learns to skip,
+        # which costs the honest signal the caveat was added for: "absence is not clean"
+        # had become "presence is never clean" (WO b302834b task 127adf0a).
+        #
+        # It is not silence either. The sha was FOLLOWED to a real commit and that commit
+        # is outside the range, which is a fact established rather than assumed -- the
+        # distinction the None branch above exists to preserve.
+    return extended, unmappable
+
+
 def attribute_range(
     work_order_id: str,
     expr: str,
@@ -193,13 +366,41 @@ def attribute_range(
     if not all_commits:
         return Attribution(own=[], note="")
 
-    mine = set(read_owned_commits(work_order_id, db_path=db_path))
-    owners = _ownership_index(db_path, work_order_id)
+    owned_raw = read_owned_commits(work_order_id, db_path=db_path)
+    in_range = set(all_commits)
+    mine = set(owned_raw)
+    lost_note = ""
+    if owned_raw:
+        _reachable, _squashed, _lost = reachable_ownership(owned_raw, repo_root=repo_root)
+        mine = set(_reachable) | set(_squashed.values())
+        if _squashed:
+            lost_note = (
+                f" {len(_squashed)} of this work order's recorded commits were squashed "
+                f"away and were followed to the merge commit that absorbed them."
+            )
+        if _lost:
+            # A SQUASH THAT CANNOT BE FOLLOWED IS NOT THE SAME AS HAVING NO NEIGHBOURS,
+            # and the two rendered identically before this. Say which.
+            lost_note += (
+                f" {len(_lost)} recorded commit(s) are no longer reachable from HEAD and "
+                f"could not be mapped to a merge commit, so this work order's own claim "
+                f"over them cannot be applied."
+            )
+    owners, _unmappable_neighbours = _squash_aware_index(
+        _ownership_index(db_path, work_order_id), in_range, repo_root
+    )
+    if _unmappable_neighbours:
+        # Say it on the neighbour side too. "No neighbour claims anything here" and "a
+        # neighbour's claim could not be located" are different facts, and only one of
+        # them means the range is clean.
+        lost_note += (
+            f" {len(_unmappable_neighbours)} commit(s) recorded by OTHER work orders are "
+            f"unreachable and unmappable, so their claims could not be applied to this "
+            f"range — a neighbour's work may be graded here."
+        )
     # This work order's own record wins: a commit both sides claim is one worked on for
     # this work order too, and dropping it would hide delivered work.
-    excluded = {
-        sha: wo for sha, wo in owners.items() if sha in set(all_commits) and sha not in mine
-    }
+    excluded = {sha: wo for sha, wo in owners.items() if sha in in_range and sha not in mine}
 
     own = [sha for sha in all_commits if sha not in excluded]
     unattributed = [sha for sha in own if sha not in mine]
@@ -217,13 +418,14 @@ def attribute_range(
                 f" {len(unattributed)} of the remaining commits have no recorded owner and "
                 f"are included on that basis alone."
             )
+        note += lost_note
     else:
         note = (
             f"Range NOT narrowed: none of the {len(all_commits)} commits in {expr} is "
             f"recorded as belonging to another work order, so all are graded. Commit "
             f"ownership is recorded going forward at each task-done; a range predating "
             f"that carries its full width, which may include a branch neighbour's work."
-        )
+        ) + lost_note
     return Attribution(own=own, excluded=excluded, note=note)
 
 

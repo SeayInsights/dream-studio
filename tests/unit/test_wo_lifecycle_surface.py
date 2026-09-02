@@ -778,6 +778,55 @@ def test_the_escape_is_a_recorded_reason_not_a_flag(db):
     assert "one line in one file" in (recorded_exception(wid, db_path=db) or "")
 
 
+def test_an_exception_that_could_not_be_recorded_is_not_reported_as_recorded(db):
+    """A RECORDED REASON THAT WAS NOT RECORDED IS WORSE THAN NO ESCAPE AT ALL.
+
+    ``record_exception`` used to return False when the artifact write no-op'd, and both
+    callers (``start_work_order`` and the close CLI) catch only ValueError -- so
+    ``--accept-structure`` printed success, stored nothing, and the next close refused
+    with the identical message. The operator's reasonable conclusion is that the flag
+    does not work.
+
+    Simulated with an authority whose artifact table is absent, which is the real
+    condition that produced the False (migration unreleased).
+    """
+    import pytest as _pytest
+
+    from core.work_orders.structural_invariants import record_exception, recorded_exception
+
+    _, _, wid = _scaffold(db, tasks=1, siblings=2)
+    conn = sqlite3.connect(str(db))
+    conn.execute("DROP TABLE IF EXISTS business_work_order_artifacts")
+    conn.commit()
+    conn.close()
+
+    reason = "One task because the whole change is one line in one file."
+    with _pytest.raises(ValueError) as exc:
+        record_exception(wid, reason, db_path=db)
+    assert "could not be recorded" in str(exc.value)
+    # And it says what to do about it rather than leaving the operator to find --force.
+    assert "refuse again" in str(exc.value)
+    assert recorded_exception(wid, db_path=db) is None
+
+
+def test_a_gate_that_cannot_read_its_data_does_not_report_clean(db):
+    """ABSENT IS NOT CLEAN. ``check_structure`` returned [] on a database error -- no
+    violations -- so a broken authority silently PASSED the gate, on exactly the work
+    orders whose data is broken. It must block and say it could not evaluate."""
+    from core.work_orders.structural_invariants import check_structure
+
+    _, _, wid = _scaffold(db, tasks=1, siblings=2)
+    conn = sqlite3.connect(str(db))
+    conn.execute("DROP TABLE business_tasks")
+    conn.commit()
+    conn.close()
+
+    violations = check_structure(wid, db_path=db)
+    assert violations, "a gate that cannot count tasks has not found the WO clean"
+    assert violations[0].scope == "unevaluated"
+    assert "BLOCKS rather than passes" in violations[0].message
+
+
 def _complete_all_tasks(db: Path, work_order_id: str) -> None:
     """Satisfy tasks_done so the structural gate is what the close is judged on.
 
@@ -1537,6 +1586,137 @@ def test_carry_over_closes_the_original_at_its_true_scope(db, tmp_path, monkeypa
     assert "tasks_done" not in failures, failures
 
 
+def test_a_carry_over_whose_split_was_not_recorded_does_not_report_success(
+    db, tmp_path, monkeypatch
+):
+    """THE RECORD IS LOAD-BEARING, SO ITS FAILURE CANNOT BE SILENT.
+
+    ``_check_tasks_done`` reads the carry-over artifact to exempt the carried tasks.
+    By the time it is written the tasks are ALREADY gone -- task.deleted is emitted and
+    the new work order exists -- so reporting ok:True on a failed write leaves the
+    original PERMANENTLY UNCLOSABLE while telling the operator the carry succeeded. Both
+    ``set_wo_artifact`` results were being discarded here, which is the same discarded
+    return that sent 154 review verdicts to disk.
+
+    The failure must name where the work went, because the tasks are not recoverable
+    from the error alone.
+    """
+    from core.work_orders.carry_over import carry_over
+
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "events"))
+    _, _, wid = _scaffold(db, tasks=3, siblings=2)
+    carry = [t[0] for t in _tasks_of(db, wid)[1:]]
+
+    conn = sqlite3.connect(str(db))
+    conn.execute("DROP TABLE IF EXISTS business_work_order_artifacts")
+    conn.commit()
+    conn.close()
+
+    result = carry_over(
+        work_order_id=wid,
+        task_ids=carry,
+        reason="These two turned out to belong to the projection work, not this one.",
+        title="Projection remainder",
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+    )
+    assert result["ok"] is False, "an unrecorded split must not be reported as a carry"
+    # Asserted as a PROPERTY, not a phrase: the message must say the record did not land
+    # and why. Pinning exact wording made this fail when the advice was corrected to stop
+    # prescribing a re-run that cannot work, which is a better message, not a regression.
+    assert "carry-over record" in result["error"], result["error"]
+    assert "refuse to close" in result["error"], result["error"]
+    # The operator has to be able to find the tasks that already moved.
+    assert result.get("carried_to"), "the error must name where the work went"
+    assert result.get("moved"), "the error must list what was moved"
+
+
+def test_a_failed_carry_over_does_not_prescribe_a_rerun_that_cannot_work(db, tmp_path, monkeypatch):
+    """THE ADVICE HAD TO BE FOLLOWABLE, AND IT WAS NOT.
+
+    The failure message said "Re-run this carry-over once the authority is writable; it is
+    idempotent." It is not. By the time it is printed, `_emit_task_deleted` has fired AND
+    called `sync_tick()`, so the tasks read as `deleted` and `_open_tasks` filters them
+    out -- a re-run answers "Not open tasks on this work order". If the projection has not
+    ticked, a re-run instead creates a SECOND work order and duplicates every task.
+
+    So the operator follows the instruction into a dead end with the work already moved.
+    An independent review found it (WO b302834b task e3df6209).
+    """
+    from core.work_orders.carry_over import carry_over
+
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "events"))
+    _, _, wid = _scaffold(db, tasks=3, siblings=2)
+    carry = [t[0] for t in _tasks_of(db, wid)[1:]]
+
+    conn = sqlite3.connect(str(db))
+    conn.execute("DROP TABLE IF EXISTS business_work_order_artifacts")
+    conn.commit()
+    conn.close()
+
+    result = carry_over(
+        work_order_id=wid,
+        task_ids=carry,
+        reason="These two turned out to belong to the projection work, not this one.",
+        title="Projection remainder",
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+    )
+    assert result["ok"] is False
+    error = result["error"]
+    # The retracted claim must be gone, not reworded.
+    assert "idempotent" not in error, error
+    assert "DO NOT re-run" in error, error
+    # And it names a route that exists: the tasks are on the new work order, and the
+    # original closes through --accept-structure or by finishing what remains.
+    assert result["carried_to"] in error
+    assert "--accept-structure" in error, error
+    assert result.get("recoverable_by_rerun") is False
+
+
+def test_a_half_recorded_carry_over_does_not_blame_a_table_that_exists(db, tmp_path, monkeypatch):
+    """Which side landed changes both the diagnosis and the advice.
+
+    The `not (stored_from and stored_to)` branch reported "the artifact table is absent"
+    even when the write to the ORIGINAL had succeeded -- in which case the table
+    demonstrably exists, the close gate can read the record, and the original IS closable,
+    while the operator was told the carry had failed outright.
+    """
+    from core.work_orders import carry_over as carry_module
+
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "events"))
+    _, _, wid = _scaffold(db, tasks=3, siblings=2)
+    carry = [t[0] for t in _tasks_of(db, wid)[1:]]
+
+    # First write lands, second does not: the half-recorded split.
+    calls = {"n": 0}
+
+    def _half(*args, **kwargs):
+        calls["n"] += 1
+        return calls["n"] == 1
+
+    monkeypatch.setattr("core.work_orders.artifacts.set_wo_artifact", _half)
+
+    result = carry_module.carry_over(
+        work_order_id=wid,
+        task_ids=carry,
+        reason="These two turned out to belong to the projection work, not this one.",
+        title="Projection remainder",
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+    )
+    assert result["ok"] is False
+    error = result["error"]
+    assert "table is absent" not in error, error
+    assert "predates the artifact table" not in error, error
+    # It says the original's close is NOT blocked, which is the fact that changed.
+    assert "DID land" in error, error
+    assert "not blocked" in error, error
+
+
 def test_carry_over_is_not_recorded_as_a_gate_bypass(db, tmp_path, monkeypatch):
     """THE WHOLE POINT OF BUILDING THIS RATHER THAN USING --force.
 
@@ -1946,3 +2126,33 @@ def test_a_database_with_no_canonical_events_is_not_judged(db, tmp_path):
     conn.close()
 
     assert check_structure(wid, db_path=db) == []
+
+
+def test_the_spool_guard_names_the_test_that_polluted():
+    """WO efe2ce9d task 1. The guard aborts the whole session when a test writes to the
+    operator's real ~/.dream-studio/events — correctly, that is its job. But it said only
+    "Test modified real ~/.dream-studio/events", and a session that ends at test 2,400 of
+    5,928 with no identifier leaves the reader to bisect by hand. I nearly did.
+
+    It is an autouse per-test fixture, so its teardown already KNOWS which test polluted;
+    the identifier was simply not in the message.
+
+    Asserted against the source rather than by polluting the spool for real: a test that
+    proves this by writing to the operator's events directory would be the very thing the
+    guard exists to stop. Verified once out-of-band with a throwaway probe, which produced
+    'FATAL: tests/unit/test_zz_guard_probe.py::test_this_one_pollutes_the_real_spool
+    modified real ~/.dream-studio/events'.
+    """
+    conftest = Path(__file__).resolve().parents[1] / "conftest.py"
+    src = conftest.read_text(encoding="utf-8")
+
+    assert (
+        "def guard_real_homedir(tmp_path, monkeypatch, request):" in src
+    ), "the guard cannot name the test without the request fixture"
+    for surface in ("events", "integrations"):
+        marker = f"modified real ~/.dream-studio/{surface}"
+        line = next((ln for ln in src.splitlines() if marker in ln), "")
+        assert line, f"no guard message for {surface}"
+        assert (
+            "request.node.nodeid" in line
+        ), f"the {surface} guard aborts the session without naming the test that did it"

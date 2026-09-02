@@ -1197,3 +1197,407 @@ def test_recording_ownership_never_breaks_the_work(db, tmp_path):
 
     assert record_commit_ownership("wo-mine", repo_root=None, db_path=db) == []
     assert record_commit_ownership("wo-mine", repo_root=tmp_path / "nope", db_path=db) == []
+
+
+def test_close_reports_bookkeeping_that_did_not_land(db, tmp_path, monkeypatch):
+    """BEST-EFFORT MEANS THE CLOSE PROCEEDS, NOT THAT NOBODY IS TOLD.
+
+    Both the boundary pin and the ownership record sat in ONE ``except Exception: pass``.
+    Two consequences, both silent: a pin that raised skipped the ownership record
+    entirely (they are unrelated operations), and neither failure reached the operator --
+    while the comment directly above claimed a boundary that cannot be pinned "keeps its
+    open range AND says so".
+
+    It matters because the cost is deferred and invisible: an unrecorded boundary makes
+    the NEXT verify grade a wider range than it should. ``mark_task_done`` already
+    reports its equivalent as ``commit_ownership_error``; close was the quiet one.
+    """
+    from core.work_orders.close import close_work_order
+
+    def _explode(*_a, **_kw):
+        raise RuntimeError("authority unwritable")
+
+    monkeypatch.setattr("core.work_orders.delivery_boundary.record_delivery_boundary_end", _explode)
+    monkeypatch.setattr("core.work_orders.range_attribution.record_commit_ownership", _explode)
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    wid = _wo_with_boundary(db, repo, "core/")
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "events"))
+    # force=True only to get PAST the gates to the code under test -- a hermetic WO has
+    # no verdict and no affirmation, and this test is about the bookkeeping report, not
+    # about the gates. It is not a claim that forcing is acceptable in real use.
+    result = close_work_order(
+        work_order_id=wid,
+        source_root=tmp_path,
+        dream_studio_home=tmp_path,
+        skip_verify=True,
+        force=True,
+    )
+    assert result.get("ok") is True, f"bookkeeping must not fail the close: {result}"
+    # Each is reported separately, which is also what proves they no longer share a try:
+    # under one block the second never ran and could not have an error to report.
+    assert "delivery_boundary_error" in result, result
+    assert "commit_ownership_error" in result, result
+
+
+def test_ownership_that_could_not_be_stored_is_not_reported_as_recorded(db, tmp_path):
+    """BEST-EFFORT IS ABOUT THE REPO, NOT ABOUT THE WRITE.
+
+    Missing repo, no new commits: nothing to record, and ``[]`` is the honest answer --
+    the test above pins that. A FAILED WRITE is different. ``[]`` there is
+    indistinguishable from "this task produced no commits", so the shas are silently
+    dropped and the attributed range stays wide forever, while the caller believes
+    ownership was captured.
+
+    An unrecorded commit keeps a range wide rather than wrong, which is why this does not
+    fail the task -- but the caller has to be able to tell it happened.
+    """
+    import sqlite3
+
+    import pytest as _pytest
+
+    from core.work_orders.range_attribution import (
+        CommitOwnershipNotRecorded,
+        record_commit_ownership,
+    )
+
+    root, shas = _repo(tmp_path)
+    conn = sqlite3.connect(str(db))
+    conn.execute("DROP TABLE IF EXISTS business_work_order_artifacts")
+    conn.commit()
+    conn.close()
+
+    with _pytest.raises(CommitOwnershipNotRecorded):
+        record_commit_ownership("wo-mine", repo_root=root, db_path=db, since=shas[0])
+
+
+# -- WO e439f287: ownership has to survive the merge that makes the work permanent ---
+
+
+def _squash_repo(tmp_path: Path):
+    """A repo where two commits were squashed into one, GitHub-style.
+
+    The squash commit's body carries each original subject as a ``* `` bullet, which is
+    what makes the mapping a RECORDED link rather than an inference.
+    """
+    import subprocess
+
+    root = tmp_path / "squashrepo"
+    root.mkdir()
+
+    def run(*a, **kw):
+        return subprocess.run(
+            list(a),
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            **kw,
+        )
+
+    run("git", "init", "-q")
+    run("git", "config", "user.email", "t@example.com")
+    run("git", "config", "user.name", "T")
+    (root / "base.txt").write_text("base", encoding="utf-8")
+    run("git", "add", "-A")
+    run("git", "commit", "-q", "-m", "base")
+
+    # Two commits that will be squashed away.
+    originals = []
+    for subject in ("feat: the first thing", "fix: the second thing"):
+        (root / f"{subject[:8].strip()}.txt").write_text(subject, encoding="utf-8")
+        run("git", "add", "-A")
+        run("git", "commit", "-q", "-m", subject)
+        originals.append(run("git", "rev-parse", "HEAD").stdout.strip())
+
+    # Rewind and land them as ONE commit, the way a squash merge does.
+    run("git", "reset", "-q", "--hard", "HEAD~2")
+    (root / "squashed.txt").write_text("both", encoding="utf-8")
+    run("git", "add", "-A")
+    body = "chore: land both (#42)\n\n* feat: the first thing\n\n* fix: the second thing\n"
+    run("git", "commit", "-q", "-m", body)
+    squash = run("git", "rev-parse", "HEAD").stdout.strip()
+    return root, originals, squash
+
+
+def test_ownership_survives_a_squash_merge(db, tmp_path):
+    """THE LIMIT THIS FIXES, found while cleaning up after the attribution work shipped.
+
+    record_commit_ownership records BRANCH shas, and this repo squash-merges every PR. So
+    the moment a branch lands, the commits a work order claimed stop being ancestors of
+    HEAD: `git merge-base --is-ancestor 4a5221cf main` returns non-zero because #687
+    squashed 18 commits into 14b8693c. Attribution was therefore correct for in-flight work
+    and inert for merged work — half the value, and silently so.
+
+    GitHub's squash writes each original subject into the merge body as a ``* `` bullet.
+    That is a recorded link, so the mapping is read rather than guessed.
+    """
+    from core.work_orders.range_attribution import reachable_ownership, resolve_squashed
+
+    root, originals, squash = _squash_repo(tmp_path)
+
+    assert resolve_squashed(originals[0], repo_root=root) == squash
+    reachable, squashed_into, lost = reachable_ownership(originals, repo_root=root)
+
+    assert reachable == [], "the originals should not be reachable after a squash"
+    assert set(squashed_into.values()) == {squash}
+    assert lost == [], f"a mappable commit was reported lost: {lost}"
+
+
+def test_a_neighbours_claim_still_applies_after_their_branch_merges(db, tmp_path):
+    """The consequence that actually matters. Exclusion reads another work order's recorded
+    ownership; if their shas stop resolving the moment they merge, their claim evaporates
+    and the range reads as having no neighbours — indistinguishable from a range that
+    genuinely has none."""
+    import json as _json
+
+    from core.work_orders.artifacts import set_wo_artifact
+    from core.work_orders.range_attribution import (
+        OWNERSHIP_KEY,
+        OWNERSHIP_KIND,
+        attribute_range,
+    )
+
+    root, originals, squash = _squash_repo(tmp_path)
+    set_wo_artifact(
+        "wo-neighbour",
+        OWNERSHIP_KIND,
+        _json.dumps({"commits": originals}),
+        instance_key=OWNERSHIP_KEY,
+        db_path=db,
+    )
+
+    result = attribute_range("wo-mine", f"{squash}~1..{squash}", repo_root=root, db_path=db)
+
+    assert squash in result.excluded, (
+        "the neighbour's claim did not follow their commits through the squash, so their "
+        "work would be graded against this work order"
+    )
+    assert result.excluded[squash] == "wo-neighbour"
+
+
+def test_unreachable_owned_commits_are_reported(db, tmp_path):
+    """A squash that cannot be followed is NOT the same as having no neighbours, and the
+    two rendered identically before this. Silent degradation to 'not narrowed' is the
+    absent-is-not-clean shape again: nothing looked wrong, and the reason was that nothing
+    could be seen."""
+    import json as _json
+
+    from core.work_orders.artifacts import set_wo_artifact
+    from core.work_orders.range_attribution import (
+        OWNERSHIP_KEY,
+        OWNERSHIP_KIND,
+        attribute_range,
+    )
+
+    root, originals, squash = _squash_repo(tmp_path)
+    # A recorded sha that never existed here: unreachable AND unmappable.
+    set_wo_artifact(
+        "wo-mine",
+        OWNERSHIP_KIND,
+        _json.dumps({"commits": ["0" * 40]}),
+        instance_key=OWNERSHIP_KEY,
+        db_path=db,
+    )
+
+    result = attribute_range("wo-mine", f"{squash}~1..{squash}", repo_root=root, db_path=db)
+
+    assert "no longer reachable" in result.note, result.note
+    assert "could not be mapped" in result.note
+
+
+def test_an_ambiguous_squash_is_not_resolved(db, tmp_path):
+    """Two merge commits carrying the same subject bullet cannot both be the answer.
+    Picking the first would be a guess wearing an answer's clothes, so it returns None and
+    the commit is reported unmappable instead."""
+    import subprocess
+
+    from core.work_orders.range_attribution import resolve_squashed
+
+    root, originals, _squash = _squash_repo(tmp_path)
+    # A SECOND commit claiming the same original subject.
+    (root / "again.txt").write_text("again", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=str(root), capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-q", "-m", "chore: land both again (#43)\n\n* feat: the first thing\n"],
+        cwd=str(root),
+        capture_output=True,
+    )
+
+    assert resolve_squashed(originals[0], repo_root=root) is None
+
+
+def test_an_unmappable_neighbour_claim_is_reported_too(db, tmp_path):
+    """AN INDEPENDENT REVIEW CAUGHT THIS ASYMMETRY IN THE SAME DIFF THAT INTRODUCED IT.
+
+    reachable_ownership names unreachable-and-unmappable commits for THIS work order's own
+    side. _squash_aware_index dropped a NEIGHBOUR's on the floor, and attribute_range then
+    reported "none of the N commits is recorded as belonging to another work order" — an
+    absence it had not established.
+
+    Candid on one side and silent on the other is worse than either, because the silence
+    is invisible next to the candour: a reader who sees one caveat reasonably assumes the
+    other case would also have been named.
+    """
+    import json as _json
+
+    from core.work_orders.artifacts import set_wo_artifact
+    from core.work_orders.range_attribution import (
+        OWNERSHIP_KEY,
+        OWNERSHIP_KIND,
+        attribute_range,
+    )
+
+    root, shas = _repo(tmp_path)
+    # A neighbour claiming a commit that never existed in this repo: unreachable AND
+    # unmappable, so its claim cannot be applied to the range.
+    set_wo_artifact(
+        "wo-neighbour",
+        OWNERSHIP_KIND,
+        _json.dumps({"commits": ["f" * 40]}),
+        instance_key=OWNERSHIP_KEY,
+        db_path=db,
+    )
+
+    result = attribute_range("wo-mine", f"{shas[0]}..{shas[5]}", repo_root=root, db_path=db)
+
+    assert "recorded by OTHER work orders" in result.note, result.note
+    assert (
+        "may be graded here" in result.note
+    ), "the range was reported as having no neighbour claims when one could not be located"
+
+
+def test_a_gate_blocked_close_still_reports_bookkeeping_that_did_not_land(
+    db, tmp_path, monkeypatch
+):
+    """THE PATH THAT ACTUALLY HAPPENS, and the one the first test could not reach.
+
+    `_bookkeeping_errors` was merged into the success result ~400 lines below where it is
+    populated, and five returns sit in between -- including `if gate_failures and not
+    force`, which is the NORMAL blocked-close outcome. So an unpinned boundary or
+    unrecorded ownership reached the operator only on a close that had already succeeded.
+
+    The test above passes `force=True` "to get past the gates", which is precisely the one
+    path that already worked -- so it confirmed the behaviour while the common case stayed
+    silent. This one takes the gate failure instead (WO b302834b task cb64fa0a).
+    """
+    from core.work_orders.close import close_work_order
+
+    def _explode(*_a, **_kw):
+        raise RuntimeError("authority unwritable")
+
+    monkeypatch.setattr("core.work_orders.delivery_boundary.record_delivery_boundary_end", _explode)
+    monkeypatch.setattr("core.work_orders.range_attribution.record_commit_ownership", _explode)
+
+    repo, _head = _git_repo(tmp_path / "repo")
+    wid = _wo_with_boundary(db, repo, "core/")
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "events"))
+
+    # NO force: a hermetic work order has no verdict and no affirmation, so the gates
+    # refuse -- which is the return that was dropping the bookkeeping.
+    result = close_work_order(
+        work_order_id=wid, source_root=tmp_path, dream_studio_home=tmp_path, skip_verify=True
+    )
+
+    assert result.get("ok") is False, "expected the gates to refuse; this test needs that path"
+    assert result.get("failures"), result
+    assert (
+        "delivery_boundary_error" in result
+    ), f"a blocked close discarded the boundary failure: {sorted(result)}"
+    assert "commit_ownership_error" in result, sorted(result)
+
+
+def test_a_neighbour_that_landed_elsewhere_is_not_reported_as_unmappable(db, tmp_path):
+    """ABSENCE IS NOT CLEAN, BUT PRESENCE IS NOT ALWAYS DIRTY EITHER.
+
+    `_squash_aware_index` put two different facts in one bucket: a neighbour sha it could
+    not map at all, and one it FOLLOWED to a squash commit that turned out to be outside
+    this range. The second is accounted for -- the commit was located and it is not here --
+    but it fired the same caveat, "a neighbour's work may be graded here".
+
+    Measured on this branch: 11 long-merged commits that could not possibly appear in a
+    17-commit range, so the caveat was on for every verify. An alarm that is always on is
+    one a grader learns to skip, which costs the honest signal it was added for
+    (WO `b302834b` task `127adf0a`).
+
+    The unmappable case must still be reported, or the fix trades a false alarm for
+    silence -- so both halves are asserted here.
+    """
+    from core.work_orders.range_attribution import _squash_aware_index
+
+    root, shas = _repo(tmp_path)
+    in_range = {shas[-1]}
+
+    # A sha that is not reachable and cannot be resolved: genuinely unknown.
+    unknown = "0" * 40
+    _extended, unmappable = _squash_aware_index({unknown: "wo-neighbour"}, in_range, root)
+    assert unmappable == [unknown], (
+        "an unresolvable neighbour sha must still be reported; silence here would trade a "
+        "false alarm for the absence-is-not-clean defect"
+    )
+
+    # A sha that IS reachable is in the history and needs no caveat at all.
+    _extended2, unmappable2 = _squash_aware_index({shas[0]: "wo-neighbour"}, in_range, root)
+    assert unmappable2 == [], f"a reachable neighbour sha was reported as unmappable: {unmappable2}"
+
+    # THE BRANCH THE FIX ACTUALLY CHANGED, which the two assertions above do not reach:
+    # a sha that is unreachable but DOES resolve, to a commit outside the range. The first
+    # version of this test exercised only `target is None` and the reachable-continue, so
+    # it passed against the pre-fix code -- a re-review ran both implementations on this
+    # fixture and got the same answer from each.
+    #
+    # `resolve_squashed` is patched rather than fabricating a squash merge, because what is
+    # under test is what `_squash_aware_index` DOES with a resolved-but-out-of-range
+    # target, not whether git can be made to produce one (the squash-merge path has its own
+    # tests below).
+    from unittest.mock import patch as _patch
+
+    outside = shas[0]  # reachable, and deliberately NOT in in_range
+    with (
+        _patch("core.work_orders.range_attribution.resolve_squashed", return_value=outside),
+        _patch("core.work_orders.range_attribution._is_reachable", return_value=False),
+    ):
+        extended3, unmappable3 = _squash_aware_index({unknown: "wo-neighbour"}, in_range, root)
+    assert unmappable3 == [], (
+        "a neighbour sha that was FOLLOWED to a commit outside this range is accounted "
+        "for, not unknown -- reporting it fires the caveat on every verify, and an alarm "
+        f"that is always on is one a grader learns to skip. Got: {unmappable3}"
+    )
+    assert (
+        outside not in extended3
+    ), "a target outside the range must not be added to the ownership index either"
+
+
+def test_the_live_attribution_does_not_carry_a_standing_neighbour_caveat(db):
+    """The end-to-end property, on the real repository.
+
+    Asserted against the actual history rather than a fixture, because the false alarm was
+    only visible at real scale: 45 recorded shas across 8 work orders, most of them merged
+    long before the range under test existed.
+    """
+    import os
+    from dataclasses import asdict, is_dataclass
+    from pathlib import Path as _Path
+
+    from core.work_orders.range_attribution import attribute_range
+
+    authority = _Path(os.path.expanduser("~/.dream-studio/state/studio.db"))
+    if not authority.is_file():
+        pytest.skip("no live authority on this machine")
+
+    repo_root = _Path(__file__).resolve().parents[2]
+    result = attribute_range(
+        "e4e85949-7719-4e83-8b3a-8df8c897d561",
+        "origin/main...HEAD",
+        repo_root=repo_root,
+        db_path=authority,
+    )
+    fields = asdict(result) if is_dataclass(result) else vars(result)
+    assert "may be graded here" not in str(fields), (
+        "the neighbour caveat is firing on commits that cannot be in this range; a "
+        "caveat that is always present is one a grader learns to ignore"
+    )
