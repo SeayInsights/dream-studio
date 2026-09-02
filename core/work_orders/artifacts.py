@@ -10,6 +10,7 @@ fall back to the legacy ``.planning`` files during the transition.
 from __future__ import annotations
 
 import sqlite3
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -53,6 +54,82 @@ def _resolve_db(db_path: Path | None) -> Path:
     return db_path or (paths.state_dir() / "studio.db")
 
 
+# A write that loses a lock race should wait and try again, not degrade. These are small
+# because an artifact write is one statement; a caller stuck here for a whole second is
+# already in trouble and should hear about it rather than be kept waiting.
+_LOCK_ATTEMPTS = 4
+_LOCK_BACKOFF_SECONDS = 0.15
+
+
+def _is_stale_schema(exc: sqlite3.OperationalError) -> bool:
+    """Is this a schema older than this write, or a real fault?
+
+    SQLite reports both through OperationalError. Reading False as "table absent" when it
+    was actually "database is locked" is what sent 154 review verdicts to disk in August,
+    so this is deliberately narrow.
+
+    TWO shapes are the same fact. "no such table" is migration 144 unreleased. A missing
+    COLUMN is 144 released and 152 not -- a real intermediate state on a live authority,
+    and one that raising would turn into a crash mid-verify on a database that merely
+    needs ``ds migrate activate``. Narrowing to "no such table" alone was a regression,
+    caught by this module's own test running the real 144-only DDL.
+
+    SQLite words the column case two ways and an INSERT gets the SECOND one: "no such
+    column: x" from an expression, "table t has no column named x" from a column list.
+    Matching only the first read as a fault and raised -- which is why this predicate is
+    tested against the actual migration files rather than a hand-built table.
+    """
+    text = str(exc).lower()
+    return "no such table" in text or "no such column" in text or "has no column named" in text
+
+
+def _is_locked(exc: sqlite3.OperationalError) -> bool:
+    text = str(exc).lower()
+    return "locked" in text or "busy" in text
+
+
+FALLBACK_RULE = "artifact_disk_fallback"
+
+
+def record_artifact_fallback(work_order_id: str, kind: str, *, reason: str) -> None:
+    """Count a disk fallback so somebody can ask how often it fires.
+
+    THIS IS THE PART THAT WAS MISSING, and it is why the lock bug survived a month. The
+    fallback itself is legitimate -- an authority whose artifact migration is unreleased
+    has nowhere else to put a verdict. What was not legitimate is that it fired 154 times
+    without leaving a single countable trace, so "are artifacts reaching the authority?"
+    had no answer short of comparing a directory listing against a table by hand.
+
+    Recorded through ``record_observation`` (HOOK_EXECUTION_LOGGED via trigger_context),
+    which ``observations_report`` already groups by rule -- so the count surface exists
+    for free and no new event type or migration is needed. Off-label in one respect: this
+    is a library write, not a hook, so ``hook_name``/``hook_type`` name the write site
+    rather than a hook. That is a smaller cost than a second event registry to keep in
+    sync, and the drift between those two registries has already broken this repo once.
+
+    Best-effort by construction. An artifact that reached disk is stored; failing the
+    write because its telemetry failed would trade a countable degradation for a real
+    loss.
+    """
+    try:
+        from runtime.lib.enforcement import record_observation
+
+        record_observation(
+            hook_name="artifact_write",
+            hook_type="library",
+            rule=FALLBACK_RULE,
+            reason=(
+                f"artifact {kind} for work order {work_order_id} was written to .planning "
+                f"instead of the authority: {reason}. Gates and `ds project state` read the "
+                f"authority, so this artifact is invisible to them. Recover with "
+                f"`ds work-order backfill-artifacts`."
+            ),
+            tier="warn",
+        )
+    except Exception:  # noqa: BLE001 - telemetry must never cost a stored artifact
+        pass
+
+
 def set_wo_artifact(
     work_order_id: str,
     kind: str,
@@ -62,8 +139,16 @@ def set_wo_artifact(
     db_path: Path | None = None,
     generator: str | None = None,
     project_root: Path | None = None,
+    conn: sqlite3.Connection | None = None,
 ) -> bool:
     """Upsert an artifact. Returns False (no-op) when the table is absent.
+
+    Pass ``conn`` to write through a connection the CALLER already holds. Opening a second
+    connection to a file whose outer transaction is still open blocks on the write lock
+    until it times out -- measured 2026-09-02 as the reason 154 of August's review verdicts
+    landed on disk instead of in the authority, because all four _persist_review_verdict
+    call sites run inside an open `with _connect(db_path)`. When ``conn`` is given the write
+    joins that transaction and its commit, so there is no second writer to lose to.
 
     Singleton artifacts use the default instance_key=''; multi-instance kinds
     (e.g. ``eval``) pass instance_key (e.g. the eval_type) so each coexists.
@@ -81,31 +166,64 @@ def set_wo_artifact(
 
         content = wrap(content, generator=generator, head_commit_sha=git_head_sha(project_root))
     now = datetime.now(UTC).isoformat()
+    borrowed = conn is not None
+    if not borrowed:
+        try:
+            # A busy timeout is the cheap half of the lock fix: SQLite waits for the holder
+            # instead of failing instantly. It is not the whole fix -- a caller holding an
+            # open transaction for the length of a verify outlasts any timeout, which is
+            # what `conn` is for.
+            conn = sqlite3.connect(str(_resolve_db(db_path)), timeout=2.0)
+        except sqlite3.Error:
+            return False
     try:
-        conn = sqlite3.connect(str(_resolve_db(db_path)))
-    except sqlite3.Error:
-        return False
-    try:
-        conn.execute(
-            f"INSERT INTO {_TABLE}"
-            " (work_order_id, kind, instance_key, content, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, ?, ?)"
-            " ON CONFLICT(work_order_id, kind, instance_key) DO UPDATE SET"
-            " content=excluded.content, updated_at=excluded.updated_at",
-            (work_order_id, kind, instance_key, content, now, now),
-        )
-        conn.commit()
+        for attempt in range(_LOCK_ATTEMPTS):
+            try:
+                conn.execute(
+                    f"INSERT INTO {_TABLE}"
+                    " (work_order_id, kind, instance_key, content, created_at, updated_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?)"
+                    " ON CONFLICT(work_order_id, kind, instance_key) DO UPDATE SET"
+                    " content=excluded.content, updated_at=excluded.updated_at",
+                    (work_order_id, kind, instance_key, content, now, now),
+                )
+                # A borrowed connection's transaction belongs to the caller; committing
+                # it here would end a transaction still being used around us.
+                if not borrowed:
+                    conn.commit()
+                return True
+            except sqlite3.OperationalError as exc:
+                # Retry a lock; anything else is not a race and gets handled below.
+                if not _is_locked(exc) or attempt == _LOCK_ATTEMPTS - 1:
+                    raise
+                time.sleep(_LOCK_BACKOFF_SECONDS * (attempt + 1))
         return True
-    except sqlite3.OperationalError:
-        return False  # table absent (unreleased migration on the live authority DB)
-    except sqlite3.IntegrityError:
+    except sqlite3.OperationalError as exc:
+        # FALSE MEANS ONE THING: this schema predates the write. It used to mean that OR any
+        # other OperationalError, and "database is locked" is the one that mattered.
+        #
+        # MEASURED 2026-09-02: of August's review verdicts, 154 went to disk and 23 to the
+        # authority. All four _persist_review_verdict call sites run INSIDE an open
+        # `with _connect(db_path)` block, so this function opened a second connection to a
+        # file the outer transaction held, got "database is locked", returned False, and
+        # the caller read that as "the artifact table does not exist" and wrote to disk.
+        # mutations.py already carries this exact lesson for the delivery-boundary stamp;
+        # the verdict write never got the same treatment.
+        if _is_stale_schema(exc):
+            return False
+        raise
+    except sqlite3.IntegrityError as exc:
         # The table exists but its ``kind`` CHECK does not yet accept this kind — a stale
         # schema from an unreleased migration (e.g. impact_affirmation before migration 154
-        # is released). Same no-op contract as table-absent: never raise a raw CHECK error
-        # at the caller. Once the backing migration is released, the write succeeds.
-        return False
+        # is released). That is the documented no-op. A FOREIGN KEY failure lands in the
+        # same exception class and is NOT that: it means the work order does not exist, and
+        # swallowing it would report a stored artifact that no reader can ever find.
+        if "CHECK constraint" in str(exc):
+            return False
+        raise
     finally:
-        conn.close()
+        if not borrowed:
+            conn.close()
 
 
 def get_wo_artifact(
