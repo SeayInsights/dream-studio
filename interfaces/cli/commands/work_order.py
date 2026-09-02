@@ -22,6 +22,7 @@ from interfaces.cli.commands.work_order_lifecycle import (
 )
 from interfaces.cli.commands.work_order_query import (
     _work_order_artifact,
+    _work_order_backfill_artifacts,
     _work_order_executor,
     _work_order_merge_check,
     _work_order_list,
@@ -58,5 +59,6 @@ __all__ = [
     "_work_order_executor",
     "_work_order_merge_check",
     "_work_order_artifact",
+    "_work_order_backfill_artifacts",
     "_work_order_packet",
 ]
