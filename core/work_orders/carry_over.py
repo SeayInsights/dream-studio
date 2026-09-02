@@ -77,6 +77,45 @@ def _open_tasks(conn: sqlite3.Connection, work_order_id: str) -> dict[str, sqlit
     }
 
 
+def _recovery_advice(work_order_id: str, new_wo_id: str, *, stored_from: bool, detail: str) -> str:
+    """What the operator can actually do, once the tasks have already moved.
+
+    THE OLD ADVICE COULD NOT WORK. It said "Re-run this carry-over once the authority is
+    writable; it is idempotent." It is not idempotent: by this point ``_emit_task_deleted``
+    has fired AND called ``sync_tick()``, so the tasks read as ``deleted`` and
+    ``_open_tasks`` filters them out -- a re-run answers "Not open tasks on this work
+    order". And if the projection has not ticked yet, a re-run creates a SECOND work order
+    and duplicates every task. Either way the instruction leads into a dead end with the
+    work already gone. An independent review found it (WO b302834b task e3df6209).
+
+    So the advice names the two states that actually exist and the command for each. It
+    does not offer a re-run.
+    """
+    head = (
+        f"The tasks were moved to {new_wo_id} but {detail}. The close gate reads the "
+        f"carry-over record to exempt them, so {work_order_id} would refuse to close with "
+        f"the work already gone."
+    )
+    if stored_from:
+        return (
+            f"{head} The record DID land on {work_order_id}, so its close is not blocked "
+            f"-- what is missing is the back-link on {new_wo_id}, which leaves that work "
+            f"order without provenance. Record it with "
+            f'`ds work-order add-task {new_wo_id} --title "..."` context, or re-run once '
+            f"the authority accepts writes and pass the same task ids; the original side "
+            f"is an upsert and will not duplicate."
+        )
+    return (
+        f"{head} DO NOT re-run this command: the tasks are already deleted from "
+        f"{work_order_id}, so a re-run either reports them as not-open or creates a second "
+        f"work order and duplicates them. The tasks exist on {new_wo_id} and that work "
+        f"order is usable now. To close {work_order_id}, either finish the remaining tasks "
+        f"and let tasks_done pass on its own, or record why with "
+        f'`ds work-order close {work_order_id} --accept-structure "<reason>"` once the '
+        f"authority is writable."
+    )
+
+
 def carry_over(
     *,
     work_order_id: str,
@@ -221,8 +260,55 @@ def carry_over(
     # BOTH SIDES. The original needs it because the close gate reads it; the new work
     # order needs it because a reader who lands there must be able to get back to where
     # the work came from, and a one-way link is how provenance is lost.
-    set_wo_artifact(work_order_id, CARRY_KIND, record, instance_key=CARRY_KEY, db_path=db_path)
-    set_wo_artifact(new_wo_id, CARRY_KIND, record, instance_key=CARRY_KEY, db_path=db_path)
+    # THE RECORD IS LOAD-BEARING, SO ITS FAILURE CANNOT BE SILENT. `_check_tasks_done`
+    # reads this artifact to exempt the carried tasks; without it the close gate refuses
+    # forever. And by this point the tasks are ALREADY moved -- task.deleted is emitted and
+    # the new work order exists -- so reporting ok:True on a failed write would leave the
+    # original permanently unclosable while telling the operator the carry succeeded.
+    #
+    # Measured 2026-09-02: set_wo_artifact returned False on a locked database and every
+    # caller here ignored it. That is how 154 review verdicts went to disk unnoticed.
+    try:
+        stored_from = set_wo_artifact(
+            work_order_id, CARRY_KIND, record, instance_key=CARRY_KEY, db_path=db_path
+        )
+        stored_to = set_wo_artifact(
+            new_wo_id, CARRY_KIND, record, instance_key=CARRY_KEY, db_path=db_path
+        )
+    except Exception as exc:  # noqa: BLE001 - surface it; never claim a carry that is half done
+        return {
+            "ok": False,
+            "error": _recovery_advice(
+                work_order_id,
+                new_wo_id,
+                stored_from=False,
+                detail=f"the split could not be recorded ({type(exc).__name__}: {exc})",
+            ),
+            "carried_to": new_wo_id,
+            "moved": moved,
+            "recoverable_by_rerun": False,
+        }
+    if not (stored_from and stored_to):
+        return {
+            "ok": False,
+            # WHICH SIDE LANDED CHANGES THE ADVICE. This branch blamed "the artifact table
+            # is absent" even when `stored_from` had SUCCEEDED -- in which case the table
+            # demonstrably exists and the original IS closable, while the operator was
+            # told the carry failed outright.
+            "error": _recovery_advice(
+                work_order_id,
+                new_wo_id,
+                stored_from=bool(stored_from),
+                detail=(
+                    "the record did not land on the new work order"
+                    if stored_from
+                    else "this authority's schema predates the artifact table"
+                ),
+            ),
+            "carried_to": new_wo_id,
+            "moved": moved,
+            "recoverable_by_rerun": False,
+        }
 
     return {
         "ok": True,

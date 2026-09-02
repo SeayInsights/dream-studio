@@ -27,6 +27,7 @@ from interfaces.cli.commands.work_order_query import (
     _work_order_add_task,
     _work_order_create,
     _work_order_artifact,
+    _work_order_backfill_artifacts,
     _work_order_executor,
     _work_order_merge_check,
     _work_order_list,
@@ -358,6 +359,22 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         help="instance_key for multi-instance kinds (e.g. the eval_type); default '' (singleton)",
     )
 
+    wo_backfill = work_order_sub.add_parser(
+        "backfill-artifacts",
+        help="Copy .planning ceremony artifacts into the authority (idempotent upsert)",
+    )
+    wo_backfill.add_argument(
+        "--planning-root",
+        dest="planning_root",
+        default=None,
+        help="Planning root to read from; defaults to <source_root>/.planning",
+    )
+    wo_backfill.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Count what would be written without writing it",
+    )
+
     wo_packet = work_order_sub.add_parser(
         "packet", help="Render a WO execution packet on demand (prints to stdout, no disk cache)"
     )
@@ -563,6 +580,13 @@ def dispatch(
             instance_key=getattr(args, "instance_key", ""),
             source_root=source_root,
             dream_studio_home=dream_studio_home,
+        )
+    if args.work_order_command == "backfill-artifacts":
+        return _work_order_backfill_artifacts(
+            planning_root=args.planning_root,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+            dry_run=args.dry_run,
         )
     if args.work_order_command == "packet":
         storage_root = Path(args.storage_root).resolve() if args.storage_root else None

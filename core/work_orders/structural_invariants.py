@@ -235,13 +235,45 @@ def record_exception(work_order_id: str, reason: str, *, db_path: Path) -> bool:
             "A structural exception needs a reason a later reader can weigh. "
             "Say why this work order is correctly sized despite the invariant."
         )
-    return set_wo_artifact(
-        work_order_id,
-        EXCEPTION_KIND,
-        text,
-        instance_key=EXCEPTION_KEY,
-        db_path=db_path,
-    )
+    # A RECORDED REASON THAT WAS NOT RECORDED IS WORSE THAN NO ESCAPE AT ALL. Both callers
+    # (start_work_order and the close CLI) catch only ValueError, so a False return meant
+    # --accept-structure printed success, stored nothing, and the next close refused with
+    # the identical message -- leaving the operator to conclude the flag does not work.
+    # Raise instead: an escape hatch must either take effect or say it did not.
+    # EVERY STORAGE FAILURE ARRIVES AS ValueError, because that is the contract both
+    # callers already handle -- `start_main.start_work_order` and the close CLI each
+    # `except ValueError`. Once `set_wo_artifact` learned to RAISE on a lock instead of
+    # silently returning False, a busy authority turned `--accept-structure` into an
+    # unhandled `sqlite3.OperationalError` traceback at both sites: the handled case was
+    # the rare one and the likely one crashed. An independent review measured it
+    # (WO b302834b task fe18ee64).
+    #
+    # Converted here rather than widened at each caller, so a third caller cannot
+    # reintroduce it, and because "the exception could not be recorded" is one fact
+    # however SQLite chose to report it.
+    try:
+        stored = set_wo_artifact(
+            work_order_id,
+            EXCEPTION_KIND,
+            text,
+            instance_key=EXCEPTION_KEY,
+            db_path=db_path,
+        )
+    except sqlite3.Error as exc:
+        raise ValueError(
+            f"The structural exception could not be recorded ({type(exc).__name__}: "
+            f"{exc}). Without the record the close gate will refuse again with the same "
+            f"message, so the reason has to land before --accept-structure means "
+            f"anything. If the authority is busy, re-run this once it is writable."
+        ) from exc
+    if not stored:
+        raise ValueError(
+            "The structural exception could not be recorded: this authority's schema "
+            "predates the artifact table. Without the record the close gate will refuse "
+            "again, so the reason has to land before --accept-structure means anything. "
+            "Release the migration with `ds migrate activate`, then re-run."
+        )
+    return True
 
 
 def render(violations: list[Violation], work_order_id: str, *, refusing: bool = True) -> str:

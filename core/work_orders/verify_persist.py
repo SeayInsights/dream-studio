@@ -128,6 +128,7 @@ def _persist_unverified_ledger(
     project_root: Path | None = None,
     truncated: str | None = None,
     verified_at: str | None = None,
+    conn=None,
 ) -> Path | None:
     """Persist the UNVERIFIED risk ledger for a WO (WO-FALSIFY-FIRST-PASS).
 
@@ -139,17 +140,21 @@ def _persist_unverified_ledger(
 
     Returns the disk Path when the authority write did not land, else None
     (stored in the authority) — the same dual-path contract the review verdict
-    uses. The fallback matters here for a known reason: this call runs INSIDE
-    verify's open authority transaction, so the second connection
-    ``set_wo_artifact`` opens can hit a write lock and no-op (registered defect
-    WO-ARTIFACT-LOCK-FALLBACK / fd981a32, which makes it authority-native).
-    Until then the ledger must survive either way — a residual risk that silently
-    fails to persist is exactly the silence this stage exists to remove.
+    uses.
+
+    THE LOCK IS FIXED, THE FALLBACK IS NOT THE PLAN (WO-ARTIFACT-LOCK-FALLBACK /
+    fd981a32). This call runs INSIDE verify's open authority transaction, so the
+    second connection ``set_wo_artifact`` used to open hit a write lock and
+    no-op'd -- silently, because ``False`` also means "table absent". Callers now
+    pass ``conn`` so the write joins the transaction already open around it. The
+    disk path remains for a genuinely absent artifact table (an unreleased
+    migration), because a residual risk that silently fails to persist is exactly
+    the silence this stage exists to remove.
 
     An EMPTY ledger is written too: "the analyst found no untestable residual"
     and "no analysis ran" must not look identical downstream.
     """
-    from core.work_orders.artifacts import set_wo_artifact
+    from core.work_orders.artifacts import record_artifact_fallback, set_wo_artifact
 
     # PARTIAL ANALYSIS AND PAIRING (falsification analyst findings on the verify
     # flow): the truncation caveat used to live only in the verdict, so close and
@@ -177,6 +182,7 @@ def _persist_unverified_ledger(
         db_path=db_path,
         generator="ds work-order verify (falsification analyst)",
         project_root=project_root,
+        conn=conn,
     ):
         # SINGLE SOURCE OF TRUTH (quality rule 7, caught by this stage's own verify):
         # a WO whose earlier run fell back to disk and whose later run reached the
@@ -184,12 +190,27 @@ def _persist_unverified_ledger(
         # serve the older one — version skew between stores on durable state a read
         # path trusts. On a successful authority write, drop any stale disk copy so
         # exactly one ledger exists per WO.
-        if ledger_path.is_file():
+        #
+        # ONLY ONCE THE WRITE IS DURABLE. With a BORROWED connection the row is not
+        # committed yet: verify holds one transaction for the whole run, and
+        # `with _connect(db_path) as conn` ROLLS BACK on any exception. The verdict write
+        # that follows this one can now raise, so unlinking here destroyed the
+        # residual-risk ledger from both stores -- a verdict failure taking the ledger
+        # with it, which is the coupling an independent review found (WO b302834b task
+        # 6705ded4). A stale disk copy is shadowed by the authority on read, so leaving it
+        # until the caller commits costs nothing and cannot lose the ledger.
+        if conn is None and ledger_path.is_file():
             try:
                 ledger_path.unlink()
             except OSError:
                 pass  # a stale copy that cannot be removed is still shadowed by the authority
         return None
+    record_artifact_fallback(
+        work_order_id,
+        "report",
+        reason="unverified_risks authority write no-op",
+        db_path=db_path,
+    )
     # Atomic (WO-VERDICT-PARTIAL-WRITE): a half-written residual-risk ledger
     # would read as a shorter list of risks, which is the silence this stage
     # exists to remove.
@@ -271,6 +292,7 @@ def _persist_review_verdict(
     db_path: Path | None = None,
     project_root: Path | None = None,
     generator: str = "ds work-order verify",
+    conn=None,
 ) -> Path | None:
     """DB-first review-verdict persistence (WO-FILESDB-C2).
 
@@ -287,12 +309,22 @@ def _persist_review_verdict(
     can reject hand-written and stale verdicts.
     """
     from core.work_orders.artifact_envelope import git_head_sha, wrap
-    from core.work_orders.artifacts import set_wo_artifact
+    from core.work_orders.artifacts import record_artifact_fallback, set_wo_artifact
 
     payload = json.dumps(verdict, indent=2)
     wrapped = wrap(payload, generator=generator, head_commit_sha=git_head_sha(project_root))
-    if set_wo_artifact(work_order_id, "review_verdict", wrapped, db_path=db_path):
+    # THROUGH THE CALLER'S CONNECTION WHEN THERE IS ONE. Every call site runs inside an
+    # open `with _connect(db_path)`, so opening a second connection here lost the write
+    # lock and returned False -- which this function read as "the table is absent" and
+    # answered with a disk file. 154 of August's verdicts went that way.
+    if set_wo_artifact(work_order_id, "review_verdict", wrapped, db_path=db_path, conn=conn):
         return None
+    # COUNT THE FALLBACK. It is legitimate on an authority whose artifact migration is
+    # unreleased, but a verdict on disk is invisible to the independent_review gate and
+    # to `ds project state`, and that invisibility went unnoticed 154 times.
+    record_artifact_fallback(
+        work_order_id, "review_verdict", reason="authority write no-op", db_path=db_path
+    )
     verdict_path = planning_root / "work-orders" / work_order_id / "review-verdict.json"
     _atomic_write(verdict_path, wrapped)
     return verdict_path

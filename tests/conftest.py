@@ -203,7 +203,7 @@ def ds_home(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def guard_real_homedir(tmp_path, monkeypatch):
+def guard_real_homedir(tmp_path, monkeypatch, request):
     """Auto-use: ensures no test writes to real ~/.dream-studio or ~/.claude.
 
     If DS_SPOOL_ROOT is not already set by a test's spool_root fixture, this
@@ -305,14 +305,18 @@ def guard_real_homedir(tmp_path, monkeypatch):
     if _before_events_mtime is not None and real_events.exists():
         if real_events.stat().st_mtime != _before_events_mtime:
             pytest.exit(
-                "FATAL: Test modified real ~/.dream-studio/events. "
+                # NAME THE TEST. This guard runs per test, so its teardown already knows
+                # which one polluted -- it just did not say, and the message ended a
+                # 5,928-test session with no way to tell who did it. Bisecting ~2,400
+                # tests by hand is the cost of a missing identifier (WO efe2ce9d).
+                f"FATAL: {request.node.nodeid} modified real ~/.dream-studio/events. "
                 "Use the spool_root fixture. Aborting session to prevent further damage.",
                 returncode=2,
             )
     if _before_int_mtime is not None and real_integrations.exists():
         if real_integrations.stat().st_mtime != _before_int_mtime:
             pytest.exit(
-                "FATAL: Test modified real ~/.dream-studio/integrations. "
+                f"FATAL: {request.node.nodeid} modified real ~/.dream-studio/integrations. "
                 "Use the ds_home fixture. Aborting session to prevent further damage.",
                 returncode=2,
             )

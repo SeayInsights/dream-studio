@@ -161,8 +161,9 @@ def test_backfill_migrates_planning_artifacts(tmp_path):
     (wo_dir / "security-scan.md").write_text("clean", encoding="utf-8")
     (wo_dir / "review-verdict.json").write_text('{"passed": true}', encoding="utf-8")
 
-    written = backfill_wo_artifacts(planning_root, db_path=db)
+    written, failures = backfill_wo_artifacts(planning_root, db_path=db)
     assert written == 3
+    assert failures == [], failures
     assert get_wo_artifact("wo-7", "api_contract", db_path=db) == "# contract"
     assert get_wo_artifact("wo-7", "review_verdict", db_path=db) == '{"passed": true}'
 

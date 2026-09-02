@@ -342,3 +342,88 @@ def test_unowned_table_write_skips_migration_ddl_and_one_time_tooling(tmp_path: 
     assert (
         findings_migrate == []
     ), f"one-time migration script must not be flagged as an unowned writer; got {findings_migrate}"
+
+
+def test_a_symbol_named_only_in_prose_is_not_a_caller(tmp_path: Path) -> None:
+    """A MENTION IS NOT A CALLER, and this blocked a real PR on two comments.
+
+    `detect_changed_signature_callers` searched raw file text, so a comment naming a
+    symbol counted as a reference to it. PR #691 failed on all three CI platforms because
+    two files mentioned `conftest.guard_real_homedir` in prose -- for a pytest FIXTURE
+    whose added `request` parameter pytest injects and no caller ever passes.
+
+    The SQL detector in the same module already carried this lesson ("Match real SQL
+    writes, not prose ... a false positive this gate caught on its own source"). One
+    detector had learned it and the other had not.
+
+    The real-caller case is asserted alongside, because narrowing a blocking gate is only
+    correct if what it exists to catch still fails.
+    """
+    repo = tmp_path
+    # Prose-only references: a comment, a string, and a docstring. None is a call.
+    _write(
+        repo / "tests" / "unit" / "test_mentions_only.py",
+        "def test_something(tmp_path):\n"
+        "    # conftest.guard_real_homedir checks that the DB is not under HOME\n"
+        '    note = "guard_real_homedir will abort the session"\n'
+        "    assert note\n",
+    )
+    _write(
+        repo / "interfaces" / "cli" / "mentions_in_docstring.py",
+        'def run():\n    """Uses a temp dir because guard_real_homedir asserts on HOME."""\n'
+        "    return 1\n",
+    )
+    # A genuine caller, which must still be flagged.
+    _write(
+        repo / "tests" / "unit" / "test_real_caller.py",
+        "def test_calls_it(tmp_path, monkeypatch):\n"
+        "    guard_real_homedir(tmp_path, monkeypatch)\n",
+    )
+    diff = (
+        "diff --git a/tests/conftest.py b/tests/conftest.py\n"
+        "--- a/tests/conftest.py\n"
+        "+++ b/tests/conftest.py\n"
+        "@@ -206,1 +206,1 @@\n"
+        "-def guard_real_homedir(tmp_path, monkeypatch):\n"
+        "+def guard_real_homedir(tmp_path, monkeypatch, request):\n"
+    )
+
+    findings = detect_changed_signature_callers(diff, repo_root=repo)
+    flagged = {f["path"] for f in findings}
+
+    assert (
+        "tests/unit/test_mentions_only.py" not in flagged
+    ), f"a comment and a string were read as calls; got {flagged}"
+    assert (
+        "interfaces/cli/mentions_in_docstring.py" not in flagged
+    ), f"a docstring was read as a call; got {flagged}"
+    assert (
+        "tests/unit/test_real_caller.py" in flagged
+    ), f"narrowing the gate stopped it catching a real un-updated caller; got {flagged}"
+
+
+def test_a_file_that_cannot_be_parsed_still_reports_its_references(tmp_path: Path) -> None:
+    """The fallback fails SAFE.
+
+    When a file will not tokenize, comments cannot be told from code -- and
+    under-reporting a genuinely dangling caller is worse than tolerating the false
+    positive that stripping would have avoided. So a syntax error falls back to searching
+    the raw text.
+    """
+    repo = tmp_path
+    _write(
+        repo / "core" / "broken.py",
+        "def f(:\n    guard_real_homedir(1)\n",
+    )
+    diff = (
+        "diff --git a/tests/conftest.py b/tests/conftest.py\n"
+        "--- a/tests/conftest.py\n"
+        "+++ b/tests/conftest.py\n"
+        "@@ -206,1 +206,1 @@\n"
+        "-def guard_real_homedir(tmp_path, monkeypatch):\n"
+        "+def guard_real_homedir(tmp_path, monkeypatch, request):\n"
+    )
+    flagged = {f["path"] for f in detect_changed_signature_callers(diff, repo_root=repo)}
+    assert (
+        "core/broken.py" in flagged
+    ), "an unparseable file was silently treated as having no references"

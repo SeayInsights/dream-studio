@@ -80,6 +80,85 @@ def _work_order_artifact(
     return 0
 
 
+def _work_order_backfill_artifacts(
+    *,
+    planning_root: Path | None,
+    source_root: Path,
+    dream_studio_home: Path | None,
+    dry_run: bool = False,
+) -> int:
+    """Recover ``.planning``-resident ceremony artifacts into the authority.
+
+    ``backfill_wo_artifacts`` has existed since WO-FILESDB-P1 and had NO production
+    caller -- only a test. That is why the recovery it performs never happened: measured
+    2026-09-02, the live authority held 24 review verdicts while 170 sat in
+    ``.planning/work-orders/``, 162 of them nowhere else. Every gate and surface that
+    reads the authority (``ds project state``, the ``independent_review`` close gate)
+    saw a work order with no verdict.
+
+    Two separate defects produced that gap and both are fixed here: the artifact write
+    was losing a lock race and reporting it as a missing table
+    (WO-ARTIFACT-LOCK-FALLBACK / fd981a32), and the recovery path for what had already
+    fallen through was unreachable. A repair function nobody can invoke is not a repair.
+
+    Idempotent -- the underlying write is an upsert -- so it is safe to re-run after
+    ``ds migrate activate`` releases a newer artifact migration. Files are left in place;
+    the authority takes precedence on read, so a stale disk copy is shadowed rather than
+    consulted.
+    """
+    from core.installed_runtime import resolve_installed_runtime_paths
+    from core.work_orders.artifacts import KIND_TO_FILENAME, backfill_wo_artifacts
+
+    root = Path(planning_root).resolve() if planning_root else (source_root / ".planning")
+    if not (root / "work-orders").is_dir():
+        print(f"No work-order artifacts to backfill under {root}", file=sys.stderr)
+        return 1
+    db_path = resolve_installed_runtime_paths(
+        source_root=source_root, dream_studio_home=dream_studio_home
+    ).sqlite_path
+
+    if dry_run:
+        # COUNT WITHOUT WRITING. A backfill that reports "162 written" is worth
+        # inspecting before it runs against the live authority, and the count is the
+        # thing an operator actually wants to see first.
+        pending = 0
+        for wo_dir in sorted((root / "work-orders").iterdir()):
+            if not wo_dir.is_dir():
+                continue
+            pending += sum(1 for fname in KIND_TO_FILENAME.values() if (wo_dir / fname).is_file())
+        print(f"{pending} artifact file(s) under {root} would be written to {db_path}")
+        return 0
+
+    written, failures = backfill_wo_artifacts(root, db_path=db_path)
+    print(f"Backfilled {written} artifact(s) from {root} into the authority.")
+    if failures:
+        # A PARTIAL RECOVERY IS REPORTED AS PARTIAL. The loop no longer aborts on the
+        # first raise, so "170 recovered, 1 locked" is now possible -- and reporting only
+        # the 170 would be the same silence this command exists to end.
+        print(f"{len(failures)} artifact(s) did NOT land:", file=sys.stderr)
+        for line in failures[:20]:
+            print(f"  - {line}", file=sys.stderr)
+        if len(failures) > 20:
+            print(f"  ... and {len(failures) - 20} more", file=sys.stderr)
+        print(
+            "Re-run this command once the authority accepts writes; it is an upsert, so "
+            "the artifacts that already landed are not duplicated.",
+            file=sys.stderr,
+        )
+        return 1
+    if written == 0:
+        # ZERO IS AMBIGUOUS AND MUST NOT READ AS SUCCESS. Either there was nothing to
+        # do, or the artifact table is absent and every write no-op'd -- the same
+        # silence this whole fix is about.
+        print(
+            "0 written: either everything was already stored, or the artifact table is "
+            "absent on this authority (run `ds migrate activate`, then re-run this).",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
 def _work_order_packet(
     *,
     work_order_id: str,
