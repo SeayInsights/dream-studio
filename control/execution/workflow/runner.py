@@ -558,11 +558,11 @@ class WorkflowRunner:
         agent that could not make the check pass is the least likely to see why. A clean
         reader is the point, the same reason independent review exists at close.
         """
-        from control.execution.workflow.autonomy import OPERATOR_STANCE
+        from control.execution.workflow.autonomy import stance_brief
 
         check = str(ynode.get("completion_check") or "(none declared)")
         prompt = (
-            f"{OPERATOR_STANCE}\n\n"
+            f"{stance_brief()}\n\n"
             f"A workflow node did not complete after {RETRY_BUDGET} attempts.\n\n"
             f"Node: {node_id}\n"
             f"Its completion check: {check}\n"

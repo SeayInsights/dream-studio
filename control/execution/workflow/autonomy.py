@@ -22,6 +22,7 @@ default for `ds workflow run` stays prompt-delivery, and `--execute` is a delibe
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -93,29 +94,158 @@ def detect_push(before: str, after: str) -> str:
     )
 
 
-# The stance the orchestrator reviews with. Not invented -- these are the rulings this
-# operator has actually made, and they are the ones an agent gets pushed back on.
-OPERATOR_STANCE = """You are reviewing on behalf of an operator who holds these positions.
-Apply them; do not soften them.
+# ── The operator's rules, as predicates ───────────────────────────────────────
+#
+# THESE WERE PROSE AND THAT WAS THE DEFECT. A paragraph handed to a model saying "no
+# false-done, gates not prose" is exactly the thing it forbids: an instruction someone is
+# trusted to follow. The operator caught it -- "these should be rules for the operator not
+# prose though" -- in a stance whose second line was GATES, NOT PROSE.
+#
+# Each rule below RUNS against what actually happened in a node and returns a violation or
+# nothing. The short statements are still handed to a reviewing agent, but they are derived
+# from the rules rather than maintained beside them, so the text cannot drift from the
+# check the way a comment drifts from its code.
 
-  * NO FALSE-DONE. A task is done when something observable says so. "I implemented it" is
-    a claim, not evidence. If the check cannot fail, it did not verify anything.
-  * GATES, NOT PROSE. If it matters, it is a check that can fail. An instruction an agent
-    is trusted to follow is decoration.
-  * ABSENCE IS NOT CLEAN. "No violations found" and "I could not look" render identically
-    and mean opposite things. Say which one it was.
-  * MEASURE BEFORE CLAIMING. A number you did not run is a guess. Demonstrating a helper
-    with hand-written input proves the helper, not the path.
-  * EVERY DEFECT IS REGISTERED. A finding that lives only in a message is lost. It goes to
-    the authority as a task, or a work order when there are several.
-  * NEVER --force. It bypasses every gate at once and records no reasoning about any of
-    them. A recorded reason is the honest escape.
-  * RIGHT-SIZED UNITS. A work order carries more than one task; a milestone more than one
-    work order. A single-task work order is a task wearing the wrong label.
 
-PUSH BACK. If the agent's account does not match what the check reported, say so plainly
-and name the discrepancy. Agreeing with a claim you cannot verify is the failure mode this
-whole plane exists to prevent."""
+@dataclass(frozen=True)
+class RuleContext:
+    """What a rule gets to look at. Everything here is observed, not reported."""
+
+    node_id: str
+    ynode: dict
+    reported_success: bool
+    check_status: str
+    check_reason: str = ""
+    output: str = ""
+    diagnosis: str = ""
+    registered: list[str] = field(default_factory=list)
+    remote_before: str = ""
+    remote_after: str = ""
+
+
+@dataclass(frozen=True)
+class OperatorRule:
+    """One position the operator holds, expressed so it can fail."""
+
+    rule_id: str
+    statement: str
+    check: Callable[[RuleContext], str | None]
+
+
+def _no_false_done(ctx: RuleContext) -> str | None:
+    if ctx.reported_success and ctx.check_status == "blocked":
+        return (
+            f"{ctx.node_id} reported success while its completion check reported "
+            f"{ctx.check_reason or 'failure'}. The agent's account and the observation "
+            f"disagree; the observation wins."
+        )
+    return None
+
+
+def _gates_not_prose(ctx: RuleContext) -> str | None:
+    if ctx.ynode.get("completion_contains") and not ctx.ynode.get("completion_check"):
+        return (
+            f"{ctx.node_id} declares completion_contains with no completion_check. Alone "
+            f"it verifies nothing -- a declaration that cannot fail is decoration."
+        )
+    return None
+
+
+def _absence_is_not_clean(ctx: RuleContext) -> str | None:
+    declared = ctx.ynode.get("completion_check") or ctx.ynode.get("completion_contains")
+    if not declared and ctx.check_status == "completed":
+        return (
+            f"{ctx.node_id} was recorded completed with nothing declared to observe it. "
+            f"'Nobody looked' and 'nothing was wrong' are different facts."
+        )
+    return None
+
+
+def _defect_is_registered(ctx: RuleContext) -> str | None:
+    if ctx.diagnosis and not ctx.registered:
+        return (
+            f"{ctx.node_id} produced a diagnosis that was never written to the authority. "
+            f"A finding that lives only in a run's output is lost when it scrolls."
+        )
+    return None
+
+
+def _never_force(ctx: RuleContext) -> str | None:
+    haystack = f"{ctx.output} {ctx.ynode.get('completion_check') or ''}"
+    if "--force" in haystack or "force=True" in haystack:
+        return (
+            f"{ctx.node_id} used --force. It bypasses every gate at once and records no "
+            f"reasoning about any of them; a recorded reason is the honest escape."
+        )
+    return None
+
+
+def _never_push(ctx: RuleContext) -> str | None:
+    return detect_push(ctx.remote_before, ctx.remote_after) or None
+
+
+OPERATOR_RULES: tuple[OperatorRule, ...] = (
+    OperatorRule(
+        "no_false_done",
+        "A task is done when something observable says so; a claim is not evidence.",
+        _no_false_done,
+    ),
+    OperatorRule(
+        "gates_not_prose",
+        "If it matters it is a check that can fail, not an instruction someone follows.",
+        _gates_not_prose,
+    ),
+    OperatorRule(
+        "absence_is_not_clean",
+        "'I could not look' and 'nothing was wrong' must not render identically.",
+        _absence_is_not_clean,
+    ),
+    OperatorRule(
+        "defect_is_registered",
+        "Every finding goes to the authority; one becomes a task, several a work order.",
+        _defect_is_registered,
+    ),
+    OperatorRule(
+        "never_force",
+        "--force bypasses every gate at once; record a reason instead.",
+        _never_force,
+    ),
+    OperatorRule(
+        "never_push",
+        "An executing node may edit the working tree; it may not push.",
+        _never_push,
+    ),
+)
+
+
+def evaluate_operator_rules(ctx: RuleContext) -> list[str]:
+    """Run every rule. Returns the violations, which is what pushing back is made of."""
+    violations: list[str] = []
+    for rule in OPERATOR_RULES:
+        try:
+            hit = rule.check(ctx)
+        except Exception as exc:  # noqa: BLE001 - a broken rule must not stop the run
+            hit = f"{rule.rule_id} could not be evaluated ({type(exc).__name__})"
+        if hit:
+            violations.append(f"[{rule.rule_id}] {hit}")
+    return violations
+
+
+def stance_brief() -> str:
+    """The rules as text for a reviewing agent, DERIVED so it cannot drift from them."""
+    lines = [
+        "You are reviewing on behalf of an operator who holds these positions.",
+        "Apply them; do not soften them. Each one is also enforced as a predicate.",
+        "",
+    ]
+    lines += [f"  * {r.rule_id.upper()}: {r.statement}" for r in OPERATOR_RULES]
+    lines += [
+        "",
+        "PUSH BACK. If the agent's account does not match what the check reported, say so",
+        "plainly and name the discrepancy. Agreeing with a claim you cannot verify is the",
+        "failure this plane exists to prevent.",
+    ]
+    return chr(10).join(lines)
 
 
 def prescribe(

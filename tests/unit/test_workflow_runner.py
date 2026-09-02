@@ -927,36 +927,54 @@ def test_execution_is_opt_in():
     ), "execution is not gated on the flag"
 
 
-def test_the_orchestrator_reviews_with_the_operators_stance():
-    """OPERATOR: "It should act as I would act, push back on an agent if it feels the need
-    to. I think you have enough history to know the guard rails."
+def test_the_operators_positions_are_rules_that_run_not_prose():
+    """OPERATOR: "these should be rules for the operator not prose though."
 
-    These are not invented guard rails. Each is a position this operator has actually held
-    and enforced across the work that produced this file: no false-done, gates not prose,
-    absence is not clean, measure before claiming, every defect registered, never --force,
-    right-sized units. They are handed to the reviewing agent verbatim so a diagnosis is
-    made from the operator's stance rather than a generic one.
+    The first version was a paragraph handed to a model — which is exactly what its own
+    second line forbids: an instruction someone is trusted to follow. Encoding
+    GATES, NOT PROSE as prose is the sharpest version of the mistake this repository keeps
+    making, and the operator caught it.
+
+    Each position is now a predicate that runs against what actually happened in a node.
+    The text handed to a reviewing agent is DERIVED from the rules, so it cannot drift the
+    way a comment drifts from its code.
     """
-    import inspect
+    from control.execution.workflow.autonomy import (
+        OPERATOR_RULES,
+        RuleContext,
+        evaluate_operator_rules,
+        stance_brief,
+    )
 
-    from control.execution.workflow.autonomy import OPERATOR_STANCE
-    from control.execution.workflow.runner import WorkflowRunner
+    assert len(OPERATOR_RULES) >= 6
+    for rule in OPERATOR_RULES:
+        assert callable(rule.check), f"{rule.rule_id} is a statement with no check"
 
-    for position in (
-        "NO FALSE-DONE",
-        "GATES, NOT PROSE",
-        "ABSENCE IS NOT CLEAN",
-        "MEASURE BEFORE CLAIMING",
-        "EVERY DEFECT IS REGISTERED",
-        "NEVER --force",
-        "RIGHT-SIZED UNITS",
-        "PUSH BACK",
-    ):
-        assert position in OPERATOR_STANCE, f"the stance dropped {position!r}"
+    # Every rule fires on its own case — a rule that cannot fail is decoration.
+    cases = {
+        "no_false_done": RuleContext("n", {"completion_check": "x"}, True, "blocked", "why"),
+        "gates_not_prose": RuleContext("n", {"completion_contains": "X"}, True, "completed"),
+        "absence_is_not_clean": RuleContext("n", {}, True, "completed"),
+        "never_force": RuleContext(
+            "n", {"completion_check": "x"}, True, "completed", output="ds close --force"
+        ),
+        "never_push": RuleContext(
+            "n", {"completion_check": "x"}, True, "completed", remote_after="ab12cd34"
+        ),
+    }
+    for rule_id, ctx in cases.items():
+        hits = " ".join(evaluate_operator_rules(ctx))
+        assert rule_id in hits, f"{rule_id} did not fire on its own case: {hits}"
 
-    assert "OPERATOR_STANCE" in inspect.getsource(
-        WorkflowRunner._diagnose
-    ), "the reviewer is diagnosing without the operator's positions"
+    # And stays silent on a clean node, or it is noise.
+    clean = RuleContext("n", {"completion_check": "git status"}, True, "completed")
+    assert evaluate_operator_rules(clean) == []
+
+    brief = stance_brief()
+    for rule in OPERATOR_RULES:
+        assert rule.rule_id.upper() in brief, f"{rule.rule_id} is enforced but never stated"
+        assert rule.statement in brief
+    assert "PUSH BACK" in brief
 
 
 def test_a_diagnosis_is_registered_not_just_reported():
