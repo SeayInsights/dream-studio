@@ -559,6 +559,7 @@ class WorkflowRunner:
         reader is the point, the same reason independent review exists at close.
         """
         from control.execution.workflow.autonomy import stance_brief
+        from core.work_orders.scenario_taxonomy import SCENARIO_TAXONOMY
 
         check = str(ynode.get("completion_check") or "(none declared)")
         prompt = (
@@ -567,7 +568,11 @@ class WorkflowRunner:
             f"Node: {node_id}\n"
             f"Its completion check: {check}\n"
             f"What the check reported: {reason}\n\n"
-            "You are a fresh reviewer. Do not assume the node's prompt was wrong or right.\n"
+            "You are a fresh reviewer. Do not assume the node's prompt was wrong or right.\n\n"
+            "STEP THROUGH THIS TAXONOMY rather than improvising a checklist. A reviewer who\n"
+            "improvises covers what occurs to them; one that walks a fixed list also covers\n"
+            "the classes that do not. Skip a class only when it genuinely cannot apply.\n\n"
+            f"{SCENARIO_TAXONOMY}\n\n"
             "State, in at most six lines:\n"
             "  1. The most likely CAUSE, named specifically.\n"
             "  2. The concrete FIX, as an action someone can take.\n"

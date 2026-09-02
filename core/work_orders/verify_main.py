@@ -72,6 +72,7 @@ from .verify_persist import (
     _persist_unverified_ledger,
     _write_eval_run,
 )
+from .scenario_taxonomy import SCENARIO_TAXONOMY
 from .verify_prompts import (
     _COMPLETION_PROMPT_TEMPLATE,
     _CORRECTNESS_PROMPT_TEMPLATE,
@@ -624,6 +625,7 @@ def verify_work_order(
                 title=wo["title"],
                 task_list=task_list_str,
                 git_diff=_falsification_diff,
+                scenario_taxonomy=SCENARIO_TAXONOMY,
             ),
         }
 

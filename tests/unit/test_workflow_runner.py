@@ -1013,3 +1013,62 @@ def test_prescribing_never_breaks_the_run(tmp_path):
     )
     assert outcome.ok is True
     assert outcome.registered, "a failed registration must say so rather than vanish"
+
+
+def test_the_diagnosis_steps_through_the_shared_taxonomy():
+    """OPERATOR: "is there a best practice for stepping through scenarios we can add" —
+    there was, and it was already here.
+
+    core/work_orders/verify_prompts.py carried a scenario taxonomy (crash_mid_write,
+    race_between_writers, version_skew, partial_failure, malformed_input, interrupted_io,
+    reachability_vs_config, empty_absent_state) reachable only by the falsification
+    grader. It has been producing the sharpest findings in recent work: the `SELECT 1`
+    acceptance criterion that proves only a database connection exists, the
+    stored-PASS-versus-re-execution question, the projection-lag window.
+
+    Extracted rather than duplicated. Two lists would let the grader and the orchestrator
+    drift into judging by different standards — the same drift as the two event registries
+    and the two splice implementations.
+
+    A reviewer who improvises a checklist covers what occurs to them; one that walks a
+    fixed taxonomy also covers the classes that do not.
+    """
+    import inspect
+
+    from core.work_orders.scenario_taxonomy import SCENARIO_TAXONOMY, taxonomy_classes
+    from core.work_orders.verify_prompts import _FALSIFICATION_PROMPT_TEMPLATE
+    from control.execution.workflow.runner import WorkflowRunner
+
+    classes = taxonomy_classes()
+    assert len(classes) >= 8, classes
+    for expected in ("crash_mid_write", "reachability_vs_config", "empty_absent_state"):
+        assert expected in classes
+
+    # ONE definition. The grader consumes it by placeholder, not by carrying a copy.
+    assert (
+        "{scenario_taxonomy}" in _FALSIFICATION_PROMPT_TEMPLATE
+    ), "the grader has its own copy of the taxonomy again"
+    # The class NAMES still appear in the template's output schema as example values,
+    # which is correct — the grader has to know what to emit. What must not be duplicated
+    # is the taxonomy's DEFINITIONS, because two definitions are what drift apart.
+    for definition in (
+        "the process dies between a write",
+        "VALID AGAINST",
+        "an empty table, a missing artifact",
+    ):
+        assert (
+            definition not in _FALSIFICATION_PROMPT_TEMPLATE
+        ), f"the template still defines the taxonomy itself ({definition!r})"
+        assert definition in SCENARIO_TAXONOMY
+
+    # And the composed prompt still carries every class, or extraction lost coverage.
+    composed = _FALSIFICATION_PROMPT_TEMPLATE.format(
+        title="t", task_list="tl", git_diff="d", scenario_taxonomy=SCENARIO_TAXONOMY
+    )
+    for name in classes:
+        assert name in composed, f"{name} vanished from the composed prompt"
+
+    # The orchestrator's diagnosis walks the same list.
+    diag = inspect.getsource(WorkflowRunner._diagnose)
+    assert "SCENARIO_TAXONOMY" in diag
+    assert "STEP THROUGH THIS TAXONOMY" in diag

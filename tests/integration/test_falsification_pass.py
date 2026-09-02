@@ -34,7 +34,15 @@ def test_taxonomy_includes_reachability_class():
     for any secret or token, what it is VALID AGAINST vs what the code CHECKS.
     Source incident: the Fulcrum magic-link dev_link gated on a base-URL config
     while BIND_HOST controlled actual exposure (2026-08-18)."""
-    tpl = _FALSIFICATION_PROMPT_TEMPLATE
+    # COMPOSED, not the raw template. The taxonomy was extracted to
+    # core.work_orders.scenario_taxonomy so the orchestrator's diagnosis can walk the same
+    # classes; it now reaches this prompt at format time. Asserting against the bare
+    # template would fail for a reason that says nothing about scenario coverage.
+    from core.work_orders.scenario_taxonomy import SCENARIO_TAXONOMY
+
+    tpl = _FALSIFICATION_PROMPT_TEMPLATE.format(
+        title="t", task_list="tl", git_diff="d", scenario_taxonomy=SCENARIO_TAXONOMY
+    )
     assert "reachability_vs_config" in tpl
     assert "VALID AGAINST" in tpl
     assert "bind address" in tpl
