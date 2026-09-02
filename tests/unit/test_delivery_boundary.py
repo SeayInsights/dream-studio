@@ -1355,3 +1355,43 @@ def test_an_ambiguous_squash_is_not_resolved(db, tmp_path):
     )
 
     assert resolve_squashed(originals[0], repo_root=root) is None
+
+
+def test_an_unmappable_neighbour_claim_is_reported_too(db, tmp_path):
+    """AN INDEPENDENT REVIEW CAUGHT THIS ASYMMETRY IN THE SAME DIFF THAT INTRODUCED IT.
+
+    reachable_ownership names unreachable-and-unmappable commits for THIS work order's own
+    side. _squash_aware_index dropped a NEIGHBOUR's on the floor, and attribute_range then
+    reported "none of the N commits is recorded as belonging to another work order" — an
+    absence it had not established.
+
+    Candid on one side and silent on the other is worse than either, because the silence
+    is invisible next to the candour: a reader who sees one caveat reasonably assumes the
+    other case would also have been named.
+    """
+    import json as _json
+
+    from core.work_orders.artifacts import set_wo_artifact
+    from core.work_orders.range_attribution import (
+        OWNERSHIP_KEY,
+        OWNERSHIP_KIND,
+        attribute_range,
+    )
+
+    root, shas = _repo(tmp_path)
+    # A neighbour claiming a commit that never existed in this repo: unreachable AND
+    # unmappable, so its claim cannot be applied to the range.
+    set_wo_artifact(
+        "wo-neighbour",
+        OWNERSHIP_KIND,
+        _json.dumps({"commits": ["f" * 40]}),
+        instance_key=OWNERSHIP_KEY,
+        db_path=db,
+    )
+
+    result = attribute_range("wo-mine", f"{shas[0]}..{shas[5]}", repo_root=root, db_path=db)
+
+    assert "recorded by OTHER work orders" in result.note, result.note
+    assert (
+        "may be graded here" in result.note
+    ), "the range was reported as having no neighbour claims when one could not be located"

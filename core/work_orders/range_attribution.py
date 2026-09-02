@@ -280,22 +280,35 @@ def _ownership_index(db_path: Path, exclude: str) -> dict[str, str]:
 
 def _squash_aware_index(
     index: dict[str, str], in_range: set[str], repo_root: Path
-) -> dict[str, str]:
-    """Extend a neighbour's ownership through the squash commit that absorbed it.
+) -> tuple[dict[str, str], list[str]]:
+    """Extend a neighbour's ownership through the squash that absorbed it.
 
-    Without this a neighbour's claim silently stops applying the moment their branch
-    merges: their recorded SHAs are no longer ancestors of HEAD, so nothing in the range
-    matches them and the range reads as having no neighbours at all. Measured on
+    Returns ``(extended_index, unmappable)``.
+
+    Without the extension a neighbour's claim silently stops applying the moment their
+    branch merges: their recorded SHAs are no longer ancestors of HEAD, so nothing in the
+    range matches them and the range reads as having no neighbours at all. Measured on
     1db6de49, whose three commits were squashed into 14b8693c by #687.
+
+    THE SECOND RETURN VALUE EXISTS BECAUSE AN INDEPENDENT REVIEW CAUGHT THE ASYMMETRY.
+    This dropped a neighbour's unreachable-and-unmappable commits on the floor while
+    ``attribute_range`` went on to report "none of the N commits is recorded as belonging
+    to another work order" -- an absence it had not established. The same diff's
+    ``reachable_ownership`` insisted on naming exactly that distinction for THIS work
+    order's own commits. Candid on one side and silent on the other is worse than either,
+    because the silence is invisible next to the candour.
     """
     extended = dict(index)
+    unmappable: list[str] = []
     for sha, wo_id in index.items():
         if sha in in_range or _is_reachable(sha, repo_root):
             continue
         target = resolve_squashed(sha, repo_root=repo_root)
         if target and target in in_range:
             extended.setdefault(target, wo_id)
-    return extended
+        else:
+            unmappable.append(sha)
+    return extended, unmappable
 
 
 def attribute_range(
@@ -336,7 +349,18 @@ def attribute_range(
                 f"could not be mapped to a merge commit, so this work order's own claim "
                 f"over them cannot be applied."
             )
-    owners = _squash_aware_index(_ownership_index(db_path, work_order_id), in_range, repo_root)
+    owners, _unmappable_neighbours = _squash_aware_index(
+        _ownership_index(db_path, work_order_id), in_range, repo_root
+    )
+    if _unmappable_neighbours:
+        # Say it on the neighbour side too. "No neighbour claims anything here" and "a
+        # neighbour's claim could not be located" are different facts, and only one of
+        # them means the range is clean.
+        lost_note += (
+            f" {len(_unmappable_neighbours)} commit(s) recorded by OTHER work orders are "
+            f"unreachable and unmappable, so their claims could not be applied to this "
+            f"range — a neighbour's work may be graded here."
+        )
     # This work order's own record wins: a commit both sides claim is one worked on for
     # this work order too, and dropping it would hide delivered work.
     excluded = {sha: wo for sha, wo in owners.items() if sha in in_range and sha not in mine}
