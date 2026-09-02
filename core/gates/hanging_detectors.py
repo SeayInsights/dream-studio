@@ -297,6 +297,63 @@ def _param_names(param_str: str) -> tuple[str, ...]:
     return tuple(names)
 
 
+def _slice(lines: list[str], start: tuple[int, int], end: tuple[int, int]) -> str:
+    """The text between two ``(row, col)`` positions, rows 1-indexed as tokenize reports."""
+    start_row, start_col = start
+    end_row, end_col = end
+    if start_row == end_row:
+        row = lines[start_row - 1] if start_row - 1 < len(lines) else ""
+        return row[start_col:end_col]
+    out = [lines[start_row - 1][start_col:]] if start_row - 1 < len(lines) else []
+    # Bound named rather than inlined: black formats `lines[start_row : end_row - 1]` with
+    # a space before the colon and flake8 then flags E203, so the two tools only agree
+    # when the slice expression is simple.
+    last_full_row = end_row - 1
+    out.extend(lines[start_row:last_full_row])
+    if end_row - 1 < len(lines):
+        out.append(lines[end_row - 1][:end_col])
+    return "".join(out)
+
+
+def _code_only(text: str) -> str:
+    """``text`` with comments and string literals blanked out.
+
+    A MENTION IS NOT A CALLER. ``detect_changed_signature_callers`` searched raw file
+    text, so a comment naming a symbol counted as a reference to it. That blocked PR #691
+    on two files whose only "reference" was the prose
+    ``conftest.guard_real_homedir checks ...`` -- for a pytest FIXTURE whose added
+    ``request`` parameter pytest injects and no caller ever passes.
+
+    The SQL detector further down already carries this lesson ("Match real SQL writes, not
+    prose ... a false positive this gate caught on its own source"). One detector in this
+    file learned it and the other did not.
+
+    Blanked rather than removed so line and column offsets survive. Falls back to the
+    original text when the file will not tokenize: a syntax error means this cannot tell
+    code from prose, and under-reporting a real dangling caller is worse than tolerating
+    the false positive it would avoid.
+    """
+    import io
+    import token as _token
+    import tokenize as _tokenize
+
+    try:
+        lines = text.splitlines(keepends=True)
+        pieces: list[str] = []
+        previous_end = (1, 0)
+        for tok in _tokenize.generate_tokens(io.StringIO(text).readline):
+            pieces.append(_slice(lines, previous_end, tok.start))
+            raw = _slice(lines, tok.start, tok.end)
+            if tok.type in (_token.COMMENT, _token.STRING):
+                pieces.append("".join("\n" if ch == "\n" else " " for ch in raw))
+            else:
+                pieces.append(raw)
+            previous_end = tok.end
+        return "".join(pieces)
+    except (_tokenize.TokenError, SyntaxError, IndentationError, ValueError):
+        return text
+
+
 def detect_changed_signature_callers(
     diff_text: str, *, repo_root: Path | str = REPO_ROOT
 ) -> list[Finding]:
@@ -331,7 +388,7 @@ def detect_changed_signature_callers(
         if rel in changed_paths:
             continue
         for name, pat in ref_res.items():
-            if pat.search(text):
+            if pat.search(_code_only(text)):
                 old_p, new_p = changed_sigs[name]
                 findings.append(
                     {
