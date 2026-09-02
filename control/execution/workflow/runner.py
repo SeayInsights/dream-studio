@@ -102,6 +102,9 @@ _DEFAULT_COMMAND_MODE = "build"
 # status query, a gate's last line. It must be a cheap read, never the work itself.
 _COMPLETION_CHECK_TIMEOUT = 60
 
+# The operator set the retry budget; imported so there is one definition of it.
+from control.execution.workflow.autonomy import RETRY_BUDGET  # noqa: E402
+
 
 def resolve_specifier(skill_raw: str) -> str:
     """Resolve a raw skill field value to a fully-qualified ``pack:mode`` specifier.
@@ -143,9 +146,12 @@ class WorkflowRunner:
         dry_run: If True, log what would be invoked but never call any skill.
     """
 
-    def __init__(self, wf_key: str, dry_run: bool = False) -> None:
+    def __init__(self, wf_key: str, dry_run: bool = False, execute: bool = False) -> None:
         self.wf_key = wf_key
         self.dry_run = dry_run
+        # EXECUTION IS OPT-IN. It spawns an agent that edits this repository unattended;
+        # making every existing `ds workflow run` do that silently would be reckless.
+        self.execute = execute
         # Why the last run() stopped, when it stopped at "blocked". Always present, so a
         # caller never has to guess whether the attribute exists before reading it.
         self.blocked_on: str = ""
@@ -336,6 +342,14 @@ class WorkflowRunner:
 
             t0 = time.monotonic()
             success, output = self._invoke_skill(specifier, node_id)
+
+            # RUN IT, do not merely deliver it. Without this, the node whose job is to
+            # implement the tasks cannot satisfy a check asking whether the tasks are
+            # implemented -- measured: the loop halted at implement-tasks reporting "15
+            # task(s) still pending", which is the work, not an obstacle.
+            _node_yaml_exec = (full_yaml_nodes or {}).get(node_id) or ynode
+            if self.execute and success and not self.dry_run:
+                success, output = self._run_node(node_id, _node_yaml_exec, output)
             duration = round(time.monotonic() - t0, 2)
 
             # THE COMPLETION DECISION DOES NOT LOOK AT THIS TEXT AT ALL, which is why
@@ -349,6 +363,8 @@ class WorkflowRunner:
 
             if not success:
                 status, reason = "failed", None
+            elif self.execute and not self.dry_run:
+                status, reason = self._verify_with_retry(node_id, _node_yaml_exec, output)
             else:
                 # Read the FULL yaml node, not the parsed summary: completion_check
                 # is a block scalar and lives only in the full node. Resolved here
@@ -466,6 +482,125 @@ class WorkflowRunner:
             if node.get("status") == "unverified"
         ]
         return chr(10).join(lines)
+
+    def _run_node(self, node_id: str, ynode: dict, prompt: str) -> tuple[bool, str]:
+        """Execute the node's prompt through the configured provider. Never pushes.
+
+        Reuses ``core.adapters.grader_runner.run_generation`` -- the same provider-neutral
+        spawn the verify plane uses -- so which agent EXECUTES a node follows the same
+        profile resolution as which agent GRADES one.
+
+        THE NO-PUSH RULE IS MEASURED, NOT ASKED. The remote ref is read before and after;
+        if it moved, the node fails with the violation named. Telling an agent not to push
+        is prose, and prose is what this repository keeps finding was never a gate.
+        """
+        from control.execution.workflow.autonomy import detect_push, remote_head
+
+        repo_root = Path(__file__).resolve().parents[3]
+        before = remote_head(repo_root)
+        timeout = int(ynode.get("timeout_seconds") or 600)
+
+        guarded = (
+            f"{prompt}\n\n"
+            "--- EXECUTION BOUNDARY ---\n"
+            "Edit the working tree. Do NOT push, and do NOT merge. Opening a pull request "
+            "is the reviewing step's decision, not yours. This boundary is checked after "
+            "you finish, not taken on trust.\n"
+        )
+        try:
+            from core.adapters.grader_runner import run_generation
+
+            proc = run_generation(guarded, timeout=timeout)
+        except Exception as exc:  # noqa: BLE001 - a provider fault is a node failure
+            return False, f"provider could not be invoked ({type(exc).__name__}): {exc}"
+
+        after = remote_head(repo_root)
+        violation = detect_push(before, after)
+        if violation:
+            return False, f"EXECUTION BOUNDARY VIOLATED: {violation}"
+
+        out = ((proc.stdout or "") + (proc.stderr or "")).strip()
+        if proc.returncode != 0:
+            return False, f"provider exited {proc.returncode}: {out[-400:]}"
+        return True, out
+
+    def _verify_with_retry(self, node_id: str, ynode: dict, output: str) -> tuple[str, str | None]:
+        """Verify; retry twice while merely not-there-yet; then DIAGNOSE rather than move on.
+
+        Operator ruling: the budget is 2, and on exhaustion the loop "should not move on,
+        it should figure out the issue using the review agent ... and determine the fix".
+        A third silent attempt and a shrug are both refusals to look.
+        """
+        from control.execution.workflow.autonomy import RETRY_BUDGET
+
+        status, reason = self._verify_completion(node_id, ynode)
+        attempt = 0
+        while status == "blocked" and attempt < RETRY_BUDGET:
+            attempt += 1
+            print(
+                f"[runner] Node {node_id}: blocked, retrying ({attempt}/{RETRY_BUDGET}) — {reason}",
+                flush=True,
+            )
+            ok, out = self._run_node(node_id, ynode, output)
+            if not ok:
+                return "failed", out
+            status, reason = self._verify_completion(node_id, ynode)
+
+        if status == "blocked":
+            diagnosis = self._diagnose(node_id, ynode, reason or "")
+            reason = f"{reason} | after {attempt} attempt(s), diagnosis: {diagnosis}"
+        return status, reason
+
+    def _diagnose(self, node_id: str, ynode: dict, reason: str) -> str:
+        """Ask a fresh reviewer WHY the node will not complete, and what would fix it.
+
+        Deliberately a separate invocation rather than another execution attempt: the
+        agent that could not make the check pass is the least likely to see why. A clean
+        reader is the point, the same reason independent review exists at close.
+        """
+        from control.execution.workflow.autonomy import OPERATOR_STANCE
+
+        check = str(ynode.get("completion_check") or "(none declared)")
+        prompt = (
+            f"{OPERATOR_STANCE}\n\n"
+            f"A workflow node did not complete after {RETRY_BUDGET} attempts.\n\n"
+            f"Node: {node_id}\n"
+            f"Its completion check: {check}\n"
+            f"What the check reported: {reason}\n\n"
+            "You are a fresh reviewer. Do not assume the node's prompt was wrong or right.\n"
+            "State, in at most six lines:\n"
+            "  1. The most likely CAUSE, named specifically.\n"
+            "  2. The concrete FIX, as an action someone can take.\n"
+            "  3. Whether this is one task or several (several means it needs a work order).\n"
+        )
+        try:
+            from core.adapters.grader_runner import run_generation
+
+            proc = run_generation(prompt, timeout=180)
+        except Exception as exc:  # noqa: BLE001 - a diagnosis must never break the run
+            return f"diagnosis unavailable ({type(exc).__name__}: {exc})"
+        if proc.returncode != 0:
+            return f"diagnosis unavailable (provider exited {proc.returncode})"
+        diagnosis = ((proc.stdout or "").strip() or "diagnosis was empty")[:1200]
+
+        # PRESCRIBE, do not merely observe. A finding that lives only in this run's output
+        # is lost the moment the terminal scrolls -- the operator's standing rule is that
+        # every defect is registered in the authority. One finding becomes a task; several
+        # become a work order, because a work order carrying one task is mis-sized.
+        try:
+            from control.execution.workflow.autonomy import prescribe
+
+            outcome = prescribe(
+                diagnosis,
+                node_id=node_id,
+                reason=reason,
+                source_root=Path(__file__).resolve().parents[3],
+            )
+            if outcome.registered:
+                diagnosis += " | registered: " + "; ".join(outcome.registered)
+        except Exception as exc:  # noqa: BLE001 - prescribing must never break the run
+            diagnosis += f" | could not register ({type(exc).__name__})"
+        return diagnosis
 
     def _describe_blockage(self, state_nodes: dict) -> str:
         """Why the run stopped, in terms an operator can act on.

@@ -101,7 +101,9 @@ def cmd_run(args) -> int:
     from control.execution.workflow.runner import WorkflowRunner
 
     dry_run = getattr(args, "dry_run", False)
-    runner = WorkflowRunner(args.wf_key, dry_run=dry_run)
+    runner = WorkflowRunner(
+        args.wf_key, dry_run=dry_run, execute=bool(getattr(args, "execute", False))
+    )
     try:
         final_status = runner.run()
     except KeyError as exc:
@@ -166,6 +168,16 @@ def add_workflow_subcommand(subparsers) -> None:
         action="store_true",
         dest="dry_run",
         help="Dry-run all waves without invoking any skill",
+    )
+    p_run.add_argument(
+        "--execute",
+        action="store_true",
+        dest="execute",
+        help=(
+            "RUN each node through the configured provider instead of writing its prompt "
+            "to a file. An executing node may edit the working tree; it may not push, and "
+            "that is checked. Spawns an agent — opt in deliberately"
+        ),
     )
     p_run.add_argument(
         "--non-interactive",

@@ -838,3 +838,160 @@ def test_the_orchestrator_declares_checks_that_observe_real_state():
         assert any(
             cmd.startswith(p) for p in ("git ", "gh ", "python ")
         ), f"{node['id']} declares {cmd!r}, which does not invoke an external observer"
+
+
+# -- WO e4e85949: executing a node, inside the boundaries the operator set --------
+
+
+def test_an_executing_node_that_pushes_is_caught_not_trusted():
+    """OPERATOR RULING: "an executing node can't push."
+
+    Telling an agent not to push is prose, and prose is what this repository keeps
+    discovering was never a gate — the same lesson as completion tokens that could never
+    match and a `--force` that bypasses everything at once.
+
+    So the remote ref is read before and after every execution. If it moved, the node
+    FAILS with the violation named, whatever the agent reported about itself.
+    """
+    from control.execution.workflow.autonomy import detect_push
+
+    assert detect_push("abc1234", "abc1234") == ""
+
+    created = detect_push("", "def5678")
+    assert created, "creating the remote branch IS the push this forbids"
+    assert "may not push" in created
+
+    moved = detect_push("abc1234", "def5678")
+    assert "abc1234"[:8] in moved and "def5678"[:8] in moved
+    assert "may not push" in moved
+
+
+def test_the_execution_boundary_is_stated_to_the_agent_as_well_as_checked():
+    """Checking without telling would be a trap: the agent is given the rule AND the rule
+    is verified. Neither alone is enough — an unstated rule is unfair, an unchecked one is
+    decoration."""
+    import inspect
+
+    from control.execution.workflow.runner import WorkflowRunner
+
+    src = inspect.getsource(WorkflowRunner._run_node)
+    assert "EXECUTION BOUNDARY" in src
+    assert "Do NOT push" in src
+    assert (
+        "detect_push" in src and "remote_head" in src
+    ), "the boundary is stated but never verified"
+
+
+def test_the_retry_budget_is_two_and_exhaustion_diagnoses():
+    """OPERATOR RULING: the budget is 2, and on exhaustion the loop "should not move on,
+    it should figure out the issue using the review agent ... and determine the fix".
+
+    A third silent attempt and a shrug are both refusals to look. `_diagnose` is a SEPARATE
+    invocation rather than another execution attempt, because the agent that could not make
+    the check pass is the least likely to see why — the same reason independent review
+    exists at close.
+    """
+    import inspect
+
+    from control.execution.workflow.autonomy import RETRY_BUDGET
+    from control.execution.workflow.runner import WorkflowRunner
+
+    assert RETRY_BUDGET == 2, f"the operator set 2, found {RETRY_BUDGET}"
+
+    src = inspect.getsource(WorkflowRunner._verify_with_retry)
+    assert "RETRY_BUDGET" in src, "the budget is hardcoded somewhere else"
+    assert "self._diagnose(" in src, "exhaustion moves on instead of diagnosing"
+
+    diag = inspect.getsource(WorkflowRunner._diagnose)
+    assert "fresh reviewer" in diag
+    assert "work order" in diag, "the diagnosis must say whether this needs a work order"
+
+
+def test_execution_is_opt_in():
+    """It spawns an agent that edits the repository unattended. Making every existing
+    `ds workflow run` do that silently would be reckless, so the default is unchanged."""
+    import inspect
+
+    from control.execution.workflow.runner import WorkflowRunner
+
+    sig = inspect.signature(WorkflowRunner.__init__)
+    assert sig.parameters["execute"].default is False
+
+    r = WorkflowRunner.__new__(WorkflowRunner)
+    r.dry_run = False
+    r.execute = False
+    # With execute off the wave must not reach the provider at all.
+    wave = inspect.getsource(WorkflowRunner._execute_wave)
+    assert (
+        "if self.execute and success and not self.dry_run:" in wave
+    ), "execution is not gated on the flag"
+
+
+def test_the_orchestrator_reviews_with_the_operators_stance():
+    """OPERATOR: "It should act as I would act, push back on an agent if it feels the need
+    to. I think you have enough history to know the guard rails."
+
+    These are not invented guard rails. Each is a position this operator has actually held
+    and enforced across the work that produced this file: no false-done, gates not prose,
+    absence is not clean, measure before claiming, every defect registered, never --force,
+    right-sized units. They are handed to the reviewing agent verbatim so a diagnosis is
+    made from the operator's stance rather than a generic one.
+    """
+    import inspect
+
+    from control.execution.workflow.autonomy import OPERATOR_STANCE
+    from control.execution.workflow.runner import WorkflowRunner
+
+    for position in (
+        "NO FALSE-DONE",
+        "GATES, NOT PROSE",
+        "ABSENCE IS NOT CLEAN",
+        "MEASURE BEFORE CLAIMING",
+        "EVERY DEFECT IS REGISTERED",
+        "NEVER --force",
+        "RIGHT-SIZED UNITS",
+        "PUSH BACK",
+    ):
+        assert position in OPERATOR_STANCE, f"the stance dropped {position!r}"
+
+    assert "OPERATOR_STANCE" in inspect.getsource(
+        WorkflowRunner._diagnose
+    ), "the reviewer is diagnosing without the operator's positions"
+
+
+def test_a_diagnosis_is_registered_not_just_reported():
+    """EVERY DEFECT IS REGISTERED. A finding that lives only in this run's output is lost
+    the moment the terminal scrolls — the operator's standing rule, and the reason
+    GitHub-issue-only tracking was banned.
+
+    Registration goes through create_task, the authoring door, so the record carries an
+    event and survives a projection rebuild. Raw SQL would be deleted by the next rebuild,
+    which is the whole reason that door exists.
+    """
+    import inspect
+
+    from control.execution.workflow.autonomy import prescribe
+    from control.execution.workflow.runner import WorkflowRunner
+
+    assert "prescribe(" in inspect.getsource(
+        WorkflowRunner._diagnose
+    ), "a diagnosis is produced and then dropped"
+    src = inspect.getsource(prescribe)
+    assert "create_task" in src, "registration bypasses the authoring door"
+    assert "work order" in src.lower()
+
+
+def test_prescribing_never_breaks_the_run(tmp_path):
+    """Bookkeeping must not be able to stop the work, the same rule the delivery-boundary
+    stamps follow. A prescription that cannot be written degrades to a note."""
+    from control.execution.workflow.autonomy import prescribe
+
+    outcome = prescribe(
+        "cause: the check names a file that does not exist",
+        node_id="n1",
+        reason="exited 1",
+        source_root=tmp_path / "nowhere",
+        dream_studio_home=tmp_path / "nowhere",
+    )
+    assert outcome.ok is True
+    assert outcome.registered, "a failed registration must say so rather than vanish"
