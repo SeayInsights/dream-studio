@@ -166,6 +166,15 @@ it (WO-ARTIFACT-LOCK-FALLBACK `fd981a32`). A reader seeing a `library` entry in 
 otherwise hook-shaped report should read it as a degraded write, and recover with
 `ds work-order backfill-artifacts`.
 
+**Where DS builds a shell string at runtime.** Hooks receive their payload on stdin and
+are invoked as fixed argv from `hooks/hooks.json` — no hook command is assembled from
+model output. The workflow runner's `completion_check` is the other case and is NOT like
+that: it is a shell string with `{{node.field}}` values interpolated into it, and those
+values are agent-generated. Those values are shell-quoted at the point of substitution
+(see **A completion check's interpolated values are shell-quoted** in
+`docs/WORKFLOW_RUNTIME.md`). Anyone adding a runtime-assembled command on the hook side
+should follow the same rule: quote the substituted value, never the template.
+
 ### Grader provider selection (verification plane)
 
 The other operator override alongside `DS_ENFORCE`: which LLM provider grades each

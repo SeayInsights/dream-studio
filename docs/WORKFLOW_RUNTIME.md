@@ -114,6 +114,32 @@ stated reasons, and enforcing the rules would have flipped every correctly-docum
 to blocked. A declaration a parser cannot read is not a declaration. The test guarding the
 gap searched the raw file text for the comment and passed throughout.
 
+### A completion check's interpolated values are shell-quoted
+
+`completion_check` supports `{{node.field}}` templates so a check can name the thing it
+is checking — "does the PR exist" needs the PR number the previous node printed. Those
+values are prior nodes' output: agent-generated text, or whatever a command node
+captured. The check is then run with `shell=True`.
+
+Until 2026-09-02 the resolved value went into that string raw, so an output containing
+`; rm -rf ~`, `$(...)` or backticks became **shell syntax** in a command this runner
+executes unattended during an `--execute` run (WO `e4e85949` task `52f2c484`).
+`resolve_templates` now takes a `transform`, and `_verify_completion` passes
+`shlex.quote`, so each substituted value is exactly one argument and never syntax.
+
+Two things are deliberately NOT quoted, and the distinction is load-bearing:
+
+- **The template around the values.** It is authored in the repo and its pipes and
+  redirects are intended; quoting the whole string would break every check, which all
+  pipe into `grep`.
+- **`completion_contains`.** It is compared as a substring against the check's output and
+  never executed, so quoting it would add literal quote characters to the thing being
+  matched.
+
+`transform` defaults to none, because the PROMPT path resolves the same templates and
+wants the raw text — quoting there would corrupt every prompt that references a prior
+node.
+
 ### The rules run where the status is decided
 
 `control/execution/workflow/autonomy.py::OPERATOR_RULES` holds six predicates —

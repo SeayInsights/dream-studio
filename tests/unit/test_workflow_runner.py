@@ -1172,3 +1172,73 @@ def test_every_shipped_node_passes_the_rules_on_a_clean_completion():
         declared = n.get("completion_check") or n.get("completion_contains")
         stated = str(n.get("completion_unobservable") or "").strip()
         assert declared or len(stated) >= 12, f"{n['id']} neither checks nor explains"
+
+
+def test_a_hostile_node_output_cannot_become_shell_syntax_in_a_completion_check(tmp_path):
+    """SECURITY: agent output was interpolated into a string run with shell=True.
+
+    WO `e4e85949` tasks `52f2c484` (the fix) and `f0dce86f` (this adversarial test,
+    malformed_input class). `_verify_completion` resolves `{{node.output}}` into
+    `completion_check` and then runs it through a shell -- unattended, in `--execute`
+    runs. The values are PRIOR NODES' OUTPUT: agent-generated prose, or whatever a
+    command node captured. A value containing `; rm -rf ~`, `$(...)` or backticks was
+    becoming shell syntax.
+
+    The template is authored in the repo and its pipes are deliberate, so only the
+    SUBSTITUTED VALUES are quoted. Asserted by tokenising the result: the hostile payload
+    must survive as exactly one argument, which is the property that makes it inert.
+    """
+    import shlex
+
+    from control.execution.workflow.engine import resolve_templates
+
+    payload = "abc; touch /tmp/PWNED; echo $(whoami) `id` && rm -rf ~"
+    wf = {"nodes": {"prev": {"output": payload}}}
+    resolved = resolve_templates(
+        "gh pr view {{prev.output}} --json state", wf, transform=shlex.quote
+    )
+
+    tokens = shlex.split(resolved)
+    assert tokens[:3] == ["gh", "pr", "view"], tokens
+    assert tokens[3] == payload, f"the payload was split into syntax: {tokens}"
+    assert tokens[4:] == ["--json", "state"], tokens
+    # The operators must not survive as operators anywhere in the string.
+    for operator in (";", "&&", "$(", "`"):
+        assert operator not in resolved.replace(shlex.quote(payload), ""), operator
+
+    # The template's OWN shell operators are untouched -- quoting the whole string would
+    # break every real check, which all pipe into grep.
+    piped = resolve_templates(
+        "git status | grep -q {{prev.output}}",
+        {"nodes": {"prev": {"output": "clean"}}},
+        transform=shlex.quote,
+    )
+    assert piped == "git status | grep -q clean", piped
+
+    # An unresolved reference stays literal rather than being quoted into a plausible
+    # value -- quoting it would mask a broken reference as a string that resolved.
+    assert "{{nope.field}}" in resolve_templates("x {{nope.field}}", wf, transform=shlex.quote)
+
+
+def test_the_runner_quotes_the_check_but_not_the_expected_substring():
+    """The two resolutions are deliberately different and the difference is load-bearing.
+
+    `completion_check` is EXECUTED, so its interpolated values are shell-quoted.
+    `completion_contains` is compared as a SUBSTRING against that command's output and
+    never executed, so quoting it would add literal quote characters to the thing being
+    matched and break every comparison. Asserted on the source, because the distinction
+    is one line apart and a later editor "tidying" them into one call would silently
+    reintroduce either the injection or the broken match.
+    """
+    import inspect
+
+    from control.execution.workflow.runner import WorkflowRunner
+
+    src = inspect.getsource(WorkflowRunner._verify_completion)
+    assert "transform=shlex.quote" in src, "the executed check is not quoted"
+    check_line = next(line for line in src.splitlines() if "check = resolve_templates(" in line)
+    expected_line = next(
+        line for line in src.splitlines() if "expected_raw = resolve_templates(" in line
+    )
+    assert "shlex.quote" in check_line, check_line
+    assert "shlex.quote" not in expected_line, expected_line

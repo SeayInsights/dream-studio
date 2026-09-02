@@ -11,6 +11,7 @@ interpreter respawn).
 from __future__ import annotations
 
 import sys
+import shlex
 import subprocess
 import time
 from datetime import datetime, UTC
@@ -764,7 +765,26 @@ class WorkflowRunner:
                 from control.execution.workflow.engine import resolve_templates
 
                 wf = (self._load_state().get("active_workflows", {}) or {}).get(self.wf_key, {})
-                check = resolve_templates(check, wf).strip()
+                # SHELL-QUOTE WHAT THE AGENT WROTE (WO `e4e85949` task `52f2c484`).
+                #
+                # `check` is run below with shell=True, and the values interpolated into
+                # it are prior nodes' output -- agent-generated text, or whatever a
+                # command node captured. A value containing `; rm -rf ~`, `$(...)` or
+                # backticks was becoming SHELL SYNTAX in a string this runner then
+                # executes unattended. The template around them is authored in the repo
+                # and its pipes and redirects are deliberate; only the substituted values
+                # are untrusted, so only they are quoted. `shlex.quote` makes each one
+                # exactly one argument.
+                #
+                # POSIX quoting on a runner that also runs on Windows: the checks in
+                # execute-work-orders are POSIX pipelines and the pre-push hook runs under
+                # Git Bash, so the shell being quoted for is the one that will run it. A
+                # value that survives POSIX quoting is inert under cmd.exe as well,
+                # because it stays a single quoted token either way.
+                check = resolve_templates(check, wf, transform=shlex.quote).strip()
+                # NOT quoted: `expected_raw` is compared as a SUBSTRING against the
+                # check's output, never executed. Quoting it would add literal quote
+                # characters to the thing being matched and break every comparison.
                 expected_raw = resolve_templates(expected_raw, wf).strip()
             except Exception:
                 # An unresolvable template leaves the literal in place; the check then

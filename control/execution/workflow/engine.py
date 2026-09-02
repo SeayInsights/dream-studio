@@ -16,6 +16,7 @@ import json
 import os
 import re
 import time
+from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
 from collections.abc import Generator
@@ -125,13 +126,27 @@ def _resolve_session_ref(filename: str, session_dir: str | None) -> str | None:
         return None
 
 
-def resolve_templates(text: str, wf: dict, session_dir: str | None = None) -> str:
+def resolve_templates(
+    text: str,
+    wf: dict,
+    session_dir: str | None = None,
+    transform: Callable[[str], str] | None = None,
+) -> str:
     """Resolve all {{ref}} templates in text.
 
     Supported patterns:
       {{node_id.field}}    — resolved via workflow state
       {{session:filename}} — resolved via session_cache
     Unresolved templates are left as-is.
+
+    ``transform`` is applied to each RESOLVED VALUE before substitution, and exists for
+    one reason: the values are agent-generated node output, and one caller interpolates
+    them into a string it then runs through a shell. That caller passes ``shlex.quote``
+    so a value can only ever become a single argument, never syntax
+    (WO ``e4e85949`` task ``52f2c484``). It is not applied to the template around them --
+    the template is authored in the repo and its shell operators are deliberate -- and not
+    applied at all by default, because the prompt path wants the raw text and quoting
+    there would corrupt every prompt that references a prior node.
     """
 
     def _replace(m: re.Match) -> str:
@@ -139,9 +154,14 @@ def resolve_templates(text: str, wf: dict, session_dir: str | None = None) -> st
         if ref.startswith("session:"):
             filename = ref[len("session:") :]
             val = _resolve_session_ref(filename, session_dir)
-            return val if val is not None else m.group(0)
-        val = _resolve_ref(ref, wf)
-        return val if val is not None else m.group(0)
+        else:
+            val = _resolve_ref(ref, wf)
+        if val is None:
+            # An unresolved reference stays literal. It is NOT transformed: quoting the
+            # template text itself would turn `{{a.b}}` into a quoted literal and mask
+            # the unresolved reference as a value that happens to look like one.
+            return m.group(0)
+        return transform(val) if transform else val
 
     return re.sub(r"\{\{(.+?)\}\}", _replace, text)
 
