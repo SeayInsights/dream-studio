@@ -808,16 +808,22 @@ def test_the_orchestrator_declares_checks_that_observe_real_state():
 
     # A node without a check must SAY why. An unexplained gap reads as an oversight and
     # invites the next author to fill it with something invented.
+    #
+    # THE REASON IS A FIELD, NOT A COMMENT. It was `# NO completion_check: <reason>` and
+    # this assertion searched a 400-character window of raw text for it -- which passed
+    # while `yaml.safe_load` dropped every one of those comments, so the
+    # `absence_is_not_clean` operator rule could not see a single stated reason and would
+    # have flipped all eight nodes to blocked once the rules were wired. A declaration a
+    # parser cannot read is not a declaration, so it moved to `completion_unobservable`
+    # and this reads the parsed node.
     for node in nodes:
         if node.get("completion_check"):
             continue
-        marker = f"- id: {node['id']}"
-        start = raw.index(marker)
-        window_end = start + 400
-        window = raw[start:window_end]
-        assert (
-            "NO completion_check:" in window
-        ), f"{node['id']} has no check and no recorded reason — the gap looks accidental"
+        stated = str(node.get("completion_unobservable") or "").strip()
+        assert len(stated) >= 12, (
+            f"{node['id']} has no check and no recorded reason — the gap looks accidental. "
+            f'Declare it with completion_unobservable: "<why>".'
+        )
 
     # The scoped check, not the substring that matched the whole ready set.
     implement = by_id["implement-tasks"]["completion_check"]
@@ -1072,3 +1078,97 @@ def test_the_diagnosis_steps_through_the_shared_taxonomy():
     diag = inspect.getsource(WorkflowRunner._diagnose)
     assert "SCENARIO_TAXONOMY" in diag
     assert "STEP THROUGH THIS TAXONOMY" in diag
+
+
+def test_the_operator_rules_are_actually_run_by_the_runner():
+    """A PREDICATE WITH NO CALL SITE IS PROSE WITH EXTRA STEPS.
+
+    ``evaluate_operator_rules`` existed, every rule fired on its own case, and the test
+    above passed -- while nothing in the runner ever called it. ``stance_brief()`` was
+    wired, so the operator's positions reached a run as TEXT for a reviewing agent and
+    never as checks. That is the exact substitution the operator objected to
+    ("these should be rules for the operator not prose though"), committed by the module
+    written to prevent it, and the `reachability` gate is what caught it.
+
+    Asserted structurally: the rules must be evaluated where a node's status is DECIDED,
+    and a violation must be able to change that status. A test that only called
+    ``_check_operator_rules`` directly would pass again with the call site removed.
+    """
+    import inspect
+
+    from control.execution.workflow.runner import WorkflowRunner
+
+    helper = inspect.getsource(WorkflowRunner._check_operator_rules)
+    assert "evaluate_operator_rules(" in helper, "the helper does not run the rules"
+
+    wave = inspect.getsource(WorkflowRunner._execute_wave)
+    assert "_check_operator_rules(" in wave, "the rules are never run on a finished node"
+    # The consequence has to exist, or the rules are advisory decoration again.
+    assert 'status = "blocked"' in wave, "a violated rule cannot change the node's status"
+
+
+def test_a_node_that_cannot_be_observed_says_why_and_a_comment_does_not_count():
+    """A STATED REASON IS THE ESCAPE; SILENCE IS NOT.
+
+    Eight nodes in execute-work-orders genuinely cannot be checked yet, and each carried
+    its reason as a YAML COMMENT -- which ``safe_load`` drops. So ``absence_is_not_clean``
+    could not see any of them, and wiring the rules would have flipped all eight to
+    blocked, halting the workflow on exactly the nodes that were correctly documented.
+    The reason is a ``completion_unobservable`` field now: a declaration is data, not a
+    remark.
+
+    Same shape as ``--accept-structure`` at close -- a reason a later reader can weigh,
+    never a bare flag. "n/a" is refused, because recorded it would look like a decision.
+    """
+    from control.execution.workflow.autonomy import RuleContext, evaluate_operator_rules
+
+    def _hits(ynode):
+        return " ".join(evaluate_operator_rules(RuleContext("n", ynode, True, "completed")))
+
+    assert "absence_is_not_clean" in _hits({}), "silence must still fail"
+    assert "absence_is_not_clean" in _hits({"completion_unobservable": "n/a"})
+    assert "absence_is_not_clean" in _hits({"completion_unobservable": "   "})
+    assert (
+        _hits({"completion_unobservable": "needs the active work order id."}) == ""
+    ), "a stated reason is the documented escape"
+
+
+def test_every_shipped_node_passes_the_rules_on_a_clean_completion():
+    """THE REGRESSION GUARD FOR THE WHOLE WIRING.
+
+    The rules now change a node's status, so a rule that fires on a correctly-authored
+    node does not merely add noise -- it halts the run. This walks the real workflow the
+    orchestrator executes and asserts that a node which completed cleanly is never
+    flagged, which is the property that made the comment-to-field change necessary rather
+    than cosmetic.
+
+    Reads the shipped YAML rather than a fixture: a fixture would keep passing while the
+    file the runner actually loads drifted, and the divergence between a test's idea of a
+    manifest and the manifest itself has already broken this repository.
+    """
+    from pathlib import Path
+
+    import yaml
+
+    from control.execution.workflow.autonomy import RuleContext, evaluate_operator_rules
+
+    repo_root = Path(__file__).resolve().parents[2]
+    wf = yaml.safe_load(
+        (repo_root / "canonical" / "workflows" / "execute-work-orders.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    nodes = wf["nodes"]
+    assert len(nodes) >= 10, "the workflow shrank; this guard is checking the wrong file"
+
+    flagged = {
+        n["id"]: evaluate_operator_rules(RuleContext(n["id"], n, True, "completed")) for n in nodes
+    }
+    offenders = {nid: v for nid, v in flagged.items() if v}
+    assert not offenders, f"correctly-authored nodes would halt the run: {offenders}"
+
+    # Every node either observes itself or says why it cannot. Neither absent.
+    for n in nodes:
+        declared = n.get("completion_check") or n.get("completion_contains")
+        stated = str(n.get("completion_unobservable") or "").strip()
+        assert declared or len(stated) >= 12, f"{n['id']} neither checks nor explains"

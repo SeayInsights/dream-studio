@@ -44,7 +44,7 @@ nodes:
     timeout_seconds: 30
 
   - id: escalation-probe
-    # NO completion_check: needs the active work order id, which the runner cannot template yet.
+    completion_unobservable: "needs the active work order id, which the runner cannot template yet."
     # This node reports `unverified`, which is the true state.
     depends_on: [capability-probe]
     command: |
@@ -65,7 +65,7 @@ nodes:
     timeout_seconds: 30
 
   - id: preflight-check
-    # NO completion_check: needs the active work order id.
+    completion_unobservable: "needs the active work order id."
     # This node reports `unverified`, which is the true state.
     depends_on: [escalation-probe]
     command: |
@@ -84,7 +84,7 @@ nodes:
     timeout_seconds: 60
 
   - id: migration-class-check
-    # NO completion_check: needs the active work order id.
+    completion_unobservable: "needs the active work order id."
     # This node reports `unverified`, which is the true state.
     depends_on: [preflight-check]
     command: |
@@ -129,7 +129,7 @@ nodes:
       Do not print TASKS_DONE unless `ds work-order tasks <work_order_id>` shows none remaining.
 
   - id: run-gates
-    # NO completion_check: the pre-push gate takes minutes; a completion check must be a cheap read, and one that times out reports blocked forever.
+    completion_unobservable: "the pre-push gate takes minutes; a completion check must be a cheap read, and one that times out reports blocked forever."
     # This node reports `unverified`, which is the true state.
     skill: verify
     depends_on: [implement-tasks]
@@ -212,7 +212,7 @@ nodes:
     timeout_seconds: 60
 
   - id: independent-review
-    # NO completion_check: needs the active work order id to locate its verdict artifact.
+    completion_unobservable: "needs the active work order id to locate its verdict artifact."
     # This node reports `unverified`, which is the true state.
     depends_on: [run-gates]
     condition: "{{run-gates.output}} contains 'GATES: PASS'"
@@ -256,7 +256,7 @@ nodes:
     timeout_seconds: 300
 
   - id: close-work-order-github
-    # NO completion_check: needs the active work order id.
+    completion_unobservable: "needs the active work order id."
     # This node reports `unverified`, which is the true state.
     depends_on: [merge, independent-review]
     condition: "{{capability-probe.output}} contains 'GITHUB: YES' and {{independent-review.output}} contains 'REVIEW_PASS'"
@@ -269,7 +269,7 @@ nodes:
     timeout_seconds: 120
 
   - id: close-work-order-local
-    # NO completion_check: needs the active work order id.
+    completion_unobservable: "needs the active work order id."
     # This node reports `unverified`, which is the true state.
     depends_on: [run-gates, independent-review]
     condition: "{{capability-probe.output}} contains 'GITHUB: NO' and {{run-gates.output}} contains 'GATES: PASS' and {{independent-review.output}} contains 'REVIEW_PASS'"
@@ -283,7 +283,7 @@ nodes:
     timeout_seconds: 120
 
   - id: next-iteration
-    # NO completion_check: its effect is choosing the next work order, which is not yet observable.
+    completion_unobservable: "its effect is choosing the next work order, which is not yet observable."
     # This node reports `unverified`, which is the true state.
     depends_on: [close-work-order-github, close-work-order-local]
     trigger_rule: any_done

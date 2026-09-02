@@ -87,6 +87,63 @@ Docker, inspect secrets, mutate external projects, or execute remediation.
 
 **Recommendation:** Document this as a declared-but-advisory field. If enforcement is needed, add to `cmd_next` in Phase 6 — check if a failed node has retry.max > retry_count and re-queue it.
 
+## Node Observation and the Operator Rules
+
+**Status: Enforced by the runtime, in `--execute` runs only.**
+
+Two fields decide whether a node's completion is believed, and one rule plane judges what
+happened.
+
+- `completion_check` — a shell command run after the node, observing state from OUTSIDE
+  the node's own account (a git ref, a status query, a gate's last line). It must be a
+  cheap read, never the work itself: it runs under a 60s cap
+  (`_COMPLETION_CHECK_TIMEOUT`), and a check that times out reports blocked forever.
+- `completion_unobservable: "<reason>"` — the recorded escape for a node that genuinely
+  cannot be checked yet. Eight of `execute-work-orders`' 14 nodes carry one; most need the
+  active work order id the runner cannot template, and `pre-push` runs a gate that takes
+  minutes. A reason under 12 characters is refused, the same shape as
+  `--accept-structure` at close: an escape is a reason a later reader can weigh, never a
+  bare flag.
+
+**A node must do one or the other.** `absence_is_not_clean` fails a node recorded complete
+with neither, because "nobody looked" and "nothing was wrong" are different facts.
+
+These reasons were YAML COMMENTS until 2026-09-02, and `yaml.safe_load` drops comments —
+so the rule that asks "was anything declared here" could not see a single one of the eight
+stated reasons, and enforcing the rules would have flipped every correctly-documented node
+to blocked. A declaration a parser cannot read is not a declaration. The test guarding the
+gap searched the raw file text for the comment and passed throughout.
+
+### The rules run where the status is decided
+
+`control/execution/workflow/autonomy.py::OPERATOR_RULES` holds six predicates —
+`no_false_done`, `gates_not_prose`, `absence_is_not_clean`, `defect_is_registered`,
+`never_force`, `never_push`. `WorkflowRunner._execute_wave` evaluates them against each
+finished node, and a violation on a node that reported `completed` makes it `blocked`. The
+text handed to a reviewing agent (`stance_brief()`) is DERIVED from the same rules, so it
+cannot drift from them.
+
+`evaluate_operator_rules` had no call site until 2026-09-02: only `stance_brief()` was
+wired, so the operator's positions reached a run as prose for an agent to follow and never
+as checks — the exact substitution the rules exist to prevent. The `reachability` gate
+caught it.
+
+**Scope: `--execute` runs only.** A dry run marks nodes completed having executed nothing,
+and prompt-delivery mode hands a node's prompt to a human. Neither asserts that work
+happened, so judging them flags every node and halts both modes. Same scoping as
+`_verify_with_retry`, and the same lesson as the structural invariants at close: a rule
+belongs at the moment the claim is made.
+
+**Retry budget 2, then diagnose — never move on.** On exhaustion a FRESH reviewer is
+invoked rather than another execution attempt, and it walks the eight-class falsification
+taxonomy (`core/work_orders/scenario_taxonomy.py`) by name rather than improvising a
+checklist. The diagnosis is then registered in the authority via `prescribe()` — one
+finding becomes a task, several become a work order.
+
+**An executing node cannot push.** `remote_head` is read before and after execution; if
+the remote-tracking ref moved, the node fails with the violation named. Opening a pull
+request is the reviewing step's decision.
+
 ## Timeout Behavior Assessment
 
 **Status: Declared and validated, NOT enforced by runtime.**

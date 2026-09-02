@@ -151,14 +151,42 @@ def _gates_not_prose(ctx: RuleContext) -> str | None:
     return None
 
 
+_MIN_UNOBSERVABLE_REASON = 12
+
+
 def _absence_is_not_clean(ctx: RuleContext) -> str | None:
+    """A node recorded complete with nothing observing it, and no reason given.
+
+    A STATED REASON IS THE ESCAPE, the same shape as ``--accept-structure`` at close: not
+    a bare flag, a reason a later reader can weigh. Eight nodes in execute-work-orders
+    genuinely cannot be checked yet -- most need the active work order id the runner
+    cannot template, and the pre-push node's gate takes minutes when a completion check
+    must be a cheap read.
+
+    THOSE EIGHT CARRIED THEIR REASONS AS YAML COMMENTS, which ``safe_load`` drops, so
+    this rule could not see them. Wiring the rules without noticing that would have
+    flipped every one of those nodes to blocked and halted the workflow on exactly the
+    nodes that were correctly documented -- the reason moved into a
+    ``completion_unobservable`` field so that a declaration is data rather than a remark.
+    Silence still fails: an empty or one-word reason is refused, because "n/a" recorded
+    here would look like a decision was made.
+    """
     declared = ctx.ynode.get("completion_check") or ctx.ynode.get("completion_contains")
-    if not declared and ctx.check_status == "completed":
+    if declared or ctx.check_status != "completed":
+        return None
+    stated = str(ctx.ynode.get("completion_unobservable") or "").strip()
+    if len(stated) >= _MIN_UNOBSERVABLE_REASON:
+        return None
+    if stated:
         return (
-            f"{ctx.node_id} was recorded completed with nothing declared to observe it. "
-            f"'Nobody looked' and 'nothing was wrong' are different facts."
+            f"{ctx.node_id} declares completion_unobservable with no reason a later reader "
+            f"can weigh ({stated!r}). Say what makes this node unobservable."
         )
-    return None
+    return (
+        f"{ctx.node_id} was recorded completed with nothing declared to observe it. "
+        f"'Nobody looked' and 'nothing was wrong' are different facts. If it genuinely "
+        f'cannot be observed yet, say why with completion_unobservable: "<reason>".'
+    )
 
 
 def _defect_is_registered(ctx: RuleContext) -> str | None:

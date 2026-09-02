@@ -375,6 +375,39 @@ class WorkflowRunner:
                 status, reason = self._verify_completion(node_id, _node_yaml)
             if reason:
                 output = f"{output}\n\n[completion] {status.upper()}: {reason}"
+
+            # THE RULES RUN HERE, on what actually happened, before the status is
+            # recorded. They existed as predicates and were never called: stance_brief()
+            # handed their TEXT to a reviewing agent while evaluate_operator_rules had no
+            # call site at all, so the operator's positions reached the run as prose only
+            # -- the exact substitution the operator objected to, committed by the module
+            # written to prevent it. The `reachability` gate refused the push and was
+            # right.
+            #
+            # ONLY A RUN THAT CLAIMED TO DO WORK IS JUDGED. A dry run marks nodes
+            # completed having executed nothing, and prompt-delivery mode hands a node's
+            # prompt to a human -- neither asserts that work happened, so
+            # `absence_is_not_clean` firing there would flag every node in both modes and
+            # halt them. Measured: it broke `test_dry_run_marks_nodes_completed`
+            # immediately. Same scoping as `_verify_with_retry` above, and the same
+            # lesson as the structural invariants -- a rule belongs at the moment the
+            # claim is made, not everywhere the code path runs.
+            violations = (
+                self._check_operator_rules(
+                    node_id, _node_yaml_exec, success, status, reason, output
+                )
+                if (self.execute and not self.dry_run)
+                else []
+            )
+            if violations:
+                _listed = chr(10).join(f"  - {v}" for v in violations)
+                output = f"{output}\n\n[operator rules] {len(violations)} violation(s):\n{_listed}"
+                # A rule the operator holds is not advisory. A node that broke one is not
+                # complete, whatever its own account said.
+                if status == "completed":
+                    status = "blocked"
+                    reason = f"operator rule(s) violated: {violations[0]}"
+
             self._update_node(node_id, status, output, duration=duration)
             self._emit_node_event(node_id, status)
             self._emit_progress_event(wf_state)
@@ -559,9 +592,16 @@ class WorkflowRunner:
         reader is the point, the same reason independent review exists at close.
         """
         from control.execution.workflow.autonomy import stance_brief
-        from core.work_orders.scenario_taxonomy import SCENARIO_TAXONOMY
+        from core.work_orders.scenario_taxonomy import SCENARIO_TAXONOMY, taxonomy_classes
 
         check = str(ynode.get("completion_check") or "(none declared)")
+        # NAME THE CLASSES IT MUST ANSWER FOR, derived from the taxonomy rather than
+        # retyped beside it. Handing over the prose alone asks the reviewer to walk a
+        # list they can skim; asking for a line per named class makes the walk something
+        # the reader can check happened. Derived, so a class added to the taxonomy is
+        # demanded here without anyone remembering to update a second copy.
+        _classes = taxonomy_classes()
+        _roll_call = ", ".join(_classes)
         prompt = (
             f"{stance_brief()}\n\n"
             f"A workflow node did not complete after {RETRY_BUDGET} attempts.\n\n"
@@ -573,7 +613,10 @@ class WorkflowRunner:
             "improvises covers what occurs to them; one that walks a fixed list also covers\n"
             "the classes that do not. Skip a class only when it genuinely cannot apply.\n\n"
             f"{SCENARIO_TAXONOMY}\n\n"
-            "State, in at most six lines:\n"
+            f"The {len(_classes)} classes you must account for: {_roll_call}.\n"
+            "For each, one line: the class name, then what it would look like here, or\n"
+            "'n/a' and why it cannot apply. 'n/a' with no reason is not an answer.\n\n"
+            "THEN state, in at most six lines:\n"
             "  1. The most likely CAUSE, named specifically.\n"
             "  2. The concrete FIX, as an action someone can take.\n"
             "  3. Whether this is one task or several (several means it needs a work order).\n"
@@ -606,6 +649,49 @@ class WorkflowRunner:
         except Exception as exc:  # noqa: BLE001 - prescribing must never break the run
             diagnosis += f" | could not register ({type(exc).__name__})"
         return diagnosis
+
+    def _check_operator_rules(
+        self,
+        node_id: str,
+        ynode: dict,
+        reported_success: bool,
+        status: str,
+        reason: str | None,
+        output: str,
+    ) -> list[str]:
+        """Run the operator's rules against the node that just finished.
+
+        Everything in the context is OBSERVED. ``reported_success`` is the agent's own
+        account and ``status`` is what the completion check saw from outside; keeping both
+        is what lets ``no_false_done`` compare them, which is the whole point of the pair.
+
+        Best-effort: a fault in the rule plane must not fail a node whose work was fine,
+        because these rules exist to catch a dishonest completion, not to invent one. The
+        fault is printed rather than swallowed -- a rule plane that quietly stopped
+        running is how the rules became prose the first time.
+        """
+        try:
+            from control.execution.workflow.autonomy import RuleContext, evaluate_operator_rules
+
+            return evaluate_operator_rules(
+                RuleContext(
+                    node_id=node_id,
+                    ynode=ynode,
+                    reported_success=reported_success,
+                    check_status=status,
+                    check_reason=reason or "",
+                    output=output,
+                    # `diagnosis` and `registered` belong to the diagnosis path; a node
+                    # that finished normally has neither, and `_defect_is_registered` is
+                    # written to stay quiet when there is no diagnosis to register.
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - a broken rule plane is not a failed node
+            print(
+                f"[runner] operator rules could not be evaluated: {type(exc).__name__}: {exc}",
+                flush=True,
+            )
+            return []
 
     def _describe_blockage(self, state_nodes: dict) -> str:
         """Why the run stopped, in terms an operator can act on.

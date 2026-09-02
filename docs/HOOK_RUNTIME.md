@@ -150,6 +150,22 @@ a broken authority DB or a failed import yields no enforcement, never a blocked 
 via `trigger_context`; no new table). Once the team has seen the data, escalate
 `observe → warn → enforce`. `ds enforce tier` prints the currently resolved tier.
 
+**One non-hook rule rides this plane.** `ds enforce report` also lists
+`artifact_disk_fallback`, whose entries carry `hook_name: artifact_write` and
+`hook_type: library` — they come from `core/work_orders/artifacts.py::record_artifact_fallback`,
+not from a hook. When an artifact write cannot reach the authority and falls back to a
+`.planning` file, that fallback is counted here so somebody can ask how often it happens.
+It is off-label deliberately: `observations_report` already groups by rule, so the count
+surface exists with no new event type and no second registry to keep in sync — and the
+drift between the two event registries has broken this repo before.
+
+It matters because that fallback was silent. Measured 2026-09-02, it had fired 154 times
+in August, putting review verdicts on disk where the `independent_review` close gate and
+`ds project state` — both authority-only readers — could not see them, and nothing counted
+it (WO-ARTIFACT-LOCK-FALLBACK `fd981a32`). A reader seeing a `library` entry in an
+otherwise hook-shaped report should read it as a degraded write, and recover with
+`ds work-order backfill-artifacts`.
+
 ### Grader provider selection (verification plane)
 
 The other operator override alongside `DS_ENFORCE`: which LLM provider grades each
