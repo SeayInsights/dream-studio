@@ -215,3 +215,65 @@ def test_bytecode_is_not_installed_as_skill_content(tmp_path: Path) -> None:
     assert not any(
         "__pycache__" in Path(str(op.target)).parts for op in ops
     ), "no op may target a __pycache__ directory"
+
+
+def test_a_planning_fault_reports_the_standard_error_envelope(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """An unreadable canonical tree must not crash `ds update` with a raw traceback.
+
+    WO 789df02b task 40754f1d. `_canonical_skill_drift` raises rather than returning `[]`
+    when it cannot compare, which is the intended contract. But ds.py main() catches only
+    RuntimeError, sqlite3.Error and ValueError, and nothing between the call site and the
+    operator caught anything else -- so a broken checkout produced a Python traceback
+    instead of the {"ok": false, ...} envelope every other CLI failure uses.
+
+    The catch lives at the command boundary, never inside the drift function, and the
+    third assertion below is the one that matters: reporting the fault must not degrade
+    into reporting a CLEAN tree. An earlier draft swallowed exactly this fault into `[]`
+    and printed already_current on a tree with an uncommitted skill edit.
+    """
+    import integrations.manifest as manifest_module
+    from interfaces.cli.commands import system_health
+
+    # Hermetic, because the drift branch is only REACHED when the installed version
+    # equals the repo version. A first draft relied on this machine's real VERSION and
+    # real installed manifest, so on a fresh CI runner -- no manifest, no
+    # installed-version file -- the branch would be skipped entirely and the test would
+    # fail for a reason having nothing to do with the defect.
+    source_root = tmp_path / "repo"
+    source_root.mkdir()
+    (source_root / "VERSION").write_text("155\n", encoding="utf-8")
+    ds_home = tmp_path / "ds-home"
+    (ds_home / "state").mkdir(parents=True)
+    (ds_home / "state" / "installed-version").write_text("155\n", encoding="utf-8")
+
+    # Patched on integrations.manifest, NOT on system_health: _update_command imports
+    # read_manifest INSIDE the function body, so `from integrations.manifest import
+    # read_manifest` resolves the attribute on the source module at call time and a
+    # system_health attribute would never be consulted.
+    monkeypatch.setattr(
+        manifest_module, "read_manifest", lambda *a, **k: {"scope": "user", "files": []}
+    )
+    monkeypatch.setattr(system_health, "_canonical_hook_drift", lambda *a, **k: [])
+
+    def _explode(*_args, **_kwargs):
+        raise FileNotFoundError("canonical/skills/ds-bootstrap/SKILL.md not found")
+
+    monkeypatch.setattr(system_health, "_canonical_skill_drift", _explode)
+
+    try:
+        exit_code = system_health._update_command(
+            source_root=source_root, dream_studio_home=ds_home, dry_run=True
+        )
+    except FileNotFoundError:  # pragma: no cover - this is the defect under test
+        raise AssertionError(
+            "the planning fault escaped the command boundary as a bare exception"
+        ) from None
+
+    out = capsys.readouterr().out
+    assert exit_code == 1, f"a fault must exit non-zero, got {exit_code}"
+    assert '"ok": false' in out.lower(), f"expected the standard error envelope, got: {out[:400]}"
+    assert (
+        "already_current" not in out
+    ), "reporting a fault must never degrade into reporting a clean tree"

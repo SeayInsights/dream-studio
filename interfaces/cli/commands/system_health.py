@@ -482,9 +482,36 @@ def _update_command(
 
         manifest = read_manifest("claude_code", ds_home=paths.dream_studio_home)
         if manifest:
-            drifted = _canonical_hook_drift(source_root, manifest) + _canonical_skill_drift(
-                source_root, manifest
-            )
+            try:
+                drifted = _canonical_hook_drift(source_root, manifest) + _canonical_skill_drift(
+                    source_root, manifest
+                )
+            except OSError as exc:
+                # PRESENTATION ONLY, and deliberately NOT inside _canonical_skill_drift.
+                # That function raises on purpose: an empty list must mean
+                # compared-and-clean and never could-not-compare, and an earlier draft
+                # swallowed the fault into `[]` and duly reported 0 drift on a tree
+                # holding an uncommitted skill edit. Catching HERE reports the fault
+                # instead of absorbing it -- `ds update` exits non-zero with the same
+                # envelope every other CLI failure uses, rather than a raw traceback,
+                # because ds.py main() catches only RuntimeError, sqlite3.Error and
+                # ValueError and an unreadable canonical tree raises none of those.
+                _print(
+                    {
+                        "ok": False,
+                        "error": (
+                            "cannot compare canonical source against the installed "
+                            f"manifest: {exc}"
+                        ),
+                        "error_type": type(exc).__name__,
+                        "hint": (
+                            "canonical/ is incomplete or unreadable in this checkout, so "
+                            "drift cannot be determined. Nothing was installed. Re-run "
+                            "from a complete clone."
+                        ),
+                    }
+                )
+                return 1
         if not drifted:
             _print({"ok": True, "status": "already_current", "version": repo_version})
             return 0
