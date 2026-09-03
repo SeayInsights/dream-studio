@@ -26,7 +26,6 @@ from interfaces.cli.commands.system_health import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-REVIEW_MODE = ("canonical", "skills", "core", "modes", "review", "SKILL.md")
 
 
 def _plan_for(source_root: Path):
@@ -75,57 +74,131 @@ def canonical_copy(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def test_an_untouched_tree_compares_clean(canonical_copy: Path) -> None:
-    """The baseline every other case rests on. If this fails they prove nothing."""
-    manifest = _manifest_from_plan(canonical_copy)
-    assert _canonical_skill_drift(canonical_copy, manifest) == []
+def test_an_untouched_tree_compares_clean(tmp_path, monkeypatch) -> None:
+    """A machine whose install matches the plan must compare clean.
+
+    Built on a synthetic install rather than a real plan. The earlier version derived a
+    manifest from a real plan WITHOUT performing the install, which describes a state
+    production cannot reach: a manifest entry exists precisely because a file was
+    written. It passed on a machine that happened to have an install and failed on all
+    three CI platforms, which have none -- the existence check correctly reported all
+    596 planned files as missing. Third time an environment-dependent test in this branch
+    passed locally for a reason unrelated to the property under test, so this one owns
+    every input it depends on.
+    """
+    import integrations.installer.claude_code as installer_module
+
+    skills = tmp_path / ".claude" / "skills" / "ds-core"
+    (skills / "modes" / "review").mkdir(parents=True)
+    top = skills / "SKILL.md"
+    top.write_text("# core\n", encoding="utf-8")
+    mode = skills / "modes" / "review" / "SKILL.md"
+    mode.write_text("# review\n", encoding="utf-8")
+
+    ops = [_FakeOp(top, "hash-top"), _FakeOp(mode, "hash-mode")]
+    monkeypatch.setattr(installer_module, "ClaudeCodeInstaller", _fake_installer(ops))
+
+    manifest = {
+        "scope": "user",
+        "files": [
+            {"path": str(top), "operation": "create", "content_hash": "hash-top"},
+            {"path": str(mode), "operation": "create", "content_hash": "hash-mode"},
+        ],
+    }
+    assert _canonical_skill_drift(tmp_path, manifest) == []
 
 
-def test_gate_consults_skills_a_skill_edit_is_drift(canonical_copy: Path) -> None:
-    """Editing a canonical SKILL.md must show as drift; before this, nothing looked."""
-    manifest = _manifest_from_plan(canonical_copy)
-    target = canonical_copy.joinpath(*REVIEW_MODE)
-    assert target.is_file(), f"expected the review mode to exist at {target}"
-    target.write_text(
-        target.read_text(encoding="utf-8") + "\n<!-- a rule added without a version bump -->\n",
-        encoding="utf-8",
+def test_gate_consults_skills_a_skill_edit_is_drift(tmp_path, monkeypatch) -> None:
+    """A changed canonical file must show as drift; before this, nothing looked.
+
+    Hermetic on purpose. An earlier version edited a real canonical file and asserted the
+    result appeared in the drift list, which discriminated only on a machine that HAS an
+    install: measured on a tree with none, all 595 planned files are already drift because
+    every one is missing, so the assertion passed whether or not the edit was detected.
+    Here the two files differ ONLY in whether the recorded hash matches, so nothing but
+    hash comparison can separate them.
+    """
+    import integrations.installer.claude_code as installer_module
+
+    skills = tmp_path / ".claude" / "skills" / "ds-core"
+    skills.mkdir(parents=True)
+    edited = skills / "edited.md"
+    edited.write_text("# edited since install\n", encoding="utf-8")
+    untouched = skills / "untouched.md"
+    untouched.write_text("# same as install\n", encoding="utf-8")
+
+    ops = [_FakeOp(edited, "hash-NEW"), _FakeOp(untouched, "hash-same")]
+    monkeypatch.setattr(installer_module, "ClaudeCodeInstaller", _fake_installer(ops))
+
+    manifest = {
+        "scope": "user",
+        "files": [
+            {"path": str(edited), "operation": "create", "content_hash": "hash-OLD"},
+            {"path": str(untouched), "operation": "create", "content_hash": "hash-same"},
+        ],
+    }
+
+    drift = _canonical_skill_drift(tmp_path, manifest)
+    assert str(edited) in drift, f"a changed file must be drift, got {drift}"
+    assert str(untouched) not in drift, (
+        "an unchanged file must NOT be drift, or the check reports everything and "
+        f"discriminates nothing: {drift}"
     )
 
-    drift = _canonical_skill_drift(canonical_copy, manifest)
-    assert any(
-        "review" in p and p.endswith("SKILL.md") for p in drift
-    ), f"the edited review mode must appear in {drift}"
 
-
-def test_gate_consults_skills_hook_check_alone_stays_silent(canonical_copy: Path) -> None:
+def test_gate_consults_skills_hook_check_alone_stays_silent(tmp_path, monkeypatch) -> None:
     """The counterfactual: the old gate reports nothing on the same edited tree.
 
     This is the whole defect. Without this assertion the case above could pass against a
     gate that already worked, leaving the fix unproven.
     """
-    manifest = _manifest_from_plan(canonical_copy)
-    target = canonical_copy.joinpath(*REVIEW_MODE)
-    target.write_text(target.read_text(encoding="utf-8") + "\n<!-- edit -->\n", encoding="utf-8")
+    import integrations.installer.claude_code as installer_module
+
+    skills = tmp_path / ".claude" / "skills" / "ds-core"
+    skills.mkdir(parents=True)
+    edited = skills / "edited.md"
+    edited.write_text("# edited since install\n", encoding="utf-8")
+
+    ops = [_FakeOp(edited, "hash-NEW")]
+    monkeypatch.setattr(installer_module, "ClaudeCodeInstaller", _fake_installer(ops))
+    manifest = {
+        "scope": "user",
+        "files": [{"path": str(edited), "operation": "create", "content_hash": "hash-OLD"}],
+    }
 
     assert (
-        _canonical_hook_drift(canonical_copy, manifest) == []
+        _canonical_hook_drift(tmp_path, manifest) == []
     ), "hook drift must be blind to a skill edit -- that blindness is the reported bug"
-    assert _canonical_skill_drift(
-        canonical_copy, manifest
-    ), "skill drift must see what hook drift cannot"
+    assert _canonical_skill_drift(tmp_path, manifest), "skill drift must see what hook drift cannot"
 
 
-def test_a_never_installed_mode_file_counts_as_drift(canonical_copy: Path) -> None:
-    """The operator's exact case: a mode file the install has never seen."""
-    manifest = _manifest_from_plan(canonical_copy)
-    canonical_copy.joinpath(*REVIEW_MODE).with_name("EXTRA.md").write_text(
-        "# a mode file added after the last install\n", encoding="utf-8"
-    )
+def test_a_never_installed_mode_file_counts_as_drift(tmp_path, monkeypatch) -> None:
+    """The operator's exact case: a mode file the install has never seen.
 
-    drift = _canonical_skill_drift(canonical_copy, manifest)
-    assert any(
-        p.endswith("EXTRA.md") for p in drift
-    ), f"a never-installed skill file must be drift, got {drift}"
+    Distinct from the changed-file case above: this file is PLANNED but has no manifest
+    entry at all, so it is caught by the ``was is None`` arm rather than by a hash
+    mismatch. Hermetic for the same reason as its siblings -- on a tree with no install
+    every planned file is already drift, so a membership assertion proves nothing there.
+    """
+    import integrations.installer.claude_code as installer_module
+
+    review = tmp_path / ".claude" / "skills" / "ds-core" / "modes" / "review"
+    review.mkdir(parents=True)
+    known = review / "SKILL.md"
+    known.write_text("# known to the manifest\n", encoding="utf-8")
+    added = review / "EXTRA.md"
+    added.write_text("# a mode file added after the last install\n", encoding="utf-8")
+
+    ops = [_FakeOp(known, "hash-known"), _FakeOp(added, "hash-added")]
+    monkeypatch.setattr(installer_module, "ClaudeCodeInstaller", _fake_installer(ops))
+    manifest = {
+        "scope": "user",
+        "files": [{"path": str(known), "operation": "create", "content_hash": "hash-known"}],
+    }
+
+    drift = _canonical_skill_drift(tmp_path, manifest)
+    assert str(added) in drift, f"a never-installed skill file must be drift, got {drift}"
+    assert str(known) not in drift, f"a recorded, present, unchanged file must not be: {drift}"
 
 
 def test_scope_mismatch_does_not_flag_the_whole_tree(canonical_copy: Path) -> None:
@@ -135,33 +208,24 @@ def test_scope_mismatch_does_not_flag_the_whole_tree(canonical_copy: Path) -> No
     manifest written by a user-scope install records ~/.claude. Those two trees share no
     path, and the first draft of this check duly called all 616 skill files drifted. A
     comparison whose paths cannot meet is broken, not strict.
-    """
-    detected, plan = _plan_for(canonical_copy)
-    user_root = Path.home() / ".claude"
-    files = []
-    for op in plan.ops:
-        if op.op == "skip":
-            continue
-        target = Path(str(op.target))
-        try:
-            rel = target.relative_to(detected.config_root)
-        except ValueError:
-            continue
-        files.append(
-            {
-                "path": str(user_root / rel),
-                "operation": op.op,
-                "content_hash": op.source_hash,
-            }
-        )
-    manifest = {"scope": "user", "files": files}
 
-    total = sum(1 for e in files if "skills" in e["path"])
-    assert total, "fixture built no skill entries, so this asserts nothing"
-    drift = _canonical_skill_drift(canonical_copy, manifest)
-    assert len(drift) < total, (
-        f"comparing a user-scope manifest flagged {len(drift)} of {total} skill files -- "
-        "the plan and the manifest are describing different trees"
+    Asserts the MECHANISM -- which root the plan was built for -- rather than a drift
+    count. The count depends on whether the machine running the test happens to have an
+    install, which is exactly why the earlier count-based form passed locally and failed
+    on all three CI platforms. Where the planned targets live does not.
+
+    An empty file list is deliberate: every planned target is then unrecorded, so the
+    drift list is the full set of planned targets and their common root is directly
+    observable.
+    """
+    drift = _canonical_skill_drift(canonical_copy, {"scope": "user", "files": []})
+    user_root = str(Path.home() / ".claude")
+
+    assert drift, "an empty manifest must flag planned files as never installed"
+    strays = [p for p in drift if not p.startswith(user_root)]
+    assert not strays, (
+        f"a user-scope manifest was compared against a different tree; {len(strays)} of "
+        f"{len(drift)} planned targets fall outside {user_root}, e.g. {strays[:3]}"
     )
 
 
