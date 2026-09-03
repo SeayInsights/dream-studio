@@ -7,7 +7,7 @@ Reusable patterns for web scraping and content fetching with intelligent fallbac
 When a skill needs web access, reference this module:
 ```
 ## Imports
-- core/web.md — web access with fallback
+- web.md — web access with fallback
 ```
 
 ## Core Principles
@@ -49,7 +49,7 @@ const hasWebFallback = true
 
 ## JIT Prompt — Firecrawl (as-needed path only)
 
-Before falling back from Tier 1 (Firecrawl) to Tier 2, check the user's onboarding path. If the user chose `as-needed`, offer a just-in-time install prompt via the JIT mode (`skills/setup/modes/jit/SKILL.md`).
+Before falling back from Tier 1 (Firecrawl) to Tier 2, check the user's onboarding path. If the user chose `as-needed`, offer a just-in-time install prompt via the ds-setup pack's `jit` mode.
 
 **When this fires:**
 - Firecrawl is NOT detected (`hasFirecrawl` is `false`)
@@ -84,7 +84,7 @@ async function selectWebTool(task) {
 
   if (!hasFirecrawl) {
     // JIT check: offer install if user is on as-needed path
-    const prefs = loadPreference()  // from core/setup.md
+    const prefs = loadPreference()  // from setup.md
     const nowAvailable = await checkJitFirecrawl(prefs)
     if (nowAvailable) {
       hasFirecrawl = true  // User approved + installed — retry with Firecrawl
@@ -112,7 +112,7 @@ async function selectWebTool(task) {
 | `read-docs` | yes | no | Fall through to Tier 2 silently |
 | absent / file missing | yes | no | Fall through to Tier 2 silently |
 
-**Reference:** See `skills/setup/modes/jit/SKILL.md` for the full `promptForTool()` contract, preference schema, and error handling rules.
+**Reference:** See the ds-setup pack's `jit` mode for the full `promptForTool()` contract, preference schema, and error handling rules.
 
 ## Tool Selection Pattern
 
@@ -294,7 +294,7 @@ When implementing web access in a skill:
 ```markdown
 ## Web Access Pattern
 
-This skill uses the web access fallback chain from core/web.md:
+This skill uses the web access fallback chain from web.md:
 
 1. **Detection phase** — Check which tools are available
 2. **Selection phase** — Choose highest-tier available tool
@@ -302,7 +302,7 @@ This skill uses the web access fallback chain from core/web.md:
 4. **Silent fallback** — No warnings if using Tier 2 or 3
 
 ### Implementation
-[paste relevant detection + selection code from core/web.md]
+[paste relevant detection + selection code from web.md]
 ```
 
 ## Capability Matrix

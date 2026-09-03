@@ -32,7 +32,7 @@ Read the discovery brief and extract these signals:
 
 ## Step 2: Cross-Reference Design Philosophies
 
-Read: `skills/domains/modes/design/references/design-philosophies.md`
+Read: `../../../design/references/design-philosophies.md`
 
 Match brief signals to the **3 most appropriate schools**. Each direction maps to ONE school. No blending.
 
@@ -59,7 +59,7 @@ Each direction MUST include ALL fields. No partial directions.
 **Typography**:
 - Display: [Font Name] — [weight, usage]
 - Body: [Font Name] — [weight, usage]
-- Source: skills/domains/modes/design/references/font-pairings.md, pairing #[N]
+- Source: ../../../design/references/font-pairings.md, pairing #[N]
 
 **Layout Strategy**: [grid type, density, whitespace approach]
 

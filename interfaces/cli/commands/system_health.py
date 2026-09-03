@@ -367,6 +367,79 @@ def _canonical_hook_drift(source_root: Path, manifest: dict) -> list[str]:
     return drift
 
 
+def _canonical_skill_drift(source_root: Path, manifest: dict) -> list[str]:
+    """Installed skill files whose canonical source changed, or that were never installed.
+
+    THE GAP THIS CLOSES. When the VERSION stamp matched, ``ds update`` consulted only
+    ``_canonical_hook_drift`` -- which filters entries to hook meta handlers -- and
+    otherwise printed ``already_current`` and installed nothing. So a SKILL change
+    without a version bump never reached an existing install: a new mode file, a new
+    section in a SKILL.md, a corrected routing table. Operator report: another Dream
+    Studio install "couldn't do the reviews because it didn't have some of the files
+    needed". Same class of silence as the hook case this sits beside -- closed once for
+    hooks, left open for the much larger skill tree.
+
+    The manifest already records ``content_hash`` for every installed file, so the data
+    was there and nothing read it. The comparison drives the installer's own ``plan()``
+    rather than re-deriving the canonical-to-installed path mapping, because a second
+    copy of that mapping would drift from the first -- which is the defect one level up.
+
+    Returns the drifted or never-installed target paths. An empty list means compared and
+    clean, and never "the comparison could not run": a planning fault propagates instead
+    of being swallowed into a false all-clear. That swallow is exactly how the first
+    draft reported 0 drift on a tree holding an uncommitted skill edit -- an argument
+    mismatch raised, a broad `except` ate it, and `[]` read as clean.
+
+    There is deliberately no "planned nothing" sentinel. An earlier draft returned one,
+    and an independent test run proved the branch unreachable: a tree with no skills
+    fails in ``compile_pack`` long before the plan could come back empty. A guard whose
+    condition cannot occur is not caution, it is dead code that reads like a guarantee.
+    """
+    recorded: dict[str, str] = {}
+    for entry in manifest.get("files", []):
+        if entry.get("operation") == "skip":
+            continue
+        path = str(entry.get("path", ""))
+        if path:
+            recorded[path] = str(entry.get("content_hash", ""))
+
+    from integrations.detector import detect_claude_code
+    from integrations.installer.claude_code import ClaudeCodeInstaller
+    from integrations.manifest import get_ds_home
+
+    # Plan against the scope the MANIFEST records, not the scope the cwd happens to
+    # detect. Standing in the repo, the detector reports `project` (<repo>/.claude) while
+    # the manifest describes `user` (~/.claude) -- comparing those two trees matches no
+    # path at all, and the first draft of this check duly reported every one of 616 skill
+    # files as drifted. A comparison whose paths cannot line up is not a strict check,
+    # it is a broken one.
+    recorded_scope = str(manifest.get("scope") or "").strip()
+    if recorded_scope == "user":
+        config_root, scope = Path.home() / ".claude", "user"
+    else:
+        detected = detect_claude_code()
+        config_root, scope = detected.config_root, detected.scope
+
+    planned = ClaudeCodeInstaller(
+        config_root,
+        scope,
+        canonical_root=source_root / "canonical",
+        ds_home=get_ds_home(),
+    ).plan()
+
+    skill_ops = [
+        op for op in planned.ops if op.op != "skip" and "skills" in Path(str(op.target)).parts
+    ]
+
+    drift: list[str] = []
+    for op in skill_ops:
+        target = str(op.target)
+        was = recorded.get(target)
+        if was is None or was != op.source_hash:
+            drift.append(target)
+    return drift
+
+
 def _update_command(
     *, source_root: Path, dream_studio_home: Path | None, dry_run: bool = False
 ) -> int:
@@ -399,30 +472,41 @@ def _update_command(
         installed_file.read_text(encoding="utf-8").strip() if installed_file.is_file() else None
     )
 
+    drifted: list[str] = []
     if installed_version == repo_version:
-        # Version stamp matches, but check whether canonical hook source has drifted
-        # from what the manifest recorded at the last install.  A hook code change
-        # without a version bump (e.g. WO-A) must still trigger re-projection.
+        # Version stamp matches, but canonical SOURCE may still have drifted from what
+        # the manifest recorded at the last install. A hook change (WO-A) or a skill
+        # change (WO 789df02b) without a version bump must still trigger re-projection --
+        # checking hooks alone is why an install could be missing the files a mode needs.
         from integrations.manifest import read_manifest
 
         manifest = read_manifest("claude_code", ds_home=paths.dream_studio_home)
-        if manifest and _canonical_hook_drift(source_root, manifest):
-            pass  # fall through to reinstall
-        else:
+        if manifest:
+            drifted = _canonical_hook_drift(source_root, manifest) + _canonical_skill_drift(
+                source_root, manifest
+            )
+        if not drifted:
             _print({"ok": True, "status": "already_current", "version": repo_version})
             return 0
+        # else fall through to reinstall
 
     if dry_run:
-        _print(
-            {
-                "ok": True,
-                "status": "update_available",
-                "from": installed_version,
-                "to": repo_version,
-                "dry_run": True,
-                "would_run": "ds integrate install claude_code --execute",
-            }
-        )
+        # Report WHY. Reaching here with drifted set means the versions are equal, and
+        # "from 155 to 155" describes nothing an operator can act on -- the reinstall is
+        # driven by changed source, not by a version bump.
+        report = {
+            "ok": True,
+            "status": "update_available",
+            "from": installed_version,
+            "to": repo_version,
+            "dry_run": True,
+            "would_run": "ds integrate install claude_code --execute",
+        }
+        if drifted:
+            report["reason"] = "canonical source drifted from the installed manifest"
+            report["drifted_file_count"] = len(drifted)
+            report["drifted_sample"] = drifted[:5]
+        _print(report)
         return 0
 
     from integrations.detector import detect_claude_code

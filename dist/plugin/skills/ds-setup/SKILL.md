@@ -30,9 +30,9 @@ Setup-specific modules:
 - `.dream-studio/setup-prefs.json` — user preferences (onboarding_path, tool states, never_prompt flags)
 
 Core shared modules available to all modes:
-- `skills/core/setup.md` — tool detection functions (detectTool, getToolStatus, shouldPromptForTool)
-- `skills/core/web.md` — web access fallbacks (Firecrawl → scraper-mcp → WebSearch)
-- `skills/core/git.md` — gh CLI detection and GitHub API fallback
+- `setup.md` in the ds-core pack — tool detection functions (detectTool, getToolStatus, shouldPromptForTool)
+- `web.md` in the ds-core pack — web access fallbacks (Firecrawl → scraper-mcp → WebSearch)
+- `git.md` in the ds-core pack — gh CLI detection and GitHub API fallback
 
 ---
 
@@ -158,7 +158,7 @@ if (status !== "installed") {
 }
 ```
 
-### Detection helpers (from `skills/core/setup.md`)
+### Detection helpers (from `setup.md` in the ds-core pack)
 
 | Function | Returns | Description |
 |---|---|---|

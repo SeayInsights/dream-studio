@@ -4,7 +4,7 @@ This document tracks which core modules the plan skill imports and how changes t
 
 ## Imported Modules
 
-### core/orchestration.md
+### ../../orchestration.md
 **Used for:**
 - Subagent spawning for complex spec analysis
 - Model selection
@@ -13,7 +13,7 @@ This document tracks which core modules the plan skill imports and how changes t
 - Spec analysis for large/complex specs
 - Dependency graph generation
 
-### core/format.md
+### ../../format.md
 **Used for:**
 - Plan output format
 - Task structure guidelines
@@ -24,14 +24,14 @@ This document tracks which core modules the plan skill imports and how changes t
 
 ## Impact Analysis
 
-### If core/orchestration.md changes:
+### If ../../orchestration.md changes:
 **Affected sections:**
 - Spec analysis patterns
 - Model selection for planning agents
 
 **Action:** Review plan SKILL.md analysis section
 
-### If core/format.md changes:
+### If ../../format.md changes:
 **Affected sections:**
 - Plan file format
 - Task structure

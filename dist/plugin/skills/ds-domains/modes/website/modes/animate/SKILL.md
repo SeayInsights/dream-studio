@@ -13,7 +13,7 @@ dream_studio:
 
 # Animate — Motion Design Engine
 
-> MANDATORY: Read `references/animation-pitfalls.md` before every animation decision.
+> MANDATORY: Read `../../references/animation-pitfalls.md` before every animation decision.
 
 ## Conceptual Model
 

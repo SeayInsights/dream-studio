@@ -7,7 +7,7 @@ Reusable quality check patterns for builds, tests, linting, and validation.
 When a skill needs quality gates, reference this module:
 ```
 ## Imports
-- core/quality.md — quality gates
+- quality.md — quality gates
 ```
 
 ## Patterns

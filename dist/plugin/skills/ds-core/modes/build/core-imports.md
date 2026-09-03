@@ -4,7 +4,7 @@ This document tracks which core modules the build skill imports and how changes 
 
 ## Imported Modules
 
-### core/git.md
+### ../../git.md
 **Used for:**
 - Commit formatting with task references
 - Reading git diffs for review
@@ -14,7 +14,7 @@ This document tracks which core modules the build skill imports and how changes 
 - Step 2.5: Commit with TR-IDs
 - Commit message format
 
-### core/traceability.md
+### ../../traceability.md
 **Used for:**
 - TR-ID validation before updates
 - Updating commit references in traceability.yaml
@@ -23,7 +23,7 @@ This document tracks which core modules the build skill imports and how changes 
 **Referenced in SKILL.md:**
 - Step 2.6: Update traceability (conditional)
 
-### core/quality.md
+### ../../quality.md
 **Used for:**
 - Running build commands
 - Executing tests
@@ -33,7 +33,7 @@ This document tracks which core modules the build skill imports and how changes 
 - Verification after implementation
 - Pre-commit checks
 
-### core/orchestration.md
+### ../../orchestration.md
 **Used for:**
 - Subagent spawning patterns
 - Model selection (Haiku/Sonnet/Opus)
@@ -48,7 +48,7 @@ This document tracks which core modules the build skill imports and how changes 
 - Step 2.3-2.4: Review loops
 - Implementer prompt template section
 
-### core/format.md
+### ../../format.md
 **Used for:**
 - Checkpoint format (output after every 3 tasks)
 - Task progress reporting
@@ -58,28 +58,28 @@ This document tracks which core modules the build skill imports and how changes 
 
 ## Impact Analysis
 
-### If core/git.md changes:
+### If ../../git.md changes:
 **Affected sections:**
 - Step 2.5 (Commit formatting)
 - May need to update commit message template
 
 **Action:** Review build SKILL.md Step 2.5 and verify commit format still works
 
-### If core/traceability.md changes:
+### If ../../traceability.md changes:
 **Affected sections:**
 - Step 2.6 (TR-ID updates)
 - Conditional traceability logic
 
 **Action:** Review build SKILL.md Step 2.6 validation and update logic
 
-### If core/quality.md changes:
+### If ../../quality.md changes:
 **Affected sections:**
 - Build/test execution patterns
 - Pre-commit validation
 
 **Action:** Review quality gates in build process
 
-### If core/orchestration.md changes:
+### If ../../orchestration.md changes:
 **Affected sections:**
 - Step 1 (dependency analysis)
 - Step 2.1 (implementer dispatch)
@@ -92,7 +92,7 @@ This document tracks which core modules the build skill imports and how changes 
 - Review loop implementation
 - Model selection guidelines
 
-### If core/format.md changes:
+### If ../../format.md changes:
 **Affected sections:**
 - Step 3 (checkpoint output)
 

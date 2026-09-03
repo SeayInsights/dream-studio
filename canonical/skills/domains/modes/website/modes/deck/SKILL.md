@@ -33,7 +33,7 @@ Builds complete, single-file HTML presentations from a locked direction and the 
 
 ## Duarte Sparkline Methodology
 
-Reference `references/slide-strategies.md` for full methodology. Core concept:
+Reference `../../references/slide-strategies.md` for full methodology. Core concept:
 
 - **What Is** — current state, the problem, context (low/tension)
 - **What Could Be** — the vision, the opportunity, the contrast (high/resolution)

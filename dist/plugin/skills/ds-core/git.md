@@ -7,7 +7,7 @@ Reusable git patterns used across dream-studio skills.
 When a skill needs git operations, reference this module in the skill's SKILL.md with:
 ```
 ## Imports
-- core/git.md — git operations
+- git.md — git operations
 ```
 
 ## Patterns

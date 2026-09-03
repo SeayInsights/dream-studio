@@ -4,7 +4,7 @@ This document tracks which core modules the verify skill imports and how changes
 
 ## Imported Modules
 
-### core/quality.md
+### ../../quality.md
 **Used for:**
 - Running tests
 - Executing build/dev servers
@@ -14,7 +14,7 @@ This document tracks which core modules the verify skill imports and how changes
 - Test execution patterns
 - Quality checks
 
-### core/format.md
+### ../../format.md
 **Used for:**
 - Verification report format
 - Evidence documentation structure
@@ -25,7 +25,7 @@ This document tracks which core modules the verify skill imports and how changes
 
 ## Impact Analysis
 
-### If core/quality.md changes:
+### If ../../quality.md changes:
 **Affected sections:**
 - Test execution logic
 - Build/dev server startup
@@ -33,7 +33,7 @@ This document tracks which core modules the verify skill imports and how changes
 
 **Action:** Review verify SKILL.md test execution patterns
 
-### If core/format.md changes:
+### If ../../format.md changes:
 **Affected sections:**
 - Verification report format
 - Evidence structure

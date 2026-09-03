@@ -24,11 +24,11 @@ Before dispatching any task, query the registry for relevant context:
 2. **Approach history** — Use the maintained Dream Studio approach-history interface if present. If unavailable, continue without history rather than calling retired helper paths.
 
 ## Imports
-- core/git.md — commit formatting, diff reading, branch operations
-- core/traceability.md — TR-ID validation and updates
-- core/quality.md — build commands, test execution
-- core/orchestration.md — subagent spawning, model selection, review loops
-- core/format.md — checkpoint format, task progress
+- ../../git.md — commit formatting, diff reading, branch operations
+- ../../traceability.md — TR-ID validation and updates
+- ../../quality.md — build commands, test execution
+- ../../orchestration.md — subagent spawning, model selection, review loops
+- ../../format.md — checkpoint format, task progress
 
 ## Trigger
 `build:`, `execute plan:`, or after `plan` is complete
@@ -75,7 +75,7 @@ Read the plan file ONCE. Extract ALL tasks with full text. Don't re-read the pla
 **⛔ STOP gate:** If the project has 5+ files AND `.planning/CONSTITUTION.md` or `.planning/GOTCHAS.md` are missing — STOP. Run `ds-quality harden` first to scaffold these files. A build without a constitution is building blind.
 
 ### Step 1: Dependency analysis
-**See:** core/orchestration.md — Dependency analysis for parallel execution
+**See:** ../../orchestration.md — Dependency analysis for parallel execution
 
 Group tasks into waves based on dependencies. Independent tasks within a wave MAY run as parallel subagents IF they touch different files.
 
@@ -89,27 +89,27 @@ Group tasks into waves based on dependencies. Independent tasks within a wave MA
    - Working directory
    - Any decisions made so far
 
-2. **Handle implementer response** — See: core/orchestration.md — Handling agent responses
+2. **Handle implementer response** — See: ../../orchestration.md — Handling agent responses
    - `DONE` → proceed to review
    - `DONE_WITH_CONCERNS` → read concerns, address if correctness/scope, then review
    - `NEEDS_CONTEXT` → provide missing info, re-dispatch
    - `BLOCKED` → assess and re-dispatch or escalate
 
-3. **Spec compliance review** — See: core/orchestration.md — Review loop pattern
+3. **Spec compliance review** — See: ../../orchestration.md — Review loop pattern
    - Dispatch reviewer with task spec + implementer report
    - Must pass before code quality review
    - If issues: implementer fixes → re-review → repeat until ✅
 
-4. **Code quality review** — See: core/orchestration.md — Review loop pattern
+4. **Code quality review** — See: ../../orchestration.md — Review loop pattern
    - Dispatch reviewer with diff (base..head SHA) + task summary
    - Only after spec compliance passes
    - If issues: implementer fixes → re-review → repeat until ✅
 
-5. **Commit** — See: core/git.md — Commit referencing plan task
+5. **Commit** — See: ../../git.md — Commit referencing plan task
    - With TR-IDs: `feat(task-3): implement login form [TR-001, TR-002]`
    - Without TR-IDs: `feat(task-3): implement login form`
 
-6. **Update traceability** (conditional) — See: core/traceability.md — Update TR-ID with commit
+6. **Update traceability** (conditional) — See: ../../traceability.md — Update TR-ID with commit
    - Check if `.planning/traceability.yaml` exists
    - If exists: validate → update commits + status → re-validate
    - If doesn't exist or invalid: skip
@@ -117,7 +117,7 @@ Group tasks into waves based on dependencies. Independent tasks within a wave MA
 7. **Mark complete** — Write proof to disk (task status in plan file or state file). If a maintained runtime persistence interface is available, record the commit SHA through it; otherwise keep the file artifact as proof.
 
 ### Step 3: Checkpoint
-**See:** core/format.md — Checkpoint format
+**See:** ../../format.md — Checkpoint format
 
 After every 3 tasks or 30 minutes (whichever first), output checkpoint with:
 - Tasks completed / total
@@ -127,7 +127,7 @@ After every 3 tasks or 30 minutes (whichever first), output checkpoint with:
 
 ## Model Selection for Subagents
 
-**See:** core/orchestration.md — Model Selection
+**See:** ../../orchestration.md — Model Selection
 
 Use Haiku for mechanical tasks, Sonnet for integration, Opus for architecture/design/review.
 
@@ -145,7 +145,7 @@ For reviewers: use `--template=reviewer`. For exploration: use `--template=explo
 
 ## Implementer Prompt Template
 
-**See:** core/orchestration.md — Implementer prompt template
+**See:** ../../orchestration.md — Implementer prompt template
 
 Use the standard template with:
 - Full task text (pasted, never a file path)

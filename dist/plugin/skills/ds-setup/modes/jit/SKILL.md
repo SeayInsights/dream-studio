@@ -14,7 +14,7 @@ dream_studio:
 # JIT Mode (Just-in-Time Prompt)
 
 ## Imports
-- core/setup.md — tool detection, preference persistence (detectTool, savePreference, loadPreference)
+- `setup.md` in the ds-core pack — tool detection, preference persistence (detectTool, savePreference, loadPreference)
 
 ## When this mode is used
 

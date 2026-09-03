@@ -82,12 +82,12 @@ These files are maintained by the `design` mode and are REUSED here — do not d
 
 | File | Contents |
 |---|---|
-| `skills/domains/modes/design/references/font-pairings.md` | 75 curated font pairings |
-| `skills/domains/modes/design/references/anti-patterns.md` | 99 UX anti-patterns |
-| `skills/domains/modes/design/references/token-architecture.md` | 3-layer W3C DTCG token system |
-| `skills/domains/modes/design/references/design-philosophies.md` | 20 design philosophy schools |
-| `skills/domains/modes/design/references/semantic-colors.md` | 30+ semantic color tokens |
-| `skills/domains/modes/design/references/component-composition.md` | 14 composition patterns |
+| `../design/references/font-pairings.md` | 75 curated font pairings |
+| `../design/references/anti-patterns.md` | 99 UX anti-patterns |
+| `../design/references/token-architecture.md` | 3-layer W3C DTCG token system |
+| `../design/references/design-philosophies.md` | 20 design philosophy schools |
+| `../design/references/semantic-colors.md` | 30+ semantic color tokens |
+| `../design/references/component-composition.md` | 14 composition patterns |
 
 ---
 

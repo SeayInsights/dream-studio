@@ -7,7 +7,7 @@ Reusable tool detection patterns used across dream-studio skills for cross-platf
 When a skill needs tool detection, reference this module in the skill's SKILL.md with:
 ```
 ## Imports
-- core/setup.md — tool detection & setup preferences
+- setup.md — tool detection & setup preferences
 ```
 
 ## Functions

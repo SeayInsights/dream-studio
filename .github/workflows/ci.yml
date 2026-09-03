@@ -82,6 +82,8 @@ jobs:
           tests/unit/test_impact_selection.py
           tests/unit/test_hanging_detectors.py
           tests/unit/test_plugin_dist.py
+          tests/unit/test_skill_module_paths_resolve.py
+          tests/unit/test_ds_update_skill_drift.py
           tests/unit/test_locale_decode_gate.py
           tests/integration/test_pr_smoke_impact.py
           -q --tb=short

@@ -7,7 +7,7 @@ Reusable formatting patterns for consistent, structured output across all skills
 When a skill needs formatted output, reference this module:
 ```
 ## Imports
-- core/format.md — output formatting
+- format.md — output formatting
 ```
 
 ## Patterns
