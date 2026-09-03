@@ -14,7 +14,7 @@ dream_studio:
 # Status Mode
 
 ## Imports
-- core/setup.md — tool detection & setup preferences
+- `setup.md` in the ds-core pack — tool detection & setup preferences
 
 ## Before you start
 
@@ -34,13 +34,13 @@ Refer to each tool's `detect_command` in `tool-registry.yml` for the exact comma
 
 ### Step 2 — Run detectTool() for each of the 6 tools
 
-For every tool in `tool-registry.yml` (gh, firecrawl, playwright, npm, python, node), call `detectTool(toolName)` from `core/setup.md`:
+For every tool in `tool-registry.yml` (gh, firecrawl, playwright, npm, python, node), call `detectTool(toolName)` from `setup.md` in the ds-core pack:
 
 1. Run the platform-appropriate detect command (e.g., `where gh` on Windows).
 2. If the command succeeds (exit code 0), the tool is present — also run the `version_command` to capture the version string.
 3. If the command fails (exit code non-zero or command not found), mark as missing.
 
-**Special cases (from core/setup.md):**
+**Special cases (from `setup.md` in the ds-core pack):**
 - **Python on Windows:** Run `where py` (Windows Python Launcher), not `where python`.
 - **Python on Mac/Linux:** Run `which python3`, not `which python`.
 - **Playwright:** If the CLI is found but `playwright list-browsers` fails or returns empty, mark status as `partial` (CLI installed, browsers missing). Otherwise `installed`.
@@ -48,7 +48,7 @@ For every tool in `tool-registry.yml` (gh, firecrawl, playwright, npm, python, n
 
 ### Step 3 — Map status for each tool
 
-Use `getToolStatus(toolName)` semantics (from `core/setup.md`):
+Use `getToolStatus(toolName)` semantics (from `setup.md` in the ds-core pack):
 
 | Return value | Meaning |
 |---|---|

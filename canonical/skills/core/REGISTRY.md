@@ -8,7 +8,7 @@ Before changing a core module, check this registry to see which skills will be a
 
 ## Module Usage Map
 
-### core/git.md
+### git.md
 **Used by:** build, review, verify, ship, plan, handoff, recap
 
 **Patterns:**
@@ -21,7 +21,7 @@ Before changing a core module, check this registry to see which skills will be a
 
 ---
 
-### core/traceability.md
+### traceability.md
 **Used by:** plan, build, verify
 
 **Patterns:**
@@ -34,7 +34,7 @@ Before changing a core module, check this registry to see which skills will be a
 
 ---
 
-### core/quality.md
+### quality.md
 **Used by:** review, ship, verify, build
 
 **Patterns:**
@@ -48,7 +48,7 @@ Before changing a core module, check this registry to see which skills will be a
 
 ---
 
-### core/orchestration.md
+### orchestration.md
 **Used by:** build, review, secure, think, analyze, career-ops
 
 **Patterns:**
@@ -61,7 +61,7 @@ Before changing a core module, check this registry to see which skills will be a
 
 ---
 
-### core/format.md
+### format.md
 **Used by:** ALL SKILLS
 
 **Patterns:**
@@ -75,7 +75,7 @@ Before changing a core module, check this registry to see which skills will be a
 
 ---
 
-### core/repo-map.md
+### repo-map.md
 **Used by:** build
 
 **Patterns:**
@@ -87,7 +87,7 @@ Before changing a core module, check this registry to see which skills will be a
 
 ---
 
-### core/web.md
+### web.md
 **Used by:** career-scan, career-ops, analyze, security-dast, domains-client-work (research phase)
 
 **Patterns:**

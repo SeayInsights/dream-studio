@@ -17,10 +17,10 @@ dream_studio:
 Read `gotchas.yml` in this directory before every invocation.
 
 ## Imports
-- core/git.md — get commit SHA
-- core/traceability.md — update TR-ID with test, coverage reporting
-- core/quality.md — run build, run tests, evidence patterns
-- core/format.md — evidence statement, coverage report, checkbox list
+- ../../git.md — get commit SHA
+- ../../traceability.md — update TR-ID with test, coverage reporting
+- ../../quality.md — run build, run tests, evidence patterns
+- ../../format.md — evidence statement, coverage report, checkbox list
 
 ## Trigger
 `verify:`, `prove it:`, or after `review` passes clean
@@ -64,14 +64,14 @@ BEFORE claiming any status:
 - "Should work now" / "I'm confident" / "Just this once"
 
 ## Steps
-1. **Identify targets** — See: core/traceability.md — Use TR-IDs if exists, else plan acceptance criteria
-2. **Run the app** — See: core/quality.md — Run build, start dev server
+1. **Identify targets** — See: ../../traceability.md — Use TR-IDs if exists, else plan acceptance criteria
+2. **Run the app** — See: ../../quality.md — Run build, start dev server
 3. **Golden path** — Test primary user flow end-to-end
 4. **Edge cases** — Test boundaries, empty states, error states, invalid input
-5. **Evidence** — See: core/format.md — Evidence statement format
+5. **Evidence** — See: ../../format.md — Evidence statement format
    - Capture: screenshots (UI), logs (API), terminal output (CLI)
 6. **Regression** — Does existing functionality still work?
-7. **Update traceability** — See: core/traceability.md — Update TR-ID with test
+7. **Update traceability** — See: ../../traceability.md — Update TR-ID with test
 
 ## Protocol-driven verify (high-risk / escalated WOs) — WO R7
 

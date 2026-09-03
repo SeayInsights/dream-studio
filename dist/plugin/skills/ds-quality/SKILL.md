@@ -21,7 +21,7 @@ description: 'Code quality, learning, and structural discipline. Use for: debug:
 | debug | modes/debug/SKILL.md | debug:, diagnose: |
 | polish | modes/polish/SKILL.md | polish ui:, critique design:, redesign:, make it premium: |
 | harden | modes/harden/SKILL.md | /harden, harden audit, harden fix |
-| secure | modes/secure/SKILL.md | secure:, security review:, audit code: |
+| secure | the ds-fullstack pack's secure mode | secure:, security review:, audit code: |
 | structure-audit | modes/structure-audit/SKILL.md | /structure-audit, audit structure: |
 | learn | modes/learn/SKILL.md | learn:, capture lesson: |
 | coach | modes/coach/SKILL.md | /coach, workflow coaching: |

@@ -72,6 +72,8 @@ gates:
       tests/unit/test_contract_atlas.py,
       tests/unit/test_state_contract_boundaries.py,
       tests/unit/test_plugin_dist.py,
+      tests/unit/test_skill_module_paths_resolve.py,
+      tests/unit/test_ds_update_skill_drift.py,
       -q]
     fail_hint: >
       A schema/contract pin drifted — update the pin's expected set in the SAME

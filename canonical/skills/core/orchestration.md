@@ -7,7 +7,7 @@ Reusable patterns for spawning, coordinating, and collecting results from subage
 When a skill needs multi-agent orchestration, reference this module:
 ```
 ## Imports
-- core/orchestration.md — agent orchestration
+- orchestration.md — agent orchestration
 ```
 
 ## Core Principles
@@ -189,7 +189,7 @@ You are implementing Task N: [task name]
 ## Project Context (static — same for every task in this session)
 - Project: [project description]
 - Architecture: [key patterns]
-- Repo Map (see core/repo-map.md for generation):
+- Repo Map (see repo-map.md for generation):
   [paste compact repo map — one line per symbol, generated once at build Step 0]
 
 ## Working directory

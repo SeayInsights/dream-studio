@@ -17,9 +17,9 @@ dream_studio:
 Read `gotchas.yml` in this directory before every invocation.
 
 ## Imports
-- core/git.md — check for uncommitted changes, pre-push validation
-- core/quality.md — quality gate checklist (audit, harden, optimize, test), pre-push local validation
-- core/format.md — ship gate format, verdict statement
+- ../../git.md — check for uncommitted changes, pre-push validation
+- ../../quality.md — quality gate checklist (audit, harden, optimize, test), pre-push local validation
+- ../../format.md — ship gate format, verdict statement
 
 ## Trigger
 `ship:`, `pre-deploy:`, `deploy:`, or before any deployment command
@@ -36,7 +36,7 @@ packaging, and a passing `WO-REL-SHIP-CLOSEOUT` with the operator's explicit GO.
 
 ## Gate checklist
 
-**See:** core/quality.md — Quality gate checklist
+**See:** ../../quality.md — Quality gate checklist
 
 Run all four gates: Audit (a11y, perf, technical), Harden (error/empty/loading states), Optimize (bundle, rendering, animation, images), Test (Playwright, suite, browser, regression)
 
@@ -58,13 +58,13 @@ Start daemon first if not running: `next-browser start`
 
 ## Gate result
 
-**See:** core/format.md — Ship gate format
+**See:** ../../format.md — Ship gate format
 
 Output gate result with PASS/FAIL for each category and final verdict (CLEAR TO SHIP / BLOCKED)
 
 ## Pre-push local validation (L3)
 
-**See:** core/quality.md — Pre-push local validation
+**See:** ../../quality.md — Pre-push local validation
 
 Run: `npm run lint && npx tsc --noEmit && npm run build`
 ```

@@ -4,7 +4,7 @@ This document tracks which core modules the ship skill imports and how changes t
 
 ## Imported Modules
 
-### core/quality.md
+### ../../quality.md
 **Used for:**
 - Running build command
 - Executing tests
@@ -15,7 +15,7 @@ This document tracks which core modules the ship skill imports and how changes t
 - Phase 1: Audit (technical checks)
 - Phase 4: Test (unit/regression tests)
 
-### core/git.md
+### ../../git.md
 **Used for:**
 - Checking current branch
 - Verifying clean working tree
@@ -25,7 +25,7 @@ This document tracks which core modules the ship skill imports and how changes t
 - Pre-deploy safety checks
 - Change analysis
 
-### core/orchestration.md
+### ../../orchestration.md
 **Used for:**
 - Spawning audit agents for different phases
 - Model selection for analysis
@@ -34,7 +34,7 @@ This document tracks which core modules the ship skill imports and how changes t
 - Phase-based audit execution
 - Parallel audit agents
 
-### core/format.md
+### ../../format.md
 **Used for:**
 - Ship report format
 - Gate decision structure
@@ -45,7 +45,7 @@ This document tracks which core modules the ship skill imports and how changes t
 
 ## Impact Analysis
 
-### If core/quality.md changes:
+### If ../../quality.md changes:
 **Affected sections:**
 - Phase 1: Audit technical checks
 - Phase 4: Test execution
@@ -53,21 +53,21 @@ This document tracks which core modules the ship skill imports and how changes t
 
 **Action:** HIGH IMPACT — review ship SKILL.md audit phases
 
-### If core/git.md changes:
+### If ../../git.md changes:
 **Affected sections:**
 - Pre-deploy git checks
 - Change analysis
 
 **Action:** Review ship safety checks
 
-### If core/orchestration.md changes:
+### If ../../orchestration.md changes:
 **Affected sections:**
 - Audit agent spawning
 - Parallel phase execution
 
 **Action:** Review ship audit orchestration
 
-### If core/format.md changes:
+### If ../../format.md changes:
 **Affected sections:**
 - Ship report format
 - Gate decision output

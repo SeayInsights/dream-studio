@@ -7,7 +7,7 @@ Reusable traceability patterns for linking requirements → tasks → commits �
 When a skill needs traceability operations, reference this module:
 ```
 ## Imports
-- core/traceability.md — traceability management
+- traceability.md — traceability management
 ```
 
 ## Patterns

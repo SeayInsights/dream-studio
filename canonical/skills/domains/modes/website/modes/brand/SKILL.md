@@ -71,7 +71,7 @@ py scripts/generate-tokens.py \
   --output brand/
 ```
 
-Outputs three files (see Token Output section below). Token structure follows the 3-layer W3C DTCG format defined in `skills/domains/modes/design/references/token-architecture.md`.
+Outputs three files (see Token Output section below). Token structure follows the 3-layer W3C DTCG format defined in `../../../design/references/token-architecture.md`.
 
 ### Step 5 — Compliance Scoring
 If HTML artifacts exist in the project, run:
@@ -120,7 +120,7 @@ Changes flow ONE DIRECTION only. Never edit `brand.css` directly — update the 
 | Connects to | How |
 |---|---|
 | Direction Lock | Palette + typography inherit from the `direction-lock.json` docstore artifact (`ds files read "direction-lock.json"`, Mode C) |
-| Token Architecture | 3-layer structure in `skills/domains/modes/design/references/token-architecture.md` |
+| Token Architecture | 3-layer structure in `../../../design/references/token-architecture.md` |
 | Page / Prototype / Deck | All downstream modes consume `brand.css` — no inline color/font values |
 | Brand Compliance | `brand-compliance.py` scores HTML artifacts against generated tokens |
 

@@ -78,7 +78,7 @@ DON'T store secrets in code — env vars or secret managers only.
 DON'T hardcode framework versions — use latest stable at time of build.
 
 ### Step 4 — Stack Preset Patterns
-Use `references/stack-presets.md` for framework-specific patterns (routers, ORMs, auth libraries, test utilities).
+Use `../../references/stack-presets.md` for framework-specific patterns (routers, ORMs, auth libraries, test utilities).
 
 | Stack | Router | ORM / DB layer | Auth |
 |---|---|---|---|

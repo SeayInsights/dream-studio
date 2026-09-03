@@ -8,7 +8,7 @@ Gives agents structural awareness without requiring them to read every file.
 When a skill needs to provide repo-wide context to subagents:
 ```
 ## Imports
-- core/repo-map.md — compact symbol index for subagent context
+- repo-map.md — compact symbol index for subagent context
 ```
 
 ## Purpose
@@ -64,8 +64,8 @@ grep -rn "^name:" --include="*.yml" --include="*.yaml" skills/ \
 One line per symbol: `path → type: name`
 
 ```
-skills/build/SKILL.md → skill: build
-skills/core/orchestration.md → module: orchestration
+modes/build/SKILL.md → skill: build
+orchestration.md → module: orchestration
 src/auth/service.ts → export: AuthService
 src/auth/service.ts → export: validateToken
 src/models/user.ts → export: User, UserSchema
@@ -85,8 +85,8 @@ Place the repo map in the static prefix (before task-specific content):
 
 ```
 ## Repo Map (generated 2026-04-28, build session)
-skills/build/SKILL.md → skill: build
-skills/core/orchestration.md → module: orchestration
+modes/build/SKILL.md → skill: build
+orchestration.md → module: orchestration
 ...
 
 ## Task

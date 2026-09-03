@@ -4,7 +4,7 @@ This document tracks which core modules the review skill imports and how changes
 
 ## Imported Modules
 
-### core/git.md
+### ../../git.md
 **Used for:**
 - Reading git diffs for review
 - Getting commit ranges
@@ -14,7 +14,7 @@ This document tracks which core modules the review skill imports and how changes
 - Diff analysis for code changes
 - Commit history review
 
-### core/orchestration.md
+### ../../orchestration.md
 **Used for:**
 - Spawning reviewer subagents
 - Two-stage review pattern (spec then quality)
@@ -24,7 +24,7 @@ This document tracks which core modules the review skill imports and how changes
 - Review loop implementation
 - Parallel reviewer spawning for large changes
 
-### core/format.md
+### ../../format.md
 **Used for:**
 - Findings report format
 - Review verdict structure
@@ -35,14 +35,14 @@ This document tracks which core modules the review skill imports and how changes
 
 ## Impact Analysis
 
-### If core/git.md changes:
+### If ../../git.md changes:
 **Affected sections:**
 - Diff reading logic
 - Commit analysis
 
 **Action:** Review diff parsing in review SKILL.md
 
-### If core/orchestration.md changes:
+### If ../../orchestration.md changes:
 **Affected sections:**
 - Reviewer spawning
 - Two-stage review pattern
@@ -52,7 +52,7 @@ This document tracks which core modules the review skill imports and how changes
 - Reviewer prompt templates
 - Review loop logic
 
-### If core/format.md changes:
+### If ../../format.md changes:
 **Affected sections:**
 - Findings report format
 - Verdict structure

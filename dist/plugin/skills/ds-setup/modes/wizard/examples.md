@@ -137,7 +137,7 @@ Run `detectTool(toolName)` for each of the 6 tools in `tool-registry.yml` (gh, f
 2. If the command succeeds (exit code 0), the tool is present — also run the `version_command` to capture the version string.
 3. If the command fails (exit code non-zero or command not found), mark as `missing`.
 
-**Special cases (from core/setup.md):**
+**Special cases (from `setup.md` in the ds-core pack):**
 - **Python on Windows:** Run `where py` (Windows Python Launcher), not `where python`.
 - **Python on Mac/Linux:** Run `which python3`, not `which python`.
 - **Firecrawl:** Do not use `where`/`which`. Instead, check `claude mcp list` output for `firecrawl-mcp`. If present and shows `connected`, mark as `installed`. If present but shows an error state, mark as `partial`. If absent, mark as `missing`.

@@ -63,7 +63,7 @@ Required:
 - **No JavaScript** unless the component is interactive by nature (carousel, modal, accordion)
 
 ### Step 6 — Apply Craft Rules
-Before finalizing, verify against `references/craft-rules.md`:
+Before finalizing, verify against `../../references/craft-rules.md`:
 - **Specificity:** every heading says something concrete, not generic
 - **Hierarchy:** each section has a clear focal point
 - **Restraint:** every decorative element earns its place

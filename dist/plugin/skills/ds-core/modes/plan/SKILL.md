@@ -17,9 +17,9 @@ dream_studio:
 Read `gotchas.yml` in this directory before every invocation.
 
 ## Imports
-- core/git.md — branch operations
-- core/traceability.md — traceability file structure, when to activate
-- core/format.md — task list format, requirements matrix, summary table
+- ../../git.md — branch operations
+- ../../traceability.md — traceability file structure, when to activate
+- ../../format.md — task list format, requirements matrix, summary table
 
 ## Trigger
 `plan:`, or after `think` spec is approved
@@ -59,7 +59,7 @@ Use these templates to structure your plan:
 
 ## Traceability
 
-**See:** core/traceability.md — Traceability file structure, status lifecycle, when to activate
+**See:** ../../traceability.md — Traceability file structure, status lifecycle, when to activate
 
 **Decision criteria:**
 - Activate if: 4+ tasks, distinct requirements, user request, or audit trail needed
@@ -70,13 +70,13 @@ Use these templates to structure your plan:
 
 ## Plan format — Full (traceability active)
 
-**See:** core/format.md — Requirements matrix, numbered task list, summary table
+**See:** ../../format.md — Requirements matrix, numbered task list, summary table
 
 Include: Requirements table with TR-IDs, task list with "Implements" field, summary table with TR-ID column
 
 ## Plan format — Lite (traceability inactive)
 
-**See:** core/format.md — Numbered task list, summary table
+**See:** ../../format.md — Numbered task list, summary table
 
 Include: Task list without "Implements" field, summary table without TR-ID column
 | 2 | ... | 1 | medium |

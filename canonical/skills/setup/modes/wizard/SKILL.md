@@ -14,7 +14,7 @@ dream_studio:
 # Wizard Mode
 
 ## Imports
-- core/setup.md — tool detection, preference persistence (detectTool, savePreference, loadPreference)
+- `setup.md` in the ds-core pack — tool detection, preference persistence (detectTool, savePreference, loadPreference)
 
 ## Before you start
 

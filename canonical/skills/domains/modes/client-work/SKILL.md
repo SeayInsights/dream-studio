@@ -16,14 +16,14 @@ dream_studio:
 ## Before you start
 Read these files first — every time:
 1. `gotchas.yml` — what NOT to do (mandatory)
-2. `domains/powerbi/pbip-format.md` — for any .pbip / TMDL work
+2. `../../powerbi/pbip-format.md` — for any .pbip / TMDL work
 3. `domains/powerbi/storytelling-framework.yml` — for report design
 4. `domains/powerbi/accessibility-checklist.yml` — before any report delivery
 
 ## Imports
-- domains/powerbi/dax-patterns.md — data modeling, DAX patterns, DAX error reference
-- domains/powerbi/m-query-patterns.md — query folding, M-query patterns, error reference, semantic model validation
-- domains/powerbi/tmdl-authoring.md — TMDL patterns, _measures table, relationship direction, rename chain, session workflow
+- ../../powerbi/dax-patterns.md — data modeling, DAX patterns, DAX error reference
+- ../../powerbi/m-query-patterns.md — query folding, M-query patterns, error reference, semantic model validation
+- ../../powerbi/tmdl-authoring.md — TMDL patterns, _measures table, relationship direction, rename chain, session workflow
 
 ## Trigger
 `intake:`, `sow:`, `proposal:`, `build report:`, `review powerbi:`, `optimize dax:`, `build flow:`, `review flow:`, `build app:`, `review app:`, `client handoff:`, `document:`
@@ -40,11 +40,11 @@ Use this table to quickly classify incoming requests and route to the right appr
 | Request Pattern | Work Type | Est. Hours | Submode/Approach |
 |---|---|---|---|
 | "Build a dashboard showing..." | Power BI dashboard build | 8-20 | Full lifecycle: data model → measures → visuals → storytelling framework. Check `domains/powerbi/storytelling-framework.yml` for structure. |
-| "This DAX measure is slow/wrong..." | DAX formula optimization | 2-6 | Dispatch `bi-developer` subagent. Read `domains/powerbi/dax-patterns.md` for VAR patterns, context transition, time intelligence. Analyze query plan if >3s. |
+| "This DAX measure is slow/wrong..." | DAX formula optimization | 2-6 | Dispatch `bi-developer` subagent. Read `../../powerbi/dax-patterns.md` for VAR patterns, context transition, time intelligence. Analyze query plan if >3s. |
 | "Build an app for tracking..." | Power Apps canvas app | 12-30 | Canvas app with delegation warnings resolved. Follow naming conventions (scr_, ctn_, lbl_, btn_). Test offline scenarios if mobile. |
 | "Automate [process] when [trigger]..." | Power Automate flow | 4-12 | Flow with error handling (Scope + Configure Run After), approval timeout, environment variables for connections. Set concurrency to 1 if shared state. |
-| "Connect [source A] to [source B]..." | Data model design | 6-16 | Star schema with fact/dimension tables. Check `domains/powerbi/m-query-patterns.md` for query folding. Dispatch `bi-developer` for TMDL authoring. |
-| "Report takes 30s to load..." | Report performance tuning | 4-10 | Check DirectQuery vs Import, measure complexity, visual count. Use Performance Analyzer. Read `domains/powerbi/dax-patterns.md` for SUMMARIZE/TREATAS patterns. Dispatch `bi-developer` if semantic model changes needed. |
+| "Connect [source A] to [source B]..." | Data model design | 6-16 | Star schema with fact/dimension tables. Check `../../powerbi/m-query-patterns.md` for query folding. Dispatch `bi-developer` for TMDL authoring. |
+| "Report takes 30s to load..." | Report performance tuning | 4-10 | Check DirectQuery vs Import, measure complexity, visual count. Use Performance Analyzer. Read `../../powerbi/dax-patterns.md` for SUMMARIZE/TREATAS patterns. Dispatch `bi-developer` if semantic model changes needed. |
 
 **Escalation:** If the request does not match any pattern above, ask one clarifying question: "Is this primarily a data issue, a visualization issue, or a process automation issue?"
 
@@ -53,7 +53,7 @@ Use this table to quickly classify incoming requests and route to the right appr
 Before writing or editing any TMDL, DAX, or M-query — complete every item:
 
 - [ ] **Detect PBIP_DIR** — locate the `*.SemanticModel` folder dynamically (e.g., `glob("*.SemanticModel")`). Never hardcode `.SemanticModel`.
-- [ ] **Read TMDL rules** — confirm `domains/powerbi/pbip-format.md` and `domains/powerbi/tmdl-authoring.md` are loaded for this session.
+- [ ] **Read TMDL rules** — confirm `../../powerbi/pbip-format.md` and `../../powerbi/tmdl-authoring.md` are loaded for this session.
 - [ ] **State blast radius** — list which tables, measures, and relationships will be affected by this change.
 - [ ] **Identify SSOT** — confirm which `.tmdl` file is the authoritative source for the object being modified.
 
@@ -74,13 +74,13 @@ Before writing or editing any TMDL, DAX, or M-query — complete every item:
 ## Power BI
 
 ### Data modeling + DAX
-**See:** `domains/powerbi/dax-patterns.md` — star schema, naming conventions, VAR patterns, time intelligence, RLS, DAX error reference
+**See:** `../../powerbi/dax-patterns.md` — star schema, naming conventions, VAR patterns, time intelligence, RLS, DAX error reference
 
 ### M Query + query folding
-**See:** `domains/powerbi/m-query-patterns.md` — folding rules, parameter tables, error handling, M-query error reference, semantic model validation
+**See:** `../../powerbi/m-query-patterns.md` — folding rules, parameter tables, error handling, M-query error reference, semantic model validation
 
 ### .pbip format
-**See:** `domains/powerbi/pbip-format.md` — full file structure, TMDL syntax, JSON schemas, and editing rules
+**See:** `../../powerbi/pbip-format.md` — full file structure, TMDL syntax, JSON schemas, and editing rules
 
 ## Power BI Version Detection {#powerbi-versions}
 
