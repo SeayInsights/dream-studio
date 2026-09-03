@@ -214,6 +214,10 @@ def _collect_hook_file_ops(
     return ops
 
 
+_EXCLUDED_SKILL_DIRS = frozenset({"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"})
+_EXCLUDED_SKILL_SUFFIXES = frozenset({".pyc", ".pyo", ".pyd"})
+
+
 def _collect_skill_dir_ops(
     skill_dir: Path,
     target_dir: Path,
@@ -228,6 +232,14 @@ def _collect_skill_dir_ops(
         if not file_path.is_file():
             continue
         rel = file_path.relative_to(skill_dir)
+        # Bytecode and cache directories are build output, not skill content. rglob("*")
+        # swept them into the projection: 20 __pycache__/*.pyc files were installed under
+        # ~/.claude/skills/ and recorded in the manifest. Two harms -- the install ships
+        # a compiled artifact whose interpreter tag may not match the reader's, and a
+        # .pyc is rewritten on every import, so its hash never settles and any
+        # content-hash drift check over the skill tree reports drift forever.
+        if _EXCLUDED_SKILL_DIRS.intersection(rel.parts) or rel.suffix in _EXCLUDED_SKILL_SUFFIXES:
+            continue
         target = target_dir / rel
         file_hash = _compute_file_hash_chunked(file_path)
         try:
