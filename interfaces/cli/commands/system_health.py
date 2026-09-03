@@ -435,7 +435,20 @@ def _canonical_skill_drift(source_root: Path, manifest: dict) -> list[str]:
     for op in skill_ops:
         target = str(op.target)
         was = recorded.get(target)
-        if was is None or was != op.source_hash:
+        if was is None:
+            drift.append(target)  # never installed -- a file added since
+        elif was != op.source_hash:
+            drift.append(target)  # canonical source changed
+        elif not Path(target).is_file():
+            # THE RECORDED FILE IS GONE. Comparing recorded hash against planned hash
+            # answers "has the source changed", never "is the file still there", so an
+            # entry present in the manifest and absent from disk matched and read as
+            # clean. That is the reported symptom itself -- an install missing the files
+            # a mode needs while `ds update` says already_current. Found by the
+            # falsification analyst in `ds work-order verify`, then reproduced: deleting
+            # ds-analyze/DOMAIN_ANALYZER_GUIDE.md left the drift count unchanged at 34
+            # and the deleted file unreported. One stat per skill file is nothing beside
+            # the ~1s the plan already costs.
             drift.append(target)
     return drift
 
@@ -481,37 +494,91 @@ def _update_command(
         from integrations.manifest import read_manifest
 
         manifest = read_manifest("claude_code", ds_home=paths.dream_studio_home)
-        if manifest:
+        if not manifest:
+            # AN UNREADABLE MANIFEST IS NOT A CLEAN ONE. read_manifest swallows
+            # JSONDecodeError and OSError into None, so a deleted, truncated or corrupt
+            # manifest left `drifted` empty and printed already_current -- and we only
+            # reach here because a version stamp exists, meaning an install DID happen.
+            # The one state where re-projection is most needed reported clean. Falling
+            # through to reinstall is right under either reading of a missing manifest,
+            # never-installed or inconsistent. Same contract as the drift function
+            # itself: empty means compared-and-clean, never could-not-compare.
+            drifted = ["<manifest unreadable: cannot determine drift>"]
+        else:
+            # Hook drift is computed FIRST and kept. Concatenating both calls in one
+            # expression meant a raising skill comparison discarded already-proven hook
+            # drift with the left operand and returned 1, so the reinstall that hook
+            # drift called for never happened. The previous `or` short-circuited and
+            # never had this failure; the concatenation introduced it.
             try:
-                drifted = _canonical_hook_drift(source_root, manifest) + _canonical_skill_drift(
-                    source_root, manifest
-                )
+                drifted = list(_canonical_hook_drift(source_root, manifest))
             except OSError as exc:
-                # PRESENTATION ONLY, and deliberately NOT inside _canonical_skill_drift.
-                # That function raises on purpose: an empty list must mean
-                # compared-and-clean and never could-not-compare, and an earlier draft
-                # swallowed the fault into `[]` and duly reported 0 drift on a tree
-                # holding an uncommitted skill edit. Catching HERE reports the fault
-                # instead of absorbing it -- `ds update` exits non-zero with the same
-                # envelope every other CLI failure uses, rather than a raw traceback,
-                # because ds.py main() catches only RuntimeError, sqlite3.Error and
-                # ValueError and an unreadable canonical tree raises none of those.
+                # The HOOK comparison can fail the same way the skill one can -- a
+                # PermissionError on read_text, or a handler that disappears between
+                # glob() and read_text(). The first cut of this fix guarded only the
+                # skill call, so a hook-side fault escaped uncaught and produced exactly
+                # the raw traceback this fix exists to prevent, on the other branch.
+                # Fixed for one caller and left open for its sibling is the shape this
+                # session keeps finding; not repeating it here.
+                #
+                # Reported separately from the skill fault because nothing is proven yet:
+                # there is no partial evidence to proceed on, so this is a hard stop.
                 _print(
                     {
                         "ok": False,
-                        "error": (
-                            "cannot compare canonical source against the installed "
-                            f"manifest: {exc}"
-                        ),
+                        "error": f"cannot compare canonical hooks against the manifest: {exc}",
                         "error_type": type(exc).__name__,
                         "hint": (
-                            "canonical/ is incomplete or unreadable in this checkout, so "
-                            "drift cannot be determined. Nothing was installed. Re-run "
-                            "from a complete clone."
+                            "runtime/hooks/meta is incomplete or unreadable, so drift "
+                            "cannot be determined. Nothing was installed."
                         ),
                     }
                 )
                 return 1
+            try:
+                drifted += _canonical_skill_drift(source_root, manifest)
+            except OSError as exc:
+                if drifted:
+                    # Actionable evidence already in hand: reinstall, and say what could
+                    # not be compared rather than discarding the finding.
+                    print(
+                        json.dumps(
+                            {
+                                "warning": "skill drift could not be determined",
+                                "error": str(exc),
+                                "error_type": type(exc).__name__,
+                                "proceeding_on": "hook drift already detected",
+                                "hook_drift_count": len(drifted),
+                            },
+                            indent=2,
+                        )
+                    )
+                else:
+                    # PRESENTATION ONLY, and deliberately NOT inside _canonical_skill_drift.
+                    # That function raises on purpose: an empty list must mean
+                    # compared-and-clean and never could-not-compare, and an earlier draft
+                    # swallowed the fault into `[]` and duly reported 0 drift on a tree
+                    # holding an uncommitted skill edit. Catching HERE reports the fault
+                    # instead of absorbing it -- `ds update` exits non-zero with the same
+                    # envelope every other CLI failure uses, rather than a raw traceback,
+                    # because ds.py main() catches only RuntimeError, sqlite3.Error and
+                    # ValueError and an unreadable canonical tree raises none of those.
+                    _print(
+                        {
+                            "ok": False,
+                            "error": (
+                                "cannot compare canonical source against the installed "
+                                f"manifest: {exc}"
+                            ),
+                            "error_type": type(exc).__name__,
+                            "hint": (
+                                "canonical/ is incomplete or unreadable in this checkout, so "
+                                "drift cannot be determined. Nothing was installed. Re-run "
+                                "from a complete clone."
+                            ),
+                        }
+                    )
+                    return 1
         if not drifted:
             _print({"ok": True, "status": "already_current", "version": repo_version})
             return 0
