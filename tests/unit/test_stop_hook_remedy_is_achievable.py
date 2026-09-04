@@ -445,6 +445,34 @@ def test_next_work_order_offers_one_whose_dependency_is_closed(enforcement) -> N
     ), f"a dependency that is closed must not block the suggestion: {nxt}"
 
 
+def test_next_work_order_matches_the_refusal_start_actually_applies(enforcement) -> None:
+    """The suggester's predicate must equal the gate's, not improve on it.
+
+    ``start_brief.py`` counts a dependency as blocking when ``dep_wo.status != 'closed'``.
+    A first cut of this exclusion wrote ``NOT IN ('closed', 'cancelled')`` on the
+    reasoning that a cancelled dependency should not block -- defensible policy, but not
+    the policy ``work-order start`` applies. The result was a work order offered by the
+    DENY and refused by start: the impossible-remedy defect this exclusion exists to
+    close, reintroduced by approximating a sibling's rule instead of matching it.
+
+    Found by the authority's own review after four rounds of independent verification had
+    passed the work.
+    """
+    db = enforcement.AUTHORITY_DB
+    _schema_for_next_wo(db)
+    _add_wo(db, "wo-dep-cancelled", "created", 10)
+    _add_wo(db, "wo-cancelled", "cancelled", 0)
+    _add_dep(db, "wo-dep-cancelled", "wo-cancelled")
+
+    nxt = enforcement.next_created_work_order("p-1")
+
+    assert nxt is None, (
+        "a cancelled dependency still blocks `work-order start` (its predicate is "
+        "status != 'closed'), so offering this work order hands the operator a command "
+        f"that will refuse: {nxt}"
+    )
+
+
 def test_next_work_order_returns_none_when_everything_is_blocked(enforcement) -> None:
     """Naming nothing is correct when nothing is startable.
 

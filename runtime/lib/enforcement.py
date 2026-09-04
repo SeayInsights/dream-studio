@@ -586,11 +586,23 @@ def next_created_work_order(project_id: str) -> dict | None:
             "SELECT wo.work_order_id, wo.title FROM business_work_orders wo"
             " LEFT JOIN business_milestones m ON m.milestone_id = wo.milestone_id"
             " WHERE wo.project_id = ? AND wo.status = 'created'"
+            # MIRROR start_brief.py's predicate EXACTLY: `dep_wo.status != 'closed'`.
+            # A first cut wrote NOT IN ('closed', 'cancelled') on the reasoning that a
+            # cancelled dependency should not block -- which may well be better policy,
+            # but it is not the policy `work-order start` applies. The effect was to
+            # offer a work order whose dependency was cancelled and have start refuse
+            # it: the exact impossible-remedy defect this function was changed to close,
+            # reintroduced by improving on the rule instead of matching it. Found by the
+            # authority's own review after four rounds of my own had passed it.
+            #
+            # If cancelled should stop blocking, change start_brief.py and this together.
+            # A suggester that disagrees with the gate it is suggesting through is worse
+            # than one that is merely strict.
             " AND NOT EXISTS ("
             "   SELECT 1 FROM work_order_dependencies d"
             "   JOIN business_work_orders dep ON dep.work_order_id = d.depends_on_id"
             "   WHERE d.work_order_id = wo.work_order_id"
-            "   AND dep.status NOT IN ('closed', 'cancelled')"
+            "   AND dep.status != 'closed'"
             " )"
             " ORDER BY m.order_index ASC, wo.sequence_order ASC NULLS LAST,"
             " wo.created_at ASC LIMIT 1",
