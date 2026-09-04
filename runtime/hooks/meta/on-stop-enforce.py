@@ -49,6 +49,29 @@ _MAX_LISTED_VIOLATIONS = 8
 _MAX_STOP_BLOCKS = 3
 
 
+def incomplete_task_count_or(enforcement, work_order_id: str, default: int = 1) -> int:
+    """``incomplete_task_count`` with an unreadable answer treated as "tasks remain".
+
+    None means the authority could not be read, or the work order has no tasks at all.
+    Neither justifies telling the operator that everything is complete, so the caller
+    falls back to the ordinary task-done guidance -- wrong-but-familiar beats a confident
+    claim built on a query that answered nothing.
+    """
+    # getattr, not a direct call: the hook file and the enforcement library are SEPARATE
+    # projected copies, so a tree can hold a new hook beside an older lib. Calling the
+    # attribute directly made this raise AttributeError, which crashed two pre-existing
+    # tests in test_wo_lifecycle_surface.py whose stub implements only
+    # authority_write_since -- and would do the same in an install whose lib had not been
+    # re-projected yet. Everything about propagation this session says that skew is the
+    # normal state, not the exception, so the hook degrades to the ordinary guidance
+    # instead of dying.
+    counter = getattr(enforcement, "incomplete_task_count", None)
+    if counter is None:
+        return default
+    remaining = counter(work_order_id)
+    return default if remaining is None else remaining
+
+
 def _authority_violations(enforcement, session: dict) -> list[str]:
     since = session.get("started_at", "")
     checked: set[str] = set()
@@ -72,22 +95,61 @@ def _authority_violations(enforcement, session: dict) -> list[str]:
             continue
         if len(claimants) > 1:
             others = ", ".join(claimants)
-            violations.append(
-                "Product source was edited under work orders whose module boundaries both"
-                f" cover it ({others}) but no authority write was recorded this session for"
-                " any of them. A write to ANY ONE satisfies this. Mark completed tasks:"
-                f" py -m interfaces.cli.ds work-order tasks {claimants[0]}"
-                f" then py -m interfaces.cli.ds work-order task-done {claimants[0]} <task_id>."
-            )
+            # The achievable-remedy rule applies to BOTH branches. The first cut of this
+            # fix patched only the single-claimant path below, so two work orders that
+            # both cover the edited file and both have every task complete -- the exact
+            # state this hook was corrected for -- still met the old impossible message.
+            # in_progress_work_order's own docstring calls concurrent work orders normal
+            # (three were in progress on the live authority when it was written), so this
+            # is a reachable path, not a corner. Fixed for one caller and left open for
+            # its sibling, in the fix for a defect about remedies that cannot be run.
+            markable = [c for c in claimants if (incomplete_task_count_or(enforcement, c)) > 0]
+            if markable:
+                violations.append(
+                    "Product source was edited under work orders whose module boundaries both"
+                    f" cover it ({others}) but no authority write was recorded this session for"
+                    " any of them. A write to ANY ONE satisfies this. Mark completed tasks:"
+                    f" py -m interfaces.cli.ds work-order tasks {markable[0]}"
+                    f" then py -m interfaces.cli.ds work-order task-done {markable[0]} <task_id>."
+                )
+            else:
+                violations.append(
+                    "Product source was edited under work orders whose module boundaries both"
+                    f" cover it ({others}) but no authority write was recorded this session for"
+                    " any of them. Every task on all of them is already complete, so there is"
+                    " nothing to mark done. If this edit is NEW work, register it against the"
+                    " one it belongs to:"
+                    f" py -m interfaces.cli.ds work-order add-task {claimants[0]} --title ..."
+                    " --acceptance TEST-CHECK:... A write to ANY ONE satisfies this."
+                )
         else:
-            violations.append(
-                "Product source was edited under work order"
-                f" {wo_id} but no authority write was recorded this session."
-                " Mark completed tasks:"
-                f" py -m interfaces.cli.ds work-order tasks {wo_id}"
-                f" then py -m interfaces.cli.ds work-order task-done {wo_id} <task_id>"
-                f" (or close: py -m interfaces.cli.ds work-order close {wo_id})."
-            )
+            # THE REMEDY MUST BE ONE THE OPERATOR CAN ACTUALLY PERFORM. This message
+            # always prescribed `task-done <task_id>` with `close` as the alternative,
+            # and both are impossible once every task is complete and the close gates
+            # refuse -- the state that produced this fix. The operator was left with
+            # inventing a task to mark done, which is the false-done this hook exists to
+            # prevent, or disabling enforcement. Neither is a remedy.
+            remaining = incomplete_task_count_or(enforcement, wo_id)
+            if remaining == 0:
+                violations.append(
+                    "Product source was edited under work order"
+                    f" {wo_id} but no authority write was recorded this session."
+                    " Every task on it is already complete, so there is nothing to mark"
+                    " done. If this edit is NEW work, register it:"
+                    f" py -m interfaces.cli.ds work-order add-task {wo_id} --title ..."
+                    " --acceptance TEST-CHECK:... That records it and satisfies this."
+                    " If the work is finished, close it once its gates pass:"
+                    f" py -m interfaces.cli.ds work-order close {wo_id}."
+                )
+            else:
+                violations.append(
+                    "Product source was edited under work order"
+                    f" {wo_id} but no authority write was recorded this session."
+                    " Mark completed tasks:"
+                    f" py -m interfaces.cli.ds work-order tasks {wo_id}"
+                    f" then py -m interfaces.cli.ds work-order task-done {wo_id} <task_id>"
+                    f" (or close: py -m interfaces.cli.ds work-order close {wo_id})."
+                )
     return violations
 
 
@@ -103,11 +165,40 @@ def _docstore_violations(enforcement, session: dict) -> list[str]:
         name_hint = Path(path).name
         if not enforcement.docstore_record_since(name_hint, since):
             project_id = entry.get("project_id", "<project_id>")
-            violations.append(
-                f"Documentation artifact {path} has no files.db record."
-                f' Register it: py -m interfaces.cli.ds files add "{path}"'
-                f" --project-id {project_id}"
-            )
+            # THE SAME ACHIEVABLE-REMEDY RULE AS _authority_violations, in its sibling.
+            # `ds files add` hard-requires path.is_file() and returns
+            # {"ok": false, "error": "not a file: ..."} otherwise, so prescribing it for
+            # an artifact that has since been deleted or moved hands the operator a
+            # command that cannot succeed. A Bash `rm`/`mv` never reaches the PreToolUse
+            # Write|Edit hook, so the session can genuinely record an edit to a file that
+            # is gone by the time the stop runs. Found by independent review as the third
+            # instance of this shape in this work order.
+            if not Path(path).is_file():
+                # Says only what is true. A first draft ended "if it was deleted
+                # deliberately, nothing is owed and this clears once the session records
+                # no edit to it" -- and independent review proved that false: nothing in
+                # the repo ever removes an entry from doc_edits, so the recorded edit is
+                # permanent for the life of the session_id. The violation does not clear;
+                # it re-blocks each stop until _MAX_STOP_BLOCKS, then passes loudly with a
+                # recorded stop_bypassed. An untrue reassurance inside a blocking message
+                # is worse than none, and writing one in a fix about achievable remedies
+                # was the same error one level up.
+                violations.append(
+                    f"Documentation artifact {path} was edited this session, has no"
+                    " files.db record, and is no longer on disk, so it cannot be"
+                    " registered as-is. If it was renamed, register the current path:"
+                    ' py -m interfaces.cli.ds files add "<new path>"'
+                    f" --project-id {project_id}. If it was deleted deliberately, this"
+                    f" session has nothing left to record for it: the edit stays on the"
+                    " session record, so this will block up to"
+                    f" {_MAX_STOP_BLOCKS} stops and then pass with a recorded bypass."
+                )
+            else:
+                violations.append(
+                    f"Documentation artifact {path} has no files.db record."
+                    f' Register it: py -m interfaces.cli.ds files add "{path}"'
+                    f" --project-id {project_id}"
+                )
     return violations
 
 
