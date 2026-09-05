@@ -385,6 +385,42 @@ def close_work_order(
                 conn=conn,
                 db_path=db_path,
             )
+            # A STALE VERDICT IS RECOVERABLE, SO RECOVER IT RATHER THAN STOPPING.
+            #
+            # Staleness means commits landed after the verdict was produced -- which is
+            # the NORMAL state of a work order whose own fixes are still landing. It was
+            # a hard block, so the loop halted and asked a human to run a command the
+            # system could run itself. Measured this session: three closes blocked on
+            # nothing but staleness, each needing a manual `work-order verify`, and one of
+            # them acquired new commits again while that verify ran.
+            #
+            # This is the escalation-altitude rule: interrupt the operator for DECISIONS,
+            # never for bookkeeping the system can redo. A re-verify is exactly that --
+            # deterministic, already implemented, and now retried up to 20 times against a
+            # flaky provider. If the fresh verdict still fails, THAT failure is reported
+            # and the close still blocks: this heals a stale artifact, it never converts a
+            # failing review into a passing one.
+            if not _ir_ok and "verdict is stale" in (_ir_reason or "") and not force:
+                try:
+                    from .verify_main import verify_work_order as _verify
+
+                    _verify(
+                        work_order_id=work_order_id,
+                        source_root=source_root,
+                        dream_studio_home=dream_studio_home,
+                    )
+                    _ir_ok, _ir_reason = _run_ir_gate(
+                        "independent_review",
+                        planning_root=p_root,
+                        work_order_id=work_order_id,
+                        project_id=project_id,
+                        conn=conn,
+                        db_path=db_path,
+                    )
+                    meta["independent_review_refreshed"] = True
+                except Exception as exc:  # noqa: BLE001 - a failed self-heal must not mask the gate
+                    meta["independent_review_refresh_error"] = f"{type(exc).__name__}: {exc}"[:200]
+
             if not _ir_ok:
                 gate_failures.append(_ir_reason)
 

@@ -229,8 +229,22 @@ def _get_update_command():
     return _update_command
 
 
-def test_update_returns_already_current_when_version_matches(tmp_path, capsys):
-    """ds update returns already_current when versions match."""
+def test_update_reinstalls_when_the_version_matches_but_no_manifest_exists(tmp_path, capsys):
+    """A version stamp with no manifest is inconsistent, so re-project rather than claim currency.
+
+    DELIBERATE CONTRACT CHANGE (WO 789df02b), not a test repaired to match code. This
+    previously asserted `already_current` for exactly this state, and that was the defect:
+    reaching this branch means an installed-version stamp EXISTS, so an install happened,
+    yet nothing records what it wrote. `read_manifest` returns None for a missing manifest
+    and a corrupt one alike, so "no manifest" cannot be distinguished from "manifest
+    unreadable" -- and answering `already_current` asserts the install is current on the
+    strength of a comparison that never ran. That is the shape this work order exists to
+    remove.
+
+    Re-projecting is idempotent and self-healing: the install writes a manifest, so the
+    next run compares normally. Claiming currency leaves a broken install unrepaired and
+    tells the operator it is fine.
+    """
     _update_command = _get_update_command()
     from interfaces.cli.ds import resolve_installed_runtime_paths
 
@@ -242,20 +256,30 @@ def test_update_returns_already_current_when_version_matches(tmp_path, capsys):
     (ds_home / "state").mkdir(parents=True, exist_ok=True)
     (ds_home / "state" / "installed-version").write_text("2026-05-17\n", encoding="utf-8")
 
-    with patch("interfaces.cli.ds.resolve_installed_runtime_paths") as mock_paths:
-        from unittest.mock import MagicMock
+    from unittest.mock import MagicMock
 
+    with (
+        patch("interfaces.cli.ds.resolve_installed_runtime_paths") as mock_paths,
+        patch("integrations.detector.detect_claude_code") as mock_detect,
+        patch("integrations.installer.claude_code.ClaudeCodeInstaller.install") as mock_install,
+    ):
         mock_rt = MagicMock()
         mock_rt.dream_studio_home = ds_home
         mock_paths.return_value = mock_rt
+        mock_detect.return_value = MagicMock(config_root=tmp_path / ".claude", scope="user")
+        mock_install.return_value = {"ok": True, "files_written": 0}
 
         result = _update_command(source_root=tmp_path, dream_studio_home=ds_home)
 
     captured = capsys.readouterr()
     output = json.loads(captured.out.strip())
-    assert output["ok"] is True
-    assert output["status"] == "already_current"
-    assert output["version"] == "2026-05-17"
+    assert mock_install.called, (
+        "a version stamp with no manifest left the install unverifiable, so the "
+        "installer must run rather than the command claiming the install is current"
+    )
+    assert output["status"] != "already_current", (
+        "reported as current on the strength of a comparison that never ran: " f"{output}"
+    )
     assert result == 0
 
 

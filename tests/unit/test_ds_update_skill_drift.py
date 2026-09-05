@@ -478,17 +478,27 @@ def test_hook_drift_survives_a_skill_comparison_fault(tmp_path, monkeypatch, cap
     exit_code = system_health._update_command(
         source_root=source_root, dream_studio_home=ds_home, dry_run=True
     )
-    out = capsys.readouterr().out
+    captured = capsys.readouterr()
+    out, err = captured.out, captured.err
 
     assert exit_code != 1, (
         "a skill-comparison fault discarded hook drift that was already proven, so the "
         f"reinstall it called for never happens. Output: {out[:400]}"
     )
     assert "update_available" in out, f"the reinstall must still be indicated, got {out[:400]}"
-    assert "skill drift could not be determined" in out, (
+    # STDERR, deliberately. stdout is this CLI's machine-readable channel and every
+    # command prints exactly ONE JSON document there; emitting the warning to stdout put
+    # a second document on it, so json.loads(captured.out) raised "Extra data" and broke
+    # two pre-existing tests in test_version_check.py. The warning still has to be SAID --
+    # proceeding on partial evidence without saying so is the compared-nothing shape --
+    # it just belongs on the diagnostic stream.
+    assert "skill drift could not be determined" in err, (
         "proceeding on partial evidence must SAY what could not be compared, or the "
-        f"operator cannot tell a full comparison from a partial one: {out[:400]}"
+        f"operator cannot tell a full comparison from a partial one. stderr: {err[:400]}"
     )
+    import json as _json
+
+    _json.loads(out), "stdout must remain exactly one parseable JSON document"
 
 
 def test_a_hook_comparison_fault_also_reports_the_envelope(tmp_path, monkeypatch, capsys) -> None:

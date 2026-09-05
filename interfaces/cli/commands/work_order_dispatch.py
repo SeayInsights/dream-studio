@@ -103,6 +103,27 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         default=None,
         help="For a defect: the SQL/TEST check that reproduces it, re-run at close",
     )
+    # REQUIRED, because edit attribution has no fallback that is not a guess. The
+    # boundary is read back by runtime.lib.enforcement.boundary_globs from a literal
+    # "Module boundary:" clause in the description. Nothing required it and nothing
+    # composed it, so on the live authority 0 of 25 in-progress work orders carried one
+    # -- and with no boundary to match, every source edit in a project was attributed to
+    # whichever work order started last, regardless of subject. The operator hit that
+    # repeatedly when switching projects and had to bypass enforcement to end a session.
+    #
+    # A rule that nothing refuses is a suggestion. This one is refused here: the door
+    # will not mint a work order whose edits cannot be attributed.
+    wo_create.add_argument(
+        "--module-boundary",
+        required=True,
+        dest="module_boundary",
+        help=(
+            "REQUIRED. Comma-separated paths this work order owns "
+            "(e.g. 'core/work_orders, interfaces/cli/commands'). Edit attribution "
+            "matches against these; without them every edit in the project is "
+            "attributed by recency, which is a guess."
+        ),
+    )
 
     wo_add_task = work_order_sub.add_parser(
         "add-task", help="Add a task to a work order (tasks live in SQLite, never in docs)"
@@ -416,6 +437,7 @@ def dispatch(
             description=args.description,
             work_order_type=args.work_order_type,
             originating_symptom=args.originating_symptom,
+            module_boundary=args.module_boundary,
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )

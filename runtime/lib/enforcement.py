@@ -846,6 +846,7 @@ def record_edit(
     project_id: str,
     work_order_id: str | None,
     claimants: list[str] | None = None,
+    attribution: str | None = None,
 ) -> None:
     """Record an allowed edit so on-stop-enforce can check the session's writes.
 
@@ -854,6 +855,16 @@ def record_edit(
     work orders both legitimately claim a file, demanding a write to the one this hook
     happened to name would be a false violation, and false violations are what push an
     operator to DS_ENFORCE=0.
+
+    ``attribution`` records HOW the work order was chosen -- ``module_boundary`` for a
+    declared match, ``most_recently_started`` for a fallback guess. The stop hook needs
+    the difference: a guess must not be presented with a match's confidence. Operator
+    report that produced this: a one-line comment edit in a different subject area was
+    stamped with the only in-progress work order in that project, an Entra
+    conditional-access research item, and the stop hook then demanded an authority write
+    against it. The two writes it offered would both have recorded something false, so
+    the honest agent could only stop by disabling enforcement -- and had to ask the
+    operator to arbitrate a decision the tool invented.
     """
     data = load_session(session_id) or {
         "session_id": session_id,
@@ -868,6 +879,7 @@ def record_edit(
         if entry.get("path") == normalized:
             entry["work_order_id"] = work_order_id
             entry["claimants"] = list(claimants or ([work_order_id] if work_order_id else []))
+            entry["attribution"] = attribution or entry.get("attribution")
             entry["ts"] = now_iso()
             break
     else:
@@ -878,6 +890,7 @@ def record_edit(
                     "project_id": project_id,
                     "work_order_id": work_order_id,
                     "claimants": list(claimants or ([work_order_id] if work_order_id else [])),
+                    "attribution": attribution,
                     "ts": now_iso(),
                 }
             )

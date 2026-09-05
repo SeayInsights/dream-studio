@@ -90,6 +90,22 @@ _ROLE_COLLECT_TIMEOUTS: dict[str, int] = {"falsification": 900}
 _DEFAULT_RETRY_TIMEOUT = 60
 _ROLE_RETRY_TIMEOUTS: dict[str, int] = {"falsification": 300}
 
+# Operator rule: run up to 20 attempts looking for one clean verdict.
+#
+# There was exactly ONE retry, and a timeout is what most often needs another. Measured
+# across one session: four timeouts to one success, every one at the 360s collect budget,
+# and each left a work order uncloseable behind an `independent_review: unreviewable`
+# gate. A single retry on a flaky provider is not a retry policy, it is a coin flip.
+_MAX_GRADER_ATTEMPTS = 20
+
+# A TIMEOUT keeps the FULL budget on every attempt. The retry budget exists for a
+# formatting flake, where the model answered promptly with the wrong shape and a short
+# second look suffices. Applying it to a timeout is backwards: the call ran out of time,
+# so the retry was handed LESS time (60s against the 360s that already expired) and was
+# near-certain to expire too. That inversion is why four timeouts in a row never
+# recovered.
+_TIMEOUT_MARKERS = ("timed out", "TimeoutExpired", "timeout")
+
 
 def role_collect_timeout(role: str | None) -> int:
     """Collect budget for a grader role (see _ROLE_COLLECT_TIMEOUTS)."""
@@ -195,10 +211,28 @@ def collect_grader_with_retry(
         result = _collect_grader(proc, timeout=role_collect_timeout(role))
     except Exception as exc:
         result = {"_grader_error": str(exc)}
-    if _should_retry(result):
-        retry = _retry_grader_once(prompt, profile, timeout=role_retry_timeout(role))
+
+    # Up to _MAX_GRADER_ATTEMPTS looking for one clean verdict, rather than the single
+    # retry this had. The budget for each attempt depends on HOW the previous one missed:
+    # a timeout gets the full collect window again, because it ran out of time and handing
+    # it less is the inversion that made four consecutive timeouts unrecoverable; a
+    # formatting flake gets the shorter retry window, which is what that budget is for.
+    attempts = 1
+    while _should_retry(result) and attempts < _MAX_GRADER_ATTEMPTS:
+        timed_out = any(m in str(result.get("_grader_error", "")) for m in _TIMEOUT_MARKERS)
+        budget = role_collect_timeout(role) if timed_out else role_retry_timeout(role)
+        retry = _retry_grader_once(prompt, profile, timeout=budget)
+        attempts += 1
         if retry is not None:
             result = retry
+            break
+
+    # Say how many attempts it took. A verdict that needed 11 tries and one that landed
+    # first time are different facts about provider health, and collapsing them hides a
+    # degrading provider until it fails outright.
+    if attempts > 1:
+        result = dict(result)
+        result["grader_attempts"] = attempts
     return result
 
 
@@ -257,12 +291,24 @@ def _run_graders_parallel(
         # the WO (WO-GRADER-RETRY-NONJSON — WO-GAP-DEDUPE-CLASS needed 3 manual
         # verify runs). The retry step is shared with the conformance suite so both
         # paths retry identically (gap 2bbed8d8).
-        if _should_retry(result):
-            retry = _retry_grader_once(
-                prompts[name], profiles.get(name), timeout=role_retry_timeout(name)
-            )
+        # SAME POLICY AS THE SERIAL PATH. This had a single retry while
+        # collect_grader_with_retry gained twenty, and THIS is the path a live
+        # `ds work-order verify` takes -- so fixing only the other one would have left
+        # every real verify on one coin flip. Fixed-in-one-branch-not-its-sibling is the
+        # shape this session found four times; the loop is written out here rather than
+        # shared only because the two paths carry different per-grader state.
+        attempts = 1
+        while _should_retry(result) and attempts < _MAX_GRADER_ATTEMPTS:
+            timed_out = any(m in str(result.get("_grader_error", "")) for m in _TIMEOUT_MARKERS)
+            budget = role_collect_timeout(name) if timed_out else role_retry_timeout(name)
+            retry = _retry_grader_once(prompts[name], profiles.get(name), timeout=budget)
+            attempts += 1
             if retry is not None:
                 result = retry
+                break
+        if attempts > 1:
+            result = dict(result)
+            result["grader_attempts"] = attempts
         # gap 0a64cf8c: check real-mode grader output against the published per-role
         # contract in the LIVE path (not only in tests). Observability only — the
         # errors are attached as evidence; scoring keeps its own fallbacks so a

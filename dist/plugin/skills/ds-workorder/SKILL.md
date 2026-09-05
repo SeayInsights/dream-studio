@@ -31,6 +31,12 @@ The Dream Studio source-of-truth is the SQLite authority. This pack does not rea
 2. **Present returned dicts. Don't invent fields.** The function returns a dict with a known shape. Show those fields. If the user asks for a field that isn't there, say so — don't fabricate it.
 3. **Mutations require explicit user confirmation.** start, execute, close, block all mutate state. Confirm intent before calling the function, then call it, then show the user the returned dict so they can verify the change.
 4. **Errors are operator-visible.** When a function returns `ok=False`, surface the `error` field verbatim. Do not paraphrase or soften the message.
+5b. **An id you will USE comes from the CLI's output, never from your own rendering of it.** The CLI returns the complete 36-character key every time. If you print a shortened id in a survey, table, or diagnostic — `work_order_id[:8]` — that rendering is for the reader, and it is NOT a source you may type a command from. Copy the full id out of the CLI's own response.
+
+   Observed twice in one session: an 8-character prefix was read back off a hand-written survey script and the remaining 28 characters were invented. `Task not found` both times, so nothing wrong was written — and only because the fabricated suffixes failed to collide. A guess that happens to hit a real id modifies the wrong record silently, and no gate downstream can catch it, because the write is well-formed.
+
+   The temptation on hitting this is to add prefix resolution to the CLI. Do not: it puts a shortcut into a tool that already hands over the full key, and an ambiguous prefix then has to be either refused (no better than the current error) or guessed at (strictly worse). The defect is reading an id from the wrong place, not the length of the id.
+
 5. **No raw UUIDs to the user unless asked.** Use the work_order_id internally; refer to the work order by its `title` in conversation. The user can ask for the ID.
 6. **Task descriptions should include behavioral acceptance criteria.** When authoring tasks (via scope or during a WO), each task description should include an "Acceptance:" clause stating what the operator observes when the task is done. The independent review completion grader will emit a warning gap if feature/infrastructure WOs have no observable behavioral AC — this is not a fail, but it signals that the grader could not verify expected operator outcomes.
 

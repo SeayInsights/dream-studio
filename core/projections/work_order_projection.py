@@ -134,6 +134,21 @@ class WorkOrderProjection(Projection):
             "last_event_id": event_id,
             "last_updated_at": now,
             "originating_symptom": payload.get("originating_symptom"),
+            # DESCRIPTION WAS DROPPED END TO END. The emitter left it out of the payload
+            # and this handler never read it, so every work order authored through
+            # `ds work-order create` stored an empty description -- measured on the live
+            # authority: 443 of 920 work orders empty, and 18 of the 19 created since
+            # 2026-09-01. The scope, the evidence and the reasoning an author typed were
+            # accepted by the CLI and discarded.
+            #
+            # That is also why edit attribution had to guess. The module boundary lives
+            # as a "Module boundary:" clause INSIDE the description, so with the
+            # description dropped a boundary could not be declared at all -- 0 of 25
+            # in-progress work orders had one, not because authors forgot but because it
+            # was impossible. The recency fallback then stamped every edit in a project
+            # with whichever work order started last, and the operator had to bypass
+            # enforcement to end a session.
+            "description": payload.get("description"),
         }
         # INSERT OR IGNORE preserves an existing skeleton row written by an
         # out-of-order event while still recording source_event_id on a
@@ -143,11 +158,11 @@ class WorkOrderProjection(Projection):
             INSERT OR IGNORE INTO {_TABLE}
                 (work_order_id, project_id, milestone_id, title, work_order_type,
                  status, created_at, source_event_id, last_event_id, last_updated_at,
-                 originating_symptom)
+                 originating_symptom, description)
             VALUES
                 (:work_order_id, :project_id, :milestone_id, :title, :work_order_type,
                  :status, :created_at, :source_event_id, :last_event_id, :last_updated_at,
-                 :originating_symptom)
+                 :originating_symptom, :description)
             """,
             row,
         )

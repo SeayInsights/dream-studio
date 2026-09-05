@@ -1,0 +1,167 @@
+# Dream Studio rule registry.
+#
+# WHY THIS FILE EXISTS. Operator, on the substrate: it is "a lot of prose laid on top of
+# each other as suggestions with no rules, evals, or really any real test that doing
+# anything they are supposed to". Measured 2026-09-04: 2,172 normative statements
+# (MUST / NEVER / ALWAYS / REQUIRED / DO NOT) across the substrate -- 772 in
+# canonical/skills over 219 files, 1,283 in docs over 143 files, 103 in canonical/workflows,
+# 14 in CLAUDE.md and AGENTS.md. Nothing distinguished the ones something enforces from the
+# ones nothing does.
+#
+# The proof that this matters is `Module boundary:`. It was a load-bearing rule -- edit
+# attribution matched against it -- stated in prose, read by a regex, and supplied by no
+# authoring door: `create_work_order` accepted --description and DROPPED it, so 0 of 25
+# in-progress work orders could declare a boundary and every edit in a project was
+# attributed to whichever work order started last. The operator had to bypass enforcement
+# to end a session, repeatedly, for months.
+#
+# THE CONTRACT. Every entry is one normative statement. It carries EITHER:
+#   enforced_by: a check that fails when the rule is broken (pytest node id or gate module)
+#   guidance:    true, with `why`, when the statement is judgment no check can settle
+# An entry with neither is refused by the gate. So is an `enforced_by` naming a check that
+# does not exist or collects nothing -- an unrunnable check is the same as no check, and
+# that exact rot was found on eight acceptance criteria this session.
+#
+# This registry starts small on purpose. Seeding it with 2,172 half-classified entries
+# would reproduce the problem in YAML. It grows by the rule below: a normative statement
+# added to a changed file must be classified in the same change set.
+
+version: 1
+
+rules:
+  - id: work-order-declares-module-boundary
+    statement: >
+      Every work order must declare the paths it owns, so an edit is attributed by a
+      declared boundary rather than by which work order started most recently.
+    source: canonical/skills/ds-workorder/SKILL.md
+    enforced_by:
+      - tests/unit/test_work_order_boundary_is_declarable.py::test_the_create_door_requires_a_boundary
+      - tests/unit/test_work_order_boundary_is_declarable.py::test_a_composed_boundary_round_trips_through_the_real_parser
+    note: >
+      Enforced at the authoring door: --module-boundary is required, and the clause is
+      composed by the machine into the form the parser reads rather than remembered by an
+      author. Before this the rule was unsupplyable, not merely unenforced.
+
+  - id: work-order-description-is-persisted
+    statement: >
+      A description supplied to the authoring door must be stored, not silently discarded.
+    source: core/work_orders/mutations.py
+    enforced_by:
+      - tests/unit/test_work_order_boundary_is_declarable.py::test_the_projection_materializes_the_description
+    note: >
+      Measured 2026-09-04: 443 of 920 work orders had an empty description, and 18 of the
+      19 created since 2026-09-01. The emitter omitted description from the event payload
+      and the projection never read it, so everything an author typed was accepted and
+      dropped -- including the boundary clause the rule above depends on.
+
+  - id: enforcement-blocks-only-on-evidence
+    statement: >
+      The stop hook must demand an authority write only when a declared module boundary
+      proves the work order owns the edit. Attribution by recency, or with no recorded
+      basis, must record an observation and allow the stop.
+    source: runtime/hooks/meta/on-stop-enforce.py
+    enforced_by:
+      - tests/unit/test_stop_hook_remedy_is_achievable.py::test_the_emitted_violation_never_prescribes_an_impossible_command
+    note: >
+      Operator: "it continuously happens when i switch projects and i have to bypass it."
+      Blocking on absent evidence trains the operator to bypass, which costs enforcement
+      its authority on the cases that are real.
+
+  - id: enforcement-remedy-is-achievable
+    statement: >
+      A blocking message must never prescribe a command the operator cannot run.
+    source: runtime/hooks/meta/on-stop-enforce.py
+    enforced_by:
+      - tests/unit/test_stop_hook_remedy_is_achievable.py::test_remedy_is_achievable_when_no_task_remains
+      - tests/unit/test_stop_hook_remedy_is_achievable.py::test_the_multi_claimant_message_is_also_achievable
+      - tests/unit/test_stop_hook_remedy_is_achievable.py::test_the_docstore_remedy_is_not_prescribed_for_a_missing_file
+    note: >
+      Found four times in one session, each in a different branch of the same file. A gate
+      whose remedy cannot be performed drives the operator to the two outcomes it exists
+      to prevent: a false record, or a bypass.
+
+  - id: shipped-skill-paths-resolve
+    statement: >
+      A path a skill tells an agent to open must exist in the tree the agent stands in.
+    source: canonical/skills
+    enforced_by:
+      - tests/unit/test_skill_module_paths_resolve.py::test_no_shipped_skill_points_at_a_file_no_install_has
+    note: >
+      Operator report: an install "couldn't do the reviews because it didn't have some of
+      the files needed". 111 references across 3 packs resolved nowhere, because projection
+      renames the pack directory and the references were written canonical-relative.
+
+  - id: skill-change-reaches-installs
+    statement: >
+      A canonical skill change must reach an existing install even without a version bump.
+    source: interfaces/cli/commands/system_health.py
+    enforced_by:
+      - tests/unit/test_ds_update_skill_drift.py::test_gate_consults_skills_a_skill_edit_is_drift
+      - tests/unit/test_ds_update_skill_drift.py::test_a_deleted_installed_file_is_drift
+    note: >
+      The version gate consulted hook drift only, so a skill change printed
+      already_current and installed nothing -- and the drift check could not see a file
+      that had been deleted, which is the reported symptom itself.
+
+  - id: no-fabricated-data
+    statement: >
+      Never present fabricated data, counts, or results as measured.
+    source: CLAUDE.md
+    guidance: true
+    why: >
+      No static check can distinguish a measured number from an invented one; the
+      evidence-backed-output gate checks that a claim CITES something, which is a
+      necessary condition and not a sufficient one. Recorded as guidance so its
+      unenforceability is a stated fact rather than an assumption.
+
+  - id: tests-run-by-a-different-agent
+    statement: >
+      Tests and evals are always run by a different agent than the one that authored them.
+    source: canonical/skills/core/modes/review/SKILL.md
+    guidance: true
+    why: >
+      A process constraint on how work is orchestrated, not a property of the tree. No
+      check inside the repo can observe which agent invoked pytest. Recorded so the gap is
+      visible rather than assumed covered.
+
+  - id: grader-retries-until-one-clean-verdict
+    statement: >
+      A grader miss is retried up to 20 times looking for one clean verdict, and a timeout
+      keeps its full collect budget rather than being handed less time than already expired.
+    source: core/work_orders/verify_graders.py
+    enforced_by:
+      - tests/unit/test_grader_retry_policy.py::test_a_transient_miss_is_retried_until_a_clean_verdict
+      - tests/unit/test_grader_retry_policy.py::test_a_timeout_keeps_the_full_collect_budget
+      - tests/unit/test_grader_retry_policy.py::test_the_parallel_path_shares_the_policy
+    note: >
+      Four timeouts to one success in a single session, each leaving a work order
+      uncloseable. There was one retry, and it was given the SHORT budget after the long
+      one expired -- so the single recovery attempt was near-certain to fail too.
+
+  - id: recoverable-bookkeeping-is-not-escalated
+    statement: >
+      The system interrupts a human for decisions, never for bookkeeping it can redo
+      itself. A stale review verdict is re-verified automatically; a failing review still
+      blocks the close.
+    source: core/work_orders/close_main.py
+    enforced_by:
+      - tests/unit/test_close_self_heals_stale_verdict.py::test_a_failing_review_is_not_healed_into_a_pass
+      - tests/unit/test_close_self_heals_stale_verdict.py::test_only_staleness_triggers_the_re_verify
+      - tests/unit/test_close_self_heals_stale_verdict.py::test_a_failed_re_verify_does_not_mask_the_gate
+    note: >
+      Staleness is the normal state of a work order whose own fixes are still landing.
+      Three closes in one session blocked on nothing else, each telling the operator to
+      run a command the system could run itself, and one went stale again during the
+      manual re-run.
+
+  - id: a-patch-target-is-a-real-dependency
+    statement: >
+      A mock.patch target names a real dependency even though it is written as a string,
+      so comment-and-string de-noising must not erase it.
+    source: core/gates/hanging_detectors.py
+    enforced_by:
+      - tests/integration/test_session_regressions.py::test_347_353_354_would_have_been_blocked
+    note: >
+      _code_only blanked string contents to stop prose raising false positives and
+      silently removed exactly the reference the changed-signature detector exists to
+      find. The comment above it still claimed patch targets were caught.

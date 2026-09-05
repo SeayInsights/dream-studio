@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -541,6 +542,13 @@ def _update_command(
                 if drifted:
                     # Actionable evidence already in hand: reinstall, and say what could
                     # not be compared rather than discarding the finding.
+                    # STDERR, because stdout is this CLI's machine-readable channel and
+                    # every command prints exactly ONE JSON document there. Printing the
+                    # warning to stdout emitted a second document, so
+                    # `json.loads(captured.out)` raised "Extra data" and broke callers
+                    # that parse the result -- including two pre-existing tests in
+                    # test_version_check.py. A diagnostic must not corrupt the contract
+                    # of the channel it is diagnosing.
                     print(
                         json.dumps(
                             {
@@ -551,7 +559,8 @@ def _update_command(
                                 "hook_drift_count": len(drifted),
                             },
                             indent=2,
-                        )
+                        ),
+                        file=sys.stderr,
                     )
                 else:
                     # PRESENTATION ONLY, and deliberately NOT inside _canonical_skill_drift.

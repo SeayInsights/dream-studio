@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+
+from tests.helpers.stored_verdict import read_stored_verdict
 import subprocess
 import uuid
 from contextlib import contextmanager
@@ -162,8 +164,12 @@ def test_verify_unreviewable_no_score_zero_no_spawned_wos(tmp_path, monkeypatch)
 
     # WO-VERIFY-PROVENANCE: _persist_review_verdict wraps the verdict in a
     # provenance envelope — unwrap before parsing the verdict body.
-    raw_stored = (planning_root / "work-orders" / wo_id / "review-verdict.json").read_text()
-    verdict = json.loads(unwrap(raw_stored)[0])
+    # DB-or-disk, matching what the independent_review gate itself reads. This read the
+    # disk path unconditionally, so on a healthy authority -- where the verdict goes to
+    # business_work_order_artifacts and the disk fallback never fires -- the guard failed
+    # with FileNotFoundError. It was down while the defect it guards (an unreviewable
+    # grader scored 0.0) was live: four such verdicts in one session.
+    verdict = read_stored_verdict(wo_id, db_path=db_path, planning_root=planning_root)
     assert verdict["unreviewable"] is True
     assert verdict["spawned_work_orders"] == []
 

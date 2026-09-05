@@ -129,6 +129,51 @@ def _authority_violations(enforcement, session: dict) -> list[str]:
             # refuse -- the state that produced this fix. The operator was left with
             # inventing a task to mark done, which is the false-done this hook exists to
             # prevent, or disabling enforcement. Neither is a remedy.
+            # A GUESS IS NOT EVIDENCE, SO IT DOES NOT BLOCK.
+            #
+            # When no in-progress work order declares a module boundary covering the
+            # edited file, attribution falls back to the most recently started one. In a
+            # project with a single open work order that stamps EVERY edit in the repo
+            # with it, whatever the subject -- so switching projects and touching one file
+            # produced a stop-block demanding an authority write against unrelated work.
+            # Operator: "it continuously happens when i switch projects and i have to
+            # bypass it."
+            #
+            # An earlier attempt here only reworded the block to admit it was guessing.
+            # That was worse than useless: the operator still could not end the session
+            # without disabling enforcement, and the honest message made the obstacle
+            # sound justified. The block itself is the defect. A recency guess carries no
+            # evidence that this work order owns the edit, so it cannot support a demand;
+            # demanding anyway trains the operator to bypass, which costs the enforcement
+            # its authority on the cases that ARE real.
+            #
+            # ONLY A PROVEN MATCH BLOCKS. The test is now positive -- attribution must
+            # equal module_boundary -- rather than excluding the one fallback value I
+            # happened to think of. A first cut skipped only "most_recently_started", so
+            # an entry carrying NO attribution (every edit recorded by an installed hook
+            # older than this change, i.e. the operator's entire current session) fell
+            # through and blocked anyway. I called that failing safe; it fails safe for
+            # the enforcement and unsafe for the operator, who is the one held hostage.
+            #
+            # Absent evidence is not evidence. If nothing proves this work order owns the
+            # edit, there is no ground to demand a write against it, and demanding one
+            # teaches the operator to bypass -- which costs enforcement its authority on
+            # the cases that are real. Recorded, not enforced.
+            if entry.get("attribution") != "module_boundary":
+                enforcement.record_observation(
+                    hook_name="on-stop-enforce",
+                    hook_type="Stop",
+                    rule="attribution_by_recency_not_enforced",
+                    reason=(
+                        f"source edit attributed to work order {wo_id} by recency, not by a"
+                        " declared module boundary; not blocking, because a guess is not"
+                        " evidence that this work order owns the edit. Declare a"
+                        " 'Module boundary: <paths>' clause on the work order that owns"
+                        " this area to make attribution real."
+                    ),
+                )
+                continue
+
             remaining = incomplete_task_count_or(enforcement, wo_id)
             if remaining == 0:
                 violations.append(

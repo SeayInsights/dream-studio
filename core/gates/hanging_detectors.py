@@ -354,6 +354,17 @@ def _code_only(text: str) -> str:
         return text
 
 
+def _PATCH_TARGET_RE(name: str):
+    """Compiled matcher for a quoted mock.patch target naming *name*.
+
+    A named function rather than an inline expression so it is unit-testable on its own:
+    an inline regex inside the loop could only be exercised through the whole detector,
+    which is how the previous attempt became unexplainable -- it behaved one way in
+    isolation and another in place, with no way to interrogate the difference.
+    """
+    return re.compile(r"patch[\w.]*\(\s*['\"][\w.]*(?<![\w])" + re.escape(name) + r"[^'\"]*['\"]")
+
+
 def detect_changed_signature_callers(
     diff_text: str, *, repo_root: Path | str = REPO_ROOT
 ) -> list[Finding]:
@@ -388,7 +399,21 @@ def detect_changed_signature_callers(
         if rel in changed_paths:
             continue
         for name, pat in ref_res.items():
-            if pat.search(_code_only(text)):
+            # A PATCH TARGET IS A REAL DEPENDENCY, AND IT LIVES IN A STRING.
+            #
+            # _code_only blanks comment and string contents so prose cannot raise false
+            # positives -- but mock.patch names its target as a STRING literal,
+            # patch('control.context.monitor._write_handoff_packet_to_db'), so the
+            # de-noising erased exactly the reference this detector exists to find. The
+            # #353 regression it was built for stopped being caught, and
+            # tests/integration/test_session_regressions.py has failed on main since.
+            #
+            # Code first (cheap, no false positives), then the raw text restricted to
+            # quoted patch targets. A quoted dotted path ending in the changed symbol is
+            # a dependency by any reading; prose does not contain one by accident.
+            in_code = pat.search(_code_only(text))
+            in_patch_target = _PATCH_TARGET_RE(name).search(text)
+            if in_code or in_patch_target:
                 old_p, new_p = changed_sigs[name]
                 findings.append(
                     {

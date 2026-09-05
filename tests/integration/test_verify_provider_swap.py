@@ -9,6 +9,8 @@ entry point ``verify_work_order`` rather than an internal helper.
 from __future__ import annotations
 
 import json
+
+from tests.helpers.stored_verdict import read_stored_verdict
 import sqlite3
 import uuid
 from contextlib import contextmanager
@@ -125,10 +127,12 @@ def test_full_verify_path_scores_via_stub_provider(tmp_path, monkeypatch):
     assert scores["quality_score"] == 0.4
     assert scores["composite_score"] == _EXPECTED_COMPOSITE == 0.66
 
-    # The verdict was persisted (the same artifact the vendor path writes).
-    verdict_path = planning_root / "work-orders" / work_order_id / "review-verdict.json"
-    assert verdict_path.is_file()
-    # WO-VERIFY-PROVENANCE: _persist_review_verdict wraps the verdict in a
-    # provenance envelope — unwrap before parsing the verdict body.
-    stored_verdict = json.loads(unwrap(verdict_path.read_text())[0])
+    # The verdict was persisted (the same artifact the vendor path writes). Read
+    # DB-or-disk, as the independent_review gate does: the zero-disk migration moved
+    # verdicts into business_work_order_artifacts, and the disk fallback fires only when
+    # the authority write fails -- so asserting is_file() on a healthy authority asserted
+    # that persistence had FAILED.
+    stored_verdict = read_stored_verdict(
+        work_order_id, db_path=db_path, planning_root=planning_root
+    )
     assert stored_verdict["scores"]["composite_score"] == 0.66

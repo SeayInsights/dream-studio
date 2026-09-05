@@ -74,6 +74,8 @@ gates:
       tests/unit/test_plugin_dist.py,
       tests/unit/test_skill_module_paths_resolve.py,
       tests/unit/test_ds_update_skill_drift.py,
+      tests/unit/test_rule_registry_gate.py,
+      tests/unit/test_work_order_boundary_is_declarable.py,
       -q]
     fail_hint: >
       A schema/contract pin drifted — update the pin's expected set in the SAME
@@ -132,6 +134,21 @@ gates:
       unauthorized projection surfaces. Authority-integrity check — blocking.
     command: [py, interfaces/cli/contract_atlas_lifecycle_gate.py]
     fail_hint: "Atlas leak — see contract-atlas docs for resolution."
+
+  - id: rule-registry
+    tier: blocking
+    description: >
+      Every rule in canonical/rules.yml is enforced by a runnable check or declared
+      guidance with a reason. Measured 2026-09-04: 2,172 normative statements across the
+      substrate, and nothing distinguished the ones something enforces from the ones
+      nothing does. An enforced_by naming a check that collects nothing is refused --
+      pytest exits 5 for no-tests-collected and 4 for a usage error, neither of which is a
+      failure, so a gate reading zero-versus-nonzero cannot tell a broken rule from a
+      check that stopped addressing anything.
+    command: [py, -m, core.gates.rule_registry]
+    fail_hint: >
+      A rule is unclassified, or its check does not exist / collects nothing. Give it an
+      enforced_by that runs, or guidance:true with a why.
 
   - id: docs-drift
     tier: blocking

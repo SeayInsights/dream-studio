@@ -11,6 +11,8 @@ mirror of false-done), blocking two real work orders from closing.
 from __future__ import annotations
 
 import json
+
+from tests.helpers.stored_verdict import read_stored_verdict
 import sqlite3
 import uuid
 from contextlib import contextmanager
@@ -134,8 +136,12 @@ def test_grader_quota_error_is_unreviewable(tmp_path, monkeypatch):
     # The persisted verdict carries the provider error verbatim for the operator.
     from core.work_orders.artifact_envelope import unwrap
 
-    verdict_path = tmp_path / "planning" / "work-orders" / work_order_id / "review-verdict.json"
-    verdict = json.loads(unwrap(verdict_path.read_text(encoding="utf-8"))[0])
+    # DB-or-disk, matching the independent_review gate. Reading the disk path
+    # unconditionally failed on a healthy authority, where the verdict lands in
+    # business_work_order_artifacts and the disk fallback never fires.
+    verdict = read_stored_verdict(
+        work_order_id, db_path=db_path, planning_root=tmp_path / "planning"
+    )
     assert verdict["unreviewable"] is True
     assert "session limit" in verdict["grader_errors"]["completion"]
 
