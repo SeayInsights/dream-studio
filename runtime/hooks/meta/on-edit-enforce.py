@@ -257,6 +257,10 @@ def _enforce(tier: str) -> tuple[str, str | None]:
                     project_id=project["project_id"],
                     work_order_id=wo["work_order_id"] if wo else None,
                     claimants=(wo or {}).get("claimants"),
+                    # Carry HOW the work order was chosen. A boundary match and a
+                    # recency guess are different claims, and the stop hook must not
+                    # present the second with the confidence of the first.
+                    attribution=(wo or {}).get("attribution"),
                 )
             decision = "allow"
         return (decision, session_id)

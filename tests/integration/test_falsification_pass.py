@@ -11,6 +11,8 @@ tracked work, and UNVERIFIED items become a named ledger instead of silence.
 from __future__ import annotations
 
 import json
+
+from tests.helpers.stored_verdict import read_stored_verdict
 import sqlite3
 import uuid
 from contextlib import contextmanager
@@ -34,7 +36,19 @@ def test_taxonomy_includes_reachability_class():
     for any secret or token, what it is VALID AGAINST vs what the code CHECKS.
     Source incident: the Fulcrum magic-link dev_link gated on a base-URL config
     while BIND_HOST controlled actual exposure (2026-08-18)."""
-    tpl = _FALSIFICATION_PROMPT_TEMPLATE
+    # Assert on the RENDERED prompt, which is what the grader receives. This read the
+    # unrendered template, where the taxonomy is a `{scenario_taxonomy}` PLACEHOLDER --
+    # so it could never pass once the taxonomy was extracted into its own module, and it
+    # failed on main while the capability was entirely intact (verify_main.py interpolates
+    # SCENARIO_TAXONOMY at render). Rendering here means the assertion now catches the
+    # regression it was written for: the taxonomy no longer reaching the analyst.
+    from core.work_orders.scenario_taxonomy import SCENARIO_TAXONOMY
+
+    assert "{scenario_taxonomy}" in _FALSIFICATION_PROMPT_TEMPLATE, (
+        "the template must still interpolate the taxonomy; if this placeholder is gone "
+        "the analyst is being told nothing about the scenario classes"
+    )
+    tpl = _FALSIFICATION_PROMPT_TEMPLATE.replace("{scenario_taxonomy}", SCENARIO_TAXONOMY)
     assert "reachability_vs_config" in tpl
     assert "VALID AGAINST" in tpl
     assert "bind address" in tpl
@@ -192,8 +206,12 @@ def test_verdict_contains_falsification_ledger(tmp_path, monkeypatch):
     # The verdict carries the analysis verbatim.
     from core.work_orders.artifact_envelope import unwrap
 
-    verdict_path = tmp_path / "planning" / "work-orders" / work_order_id / "review-verdict.json"
-    verdict = json.loads(unwrap(verdict_path.read_text(encoding="utf-8"))[0])
+    # DB-or-disk, matching the independent_review gate. Reading the disk path
+    # unconditionally failed on a healthy authority, where the verdict lands in
+    # business_work_order_artifacts and the disk fallback never fires.
+    verdict = read_stored_verdict(
+        work_order_id, db_path=db_path, planning_root=tmp_path / "planning"
+    )
     assert verdict["falsification"]["falsification_score"] == 0.75
     assert len(verdict["falsification"]["scenarios"]) == 3
 

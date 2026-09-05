@@ -570,10 +570,40 @@ def next_created_work_order(project_id: str) -> dict | None:
     if conn is None:
         return None
     try:
+        # EXCLUDE CANDIDATES `work-order start` WOULD REFUSE. This selected on
+        # status='created' alone, so the DENY it feeds could name a work order blocked
+        # behind an unclosed dependency -- start_main.py returns
+        # "Cannot start this work order -- N declared dependenc(y/ies) are not closed
+        # yet" for exactly that. The operator was denied an edit and handed a command
+        # that would also refuse, leaving no forward path. Dependency edges are an
+        # ordinary feature (ds work-order add-dep), not a corner case.
+        #
+        # The design-brief refusal is deliberately NOT modelled here: it is a
+        # confirmable prompt (accept_no_brief) rather than a hard stop, so naming such a
+        # work order still gives the operator somewhere to go. Excluding only what
+        # cannot proceed keeps this from silently hiding startable work.
         row = conn.execute(
             "SELECT wo.work_order_id, wo.title FROM business_work_orders wo"
             " LEFT JOIN business_milestones m ON m.milestone_id = wo.milestone_id"
             " WHERE wo.project_id = ? AND wo.status = 'created'"
+            # MIRROR start_brief.py's predicate EXACTLY: `dep_wo.status != 'closed'`.
+            # A first cut wrote NOT IN ('closed', 'cancelled') on the reasoning that a
+            # cancelled dependency should not block -- which may well be better policy,
+            # but it is not the policy `work-order start` applies. The effect was to
+            # offer a work order whose dependency was cancelled and have start refuse
+            # it: the exact impossible-remedy defect this function was changed to close,
+            # reintroduced by improving on the rule instead of matching it. Found by the
+            # authority's own review after four rounds of my own had passed it.
+            #
+            # If cancelled should stop blocking, change start_brief.py and this together.
+            # A suggester that disagrees with the gate it is suggesting through is worse
+            # than one that is merely strict.
+            " AND NOT EXISTS ("
+            "   SELECT 1 FROM work_order_dependencies d"
+            "   JOIN business_work_orders dep ON dep.work_order_id = d.depends_on_id"
+            "   WHERE d.work_order_id = wo.work_order_id"
+            "   AND dep.status != 'closed'"
+            " )"
             " ORDER BY m.order_index ASC, wo.sequence_order ASC NULLS LAST,"
             " wo.created_at ASC LIMIT 1",
             (project_id,),
@@ -612,6 +642,44 @@ TASK_DONE_STATUSES = ("complete", "done")
 AUTHORITY_ARTIFACT_KINDS = ("impact_affirmation",)
 
 
+def incomplete_task_count(work_order_id: str) -> int | None:
+    """How many tasks remain markable, or None when the authority cannot be read.
+
+    Exists so the stop hook never prescribes a command the operator cannot run. Its
+    message offered exactly two remedies -- ``task-done <task_id>`` and ``close`` -- and
+    on the session that produced this function BOTH were impossible: ten tasks, all
+    complete, and close refused by its gates. The only ways left to stop were to invent
+    a task and mark it done, which is the false-done this module exists to prevent, or
+    to disable enforcement. A gate whose remedy cannot be performed drives the operator
+    to exactly the two outcomes it was built to stop.
+
+    None (unreadable) is distinct from 0 (readable, nothing left) because the caller
+    must not claim "no tasks remain" on the strength of a failed query -- that would be
+    the compared-nothing-reported-clean shape this codebase keeps finding.
+    """
+    conn = _connect_ro(AUTHORITY_DB)
+    if conn is None:
+        return None
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*),"
+            " SUM(CASE WHEN status NOT IN ('complete', 'done', 'cancelled') THEN 1 ELSE 0 END)"
+            " FROM business_tasks WHERE work_order_id = ?",
+            (work_order_id,),
+        ).fetchone()
+    except sqlite3.Error:
+        return None
+    finally:
+        conn.close()
+    if row is None or not row[0]:
+        # No tasks at all -- including an unknown work order id, which the count query
+        # answers 0 for just as readily as a real one. Reporting 0 here would let the
+        # caller announce "every task is already complete" about a work order that has
+        # none, so this stays None: not knowing is not the same as nothing remaining.
+        return None
+    return int(row[1] or 0)
+
+
 def authority_write_since(work_order_id: str, since_iso: str) -> bool:
     """True if any authority write for the WO landed at/after since_iso.
 
@@ -636,6 +704,21 @@ def authority_write_since(work_order_id: str, since_iso: str) -> bool:
             "SELECT updated_at FROM business_tasks"
             f" WHERE work_order_id = ? AND status IN ({placeholders})",
             (work_order_id, *TASK_DONE_STATUSES),
+        ).fetchall()
+        for row in rows:
+            ts = parse_ts(row[0])
+            if ts is not None and ts >= since:
+                return True
+
+        # 1b. A task CREATED in the window. Registering newly discovered work is as much
+        # an authority write as completing it, and the no-deferred-findings rule REQUIRES
+        # registering a defect the moment it is found. Without this, a session whose
+        # honest output is "I found and registered three defects" reads as having
+        # recorded nothing -- measured on the session that produced this fix, which
+        # registered six work orders and eight tasks and still tripped the hook.
+        rows = conn.execute(
+            "SELECT created_at FROM business_tasks WHERE work_order_id = ?",
+            (work_order_id,),
         ).fetchall()
         for row in rows:
             ts = parse_ts(row[0])
@@ -763,6 +846,7 @@ def record_edit(
     project_id: str,
     work_order_id: str | None,
     claimants: list[str] | None = None,
+    attribution: str | None = None,
 ) -> None:
     """Record an allowed edit so on-stop-enforce can check the session's writes.
 
@@ -771,6 +855,16 @@ def record_edit(
     work orders both legitimately claim a file, demanding a write to the one this hook
     happened to name would be a false violation, and false violations are what push an
     operator to DS_ENFORCE=0.
+
+    ``attribution`` records HOW the work order was chosen -- ``module_boundary`` for a
+    declared match, ``most_recently_started`` for a fallback guess. The stop hook needs
+    the difference: a guess must not be presented with a match's confidence. Operator
+    report that produced this: a one-line comment edit in a different subject area was
+    stamped with the only in-progress work order in that project, an Entra
+    conditional-access research item, and the stop hook then demanded an authority write
+    against it. The two writes it offered would both have recorded something false, so
+    the honest agent could only stop by disabling enforcement -- and had to ask the
+    operator to arbitrate a decision the tool invented.
     """
     data = load_session(session_id) or {
         "session_id": session_id,
@@ -785,6 +879,7 @@ def record_edit(
         if entry.get("path") == normalized:
             entry["work_order_id"] = work_order_id
             entry["claimants"] = list(claimants or ([work_order_id] if work_order_id else []))
+            entry["attribution"] = attribution or entry.get("attribution")
             entry["ts"] = now_iso()
             break
     else:
@@ -795,6 +890,7 @@ def record_edit(
                     "project_id": project_id,
                     "work_order_id": work_order_id,
                     "claimants": list(claimants or ([work_order_id] if work_order_id else [])),
+                    "attribution": attribution,
                     "ts": now_iso(),
                 }
             )

@@ -413,6 +413,40 @@ def reopen_work_order(
     }
 
 
+def compose_module_boundary(description: str, module_boundary: str | list[str] | None) -> str:
+    """Put the boundary into the description in the exact form the parser reads.
+
+    ``runtime.lib.enforcement.boundary_globs`` searches for a literal ``Module boundary:``
+    clause and keeps comma-separated parts containing ``/`` or ``.``. Composing the clause
+    here means the producer emits precisely what the consumer parses, instead of an author
+    recalling a literal documented nowhere -- which is why 0 of 25 in-progress work orders
+    on the live authority carried one, and why edit attribution had no choice but to guess.
+
+    An already-present clause is left alone: a caller who wrote it by hand is not
+    second-guessed, and re-composing would duplicate it.
+    """
+    if not module_boundary:
+        return description
+    if "Module boundary:" in (description or ""):
+        return description
+    parts = (
+        [p.strip() for p in module_boundary.split(",")]
+        if isinstance(module_boundary, str)
+        else [str(p).strip() for p in module_boundary]
+    )
+    usable = [p for p in parts if p and ("/" in p or "." in p)]
+    if not usable:
+        # Nothing the parser would keep. Silently storing an unparseable boundary would
+        # look declared and match nothing -- the failure this function exists to end.
+        return description
+    clause = "Module boundary: " + ", ".join(usable) + "."
+    body = (description or "").rstrip()
+    if not body:
+        return clause
+    separator = chr(10) * 2
+    return body + separator + clause
+
+
 def _unverified_claim_note(description: str) -> str | None:
     """Asserted absences in a description that cite nothing, as one operator-facing line.
 
@@ -455,10 +489,29 @@ def create_work_order(
     description: str = "",
     work_order_type: str | None = None,
     originating_symptom: str | None = None,
+    module_boundary: str | list[str] | None = None,
     source_root: Path,
     dream_studio_home: Path | None = None,
 ) -> dict[str, Any]:
     """Emit a work_order.created event; WorkOrderProjection materializes the row.
+
+    ``module_boundary`` is the paths this work order owns, and passing it is how edit
+    attribution stops guessing. The boundary is read back by
+    ``runtime.lib.enforcement.boundary_globs``, which searches the DESCRIPTION for a
+    literal ``Module boundary:`` clause -- there is no column for it. Nothing required
+    that clause and nothing composed it, so on the live authority 0 of 25 in-progress
+    work orders carried one. With no boundary to match, attribution falls back to the
+    most recently started work order, which in a project with one open work order stamps
+    every edit in that repo with it regardless of subject. The operator's report:
+    switching projects, editing one unrelated file, and being blocked by a stop hook
+    demanding an authority write against someone else's research work order --
+    repeatedly, until bypassing became routine.
+
+    So the clause is COMPOSED HERE from an argument rather than remembered by an author.
+    A rule enforced by a regex over prose that no door produces is not a rule; it is a
+    hope. Passing a list or a comma-separated string both work; the stored form is the
+    one the parser reads, asserted by a test that runs the real parser over the real
+    composed description.
 
     Pure event emitter — no direct INSERT to business_work_orders. The
     WorkOrderProjection daemon (5-second poll or synchronous tick) materializes
@@ -510,6 +563,11 @@ def create_work_order(
         }
         if originating_symptom is not None:
             _payload["originating_symptom"] = originating_symptom
+        # Carry the description, with the module boundary composed into it. Neither the
+        # payload nor the projection handled description before, so the field the CLI
+        # advertises was accepted and silently dropped -- and the boundary that lives
+        # inside it could never be declared, which is why attribution had to guess.
+        _payload["description"] = compose_module_boundary(description, module_boundary)
         _spool_writer.write_event(
             CanonicalEventEnvelope(
                 event_type="work_order.created",
