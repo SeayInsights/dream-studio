@@ -191,13 +191,42 @@ def _retry_budget_exhausted(started: float, attempts: int) -> str | None:
     return None
 
 
+#: Provider responses meaning "not now, and not for a while". A re-spawn cannot conjure
+#: quota any more than it can conjure a missing binary, so these are NOT retryable.
+#: Measured 2026-09-07: five work orders in one close sweep came back `unreviewable` with
+#: the raw body "You've hit your session limit - resets 5pm (America/New_York)", and the
+#: retry policy spent attempts on every one of them. Twenty attempts against a limit that
+#: resets in hours is not a recovery strategy, it is a way to turn a clear answer into a
+#: slow one.
+_QUOTA_MARKERS = (
+    "session limit",
+    "usage limit",
+    "rate limit",
+    "quota",
+    "too many requests",
+    "429",
+)
+
+
+def quota_exhausted(result: dict[str, Any]) -> bool:
+    """True when the provider said it is out of capacity rather than failing to answer."""
+    blob = f"{result.get('_grader_error', '')} {result.get('raw', '')}".lower()
+    return any(marker in blob for marker in _QUOTA_MARKERS)
+
+
 def _should_retry(result: dict[str, Any]) -> bool:
     """A grader miss is retryable when it is unreviewable (empty output) OR non-JSON
     (_grader_error) — both are transient LLM formatting flakes a fresh call usually
     resolves. A structurally-absent CLI (grader_cli_unavailable) is NOT retryable: a
-    re-spawn cannot conjure a missing binary."""
+    re-spawn cannot conjure a missing binary. Neither is an exhausted provider quota, for
+    exactly the same reason -- and unlike a missing binary it arrives looking like an
+    ordinary non-JSON reply, which is how it consumed retries unnoticed."""
     needs = result.get("unreviewable") or result.get("_grader_error")
-    return bool(needs) and result.get("reason") != "grader_cli_unavailable"
+    if not needs:
+        return False
+    if result.get("reason") == "grader_cli_unavailable":
+        return False
+    return not quota_exhausted(result)
 
 
 def _retry_grader_once(

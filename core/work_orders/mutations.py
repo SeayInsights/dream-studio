@@ -12,6 +12,7 @@ from core.event_store.studio_db import _connect
 from core.work_orders.task_status import (
     TASK_ABANDONED_STATUSES,
     TASK_DONE_STATUSES,
+    is_open,
     sql_placeholders,
 )
 
@@ -71,7 +72,7 @@ def mark_task_done(
         ).fetchone()[0]
         # Task is being completed via event but not yet written directly; subtract 1
         # unless the projection already applied a prior completion for this task.
-        if t_status not in _settled:
+        if is_open(t_status):
             remaining -= 1
 
         task_index = (

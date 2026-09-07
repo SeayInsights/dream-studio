@@ -212,3 +212,75 @@ def test_giving_up_is_recorded_on_the_result_not_left_silent():
     assert result.get("grader_attempts") == 3
     assert "attempt ceiling" in str(result.get("grader_retry_stopped_by"))
     assert calls["n"] == 2, "it must stop retrying at the ceiling, not run past it"
+
+
+# --------------------------------------------------------------------------------------
+# QUOTA. A re-spawn cannot conjure capacity, so an exhausted provider is not retryable --
+# the same reason grader_cli_unavailable is not. Unlike a missing binary it arrives looking
+# like an ordinary non-JSON reply, which is how it consumed retries unnoticed: measured
+# 2026-09-07, five work orders in one close sweep came back with the raw body "You've hit
+# your session limit - resets 5pm (America/New_York)".
+# --------------------------------------------------------------------------------------
+
+_REAL_QUOTA_BODY = (
+    "Grader returned non-JSON.\nRaw:\nYou've hit your session limit "
+    "- resets 5pm (America/New_York)"
+)
+
+
+def test_the_measured_quota_reply_is_not_retried():
+    """Verbatim from the run that exposed this, not a paraphrase of it."""
+    result = {"unreviewable": True, "_grader_error": _REAL_QUOTA_BODY}
+    assert verify_graders.quota_exhausted(result)
+    assert verify_graders._should_retry(result) is False
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "rate limit exceeded",
+        "429 Too Many Requests",
+        "Usage limit reached for this account",
+        "monthly quota exhausted",
+    ],
+)
+def test_other_capacity_replies_are_not_retried(body):
+    assert verify_graders._should_retry({"unreviewable": True, "_grader_error": body}) is False
+
+
+def test_a_genuine_formatting_flake_is_still_retried():
+    """The retry policy must keep working for what it was built for.
+
+    A quota check that swallowed ordinary non-JSON would silently disable the whole
+    twenty-attempt policy -- a worse defect than the one being fixed, and invisible.
+    """
+    result = {"unreviewable": True, "_grader_error": "Grader returned non-JSON.\nRaw:\n{oops"}
+    assert verify_graders.quota_exhausted(result) is False
+    assert verify_graders._should_retry(result) is True
+
+
+def test_a_timeout_is_still_retried():
+    result = {"unreviewable": True, "_grader_error": "Command '['claude']' timed out after 360s"}
+    assert verify_graders._should_retry(result) is True
+
+
+def test_a_clean_verdict_is_never_retried():
+    assert verify_graders._should_retry({"passed": True, "score": 4}) is False
+
+
+def test_a_missing_cli_is_still_not_retried():
+    """The pre-existing non-retryable case, pinned alongside the new one."""
+    result = {"unreviewable": True, "reason": "grader_cli_unavailable", "_grader_error": "no cli"}
+    assert verify_graders._should_retry(result) is False
+
+
+def test_the_word_quota_in_ordinary_prose_does_not_disable_retrying():
+    """`quota_exhausted` reads the provider's reply, not the work under review.
+
+    A grader whose finding legitimately discusses a quota -- reviewing rate-limit code, say
+    -- must not be classified as an exhausted provider, because that would turn a real
+    verdict into a permanent no-retry.
+    """
+    verdict = {"passed": False, "findings": ["the quota check is missing a test"]}
+    assert verify_graders.quota_exhausted(verdict) is False
+    assert verify_graders._should_retry(verdict) is False  # a real verdict, nothing to retry

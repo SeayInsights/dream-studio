@@ -163,7 +163,11 @@ rules:
       collect window is two hours on ONE role and a work order runs several, so a single
       degraded provider could stall a close for most of a day while reporting nothing.
       Both ceilings live in one helper both retry paths call, and whichever is reached
-      first is recorded on the result as grader_retry_stopped_by.
+      first is recorded on the result as grader_retry_stopped_by. An exhausted provider
+      quota is not retried at all: a re-spawn cannot conjure capacity any more than it can
+      conjure a missing binary, and unlike a missing binary it arrives looking like an
+      ordinary non-JSON reply -- five work orders in one sweep spent attempts on "You've
+      hit your session limit - resets 5pm" before this was recognised.
 
   - id: recoverable-bookkeeping-is-not-escalated
     statement: >
