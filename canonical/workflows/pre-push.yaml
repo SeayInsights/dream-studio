@@ -81,6 +81,8 @@ gates:
       tests/unit/test_fixture_schema_parity_gate.py,
       tests/unit/test_seam_payload_to_projection.py,
       tests/unit/test_normative_baseline_gate.py,
+      tests/unit/test_single_read_path_gate.py,
+      tests/unit/test_task_status_vocabulary.py,
       -q]
     fail_hint: >
       A schema/contract pin drifted — update the pin's expected set in the SAME
@@ -261,6 +263,20 @@ gates:
     fail_hint: >
       Dead-table CREATE TABLE found in test diff. Delete the test if its
       subject is dead, or fix the root cause in the migration.
+
+  - id: single-read-path
+    tier: blocking
+    description: >
+      A decided question has one supported read, and a caller may not re-derive it
+      from the raw fields. A survey that read the wrong key on the close preview
+      reported thirteen blocked work orders as closable, twice, because a wrong key
+      returns None and None is falsy. Also refuses a hand-spelled task-status
+      vocabulary: the stored values are not the ones people guess.
+    command: [py, -m, core.gates.single_read_path]
+    fail_hint: >
+      Call core.work_orders.close.closability() for close-readiness, or import
+      core.work_orders.task_status for the status vocabulary. If the file legitimately
+      produces the fields, add it to that contract's owners with a reason.
 
   - id: normative-baseline
     tier: blocking

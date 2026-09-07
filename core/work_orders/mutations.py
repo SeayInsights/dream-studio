@@ -9,6 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from core.event_store.studio_db import _connect
+from core.work_orders.task_status import (
+    TASK_ABANDONED_STATUSES,
+    TASK_DONE_STATUSES,
+    sql_placeholders,
+)
 
 
 def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
@@ -54,14 +59,19 @@ def mark_task_done(
 
         now = datetime.now(UTC).isoformat()
 
+        # The vocabulary comes from task_status, not from a literal spelled here. This site
+        # previously excluded only the settled-and-cancelled pair by name, omitting the
+        # third stored value -- 27 tasks use it -- so a finished task counted as still
+        # remaining in the number that feeds the tasks_done close gate.
+        _settled = TASK_DONE_STATUSES + TASK_ABANDONED_STATUSES
         remaining = conn.execute(
             "SELECT COUNT(*) FROM business_tasks"
-            " WHERE work_order_id = ? AND status NOT IN ('complete', 'cancelled')",
-            (work_order_id,),
+            f" WHERE work_order_id = ? AND status NOT IN ({sql_placeholders(_settled)})",
+            (work_order_id, *_settled),
         ).fetchone()[0]
         # Task is being completed via event but not yet written directly; subtract 1
         # unless the projection already applied a prior completion for this task.
-        if t_status not in ("complete", "cancelled"):
+        if t_status not in _settled:
             remaining -= 1
 
         task_index = (

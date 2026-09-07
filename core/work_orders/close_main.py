@@ -161,6 +161,60 @@ def _ledger_verdict_mismatch(
         return ""  # a decoration must never break the note it decorates
 
 
+def closability(
+    *,
+    work_order_id: str,
+    source_root: Path,
+    dream_studio_home: Path | None = None,
+    planning_root: Path | None = None,
+) -> tuple[bool, list[str]]:
+    """Whether this work order would close, and why not. THE supported read.
+
+    Returns ``(can_close, reasons)``. ``reasons`` is empty exactly when ``can_close``.
+
+    WHY THIS EXISTS RATHER THAN LETTING CALLERS READ THE DICT. Every surface that wanted a
+    yes/no answer re-derived it from ``check_close_gates``'s dict, and a caller that mis-keys
+    that dict gets ``None`` -- which is falsy, so a wrong key reads as "no failures". That
+    happened repeatedly: a survey looked for ``result["gates"]`` (the real keys are
+    ``gates_pass`` and ``gate_failures``), found nothing to inspect, and reported thirteen
+    work orders CLOSABLE when every one of them was blocked on ``independent_review``. The
+    operator was told work could be closed, twice, and it could not.
+
+    The dict is still there and still correct -- the shape was documented accurately the
+    whole time. The defect is that answering a yes/no question through a dict lookup makes
+    the permissive answer the DEFAULT for any mistake. A tuple cannot be mis-keyed, and an
+    unpacking error is immediate and loud rather than silently optimistic.
+
+    A work order that cannot be read at all is NOT closable, and says so: "not found" is a
+    refusal to answer, never a pass.
+    """
+    result = check_close_gates(
+        work_order_id=work_order_id,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+        planning_root=planning_root,
+    )
+    if not result.get("ok"):
+        return False, [str(result.get("error") or "closability could not be determined")]
+    failures = [str(f) for f in (result.get("gate_failures") or [])]
+    passed = bool(result.get("gates_pass"))
+    if passed and failures:
+        # The two fields disagree. Report NOT closable: a preview that contradicts itself is
+        # not evidence of a pass, and the whole point of this function is that ambiguity
+        # never resolves to yes.
+        return False, [
+            "gates_pass=True while gate_failures is non-empty -- the preview contradicts"
+            " itself; treating as NOT closable",
+            *failures,
+        ]
+    if not passed and not failures:
+        return False, [
+            "gates_pass=False with no stated failure -- the preview refused without a"
+            " reason; treating as NOT closable"
+        ]
+    return passed, failures
+
+
 def close_work_order(
     *,
     work_order_id: str,

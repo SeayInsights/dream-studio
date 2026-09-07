@@ -51,7 +51,7 @@ from .close_gates import (
     _run_ac_gate,
     run_gate_check,
 )
-from .close_main import check_close_gates, close_work_order
+from .close_main import check_close_gates, closability, close_work_order
 from .close_shared import _artifact_text, _lookup_work_order_and_gates, _require_db
 
 __all__ = [
@@ -63,6 +63,7 @@ __all__ = [
     "_require_db",
     "_run_ac_gate",
     "check_close_gates",
+    "closability",
     "close_work_order",
     "run_gate_check",
 ]

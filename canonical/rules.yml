@@ -283,3 +283,44 @@ rules:
       ceiling left above reality floats upward silently and stops meaning anything. The gate
       counts only the SHOUTED form: the any-case count is 5,752 against 191 shouted, and an
       unmeetable ceiling gets switched off, which is worse than having none.
+
+  - id: a-decided-question-has-one-supported-read
+    statement: >
+      When a function answers a question directly, that function is the only supported read.
+      The raw fields it interprets may be touched only where they are produced.
+    source: core/work_orders/close_main.py
+    enforced_by:
+      - core.gates.single_read_path
+      - tests/unit/test_single_read_path_gate.py::test_catches_a_caller_that_rederives_close_readiness
+      - tests/unit/test_single_read_path_gate.py::test_a_missing_gates_pass_key_is_not_an_optimistic_pass
+      - tests/unit/test_single_read_path_gate.py::test_closability_reasons_are_empty_exactly_when_it_can_close
+    note: >
+      A survey asked whether thirteen work orders could close, read result["gates"] instead
+      of gates_pass/gate_failures, got None, and reported all thirteen CLOSABLE while every
+      one was blocked on independent_review. The operator was told work was ready to close,
+      more than once, and it was not. The shape was documented correctly the whole time, so
+      no doc fix prevents this: answering a yes/no question through a dict lookup makes the
+      permissive answer the default outcome of any mistake. closability() returns a tuple,
+      which cannot be mis-keyed, and resolves every ambiguity toward NOT closable.
+
+  - id: a-vocabulary-has-one-definition
+    statement: >
+      A status vocabulary is defined once and imported. Where a standalone boundary forces a
+      second copy, a parity test holds the copies in agreement.
+    source: core/work_orders/task_status.py
+    enforced_by:
+      - core.gates.single_read_path
+      - tests/unit/test_task_status_vocabulary.py::test_the_hook_copy_agrees_with_the_definition
+      - tests/unit/test_task_status_vocabulary.py::test_completed_is_not_in_the_vocabulary
+      - tests/unit/test_task_status_vocabulary.py::test_the_hook_library_takes_no_module_level_repo_import
+    note: >
+      business_tasks.status holds 'complete' (2,229 rows) and 'done' (27). mark_task_done
+      counted remaining work against a literal that omitted 'done', so a finished task
+      counted as still remaining in the number feeding the tasks_done gate -- ten work
+      orders held one, all already closed, so nothing was blocked today and the next one
+      would have been. A diagnostic hardcoded ('done', 'completed') and reported every work
+      order 0-done, because 'completed' is not a value this column holds; it is the trap,
+      because it reads correctly and IS correct in other tables. The hook library keeps its
+      own copy because it must import cleanly where the repo is not importable, so the
+      copies are held together by a parity test that also asserts that justification still
+      holds.
