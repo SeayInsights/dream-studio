@@ -38,6 +38,35 @@ def _artifact_text(work_order_id: str, wo_dir: Path, kind: str, db_path: Path | 
     return content
 
 
+#: Grader roles, in the order they are declared. Used as the stable tie-break when a
+#: verdict carries no scores.
+_VERDICT_ROLES = ("completion", "correctness", "quality", "falsification")
+
+
+def verdict_score_line(verdict: dict[str, Any]) -> str:
+    """`quality 0.62, correctness 0.79, completion 1.00 (composite 0.86)`, or "".
+
+    Named in the failure message so a reader can see WHICH role objected without opening
+    the stored artifact. Without it the message carries one paragraph and no indication of
+    where it came from.
+    """
+    scores = verdict.get("scores")
+    if not isinstance(scores, dict):
+        return ""
+    parts = [
+        (role, float(scores[f"{role}_score"]))
+        for role in _VERDICT_ROLES
+        if isinstance(scores.get(f"{role}_score"), (int, float))
+    ]
+    if not parts:
+        return ""
+    ranked = ", ".join(f"{role} {value:.2f}" for role, value in sorted(parts, key=lambda p: p[1]))
+    composite = scores.get("composite_score")
+    if isinstance(composite, (int, float)):
+        return f"{ranked} (composite {float(composite):.2f})"
+    return ranked
+
+
 def verdict_evidence(verdict: dict[str, Any]) -> tuple[str, list[Any]]:
     """``(summary, findings)`` from a verify verdict, read where verify WRITES them.
 
@@ -58,7 +87,25 @@ def verdict_evidence(verdict: dict[str, Any]) -> tuple[str, list[Any]]:
     """
     summary = (verdict.get("summary") or "").strip()
     if not summary:
-        for section in ("completion", "correctness", "quality"):
+        # LEAD WITH THE ROLE THAT SCORED WORST, not with whichever role comes first
+        # alphabetically-by-declaration. Measured on WO 17f20d48: completion scored 1.0
+        # and wrote a glowing paragraph ("both resolve and pass"), while correctness
+        # (0.786) and quality (0.62) carried the violations that failed the composite
+        # (0.8598). The gate therefore printed "review failed - [everything is great]",
+        # which reads as a broken gate rather than as a real finding, and cost a reader
+        # twenty minutes concluding exactly that. The verdict was right; the sentence it
+        # chose was from the one role that had nothing to report.
+        #
+        # `sorted` is stable, so roles with no score keep the original declaration order
+        # and a verdict carrying no scores at all behaves exactly as before.
+        scores = verdict.get("scores") if isinstance(verdict.get("scores"), dict) else {}
+
+        def _rank(role: str) -> float:
+            value = scores.get(f"{role}_score")
+            # An unscored role ranks last: absence of a score is not evidence of a problem.
+            return float(value) if isinstance(value, (int, float)) else 1.0
+
+        for section in sorted(_VERDICT_ROLES, key=_rank):
             part = verdict.get(section)
             if isinstance(part, dict) and (part.get("summary") or "").strip():
                 summary = str(part["summary"]).strip()
@@ -68,6 +115,16 @@ def verdict_evidence(verdict: dict[str, Any]) -> tuple[str, list[Any]]:
         value = verdict.get(key)
         if isinstance(value, list):
             findings.extend(value)
+    # ROLE VIOLATIONS ARE FINDINGS TOO. correctness and quality record `violations` and
+    # write no `summary` at all, so a verdict whose ONLY objections live there produced a
+    # findings list that was empty while the work order was failing on exactly those
+    # objections -- and the summary came from the one role with nothing to report.
+    for role in _VERDICT_ROLES:
+        part = verdict.get(role)
+        if isinstance(part, dict):
+            violations = part.get("violations")
+            if isinstance(violations, list):
+                findings.extend(violations)
     return summary, findings
 
 

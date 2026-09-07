@@ -333,3 +333,23 @@ rules:
       own copy because it must import cleanly where the repo is not importable, so the
       copies are held together by a parity test that also asserts that justification still
       holds.
+
+  - id: a-refusal-names-what-objected
+    statement: >
+      A gate that refuses on a graded review must name which role objected, how it scored,
+      and one concrete objection -- never only the narrative of a role that passed.
+    source: core/work_orders/close_gates.py
+    enforced_by:
+      - tests/unit/test_review_failure_names_its_objection.py::test_the_score_line_names_every_role_worst_first
+      - tests/unit/test_review_failure_names_its_objection.py::test_role_violations_are_findings
+      - tests/unit/test_review_failure_names_its_objection.py::test_a_verdict_objecting_only_through_violations_is_not_an_incomplete_record
+    note: >
+      Measured on WO 17f20d48: completion scored 1.0 and wrote the only prose in the
+      verdict; correctness (0.786) and quality (0.62) recorded violations and no summary.
+      The gate printed "review failed - Both tasks are implemented end-to-end ... both
+      resolve and pass", which reads as a broken gate rather than a real finding and cost a
+      reader twenty minutes concluding exactly that. The verdict was right; the sentence it
+      chose came from the one role with nothing to report. Role violations now count as
+      findings -- they did not, so a verdict objecting only through them had an EMPTY
+      findings list and risked being reported as an incomplete record, softening a real
+      failure into inconclusive.

@@ -439,9 +439,10 @@ def run_gate_check(
             # distinction read_unverified_ledger already makes: say the record is
             # unusable and name the remedy, rather than converting missing
             # information into a verdict against the work.
-            from .close_shared import verdict_evidence
+            from .close_shared import verdict_evidence, verdict_score_line
 
             _summary, _reasons = verdict_evidence(verdict)
+            _scores = verdict_score_line(verdict)
             if not _summary and not _reasons:
                 return False, (
                     "independent_review: UNREVIEWABLE — the stored verdict says passed=False"
@@ -450,8 +451,29 @@ def run_gate_check(
                     " leaves exactly this). Re-run: py -m interfaces.cli.ds work-order"
                     f" verify {work_order_id}"
                 )
+            _score_msg = f" [{_scores}]" if _scores else ""
+            # SHOW AN OBJECTION, not only the narrative. The summary is written by whichever
+            # role has prose, and the roles that FAIL (correctness, quality) record
+            # `violations` with no summary at all -- so the message quoted the passing
+            # role's paragraph and read as "review failed: everything is great".
+            # The first FINDING is often a spawned work order (title/description), which
+            # carries no objection text -- taking findings[0] blindly printed nothing at
+            # all. Take the first entry that actually states a rule or a detail.
+            _first = next(
+                (f for f in _reasons if isinstance(f, dict) and (f.get("detail") or f.get("rule"))),
+                None,
+            )
+            _objection = ""
+            if isinstance(_first, dict):
+                _where = ":".join(str(_first[k]) for k in ("file", "line") if _first.get(k))
+                _detail = str(_first.get("detail") or _first.get("rule") or "").strip()
+                if _detail:
+                    _objection = (
+                        f" First objection{f' ({_where})' if _where else ''}: {_detail[:300]}"
+                    )
             return False, (
-                f"independent_review: review failed — {_summary or 'no summary'}.{gap_msg}"
+                f"independent_review: review failed{_score_msg} — "
+                f"{_summary or 'no summary'}.{_objection}{gap_msg}"
             )
         return True, ""
 
