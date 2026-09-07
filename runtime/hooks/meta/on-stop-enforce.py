@@ -160,18 +160,25 @@ def _authority_violations(enforcement, session: dict) -> list[str]:
             # teaches the operator to bypass -- which costs enforcement its authority on
             # the cases that are real. Recorded, not enforced.
             if entry.get("attribution") != "module_boundary":
-                enforcement.record_observation(
-                    hook_name="on-stop-enforce",
-                    hook_type="Stop",
-                    rule="attribution_by_recency_not_enforced",
-                    reason=(
-                        f"source edit attributed to work order {wo_id} by recency, not by a"
-                        " declared module boundary; not blocking, because a guess is not"
-                        " evidence that this work order owns the edit. Declare a"
-                        " 'Module boundary: <paths>' clause on the work order that owns"
-                        " this area to make attribution real."
-                    ),
-                )
+                # getattr for the same reason incomplete_task_count needed it, one fix
+                # earlier in this same file: the hook and the enforcement library are
+                # separate projected copies that can be out of sync, and a caller may pass
+                # a partial stub. Calling the attribute directly raised AttributeError and
+                # took out three tests -- the identical defect I had just fixed above.
+                _observe = getattr(enforcement, "record_observation", None)
+                if _observe is not None:
+                    _observe(
+                        hook_name="on-stop-enforce",
+                        hook_type="Stop",
+                        rule="attribution_by_recency_not_enforced",
+                        reason=(
+                            f"source edit attributed to work order {wo_id} by recency, not by a"
+                            " declared module boundary; not blocking, because a guess is not"
+                            " evidence that this work order owns the edit. Declare a"
+                            " 'Module boundary: <paths>' clause on the work order that owns"
+                            " this area to make attribution real."
+                        ),
+                    )
                 continue
 
             remaining = incomplete_task_count_or(enforcement, wo_id)

@@ -473,6 +473,8 @@ def test_a_milestone_work_order_and_task_can_be_created_from_the_cli(db, tmp_pat
             "Wire the CLI",
             "--type",
             "infrastructure",
+            "--module-boundary",
+            "interfaces/cli/commands",
         ],
         tmp_path,
     )
@@ -525,7 +527,17 @@ def test_creating_a_work_order_says_it_needs_more_than_one_task(db, tmp_path):
     conn.close()
 
     code, out = _run(
-        ["work-order", "create", pid, "--milestone", mid, "--title", "T"],
+        [
+            "work-order",
+            "create",
+            pid,
+            "--milestone",
+            mid,
+            "--title",
+            "T",
+            "--module-boundary",
+            "core/work_orders",
+        ],
         tmp_path,
     )
     assert code == 0, out
@@ -556,7 +568,20 @@ def test_a_task_with_no_executable_criterion_is_told_so(db, tmp_path):
     conn.commit()
     conn.close()
 
-    _run(["work-order", "create", pid, "--milestone", mid, "--title", "T"], tmp_path)
+    _run(
+        [
+            "work-order",
+            "create",
+            pid,
+            "--milestone",
+            mid,
+            "--title",
+            "T",
+            "--module-boundary",
+            "core/work_orders",
+        ],
+        tmp_path,
+    )
     wid = _one(db, "SELECT work_order_id FROM business_work_orders WHERE milestone_id = ?", (mid,))
 
     _, bare = _run(["work-order", "add-task", wid, "--title", "T"], tmp_path)
@@ -1294,18 +1319,42 @@ def test_a_session_recorded_before_claimants_existed_still_checks(db, tmp_path):
     stop = module_from_spec(spec)
     loader.exec_module(stop)
 
+    observed: list[str] = []
+
     class _NoWrites:
         @staticmethod
         def authority_write_since(wo_id, since):
             return False
+
+        @staticmethod
+        def record_observation(**kw):
+            observed.append(kw.get("rule", ""))
 
     legacy = {
         "started_at": "2026-08-28T00:00:00Z",
         "source_edits": [{"path": "x.py", "work_order_id": "wo-legacy"}],
     }
     violations = stop._authority_violations(_NoWrites, legacy)
-    assert len(violations) == 1
-    assert "wo-legacy" in violations[0]
+
+    # CONTRACT CHANGED DELIBERATELY, and the original concern is preserved rather than
+    # discarded. This asserted len(violations) == 1 on the reasoning that "a migration
+    # that turns a gate off is worse than one that fails loudly". Correct -- but a legacy
+    # entry carries NO attribution, so nothing proves this work order owns the edit, and
+    # blocking on that is a demand without evidence. In practice it meant every edit in a
+    # project was attributed to whichever work order started last and the operator had to
+    # bypass enforcement to end a session, repeatedly, for months. A gate that is bypassed
+    # by habit is more off than one that records honestly.
+    #
+    # So the gate is NOT silently off: the downgrade is recorded as an observation, which
+    # is countable and reviewable. Loud, without holding the operator hostage.
+    assert violations == [], (
+        "an entry with no recorded attribution proves nothing about ownership, so it must "
+        f"not demand an authority write: {violations}"
+    )
+    assert observed == ["attribution_by_recency_not_enforced"], (
+        "the downgrade must be RECORDED -- otherwise this migration really does turn the "
+        f"gate off silently, which is the failure the original test guarded: {observed}"
+    )
 
 
 # -- Task 5: one write path for a generated file ---------------------------------

@@ -806,7 +806,16 @@ def test_grader_retries_on_non_json_and_recovers() -> None:
         os.environ.pop("DREAM_STUDIO_VERIFY_MOCK", None)
         results = _run_graders_parallel({"completion": "prompt"})
 
-    assert results["completion"] == valid, "non-JSON first call must be recovered by the retry"
+    # The retry now reports how many attempts it took, so compare the VERDICT rather than
+    # the whole dict: a verdict that landed first time and one that needed eleven tries are
+    # different facts about provider health, and collapsing them hides a degrading provider
+    # until it fails outright.
+    recovered = {k: v for k, v in results["completion"].items() if k != "grader_attempts"}
+    assert recovered == valid, "non-JSON first call must be recovered by the retry"
+    assert results["completion"].get("grader_attempts") == 2, (
+        "a recovery must say it took a second attempt, or a provider degrading toward "
+        f"failure looks identical to a healthy one: {results['completion']}"
+    )
     assert collect.call_count == 2, "grader must be retried exactly once on non-JSON"
 
 

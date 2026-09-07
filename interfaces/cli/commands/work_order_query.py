@@ -456,6 +456,7 @@ def _work_order_create(
     description: str,
     work_order_type: str,
     originating_symptom: str | None,
+    module_boundary: str | None = None,
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
@@ -480,6 +481,7 @@ def _work_order_create(
         description=description,
         work_order_type=work_order_type,
         originating_symptom=originating_symptom,
+        module_boundary=module_boundary,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )

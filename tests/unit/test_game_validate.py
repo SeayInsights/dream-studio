@@ -182,12 +182,34 @@ class TestClassifyPathContentFallback:
 
 class TestValidateGdscriptCoverage:
     def test_skips_oversized_file(self, tmp_path: Path, monkeypatch) -> None:
-        # Line 195: file too large — patch Path.stat at class level (WindowsPath slots are read-only)
+        # A CLASS-LEVEL Path.stat PATCH IS PROCESS-WIDE. WindowsPath slots are read-only,
+        # so the size must be faked on the class -- but the previous lambda answered 20MB
+        # for EVERY path in the process, not just this file. Anything that consulted a
+        # file size while this test ran got a fabricated answer, and the fallout was
+        # writes into the operator's real ~/.dream-studio/events: the autouse spool guard
+        # then aborted the entire session ("modified real ~/.dream-studio/events"), so the
+        # full local suite could not run to completion.
+        #
+        # That is not a cosmetic isolation nit. The full suite is the only check that
+        # caught the fail-open defect in authority_write_since, and this test made it
+        # unrunnable end to end -- a large part of why main drifted red across three
+        # merges while every PR went green.
+        #
+        # Delegating to the real stat for every other path keeps the fake scoped to the
+        # one file under test.
         f = tmp_path / "big.gd"
         f.write_text("x = 1\n")
-        mock_stat = MagicMock()
-        mock_stat.st_size = 20 * 1024 * 1024
-        monkeypatch.setattr(type(f), "stat", lambda self_, **_: mock_stat)
+        real_stat = type(f).stat
+        target = str(f)
+
+        def _stat_only_for_target(self_, **kw):
+            if str(self_) == target:
+                oversized = MagicMock()
+                oversized.st_size = 20 * 1024 * 1024
+                return oversized
+            return real_stat(self_, **kw)
+
+        monkeypatch.setattr(type(f), "stat", _stat_only_for_target)
         result = validate_gdscript(f, {"gameplay"})
         assert any("Skipped" in i for i in result.info)
 

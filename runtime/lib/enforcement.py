@@ -609,7 +609,24 @@ def next_created_work_order(project_id: str) -> dict | None:
             (project_id,),
         ).fetchone()
     except sqlite3.Error:
-        return None
+        # THE DEPENDENCY TABLE MAY NOT EXIST. work_order_dependencies is absent on an
+        # older authority, and the NOT EXISTS above then throws -- which this caught and
+        # turned into "no next work order", silently removing the suggestion from every
+        # DENY on that machine. A refinement that cannot run must degrade to the
+        # unrefined answer, not to no answer: the suggestion may name a work order with an
+        # unclosed dependency, which is the behaviour before this change, rather than
+        # leaving the operator with a denial and no next step at all.
+        try:
+            row = conn.execute(
+                "SELECT wo.work_order_id, wo.title FROM business_work_orders wo"
+                " LEFT JOIN business_milestones m ON m.milestone_id = wo.milestone_id"
+                " WHERE wo.project_id = ? AND wo.status = 'created'"
+                " ORDER BY m.order_index ASC, wo.sequence_order ASC NULLS LAST,"
+                " wo.created_at ASC LIMIT 1",
+                (project_id,),
+            ).fetchone()
+        except sqlite3.Error:
+            return None
     finally:
         conn.close()
     return {"work_order_id": row[0], "title": row[1]} if row else None
@@ -685,86 +702,131 @@ def authority_write_since(work_order_id: str, since_iso: str) -> bool:
 
     DURABLE ROW STATE IS THE PRIMARY SIGNAL, canonical events are reinforcement.
     The original order asked the event stream first, and events arrive only once
-    spool ingestion has run — so the check partly measured "did ingestion keep up"
+    spool ingestion has run - so the check partly measured "did ingestion keep up"
     rather than "did the operator record work", and a compliant session was blocked
     whenever ingestion lagged. The rows are written by the mutation itself and cannot
     lag it. Same demotion the verify locator got: read the state, treat the stream as
     corroboration.
+
+    EVERY SIGNAL IS AN INDEPENDENT PROBE, and the independence is structural rather than
+    remembered. This function fails open at the end, so an unguarded query does not
+    merely skip its own signal - the function-level handler turns it into
+    ``return True``, reporting "an authority write happened" for EVERY work order on
+    that machine and silently disabling stop enforcement while claiming success.
+    Measured 2026-09-05: a newly added probe selected ``created_at`` from an older
+    ``business_tasks`` that lacked the column. Two of the five probes had their own
+    handler; three did not, and the difference was invisible until a full-suite run.
+    Routing all five through ``probe()`` means a sixth added later gets the same
+    isolation without anyone having to know this history. Enforced by
+    ``core/gates/fail_open_probe.py``.
     """
     since = parse_ts(since_iso)
     if since is None:
-        return True  # unusable window — fail open
+        return True  # unusable window - fail open
     conn = _connect_ro(AUTHORITY_DB)
     if conn is None:
         return True
-    try:
-        # 1. A completed task — the most common authority write by far.
-        placeholders = ",".join("?" for _ in TASK_DONE_STATUSES)
-        rows = conn.execute(
-            "SELECT updated_at FROM business_tasks"
-            f" WHERE work_order_id = ? AND status IN ({placeholders})",
-            (work_order_id, *TASK_DONE_STATUSES),
-        ).fetchall()
+
+    answered = 0
+
+    def probe(sql: str, params: tuple) -> list:
+        """Run one independent signal. A probe that cannot run contributes nothing.
+
+        Returns no rows on a query error, and counts itself in ``answered`` only when it
+        actually ran, so total failure can be told apart from a genuine absence.
+        """
+        nonlocal answered
+        try:
+            rows = conn.execute(sql, params).fetchall()
+        except sqlite3.Error:
+            return []
+        answered += 1
+        return rows
+
+    def in_window(rows: list, *cols: int) -> bool:
+        """True if any row's first parseable timestamp among cols is at/after since."""
         for row in rows:
-            ts = parse_ts(row[0])
+            ts = None
+            for col in cols:
+                ts = ts or parse_ts(row[col])
             if ts is not None and ts >= since:
                 return True
+        return False
 
-        # 1b. A task CREATED in the window. Registering newly discovered work is as much
+    try:
+        # 1. A completed task - the most common authority write by far.
+        done_slots = ",".join("?" for _ in TASK_DONE_STATUSES)
+        if in_window(
+            probe(
+                "SELECT updated_at FROM business_tasks"
+                f" WHERE work_order_id = ? AND status IN ({done_slots})",
+                (work_order_id, *TASK_DONE_STATUSES),
+            ),
+            0,
+        ):
+            return True
+
+        # 2. A task CREATED in the window. Registering newly discovered work is as much
         # an authority write as completing it, and the no-deferred-findings rule REQUIRES
         # registering a defect the moment it is found. Without this, a session whose
         # honest output is "I found and registered three defects" reads as having
-        # recorded nothing -- measured on the session that produced this fix, which
+        # recorded nothing - measured on the session that produced this fix, which
         # registered six work orders and eight tasks and still tripped the hook.
-        rows = conn.execute(
-            "SELECT created_at FROM business_tasks WHERE work_order_id = ?",
-            (work_order_id,),
-        ).fetchall()
-        for row in rows:
-            ts = parse_ts(row[0])
-            if ts is not None and ts >= since:
-                return True
-
-        # 2. An artifact whose existence records completed work (impact affirmation).
-        placeholders = ",".join("?" for _ in AUTHORITY_ARTIFACT_KINDS)
-        try:
-            rows = conn.execute(
-                "SELECT updated_at, created_at FROM business_work_order_artifacts"
-                f" WHERE work_order_id = ? AND kind IN ({placeholders})",
-                (work_order_id, *AUTHORITY_ARTIFACT_KINDS),
-            ).fetchall()
-        except sqlite3.Error:
-            rows = []  # table absent on an old authority — not a reason to block
-        for row in rows:
-            ts = parse_ts(row[0]) or parse_ts(row[1])
-            if ts is not None and ts >= since:
-                return True
-
-        # 3. The work order itself reached a terminal state.
-        row = conn.execute(
-            "SELECT status, closed_at FROM business_work_orders WHERE work_order_id = ?",
-            (work_order_id,),
-        ).fetchone()
-        if row is not None and row[0] in ("closed", "cancelled"):
+        if in_window(
+            probe(
+                "SELECT created_at FROM business_tasks WHERE work_order_id = ?",
+                (work_order_id,),
+            ),
+            0,
+        ):
             return True
 
-        # 4. Reinforcement: the canonical event stream, which lags behind the rows
+        # 3. An artifact whose existence records completed work (impact affirmation).
+        kind_slots = ",".join("?" for _ in AUTHORITY_ARTIFACT_KINDS)
+        if in_window(
+            probe(
+                "SELECT updated_at, created_at FROM business_work_order_artifacts"
+                f" WHERE work_order_id = ? AND kind IN ({kind_slots})",
+                (work_order_id, *AUTHORITY_ARTIFACT_KINDS),
+            ),
+            0,
+            1,
+        ):
+            return True
+
+        # 4. The work order itself reached a terminal state.
+        for row in probe(
+            "SELECT status, closed_at FROM business_work_orders WHERE work_order_id = ?",
+            (work_order_id,),
+        ):
+            if row[0] in ("closed", "cancelled"):
+                return True
+
+        # 5. Reinforcement: the canonical event stream, which lags behind the rows
         # above by however long spool ingestion takes. Last because a write that has
         # not been ingested yet is still a write.
-        rows = conn.execute(
-            "SELECT event_timestamp, received_at FROM business_canonical_events"
-            " WHERE work_order_id = ?"
-            " AND event_type IN ('task.completed', 'work_order.closed')",
-            (work_order_id,),
-        ).fetchall()
-        for row in rows:
-            ts = parse_ts(row[0]) or parse_ts(row[1])
-            if ts is not None and ts >= since:
-                return True
+        if in_window(
+            probe(
+                "SELECT event_timestamp, received_at FROM business_canonical_events"
+                " WHERE work_order_id = ?"
+                " AND event_type IN ('task.completed', 'work_order.closed')",
+                (work_order_id,),
+            ),
+            0,
+            1,
+        ):
+            return True
     except sqlite3.Error:
         return True
     finally:
         conn.close()
+
+    if answered == 0:
+        # Not one probe could run. That is total ignorance, not evidence of absence, and
+        # blocking a session over a schema DS itself could not read would be DS making
+        # the operator pay for DS's own gap. Partial ignorance is different: if even one
+        # probe answered, the absence it reports is real and the caller may act on it.
+        return True
     return False
 
 

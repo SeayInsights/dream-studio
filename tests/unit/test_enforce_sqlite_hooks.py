@@ -123,12 +123,20 @@ def captured_hook_executions(monkeypatch):
 
 
 def _set_wo_in_progress(authority: Path) -> None:
+    # DECLARES A BOUNDARY covering the edited file, because attribution by boundary is
+    # now what makes the stop hook block. A work order with no boundary can only be
+    # attributed by recency -- a guess -- and a guess no longer supports a demand for an
+    # authority write. These tests are about the WRITE requirement, not about attribution,
+    # so they supply the evidence a real work order now must carry: --module-boundary is
+    # required at the create door, so every work order authored from here on has one.
     con = sqlite3.connect(authority)
     con.execute(
         "INSERT INTO business_work_orders"
-        " (work_order_id, project_id, title, status, started_at, created_at, sequence_order)"
+        " (work_order_id, project_id, title, status, started_at, created_at,"
+        "  sequence_order, description)"
         " VALUES (?, ?, 'WO-ACTIVE: current work', 'in_progress',"
-        " '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 0)",
+        " '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 0,"
+        " 'Current work. Module boundary: src/.')",
         (WO_IN_PROGRESS, PROJECT_ID),
     )
     con.commit()

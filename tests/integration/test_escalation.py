@@ -166,20 +166,35 @@ def _seed_inprogress_wo(db_path: Path, *, ac: str) -> str:
     return wo
 
 
-def _write_passing_verdict(planning_root: Path, wo: str) -> None:
+def _write_passing_verdict(planning_root: Path, wo: str, db_path: Path) -> None:
     """Pre-write a passing review-verdict.json so the independent_review gate passes
     and close's inline auto-verify is skipped.
 
     WO-VERIFY-PROVENANCE: the gate now requires a provenance envelope — wrap the
     content the same way ``_persist_review_verdict`` does for a genuine verify run.
     """
+    body = json.dumps({"ok": True, "passed": True, "work_order_id": wo, "summary": "ok"})
+
+    # STORE WHERE THE GATE READS. This wrote only the .planning disk path, which the
+    # zero-disk migration abandoned: verdicts live in business_work_order_artifacts and
+    # the disk fallback fires only when the authority write fails. So the seeded verdict
+    # was invisible, the gate found no review, and an escalated close -- which cannot
+    # bypass independent_review -- failed with "no delivered change could be located".
+    # Same defect as four other guards fixed in this change set.
+    #
+    # Both locations are written: the authority is what the gate reads, and the disk copy
+    # keeps any assertion that inspects planning_root working.
+    # db_path is REQUIRED, not defaulted: set_wo_artifact falls back to the operator's
+    # real ~/.dream-studio authority, so a seeder without an explicit path would write
+    # test rows into live state. A test that mutates the operator's authority is a worse
+    # defect than the one it is exercising.
+    from core.work_orders.artifacts import set_wo_artifact
+
+    set_wo_artifact(wo, "review_verdict", body, generator="ds work-order verify", db_path=db_path)
+
     wo_dir = planning_root / "work-orders" / wo
     wo_dir.mkdir(parents=True, exist_ok=True)
-    stored = wrap(
-        json.dumps({"ok": True, "passed": True, "work_order_id": wo, "summary": "ok"}),
-        generator="ds work-order verify",
-        head_commit_sha=None,
-    )
+    stored = wrap(body, generator="ds work-order verify", head_commit_sha=None)
     (wo_dir / "review-verdict.json").write_text(stored, encoding="utf-8")
 
 
@@ -295,7 +310,7 @@ def test_escalated_reclose_requires_independent_review(tmp_path: Path, monkeypat
     assert _wo_status(db, wo) == "in_progress"
 
     # Provide a PASSING independent-review verdict → close now succeeds (no force).
-    _write_passing_verdict(planning_root, wo)
+    _write_passing_verdict(planning_root, wo, db)
     with _patch_close_runtime(db):
         ok = close_work_order(
             work_order_id=wo,
