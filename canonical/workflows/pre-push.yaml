@@ -80,6 +80,7 @@ gates:
       tests/unit/test_test_isolation_gate.py,
       tests/unit/test_fixture_schema_parity_gate.py,
       tests/unit/test_seam_payload_to_projection.py,
+      tests/unit/test_normative_baseline_gate.py,
       -q]
     fail_hint: >
       A schema/contract pin drifted — update the pin's expected set in the SAME
@@ -260,6 +261,23 @@ gates:
     fail_hint: >
       Dead-table CREATE TABLE found in test diff. Delete the test if its
       subject is dead, or fix the root cause in the migration.
+
+  - id: normative-baseline
+    tier: blocking
+    description: >
+      The substrate's shouted normative statements may only decrease. A newly
+      shouted rule has to be classified in canonical/rules.yml with a runnable
+      check, converted to an eval under tests/evals/ if it instructs a model rather
+      than constrains the code, generated from what it describes, or deleted. A
+      decrease fails too: a ceiling left above reality drifts upward silently and
+      stops meaning anything, which is how the pile grew the first time. (This
+      description deliberately avoids quoting the shouted vocabulary -- doing so
+      raised the count by three and the gate caught it, which is the gate working.)
+    command: [py, -m, core.gates.normative_baseline]
+    fail_hint: >
+      Classify the new statement in canonical/rules.yml, or delete it. If the change
+      genuinely earns a higher ceiling, run `py -m core.gates.normative_baseline
+      --update` in the SAME change set as the rule that earns it.
 
   - id: fail-open-probe
     tier: blocking

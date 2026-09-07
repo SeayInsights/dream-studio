@@ -2,11 +2,30 @@
 #
 # WHY THIS FILE EXISTS. Operator, on the substrate: it is "a lot of prose laid on top of
 # each other as suggestions with no rules, evals, or really any real test that doing
-# anything they are supposed to". Measured 2026-09-04: 2,172 normative statements
-# (MUST / NEVER / ALWAYS / REQUIRED / DO NOT) across the substrate -- 772 in
-# canonical/skills over 219 files, 1,283 in docs over 143 files, 103 in canonical/workflows,
-# 14 in CLAUDE.md and AGENTS.md. Nothing distinguished the ones something enforces from the
-# ones nothing does.
+# anything they are supposed to". Nothing distinguished the statements something enforces
+# from the ones nothing does.
+#
+# THE SIZE OF THE PROBLEM, corrected 2026-09-07. This header previously recorded "2,172
+# normative statements" as though it were a backlog of unwritten rules. It is not: it was a
+# count of WORD OCCURRENCES under one pattern, and most occurrences are ordinary English
+# inside explanatory prose -- "the runner must be the sole writer" in a docstring describing
+# a design is not an unenforced rule. Re-measured across the same corpus:
+#
+#   SHOUTED (MUST / MUST NOT / NEVER / ALWAYS / REQUIRED / DO NOT / SHALL / MAY NOT):  191
+#   any-case (must / never / always / required / should not / do not / shall):        5,752
+#
+# Neither is a rule backlog, and 5,752 rules would be absurd. The tractable candidate set is
+# the shouted form, because writing a rule in capitals is a deliberate act. That count is now
+# a CEILING per lane in canonical/normative_baseline.json, enforced by the blocking
+# normative-baseline gate: it may only go down. Leaving the inflated figure in place would
+# have been the same defect this file exists to fix -- an unfalsified claim in prose.
+#
+# THE LANE MATTERS, because the enforcement substrate differs by kind. A constraint on the
+# CODE becomes a gate. An instruction to a MODEL at runtime ("ask one question at a time")
+# can only become an EVAL -- no static check settles it, and canonical/skills holds the
+# largest genuinely unenforced share. A DESCRIPTION of the machine should be generated from
+# the machine or deleted, never restated as a rule; AGENTS.md is already generated from
+# packs.yaml, and a hand-written second copy of behaviour is what rots.
 #
 # The proof that this matters is `Module boundary:`. It was a load-bearing rule -- edit
 # attribution matched against it -- stated in prose, read by a regex, and supplied by no
@@ -22,9 +41,12 @@
 # does not exist or collects nothing -- an unrunnable check is the same as no check, and
 # that exact rot was found on eight acceptance criteria this session.
 #
-# This registry starts small on purpose. Seeding it with 2,172 half-classified entries
-# would reproduce the problem in YAML. It grows by the rule below: a normative statement
-# added to a changed file must be classified in the same change set.
+# This registry starts small on purpose. Seeding it with hundreds of half-classified entries
+# would reproduce the problem in YAML. It grows by ratchet, not by sweep: the
+# normative-baseline gate refuses any change set that raises a lane's ceiling, so a new
+# shouted statement must be classified here, converted to an eval, generated from what it
+# describes, or deleted -- in the same change set. The backlog drains as a side effect of
+# ordinary work instead of needing a heroic pass nobody finishes.
 
 version: 1
 
@@ -241,3 +263,23 @@ rules:
       survives. The payload key set is now derived from the emitter by parsing it and the
       row is produced by the real projection against a real bootstrapped schema, so a key
       added to the emitter fails here without anyone remembering this file exists.
+
+  - id: the-unclassified-pile-may-only-shrink
+    statement: >
+      A change set may not raise any lane's count of shouted normative statements. A new one
+      must be classified here with a runnable check, converted to an eval, generated from
+      what it describes, or deleted.
+    source: canonical/normative_baseline.json
+    enforced_by:
+      - core.gates.normative_baseline
+      - tests/unit/test_normative_baseline_gate.py::test_an_increase_fails_and_names_the_four_ways_out
+      - tests/unit/test_normative_baseline_gate.py::test_a_decrease_also_fails_so_the_ceiling_cannot_drift
+      - tests/unit/test_normative_baseline_gate.py::test_counts_only_the_shouted_form
+    note: >
+      This registry answers the operator's complaint one rule at a time and cannot answer it
+      at scale: hand-classifying drifts, and nothing stopped the pile regrowing the next day.
+      The ratchet is the scaling mechanism, modelled on the flake8 lint_baseline this repo
+      already runs. A DECREASE fails too, which is the half that makes it monotonic -- a
+      ceiling left above reality floats upward silently and stops meaning anything. The gate
+      counts only the SHOUTED form: the any-case count is 5,752 against 191 shouted, and an
+      unmeetable ceiling gets switched off, which is worse than having none.
