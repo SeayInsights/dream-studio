@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 from typing import Any
 
 from .verify_shared import (
@@ -98,6 +99,19 @@ _ROLE_RETRY_TIMEOUTS: dict[str, int] = {"falsification": 300}
 # gate. A single retry on a flaky provider is not a retry policy, it is a coin flip.
 _MAX_GRADER_ATTEMPTS = 20
 
+# ...AND A WALL-CLOCK CEILING, because the attempt count alone is not a budget. A grader
+# whose every attempt times out at the 360s collect window consumes 20 x 360s = TWO HOURS
+# on one role, and a work order runs several roles -- so a single degraded provider could
+# stall one close for most of a day while reporting nothing. Measured on the close sweep of
+# 2026-09-07: one verify took 656s to a clean verdict, and a second sat past the 20-minute
+# mark on a role that kept timing out.
+#
+# The operator's rule is kept exactly: up to 20 attempts looking for one success. This bounds
+# the TIME those attempts may take, so the policy stops being "retry until the afternoon is
+# gone". Whichever ceiling is reached first ends the retrying, and the result says which --
+# a stall reported as a stall is actionable, where a stall reported as nothing is not.
+_MAX_GRADER_RETRY_SECONDS = 1800
+
 # A TIMEOUT keeps the FULL budget on every attempt. The retry budget exists for a
 # formatting flake, where the model answered promptly with the wrong shape and a short
 # second look suffices. Applying it to a timeout is backwards: the call ran out of time,
@@ -159,6 +173,24 @@ def _collect_grader(proc: subprocess.Popen, timeout: int = _DEFAULT_COLLECT_TIME
         raise RuntimeError(f"Grader failed: {exc}")
 
 
+def _retry_budget_exhausted(started: float, attempts: int) -> str | None:
+    """Which ceiling stopped the retrying, or None while there is still room.
+
+    Both paths call this so they cannot drift: the parallel WO-verify path and the
+    conformance path retried identically by copy, which is how a fix to one has previously
+    missed the other.
+    """
+    if attempts >= _MAX_GRADER_ATTEMPTS:
+        return f"attempt ceiling reached ({_MAX_GRADER_ATTEMPTS} attempts)"
+    elapsed = time.monotonic() - started
+    if elapsed >= _MAX_GRADER_RETRY_SECONDS:
+        return (
+            f"time ceiling reached ({int(elapsed)}s of {_MAX_GRADER_RETRY_SECONDS}s)"
+            f" after {attempts} attempt(s)"
+        )
+    return None
+
+
 def _should_retry(result: dict[str, Any]) -> bool:
     """A grader miss is retryable when it is unreviewable (empty output) OR non-JSON
     (_grader_error) — both are transient LLM formatting flakes a fresh call usually
@@ -218,21 +250,30 @@ def collect_grader_with_retry(
     # it less is the inversion that made four consecutive timeouts unrecoverable; a
     # formatting flake gets the shorter retry window, which is what that budget is for.
     attempts = 1
-    while _should_retry(result) and attempts < _MAX_GRADER_ATTEMPTS:
+    started = time.monotonic()
+    stopped_by: str | None = None
+    while _should_retry(result):
+        stopped_by = _retry_budget_exhausted(started, attempts)
+        if stopped_by is not None:
+            break
         timed_out = any(m in str(result.get("_grader_error", "")) for m in _TIMEOUT_MARKERS)
         budget = role_collect_timeout(role) if timed_out else role_retry_timeout(role)
         retry = _retry_grader_once(prompt, profile, timeout=budget)
         attempts += 1
         if retry is not None:
             result = retry
+            stopped_by = None
             break
 
-    # Say how many attempts it took. A verdict that needed 11 tries and one that landed
-    # first time are different facts about provider health, and collapsing them hides a
-    # degrading provider until it fails outright.
-    if attempts > 1:
+    # Say how many attempts it took, and which ceiling ended it. A verdict that needed 11
+    # tries and one that landed first time are different facts about provider health, and
+    # collapsing them hides a degrading provider until it fails outright. A run that gave up
+    # says so: a stall reported as a stall is actionable, a stall reported as nothing is not.
+    if attempts > 1 or stopped_by:
         result = dict(result)
         result["grader_attempts"] = attempts
+        if stopped_by:
+            result["grader_retry_stopped_by"] = stopped_by
     return result
 
 
@@ -298,17 +339,25 @@ def _run_graders_parallel(
         # shape this session found four times; the loop is written out here rather than
         # shared only because the two paths carry different per-grader state.
         attempts = 1
-        while _should_retry(result) and attempts < _MAX_GRADER_ATTEMPTS:
+        started = time.monotonic()
+        stopped_by: str | None = None
+        while _should_retry(result):
+            stopped_by = _retry_budget_exhausted(started, attempts)
+            if stopped_by is not None:
+                break
             timed_out = any(m in str(result.get("_grader_error", "")) for m in _TIMEOUT_MARKERS)
             budget = role_collect_timeout(name) if timed_out else role_retry_timeout(name)
             retry = _retry_grader_once(prompts[name], profiles.get(name), timeout=budget)
             attempts += 1
             if retry is not None:
                 result = retry
+                stopped_by = None
                 break
-        if attempts > 1:
+        if attempts > 1 or stopped_by:
             result = dict(result)
             result["grader_attempts"] = attempts
+            if stopped_by:
+                result["grader_retry_stopped_by"] = stopped_by
         # gap 0a64cf8c: check real-mode grader output against the published per-role
         # contract in the LIVE path (not only in tests). Observability only — the
         # errors are attached as evidence; scoring keeps its own fallbacks so a

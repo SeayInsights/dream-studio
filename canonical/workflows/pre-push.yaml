@@ -83,6 +83,7 @@ gates:
       tests/unit/test_normative_baseline_gate.py,
       tests/unit/test_single_read_path_gate.py,
       tests/unit/test_task_status_vocabulary.py,
+      tests/unit/test_grader_retry_policy.py,
       -q]
     fail_hint: >
       A schema/contract pin drifted — update the pin's expected set in the SAME

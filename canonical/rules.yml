@@ -158,7 +158,12 @@ rules:
     note: >
       Four timeouts to one success in a single session, each leaving a work order
       uncloseable. There was one retry, and it was given the SHORT budget after the long
-      one expired -- so the single recovery attempt was near-certain to fail too.
+      one expired -- so the single recovery attempt was near-certain to fail too. The
+      attempt count is bounded by a wall-clock ceiling as well: 20 attempts at a 360s
+      collect window is two hours on ONE role and a work order runs several, so a single
+      degraded provider could stall a close for most of a day while reporting nothing.
+      Both ceilings live in one helper both retry paths call, and whichever is reached
+      first is recorded on the result as grader_retry_stopped_by.
 
   - id: recoverable-bookkeeping-is-not-escalated
     statement: >
