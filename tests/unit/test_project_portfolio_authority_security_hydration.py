@@ -133,7 +133,7 @@ dependencies = ["fastapi", "pydantic"]
         # object_exists() and return the honest-empty shape (attention_open=0,
         # attention_items classification="unavailable") when the table is absent.
         conn.execute(
-            "CREATE TABLE validation_results(result_id TEXT, project_id TEXT, status TEXT)"
+            "CREATE TABLE validation_results(validation_id TEXT, project_id TEXT, status TEXT)"
         )
         conn.execute(
             "INSERT INTO validation_results VALUES('validation-1', 'dream-studio', 'passed')"

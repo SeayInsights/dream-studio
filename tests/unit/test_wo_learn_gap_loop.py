@@ -301,7 +301,7 @@ class TestRetroactiveValidatorIncrement:
     def _make_scan_runs_table(self, conn: sqlite3.Connection) -> None:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS scan_runs (
-                run_id TEXT PRIMARY KEY,
+                scan_id TEXT PRIMARY KEY,
                 skill_id TEXT,
                 project_id TEXT,
                 status TEXT,
@@ -312,7 +312,7 @@ class TestRetroactiveValidatorIncrement:
 
     def _insert_scan_run(self, conn: sqlite3.Connection, skill_id: str) -> None:
         conn.execute(
-            "INSERT INTO scan_runs (run_id, skill_id, created_at) VALUES (?, ?, datetime('now'))",
+            "INSERT INTO scan_runs (scan_id, skill_id, created_at) VALUES (?, ?, datetime('now'))",
             (str(uuid.uuid4()), skill_id),
         )
         conn.commit()

@@ -148,7 +148,30 @@ def _enforcement_errors(rules: list[dict]) -> list[str]:
                 module_path = REPO_ROOT / (target.replace(".", "/") + ".py")
                 if not module_path.is_file():
                     errors.append(f"{rid}: enforced_by names a missing gate module: {target}")
+                    continue
+                ok, why = _runnable_as_module(target)
+                if not ok:
+                    errors.append(f"{rid}: enforced_by is not runnable -- {target}: {why}")
     return errors
+
+
+def _runnable_as_module(dotted: str) -> tuple[bool, str]:
+    """True when `py -m <dotted>` would have an entry point to run.
+
+    Existence of the file was the whole check before, which let a rule cite a gate that
+    could not actually be invoked the way pre-push invokes it. Verified by import and an
+    attribute lookup rather than by execution -- a gate that FAILS is the rule being
+    broken, which is the gate's job to report, not this one's.
+    """
+    import importlib
+
+    try:
+        module = importlib.import_module(dotted)
+    except Exception as exc:  # noqa: BLE001 - any import failure means not runnable
+        return False, f"import failed: {type(exc).__name__}: {exc}"[:180]
+    if not callable(getattr(module, "main", None)):
+        return False, "no callable main() -- `py -m` would do nothing"
+    return True, ""
 
 
 def run() -> dict:

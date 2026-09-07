@@ -133,6 +133,16 @@ _SELF_SCAN_EXCLUDE: frozenset[str] = frozenset(
         # ("# CREATE TABLE if needed", "DROP TABLE") to explain what it strips —
         # detection rule text, not DDL call sites (WO-GATE-SQL-PARSERS).
         "core/gates/sql_comments.py",
+        # Fixture/schema parity gate: carries a CREATE TABLE regex and quotes DDL prose
+        # while explaining what it parses. It READS the schema (via bootstrap_database
+        # against a temp file) and declares none of its own.
+        "core/gates/fixture_schema_parity.py",
+        # Fail-open probe gate: its docstring quotes the SELECT statements whose missing
+        # handlers it detects — query text under discussion, not DDL call sites.
+        "core/gates/fail_open_probe.py",
+        # Test-isolation gate: quotes monkeypatch/DDL prose from the defect it was built
+        # for. Pattern text, not DDL.
+        "core/gates/test_isolation.py",
     }
 )
 

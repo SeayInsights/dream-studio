@@ -76,6 +76,10 @@ gates:
       tests/unit/test_ds_update_skill_drift.py,
       tests/unit/test_rule_registry_gate.py,
       tests/unit/test_work_order_boundary_is_declarable.py,
+      tests/unit/test_fail_open_probe_gate.py,
+      tests/unit/test_test_isolation_gate.py,
+      tests/unit/test_fixture_schema_parity_gate.py,
+      tests/unit/test_seam_payload_to_projection.py,
       -q]
     fail_hint: >
       A schema/contract pin drifted — update the pin's expected set in the SAME
@@ -256,6 +260,46 @@ gates:
     fail_hint: >
       Dead-table CREATE TABLE found in test diff. Delete the test if its
       subject is dead, or fix the root cause in the migration.
+
+  - id: fail-open-probe
+    tier: blocking
+    description: >
+      Inside a function whose own handler returns a permissive constant, every
+      database call must carry its own handler. Otherwise an optional probe that
+      cannot run answers the whole question: authority_write_since reported "an
+      authority write happened" for every work order on the machine when one of
+      its five probes hit a column an older schema lacked, silently disabling
+      stop enforcement while claiming success.
+    command: [py, -m, core.gates.fail_open_probe]
+    fail_hint: >
+      Wrap the named database call in its own try/except so a probe that cannot
+      run contributes nothing instead of answering for its siblings.
+
+  - id: test-isolation
+    tier: blocking
+    description: >
+      A test may not monkeypatch.setattr an inline fake over a stdlib type's
+      instance method. Such a replacement answers identically for every object in
+      the process and stays installed through teardown, where autouse guards run —
+      the shape that made the spool guard see writes into the operator's real
+      ~/.dream-studio and abort the suite FATAL while the test itself passed.
+    command: [py, -m, core.gates.test_isolation]
+    fail_hint: >
+      Replace the lambda/mock with a named function that delegates to the real
+      implementation for anything but the object under test.
+
+  - id: fixture-schema-parity
+    tier: blocking
+    description: >
+      A test fixture may not give an authority table a column a fresh database
+      does not have. A test asserting on a column production never writes cannot
+      fail for the right reason. Omitting columns stays legal; inventing them does
+      not. The authority is a freshly bootstrapped database, not a parse.
+    command: [py, -m, core.gates.fixture_schema_parity]
+    fail_hint: >
+      Use the real column name, or — if the drift IS the subject under test —
+      declare `# fixture-schema-parity: allow <table>.<column> -- <reason>` with a
+      reason of at least 20 characters.
 
   - id: rule4-ingestor-sole-event-writer
     tier: blocking

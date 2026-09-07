@@ -24,6 +24,7 @@ def _schema_drift_db(tmp_path: Path) -> Path:
             "INSERT INTO _schema_version(version, applied_at) VALUES(?, '2026-05-14T00:00:00Z')",
             (latest_migration_version(),),
         )
+        # fixture-schema-parity: allow raw_sessions.created_at -- _schema_drift_db exists to prove the dashboard routes degrade correctly against a legacy schema; the drift is deliberately constructed and must not be normalised away.
         conn.execute("CREATE TABLE raw_sessions(session_id TEXT PRIMARY KEY, created_at TEXT)")
         conn.execute(
             "CREATE TABLE raw_token_usage("

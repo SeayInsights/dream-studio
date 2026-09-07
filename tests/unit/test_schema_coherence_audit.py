@@ -263,6 +263,10 @@ def test_fixture_e_staleness_guard_does_not_flag_migration_owned_table(tmp_path)
         "Expected business_canonical_events in migration tables. "
         "Update this test if the table was renamed or removed."
     )
+    # fixture-schema-parity: allow business_canonical_events.id -- this string is synthetic
+    # PYTHON SOURCE handed to the coherence auditor as input, not DDL this test executes.
+    # Its mismatch with the migration-owned table is exactly the finding being asserted,
+    # so aligning it with the real schema would delete the scenario.
     fake_content = (
         'conn.execute("CREATE TABLE IF NOT EXISTS business_canonical_events (id TEXT)")\n'
     )

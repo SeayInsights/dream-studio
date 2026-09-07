@@ -36,7 +36,6 @@ def _seed_studio_db(path: Path) -> None:
                 payload TEXT NOT NULL,
                 session_id TEXT,
                 model_id TEXT,
-                project_id TEXT,
                 severity TEXT
             );
             CREATE TABLE business_canonical_events (
@@ -50,7 +49,7 @@ def _seed_studio_db(path: Path) -> None:
             );
             """)
         conn.execute(
-            "INSERT INTO ai_canonical_events VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO ai_canonical_events VALUES (?,?,?,?,?,?,?)",
             (
                 "ai-1",
                 "token.consumed",
@@ -58,12 +57,11 @@ def _seed_studio_db(path: Path) -> None:
                 json.dumps({"input_tokens": 100, "output_tokens": 40, "status": "ok"}),
                 "sess-1",
                 "sonnet",
-                "proj-a",
                 "info",
             ),
         )
         conn.execute(
-            "INSERT INTO ai_canonical_events VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO ai_canonical_events VALUES (?,?,?,?,?,?,?)",
             (
                 "ai-2",
                 "execution.completed",
@@ -71,7 +69,6 @@ def _seed_studio_db(path: Path) -> None:
                 json.dumps({"duration_ms": 1500, "exit_code": 0, "outcome_status": "completed"}),
                 "sess-2",
                 "haiku",
-                "proj-a",
                 "info",
             ),
         )
@@ -157,7 +154,7 @@ def test_incremental_picks_up_new_rows(studio_db, duck):
     conn = sqlite3.connect(str(studio_db))
     try:
         conn.execute(
-            "INSERT INTO ai_canonical_events VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO ai_canonical_events VALUES (?,?,?,?,?,?,?)",
             (
                 "ai-3",
                 "token.consumed",
@@ -165,7 +162,6 @@ def test_incremental_picks_up_new_rows(studio_db, duck):
                 json.dumps({"input_tokens": 7}),
                 "sess-3",
                 "opus",
-                "proj-a",
                 "info",
             ),
         )

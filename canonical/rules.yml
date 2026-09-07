@@ -47,7 +47,7 @@ rules:
       A description supplied to the authoring door must be stored, not silently discarded.
     source: core/work_orders/mutations.py
     enforced_by:
-      - tests/unit/test_work_order_boundary_is_declarable.py::test_the_projection_materializes_the_description
+      - tests/unit/test_seam_payload_to_projection.py::test_description_specifically_survives_the_round_trip
     note: >
       Measured 2026-09-04: 443 of 920 work orders had an empty description, and 18 of the
       19 created since 2026-09-01. The emitter omitted description from the event payload
@@ -165,3 +165,79 @@ rules:
       _code_only blanked string contents to stop prose raising false positives and
       silently removed exactly the reference the changed-signature detector exists to
       find. The comment above it still claimed patch targets were caught.
+
+  - id: an-optional-probe-may-not-answer-for-all
+    statement: >
+      Inside a function whose own handler returns a permissive constant, every database
+      call carries its own handler, so a probe that cannot run contributes nothing instead
+      of answering the whole question.
+    source: runtime/lib/enforcement.py
+    enforced_by:
+      - core.gates.fail_open_probe
+      - tests/unit/test_fail_open_probe_gate.py::test_catches_the_historical_defect
+      - tests/unit/test_fail_open_probe_gate.py::test_gate_is_bound_to_the_real_enforcement_module
+    note: >
+      authority_write_since consults five independent signals under one fail-open handler.
+      A probe selecting created_at from an older business_tasks raised, the function-level
+      handler turned that into `return True`, and stop enforcement was silently disabled
+      while reporting the condition SATISFIED for every work order on the machine. Two of
+      the five probes were guarded; three were not, and the difference was invisible until
+      a full-suite run. The five now route through one probe() helper, so a sixth gets the
+      isolation without anyone knowing this history.
+
+  - id: a-test-may-not-fake-a-stdlib-method-process-wide
+    statement: >
+      A test may not install an inline fake (lambda, mock, or constant) over a stdlib
+      type's instance method with monkeypatch.setattr; the replacement must be a named
+      function that delegates to the real implementation for anything but the subject.
+    source: tests/unit/test_game_validate.py
+    enforced_by:
+      - core.gates.test_isolation
+      - tests/unit/test_test_isolation_gate.py::test_catches_the_patch_that_aborted_the_suite
+      - tests/unit/test_test_isolation_gate.py::test_gate_is_bound_to_the_real_suite
+    note: >
+      `monkeypatch.setattr(type(f), "stat", lambda self_, **_: mock_stat)` made every path
+      in the process report 20 MB until fixture teardown -- where the autouse spool guard
+      concluded the run had written into the operator's real ~/.dream-studio/events and
+      aborted FATAL. The test passed throughout; the damage was entirely to its
+      neighbours, and the full local suite could not complete. That is why 45 failures
+      reached main on a green subset. Path.home stays deliberately exempt: it is the
+      mechanism that keeps ~100 tests off live state.
+
+  - id: a-fixture-may-not-invent-a-column
+    statement: >
+      A test fixture may not give an authority table a column a fresh database does not
+      have. Omitting columns is fine; inventing them is not.
+    source: core/config/sqlite_bootstrap.py
+    enforced_by:
+      - core.gates.fixture_schema_parity
+      - tests/unit/test_fixture_schema_parity_gate.py::test_invented_column_fails
+      - tests/unit/test_fixture_schema_parity_gate.py::test_exemption_without_a_real_reason_is_itself_a_finding
+    note: >
+      Six fixtures described tables production does not have -- business_projects.id for
+      project_id, validation_results.result_id for validation_id, scan_runs.run_id for
+      scan_id, raw_sessions.exit_reason for nothing at all, and a project_id on
+      ai_canonical_events that made the DuckDB fact test exercise the column-present
+      branch AI events never take. The authority is a freshly bootstrapped database read
+      back out of sqlite_master, not a parse of the baseline: a gate that duplicates the
+      schema it checks eventually checks its own copy.
+
+  - id: a-payload-key-must-reach-its-projection
+    statement: >
+      Every key an emitter puts in an event payload must be persisted by the projection
+      that consumes it, or be declared unpersisted with the reason storing it would be
+      wrong.
+    source: core/projections/work_order_projection.py
+    enforced_by:
+      - tests/unit/test_seam_payload_to_projection.py::test_the_emitter_and_the_projection_agree_on_every_payload_key
+      - tests/unit/test_seam_payload_to_projection.py::test_the_stored_description_is_readable_by_the_real_boundary_parser
+      - tests/unit/test_seam_payload_to_projection.py::test_declared_exceptions_are_still_sent_by_the_emitter
+    note: >
+      Nothing connected the emitter to the projection. create_work_order did not carry
+      description and the projection did not read it, so 443 of 920 work orders on the
+      live authority had none -- and the Module boundary: clause that edit attribution
+      matches against could not be declared at all. The first version of this check
+      asserted on SOURCE TEXT, which proves a string is present rather than that a value
+      survives. The payload key set is now derived from the emitter by parsing it and the
+      row is produced by the real projection against a real bootstrapped schema, so a key
+      added to the emitter fails here without anyone remembering this file exists.
