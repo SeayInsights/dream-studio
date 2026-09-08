@@ -109,6 +109,23 @@ def _resolve_ref(ref: str, wf: dict) -> str | None:
     return str(node.get(field, ""))
 
 
+def _resolve_param(key: str, wf: dict) -> str | None:
+    """Resolve a ``{{workflow.<key>}}`` reference against the run's bound parameters.
+
+    Returns None when unset, which leaves the literal template in place. A check carrying
+    an unresolved template then fails and the node blocks with the reason -- the outcome
+    the resolver's own docstring already prescribes, and far better than substituting an
+    empty string, which would silently turn a scoped query into a repo-global one.
+    """
+    params = wf.get("params")
+    if not isinstance(params, dict):
+        return None
+    value = params.get(key)
+    if value in (None, ""):
+        return None
+    return str(value)
+
+
 def _resolve_session_ref(filename: str, session_dir: str | None) -> str | None:
     """Resolve a session:<filename> reference. Returns None if no session dir or empty result."""
     if not session_dir:
@@ -136,6 +153,18 @@ def resolve_templates(text: str, wf: dict, session_dir: str | None = None) -> st
 
     def _replace(m: re.Match) -> str:
         ref = m.group(1)
+        if ref.startswith("workflow."):
+            # THE RUN'S OWN PARAMETERS, bound at `workflow start`. Without this a node
+            # could reference other nodes' state and the session cache but never the thing
+            # the run is FOR -- so every completion_check had to be repo-global, and the
+            # orchestrator's eight work-order-scoped nodes could not be checked at all.
+            # The bound is named first: black formats `ref[len(x) :]` with a space before
+            # the colon and flake8 reports that as E203, and the two cannot both be
+            # satisfied inline. The same shape is tolerated on the session branch below
+            # only because it predates the lint baseline.
+            key_start = len("workflow.")
+            val = _resolve_param(ref[key_start:], wf)
+            return val if val is not None else m.group(0)
         if ref.startswith("session:"):
             filename = ref[len("session:") :]
             val = _resolve_session_ref(filename, session_dir)

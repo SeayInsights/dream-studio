@@ -46,7 +46,10 @@ nodes:
     timeout_seconds: 30
 
   - id: escalation-probe
-    # UNVERIFIED BY DESIGN: needs the active work-order id to name its subject (WO
+    # completion_check: the effect is a resolved executor for THIS work order; the
+    # command exits non-zero when it cannot be resolved, which is exactly what the node
+    # decides
+    completion_check: py -m interfaces.cli.ds work-order executor {{workflow.work_order_id}}
     # e4e85949)
     depends_on: [capability-probe]
     command: |
@@ -67,7 +70,9 @@ nodes:
     timeout_seconds: 30
 
   - id: preflight-check
-    # UNVERIFIED BY DESIGN: needs the active work-order id to name its subject (WO
+    # completion_check: the effect is a readable task list for THIS work order; a work
+    # order with no readable tasks cannot be preflighted, and the exit status says so
+    completion_check: py -m interfaces.cli.ds work-order tasks {{workflow.work_order_id}}
     # e4e85949)
     depends_on: [escalation-probe]
     command: |
@@ -105,7 +110,10 @@ nodes:
     timeout_seconds: 30
 
   - id: implement-tasks
-    # UNVERIFIED BY DESIGN: needs the active work-order id to name its subject (WO
+    # completion_check: a readable task list is the weakest honest check here: whether
+    # every task is DONE is what the close gate decides, and duplicating that judgement
+    # in a node would let the two disagree
+    completion_check: py -m interfaces.cli.ds work-order tasks {{workflow.work_order_id}}
     # e4e85949)
     depends_on: [migration-class-check]
     skill: build
@@ -215,7 +223,10 @@ nodes:
     timeout_seconds: 60
 
   - id: independent-review
-    # UNVERIFIED BY DESIGN: needs the active work-order id to name its subject (WO
+    # completion_check: the effect is a STORED verdict for this work order; reading it
+    # back from the authority is evidence the review happened, rather than the agent's
+    # report that it did
+    completion_check: py -m interfaces.cli.ds work-order artifact {{workflow.work_order_id}} review_verdict
     # e4e85949)
     depends_on: [run-gates]
     condition: "{{run-gates.output}} contains 'GATES: PASS'"
@@ -271,7 +282,9 @@ nodes:
     timeout_seconds: 120
 
   - id: close-work-order-local
-    # UNVERIFIED BY DESIGN: needs the active work-order id (WO e4e85949)
+    # completion_check: the local close path rests on a stored verdict; if it is absent
+    # the close would refuse anyway, so the node has not had its effect
+    completion_check: py -m interfaces.cli.ds work-order artifact {{workflow.work_order_id}} review_verdict
     depends_on: [run-gates, independent-review]
     condition: "{{capability-probe.output}} contains 'GITHUB: NO' and {{run-gates.output}} contains 'GATES: PASS' and {{independent-review.output}} contains 'REVIEW_PASS'"
     command: |
@@ -284,7 +297,9 @@ nodes:
     timeout_seconds: 120
 
   - id: next-iteration
-    # UNVERIFIED BY DESIGN: needs the active work-order id to name its subject (WO
+    # completion_check: the node's own effect IS this read -- it surfaces the next work 
+    # order from the authority, so the exit status of the same query is the evidence, exactly as for capability-probe
+    completion_check: py -m interfaces.cli.ds project state
     # e4e85949)
     depends_on: [close-work-order-github, close-work-order-local]
     trigger_rule: any_done

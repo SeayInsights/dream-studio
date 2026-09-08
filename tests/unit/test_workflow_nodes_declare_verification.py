@@ -152,9 +152,11 @@ def test_the_orchestrator_declares_every_node():
 
     parsed = yaml.safe_load(text)
     checked = [n["id"] for n in parsed["nodes"] if str(n.get("completion_check") or "").strip()]
-    assert len(checked) >= 3, (
+    assert len(checked) >= 9, (
         f"only {len(checked)} node(s) carry a real check; the declared-unverifiable escape"
-        " is meant to shrink, not to absorb every node"
+        " is meant to SHRINK, not to absorb every node. It went 0 -> 3 -> 9 as"
+        " {{workflow.work_order_id}} made a check able to name its subject; a drop means"
+        " nodes were re-declared unverifiable instead of fixed."
     )
     assert "run-gates" in checked, (
         "run-gates is the one node whose effect the runner can verify deterministically"
@@ -237,3 +239,79 @@ def test_a_workflow_with_nodes_is_still_scanned_when_it_also_has_other_keys():
     )
     offenders = offenders_in_text(text)
     assert [o["node"] for o in offenders] == ["alpha"]
+
+
+# --------------------------------------------------------------------------------------
+# A CHECK MUST BE ABLE TO NAME ITS SUBJECT. Eight orchestrator nodes were declared
+# unverifiable because `<active_work_order_id>` was a prose placeholder nothing
+# substituted -- and it could not be inferred: 22 work orders were `in_progress` in the
+# authority at once, so "the active work order" is ambiguous. Inferring by recency is the
+# option NOT taken; that is the attribution guess the stop hook was corrected for, which
+# stamped every edit in a project with whichever work order started last.
+# --------------------------------------------------------------------------------------
+
+
+def test_a_bound_work_order_resolves_in_a_check():
+    from control.execution.workflow.engine import resolve_templates
+
+    wf = {"params": {"work_order_id": "wo-1234"}, "nodes": {}}
+    resolved = resolve_templates("ds work-order tasks {{workflow.work_order_id}}", wf)
+    assert resolved == "ds work-order tasks wo-1234"
+
+
+def test_an_unbound_work_order_leaves_the_literal_in_place():
+    """NOT an empty string. Substituting nothing would silently turn a work-order-scoped
+    query into a repo-global one; leaving the template makes the check fail and the node
+    block with the reason, which is what the resolver's own docstring prescribes."""
+    from control.execution.workflow.engine import resolve_templates
+
+    for wf in ({"params": {"work_order_id": ""}, "nodes": {}}, {"nodes": {}}):
+        resolved = resolve_templates("ds work-order tasks {{workflow.work_order_id}}", wf)
+        assert resolved == "ds work-order tasks {{workflow.work_order_id}}"
+
+
+def test_start_accepts_the_binding():
+    """The CLI must expose it, or the parameter can never be set.
+
+    Driven through the REAL registrar rather than asserting on source text: a source match
+    would pass against a flag registered on the wrong subcommand.
+    """
+    import argparse
+
+    from interfaces.cli.ds_workflow import add_workflow_subcommand
+
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="cmd")
+    add_workflow_subcommand(sub)
+
+    workflow = sub.choices.get("workflow")
+    assert workflow is not None, "the workflow command group disappeared"
+    start_parser = None
+    for action in workflow._subparsers._group_actions:  # noqa: SLF001
+        start_parser = action.choices.get("start")
+        if start_parser is not None:
+            break
+    assert start_parser is not None, "the start subcommand disappeared"
+    assert any(
+        "--work-order" in (a.option_strings or []) for a in start_parser._actions  # noqa: SLF001
+    ), "workflow start exposes no --work-order, so nothing can bind the run"
+
+
+def test_the_orchestrators_scoped_checks_name_the_work_order():
+    """Every check that queries the authority must be work-order-scoped.
+
+    A repo-global authority query would pass for ANY work order, which is the
+    compared-nothing-reported-clean shape wearing a completion check.
+    """
+    import yaml as _yaml
+
+    text = (REPO_ROOT / "canonical" / "workflows" / "execute-work-orders.yaml").read_text(
+        encoding="utf-8"
+    )
+    for node in _yaml.safe_load(text)["nodes"]:
+        check = str(node.get("completion_check") or "")
+        if "work-order" in check and "artifact" not in check:
+            assert "{{workflow.work_order_id}}" in check, (
+                f"node {node['id']!r} queries work orders without naming one:"
+                f" {check!r} would pass for any work order in the authority"
+            )
