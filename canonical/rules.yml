@@ -482,3 +482,26 @@ rules:
       AC-rot wearing a verdict. basis flips to "executed" as soon as anything runs, which
       is why the unexecuted LIST carries the gap: reporting only the basis would call a
       partially-run verdict fully backed.
+
+  - id: attachment-pressure-is-relievable
+    statement: >
+      Both forms of a duplicated gap are drainable -- the spawned sibling work order and the
+      task attached to the work order that owns it.
+    source: core/work_orders/verify_gaps.py
+    enforced_by:
+      - tests/unit/test_attachment_pressure_is_relievable.py::test_drain_gaps_sees_attached_tasks
+      - tests/unit/test_attachment_pressure_is_relievable.py::test_a_single_attachment_is_not_drained
+      - tests/unit/test_attachment_pressure_is_relievable.py::test_apply_is_idempotent
+    note: >
+      WO-GAP-FANOUT stopped gaps spawning siblings by ATTACHING them as tasks, which is the
+      right shape, but it moved the pressure rather than bounding it and the tooling did not
+      follow. Measured 2026-09-08: drain-gaps reported "No gap category has more than one
+      open spawn. Nothing to drain." while 317 pending tasks sat on in-progress work orders.
+      With the attached form visible the same command found 32 duplicated categories and 340
+      duplicate tasks -- add-missing-adversarial-tests attached 82 times across 15 work
+      orders. Applied, the queue went 317 -> 43 and the largest work order went from 10/44
+      to 10/11. Grouping is by CATEGORY across work orders, because a generic finding is one
+      piece of work however many reviews surfaced it; keying on the reviewed work order is
+      what made eleven duplicates carry eleven distinct keys in the original fan-out. The
+      two forms are reported separately: they cancel different things, and merging the
+      counts is how a reader thinks a work order was cancelled when a task was.
