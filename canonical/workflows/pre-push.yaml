@@ -88,6 +88,8 @@ gates:
       tests/unit/test_check_records_its_runner.py,
       tests/unit/test_skip_verify_reaches_the_post_gate.py,
       tests/unit/test_originating_symptom_is_executable.py,
+      tests/unit/test_milestone_status_vocabulary.py,
+      tests/unit/test_update_clears_its_own_drift.py,
       -q]
     fail_hint: >
       A schema/contract pin drifted — update the pin's expected set in the SAME

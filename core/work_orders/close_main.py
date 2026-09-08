@@ -22,6 +22,7 @@ from core.event_store.studio_db import _connect
 from .close_continuation import _apply_report_only_continuation
 from .close_gates import (
     _check_originating_symptom,
+    symptom_has_executable_check,
     _check_tasks_done,
     _evaluate_gates,
     _run_ac_gate,
@@ -557,6 +558,19 @@ def close_work_order(
             _sym_failure = _check_originating_symptom(_orig_symptom, db_path)
             if _sym_failure:
                 gate_failures.append(_sym_failure)
+            elif not symptom_has_executable_check(_orig_symptom):
+                # A SATISFIED SYMPTOM AND AN UNCHECKED ONE MUST NOT LOOK ALIKE. A defect
+                # work order may legitimately carry no executable symptom -- a code defect
+                # often has no authority data signature, and a fabricated check is worse
+                # than none: two work orders were made permanently unclosable by SQL that
+                # could never return a truthy value. So prose passes, but silently passing
+                # would mean "the symptom passed" reads as both "the root cause is fixed"
+                # and "nobody checked", which is the ambiguity this whole registry exists
+                # to end. Recorded on the result rather than blocking.
+                _bookkeeping_errors["symptom_not_executable"] = (
+                    "the originating symptom carries no SQL-CHECK or TEST-CHECK, so this"
+                    " close rested on no executable root-cause evidence"
+                )
             try:
                 from .close_gates import symptom_check_detail
                 from .verify_executor import resolve_project_root as _rpr

@@ -572,26 +572,37 @@ def test_a_hook_comparison_fault_also_reports_the_envelope(tmp_path, monkeypatch
 def _hook_tree(root, *, meta: str, lib: str) -> None:
     (root / "runtime" / "hooks" / "meta").mkdir(parents=True, exist_ok=True)
     (root / "runtime" / "lib").mkdir(parents=True, exist_ok=True)
-    (root / "runtime" / "hooks" / "meta" / "on-stop-enforce.py").write_text(
-        meta, encoding="utf-8"
-    )
+    (root / "runtime" / "hooks" / "meta" / "on-stop-enforce.py").write_text(meta, encoding="utf-8")
     (root / "runtime" / "lib" / "enforcement.py").write_text(lib, encoding="utf-8")
 
 
-def _hook_manifest(installed_root, *, meta_hash: str, lib_hash: str) -> dict:
+def _hook_manifest(
+    installed_root,
+    *,
+    meta_hash: str,
+    lib_hash: str,
+    installed_meta: str | None = None,
+    installed_lib: str | None = None,
+) -> dict:
+    """Manifest entries plus the INSTALLED files they point at.
+
+    Drift is measured against the installed file, not only the manifest's cached hash --
+    the cache goes stale while the file is correct, which made a completed update report
+    its own drift forever (WO 3e4ea639). A fixture that records an entry must therefore
+    also write the file, or it exercises the recorded-but-absent branch instead of the
+    comparison it means to.
+    """
+    meta_path = installed_root / "hooks" / "meta" / "on-stop-enforce.py"
+    lib_path = installed_root / "hooks" / "runtime" / "lib" / "enforcement.py"
+    for path, content in ((meta_path, installed_meta), (lib_path, installed_lib)):
+        if content is not None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
     return {
         "scope": "user",
         "files": [
-            {
-                "path": str(installed_root / "hooks" / "meta" / "on-stop-enforce.py"),
-                "operation": "create",
-                "content_hash": meta_hash,
-            },
-            {
-                "path": str(installed_root / "hooks" / "runtime" / "lib" / "enforcement.py"),
-                "operation": "create",
-                "content_hash": lib_hash,
-            },
+            {"path": str(meta_path), "operation": "create", "content_hash": meta_hash},
+            {"path": str(lib_path), "operation": "create", "content_hash": lib_hash},
         ],
     }
 
@@ -606,6 +617,8 @@ def test_a_library_only_edit_is_drift(tmp_path) -> None:
         tmp_path / ".claude",
         meta_hash=compute_hash(meta_src),
         lib_hash=compute_hash("TASK_DONE_STATUSES = ('complete',)\n"),  # the OLD library
+        installed_meta=meta_src,  # the handler matches canonical
+        installed_lib="TASK_DONE_STATUSES = ('complete',)\n",  # the library does not
     )
 
     drift = _canonical_hook_drift(tmp_path, manifest)
@@ -621,7 +634,11 @@ def test_the_label_says_which_tree_the_drift_is_in(tmp_path) -> None:
 
     _hook_tree(tmp_path, meta="# new handler\n", lib="# new lib\n")
     manifest = _hook_manifest(
-        tmp_path / ".claude", meta_hash=compute_hash("# old\n"), lib_hash=compute_hash("# old\n")
+        tmp_path / ".claude",
+        meta_hash=compute_hash("# old\n"),
+        lib_hash=compute_hash("# old\n"),
+        installed_meta="# old\n",
+        installed_lib="# old\n",
     )
 
     assert sorted(_canonical_hook_drift(tmp_path, manifest)) == [
@@ -641,6 +658,8 @@ def test_a_clean_tree_reports_no_drift(tmp_path) -> None:
         tmp_path / ".claude",
         meta_hash=compute_hash(meta_src),
         lib_hash=compute_hash(lib_src),
+        installed_meta=meta_src,
+        installed_lib=lib_src,
     )
 
     assert _canonical_hook_drift(tmp_path, manifest) == []

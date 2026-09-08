@@ -420,3 +420,43 @@ rules:
       blocks today and passes when the fix lands. A prose-only symptom still passes, because
       a fabricated check is worse than none, but symptom_has_executable_check reports it so
       "the symptom passed" cannot mean both "fixed" and "nobody checked".
+
+  - id: a-vocabulary-has-one-definition-per-domain
+    statement: >
+      Milestone status has one definition and every reader and writer agrees with it.
+      Vocabularies that merely share a word stay separate.
+    source: core/milestones/status.py
+    enforced_by:
+      - tests/unit/test_milestone_status_vocabulary.py::test_the_copies_agree
+      - tests/unit/test_milestone_status_vocabulary.py::test_completed_is_not_in_the_vocabulary
+      - tests/unit/test_milestone_status_vocabulary.py::test_the_step_vocabulary_is_deliberately_left_alone
+    note: >
+      business_milestones.status holds complete (45 rows), pending (43) and deleted (2),
+      measured on the live authority 2026-09-08, while milestones_classify tested membership
+      of a set naming a past-tense variant the column has never held. A phantom member is
+      harmless until someone writes it, at which point every reader omitting it silently
+      disagrees -- the task-status equivalent made a diagnostic report every work order
+      0-done. The copies are checked by RUNNING the projection and inspecting its row, not
+      by reading its SQL. Workflow STEP status shares the word and is deliberately left
+      alone: unifying two vocabularies because they overlap is how the wrong one gets
+      applied, so the separation is pinned rather than remembered.
+
+  - id: drift-is-measured-against-the-installed-file
+    statement: >
+      Installation drift is measured against the installed file, not only the manifest's
+      recorded hash, so a completed update clears its own drift report.
+    source: interfaces/cli/commands/system_health.py
+    enforced_by:
+      - tests/unit/test_update_clears_its_own_drift.py::test_a_completed_update_reports_no_drift
+      - tests/unit/test_update_clears_its_own_drift.py::test_a_genuinely_stale_installed_file_is_still_drift
+      - tests/unit/test_update_clears_its_own_drift.py::test_a_deleted_installed_file_is_drift
+    note: >
+      Measured 2026-09-08: after ds update completed, both projections of
+      runtime/lib/enforcement.py were byte-identical to canonical and ds update --dry-run
+      still reported the same file drifted. The manifest had been rewritten by that run yet
+      its entry recorded the pre-update hash 50fd7bb301e618bb against a canonical
+      eb430a7e8b3d0a21. The recorded hash is a CACHE of what was installed and can go stale
+      while the file is correct; the file cannot go stale about itself. An operator who runs
+      the prescribed fix, succeeds, and is told again to run it learns to ignore the signal.
+      The cached hash remains the fallback when no installed file can be read, because
+      reporting clean on no evidence is the fail-open shape.

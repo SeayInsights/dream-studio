@@ -364,6 +364,9 @@ def _canonical_hook_drift(source_root: Path, manifest: dict) -> list[str]:
     """
     # Index manifest by filename for hook meta files (ignore duplicates — first match wins)
     meta_hashes: dict[str, str] = {}
+    #: name -> the installed path, so drift can be measured against the FILE and not only
+    #: against the manifest's cached hash. See the note in the walk below.
+    meta_paths: dict[str, str] = {}
     for entry in manifest.get("files", []):
         if entry.get("operation") == "skip":
             continue
@@ -374,6 +377,7 @@ def _canonical_hook_drift(source_root: Path, manifest: dict) -> list[str]:
             name = Path(p).name
             if name not in meta_hashes:
                 meta_hashes[name] = entry.get("content_hash", "")
+                meta_paths[name] = p
 
     from integrations.manifest import compute_hash as _compute_hash
 
@@ -390,7 +394,36 @@ def _canonical_hook_drift(source_root: Path, manifest: dict) -> list[str]:
                 # Never installed under this name: not drift, and not this check's
                 # business -- _canonical_skill_drift owns never-installed files.
                 continue
-            if _compute_hash(handler.read_text(encoding="utf-8")) != recorded:
+            canonical_hash = _compute_hash(handler.read_text(encoding="utf-8"))
+
+            # COMPARE AGAINST THE INSTALLED FILE, not only the manifest's recorded hash.
+            # The manifest hash is a CACHE of what was installed, and it can go stale while
+            # the file is correct: measured 2026-09-08, `ds update` wrote a fresh
+            # enforcement.py to ~/.claude and left the entry recording the old hash, so
+            # `ds update --dry-run` reported the same drift forever. An operator who runs
+            # the prescribed fix, succeeds, and is told again to run it learns to ignore the
+            # signal -- the unachievable-remedy shape. The file cannot go stale about
+            # itself, so it is the better witness, and this is the same comparison
+            # `_check_hook_freshness` already makes.
+            installed = Path(meta_paths.get(handler.name, ""))
+            if installed.is_file():
+                try:
+                    installed_hash = _compute_hash(installed.read_text(encoding="utf-8"))
+                except OSError:
+                    installed_hash = None
+                if installed_hash is not None:
+                    if installed_hash != canonical_hash:
+                        drift.append(f"{label}/{handler.name}")
+                    continue
+            elif meta_paths.get(handler.name):
+                # Recorded as installed and now absent: drift, and the reported symptom
+                # that motivated the skill-drift work.
+                drift.append(f"{label}/{handler.name}")
+                continue
+
+            # No usable installed file to read (unreadable, or no path recorded): fall back
+            # to the cached hash rather than reporting clean on no evidence.
+            if canonical_hash != recorded:
                 drift.append(f"{label}/{handler.name}")
     return drift
 

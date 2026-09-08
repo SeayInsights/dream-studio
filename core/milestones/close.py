@@ -32,6 +32,8 @@ from pathlib import Path
 from typing import Any
 
 from core.event_store.studio_db import _connect
+
+from core.milestones.status import MILESTONE_COMPLETE
 from core.work_orders.models import TERMINAL_WO_STATUSES
 
 logger = logging.getLogger(__name__)
@@ -312,7 +314,7 @@ def close_milestone(
         "milestone_id": milestone_id,
         "title": ms_title,
         "project_id": project_id,
-        "status": "complete",
+        "status": MILESTONE_COMPLETE,
         "completed_at": now,
         "forced": force,
         "bypassed_gates": failures if force else [],
