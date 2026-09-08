@@ -2,11 +2,30 @@
 #
 # WHY THIS FILE EXISTS. Operator, on the substrate: it is "a lot of prose laid on top of
 # each other as suggestions with no rules, evals, or really any real test that doing
-# anything they are supposed to". Measured 2026-09-04: 2,172 normative statements
-# (MUST / NEVER / ALWAYS / REQUIRED / DO NOT) across the substrate -- 772 in
-# canonical/skills over 219 files, 1,283 in docs over 143 files, 103 in canonical/workflows,
-# 14 in CLAUDE.md and AGENTS.md. Nothing distinguished the ones something enforces from the
-# ones nothing does.
+# anything they are supposed to". Nothing distinguished the statements something enforces
+# from the ones nothing does.
+#
+# THE SIZE OF THE PROBLEM, corrected 2026-09-07. This header previously recorded "2,172
+# normative statements" as though it were a backlog of unwritten rules. It is not: it was a
+# count of WORD OCCURRENCES under one pattern, and most occurrences are ordinary English
+# inside explanatory prose -- "the runner must be the sole writer" in a docstring describing
+# a design is not an unenforced rule. Re-measured across the same corpus:
+#
+#   SHOUTED (MUST / MUST NOT / NEVER / ALWAYS / REQUIRED / DO NOT / SHALL / MAY NOT):  191
+#   any-case (must / never / always / required / should not / do not / shall):        5,752
+#
+# Neither is a rule backlog, and 5,752 rules would be absurd. The tractable candidate set is
+# the shouted form, because writing a rule in capitals is a deliberate act. That count is now
+# a CEILING per lane in canonical/normative_baseline.json, enforced by the blocking
+# normative-baseline gate: it may only go down. Leaving the inflated figure in place would
+# have been the same defect this file exists to fix -- an unfalsified claim in prose.
+#
+# THE LANE MATTERS, because the enforcement substrate differs by kind. A constraint on the
+# CODE becomes a gate. An instruction to a MODEL at runtime ("ask one question at a time")
+# can only become an EVAL -- no static check settles it, and canonical/skills holds the
+# largest genuinely unenforced share. A DESCRIPTION of the machine should be generated from
+# the machine or deleted, never restated as a rule; AGENTS.md is already generated from
+# packs.yaml, and a hand-written second copy of behaviour is what rots.
 #
 # The proof that this matters is `Module boundary:`. It was a load-bearing rule -- edit
 # attribution matched against it -- stated in prose, read by a regex, and supplied by no
@@ -22,9 +41,12 @@
 # does not exist or collects nothing -- an unrunnable check is the same as no check, and
 # that exact rot was found on eight acceptance criteria this session.
 #
-# This registry starts small on purpose. Seeding it with 2,172 half-classified entries
-# would reproduce the problem in YAML. It grows by the rule below: a normative statement
-# added to a changed file must be classified in the same change set.
+# This registry starts small on purpose. Seeding it with hundreds of half-classified entries
+# would reproduce the problem in YAML. It grows by ratchet, not by sweep: the
+# normative-baseline gate refuses any change set that raises a lane's ceiling, so a new
+# shouted statement must be classified here, converted to an eval, generated from what it
+# describes, or deleted -- in the same change set. The backlog drains as a side effect of
+# ordinary work instead of needing a heroic pass nobody finishes.
 
 version: 1
 
@@ -47,7 +69,7 @@ rules:
       A description supplied to the authoring door must be stored, not silently discarded.
     source: core/work_orders/mutations.py
     enforced_by:
-      - tests/unit/test_work_order_boundary_is_declarable.py::test_the_projection_materializes_the_description
+      - tests/unit/test_seam_payload_to_projection.py::test_description_specifically_survives_the_round_trip
     note: >
       Measured 2026-09-04: 443 of 920 work orders had an empty description, and 18 of the
       19 created since 2026-09-01. The emitter omitted description from the event payload
@@ -98,31 +120,53 @@ rules:
     enforced_by:
       - tests/unit/test_ds_update_skill_drift.py::test_gate_consults_skills_a_skill_edit_is_drift
       - tests/unit/test_ds_update_skill_drift.py::test_a_deleted_installed_file_is_drift
+      - tests/unit/test_ds_update_skill_drift.py::test_a_library_only_edit_is_drift
     note: >
       The version gate consulted hook drift only, so a skill change printed
       already_current and installed nothing -- and the drift check could not see a file
-      that had been deleted, which is the reported symptom itself.
+      that had been deleted, which is the reported symptom itself. The SHARED HOOK LIBRARY
+      was invisible for the same reason one directory over: the index required "meta" in
+      the path and the walk covered runtime/hooks/meta only, so runtime/lib/enforcement.py
+      -- every enforcement decision the hooks make -- was excluded from both. Measured
+      2026-09-07, the user-scope projection of that library was stale AND firing while
+      ds update reported one drifted file, a meta handler that happened to change in the
+      same session; had only the library changed it would have reported none.
 
   - id: no-fabricated-data
     statement: >
       Never present fabricated data, counts, or results as measured.
     source: CLAUDE.md
-    guidance: true
-    why: >
-      No static check can distinguish a measured number from an invented one; the
-      evidence-backed-output gate checks that a claim CITES something, which is a
-      necessary condition and not a sufficient one. Recorded as guidance so its
-      unenforceability is a stated fact rather than an assumption.
+    enforced_by:
+      - core.gates.evidence_backed_output
+      - tests/unit/test_evidence_backed_output.py::test_an_unbacked_claim_is_flagged
+      - tests/unit/test_evidence_backed_output.py::test_the_real_unbacked_claims_from_this_session_are_caught
+    residual_risk: >
+      The gate proves a claim CITES something checkable -- a command with its output, a
+      test count with its unit, a file.py:line, a commit sha, a run id, a named artifact.
+      It cannot prove the cited thing was actually run, or that the number came from it, so
+      a fabricated figure presented beside a real-looking citation still passes. Closing
+      this needs the cited command re-executed at claim time, the way an
+      originating-symptom SQL check is re-run at close. Filed as PARTIAL rather than
+      guidance because the citation requirement is real enforcement, and calling the whole
+      rule unenforceable understated what the substrate already does.
 
   - id: tests-run-by-a-different-agent
     statement: >
       Tests and evals are always run by a different agent than the one that authored them.
     source: canonical/skills/core/modes/review/SKILL.md
-    guidance: true
-    why: >
-      A process constraint on how work is orchestrated, not a property of the tree. No
-      check inside the repo can observe which agent invoked pytest. Recorded so the gap is
-      visible rather than assumed covered.
+    enforced_by:
+      - tests/unit/test_check_records_its_runner.py::test_every_check_result_carries_a_runner
+      - tests/unit/test_check_records_its_runner.py::test_an_absent_session_is_recorded_as_unknown_not_omitted
+    residual_risk: >
+      Every check result now records WHO ran it (session, adapter, host, pid), so an
+      author-run suite is no longer indistinguishable from an independent runner's report
+      in the stored artifact. Nothing yet COMPARES that runner against the author, because
+      the authority records no author for a task -- mark_task_done emits task.completed
+      with session_id=None. So the substrate can say who ran a check and cannot yet say it
+      was someone else. Closing this needs author identity on authority writes, tracked as
+      WO fb7375d9. The previous claim that no check inside the repo could observe this was
+      wrong in its reason: it could not be observed because the identity was never written
+      down, not because observing it is impossible.
 
   - id: grader-retries-until-one-clean-verdict
     statement: >
@@ -136,7 +180,16 @@ rules:
     note: >
       Four timeouts to one success in a single session, each leaving a work order
       uncloseable. There was one retry, and it was given the SHORT budget after the long
-      one expired -- so the single recovery attempt was near-certain to fail too.
+      one expired -- so the single recovery attempt was near-certain to fail too. The
+      attempt count is bounded by a wall-clock ceiling as well: 20 attempts at a 360s
+      collect window is two hours on ONE role and a work order runs several, so a single
+      degraded provider could stall a close for most of a day while reporting nothing.
+      Both ceilings live in one helper both retry paths call, and whichever is reached
+      first is recorded on the result as grader_retry_stopped_by. An exhausted provider
+      quota is not retried at all: a re-spawn cannot conjure capacity any more than it can
+      conjure a missing binary, and unlike a missing binary it arrives looking like an
+      ordinary non-JSON reply -- five work orders in one sweep spent attempts on "You've
+      hit your session limit - resets 5pm" before this was recognised.
 
   - id: recoverable-bookkeeping-is-not-escalated
     statement: >
@@ -165,3 +218,333 @@ rules:
       _code_only blanked string contents to stop prose raising false positives and
       silently removed exactly the reference the changed-signature detector exists to
       find. The comment above it still claimed patch targets were caught.
+
+  - id: an-optional-probe-may-not-answer-for-all
+    statement: >
+      Inside a function whose own handler returns a permissive constant, every database
+      call carries its own handler, so a probe that cannot run contributes nothing instead
+      of answering the whole question.
+    source: runtime/lib/enforcement.py
+    enforced_by:
+      - core.gates.fail_open_probe
+      - tests/unit/test_fail_open_probe_gate.py::test_catches_the_historical_defect
+      - tests/unit/test_fail_open_probe_gate.py::test_gate_is_bound_to_the_real_enforcement_module
+    note: >
+      authority_write_since consults five independent signals under one fail-open handler.
+      A probe selecting created_at from an older business_tasks raised, the function-level
+      handler turned that into `return True`, and stop enforcement was silently disabled
+      while reporting the condition SATISFIED for every work order on the machine. Two of
+      the five probes were guarded; three were not, and the difference was invisible until
+      a full-suite run. The five now route through one probe() helper, so a sixth gets the
+      isolation without anyone knowing this history.
+
+  - id: a-test-may-not-fake-a-stdlib-method-process-wide
+    statement: >
+      A test may not install an inline fake (lambda, mock, or constant) over a stdlib
+      type's instance method with monkeypatch.setattr; the replacement must be a named
+      function that delegates to the real implementation for anything but the subject.
+    source: tests/unit/test_game_validate.py
+    enforced_by:
+      - core.gates.test_isolation
+      - tests/unit/test_test_isolation_gate.py::test_catches_the_patch_that_aborted_the_suite
+      - tests/unit/test_test_isolation_gate.py::test_gate_is_bound_to_the_real_suite
+    note: >
+      `monkeypatch.setattr(type(f), "stat", lambda self_, **_: mock_stat)` made every path
+      in the process report 20 MB until fixture teardown -- where the autouse spool guard
+      concluded the run had written into the operator's real ~/.dream-studio/events and
+      aborted FATAL. The test passed throughout; the damage was entirely to its
+      neighbours, and the full local suite could not complete. That is why 45 failures
+      reached main on a green subset. Path.home stays deliberately exempt: it is the
+      mechanism that keeps ~100 tests off live state.
+
+  - id: a-fixture-may-not-invent-a-column
+    statement: >
+      A test fixture may not give an authority table a column a fresh database does not
+      have. Omitting columns is fine; inventing them is not.
+    source: core/config/sqlite_bootstrap.py
+    enforced_by:
+      - core.gates.fixture_schema_parity
+      - tests/unit/test_fixture_schema_parity_gate.py::test_invented_column_fails
+      - tests/unit/test_fixture_schema_parity_gate.py::test_exemption_without_a_real_reason_is_itself_a_finding
+    note: >
+      Six fixtures described tables production does not have -- business_projects.id for
+      project_id, validation_results.result_id for validation_id, scan_runs.run_id for
+      scan_id, raw_sessions.exit_reason for nothing at all, and a project_id on
+      ai_canonical_events that made the DuckDB fact test exercise the column-present
+      branch AI events never take. The authority is a freshly bootstrapped database read
+      back out of sqlite_master, not a parse of the baseline: a gate that duplicates the
+      schema it checks eventually checks its own copy.
+
+  - id: a-payload-key-must-reach-its-projection
+    statement: >
+      Every key an emitter puts in an event payload must be persisted by the projection
+      that consumes it, or be declared unpersisted with the reason storing it would be
+      wrong.
+    source: core/projections/work_order_projection.py
+    enforced_by:
+      - tests/unit/test_seam_payload_to_projection.py::test_the_emitter_and_the_projection_agree_on_every_payload_key
+      - tests/unit/test_seam_payload_to_projection.py::test_the_stored_description_is_readable_by_the_real_boundary_parser
+      - tests/unit/test_seam_payload_to_projection.py::test_declared_exceptions_are_still_sent_by_the_emitter
+    note: >
+      Nothing connected the emitter to the projection. create_work_order did not carry
+      description and the projection did not read it, so 443 of 920 work orders on the
+      live authority had none -- and the Module boundary: clause that edit attribution
+      matches against could not be declared at all. The first version of this check
+      asserted on SOURCE TEXT, which proves a string is present rather than that a value
+      survives. The payload key set is now derived from the emitter by parsing it and the
+      row is produced by the real projection against a real bootstrapped schema, so a key
+      added to the emitter fails here without anyone remembering this file exists.
+
+  - id: the-unclassified-pile-may-only-shrink
+    statement: >
+      A change set may not raise any lane's count of shouted normative statements. A new one
+      must be classified here with a runnable check, converted to an eval, generated from
+      what it describes, or deleted.
+    source: canonical/normative_baseline.json
+    enforced_by:
+      - core.gates.normative_baseline
+      - tests/unit/test_normative_baseline_gate.py::test_an_increase_fails_and_names_the_four_ways_out
+      - tests/unit/test_normative_baseline_gate.py::test_a_decrease_also_fails_so_the_ceiling_cannot_drift
+      - tests/unit/test_normative_baseline_gate.py::test_counts_only_the_shouted_form
+    note: >
+      This registry answers the operator's complaint one rule at a time and cannot answer it
+      at scale: hand-classifying drifts, and nothing stopped the pile regrowing the next day.
+      The ratchet is the scaling mechanism, modelled on the flake8 lint_baseline this repo
+      already runs. A DECREASE fails too, which is the half that makes it monotonic -- a
+      ceiling left above reality floats upward silently and stops meaning anything. The gate
+      counts only the SHOUTED form: the any-case count is 5,752 against 191 shouted, and an
+      unmeetable ceiling gets switched off, which is worse than having none.
+
+  - id: a-decided-question-has-one-supported-read
+    statement: >
+      When a function answers a question directly, that function is the only supported read.
+      The raw fields it interprets may be touched only where they are produced.
+    source: core/work_orders/close_main.py
+    enforced_by:
+      - core.gates.single_read_path
+      - tests/unit/test_single_read_path_gate.py::test_catches_a_caller_that_rederives_close_readiness
+      - tests/unit/test_single_read_path_gate.py::test_a_missing_gates_pass_key_is_not_an_optimistic_pass
+      - tests/unit/test_single_read_path_gate.py::test_closability_reasons_are_empty_exactly_when_it_can_close
+    note: >
+      A survey asked whether thirteen work orders could close, read result["gates"] instead
+      of gates_pass/gate_failures, got None, and reported all thirteen CLOSABLE while every
+      one was blocked on independent_review. The operator was told work was ready to close,
+      more than once, and it was not. The shape was documented correctly the whole time, so
+      no doc fix prevents this: answering a yes/no question through a dict lookup makes the
+      permissive answer the default outcome of any mistake. closability() returns a tuple,
+      which cannot be mis-keyed, and resolves every ambiguity toward NOT closable.
+
+  - id: a-vocabulary-has-one-definition
+    statement: >
+      A status vocabulary is defined once and imported. Where a standalone boundary forces a
+      second copy, a parity test holds the copies in agreement.
+    source: core/work_orders/task_status.py
+    enforced_by:
+      - core.gates.single_read_path
+      - tests/unit/test_task_status_vocabulary.py::test_the_hook_copy_agrees_with_the_definition
+      - tests/unit/test_task_status_vocabulary.py::test_completed_is_not_in_the_vocabulary
+      - tests/unit/test_task_status_vocabulary.py::test_the_hook_library_takes_no_module_level_repo_import
+    note: >
+      business_tasks.status holds 'complete' (2,229 rows) and 'done' (27). mark_task_done
+      counted remaining work against a literal that omitted 'done', so a finished task
+      counted as still remaining in the number feeding the tasks_done gate -- ten work
+      orders held one, all already closed, so nothing was blocked today and the next one
+      would have been. A diagnostic hardcoded ('done', 'completed') and reported every work
+      order 0-done, because 'completed' is not a value this column holds; it is the trap,
+      because it reads correctly and IS correct in other tables. The hook library keeps its
+      own copy because it must import cleanly where the repo is not importable, so the
+      copies are held together by a parity test that also asserts that justification still
+      holds.
+
+  - id: a-refusal-names-what-objected
+    statement: >
+      A gate that refuses on a graded review must name which role objected, how it scored,
+      and one concrete objection -- never only the narrative of a role that passed.
+    source: core/work_orders/close_gates.py
+    enforced_by:
+      - tests/unit/test_review_failure_names_its_objection.py::test_the_score_line_names_every_role_worst_first
+      - tests/unit/test_review_failure_names_its_objection.py::test_role_violations_are_findings
+      - tests/unit/test_review_failure_names_its_objection.py::test_a_verdict_objecting_only_through_violations_is_not_an_incomplete_record
+    note: >
+      Measured on WO 17f20d48: completion scored 1.0 and wrote the only prose in the
+      verdict; correctness (0.786) and quality (0.62) recorded violations and no summary.
+      The gate printed "review failed - Both tasks are implemented end-to-end ... both
+      resolve and pass", which reads as a broken gate rather than a real finding and cost a
+      reader twenty minutes concluding exactly that. The verdict was right; the sentence it
+      chose came from the one role with nothing to report. Role violations now count as
+      findings -- they did not, so a verdict objecting only through them had an EMPTY
+      findings list and risked being reported as an incomplete record, softening a real
+      failure into inconclusive.
+
+  - id: a-bypass-flag-must-reach-the-gate-it-names
+    statement: >
+      A flag that names a gate must waive that gate wherever it is evaluated, and must waive
+      only the case it names -- an unreviewable verdict, never a failed one.
+    source: core/work_orders/close_main.py
+    enforced_by:
+      - tests/unit/test_skip_verify_reaches_the_post_gate.py::test_the_close_waives_on_the_post_gate_path_not_only_the_default_on_one
+      - tests/unit/test_skip_verify_reaches_the_post_gate.py::test_a_failed_review_is_never_waived
+      - tests/unit/test_skip_verify_reaches_the_post_gate.py::test_every_unreviewable_phrasing_the_gate_emits_is_waived
+    note: >
+      --skip-verify guarded only the DEFAULT-ON review branch, so for every work order type
+      whose declared post_gate IS independent_review it was inert -- which is the population
+      an operator reaches for it with. Measured 2026-09-08: four work orders whose graders had
+      all returned "You've hit your session limit" refused --skip-verify and closed only under
+      --force, which waives tasks_done and change_impact_affirmed as well. A prescribed
+      command that does not work drives the operator to the louder instrument. The waiver
+      covers UNREVIEWABLE only: that is the provider reporting it produced no judgment, while
+      a FAILED review is a finding about the work and waiving it would be the false-done the
+      gate exists to prevent. Matching is case-insensitive because close_gates emits both
+      "unreviewable" (grader failure) and "UNREVIEWABLE" (incomplete record); the first cut
+      matched only the former, and an `or` in the test hid it.
+
+  - id: a-symptom-must-be-able-to-fail
+    statement: >
+      A defect work order's originating symptom must be an executable check that fails while
+      the defect is present and passes once it is fixed. An unrecognised check kind is
+      refused, not skipped.
+    source: core/work_orders/close_gates.py
+    enforced_by:
+      - tests/unit/test_originating_symptom_is_executable.py::test_a_test_check_is_evaluated_not_skipped
+      - tests/unit/test_originating_symptom_is_executable.py::test_an_unrecognised_check_kind_fails_closed
+      - tests/unit/test_originating_symptom_is_executable.py::test_a_prose_only_symptom_is_reported_as_carrying_no_check
+    note: >
+      _check_originating_symptom iterated lines and continued past anything not starting with
+      SQL-CHECK:, so the TEST-CHECK form CLAUDE.md and the --originating-symptom help text
+      both advertise was silently skipped and the gate returned None -- a pass. Measured
+      2026-09-08: five defect work orders registered that day carried no valid symptom
+      between them, because a CODE defect usually has no authority data signature and the
+      only working instrument read the authority. Two carried SQL that could never return a
+      truthy value, making them permanently unclosable; three carried SQL that already
+      passed. With TEST-CHECK evaluable, all five now name the test their fix must add: each
+      blocks today and passes when the fix lands. A prose-only symptom still passes, because
+      a fabricated check is worse than none, but symptom_has_executable_check reports it so
+      "the symptom passed" cannot mean both "fixed" and "nobody checked".
+
+  - id: a-vocabulary-has-one-definition-per-domain
+    statement: >
+      Milestone status has one definition and every reader and writer agrees with it.
+      Vocabularies that merely share a word stay separate.
+    source: core/milestones/status.py
+    enforced_by:
+      - tests/unit/test_milestone_status_vocabulary.py::test_the_copies_agree
+      - tests/unit/test_milestone_status_vocabulary.py::test_completed_is_not_in_the_vocabulary
+      - tests/unit/test_milestone_status_vocabulary.py::test_the_step_vocabulary_is_deliberately_left_alone
+    note: >
+      business_milestones.status holds complete (45 rows), pending (43) and deleted (2),
+      measured on the live authority 2026-09-08, while milestones_classify tested membership
+      of a set naming a past-tense variant the column has never held. A phantom member is
+      harmless until someone writes it, at which point every reader omitting it silently
+      disagrees -- the task-status equivalent made a diagnostic report every work order
+      0-done. The copies are checked by RUNNING the projection and inspecting its row, not
+      by reading its SQL. Workflow STEP status shares the word and is deliberately left
+      alone: unifying two vocabularies because they overlap is how the wrong one gets
+      applied, so the separation is pinned rather than remembered.
+
+  - id: drift-is-measured-against-the-installed-file
+    statement: >
+      Installation drift is measured against the installed file, not only the manifest's
+      recorded hash, so a completed update clears its own drift report.
+    source: interfaces/cli/commands/system_health.py
+    enforced_by:
+      - tests/unit/test_update_clears_its_own_drift.py::test_a_completed_update_reports_no_drift
+      - tests/unit/test_update_clears_its_own_drift.py::test_a_genuinely_stale_installed_file_is_still_drift
+      - tests/unit/test_update_clears_its_own_drift.py::test_a_deleted_installed_file_is_drift
+    note: >
+      Measured 2026-09-08: after ds update completed, both projections of
+      runtime/lib/enforcement.py were byte-identical to canonical and ds update --dry-run
+      still reported the same file drifted. The manifest had been rewritten by that run yet
+      its entry recorded the pre-update hash 50fd7bb301e618bb against a canonical
+      eb430a7e8b3d0a21. The recorded hash is a CACHE of what was installed and can go stale
+      while the file is correct; the file cannot go stale about itself. An operator who runs
+      the prescribed fix, succeeds, and is told again to run it learns to ignore the signal.
+      The cached hash remains the fallback when no installed file can be read, because
+      reporting clean on no evidence is the fail-open shape.
+
+  - id: a-verdict-declares-what-it-did-not-execute
+    statement: >
+      A verdict whose TEST-CHECKs did not run must say so where the verdict is read, naming
+      which checks and why -- never only in trailing prose.
+    source: core/work_orders/verify_executor.py
+    enforced_by:
+      - tests/unit/test_unexecuted_checks_are_declared.py::test_a_verdict_says_when_its_checks_did_not_run
+      - tests/unit/test_unexecuted_checks_are_declared.py::test_an_executed_verdict_says_nothing
+      - tests/unit/test_unexecuted_checks_are_declared.py::test_a_partially_executed_verdict_still_declares_the_gap
+    note: >
+      A grader on 2026-09-07 ended its verdict for WO 0a7abdfe with "the pytest run was
+      denied approval, so pass/fail for the TEST-CHECK criteria is unverified" -- true,
+      buried in trailing prose, and invisible downstream while the verdict rendered as an
+      ordinary graded one. record_test_execution already reported a basis of
+      not_run_at_verify; what it could not say was WHICH checks had not run or WHY, because
+      the per-check not_executed_reason existed and nothing aggregated it, so a sandbox
+      denial and a runner never invoked were indistinguishable. The AC gate's purpose is
+      that a criterion is EXECUTED rather than asserted, so an unexecuted TEST-CHECK is
+      AC-rot wearing a verdict. basis flips to "executed" as soon as anything runs, which
+      is why the unexecuted LIST carries the gap: reporting only the basis would call a
+      partially-run verdict fully backed.
+
+  - id: attachment-pressure-is-relievable
+    statement: >
+      Both forms of a duplicated gap are drainable -- the spawned sibling work order and the
+      task attached to the work order that owns it.
+    source: core/work_orders/verify_gaps.py
+    enforced_by:
+      - tests/unit/test_attachment_pressure_is_relievable.py::test_drain_gaps_sees_attached_tasks
+      - tests/unit/test_attachment_pressure_is_relievable.py::test_a_single_attachment_is_not_drained
+      - tests/unit/test_attachment_pressure_is_relievable.py::test_apply_is_idempotent
+    note: >
+      WO-GAP-FANOUT stopped gaps spawning siblings by ATTACHING them as tasks, which is the
+      right shape, but it moved the pressure rather than bounding it and the tooling did not
+      follow. Measured 2026-09-08: drain-gaps reported "No gap category has more than one
+      open spawn. Nothing to drain." while 317 pending tasks sat on in-progress work orders.
+      With the attached form visible the same command found 32 duplicated categories and 340
+      duplicate tasks -- add-missing-adversarial-tests attached 82 times across 15 work
+      orders. Applied, the queue went 317 -> 43 and the largest work order went from 10/44
+      to 10/11. Grouping is by CATEGORY across work orders, because a generic finding is one
+      piece of work however many reviews surfaced it; keying on the reviewed work order is
+      what made eleven duplicates carry eleven distinct keys in the original fan-out. The
+      two forms are reported separately: they cancel different things, and merging the
+      counts is how a reader thinks a work order was cancelled when a task was.
+
+  - id: a-graded-range-states-its-basis
+    statement: >
+      A narrowed range says whether any retained commit carries this work order's own
+      recorded claim, and the neighbour caveat fires only where a neighbour could be.
+    source: core/work_orders/range_attribution.py
+    enforced_by:
+      - tests/unit/test_graded_range_includes_own_commits.py::test_a_range_missing_its_own_commits_fails_loudly
+      - tests/unit/test_graded_range_includes_own_commits.py::test_a_range_with_its_own_commits_reports_ownership
+      - tests/unit/test_delivery_boundary.py::test_the_live_attribution_does_not_carry_a_standing_neighbour_caveat
+    note: >
+      Exclusion is one-sided: a commit goes only when ANOTHER work order recorded it, and
+      this work order's own record is the only defence. So an empty or out-of-range record
+      means it can defend nothing and receives whatever nobody else claimed -- reported
+      until now in the same words as ownership. WO 0a7abdfe's review refused to grade its
+      diff on 2026-09-07 because the shown slice omitted its own implementing commits, and
+      grading it "would have reported ten false misses". That instance no longer reproduces
+      (the record has since grown to 22 commits through task-done and the range now returns
+      27 own of 32), but the shape is intact because ownership is written AT task-done.
+      Separately, the unmappable-neighbour caveat fired on every verify: measured on
+      origin/main...HEAD, 19 unmappable commits and ALL NINETEEN predating the range's
+      oldest commit, so none could have been squashed into it. A sha whose timestamp cannot
+      be read stays in the caveat, because unknown is not safe.
+
+  - id: a-gate-does-not-get-slower-as-it-is-adopted
+    statement: >
+      The rule registry validates every enforced_by node id in one collection run, so
+      classifying a rule does not make the gate that checks it slower.
+    source: core/gates/rule_registry.py
+    enforced_by:
+      - tests/unit/test_rule_registry_gate.py::test_a_healthy_registry_collects_in_one_spawn
+      - tests/unit/test_rule_registry_gate.py::test_a_broken_node_id_is_still_named_individually
+    note: >
+      The gate probed each node id in its own subprocess, so its cost scaled linearly with
+      a registry designed to grow by ratchet. Measured 2026-09-08 at 26 rules: 64 node ids,
+      64 spawns, 213s for the gate and 355s for its test file, which pushed the BLOCKING
+      pin-tests gate past its 600s timeout and refused the push. A Windows subprocess spawn
+      costs 3-12s, so the cost was spawn count rather than collection work. Batched: 213s
+      -> 6s, and the gate no longer grows with the registry. The per-id probe survives as
+      the failure path only, because "something in the registry is unrunnable" is not
+      actionable -- it costs 223s and runs only when something is genuinely broken. A gate
+      that punishes its own adoption eventually gets switched off, and it would take every
+      rule with it.

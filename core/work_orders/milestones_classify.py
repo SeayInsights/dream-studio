@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from typing import Any
+from core.milestones.status import is_complete as _milestone_status_is_complete
 
 from .milestones_completion import validate_milestone_completion_criteria
 from .milestones_shared import (
@@ -292,8 +293,11 @@ def _is_external_project_work(step: Mapping[str, Any], state: Mapping[str, Any])
 def _milestone_complete(
     milestone: Mapping[str, Any], pending_steps: Sequence[Mapping[str, Any]]
 ) -> bool:
+    # The vocabulary comes from core.milestones.status, not a literal spelled here. This
+    # site tested a two-member set naming a past-tense variant the column has never held,
+    # so a reader could disagree with every writer the moment anyone stored it.
     status = _text(milestone.get("status") or milestone.get("milestone_status")).lower()
-    if status in {"complete", "completed"}:
+    if _milestone_status_is_complete(status):
         return True
     if pending_steps:
         return False

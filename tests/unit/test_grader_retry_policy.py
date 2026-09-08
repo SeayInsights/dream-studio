@@ -125,12 +125,162 @@ def test_the_parallel_path_shares_the_policy() -> None:
     from pathlib import Path
 
     source = Path(verify_graders.__file__).read_text(encoding="utf-8")
-    assert (
-        source.count("_MAX_GRADER_ATTEMPTS") >= 3
-    ), "both the serial and parallel paths must bound their attempts by the same cap"
+    serial_start = source.index("def collect_grader_with_retry")
     parallel_start = source.index("def _run_graders_parallel")
+    serial = source[serial_start:parallel_start]
     parallel = source[parallel_start:]
-    assert "_MAX_GRADER_ATTEMPTS" in parallel, "the parallel path still has a single retry"
+
+    # Both ceilings now live in ONE helper that both paths call, which is stronger than
+    # each path spelling the cap itself: a change to the policy cannot reach one path and
+    # miss the other. This test previously asserted the literal _MAX_GRADER_ATTEMPTS
+    # appeared inside each loop -- true of the old copy-paste shape, and stale the moment
+    # the policy was shared.
+    for name, chunk in (("serial", serial), ("parallel", parallel)):
+        assert "_retry_budget_exhausted(started, attempts)" in chunk, (
+            f"the {name} path does not consult the shared retry budget, so the attempt and"
+            " time ceilings can drift apart between the two paths"
+        )
     assert (
         "role_collect_timeout(name) if timed_out" in parallel
     ), "the parallel path must also keep the full budget after a timeout"
+    assert (
+        "role_collect_timeout(role) if timed_out" in serial
+    ), "the serial path must also keep the full budget after a timeout"
+
+
+# --------------------------------------------------------------------------------------
+# The WALL-CLOCK ceiling. The attempt count alone is not a budget: 20 attempts x a 360s
+# collect window is two hours on ONE role, and a work order runs several. Measured on the
+# close sweep of 2026-09-07, one verify sat past 20 minutes on a role that kept timing out.
+# --------------------------------------------------------------------------------------
+
+
+def test_a_time_ceiling_exists_alongside_the_attempt_ceiling():
+    assert verify_graders._MAX_GRADER_ATTEMPTS == 20, "the operator's rule is 20 attempts"
+    assert verify_graders._MAX_GRADER_RETRY_SECONDS > 0, (
+        "20 attempts at the full collect budget is two hours on one role; the attempt count"
+        " alone is not a budget"
+    )
+
+
+def test_the_attempt_ceiling_stops_the_retrying_and_says_so():
+    exhausted = verify_graders._retry_budget_exhausted(
+        __import__("time").monotonic(), verify_graders._MAX_GRADER_ATTEMPTS
+    )
+    assert exhausted is not None
+    assert "attempt ceiling" in exhausted
+
+
+def test_the_time_ceiling_stops_the_retrying_and_says_so():
+    long_ago = __import__("time").monotonic() - (verify_graders._MAX_GRADER_RETRY_SECONDS + 1)
+    exhausted = verify_graders._retry_budget_exhausted(long_ago, 2)
+    assert exhausted is not None
+    assert "time ceiling" in exhausted
+    assert "2 attempt" in exhausted, "the reason must say how many attempts were spent"
+
+
+def test_there_is_room_while_both_ceilings_are_unmet():
+    assert verify_graders._retry_budget_exhausted(__import__("time").monotonic(), 1) is None
+
+
+def test_giving_up_is_recorded_on_the_result_not_left_silent():
+    """A stall reported as a stall is actionable; a stall reported as nothing is not."""
+    calls = {"n": 0}
+
+    def _never_succeeds(prompt, profile, *, timeout):
+        calls["n"] += 1
+        return None
+
+    monkey = pytest.MonkeyPatch()
+    try:
+        monkey.setattr(verify_graders, "_retry_grader_once", _never_succeeds)
+        monkey.setattr(verify_graders, "_MAX_GRADER_ATTEMPTS", 3)
+
+        class _Proc:
+            pass
+
+        monkey.setattr(
+            verify_graders,
+            "_collect_grader",
+            lambda proc, timeout: {"unreviewable": True, "_grader_error": "timed out"},
+        )
+        monkey.setattr(verify_graders, "_spawn_grader", lambda *a, **k: _Proc())
+        result = verify_graders.collect_grader_with_retry("p", None, role="completion")
+    finally:
+        monkey.undo()
+
+    assert result.get("grader_attempts") == 3
+    assert "attempt ceiling" in str(result.get("grader_retry_stopped_by"))
+    assert calls["n"] == 2, "it must stop retrying at the ceiling, not run past it"
+
+
+# --------------------------------------------------------------------------------------
+# QUOTA. A re-spawn cannot conjure capacity, so an exhausted provider is not retryable --
+# the same reason grader_cli_unavailable is not. Unlike a missing binary it arrives looking
+# like an ordinary non-JSON reply, which is how it consumed retries unnoticed: measured
+# 2026-09-07, five work orders in one close sweep came back with the raw body "You've hit
+# your session limit - resets 5pm (America/New_York)".
+# --------------------------------------------------------------------------------------
+
+_REAL_QUOTA_BODY = (
+    "Grader returned non-JSON.\nRaw:\nYou've hit your session limit "
+    "- resets 5pm (America/New_York)"
+)
+
+
+def test_the_measured_quota_reply_is_not_retried():
+    """Verbatim from the run that exposed this, not a paraphrase of it."""
+    result = {"unreviewable": True, "_grader_error": _REAL_QUOTA_BODY}
+    assert verify_graders.quota_exhausted(result)
+    assert verify_graders._should_retry(result) is False
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "rate limit exceeded",
+        "429 Too Many Requests",
+        "Usage limit reached for this account",
+        "monthly quota exhausted",
+    ],
+)
+def test_other_capacity_replies_are_not_retried(body):
+    assert verify_graders._should_retry({"unreviewable": True, "_grader_error": body}) is False
+
+
+def test_a_genuine_formatting_flake_is_still_retried():
+    """The retry policy must keep working for what it was built for.
+
+    A quota check that swallowed ordinary non-JSON would silently disable the whole
+    twenty-attempt policy -- a worse defect than the one being fixed, and invisible.
+    """
+    result = {"unreviewable": True, "_grader_error": "Grader returned non-JSON.\nRaw:\n{oops"}
+    assert verify_graders.quota_exhausted(result) is False
+    assert verify_graders._should_retry(result) is True
+
+
+def test_a_timeout_is_still_retried():
+    result = {"unreviewable": True, "_grader_error": "Command '['claude']' timed out after 360s"}
+    assert verify_graders._should_retry(result) is True
+
+
+def test_a_clean_verdict_is_never_retried():
+    assert verify_graders._should_retry({"passed": True, "score": 4}) is False
+
+
+def test_a_missing_cli_is_still_not_retried():
+    """The pre-existing non-retryable case, pinned alongside the new one."""
+    result = {"unreviewable": True, "reason": "grader_cli_unavailable", "_grader_error": "no cli"}
+    assert verify_graders._should_retry(result) is False
+
+
+def test_the_word_quota_in_ordinary_prose_does_not_disable_retrying():
+    """`quota_exhausted` reads the provider's reply, not the work under review.
+
+    A grader whose finding legitimately discusses a quota -- reviewing rate-limit code, say
+    -- must not be classified as an exhausted provider, because that would turn a real
+    verdict into a permanent no-retry.
+    """
+    verdict = {"passed": False, "findings": ["the quota check is missing a test"]}
+    assert verify_graders.quota_exhausted(verdict) is False
+    assert verify_graders._should_retry(verdict) is False  # a real verdict, nothing to retry

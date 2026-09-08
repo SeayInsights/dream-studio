@@ -79,6 +79,17 @@ def test_enforcement_lib_drift_detected(tmp_path):
 
 # ── stop-hook re-block ──────────────────────────────────────────────────────────
 
+#: The clause edit attribution matches against. Composed the way the real emitter
+#: composes it (a blank line before the clause), so the fixture exercises the same
+#: format runtime/lib/enforcement.py::boundary_globs parses.
+#:
+#: `src/` and not `src`: the parser keeps only comma-separated parts containing a `/` or a
+#: `.`, so `Module boundary: src` yields [] -- a clause that LOOKS declared and matches
+#: nothing, which is the silent-wrong-answer shape. `compose_module_boundary` refuses to
+#: store such a clause at the authoring door, but a hand-written one has no such guard, so
+#: the trailing slash is load-bearing here.
+_WO_DESCRIPTION = "Owns the sources under test." + chr(10) * 2 + "Module boundary: src/."
+
 _AUTHORITY_DDL = """
 CREATE TABLE business_projects (
     project_id TEXT, name TEXT, status TEXT, project_path TEXT
@@ -110,12 +121,21 @@ def env(tmp_path, monkeypatch):
         "INSERT INTO business_projects VALUES (?, 'TestProj', 'active', ?)",
         (PROJECT_ID, str(project_dir)),
     )
+    # DECLARE THE BOUNDARY. These tests exercise the stop hook's re-block and cap
+    # behaviour, and that path is only reached when the work order is PROVEN to own the
+    # edit. Enforcement no longer blocks on attribution by recency -- it records an
+    # observation (rule attribution_by_recency_not_enforced) and allows the stop, because
+    # a guess is not evidence and blocking on absent evidence trains a bypass. Without a
+    # `Module boundary:` clause the fixture's work order was attributed by recency, so
+    # these three tests were silently exercising the allow path and asserting a block.
+    # The clause names src/, which is where _seed_source_session edits.
     con.execute(
         "INSERT INTO business_work_orders"
-        " (work_order_id, project_id, title, status, started_at, created_at, sequence_order)"
-        " VALUES (?, ?, 'WO-ACTIVE', 'in_progress', '2026-01-01T00:00:00Z',"
+        " (work_order_id, project_id, title, description, status, started_at, created_at,"
+        " sequence_order)"
+        " VALUES (?, ?, 'WO-ACTIVE', ?, 'in_progress', '2026-01-01T00:00:00Z',"
         " '2026-01-01T00:00:00Z', 0)",
-        (WO_ID, PROJECT_ID),
+        (WO_ID, PROJECT_ID, _WO_DESCRIPTION),
     )
     con.commit()
     con.close()

@@ -76,6 +76,23 @@ gates:
       tests/unit/test_ds_update_skill_drift.py,
       tests/unit/test_rule_registry_gate.py,
       tests/unit/test_work_order_boundary_is_declarable.py,
+      tests/unit/test_fail_open_probe_gate.py,
+      tests/unit/test_test_isolation_gate.py,
+      tests/unit/test_fixture_schema_parity_gate.py,
+      tests/unit/test_seam_payload_to_projection.py,
+      tests/unit/test_normative_baseline_gate.py,
+      tests/unit/test_single_read_path_gate.py,
+      tests/unit/test_task_status_vocabulary.py,
+      tests/unit/test_grader_retry_policy.py,
+      tests/unit/test_review_failure_names_its_objection.py,
+      tests/unit/test_check_records_its_runner.py,
+      tests/unit/test_skip_verify_reaches_the_post_gate.py,
+      tests/unit/test_originating_symptom_is_executable.py,
+      tests/unit/test_milestone_status_vocabulary.py,
+      tests/unit/test_update_clears_its_own_drift.py,
+      tests/unit/test_unexecuted_checks_are_declared.py,
+      tests/unit/test_attachment_pressure_is_relievable.py,
+      tests/unit/test_graded_range_includes_own_commits.py,
       -q]
     fail_hint: >
       A schema/contract pin drifted — update the pin's expected set in the SAME
@@ -256,6 +273,77 @@ gates:
     fail_hint: >
       Dead-table CREATE TABLE found in test diff. Delete the test if its
       subject is dead, or fix the root cause in the migration.
+
+  - id: single-read-path
+    tier: blocking
+    description: >
+      A decided question has one supported read, and a caller may not re-derive it
+      from the raw fields. A survey that read the wrong key on the close preview
+      reported thirteen blocked work orders as closable, twice, because a wrong key
+      returns None and None is falsy. Also refuses a hand-spelled task-status
+      vocabulary: the stored values are not the ones people guess.
+    command: [py, -m, core.gates.single_read_path]
+    fail_hint: >
+      Call core.work_orders.close.closability() for close-readiness, or import
+      core.work_orders.task_status for the status vocabulary. If the file legitimately
+      produces the fields, add it to that contract's owners with a reason.
+
+  - id: normative-baseline
+    tier: blocking
+    description: >
+      The substrate's shouted normative statements may only decrease. A newly
+      shouted rule has to be classified in canonical/rules.yml with a runnable
+      check, converted to an eval under tests/evals/ if it instructs a model rather
+      than constrains the code, generated from what it describes, or deleted. A
+      decrease fails too: a ceiling left above reality drifts upward silently and
+      stops meaning anything, which is how the pile grew the first time. (This
+      description deliberately avoids quoting the shouted vocabulary -- doing so
+      raised the count by three and the gate caught it, which is the gate working.)
+    command: [py, -m, core.gates.normative_baseline]
+    fail_hint: >
+      Classify the new statement in canonical/rules.yml, or delete it. If the change
+      genuinely earns a higher ceiling, run `py -m core.gates.normative_baseline
+      --update` in the SAME change set as the rule that earns it.
+
+  - id: fail-open-probe
+    tier: blocking
+    description: >
+      Inside a function whose own handler returns a permissive constant, every
+      database call must carry its own handler. Otherwise an optional probe that
+      cannot run answers the whole question: authority_write_since reported "an
+      authority write happened" for every work order on the machine when one of
+      its five probes hit a column an older schema lacked, silently disabling
+      stop enforcement while claiming success.
+    command: [py, -m, core.gates.fail_open_probe]
+    fail_hint: >
+      Wrap the named database call in its own try/except so a probe that cannot
+      run contributes nothing instead of answering for its siblings.
+
+  - id: test-isolation
+    tier: blocking
+    description: >
+      A test may not monkeypatch.setattr an inline fake over a stdlib type's
+      instance method. Such a replacement answers identically for every object in
+      the process and stays installed through teardown, where autouse guards run —
+      the shape that made the spool guard see writes into the operator's real
+      ~/.dream-studio and abort the suite FATAL while the test itself passed.
+    command: [py, -m, core.gates.test_isolation]
+    fail_hint: >
+      Replace the lambda/mock with a named function that delegates to the real
+      implementation for anything but the object under test.
+
+  - id: fixture-schema-parity
+    tier: blocking
+    description: >
+      A test fixture may not give an authority table a column a fresh database
+      does not have. A test asserting on a column production never writes cannot
+      fail for the right reason. Omitting columns stays legal; inventing them does
+      not. The authority is a freshly bootstrapped database, not a parse.
+    command: [py, -m, core.gates.fixture_schema_parity]
+    fail_hint: >
+      Use the real column name, or — if the drift IS the subject under test —
+      declare `# fixture-schema-parity: allow <table>.<column> -- <reason>` with a
+      reason of at least 20 characters.
 
   - id: rule4-ingestor-sole-event-writer
     tier: blocking

@@ -162,3 +162,42 @@ Rules for running the loop:
 - **Leaving findings unannotated after fixing (L5)** — after each finding is resolved, add
   `[FIXED: <commit-sha>]` inline in the review report. An unmarked report misleads the next
   session into re-fixing already-resolved issues.
+
+## Two passes the bounded review keeps skipping (operator rule, 2026-09-08)
+
+Claim-verification is bounded and produces clean output. Adversarial input enumeration is
+open-ended. Offered both, a review takes the bounded one — measured across seven reviews in
+one session, every time. These two passes are therefore MANDATORY, not optional depth.
+
+**1. A validator is tested by CALLING it, never by mutating its input.**
+When the subject is a validator, guard, gate, or parser: import it and call it with
+constructed inputs — absent, empty, malformed, duplicated, out-of-order, wrong-typed —
+BEFORE touching the real file. Editing the real input tests the input; it does not test the
+checker. A checker that returns clean on a file you just edited has shown only that it reads
+that file.
+
+This is `compared-nothing-reported-clean` one level up: the review itself compared nothing.
+Measured in one session — a survey read `result["gates"]` where the producer writes
+`gates_pass`/`gate_failures`, got `None`, and reported thirteen blocked work orders as
+CLOSABLE; a query used `completed` where the column holds `complete` and reported every work
+order 0-done; a gate's 400-character DOTALL window named five lines containing no status
+comparison at all. Each was found by RUNNING the checker against constructed input. None was
+findable by reading it.
+
+**2. Scope-to-diff bounds where you hunt. It does not bound what the diff INVALIDATES.**
+Every diff gets one explicit pass asking which surrounding claims it just made false:
+- a docstring or comment describing the behaviour that was replaced
+- a comment quoting a literal the diff removed (which can trip the pin that forbids it)
+- a test whose NAME no longer matches what it asserts
+- a count, measurement, or figure quoted in a header or module docstring
+- an acceptance criterion pointing at a node id the diff renamed
+- a `Reviewed`/`Last reviewed` trailer whose claim the diff contradicts
+
+Four instances in one session, all found after the review and none by it: a gate docstring
+still asserting a corrected figure, a docstring claiming a module imports only the standard
+library when it already imported the repo lazily, a comment quoting the literal it had just
+replaced, and a parity test asserting a constant appeared inside each loop — stale the moment
+the policy moved into a shared helper.
+
+Report both passes explicitly. "No adversarial inputs found to fail" is a finding; silence
+is indistinguishable from not having looked, which is the thing being corrected.

@@ -668,6 +668,21 @@ def drain_fanned_out_categories(
     marker, keeps the earliest-created of each group, and cancels the rest with a reason
     naming the survivor. ``apply=False`` reports what it WOULD do and changes nothing —
     a destructive maintenance action should be previewable before it runs.
+
+    BOTH FORMS OF A GAP ARE DRAINED. WO-GAP-FANOUT stopped gaps SPAWNING siblings by
+    ATTACHING them as tasks to the work order that owns them, and the drain kept seeing only
+    the spawned form. Measured 2026-09-08: ``ds work-order drain-gaps`` reported "No gap
+    category has more than one open spawn. Nothing to drain." while 317 pending tasks sat on
+    in-progress work orders and twelve titles appeared on two different work orders each --
+    including one this very session had already satisfied on one of them. The fix moved the
+    pressure from sibling work orders onto tasks and the tooling did not follow, so the
+    warning was real and nothing could act on it.
+
+    Attached duplicates are grouped by the same CATEGORY half of their
+    ``[gap-attached: <reviewed>::<cat>]`` marker, ACROSS work orders: the whole point of the
+    category key is that a generic finding ("add missing adversarial tests") is one piece of
+    work however many reviews surfaced it, and keying on the reviewed work order is what
+    made eleven duplicates carry eleven distinct keys in the first place.
     """
     rows = conn.execute(
         "SELECT work_order_id, title, description, created_at FROM business_work_orders"
@@ -706,6 +721,8 @@ def drain_fanned_out_categories(
             }
         )
 
+    task_plan = _attached_drain_plan(conn, project_id)
+
     if apply:
         now = datetime.now(UTC).isoformat()
         for item in plan:
@@ -719,13 +736,90 @@ def drain_fanned_out_categories(
                         wo_id,
                     ),
                 )
+        for item in task_plan:
+            for task_id in item["cancel"]:
+                conn.execute(
+                    "UPDATE business_tasks SET status = 'cancelled', updated_at = ?,"
+                    " description = COALESCE(description, '') || ? WHERE task_id = ?",
+                    (
+                        now,
+                        _DRAINED_NOTE.format(now=now, category=item["category"], keep=item["keep"]),
+                        task_id,
+                    ),
+                )
 
     return {
         "applied": apply,
         "categories_fanned_out": len(plan),
         "would_cancel" if not apply else "cancelled": sum(len(i["cancel"]) for i in plan),
         "plan": plan,
+        # The attached form is reported SEPARATELY rather than merged into `plan`: the two
+        # cancel different things (a work order versus a task on one), and collapsing them
+        # into one count is how a reader would think a work order had been cancelled when a
+        # task was.
+        "attached_categories_fanned_out": len(task_plan),
+        "attached_would_cancel" if not apply else "attached_cancelled": sum(
+            len(i["cancel"]) for i in task_plan
+        ),
+        "attached_plan": task_plan,
     }
+
+
+def _attached_drain_plan(conn: Any, project_id: str) -> list[dict[str, Any]]:
+    """Duplicate ATTACHED gap tasks, grouped by category across work orders.
+
+    Only OPEN tasks on OPEN work orders: a cancelled or completed duplicate is already
+    drained, and re-cancelling it would inflate the count with work nobody has to do.
+    """
+    marker = "[gap-attached: "
+    try:
+        rows = conn.execute(
+            "SELECT t.task_id, t.work_order_id, t.title, t.description, t.created_at"
+            " FROM business_tasks t"
+            " JOIN business_work_orders w ON w.work_order_id = t.work_order_id"
+            " WHERE w.project_id = ?"
+            "   AND w.status IN ('created', 'in_progress')"
+            "   AND t.status NOT IN ('complete', 'done', 'cancelled', 'deleted')"
+            "   AND instr(t.description, ?) > 0"
+            " ORDER BY t.created_at ASC",
+            (project_id, marker),
+        ).fetchall()
+    except Exception:  # noqa: BLE001 - a maintenance preview must not break on an old schema
+        return []
+
+    groups: dict[str, list[tuple[str, str, str]]] = {}
+    for task_id, wo_id, title, description, _created in rows:
+        text = description or ""
+        start = text.find(marker)
+        if start < 0:
+            continue
+        begin = start + len(marker)
+        end = text.find("]", begin)
+        if end <= begin:
+            continue
+        key = text[begin:end]
+        category = key.split("::", 1)[1] if "::" in key else key
+        groups.setdefault(category, []).append((task_id, wo_id, title or ""))
+
+    plan: list[dict[str, Any]] = []
+    for category, members in sorted(groups.items()):
+        if len(members) < 2:
+            continue
+        # A category duplicated WITHIN one work order is still a duplicate, but a category
+        # appearing once on each of two work orders is the shape that motivated this: the
+        # same generic finding attached twice because two reviews surfaced it.
+        survivor_task, survivor_wo, survivor_title = members[0]
+        plan.append(
+            {
+                "category": category,
+                "keep": survivor_task,
+                "keep_work_order": survivor_wo,
+                "title": survivor_title,
+                "cancel": [task_id for task_id, _wo, _t in members[1:]],
+                "work_orders": sorted({wo for _t, wo, _ti in members}),
+            }
+        )
+    return plan
 
 
 def _insert_gap_work_orders(

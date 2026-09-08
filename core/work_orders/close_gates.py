@@ -11,6 +11,8 @@ extracted verbatim from the original module.
 
 from __future__ import annotations
 
+import re as _re
+
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -439,9 +441,14 @@ def run_gate_check(
             # distinction read_unverified_ledger already makes: say the record is
             # unusable and name the remedy, rather than converting missing
             # information into a verdict against the work.
-            from .close_shared import verdict_evidence
+            from .close_shared import (
+                verdict_evidence,
+                verdict_execution_note,
+                verdict_score_line,
+            )
 
             _summary, _reasons = verdict_evidence(verdict)
+            _scores = verdict_score_line(verdict)
             if not _summary and not _reasons:
                 return False, (
                     "independent_review: UNREVIEWABLE — the stored verdict says passed=False"
@@ -450,8 +457,30 @@ def run_gate_check(
                     " leaves exactly this). Re-run: py -m interfaces.cli.ds work-order"
                     f" verify {work_order_id}"
                 )
+            _score_msg = f" [{_scores}]" if _scores else ""
+            # SHOW AN OBJECTION, not only the narrative. The summary is written by whichever
+            # role has prose, and the roles that FAIL (correctness, quality) record
+            # `violations` with no summary at all -- so the message quoted the passing
+            # role's paragraph and read as "review failed: everything is great".
+            # The first FINDING is often a spawned work order (title/description), which
+            # carries no objection text -- taking findings[0] blindly printed nothing at
+            # all. Take the first entry that actually states a rule or a detail.
+            _first = next(
+                (f for f in _reasons if isinstance(f, dict) and (f.get("detail") or f.get("rule"))),
+                None,
+            )
+            _objection = ""
+            if isinstance(_first, dict):
+                _where = ":".join(str(_first[k]) for k in ("file", "line") if _first.get(k))
+                _detail = str(_first.get("detail") or _first.get("rule") or "").strip()
+                if _detail:
+                    _objection = (
+                        f" First objection{f' ({_where})' if _where else ''}: {_detail[:300]}"
+                    )
             return False, (
-                f"independent_review: review failed — {_summary or 'no summary'}.{gap_msg}"
+                f"independent_review: review failed{_score_msg} — "
+                f"{_summary or 'no summary'}.{_objection}{gap_msg}"
+                f"{verdict_execution_note(verdict)}"
             )
         return True, ""
 
@@ -649,39 +678,107 @@ def _run_ac_gate(
     return reasons
 
 
-def _check_originating_symptom(symptom: str, db_path: Path) -> str | None:
-    """Return failure reason if any SQL-CHECK line in symptom still fails, else None.
+#: A line naming a check kind. Anything else in a symptom is prose.
+_CHECK_LINE = _re.compile(r"^([A-Z][A-Z0-9_]*)-CHECK:\s*(.*)$")
 
-    Mirrors _run_sql_checks() in verify.py but is a direct blocking check:
-    the first failing line returns a reason; if all pass, returns None.
+#: Check kinds this path can actually evaluate.
+_SYMPTOM_KINDS = ("SQL", "TEST")
+
+
+def _check_originating_symptom(
+    symptom: str, db_path: Path, *, project_root: Path | None = None
+) -> str | None:
+    """Return a failure reason if any executable check in symptom still fails, else None.
+
+    A defect work order's symptom is the root-cause check re-run at close: it must FAIL
+    while the defect is present and PASS once fixed, which is what stops the work order
+    being marked done before the fix lands.
+
+    TEST-CHECK IS EVALUATED, not skipped. This function iterated lines and `continue`d past
+    anything not starting with ``SQL-CHECK:``, so the ``TEST-CHECK`` form that CLAUDE.md and
+    the ``--originating-symptom`` help text both advertise was silently skipped and the gate
+    returned None -- a pass. Measured 2026-09-08: five defect work orders registered that
+    day carried no valid symptom between them, because a CODE defect usually has no
+    authority data signature and the only working instrument read the authority. Two carried
+    SQL that could never return a truthy value, making them permanently unclosable; three
+    carried SQL that already passed, so the gate was ceremony.
+
+    AN UNRECOGNISED CHECK KIND FAILS CLOSED, matching ``run_executable_checks``, which
+    already refuses an unknown ``*-CHECK:`` token. This path did the opposite and passed.
+    "Unrecognised" means a well-formed ``<KIND>-CHECK:`` line whose kind this path cannot
+    run -- ``API-CHECK:`` (real elsewhere, not runnable here) or ``FOO-CHECK:``. A
+    MALFORMED token such as ``SQLCHECK:`` or ``SQL_CHECK:`` does not match the line pattern
+    at all and is still read as prose, so it passes: verified by calling the pattern rather
+    than assumed, after an earlier draft of this docstring claimed those two failed closed.
+    Catching a malformed token would need the pattern to guess at intent, and a symptom with
+    no recognisable check is already reported as carrying no executable evidence.
+
+    A symptom with NO check line at all still passes, because a code defect may legitimately
+    have no executable signature and a fabricated check is worse than none. The caller
+    reports that case so a reader can see the close rested on no executable evidence rather
+    than assuming it was checked.
     """
     import sqlite3 as _sqlite3
 
-    try:
-        conn = _sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-    except Exception as exc:
-        return f"originating_symptom: could not open DB for symptom check: {exc}"
+    from core.work_orders.verify_executor import _run_one_test_check
 
+    conn = None
     try:
         for raw_line in symptom.splitlines():
             line = raw_line.strip()
-            if not line.upper().startswith("SQL-CHECK:"):
+            match = _CHECK_LINE.match(line)
+            if match is None:
+                continue  # prose
+            kind, expr = match.group(1).upper(), match.group(2).strip()
+            if kind not in _SYMPTOM_KINDS:
+                return (
+                    f"originating_symptom: unrecognised check kind {kind + '-CHECK'!r} --"
+                    f" this path evaluates {', '.join(k + '-CHECK' for k in _SYMPTOM_KINDS)}."
+                    " Refused rather than skipped: a token nobody evaluates is a symptom"
+                    " that cannot reproduce anything."
+                )
+            if kind == "TEST":
+                result = _run_one_test_check(expr, project_root)
+                if not result.get("passed"):
+                    detail = result.get("error") or result.get("result") or "no detail"
+                    return (
+                        f"originating_symptom: TEST-CHECK still failing — {expr!r}:"
+                        f" {str(detail)[:200]}"
+                    )
                 continue
-            sql = line[len("SQL-CHECK:") :].strip()  # noqa: E203
+            if conn is None:
+                try:
+                    conn = _sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+                except Exception as exc:
+                    return f"originating_symptom: could not open DB for symptom check: {exc}"
             try:
-                row = conn.execute(sql).fetchone()
+                row = conn.execute(expr).fetchone()
                 val = row[0] if row is not None else None
                 if not val:
                     return (
                         f"originating_symptom: SQL-CHECK still failing —"
-                        f" {sql!r} returned {val!r}"
+                        f" {expr!r} returned {val!r}"
                     )
             except Exception as exc:
                 return f"originating_symptom: SQL-CHECK error — {exc}"
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
 
     return None
+
+
+def symptom_has_executable_check(symptom: str) -> bool:
+    """True when the symptom carries a check this path can run.
+
+    Lets a caller say "this close rested on no executable evidence" instead of leaving a
+    prose-only symptom indistinguishable from a satisfied one.
+    """
+    for raw_line in (symptom or "").splitlines():
+        match = _CHECK_LINE.match(raw_line.strip())
+        if match is not None and match.group(1).upper() in _SYMPTOM_KINDS:
+            return True
+    return False
 
 
 def symptom_check_detail(

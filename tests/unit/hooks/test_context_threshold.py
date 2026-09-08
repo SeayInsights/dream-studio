@@ -176,9 +176,10 @@ def test_continuation_prompt_includes_project(handler, monkeypatch):
 
     db = sqlite3.connect(":memory:")
     db.row_factory = sqlite3.Row
-    db.execute("CREATE TABLE business_projects (name TEXT, id TEXT, status TEXT)")
+    db.execute("CREATE TABLE business_projects (name TEXT, project_id TEXT, status TEXT)")
     db.execute(
-        "INSERT INTO business_projects (name, id, status) VALUES ('MyProject', 'proj-123', 'active')"
+        "INSERT INTO business_projects (name, project_id, status)"
+        " VALUES ('MyProject', 'proj-123', 'active')"
     )
     db.execute(
         "CREATE TABLE ds_workflow_runs "
@@ -191,8 +192,18 @@ def test_continuation_prompt_includes_project(handler, monkeypatch):
         "sqlite3.connect",
         lambda path, **kw: db if "studio.db" in str(path) else sqlite3.connect(path, **kw),
     )
-    # Patch Path.exists so the db_path.exists() check passes
-    monkeypatch.setattr(Path, "exists", lambda self: True)
+    # Report the authority db as present WITHOUT answering for every other path. A bare
+    # `lambda self: True` here made every Path in the process claim to exist, including
+    # the ones the autouse spool guard consults during teardown -- the shape that aborted
+    # the whole suite. Enforced by core/gates/test_isolation.py.
+    real_exists = Path.exists
+
+    def _exists_for_authority_db(self_):
+        if "studio.db" in str(self_):
+            return True
+        return real_exists(self_)
+
+    monkeypatch.setattr(Path, "exists", _exists_for_authority_db)
 
     prompt = handler._build_continuation_prompt({"cwd": "/tmp"})
     assert "MyProject" in prompt

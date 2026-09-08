@@ -85,5 +85,9 @@ jobs:
           tests/unit/test_skill_module_paths_resolve.py
           tests/unit/test_ds_update_skill_drift.py
           tests/unit/test_locale_decode_gate.py
+          tests/unit/test_fail_open_probe_gate.py
+          tests/unit/test_test_isolation_gate.py
+          tests/unit/test_fixture_schema_parity_gate.py
+          tests/unit/test_seam_payload_to_projection.py
           tests/integration/test_pr_smoke_impact.py
           -q --tb=short

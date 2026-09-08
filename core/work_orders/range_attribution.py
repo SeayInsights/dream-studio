@@ -63,10 +63,23 @@ class Attribution:
     own: list[str] = field(default_factory=list)
     excluded: dict[str, str] = field(default_factory=dict)  # sha -> owning work order
     note: str = ""
+    #: True when at least one commit in the range is one this work order RECORDED as its
+    #: own. False means the retained commits are merely unclaimed by anyone else, which is
+    #: a much weaker basis and was previously reported in the same words as ownership.
+    own_evidence: bool = True
 
     @property
     def narrowed(self) -> bool:
         return bool(self.excluded)
+
+    @property
+    def unevidenced(self) -> bool:
+        """Narrowed, but with nothing of its own to narrow TO.
+
+        The state that let a grader be handed "commits nobody else claimed" under the
+        heading of "this work order's commits".
+        """
+        return self.narrowed and not self.own_evidence
 
 
 def _commits_in(expr: str, repo_root: Path) -> list[str]:
@@ -302,6 +315,54 @@ def _ownership_index(db_path: Path, exclude: str) -> dict[str, str]:
     return index
 
 
+def _commit_timestamp(sha: str, repo_root: Path) -> int | None:
+    """Committer timestamp as an epoch int, or None when it cannot be read."""
+    try:
+        proc = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            ["git", "show", "-s", "--format=%ct", sha],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    text = (proc.stdout or "").strip()
+    return int(text) if text.isdigit() else None
+
+
+def _partition_by_range_floor(
+    shas: list[str], range_commits: list[str], repo_root: Path
+) -> tuple[list[str], list[str]]:
+    """Split shas into (could-be-in-range, provably-predates-the-range).
+
+    A sha committed before the range's oldest commit cannot have been squashed into it. One
+    whose timestamp cannot be read stays in the first group: unknown is not safe, and
+    reporting it as harmless would be the fail-open direction this module refuses
+    everywhere else.
+    """
+    if not shas:
+        return [], []
+    floors = [t for t in (_commit_timestamp(s, repo_root) for s in range_commits) if t]
+    if not floors:
+        # The range's own timestamps are unreadable, so nothing can be ruled out.
+        return list(shas), []
+    floor = min(floors)
+    could_be_here: list[str] = []
+    predate: list[str] = []
+    for sha in shas:
+        stamp = _commit_timestamp(sha, repo_root)
+        if stamp is not None and stamp < floor:
+            predate.append(sha)
+        else:
+            could_be_here.append(sha)
+    return could_be_here, predate
+
+
 def _squash_aware_index(
     index: dict[str, str], in_range: set[str], repo_root: Path
 ) -> tuple[dict[str, str], list[str]]:
@@ -389,14 +450,30 @@ def attribute_range(
     owners, _unmappable_neighbours = _squash_aware_index(
         _ownership_index(db_path, work_order_id), in_range, repo_root
     )
-    if _unmappable_neighbours:
-        # Say it on the neighbour side too. "No neighbour claims anything here" and "a
-        # neighbour's claim could not be located" are different facts, and only one of
-        # them means the range is clean.
+    # ONLY THE ONES THAT COULD BE HERE. An unmappable sha's content might sit inside the
+    # range under a commit whose message does not name it -- that is why the caveat exists.
+    # But a sha committed BEFORE the range's oldest commit cannot have been squashed into
+    # it, so for those the worry is arithmetic rather than evidence. Measured on the live
+    # repository for origin/main...HEAD: 19 unmappable commits, ALL NINETEEN predating the
+    # range, so the caveat fired on every verify. An alarm that is always on is one a
+    # grader learns to skip, which costs the honest signal it was added for.
+    _could_be_here, _predate = _partition_by_range_floor(
+        _unmappable_neighbours, all_commits, repo_root
+    )
+    if _could_be_here:
+        # "No neighbour claims anything here" and "a neighbour's claim could not be
+        # located" are different facts, and only one of them means the range is clean.
         lost_note += (
-            f" {len(_unmappable_neighbours)} commit(s) recorded by OTHER work orders are "
+            f" {len(_could_be_here)} commit(s) recorded by OTHER work orders are "
             f"unreachable and unmappable, so their claims could not be applied to this "
             f"range — a neighbour's work may be graded here."
+        )
+    if _predate:
+        # Stated, but not as an alarm: the fact is established rather than assumed, which
+        # is the distinction the whole module turns on.
+        lost_note += (
+            f" {len(_predate)} further unmappable neighbour commit(s) predate this range's"
+            f" oldest commit and so cannot be inside it."
         )
     # This work order's own record wins: a commit both sides claim is one worked on for
     # this work order too, and dropping it would hide delivered work.
@@ -405,7 +482,27 @@ def attribute_range(
     own = [sha for sha in all_commits if sha not in excluded]
     unattributed = [sha for sha in own if sha not in mine]
 
-    if excluded:
+    # DOES ANY RETAINED COMMIT CARRY THIS WORK ORDER'S OWN CLAIM? Exclusion is one-sided:
+    # a commit goes only when a NEIGHBOUR recorded it, and `mine` is what defends against
+    # that. With an empty or out-of-range ownership record there is nothing to defend with,
+    # so the retained set is "whatever nobody else claimed" -- reported until now in the
+    # same words as ownership. Ownership is written at task-done, so a work order whose
+    # commits landed before its first task-done is exactly this case.
+    own_evidence = bool(mine & in_range)
+
+    if excluded and not own_evidence:
+        others = sorted({wo[:8] for wo in excluded.values()})
+        note = (
+            f"Range NOT narrowed to this work order's own commits -- it has NO recorded "
+            f"commit inside {expr}, so nothing here carries its claim. What remains is the "
+            f"{len(own)} of {len(all_commits)} commit(s) that no OTHER work order claimed, "
+            f"after removing {len(excluded)} recorded by {len(others)} other work order(s) "
+            f"({', '.join(others)}). That is a weaker basis than ownership and must not be "
+            f"read as one: grading it can report a miss for work that is present but was "
+            f"attributed elsewhere. Ownership is recorded at each task-done, so a range "
+            f"whose commits predate this work order's first task-done has none."
+        ) + lost_note
+    elif excluded:
         others = sorted({wo[:8] for wo in excluded.values()})
         note = (
             f"Range narrowed to this work order's commits: {len(own)} of {len(all_commits)} "
@@ -426,7 +523,7 @@ def attribute_range(
             f"ownership is recorded going forward at each task-done; a range predating "
             f"that carries its full width, which may include a branch neighbour's work."
         ) + lost_note
-    return Attribution(own=own, excluded=excluded, note=note)
+    return Attribution(own=own, excluded=excluded, note=note, own_evidence=own_evidence)
 
 
 def attributed_diff(

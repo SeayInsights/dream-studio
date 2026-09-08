@@ -23,6 +23,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from core.work_orders.task_status import is_done
+
 # Add hooks to path for database access
 sys.path.insert(0, str(Path(__file__).parent.parent / "hooks"))
 
@@ -203,7 +205,7 @@ def print_full_briefing(data: dict) -> None:
     # Progress
     tasks = data.get("tasks", [])
     if tasks:
-        done = sum(1 for t in tasks if t.get("status") in ("done", "complete", "completed"))
+        done = sum(1 for t in tasks if is_done(t.get("status")))
         total = len(tasks)
         progress = f"{done} of {total} tasks complete"
     else:

@@ -1,0 +1,11 @@
+{
+  "_comment": "Ceiling on SHOUTED normative statements per lane, enforced by core/gates/normative_baseline.py. It may only go DOWN. A new statement must be classified in canonical/rules.yml, converted to an eval, generated from what it describes, or deleted. Regenerate with `py -m core.gates.normative_baseline --update` in the same change set.",
+  "lanes": {
+    "canonical/skills": 69,
+    "canonical/workflows": 24,
+    "code": 64,
+    "docs": 28,
+    "root instructions": 2
+  },
+  "total": 187
+}

@@ -133,24 +133,18 @@ def test_the_create_door_requires_a_boundary() -> None:
 
 
 def test_the_projection_materializes_the_description() -> None:
-    """The description must survive the event round trip, boundary and all.
+    """Superseded by a behavioural check; kept only as a pointer.
 
-    The emitter left description out of the payload and the projection never read it, so
-    everything an author typed was accepted and discarded -- and with it any chance of
-    declaring a boundary. Asserted on the projection's own SQL and row mapping, which is
-    where the field was missing.
+    This used to assert that certain SOURCE TEXT appeared in the projection and the
+    emitter. That proves a string is present, not that a value survives -- it would pass
+    against a projection whose INSERT dropped the column, and it said nothing about the
+    next field someone added. The real round trip now runs the emitter's payload key set
+    through the real projection into a real bootstrapped schema, in
+    tests/unit/test_seam_payload_to_projection.py, and fails when ANY payload key goes
+    unaccounted for rather than just this one.
     """
-    source = (REPO_ROOT / "core" / "projections" / "work_order_projection.py").read_text(
-        encoding="utf-8"
+    seam = REPO_ROOT / "tests" / "unit" / "test_seam_payload_to_projection.py"
+    assert seam.is_file(), (
+        "the behavioural seam contract is gone; description persistence is unverified "
+        "again -- restore tests/unit/test_seam_payload_to_projection.py"
     )
-    assert (
-        '"description": payload.get("description")' in source
-    ), "the created handler must read description from the payload"
-    assert (
-        "originating_symptom, description)" in source
-    ), "the INSERT column list must include description"
-
-    emitter = (REPO_ROOT / "core" / "work_orders" / "mutations.py").read_text(encoding="utf-8")
-    assert (
-        '_payload["description"] = compose_module_boundary(' in emitter
-    ), "the emitter must carry the description with the boundary composed into it"

@@ -46,7 +46,7 @@ def _load(name: str, path: Path):
 def enforcement(tmp_path, monkeypatch):
     """The enforcement library pointed at a throwaway authority.
 
-    Never the operator's real ~/.dream-studio: these tests write task rows, and a test
+    Never the operator's real state directory. These tests write task rows, and a test
     that mutates live authority state is a worse defect than the one under test.
     """
     module = _load("enf_under_test", ENFORCEMENT_PATH)
@@ -157,7 +157,13 @@ def test_the_emitted_violation_never_prescribes_an_impossible_command(enforcemen
         enforcement, "wo-5", "complete", "2020-01-01T00:00:00+00:00", "2020-01-01T00:00:00+00:00"
     )
 
-    session = {"started_at": FUTURE, "source_edits": [{"work_order_id": "wo-5"}]}
+    session = {
+        "started_at": FUTURE,
+        # attribution must be a proven boundary MATCH: only that blocks now. An
+        # entry with no attribution is an edit an older installed hook recorded,
+        # and absent evidence cannot support a demand.
+        "source_edits": [{"work_order_id": "wo-5", "attribution": "module_boundary"}],
+    }
     violations = hook._authority_violations(enforcement, session)
 
     assert len(violations) == 1, f"expected exactly one violation, got {violations}"
@@ -184,7 +190,10 @@ def test_the_ordinary_message_still_prescribes_task_done(enforcement) -> None:
         enforcement, "wo-6", "pending", "2020-01-01T00:00:00+00:00", "2020-01-01T00:00:00+00:00"
     )
 
-    session = {"started_at": FUTURE, "source_edits": [{"work_order_id": "wo-6"}]}
+    session = {
+        "started_at": FUTURE,
+        "source_edits": [{"work_order_id": "wo-6", "attribution": "module_boundary"}],
+    }
     message = hook._authority_violations(enforcement, session)[0]
 
     assert "task-done" in message, f"a markable task must still be offered: {message}"
@@ -261,7 +270,10 @@ def test_an_unreadable_authority_keeps_the_ordinary_guidance(enforcement, monkey
     hook = _load("stop_hook_under_test", HOOK_PATH)
     monkeypatch.setattr(enforcement, "incomplete_task_count", lambda *_a, **_k: None)
 
-    session = {"started_at": FUTURE, "source_edits": [{"work_order_id": "wo-unknown"}]}
+    session = {
+        "started_at": FUTURE,
+        "source_edits": [{"work_order_id": "wo-unknown", "attribution": "module_boundary"}],
+    }
     message = hook._authority_violations(enforcement, session)[0]
 
     assert "task-done" in message, (
@@ -485,3 +497,33 @@ def test_next_work_order_returns_none_when_everything_is_blocked(enforcement) ->
     _add_dep(db, "wo-blocked", "wo-open-dep")
 
     assert enforcement.next_created_work_order("p-1") is None
+
+
+def test_an_optional_probe_cannot_answer_the_whole_question(enforcement) -> None:
+    """A missing column must not report "a write happened" for every work order.
+
+    The task-creation probe selects ``created_at`` from business_tasks. Where that column
+    is absent -- an older schema, or any narrower fixture -- the query raises
+    sqlite3.Error, and ``authority_write_since``'s OUTER handler turns that into
+    ``return True`` to fail open. The result is not a skipped signal: it is a blanket
+    "an authority write was recorded" for every work order on that machine, so stop
+    enforcement is silently OFF while reporting success.
+
+    Found by the full local suite, invisible to every targeted run beforehand.
+    """
+    import sqlite3 as _sqlite3
+
+    conn = _sqlite3.connect(enforcement.AUTHORITY_DB)
+    conn.execute("DROP TABLE business_tasks")
+    # An older business_tasks: no created_at, which is what the probe reads.
+    conn.execute(
+        "CREATE TABLE business_tasks (task_id TEXT, work_order_id TEXT, status TEXT,"
+        " updated_at TEXT)"
+    )
+    conn.commit()
+    conn.close()
+
+    assert enforcement.authority_write_since("wo-any", "2026-01-01T00:00:00+00:00") is False, (
+        "a probe that cannot run reported that a write had happened; an optional signal "
+        "must never be able to answer the whole question"
+    )

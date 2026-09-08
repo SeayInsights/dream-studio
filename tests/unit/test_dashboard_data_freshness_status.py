@@ -17,6 +17,7 @@ def _drift_db(tmp_path: Path) -> Path:
         conn.execute(
             "INSERT INTO _schema_version(version, applied_at) VALUES(38, '2026-05-14T00:00:00Z')"
         )
+        # fixture-schema-parity: allow raw_sessions.created_at -- this fixture pins _schema_version at 38 on purpose to build a pre-migration legacy shape; the drifted column IS the subject under test, so matching the current schema would delete the scenario.
         conn.execute("CREATE TABLE raw_sessions(session_id TEXT PRIMARY KEY, created_at TEXT)")
         conn.execute(
             "CREATE TABLE raw_token_usage("

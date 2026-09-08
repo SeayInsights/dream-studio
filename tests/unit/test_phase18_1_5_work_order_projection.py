@@ -58,6 +58,10 @@ CREATE TABLE IF NOT EXISTS business_work_orders (
     milestone_id TEXT,
     title TEXT,
     work_order_type TEXT,
+    -- Present in the lean baseline (142_lean_baseline.sql) and omitted here, so a
+    -- projection that writes it failed only against this fixture. A fixture that is a
+    -- SUBSET of the real schema reports a defect the product does not have.
+    description TEXT,
     status TEXT NOT NULL DEFAULT 'created',
     created_at TEXT,
     started_at TEXT,

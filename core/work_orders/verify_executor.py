@@ -144,6 +144,17 @@ def _run_one_test_check(expr: str, project_root: Path | None = None) -> dict[str
         # handling below). Present on every result so a consumer never has to guess
         # whether execution happened.
         "executed": False,
+        # WHO ran it. WO-SEPARATE-TEST-RUNNER shipped the rule "tests and evals are always
+        # run by a different agent than the one that authored them" as skill text and made
+        # every result record WHETHER it ran -- but nothing recorded WHO, so an
+        # author-run suite was indistinguishable from an independent runner's report in
+        # every stored artifact, and the rule sat in canonical/rules.yml as pure guidance
+        # on the stated grounds that no check could observe it. A check CAN observe it once
+        # the identity is written down; this is that half. The comparison against the
+        # AUTHOR's identity is still owed (task events carry session_id=None), which is
+        # why the rule is registered as partially enforced with the residual named rather
+        # than as satisfied.
+        "runner": _runner_identity(),
     }
 
     # cwd = the WO's target repo (falls back to the current process dir = DS repo).
@@ -391,6 +402,27 @@ def _execution_context(kind: str, project_root: Path | None, db_path: Path) -> s
     return "unknown -- the check kind was not recognised, so nothing was executed"
 
 
+def _runner_identity() -> dict[str, str]:
+    """Who is running this check, as far as the process can honestly say.
+
+    ``session`` is the adapter session that invoked the run -- the field that makes an
+    author-run suite distinguishable from an independent runner's. It is "unknown" when the
+    environment does not carry one (a bare pytest run, CI), and "unknown" is recorded rather
+    than omitted: an absent field reads as "nobody asked", while an explicit unknown reads
+    as "asked, and the answer was not available", which is the distinction every other
+    honesty fix in this module turns on.
+    """
+    import os
+    import socket
+
+    return {
+        "session": os.environ.get("CLAUDE_SESSION_ID") or "unknown",
+        "adapter": os.environ.get("DS_ADAPTER_ID") or "unknown",
+        "host": socket.gethostname() or "unknown",
+        "pid": str(os.getpid()),
+    }
+
+
 def run_executable_checks(
     tasks: list[dict[str, Any]],
     db_path: Path,
@@ -507,9 +539,26 @@ def record_test_execution(
                 registered += 1
 
     executed = passed = 0
+    unexecuted: list[dict[str, str]] = []
     for task_checks in (ac_results or {}).values():
         for check in task_checks:
-            if check.get("kind") != "TEST-CHECK" or not check.get("executed"):
+            if check.get("kind") != "TEST-CHECK":
+                continue
+            if not check.get("executed"):
+                # WHICH checks did not run, and WHY. `basis` said that some had not; it
+                # could not say which, so a reader could not tell an approval denied by a
+                # sandbox from a runner that was never invoked. The per-check
+                # `not_executed_reason` already existed and nothing aggregated it: a
+                # grader on 2026-09-07 ended its verdict "the pytest run was denied
+                # approval, so pass/fail for the TEST-CHECK criteria is unverified", and
+                # that fact lived only in its trailing prose while the verdict rendered
+                # as an ordinary graded one.
+                unexecuted.append(
+                    {
+                        "expr": str(check.get("expr") or "")[:200],
+                        "reason": str(check.get("not_executed_reason") or "no reason recorded"),
+                    }
+                )
                 continue
             executed += 1
             if check.get("passed"):
@@ -521,4 +570,10 @@ def record_test_execution(
         basis = "executed"
     else:
         basis = "not_run_at_verify"
-    return {"registered": registered, "executed": executed, "passed": passed, "basis": basis}
+    return {
+        "registered": registered,
+        "executed": executed,
+        "passed": passed,
+        "basis": basis,
+        "unexecuted": unexecuted,
+    }

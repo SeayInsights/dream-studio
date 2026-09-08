@@ -22,6 +22,7 @@ from core.event_store.studio_db import _connect
 from .close_continuation import _apply_report_only_continuation
 from .close_gates import (
     _check_originating_symptom,
+    symptom_has_executable_check,
     _check_tasks_done,
     _evaluate_gates,
     _run_ac_gate,
@@ -159,6 +160,92 @@ def _ledger_verdict_mismatch(
         )
     except Exception:
         return ""  # a decoration must never break the note it decorates
+
+
+def waive_unreviewable_review(
+    failures: list[str], *, work_order_id: str, skip_verify: bool
+) -> tuple[list[str], list[str]]:
+    """Apply --skip-verify to gate failures. Returns (remaining, waived).
+
+    UNREVIEWABLE ONLY, and the distinction is the whole point. An unreviewable verdict is
+    not a judgment -- it is the provider reporting it could not produce one -- so waiving it
+    withholds certification without asserting the work is sound. A verdict that FAILED on
+    substance is a finding about the work; waiving that would be the false-done the gate
+    exists to prevent, and it still requires --force, a louder and separately recorded act.
+
+    Matching is case-INSENSITIVE: close_gates emits "unreviewable" in the grader-failure
+    path and "UNREVIEWABLE" in the incomplete-record path. A case-sensitive predicate waived
+    the first and left the second reaching for --force, which is the defect in a new place.
+
+    A separate function rather than an inline block because inline, the only way to test it
+    was to copy the predicate into the test -- and a test of its own copy proves nothing
+    about the branch that ships.
+    """
+    if not skip_verify or not failures:
+        return failures, []
+    waived = [
+        f
+        for f in failures
+        if str(f).startswith("independent_review") and "unreviewable" in str(f).lower()
+    ]
+    if not waived:
+        return failures, []
+    remaining = [f for f in failures if f not in waived]
+    return remaining, waived
+
+
+def closability(
+    *,
+    work_order_id: str,
+    source_root: Path,
+    dream_studio_home: Path | None = None,
+    planning_root: Path | None = None,
+) -> tuple[bool, list[str]]:
+    """Whether this work order would close, and why not. THE supported read.
+
+    Returns ``(can_close, reasons)``. ``reasons`` is empty exactly when ``can_close``.
+
+    WHY THIS EXISTS RATHER THAN LETTING CALLERS READ THE DICT. Every surface that wanted a
+    yes/no answer re-derived it from ``check_close_gates``'s dict, and a caller that mis-keys
+    that dict gets ``None`` -- which is falsy, so a wrong key reads as "no failures". That
+    happened repeatedly: a survey looked for ``result["gates"]`` (the real keys are
+    ``gates_pass`` and ``gate_failures``), found nothing to inspect, and reported thirteen
+    work orders CLOSABLE when every one of them was blocked on ``independent_review``. The
+    operator was told work could be closed, twice, and it could not.
+
+    The dict is still there and still correct -- the shape was documented accurately the
+    whole time. The defect is that answering a yes/no question through a dict lookup makes
+    the permissive answer the DEFAULT for any mistake. A tuple cannot be mis-keyed, and an
+    unpacking error is immediate and loud rather than silently optimistic.
+
+    A work order that cannot be read at all is NOT closable, and says so: "not found" is a
+    refusal to answer, never a pass.
+    """
+    result = check_close_gates(
+        work_order_id=work_order_id,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+        planning_root=planning_root,
+    )
+    if not result.get("ok"):
+        return False, [str(result.get("error") or "closability could not be determined")]
+    failures = [str(f) for f in (result.get("gate_failures") or [])]
+    passed = bool(result.get("gates_pass"))
+    if passed and failures:
+        # The two fields disagree. Report NOT closable: a preview that contradicts itself is
+        # not evidence of a pass, and the whole point of this function is that ambiguity
+        # never resolves to yes.
+        return False, [
+            "gates_pass=True while gate_failures is non-empty -- the preview contradicts"
+            " itself; treating as NOT closable",
+            *failures,
+        ]
+    if not passed and not failures:
+        return False, [
+            "gates_pass=False with no stated failure -- the preview refused without a"
+            " reason; treating as NOT closable"
+        ]
+    return passed, failures
 
 
 def close_work_order(
@@ -369,6 +456,34 @@ def close_work_order(
             db_path=db_path,
         )
 
+        # --skip-verify HAS TO REACH THE POST-GATE PATH TOO. It guarded only the
+        # default-on review below, so for every work order type whose declared post_gate
+        # IS independent_review (infrastructure among them) the flag was inert -- and that
+        # is the population an operator reaches for it with. Measured 2026-09-08: four
+        # work orders whose graders had all returned "You've hit your session limit"
+        # refused --skip-verify and closed only under --force, which bypasses every gate
+        # at once instead of the one that could not run.
+        #
+        # UNREVIEWABLE ONLY. A verdict that FAILED on substance is a finding about the
+        # work, and waiving it here would be the false-done this gate exists to prevent;
+        # that still requires --force, which is a louder and separately recorded act. An
+        # unreviewable verdict is not a judgment at all -- it is the provider reporting it
+        # could not produce one -- so skipping it withholds certification without
+        # asserting the work is wrong.
+        gate_failures, _waived = waive_unreviewable_review(
+            gate_failures, work_order_id=work_order_id, skip_verify=skip_verify
+        )
+        if _waived:
+            from core.gates.bypass_event import record_gate_bypass
+
+            for _reason in _waived:
+                record_gate_bypass(
+                    "independent_review",
+                    f"skip_verify: close of {work_order_id} waived an UNREVIEWABLE"
+                    f" verdict (no judgment was produced) -- {str(_reason)[:300]}",
+                    extra={"work_order_id": work_order_id, "waived": "unreviewable"},
+                )
+
         # WO-GRADER-ADVERSARIAL: the independent_review gate applies to every
         # non-exempt WO type, not only those whose type post-gate names it —
         # previously api_endpoint/ui/saas/pipeline WOs closed with zero review.
@@ -443,6 +558,19 @@ def close_work_order(
             _sym_failure = _check_originating_symptom(_orig_symptom, db_path)
             if _sym_failure:
                 gate_failures.append(_sym_failure)
+            elif not symptom_has_executable_check(_orig_symptom):
+                # A SATISFIED SYMPTOM AND AN UNCHECKED ONE MUST NOT LOOK ALIKE. A defect
+                # work order may legitimately carry no executable symptom -- a code defect
+                # often has no authority data signature, and a fabricated check is worse
+                # than none: two work orders were made permanently unclosable by SQL that
+                # could never return a truthy value. So prose passes, but silently passing
+                # would mean "the symptom passed" reads as both "the root cause is fixed"
+                # and "nobody checked", which is the ambiguity this whole registry exists
+                # to end. Recorded on the result rather than blocking.
+                _bookkeeping_errors["symptom_not_executable"] = (
+                    "the originating symptom carries no SQL-CHECK or TEST-CHECK, so this"
+                    " close rested on no executable root-cause evidence"
+                )
             try:
                 from .close_gates import symptom_check_detail
                 from .verify_executor import resolve_project_root as _rpr

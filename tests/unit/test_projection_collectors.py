@@ -27,8 +27,7 @@ def test_db(tmp_path):
             project_id TEXT,
             started_at TEXT NOT NULL,
             ended_at TEXT,
-            outcome TEXT,
-            exit_reason TEXT
+            outcome TEXT
         )
     """)
 
@@ -41,7 +40,6 @@ def test_db(tmp_path):
             (now - timedelta(days=1)).isoformat(),
             (now - timedelta(days=1, hours=-1)).isoformat(),
             "success",
-            None,
         ),
         (
             "session-2",
@@ -49,7 +47,6 @@ def test_db(tmp_path):
             (now - timedelta(days=2)).isoformat(),
             (now - timedelta(days=2, hours=-2)).isoformat(),
             "success",
-            None,
         ),
         (
             "session-3",
@@ -57,7 +54,6 @@ def test_db(tmp_path):
             (now - timedelta(days=3)).isoformat(),
             (now - timedelta(days=3, hours=-1)).isoformat(),
             "failed",
-            None,
         ),
         (
             "session-4",
@@ -65,7 +61,6 @@ def test_db(tmp_path):
             (now - timedelta(days=5)).isoformat(),
             (now - timedelta(days=5, hours=-1.5)).isoformat(),
             "success",
-            None,
         ),
         (
             "session-5",
@@ -73,14 +68,13 @@ def test_db(tmp_path):
             (now - timedelta(days=100)).isoformat(),
             (now - timedelta(days=100, hours=-1)).isoformat(),
             "success",
-            None,
         ),  # Outside 90-day window
     ]
 
     cursor.executemany(
         """
-        INSERT INTO raw_sessions (session_id, project_id, started_at, ended_at, outcome, exit_reason)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO raw_sessions (session_id, project_id, started_at, ended_at, outcome)
+        VALUES (?, ?, ?, ?, ?)
     """,
         test_data,
     )

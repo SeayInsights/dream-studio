@@ -19,7 +19,7 @@ believe the WO is done but close reports a `tasks_done` failure, mark the remain
 
 ## What to do
 
-1. **Preview gates first.** Call `check_close_gates(work_order_id=<wo>, source_root=..., dream_studio_home=..., planning_root=...)`. The returned dict tells you whether the WO would close cleanly without actually mutating anything.
+1. **Preview gates first.** Call `closability(work_order_id=<wo>, source_root=..., dream_studio_home=..., planning_root=...)` from `core.work_orders.close`. It returns `(can_close, reasons)` — `reasons` is empty exactly when `can_close`. Do NOT re-derive the answer from `check_close_gates`'s dict: a mis-keyed lookup returns `None`, `None` is falsy, and that reads as "no failures". A survey that did this reported thirteen blocked work orders as closable. `check_close_gates` remains available for the detail (which gate, which reason); `closability` is the yes/no.
 
 2. **If `gates_pass is True`:** call `close_work_order(work_order_id=<wo>, source_root=..., dream_studio_home=..., planning_root=...)` directly — no confirmation on the normal path. Surface the result dict (see contract below).
 
