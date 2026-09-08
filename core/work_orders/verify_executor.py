@@ -539,9 +539,26 @@ def record_test_execution(
                 registered += 1
 
     executed = passed = 0
+    unexecuted: list[dict[str, str]] = []
     for task_checks in (ac_results or {}).values():
         for check in task_checks:
-            if check.get("kind") != "TEST-CHECK" or not check.get("executed"):
+            if check.get("kind") != "TEST-CHECK":
+                continue
+            if not check.get("executed"):
+                # WHICH checks did not run, and WHY. `basis` said that some had not; it
+                # could not say which, so a reader could not tell an approval denied by a
+                # sandbox from a runner that was never invoked. The per-check
+                # `not_executed_reason` already existed and nothing aggregated it: a
+                # grader on 2026-09-07 ended its verdict "the pytest run was denied
+                # approval, so pass/fail for the TEST-CHECK criteria is unverified", and
+                # that fact lived only in its trailing prose while the verdict rendered
+                # as an ordinary graded one.
+                unexecuted.append(
+                    {
+                        "expr": str(check.get("expr") or "")[:200],
+                        "reason": str(check.get("not_executed_reason") or "no reason recorded"),
+                    }
+                )
                 continue
             executed += 1
             if check.get("passed"):
@@ -553,4 +570,10 @@ def record_test_execution(
         basis = "executed"
     else:
         basis = "not_run_at_verify"
-    return {"registered": registered, "executed": executed, "passed": passed, "basis": basis}
+    return {
+        "registered": registered,
+        "executed": executed,
+        "passed": passed,
+        "basis": basis,
+        "unexecuted": unexecuted,
+    }

@@ -90,6 +90,7 @@ gates:
       tests/unit/test_originating_symptom_is_executable.py,
       tests/unit/test_milestone_status_vocabulary.py,
       tests/unit/test_update_clears_its_own_drift.py,
+      tests/unit/test_unexecuted_checks_are_declared.py,
       -q]
     fail_hint: >
       A schema/contract pin drifted — update the pin's expected set in the SAME

@@ -43,6 +43,40 @@ def _artifact_text(work_order_id: str, wo_dir: Path, kind: str, db_path: Path | 
 _VERDICT_ROLES = ("completion", "correctness", "quality", "falsification")
 
 
+def verdict_execution_note(verdict: dict[str, Any]) -> str:
+    """A sentence saying the verdict's TEST-CHECKs did not run, or "".
+
+    A verdict whose checks never executed rendered as an ordinary graded verdict. A grader
+    on 2026-09-07 ended with "the pytest run was denied approval, so pass/fail for the
+    TEST-CHECK criteria is unverified" -- true, buried in trailing prose, and invisible to
+    every reader downstream. The AC gate's whole purpose is that a criterion is EXECUTED
+    rather than asserted, so an unexecuted TEST-CHECK is the AC-rot defect wearing a
+    verdict, and it belongs in the same sentence as the verdict itself.
+
+    Says nothing when the work order registers no TEST-CHECK at all: no verdict on it could
+    rest on execution, so there is nothing withheld to report.
+    """
+    execution = verdict.get("test_execution")
+    if not isinstance(execution, dict):
+        return ""
+    registered = execution.get("registered")
+    if not isinstance(registered, int) or registered <= 0:
+        return ""
+    if execution.get("basis") == "executed":
+        return ""
+    unexecuted = execution.get("unexecuted")
+    first = ""
+    if isinstance(unexecuted, list) and unexecuted and isinstance(unexecuted[0], dict):
+        reason = str(unexecuted[0].get("reason") or "").strip()
+        if reason:
+            first = f" First: {reason[:160]}"
+    return (
+        f" CHECKS NOT EXECUTED: {registered} TEST-CHECK(s) are registered and"
+        f" {execution.get('executed', 0)} ran, so this verdict rests on reading rather than"
+        f" execution and its pass/fail for those criteria is unverified.{first}"
+    )
+
+
 def verdict_score_line(verdict: dict[str, Any]) -> str:
     """`quality 0.62, correctness 0.79, completion 1.00 (composite 0.86)`, or "".
 

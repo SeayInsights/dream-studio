@@ -460,3 +460,25 @@ rules:
       the prescribed fix, succeeds, and is told again to run it learns to ignore the signal.
       The cached hash remains the fallback when no installed file can be read, because
       reporting clean on no evidence is the fail-open shape.
+
+  - id: a-verdict-declares-what-it-did-not-execute
+    statement: >
+      A verdict whose TEST-CHECKs did not run must say so where the verdict is read, naming
+      which checks and why -- never only in trailing prose.
+    source: core/work_orders/verify_executor.py
+    enforced_by:
+      - tests/unit/test_unexecuted_checks_are_declared.py::test_a_verdict_says_when_its_checks_did_not_run
+      - tests/unit/test_unexecuted_checks_are_declared.py::test_an_executed_verdict_says_nothing
+      - tests/unit/test_unexecuted_checks_are_declared.py::test_a_partially_executed_verdict_still_declares_the_gap
+    note: >
+      A grader on 2026-09-07 ended its verdict for WO 0a7abdfe with "the pytest run was
+      denied approval, so pass/fail for the TEST-CHECK criteria is unverified" -- true,
+      buried in trailing prose, and invisible downstream while the verdict rendered as an
+      ordinary graded one. record_test_execution already reported a basis of
+      not_run_at_verify; what it could not say was WHICH checks had not run or WHY, because
+      the per-check not_executed_reason existed and nothing aggregated it, so a sandbox
+      denial and a runner never invoked were indistinguishable. The AC gate's purpose is
+      that a criterion is EXECUTED rather than asserted, so an unexecuted TEST-CHECK is
+      AC-rot wearing a verdict. basis flips to "executed" as soon as anything runs, which
+      is why the unexecuted LIST carries the gap: reporting only the basis would call a
+      partially-run verdict fully backed.

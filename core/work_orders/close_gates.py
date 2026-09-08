@@ -441,7 +441,11 @@ def run_gate_check(
             # distinction read_unverified_ledger already makes: say the record is
             # unusable and name the remedy, rather than converting missing
             # information into a verdict against the work.
-            from .close_shared import verdict_evidence, verdict_score_line
+            from .close_shared import (
+                verdict_evidence,
+                verdict_execution_note,
+                verdict_score_line,
+            )
 
             _summary, _reasons = verdict_evidence(verdict)
             _scores = verdict_score_line(verdict)
@@ -476,6 +480,7 @@ def run_gate_check(
             return False, (
                 f"independent_review: review failed{_score_msg} — "
                 f"{_summary or 'no summary'}.{_objection}{gap_msg}"
+                f"{verdict_execution_note(verdict)}"
             )
         return True, ""
 
