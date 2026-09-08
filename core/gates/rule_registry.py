@@ -159,21 +159,80 @@ def _collectable(node_id: str) -> tuple[bool, str]:
     return True, ""
 
 
+def _collectable_batch(node_ids: list[str]) -> tuple[bool, str]:
+    """True when pytest can collect ALL of these node ids in one run.
+
+    ONE SPAWN, NOT ONE PER ID. Measured 2026-09-08: 64 node ids meant 64 subprocess
+    spawns and 213s for this gate alone, and its own test file -- which runs the gate
+    several times -- took 355s and pushed the blocking pin-tests gate past its 600s
+    timeout. A Windows subprocess spawn costs 3-12s, so the cost was spawn count rather
+    than collection work. The registry grows by ratchet, so a per-id probe gets slower
+    every time a rule is classified: a gate that punishes its own adoption eventually gets
+    switched off, and it would take every rule with it.
+
+    Returns (ok, detail). On failure the caller probes individually to name the offender,
+    because "something in the registry is unrunnable" is not actionable.
+    """
+    if not node_ids:
+        return True, ""
+    try:
+        proc = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            [sys.executable, "-m", "pytest", *node_ids, "--collect-only", "-q"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=_COLLECT_TIMEOUT_SECS,
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"batch collection timed out after {_COLLECT_TIMEOUT_SECS}s"
+    if proc.returncode == 0:
+        return True, ""
+    return False, f"batch collection exited {proc.returncode}"
+
+
 def _enforcement_errors(rules: list[dict]) -> list[str]:
     """Every enforced_by target must resolve to something runnable."""
     errors: list[str] = []
+
+    # Gather the pytest node ids first and collect them in ONE run. Only if that fails is
+    # each probed individually, to name the offender.
+    pytest_targets: list[tuple[str, str]] = []
     for rule in rules:
         rid = str(rule.get("id") or "<unnamed>")
         for raw_target in rule.get("enforced_by") or []:
             target = str(raw_target).strip()
             if "::" in target or target.endswith(".py"):
-                path = REPO_ROOT / target.split("::", 1)[0]
-                if not path.is_file():
-                    errors.append(f"{rid}: enforced_by names a missing file: {target}")
-                    continue
-                ok, why = _collectable(target)
-                if not ok:
-                    errors.append(f"{rid}: enforced_by is not runnable -- {target}: {why}")
+                pytest_targets.append((rid, target))
+
+    present = [(rid, t) for rid, t in pytest_targets if (REPO_ROOT / t.split("::", 1)[0]).is_file()]
+    for rid, target in pytest_targets:
+        if (rid, target) not in present:
+            errors.append(f"{rid}: enforced_by names a missing file: {target}")
+
+    batch_ok, batch_detail = _collectable_batch([t for _rid, t in present])
+    if not batch_ok:
+        for rid, target in present:
+            ok, why = _collectable(target)
+            if not ok:
+                errors.append(f"{rid}: enforced_by is not runnable -- {target}: {why}")
+        if not any("is not runnable" in e for e in errors):
+            # The batch failed and no individual id did: the fault is in the run itself,
+            # not in a rule. Reported rather than swallowed -- a gate that cannot complete
+            # must not report clean.
+            errors.append(
+                f"the registry's checks could not be collected together ({batch_detail})"
+                " and every id collected individually, so the fault is in the collection"
+                " run rather than in any one rule"
+            )
+
+    for rule in rules:
+        rid = str(rule.get("id") or "<unnamed>")
+        for raw_target in rule.get("enforced_by") or []:
+            target = str(raw_target).strip()
+            if "::" in target or target.endswith(".py"):
+                continue
             else:
                 module_path = REPO_ROOT / (target.replace(".", "/") + ".py")
                 if not module_path.is_file():

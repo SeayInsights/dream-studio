@@ -238,3 +238,95 @@ def test_the_shipped_registry_has_no_unenforced_rule() -> None:
     )
     assert result["enforced"] == result["rule_count"]
     assert result["partially_enforced"] >= 2
+
+
+# --------------------------------------------------------------------------------------
+# SPAWN COUNT. The gate probed each enforced_by node id in its own subprocess, so its cost
+# scaled LINEARLY with the registry -- and the registry is designed to grow by ratchet.
+# Measured 2026-09-08: 64 node ids, 64 spawns, 213s for the gate and 355s for this file,
+# which pushed the blocking pin-tests gate past its 600s timeout. A Windows subprocess
+# spawn costs 3-12s, so the cost was spawn count rather than collection work. A gate that
+# punishes its own adoption eventually gets switched off, and it would take every rule
+# with it.
+# --------------------------------------------------------------------------------------
+
+
+def _count_spawns(monkeypatch) -> list[list[str]]:
+    """Record every argv the gate spawns, letting the real call through."""
+    calls: list[list[str]] = []
+    real = rule_registry.subprocess.run
+
+    def _spy(argv, *a, **kw):
+        calls.append(list(argv))
+        return real(argv, *a, **kw)
+
+    monkeypatch.setattr(rule_registry.subprocess, "run", _spy)
+    return calls
+
+
+def test_a_healthy_registry_collects_in_one_spawn(registry, monkeypatch) -> None:
+    """Two rules, four node ids, ONE collect run."""
+    node = "tests/unit/test_rule_registry_gate.py::test_a_classified_and_runnable_rule_passes"
+    other = "tests/unit/test_rule_registry_gate.py::test_an_unclassified_rule_is_refused"
+    _write(
+        registry,
+        "  - id: one\n"
+        "    statement: A rule.\n"
+        "    enforced_by:\n"
+        f"      - {node}\n"
+        f"      - {other}\n"
+        "  - id: two\n"
+        "    statement: Another rule.\n"
+        "    enforced_by:\n"
+        f"      - {node}\n"
+        f"      - {other}\n",
+    )
+    calls = _count_spawns(monkeypatch)
+
+    result = rule_registry.run()
+
+    assert result["status"] == "pass", result["errors"]
+    assert len(calls) == 1, (
+        f"the gate spawned {len(calls)} subprocesses for 4 node ids. Per-id probing makes"
+        " the gate slower every time a rule is classified, which is what timed out the"
+        " blocking pin-tests gate."
+    )
+
+
+def test_a_broken_node_id_is_still_named_individually(registry, monkeypatch) -> None:
+    """The fallback earns its cost: it must say WHICH id is unrunnable.
+
+    "Something in the registry is unrunnable" is not actionable, so when the batch fails
+    the gate pays for per-id probing -- but only then.
+    """
+    good = "tests/unit/test_rule_registry_gate.py::test_a_classified_and_runnable_rule_passes"
+    _write(
+        registry,
+        "  - id: mixed\n"
+        "    statement: A rule with one bad target.\n"
+        "    enforced_by:\n"
+        f"      - {good}\n"
+        "      - tests/unit/test_rule_registry_gate.py::test_no_such_node\n",
+    )
+    calls = _count_spawns(monkeypatch)
+
+    result = rule_registry.run()
+
+    assert result["status"] == "fail"
+    assert any(
+        "test_no_such_node" in e for e in result["errors"]
+    ), f"the offender was not named: {result['errors']}"
+    assert len(calls) > 1, "the fallback did not probe individually, so it cannot name one"
+
+
+def test_a_registry_of_only_gate_modules_spawns_nothing(registry) -> None:
+    """A gate module is validated by import, not by pytest, so it costs no spawn at all."""
+    _write(
+        registry,
+        "  - id: modules_only\n"
+        "    statement: Enforced by a gate module.\n"
+        "    enforced_by:\n"
+        "      - core.gates.rule_registry\n",
+    )
+    result = rule_registry.run()
+    assert result["status"] == "pass", result["errors"]

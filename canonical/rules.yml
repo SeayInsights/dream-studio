@@ -528,3 +528,23 @@ rules:
       origin/main...HEAD, 19 unmappable commits and ALL NINETEEN predating the range's
       oldest commit, so none could have been squashed into it. A sha whose timestamp cannot
       be read stays in the caveat, because unknown is not safe.
+
+  - id: a-gate-does-not-get-slower-as-it-is-adopted
+    statement: >
+      The rule registry validates every enforced_by node id in one collection run, so
+      classifying a rule does not make the gate that checks it slower.
+    source: core/gates/rule_registry.py
+    enforced_by:
+      - tests/unit/test_rule_registry_gate.py::test_a_healthy_registry_collects_in_one_spawn
+      - tests/unit/test_rule_registry_gate.py::test_a_broken_node_id_is_still_named_individually
+    note: >
+      The gate probed each node id in its own subprocess, so its cost scaled linearly with
+      a registry designed to grow by ratchet. Measured 2026-09-08 at 26 rules: 64 node ids,
+      64 spawns, 213s for the gate and 355s for its test file, which pushed the BLOCKING
+      pin-tests gate past its 600s timeout and refused the push. A Windows subprocess spawn
+      costs 3-12s, so the cost was spawn count rather than collection work. Batched: 213s
+      -> 6s, and the gate no longer grows with the registry. The per-id probe survives as
+      the failure path only, because "something in the registry is unrunnable" is not
+      actionable -- it costs 223s and runs only when something is genuinely broken. A gate
+      that punishes its own adoption eventually gets switched off, and it would take every
+      rule with it.
