@@ -32,8 +32,17 @@ from core.work_orders.range_attribution import attribute_range
 
 
 def _git(repo: Path, *args: str) -> str:
+    # encoding/errors are explicit: without them subprocess decodes with the platform
+    # codec, and one unmapped byte raises inside its reader thread -- run() then returns
+    # returncode=0 with stdout=None, handing the caller success plus no output.
     return subprocess.run(
-        ["git", *args], cwd=str(repo), capture_output=True, text=True, check=True
+        ["git", *args],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=True,
     ).stdout.strip()
 
 
