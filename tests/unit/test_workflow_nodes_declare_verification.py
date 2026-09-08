@@ -168,3 +168,72 @@ def test_the_node_id_pattern_tolerates_indentation(indent):
     would silently see no nodes and report every file clean."""
     text = "nodes:" + NL + f"{indent}- id: alpha" + NL + f"{indent}  skill: build" + NL
     assert len(offenders_in_text(text)) == 1
+
+
+# --------------------------------------------------------------------------------------
+# A GATE MANIFEST IS NOT A NODE WORKFLOW. canonical/workflows/pre-push.yaml declares
+# `gates:`, and its entries also begin with `- id:` -- so scanning the whole file made this
+# gate demand a completion_check on every PRE-PUSH GATE, including itself. Those entries
+# carry real executable `command:` lists and are run by a different engine.
+#
+# Caught on a push, not locally: the gate was validated BEFORE pre-push.yaml was edited to
+# register it, so the run that would have failed never happened. Scope-to-diff bounds where
+# to hunt; this is the other half -- what the change invalidated.
+# --------------------------------------------------------------------------------------
+
+
+def test_a_manifest_without_a_nodes_key_is_skipped():
+    gate_manifest = (
+        "name: pre-push" + NL + "gates:" + NL + "  - id: pin-tests" + NL + "    tier: blocking" + NL
+    )
+    assert offenders_in_text(gate_manifest, "pre-push.yaml") == []
+
+
+def test_the_real_gate_manifest_is_skipped():
+    """Pinned against the actual file, because the synthetic case above would pass even if
+    the real manifest's shape differed from my reduction of it."""
+    text = (REPO_ROOT / "canonical" / "workflows" / "pre-push.yaml").read_text(encoding="utf-8")
+    assert "gates:" in text, "pre-push.yaml no longer declares gates; this lock is stale"
+    assert offenders_in_text(text, "pre-push.yaml") == []
+
+
+def test_only_the_nodes_section_is_scanned():
+    """A `- id:` entry under another top-level key must not be read as a node."""
+    text = (
+        "name: t"
+        + NL
+        + "nodes:"
+        + NL
+        + "  - id: alpha"
+        + NL
+        + "    completion_check: py -m core.gates.migration_risk"
+        + NL
+        + "gates:"
+        + NL
+        + "  - id: some-gate"
+        + NL
+        + "    tier: blocking"
+        + NL
+    )
+    assert offenders_in_text(text) == [], "an entry outside the nodes section was judged as a node"
+
+
+def test_a_workflow_with_nodes_is_still_scanned_when_it_also_has_other_keys():
+    """The converse: skipping must key on the ABSENCE of nodes, not on the presence of
+    another section, or one extra key would switch the gate off for a real workflow."""
+    text = (
+        "name: t"
+        + NL
+        + "gates:"
+        + NL
+        + "  - id: some-gate"
+        + NL
+        + "nodes:"
+        + NL
+        + "  - id: alpha"
+        + NL
+        + "    skill: build"
+        + NL
+    )
+    offenders = offenders_in_text(text)
+    assert [o["node"] for o in offenders] == ["alpha"]

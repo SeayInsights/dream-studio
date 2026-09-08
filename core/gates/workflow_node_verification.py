@@ -88,6 +88,35 @@ def changed_workflow_files(base_ref: str | None = None) -> list[str]:
     return sorted(paths)
 
 
+def _nodes_section(text: str) -> str | None:
+    """The text under a top-level ``nodes:`` key, or None when the file declares none.
+
+    A GATE manifest is not a node workflow. canonical/workflows/pre-push.yaml declares
+    `gates:`, and its entries also begin with `- id:` -- so scanning the whole file made
+    this gate demand a completion_check on every PRE-PUSH GATE, including itself. Those
+    entries carry real executable `command:` lists and are run by a different engine
+    entirely.
+
+    Caught on a push, not locally: the gate was validated BEFORE pre-push.yaml was edited to
+    register it, so the run that would have failed never happened. Scope-to-diff bounds
+    where to hunt, and this is the other half of that rule -- what the change invalidated.
+    """
+    lines = text.splitlines()
+    start: int | None = None
+    for index, line in enumerate(lines):
+        if re.match(r"^nodes:\s*$", line):
+            start = index + 1
+            break
+    if start is None:
+        return None
+    end = len(lines)
+    for index in range(start, len(lines)):
+        if re.match(r"^[A-Za-z_]", lines[index]):
+            end = index
+            break
+    return chr(10).join(lines[start:end])
+
+
 def _node_blocks(text: str) -> list[tuple[str, str]]:
     """``(node_id, block_text)`` for each node, split on the list-item boundary.
 
@@ -131,8 +160,12 @@ def offenders_in_text(text: str, label: str = "<text>") -> list[dict]:
     input -- absent, empty, malformed, a reason that is a shrug -- rather than editing a
     real manifest. Mutating a real input tests the input; it does not test the checker."""
     rel = label
+    section = _nodes_section(text)
+    if section is None:
+        # No `nodes:` key: a gate manifest or any other YAML that happens to live here.
+        return []
     offenders: list[dict] = []
-    for node_id, block in _node_blocks(text):
+    for node_id, block in _node_blocks(section):
         # Horizontal whitespace only. `\s*\S` spans the NEWLINE -- so
         # `completion_check:` with an empty value matched the next line's text and an
         # empty check read as present. Found by a constructed-input test, not by reading.
