@@ -120,10 +120,17 @@ rules:
     enforced_by:
       - tests/unit/test_ds_update_skill_drift.py::test_gate_consults_skills_a_skill_edit_is_drift
       - tests/unit/test_ds_update_skill_drift.py::test_a_deleted_installed_file_is_drift
+      - tests/unit/test_ds_update_skill_drift.py::test_a_library_only_edit_is_drift
     note: >
       The version gate consulted hook drift only, so a skill change printed
       already_current and installed nothing -- and the drift check could not see a file
-      that had been deleted, which is the reported symptom itself.
+      that had been deleted, which is the reported symptom itself. The SHARED HOOK LIBRARY
+      was invisible for the same reason one directory over: the index required "meta" in
+      the path and the walk covered runtime/hooks/meta only, so runtime/lib/enforcement.py
+      -- every enforcement decision the hooks make -- was excluded from both. Measured
+      2026-09-07, the user-scope projection of that library was stale AND firing while
+      ds update reported one drifted file, a meta handler that happened to change in the
+      same session; had only the library changed it would have reported none.
 
   - id: no-fabricated-data
     statement: >

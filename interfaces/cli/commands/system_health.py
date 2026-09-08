@@ -330,13 +330,37 @@ def _doctor_status(
     )
 
 
-def _canonical_hook_drift(source_root: Path, manifest: dict) -> list[str]:
-    """Return names of hook meta files whose canonical source has changed since last install.
+#: Source trees whose files the hooks actually execute, and the label each drift is
+#: reported under. The LIB was missing, and it is where every enforcement decision lives.
+_HOOK_SOURCE_TREES = (
+    ("meta", ("runtime", "hooks", "meta")),
+    ("lib", ("runtime", "lib")),
+)
 
-    The manifest records content_hash = hash(canonical_source) at install time.
-    If the canonical source has since been updated (e.g. a bug fix without a version bump),
-    the hashes differ and re-projection is required.  Returns an empty list when everything
-    matches (no reinstall needed).
+
+def _canonical_hook_drift(source_root: Path, manifest: dict) -> list[str]:
+    """Hook files whose canonical source has changed since the last install.
+
+    The manifest records content_hash = hash(canonical_source) at install time. If the
+    canonical source has since been updated (a bug fix without a version bump, say), the
+    hashes differ and re-projection is required. An empty list means compared and clean.
+
+    THE SHARED LIBRARY WAS INVISIBLE HERE. The manifest index filtered entries with
+    ``"hooks" in p and "meta" in p``, and the walk covered ``runtime/hooks/meta/*.py``
+    only -- so ``runtime/lib/enforcement.py``, which holds EVERY enforcement decision the
+    hooks make, was excluded from both. A fix to that library therefore did not reach an
+    existing install: ``ds update`` compared the meta handlers, found them identical, and
+    printed ``already_current``.
+
+    Measured 2026-09-07: the user-scope projection at ``~/.claude/hooks/runtime/lib/
+    enforcement.py`` was stale AND firing -- the operator's live sessions were running an
+    enforcement library without that day's fail-open fix, while ``ds update --dry-run``
+    reported exactly one drifted file (a meta handler that happened to change in the same
+    session). Had only the library changed, it would have reported none. This is the same
+    silence as the skill case in ``_canonical_skill_drift`` below, one directory over.
+
+    Drift is labelled ``meta/<name>`` or ``lib/<name>`` so a report names which tree, since
+    the two are indexed by filename and a bare name cannot say.
     """
     # Index manifest by filename for hook meta files (ignore duplicates — first match wins)
     meta_hashes: dict[str, str] = {}
@@ -344,27 +368,30 @@ def _canonical_hook_drift(source_root: Path, manifest: dict) -> list[str]:
         if entry.get("operation") == "skip":
             continue
         p = entry.get("path", "")
-        # Match installed hook meta handlers in either projection tree
-        if "hooks" in p and "meta" in p and p.endswith(".py") and "__init__" not in p:
+        # Any installed .py under a hooks tree, in either projection: the meta handlers AND
+        # the shared library they import. Requiring "meta" in the path excluded the library.
+        if "hooks" in p and p.endswith(".py") and "__init__" not in p:
             name = Path(p).name
             if name not in meta_hashes:
                 meta_hashes[name] = entry.get("content_hash", "")
 
-    meta_src = source_root / "runtime" / "hooks" / "meta"
-    if not meta_src.is_dir():
-        return []
+    from integrations.manifest import compute_hash as _compute_hash
 
     drift: list[str] = []
-    for handler in sorted(meta_src.glob("*.py")):
-        if handler.name == "__init__.py":
+    for label, parts in _HOOK_SOURCE_TREES:
+        tree = source_root.joinpath(*parts)
+        if not tree.is_dir():
             continue
-        recorded = meta_hashes.get(handler.name, "")
-        if not recorded:
-            continue
-        from integrations.manifest import compute_hash as _compute_hash
-
-        if _compute_hash(handler.read_text(encoding="utf-8")) != recorded:
-            drift.append(handler.name)
+        for handler in sorted(tree.glob("*.py")):
+            if handler.name == "__init__.py":
+                continue
+            recorded = meta_hashes.get(handler.name, "")
+            if not recorded:
+                # Never installed under this name: not drift, and not this check's
+                # business -- _canonical_skill_drift owns never-installed files.
+                continue
+            if _compute_hash(handler.read_text(encoding="utf-8")) != recorded:
+                drift.append(f"{label}/{handler.name}")
     return drift
 
 
