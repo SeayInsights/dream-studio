@@ -129,22 +129,37 @@ rules:
     statement: >
       Never present fabricated data, counts, or results as measured.
     source: CLAUDE.md
-    guidance: true
-    why: >
-      No static check can distinguish a measured number from an invented one; the
-      evidence-backed-output gate checks that a claim CITES something, which is a
-      necessary condition and not a sufficient one. Recorded as guidance so its
-      unenforceability is a stated fact rather than an assumption.
+    enforced_by:
+      - core.gates.evidence_backed_output
+      - tests/unit/test_evidence_backed_output.py::test_an_unbacked_claim_is_flagged
+      - tests/unit/test_evidence_backed_output.py::test_the_real_unbacked_claims_from_this_session_are_caught
+    residual_risk: >
+      The gate proves a claim CITES something checkable -- a command with its output, a
+      test count with its unit, a file.py:line, a commit sha, a run id, a named artifact.
+      It cannot prove the cited thing was actually run, or that the number came from it, so
+      a fabricated figure presented beside a real-looking citation still passes. Closing
+      this needs the cited command re-executed at claim time, the way an
+      originating-symptom SQL check is re-run at close. Filed as PARTIAL rather than
+      guidance because the citation requirement is real enforcement, and calling the whole
+      rule unenforceable understated what the substrate already does.
 
   - id: tests-run-by-a-different-agent
     statement: >
       Tests and evals are always run by a different agent than the one that authored them.
     source: canonical/skills/core/modes/review/SKILL.md
-    guidance: true
-    why: >
-      A process constraint on how work is orchestrated, not a property of the tree. No
-      check inside the repo can observe which agent invoked pytest. Recorded so the gap is
-      visible rather than assumed covered.
+    enforced_by:
+      - tests/unit/test_check_records_its_runner.py::test_every_check_result_carries_a_runner
+      - tests/unit/test_check_records_its_runner.py::test_an_absent_session_is_recorded_as_unknown_not_omitted
+    residual_risk: >
+      Every check result now records WHO ran it (session, adapter, host, pid), so an
+      author-run suite is no longer indistinguishable from an independent runner's report
+      in the stored artifact. Nothing yet COMPARES that runner against the author, because
+      the authority records no author for a task -- mark_task_done emits task.completed
+      with session_id=None. So the substrate can say who ran a check and cannot yet say it
+      was someone else. Closing this needs author identity on authority writes, tracked as
+      WO fb7375d9. The previous claim that no check inside the repo could observe this was
+      wrong in its reason: it could not be observed because the identity was never written
+      down, not because observing it is impossible.
 
   - id: grader-retries-until-one-clean-verdict
     statement: >

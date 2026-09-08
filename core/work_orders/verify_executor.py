@@ -144,6 +144,17 @@ def _run_one_test_check(expr: str, project_root: Path | None = None) -> dict[str
         # handling below). Present on every result so a consumer never has to guess
         # whether execution happened.
         "executed": False,
+        # WHO ran it. WO-SEPARATE-TEST-RUNNER shipped the rule "tests and evals are always
+        # run by a different agent than the one that authored them" as skill text and made
+        # every result record WHETHER it ran -- but nothing recorded WHO, so an
+        # author-run suite was indistinguishable from an independent runner's report in
+        # every stored artifact, and the rule sat in canonical/rules.yml as pure guidance
+        # on the stated grounds that no check could observe it. A check CAN observe it once
+        # the identity is written down; this is that half. The comparison against the
+        # AUTHOR's identity is still owed (task events carry session_id=None), which is
+        # why the rule is registered as partially enforced with the residual named rather
+        # than as satisfied.
+        "runner": _runner_identity(),
     }
 
     # cwd = the WO's target repo (falls back to the current process dir = DS repo).
@@ -389,6 +400,27 @@ def _execution_context(kind: str, project_root: Path | None, db_path: Path) -> s
     if kind == "API-CHECK":
         return "a network endpoint named by the check itself (not a repository root)"
     return "unknown -- the check kind was not recognised, so nothing was executed"
+
+
+def _runner_identity() -> dict[str, str]:
+    """Who is running this check, as far as the process can honestly say.
+
+    ``session`` is the adapter session that invoked the run -- the field that makes an
+    author-run suite distinguishable from an independent runner's. It is "unknown" when the
+    environment does not carry one (a bare pytest run, CI), and "unknown" is recorded rather
+    than omitted: an absent field reads as "nobody asked", while an explicit unknown reads
+    as "asked, and the answer was not available", which is the distinction every other
+    honesty fix in this module turns on.
+    """
+    import os
+    import socket
+
+    return {
+        "session": os.environ.get("CLAUDE_SESSION_ID") or "unknown",
+        "adapter": os.environ.get("DS_ADAPTER_ID") or "unknown",
+        "host": socket.gethostname() or "unknown",
+        "pid": str(os.getpid()),
+    }
 
 
 def run_executable_checks(

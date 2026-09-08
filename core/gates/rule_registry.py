@@ -2,14 +2,18 @@
 
 Operator, on the substrate: it is "a lot of prose laid on top of each other as suggestions
 with no rules, evals, or really any real test that doing anything they are supposed to".
-Measured 2026-09-04: 2,172 normative statements (MUST / NEVER / ALWAYS / REQUIRED /
-DO NOT) across canonical/skills (772), docs (1,283), canonical/workflows (103) and the two
-root instruction files (14). Nothing distinguished a statement something enforces from one
-nothing does.
+Nothing distinguished a statement something enforces from one nothing does.
 
-This gate does not attempt to enforce 2,172 sentences -- that is not a reachable state, and
-some of them are judgment no check can settle. It enforces the property that makes the
-distinction real:
+A figure of "2,172 normative statements" circulated here, including in this docstring, as
+though it were a backlog of unwritten rules. It was a count of WORD OCCURRENCES under one
+pattern, and most occurrences are ordinary English inside explanatory prose. Re-measured
+2026-09-07 over the same corpus: 191 SHOUTED statements against 5,752 any-case. The shouted
+count is now a per-lane ceiling in canonical/normative_baseline.json, enforced by the
+normative-baseline gate; see that module for the lane breakdown and why the lane decides
+which substrate can enforce a statement at all.
+
+This gate does not attempt to enforce every sentence -- some are judgment no check can
+settle. It enforces the property that makes the distinction real:
 
   1. Every entry in canonical/rules.yml carries EITHER `enforced_by` or `guidance: true`.
      An entry with neither is refused. A rule nobody classified is the status quo this
@@ -21,6 +25,9 @@ distinction real:
      acceptance criteria were found rotted exactly that way this session.
   3. Every entry declaring `guidance: true` carries a `why`. "No check is possible" is a
      claim, and an unexplained one hides an unenforced rule behind a label.
+  4. A rule a check covers only PARTLY declares `enforced_by` plus `residual_risk` naming
+     what the check cannot see. Filing such a rule as pure guidance understates what the
+     substrate already does; filing it as fully enforced hides the gap. Both were happening.
 
 Read-only: it imports nothing from the checks it validates and never executes them, so it
 stays fast enough for the blocking pre-push tier.
@@ -88,11 +95,34 @@ def _classification_errors(rules: list[dict]) -> list[str]:
             errors.append(
                 f"{rid}: both enforced_by and guidance:true. If a check exists the rule is"
                 " enforced; calling it guidance too hides which one the gate trusts."
+                " For a rule a check covers only PARTLY, use enforced_by plus"
+                " residual_risk -- that is the honest third state, and pretending the"
+                " whole rule is guidance understates what is already checked."
             )
         if guidance and not str(rule.get("why") or "").strip():
             errors.append(
                 f"{rid}: guidance:true with no `why`. 'No check is possible' is a claim,"
                 " and an unexplained one hides an unenforced rule behind a label."
+            )
+        # PARTIAL ENFORCEMENT IS THE COMMON CASE, and the binary above could not say it.
+        # Two rules sat as pure `guidance` while a real check already covered part of each:
+        # no-fabricated-data is partly covered by the evidence-backed-output gate (a claim
+        # must CITE something -- necessary, not sufficient), and
+        # tests-run-by-a-different-agent is partly covered by recorded runner identity.
+        # Filing those as unenforceable understated what the substrate does and made the
+        # registry read as more helpless than it is. `residual_risk` names the uncovered
+        # part so the gap stays visible WITHOUT discarding the coverage.
+        residual = str(rule.get("residual_risk") or "").strip()
+        if residual and not enforced:
+            errors.append(
+                f"{rid}: residual_risk with no enforced_by. Residual risk is what a check"
+                " does NOT cover; with no check there is no residual, only the whole rule"
+                " unenforced -- say guidance:true and why."
+            )
+        if residual and len(residual) < 60:
+            errors.append(
+                f"{rid}: residual_risk states too little ({residual!r}). Name the part the"
+                " check cannot see, concretely enough that someone can later close it."
             )
     return errors
 
@@ -183,11 +213,15 @@ def run() -> dict:
     errors = _classification_errors(rules) + _enforcement_errors(rules)
     enforced = sum(1 for r in rules if r.get("enforced_by"))
     guidance = sum(1 for r in rules if r.get("guidance"))
+    partial = sum(
+        1 for r in rules if r.get("enforced_by") and str(r.get("residual_risk") or "").strip()
+    )
     return {
         "status": "fail" if errors else "pass",
         "rule_count": len(rules),
         "enforced": enforced,
         "guidance": guidance,
+        "partially_enforced": partial,
         "errors": errors,
     }
 
@@ -204,7 +238,8 @@ def main() -> int:
         return 1
     print(
         f"\nrule-registry: OK - {result['rule_count']} rule(s):"
-        f" {result['enforced']} enforced, {result['guidance']} declared guidance."
+        f" {result['enforced']} enforced ({result['partially_enforced']} partially,"
+        f" residual stated), {result['guidance']} declared guidance."
     )
     return 0
 
