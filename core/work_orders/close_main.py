@@ -161,6 +161,38 @@ def _ledger_verdict_mismatch(
         return ""  # a decoration must never break the note it decorates
 
 
+def waive_unreviewable_review(
+    failures: list[str], *, work_order_id: str, skip_verify: bool
+) -> tuple[list[str], list[str]]:
+    """Apply --skip-verify to gate failures. Returns (remaining, waived).
+
+    UNREVIEWABLE ONLY, and the distinction is the whole point. An unreviewable verdict is
+    not a judgment -- it is the provider reporting it could not produce one -- so waiving it
+    withholds certification without asserting the work is sound. A verdict that FAILED on
+    substance is a finding about the work; waiving that would be the false-done the gate
+    exists to prevent, and it still requires --force, a louder and separately recorded act.
+
+    Matching is case-INSENSITIVE: close_gates emits "unreviewable" in the grader-failure
+    path and "UNREVIEWABLE" in the incomplete-record path. A case-sensitive predicate waived
+    the first and left the second reaching for --force, which is the defect in a new place.
+
+    A separate function rather than an inline block because inline, the only way to test it
+    was to copy the predicate into the test -- and a test of its own copy proves nothing
+    about the branch that ships.
+    """
+    if not skip_verify or not failures:
+        return failures, []
+    waived = [
+        f
+        for f in failures
+        if str(f).startswith("independent_review") and "unreviewable" in str(f).lower()
+    ]
+    if not waived:
+        return failures, []
+    remaining = [f for f in failures if f not in waived]
+    return remaining, waived
+
+
 def closability(
     *,
     work_order_id: str,
@@ -422,6 +454,34 @@ def close_work_order(
             planning_root=p_root,
             db_path=db_path,
         )
+
+        # --skip-verify HAS TO REACH THE POST-GATE PATH TOO. It guarded only the
+        # default-on review below, so for every work order type whose declared post_gate
+        # IS independent_review (infrastructure among them) the flag was inert -- and that
+        # is the population an operator reaches for it with. Measured 2026-09-08: four
+        # work orders whose graders had all returned "You've hit your session limit"
+        # refused --skip-verify and closed only under --force, which bypasses every gate
+        # at once instead of the one that could not run.
+        #
+        # UNREVIEWABLE ONLY. A verdict that FAILED on substance is a finding about the
+        # work, and waiving it here would be the false-done this gate exists to prevent;
+        # that still requires --force, which is a louder and separately recorded act. An
+        # unreviewable verdict is not a judgment at all -- it is the provider reporting it
+        # could not produce one -- so skipping it withholds certification without
+        # asserting the work is wrong.
+        gate_failures, _waived = waive_unreviewable_review(
+            gate_failures, work_order_id=work_order_id, skip_verify=skip_verify
+        )
+        if _waived:
+            from core.gates.bypass_event import record_gate_bypass
+
+            for _reason in _waived:
+                record_gate_bypass(
+                    "independent_review",
+                    f"skip_verify: close of {work_order_id} waived an UNREVIEWABLE"
+                    f" verdict (no judgment was produced) -- {str(_reason)[:300]}",
+                    extra={"work_order_id": work_order_id, "waived": "unreviewable"},
+                )
 
         # WO-GRADER-ADVERSARIAL: the independent_review gate applies to every
         # non-exempt WO type, not only those whose type post-gate names it —

@@ -375,3 +375,25 @@ rules:
       findings -- they did not, so a verdict objecting only through them had an EMPTY
       findings list and risked being reported as an incomplete record, softening a real
       failure into inconclusive.
+
+  - id: a-bypass-flag-must-reach-the-gate-it-names
+    statement: >
+      A flag that names a gate must waive that gate wherever it is evaluated, and must waive
+      only the case it names -- an unreviewable verdict, never a failed one.
+    source: core/work_orders/close_main.py
+    enforced_by:
+      - tests/unit/test_skip_verify_reaches_the_post_gate.py::test_the_close_waives_on_the_post_gate_path_not_only_the_default_on_one
+      - tests/unit/test_skip_verify_reaches_the_post_gate.py::test_a_failed_review_is_never_waived
+      - tests/unit/test_skip_verify_reaches_the_post_gate.py::test_every_unreviewable_phrasing_the_gate_emits_is_waived
+    note: >
+      --skip-verify guarded only the DEFAULT-ON review branch, so for every work order type
+      whose declared post_gate IS independent_review it was inert -- which is the population
+      an operator reaches for it with. Measured 2026-09-08: four work orders whose graders had
+      all returned "You've hit your session limit" refused --skip-verify and closed only under
+      --force, which waives tasks_done and change_impact_affirmed as well. A prescribed
+      command that does not work drives the operator to the louder instrument. The waiver
+      covers UNREVIEWABLE only: that is the provider reporting it produced no judgment, while
+      a FAILED review is a finding about the work and waiving it would be the false-done the
+      gate exists to prevent. Matching is case-insensitive because close_gates emits both
+      "unreviewable" (grader failure) and "UNREVIEWABLE" (incomplete record); the first cut
+      matched only the former, and an `or` in the test hid it.
