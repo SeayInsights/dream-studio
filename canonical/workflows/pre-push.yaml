@@ -93,6 +93,7 @@ gates:
       tests/unit/test_unexecuted_checks_are_declared.py,
       tests/unit/test_attachment_pressure_is_relievable.py,
       tests/unit/test_graded_range_includes_own_commits.py,
+      tests/unit/test_workflow_nodes_declare_verification.py,
       -q]
     fail_hint: >
       A schema/contract pin drifted — update the pin's expected set in the SAME
@@ -287,6 +288,24 @@ gates:
       Call core.work_orders.close.closability() for close-readiness, or import
       core.work_orders.task_status for the status vocabulary. If the file legitimately
       produces the fields, add it to that contract's owners with a reason.
+
+  - id: workflow-node-verification
+    tier: blocking
+    description: >
+      Every node in a CHANGED workflow manifest declares either a
+      completion_check or an inline "UNVERIFIED BY DESIGN: <reason>". Zero of
+      ~150 nodes across 18 workflows declared anything, so the completion-check
+      machinery built to observe a node's effect had no user and the runner
+      marked every node `unverified` and advanced — a live orchestrator run sat
+      at 1 of 14 with three nodes "executed" in under a tenth of a second. An
+      unverifiable node is acceptable; an unexamined one is not. Diff-scoped, so
+      the ~136 undeclared nodes elsewhere drain as those files are touched
+      instead of making this a wall on day one.
+    command: [py, -m, core.gates.workflow_node_verification]
+    fail_hint: >
+      Add a completion_check that observes the node's effect (a git ref, an
+      authority query — never the work itself), or state why it cannot be
+      checked with an inline "# UNVERIFIED BY DESIGN: <reason>".
 
   - id: normative-baseline
     tier: blocking

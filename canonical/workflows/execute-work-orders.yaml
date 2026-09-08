@@ -29,6 +29,9 @@ on_failure: abort
 # authority query for close-work-order. That is real work and it is tracked, not assumed.
 nodes:
   - id: capability-probe
+    # completion_check: the probe is a read-only capability report, so re-running it is
+    # cheap and its exit status is the evidence that capabilities resolve on this host
+    completion_check: py -m core.preflight.capability_probe
     command: |
       Run: py -m core.preflight.capability_probe
       OR call is_github_usable() from core.preflight.capability_probe.
@@ -43,6 +46,8 @@ nodes:
     timeout_seconds: 30
 
   - id: escalation-probe
+    # UNVERIFIED BY DESIGN: needs the active work-order id to name its subject (WO
+    # e4e85949)
     depends_on: [capability-probe]
     command: |
       Resolve the executor (model) this work order must run on — escalation-aware.
@@ -62,6 +67,8 @@ nodes:
     timeout_seconds: 30
 
   - id: preflight-check
+    # UNVERIFIED BY DESIGN: needs the active work-order id to name its subject (WO
+    # e4e85949)
     depends_on: [escalation-probe]
     command: |
       Call `py -m interfaces.cli.ds work-order tasks <active_work_order_id>`.
@@ -79,6 +86,10 @@ nodes:
     timeout_seconds: 60
 
   - id: migration-class-check
+    # completion_check: the same check the blocking pre-push tier runs; its exit status
+    # is exactly what this node decides, rather than the agent's reading of the task
+    # list
+    completion_check: py -m core.gates.migration_risk
     depends_on: [preflight-check]
     command: |
       Inspect the active work order's task list and description.
@@ -94,6 +105,8 @@ nodes:
     timeout_seconds: 30
 
   - id: implement-tasks
+    # UNVERIFIED BY DESIGN: needs the active work-order id to name its subject (WO
+    # e4e85949)
     depends_on: [migration-class-check]
     skill: build
     model: sonnet
@@ -118,6 +131,9 @@ nodes:
       Do not print TASKS_DONE unless `ds work-order tasks <work_order_id>` shows none remaining.
 
   - id: run-gates
+    # completion_check: the gate chain IS the effect, and pre-push is the one workflow
+    # this runner executes deterministically without an LLM
+    completion_check: py -m interfaces.cli.ds workflow run pre-push --non-interactive
     skill: verify
     depends_on: [implement-tasks]
     model: sonnet
@@ -137,6 +153,8 @@ nodes:
       Output: GATES: PASS or GATES: FAIL <reason>
 
   - id: create-branch
+    # UNVERIFIED BY DESIGN: the effect is a NEGATIVE assertion -- on any branch but main
+    # -- which completion_contains cannot express (WO e4e85949)
     depends_on: [run-gates]
     condition: "{{capability-probe.output}} contains 'GITHUB: YES' and {{run-gates.output}} contains 'GATES: PASS'"
     command: |
@@ -155,6 +173,7 @@ nodes:
     timeout_seconds: 120
 
   - id: push-and-pr
+    # UNVERIFIED BY DESIGN: needs the PR number the previous node printed (WO e4e85949)
     depends_on: [create-branch]
     condition: "{{capability-probe.output}} contains 'GITHUB: YES'"
     command: |
@@ -170,6 +189,7 @@ nodes:
     timeout_seconds: 120
 
   - id: watch-ci
+    # UNVERIFIED BY DESIGN: needs the PR number the previous node printed (WO e4e85949)
     depends_on: [push-and-pr]
     condition: "{{capability-probe.output}} contains 'GITHUB: YES'"
     command: |
@@ -183,6 +203,7 @@ nodes:
     timeout_seconds: 600
 
   - id: merge
+    # UNVERIFIED BY DESIGN: needs the PR number the previous node printed (WO e4e85949)
     depends_on: [watch-ci]
     condition: "{{capability-probe.output}} contains 'GITHUB: YES' and {{watch-ci.output}} contains 'CI: ALL_GREEN'"
     command: |
@@ -194,6 +215,8 @@ nodes:
     timeout_seconds: 60
 
   - id: independent-review
+    # UNVERIFIED BY DESIGN: needs the active work-order id to name its subject (WO
+    # e4e85949)
     depends_on: [run-gates]
     condition: "{{run-gates.output}} contains 'GATES: PASS'"
     command: |
@@ -236,6 +259,7 @@ nodes:
     timeout_seconds: 300
 
   - id: close-work-order-github
+    # UNVERIFIED BY DESIGN: needs the active work-order id (WO e4e85949)
     depends_on: [merge, independent-review]
     condition: "{{capability-probe.output}} contains 'GITHUB: YES' and {{independent-review.output}} contains 'REVIEW_PASS'"
     command: |
@@ -247,6 +271,7 @@ nodes:
     timeout_seconds: 120
 
   - id: close-work-order-local
+    # UNVERIFIED BY DESIGN: needs the active work-order id (WO e4e85949)
     depends_on: [run-gates, independent-review]
     condition: "{{capability-probe.output}} contains 'GITHUB: NO' and {{run-gates.output}} contains 'GATES: PASS' and {{independent-review.output}} contains 'REVIEW_PASS'"
     command: |
@@ -259,6 +284,8 @@ nodes:
     timeout_seconds: 120
 
   - id: next-iteration
+    # UNVERIFIED BY DESIGN: needs the active work-order id to name its subject (WO
+    # e4e85949)
     depends_on: [close-work-order-github, close-work-order-local]
     trigger_rule: any_done
     command: |
