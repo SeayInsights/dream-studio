@@ -505,3 +505,26 @@ rules:
       what made eleven duplicates carry eleven distinct keys in the original fan-out. The
       two forms are reported separately: they cancel different things, and merging the
       counts is how a reader thinks a work order was cancelled when a task was.
+
+  - id: a-graded-range-states-its-basis
+    statement: >
+      A narrowed range says whether any retained commit carries this work order's own
+      recorded claim, and the neighbour caveat fires only where a neighbour could be.
+    source: core/work_orders/range_attribution.py
+    enforced_by:
+      - tests/unit/test_graded_range_includes_own_commits.py::test_a_range_missing_its_own_commits_fails_loudly
+      - tests/unit/test_graded_range_includes_own_commits.py::test_a_range_with_its_own_commits_reports_ownership
+      - tests/unit/test_delivery_boundary.py::test_the_live_attribution_does_not_carry_a_standing_neighbour_caveat
+    note: >
+      Exclusion is one-sided: a commit goes only when ANOTHER work order recorded it, and
+      this work order's own record is the only defence. So an empty or out-of-range record
+      means it can defend nothing and receives whatever nobody else claimed -- reported
+      until now in the same words as ownership. WO 0a7abdfe's review refused to grade its
+      diff on 2026-09-07 because the shown slice omitted its own implementing commits, and
+      grading it "would have reported ten false misses". That instance no longer reproduces
+      (the record has since grown to 22 commits through task-done and the range now returns
+      27 own of 32), but the shape is intact because ownership is written AT task-done.
+      Separately, the unmappable-neighbour caveat fired on every verify: measured on
+      origin/main...HEAD, 19 unmappable commits and ALL NINETEEN predating the range's
+      oldest commit, so none could have been squashed into it. A sha whose timestamp cannot
+      be read stays in the caveat, because unknown is not safe.
