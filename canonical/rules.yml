@@ -548,3 +548,37 @@ rules:
       actionable -- it costs 223s and runs only when something is genuinely broken. A gate
       that punishes its own adoption eventually gets switched off, and it would take every
       rule with it.
+
+  - id: a-workflow-node-states-how-it-is-verified
+    statement: >
+      Every node in a workflow manifest declares either a completion_check that observes its
+      effect, or why it cannot be checked. An unverifiable node is acceptable; an unexamined
+      one is not.
+    source: canonical/workflows/execute-work-orders.yaml
+    enforced_by:
+      - core.gates.workflow_node_verification
+      - tests/unit/test_workflow_nodes_declare_verification.py::test_every_changed_workflow_node_declares_how_it_is_verified
+      - tests/unit/test_workflow_nodes_declare_verification.py::test_a_node_declaring_nothing_is_refused
+      - tests/unit/test_workflow_nodes_declare_verification.py::test_the_orchestrator_declares_every_node
+    residual_risk: >
+      Diff-scoped, so roughly 136 nodes in the other seventeen workflows still declare
+      nothing and are not yet refused -- failing the whole tree would make the gate a wall
+      on day one and get it switched off, so the backlog drains as those files are touched.
+      And a DECLARED-unverifiable node is still unverified: eleven of the orchestrator's
+      fourteen cannot be checked at all until node output can be templated into a check
+      (an authority id, the previous node's PR number) and until a negative assertion is
+      expressible, both tracked as WO e4e85949. Three nodes carry a real check today.
+    note: >
+      Operator on the orchestrator 2026-09-08: it "doesn't do fucking shit". Measured, and
+      accurate: ZERO of ~150 nodes across 18 canonical workflows declared a
+      completion_check. The machinery was built by WO 1db6de49 so a node's effect could be
+      observed independently of what an agent claims, and runner.py::_completion_verdict is
+      correct, template-resolving and bounded -- with no user at all. That is a mechanism
+      with no caller at the MANIFEST level, one layer above where core/gates/reachability.py
+      looks, since it reads Python definitions and not YAML fields. A command: node's text
+      is a PROMPT (the runner's own comment says so), written to a context file and handed
+      to a skill while the runner advances, so every node landed `unverified` and the live
+      run orch-verify-1788306820 sat at 1/14 for days. The gate's own regex had the same
+      class of defect on its first run: `\s*\S` spans a newline, so `completion_check:` with
+      an empty value matched the NEXT line and an empty check read as present -- found by a
+      constructed-input test rather than by reading it.
