@@ -260,10 +260,10 @@ def test_parentheses_are_allowed_because_they_are_not_shell_control():
 
 def test_a_backslash_blocks_rather_than_being_silently_deleted():
     """shlex(posix=True) DELETES an unquoted backslash. Before this guard,
-    `C:\\Users\\x\\f.txt` became `C:Usersxf.txt` and check_argv returned reason=None --
+    `C:\\Users\\Example\\f.txt` became `C:Usersxf.txt` and check_argv returned reason=None --
     so the check ran against a path that never existed and reported the effect absent for
     the wrong reason. Silent corruption in a verifier is a fail-open."""
-    raw = "py -m thing C:" + chr(92) + "Users" + chr(92) + "x" + chr(92) + "f.txt"
+    raw = "py -m thing C:" + chr(92) + "Users" + chr(92) + "Example" + chr(92) + "f.txt"
     argv, reason = check_argv(raw)
     assert argv is None, f"backslash silently produced {argv}"
     assert reason is not None

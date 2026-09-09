@@ -417,6 +417,31 @@ _CLAIMS = [
 def prove_main(*, as_json: bool = False, keep: bool = False) -> int:
     scratch = _Scratch()
     results: list[dict] = []
+
+    # POINT THE WHOLE PROCESS AT THE SCRATCH HOME, not just the calls that take an argument.
+    #
+    # Measured: a full run grew the operator's live studio.db by ~692KB, and tracing
+    # sqlite3.connect during claim 2 recorded 189 connections to the live file from
+    # spool/ingestor.py. The claim passes `dream_studio_home=` to close_work_order, which
+    # covers the authority work that function does itself -- but closing a work order EMITS
+    # EVENTS, and the spool ingestor resolves its own database through core/config/paths.py,
+    # which reads DREAM_STUDIO_HOME and otherwise falls back to the real home. An argument
+    # cannot reach a component that never receives it.
+    #
+    # Set for the RUN rather than for the one claim that was caught: claims 1, 3 and 4
+    # measured clean, but by what they happen to exercise, not by construction. The next
+    # claim that emits an event would be a fresh instance of the same bug.
+    # TWO VARIABLES, because two resolvers answer "where is the authority" and they read
+    # different ones. core/config/paths.py::user_data_dir honours DREAM_STUDIO_HOME;
+    # core/config/database.py::_default_db_path honours DREAM_STUDIO_DB_PATH and otherwise
+    # goes straight to Path.home(). Setting only the first left 4194 live connections in a
+    # traced run -- the spool ingestor asks the second resolver.
+    _overrides = {
+        "DREAM_STUDIO_HOME": str(scratch.ds_home),
+        "DREAM_STUDIO_DB_PATH": str(scratch.db),
+    }
+    _prior = {name: os.environ.get(name) for name in _overrides}
+    os.environ.update(_overrides)
     try:
         for idx, (title, fn) in enumerate(_CLAIMS, start=1):
             try:
@@ -425,6 +450,13 @@ def prove_main(*, as_json: bool = False, keep: bool = False) -> int:
                 passed, evidence = False, f"(claim raised: {type(exc).__name__}: {exc})"
             results.append({"claim": idx, "title": title, "passed": passed, "evidence": evidence})
     finally:
+        # Restore, including the unset case: prove runs inside test sessions that set this
+        # themselves, and leaking a temp path into them would break their isolation instead.
+        for name, value in _prior.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
         if not keep:
             scratch.cleanup()
 

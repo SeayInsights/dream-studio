@@ -435,18 +435,18 @@ def test_canonical_hook_drift_returns_empty_when_hashes_match(tmp_path):
     handler.write_text("# canonical content\n", encoding="utf-8")
     h = compute_hash("# canonical content\n")
 
+    # THE INSTALLED FILE IS THE WITNESS, not the manifest's recorded hash. The hash is a
+    # cache and can go stale while the file is correct, which made `ds update --dry-run`
+    # report the same drift forever after a successful update.
+    installed = tmp_path / ".claude" / "hooks" / "runtime" / "hooks" / "meta"
+    installed.mkdir(parents=True)
+    installed_file = installed / "on-context-threshold.py"
+    installed_file.write_text("# canonical content\n", encoding="utf-8")
+
     manifest = _make_manifest(
         [
             {
-                "path": str(
-                    tmp_path
-                    / ".claude"
-                    / "hooks"
-                    / "runtime"
-                    / "hooks"
-                    / "meta"
-                    / "on-context-threshold.py"
-                ),
+                "path": str(installed_file),
                 "content_hash": h,
                 "operation": "create",
             }
@@ -466,9 +466,50 @@ def test_canonical_hook_drift_returns_filename_when_hash_differs(tmp_path):
     handler.write_text("# NEW canonical content\n", encoding="utf-8")
     old_hash = compute_hash("# OLD canonical content\n")
 
+    # The installed copy still holds the OLD content: that is the drift.
+    installed = tmp_path / ".claude" / "hooks" / "runtime" / "hooks" / "meta"
+    installed.mkdir(parents=True)
+    installed_file = installed / "on-context-threshold.py"
+    installed_file.write_text("# OLD canonical content\n", encoding="utf-8")
+
     manifest = _make_manifest(
         [
             {
+                "path": str(installed_file),
+                "content_hash": old_hash,
+                "operation": "create",
+            }
+        ]
+    )
+    drift = _canonical_hook_drift(tmp_path, manifest)
+    # LABELLED BY TREE. `runtime/hooks/meta` and `runtime/lib` are indexed by filename, so
+    # a bare name cannot say which one drifted -- and the library being invisible here is
+    # what let a stale enforcement.py keep firing while `ds update` printed already_current.
+    assert drift == ["meta/on-context-threshold.py"]
+
+
+def test_canonical_hook_drift_reports_a_file_recorded_as_installed_and_now_absent(tmp_path):
+    """The reported symptom the installed-file comparison exists for, pinned.
+
+    An entry says the file was installed and the file is gone. Under the old contract --
+    canonical hash versus the manifest's recorded hash -- this read as CLEAN, because the
+    manifest still remembered the right hash. Nothing was checking the disk.
+
+    This is also what broke the two tests above: neither created the installed file its
+    manifest pointed at, so both were exercising this path without meaning to.
+    """
+    from interfaces.cli.commands.system import _canonical_hook_drift
+    from integrations.manifest import compute_hash
+
+    meta_dir = tmp_path / "runtime" / "hooks" / "meta"
+    meta_dir.mkdir(parents=True)
+    handler = meta_dir / "on-context-threshold.py"
+    handler.write_text("# canonical content\n", encoding="utf-8")
+
+    manifest = _make_manifest(
+        [
+            {
+                # Recorded as installed, never written.
                 "path": str(
                     tmp_path
                     / ".claude"
@@ -478,13 +519,12 @@ def test_canonical_hook_drift_returns_filename_when_hash_differs(tmp_path):
                     / "meta"
                     / "on-context-threshold.py"
                 ),
-                "content_hash": old_hash,
+                "content_hash": compute_hash("# canonical content\n"),
                 "operation": "create",
             }
         ]
     )
-    drift = _canonical_hook_drift(tmp_path, manifest)
-    assert drift == ["on-context-threshold.py"]
+    assert _canonical_hook_drift(tmp_path, manifest) == ["meta/on-context-threshold.py"]
 
 
 def test_update_falls_through_on_version_match_with_hook_drift(tmp_path, capsys):

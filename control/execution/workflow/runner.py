@@ -146,7 +146,7 @@ def _load_full_yaml_nodes(yaml_path: str) -> dict[str, Any]:
 _SHELL_METACHARACTERS = ("|", ";", "&", ">", "<", chr(96), "$", chr(10))
 
 #: Refused for a different reason: `shlex.split(posix=True)` DELETES an unquoted backslash,
-#: so `C:\Users\x\f.txt` became `C:Usersxf.txt` and the check ran against a path that was
+#: so `C:\Users\Example\f.txt` became `C:UsersExamplef.txt` and the check ran against a path that was
 #: never there -- returning a reason of None, so the corruption was silent and the failure
 #: looked like the checked thing being absent. A verifier that quietly checks the wrong
 #: thing is the fail-open family, so this blocks and says how to fix it.
