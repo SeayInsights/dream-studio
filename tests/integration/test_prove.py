@@ -7,6 +7,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import sqlite3
+import pathlib
 from pathlib import Path
 
 from interfaces.cli.commands.prove import prove_main
@@ -36,17 +39,58 @@ def test_prove_all_four_claims_pass(capsys):
     assert rc == 0
 
 
-def test_prove_does_not_touch_live_authority(capsys):
-    """The hard constraint: a full `ds prove` run leaves the operator's live studio.db
-    byte-for-byte unchanged (and does not create it if absent)."""
-    before = _live_fingerprint()
+def test_prove_points_both_resolvers_at_its_scratch_home(monkeypatch):
+    """The hard constraint, asserted where a test can actually observe it.
+
+    WHY NOT A FINGERPRINT OF THE LIVE DATABASE. tests/conftest.py sets DREAM_STUDIO_HOME and
+    DREAM_STUDIO_DB_PATH to a session temp directory for the whole session, so inside pytest
+    nothing reaches the live file whatever prove does -- a byte-hash or connection-recording
+    test cannot fail for the real reason, and mutation confirmed it: removing prove's
+    DREAM_STUDIO_DB_PATH override left such a test green.
+
+    What it CAN check is what prove sets. Two resolvers answer "where is the authority" and
+    they read different variables: core/config/paths.py::user_data_dir reads
+    DREAM_STUDIO_HOME, core/config/database.py::_default_db_path reads DREAM_STUDIO_DB_PATH
+    and otherwise goes straight to Path.home(). Setting only the first left 4194 live
+    connections in a traced run outside pytest, from the spool ingestor -- because closing a
+    work order emits events and the ingestor asks the second resolver.
+    """
+    from interfaces.cli.commands import prove as prove_mod
+
+    seen: dict[str, str | None] = {}
+
+    def _capture(scratch) -> tuple[bool, str]:
+        seen["home"] = os.environ.get("DREAM_STUDIO_HOME")
+        seen["db"] = os.environ.get("DREAM_STUDIO_DB_PATH")
+        seen["scratch_root"] = str(pathlib.Path(scratch.root).resolve())
+        return True, "captured the environment the claims run under"
+
+    monkeypatch.setattr(prove_mod, "_CLAIMS", [("capture the environment", _capture)])
     prove_main(as_json=True)
-    capsys.readouterr()
-    after = _live_fingerprint()
-    assert before == after, (
-        "ds prove mutated the live authority DB — scratch isolation is broken "
-        f"(before={before}, after={after})"
+    root = seen["scratch_root"]
+    assert seen["home"], "prove ran its claims without setting DREAM_STUDIO_HOME"
+    assert seen["db"], (
+        "prove ran its claims without setting DREAM_STUDIO_DB_PATH -- the spool ingestor "
+        "resolves its database from that variable, so events land in the operator's live "
+        "authority"
     )
+    assert str(pathlib.Path(seen["home"]).resolve()).startswith(root), (seen, root)
+    assert str(pathlib.Path(seen["db"]).resolve()).startswith(root), (seen, root)
+
+
+def test_prove_restores_the_callers_environment(monkeypatch):
+    """prove runs inside sessions that set these themselves -- conftest is one -- so leaking
+    a temp path out of a run would break the caller's isolation instead of protecting it."""
+    from interfaces.cli.commands import prove as prove_mod
+
+    monkeypatch.setenv("DREAM_STUDIO_HOME", "SENTINEL_HOME")
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", "SENTINEL_DB")
+    monkeypatch.setattr(prove_mod, "_CLAIMS", [("noop", lambda _s: (True, "noop"))])
+
+    prove_main(as_json=True)
+
+    assert os.environ.get("DREAM_STUDIO_HOME") == "SENTINEL_HOME"
+    assert os.environ.get("DREAM_STUDIO_DB_PATH") == "SENTINEL_DB"
 
 
 def test_prove_nonzero_exit_is_wired(capsys, monkeypatch):

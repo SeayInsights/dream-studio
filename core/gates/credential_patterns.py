@@ -101,5 +101,10 @@ SCANNER_EXCLUDED_PATH_SUBSTRINGS: tuple[str, ...] = (
     "test_secret_scan",
     "test_security_baseline",
     "test_credential_patterns",
+    # Holds a PEM marker and credential-shaped literals as INPUT to the parsing scanner
+    # it tests. Added when repo-publication-readiness reported it as a secret_pattern
+    # finding -- which is RELEASE-BLOCKING, and that gate is not in the pre-push chain,
+    # so a merge can leave main in that state with nothing saying so.
+    "test_security_scan_sees_real_code_shapes",
     "templates/security",
 )
