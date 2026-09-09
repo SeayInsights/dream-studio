@@ -12,21 +12,32 @@ on_failure: abort
 # GitHub path is gated on: github_repo configured + gh CLI authenticated.
 # When the GitHub path is absent, work order closes on local gates only (no PR).
 
-# COMPLETION IS NOT YET OBSERVED FOR ANY NODE HERE, and that is recorded rather than
-# papered over. Each node below tells an agent to print a token (GATES: PASS, REVIEW_PASS,
-# ...), and a first cut declared those tokens as `completion_contains`. An independent
-# review found they could never match: `_invoke_skill` LOADS a skill and returns its
-# SKILL.md text, `_execute_wave` then replaces a command node's output with a synthetic
-# "<id> executed via <specifier>" string, and the agent that would actually print the token
-# reads the runner's output out of band. The runner has no execution result to inspect.
+# HOW A NODE HERE IS VERIFIED. Nine of the fourteen carry a `completion_check`: a cheap
+# READ whose exit status is the evidence, run from outside the node — an authority query,
+# a gate, a capability probe. Five say `UNVERIFIED BY DESIGN` with the reason inline. That
+# is the whole vocabulary; a node declaring neither now fails the
+# workflow-node-verification gate.
 #
-# So every node reports `unverified`: the prompt was delivered and nothing confirmed the
-# effect. The run advances (blocking every node made this a wall at node 1 of 14) and the
-# final status is `completed_with_unverified`, never `completed`.
+# WHAT A CHECK IS NOT. It is not a shell command. `completion_check` is split into
+# arguments and run with shell=False, because a check may interpolate `{{node.output}}` —
+# text a command node captured, or an LLM's stdout — and under a shell that text was
+# EXECUTED. Worse, the injected command's exit status became the node's evidence: a check
+# naming a module that does not exist reported `completed` when the node's output ended in
+# a separator, so the checked party could author its own PASS (WO 26675b56). Templates now
+# resolve inside each argument separately, so an interpolated value can never become more
+# than one argument. A check that needs a pipe or a redirect is BLOCKED, not reinterpreted
+# — move the logic into a module the check can invoke.
 #
-# What each node NEEDS is a `completion_check` — a cheap shell read that observes the
-# effect from outside: a git ref for create-branch, `gh pr view` for push-and-pr, an
-# authority query for close-work-order. That is real work and it is tracked, not assumed.
+# WHY `completion_contains` ALONE IS NOT ENOUGH. Each node below tells an agent to print a
+# token (GATES: PASS, REVIEW_PASS, ...), and a first cut declared those tokens as
+# `completion_contains`. They could never match: `_invoke_skill` LOADS a skill and returns
+# its SKILL.md text, `_execute_wave` replaces a command node's output with a synthetic
+# "<id> executed via <specifier>" string, and the agent that would print the token reads
+# the runner's output out of band. The runner still has no execution result to inspect, so
+# `completion_contains` applies to a completion_check's output, never to a node's own.
+#
+# A run whose nodes are all checked reaches `completed`; one carrying any unverified node
+# reaches `completed_with_unverified`, never `completed`.
 nodes:
   - id: capability-probe
     # completion_check: the probe is a read-only capability report, so re-running it is
@@ -50,7 +61,6 @@ nodes:
     # command exits non-zero when it cannot be resolved, which is exactly what the node
     # decides
     completion_check: py -m interfaces.cli.ds work-order executor {{workflow.work_order_id}}
-    # e4e85949)
     depends_on: [capability-probe]
     command: |
       Resolve the executor (model) this work order must run on — escalation-aware.
@@ -73,7 +83,6 @@ nodes:
     # completion_check: the effect is a readable task list for THIS work order; a work
     # order with no readable tasks cannot be preflighted, and the exit status says so
     completion_check: py -m interfaces.cli.ds work-order tasks {{workflow.work_order_id}}
-    # e4e85949)
     depends_on: [escalation-probe]
     command: |
       Call `py -m interfaces.cli.ds work-order tasks <active_work_order_id>`.
@@ -114,7 +123,6 @@ nodes:
     # every task is DONE is what the close gate decides, and duplicating that judgement
     # in a node would let the two disagree
     completion_check: py -m interfaces.cli.ds work-order tasks {{workflow.work_order_id}}
-    # e4e85949)
     depends_on: [migration-class-check]
     skill: build
     model: sonnet
@@ -227,7 +235,6 @@ nodes:
     # back from the authority is evidence the review happened, rather than the agent's
     # report that it did
     completion_check: py -m interfaces.cli.ds work-order artifact {{workflow.work_order_id}} review_verdict
-    # e4e85949)
     depends_on: [run-gates]
     condition: "{{run-gates.output}} contains 'GATES: PASS'"
     command: |
@@ -297,10 +304,9 @@ nodes:
     timeout_seconds: 120
 
   - id: next-iteration
-    # completion_check: the node's own effect IS this read -- it surfaces the next work 
+    # completion_check: the node's own effect IS this read -- it surfaces the next work
     # order from the authority, so the exit status of the same query is the evidence, exactly as for capability-probe
     completion_check: py -m interfaces.cli.ds project state
-    # e4e85949)
     depends_on: [close-work-order-github, close-work-order-local]
     trigger_rule: any_done
     command: |
