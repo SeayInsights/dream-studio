@@ -583,6 +583,73 @@ rules:
       an empty value matched the NEXT line and an empty check read as present -- found by a
       constructed-input test rather than by reading it.
 
+  - id: a-completion-check-is-argv-not-shell
+    statement: >
+      A completion_check is split into arguments and run with shell=False, and its
+      templates resolve inside each argument separately, so a node's output can never
+      become code or an extra argument.
+    source: control/execution/workflow/runner.py
+    enforced_by:
+      - tests/unit/test_completion_check_is_not_shell_code.py::test_a_nodes_output_does_not_execute
+      - tests/unit/test_completion_check_is_not_shell_code.py::test_a_failing_check_cannot_be_rescued_by_the_nodes_output
+      - tests/unit/test_completion_check_is_not_shell_code.py::test_a_resolved_value_containing_shell_syntax_stays_one_argument
+      - tests/unit/test_completion_check_is_not_shell_code.py::test_a_resolved_value_cannot_smuggle_a_second_flag
+      - tests/unit/test_completion_check_is_not_shell_code.py::test_every_shipped_completion_check_is_runnable_as_argv
+    note: >
+      PROVEN, not theorised: driving the real _verify_completion with a crafted state wrote
+      a marker file from text that was only ever a node's `output` field. The check was
+      resolved through resolve_templates and then run with subprocess.run(check,
+      shell=True), and engine._resolve_ref returns str(node.get(field, "")) for any
+      {{node.output}} reference -- text a command node captured, or an LLM's stdout. The
+      RCE is the lesser half: the injected command's exit status BECAME THE NODE'S
+      EVIDENCE, so a check naming a module that does not exist reported `completed` when
+      the node's output ended in a shell separator. The checked party could author its own
+      PASS, in the one mechanism whose purpose is to be unforgeable. SPLIT FIRST, RESOLVE
+      PER TOKEN is the load-bearing half of the fix -- resolving the whole string and
+      splitting after would let one value expand into several argv elements, smuggling
+      --force into an authority command even with the shell gone. A raw check is refused, never reinterpreted, for a
+      separator or substitution (| ; & > < backtick $ newline) -- passing a pipe through as
+      a literal argument would let a check that used to pipe exit 0 for the wrong reason,
+      which is a fail-open in a verifier. PARENTHESES ARE NOT REFUSED: an independent audit
+      failed this fix's own test on them, and it was right -- they are neither a separator
+      nor a substitution, so refusing them rejected every Python -c one-liner and every
+      regex argument for no safety; $(...) is still refused, by $. A BACKSLASH is refused
+      because shlex DELETES it, so an unquoted Windows path silently lost its separators
+      and the check reported the effect absent for the wrong reason. A TEMPLATED argv[0]
+      is refused because shell=False stops an interpolated value becoming code and does
+      nothing about a value that IS the program, and a .bat/.cmd argv[0] is refused
+      because Windows hands those to cmd.exe even with shell=False, which would reopen
+      cmd's own syntax (%VAR%, ^, !) that a POSIX metacharacter set does not screen, and a SHELL as argv[0]
+      (cmd, powershell, sh, bash, wscript, ...) is refused because it re-parses its own
+      arguments as a command string -- `cmd /c thing {{node.output}}` would make an
+      interpolated ARGUMENT executable again, which is the proven injection restored.
+      argv[0] is compared by bare program name with trailing dots and spaces stripped:
+      `tool.bat.` and `tool.bat ` both resolve to the batch file on Windows and both
+      defeated a plain endswith test. A TEMPLATE IN A CODE-EXECUTING FLAG'S
+      ARGUMENT (-c, -e, --eval, --exec, --command; attached or separate) is refused as
+      well: `py -m mod {{x}}` passes the value as DATA into sys.argv, which is what the
+      whole design rests on, but `py -c {{x}}` makes it THE PROGRAM and argv[0] is the
+      innocent interpreter. The rule follows the CODE, not the program, so python/node/perl
+      need not be blocklisted -- which would be overbroad and would reject all nine shipped
+      checks. It is not an equality test: `py -cprint(42)` runs, so `-c{{x}}` is ONE token
+      and a rule matching a token equal to `-c` misses it -- the hole in both my first cut
+      and the third audit round's own recommendation, found by TESTING the fix rather than
+      reading it. A drive-relative argv[0] (`C:cmd.exe`, no separator at all) also defeated
+      the shell refusal, because PurePosixPath models no Windows drive and returned the
+      whole string as the program name; argv[0] is normalised with PureWindowsPath now.
+      Two later fixes were STRUCTURAL rather than list entries: the program name is
+      normalised before its marker set is chosen (node20, nodejs, php8.2 all leaked --
+      Debian's node package is named nodejs), and indirection commands (env, nice,
+      timeout, xargs, sudo) are refused as argv[0], because `env node -p {{x}}` chose
+      env's marker set and node's -p was never consulted. That was the only finding in
+      five audit rounds that was not another unlisted marker. UNCLOSED, stated plainly:
+      an executable that execs an interpreter internally selects its own marker set, and
+      no inspection of argv[0] sees through that; the failure is bounded because the
+      universal markers apply whatever program is named.
+      Every gap after the first came from a LATER audit round -- the review was run to a
+      fixed point rather than once, and each round found what the previous had not. The task that claimed
+      this fix (52f2c484 on WO e4e85949) was marked complete against its own description
+      while the code was unchanged, and has been reopened.
   - id: a-completion-check-names-its-subject
     statement: >
       A work order is bound to a workflow run explicitly at start, never inferred, so a
