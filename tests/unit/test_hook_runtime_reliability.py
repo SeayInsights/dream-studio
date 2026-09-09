@@ -136,6 +136,9 @@ class TestHooksJsonValid:
             capture_output=True,
             cwd=REPO_ROOT / "runtime",
             env=env,
+            # security-scan: the point of this test is that a hook command reaches a real
+            # shell, and `command` is built in this file from REPO_ROOT and a fixed hook
+            # name -- no external or agent-supplied text reaches it.
             shell=True,
             timeout=45,
         )

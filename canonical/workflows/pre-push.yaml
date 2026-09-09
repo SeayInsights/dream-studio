@@ -289,6 +289,23 @@ gates:
       core.work_orders.task_status for the status vocabulary. If the file legitimately
       produces the fields, add it to that contract's owners with a reason.
 
+  - id: security-scan
+    tier: blocking
+    description: >
+      A changed file may not introduce a security anti-pattern. A live shell
+      injection sat in the workflow runner for a month while DS's own
+      shell=True detector reported clean on that exact file: its pattern
+      required the token and the keyword on ONE line, and black formats any
+      multi-argument call across lines, so it was blind to 189 of 245
+      subprocess call sites. Detection now PARSES rather than pattern-matches,
+      which also stops it flagging its own prose -- the eval() pattern matched
+      10 files and a parse confirmed a real eval() call in none of them. This
+      is the BLOCKING tier: the on-security-scan hook is PostToolUse, so the
+      edit has already happened, and a file written by a patch script, a merge
+      or a rebase fires no Edit/Write hook at all. Diff-scoped, and the tracked
+      tree currently has zero findings.
+    command: [py, -m, core.gates.security_scan]
+
   - id: workflow-node-verification
     tier: blocking
     description: >
