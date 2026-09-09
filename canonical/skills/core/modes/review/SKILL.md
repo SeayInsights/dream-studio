@@ -69,6 +69,17 @@ Spec compliance BEFORE code quality. Always. Catching "built the wrong thing" ma
 
 ### Stage 2 lanes from the registry
 
+**Convene the table before you push:**
+
+```
+py -m core.gates.round_table
+```
+
+It runs the detector lanes and reports what they found, and puts the graded and declared
+lanes in front of you as questions to answer against the diff. `--no-detectors` lists the
+lanes without running anything and reports `unchecked`, because a listing that ran nothing
+is not a pass.
+
 `canonical/review_lanes.yml` is the source of truth for these, not this list. Each lane is
 held by a **seat at the round table**, and the seat says what it watches — the Warden (a
 guard enforced on one half), the Machinist (the real machine: which lane runs, and how long
