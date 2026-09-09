@@ -415,7 +415,17 @@ def check_argv(
       shim, a symlink, a ``check.exe`` that runs node -- selects its own marker set. No
       inspection of argv[0] can see through that: a limit of naming, not an oversight. The
       failure is BOUNDED, because the universal markers are checked regardless of which
-      program is named.
+      program is named. Known-unlisted at the close of review: ``flatpak run``, macOS
+      ``open -a``, and hyphenated packaging variants (``env-v2`` reduces to ``env-v``,
+      since only trailing digits and dots are stripped). None corresponds to a binary
+      found in the wild, unlike ``nodejs``/``php8.2``/``node20``, which did and are fixed.
+    * NORMALISING BEFORE THE INDIRECTION LOOKUP has a side effect worth knowing: several
+      entries are short ordinary words (``su``, ``time``, ``start``, ``exec``, ``watch``),
+      so a real tool named ``su2`` or ``time2`` would be refused outright. A search for a
+      live collision found none -- and ``environ`` does NOT collide with ``env``, since
+      the comparison is exact-match-after-stripping rather than prefix -- but the
+      direction of this failure is what makes it acceptable: it wrongly BLOCKS a check,
+      never wrongly executes one.
 
     WHAT THIS GUARD IS, which is why an incomplete list is still the right shape: the check
     string is authored by a trusted operator in canonical YAML, and the TEMPLATE VALUE is
