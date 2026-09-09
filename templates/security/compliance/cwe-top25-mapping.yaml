@@ -352,6 +352,7 @@ controls:
       - "*-sec-*"
       - "*-secrets-*"
       - "*-creds-*"
+    # security-scan: prose describing what the rules detect, not a credential
     scan_coverage: >
       Rules detect password = "literal", API_KEY = "literal", connection strings with
       embedded credentials, and private keys in source files. Cross-language coverage.

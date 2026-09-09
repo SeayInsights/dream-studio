@@ -62,6 +62,7 @@ def test_scheduled_scan_and_single_source_config():
 def test_secret_scanner_detects_high_confidence_credentials():
     assert find_secrets("k = 'AKIA" + "A" * 16 + "'")[0]["rule"] == "aws_access_key_id"
     assert find_secrets("t=ghp_" + "a" * 36)[0]["rule"] == "github_token"
+    # security-scan: a PEM marker asserted against the baseline scanner; no key material
     assert find_secrets("-----BEGIN RSA PRIVATE KEY-----")[0]["rule"] == "private_key_block"
     # The redacted match never contains the full credential.
     finding = find_secrets("t=ghp_" + "a" * 36)[0]
@@ -74,6 +75,7 @@ def test_secret_scanner_no_false_positives_or_pragma_waives():
     # An inline pragma waives a line.
     assert find_secrets("token = ghp_" + "a" * 36 + "  # allowlist secret") == []
     # Rule/template files are excluded by path.
+    # security-scan: a PEM marker asserted against the baseline scanner; no key material
     assert find_secrets("-----BEGIN RSA PRIVATE KEY-----", source="templates/security/x.j2") == []
 
 
@@ -82,6 +84,7 @@ def test_scan_history_parses_diff_and_honors_path_exclusion(monkeypatch):
     skips excluded paths."""
     from core.gates import secret_scan
 
+    # security-scan: a PEM marker asserted against the baseline scanner; no key material
     fake = "\n".join(
         [
             "a" * 40,  # commit hash line

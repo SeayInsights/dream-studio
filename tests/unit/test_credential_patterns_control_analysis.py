@@ -33,6 +33,7 @@ def test_control_analysis_scanners_use_single_source():
     # 3. The unified patterns still detect — a real-shaped token and a PEM header.
     assert TOKEN_SHAPED_PATTERN.search("ghp_" + "a" * 36)
     assert TOKEN_SHAPED_PATTERN.search("AKIA" + "A" * 16)
+    # security-scan: a PEM marker asserted against the pattern that detects it; no key material
     assert CREDENTIAL_PATTERNS["private_key_block"].search("-----BEGIN RSA PRIVATE KEY-----")
 
     # ...but a prefix embedded mid-word is not a token (the \b boundary): ordinary hyphenated

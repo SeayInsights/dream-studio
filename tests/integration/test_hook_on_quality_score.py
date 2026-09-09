@@ -57,6 +57,7 @@ def test_secret_pattern_fails(isolated_home, monkeypatch, handler):
     mod = handler("on-quality-score")
     monkeypatch.chdir(isolated_home)
 
+    # security-scan: fabricated credential fed to the secret check under test
     with (
         patch.object(quality_scoring, "_changed_files", return_value=["src/secrets.py"]),
         patch.object(

@@ -35,6 +35,8 @@ def get_user(email: str):
     conn.execute(f"SELECT * FROM users WHERE email='{email}'")
 """
 
+# security-scan: sample source fed to the security auditor as INPUT. The key is
+# fabricated and reaches nothing but an assertion about what the auditor reports.
 HARDCODED_SECRET = """
 API_KEY = "sk-abc123def456"
 client = openai.Client(api_key=API_KEY)
@@ -191,6 +193,8 @@ class TestSecurityAuditor:
 
     def test_placeholder_credentials_not_flagged(self):
         # Placeholders should not fire sec-001
+        # security-scan: literal PLACEHOLDER text, and the assertion below is that the
+        # auditor does NOT flag it -- the credential shape is the point of the case.
         code = 'API_KEY = "your-api-key-here"\nDB_PASSWORD = "<your-password>"'
         findings = sec_audit(code, {})
         sec001 = [f for f in findings if f["rule_id"] == "sec-001"]

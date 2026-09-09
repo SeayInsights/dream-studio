@@ -583,6 +583,66 @@ rules:
       an empty value matched the NEXT line and an empty check read as present -- found by a
       constructed-input test rather than by reading it.
 
+  - id: a-security-pattern-is-found-by-parsing
+    statement: >
+      A security anti-pattern in a changed file is detected by parsing the source, not by
+      matching a pattern over one line, and a finding blocks the push.
+    source: core/gates/security_scan.py
+    enforced_by:
+      - tests/unit/test_security_scan_sees_real_code_shapes.py::test_a_multiline_shell_true_call_is_found
+      - tests/unit/test_security_scan_sees_real_code_shapes.py::test_the_vulnerable_file_that_was_reported_clean_is_now_found
+      - tests/unit/test_security_scan_sees_real_code_shapes.py::test_prose_about_a_pattern_is_not_a_use_of_it
+      - tests/unit/test_security_scan_sees_real_code_shapes.py::test_an_exemption_needs_a_usable_reason
+      - tests/unit/test_security_scan_sees_real_code_shapes.py::test_unparseable_python_is_reported_not_passed
+      - tests/unit/test_security_scan_sees_real_code_shapes.py::test_a_credential_in_valid_python_is_found
+      - tests/unit/test_security_scan_sees_real_code_shapes.py::test_an_ordinary_file_cannot_lose_coverage_by_its_name
+      - tests/unit/test_security_scan_sees_real_code_shapes.py::test_a_declaration_reaches_a_finding_inside_a_yaml_block_scalar
+    note: >
+      MEASURED, not asserted. A live shell injection sat in
+      control/execution/workflow/runner.py where a node's own output reached
+      subprocess.run(check, shell=True) as code and the injected command's exit status
+      became the node's verification evidence (WO 26675b56). DS had carried a shell=True
+      detector the whole time; called against that file it returned []. The pattern
+      `subprocess[^\n]+shell\s*=\s*True` needs the token and the keyword on one line, and
+      black formats any multi-argument call across lines -- counted by walking each call's
+      parenthesis depth over `git ls-files *.py`, 56 subprocess call sites are single-line
+      and 189 span lines, so it was blind to 77% of them. Widening the window was the
+      obvious fix and the wrong one: a 400-character DOTALL window is what made
+      single-read-path's first cut name five lines with no status comparison at all.
+      PARSING has no window to get wrong, and it removed false positives too -- the
+      `\beval\s*\(` pattern flagged 10 files and a parse confirmed a real eval() call in
+      ZERO, because "eval (`deno eval <code>`)" is a sentence with a parenthetical and the
+      regex read it as a call. A regex over source flags its own explanation. THE BLOCKING
+      TIER IS A GATE, NOT THE HOOK: on-security-scan is PostToolUse, so the edit has
+      already landed and there is nothing left to block, and more importantly a file
+      written by a patch script, a merge or a rebase fires no Edit/Write hook at all --
+      which is how every change in the session that found this defect landed. The hook now
+      scans the FILE rather than an Edit's `new_string` fragment, which for a realistic
+      payload is `'    shell=True,'`: unparseable, and missing the token the old regex also
+      required. A CLAIM I WITHDREW: I reported the hook was unwired because the name does
+      not appear in hooks/hooks.json. The grep was right and the conclusion was wrong --
+      runtime/hooks/meta/on-edit-dispatch.py invokes it and hooks.json wires that
+      dispatcher to PostToolUse. Searching a manifest for a literal name missed one layer
+      of indirection.
+      THE MECHANISM, after five independent audit rounds that found three fail-opens
+      introduced BY this fix rather than by the original code. TWO KINDS OF PATTERN, and
+      conflating them broke it in both directions: FORMAT patterns (a credential, a PEM
+      block, a token -- the shape of a string) run over the whole content of every
+      scannable file, and CODE-SHAPE patterns (Python syntax) are scanned where that syntax
+      can execute -- Python parsed, shell and JS by regex with comments skipped, YAML and
+      .env not at all. Returning parsed findings early left every valid Python file
+      unchecked for credentials; matching code shapes as text in a manifest made the gate
+      block its own change set on nine lines of its own documentation.
+      AN EXEMPTION IS DECLARED AT THE FINDING SITE, never on a path list. Three rounds
+      produced one root cause three times -- a hand-maintained list of files that
+      legitimately hold dangerous-looking strings -- failing under-inclusively (the third
+      instance was this rule's own test file) and over-inclusively (a bare substring test,
+      so one match disabled all three format patterns for a file). The list was deleted
+      rather than extended. A declaration carries a reason of at least 20 characters and
+      may sit on the finding's line, in the contiguous comment block above it, or above the
+      construct containing it -- the enclosing statement for Python, the owning key of an
+      indented block otherwise, because a finding inside a triple-quoted fixture or a YAML
+      block scalar has no line a comment can attach to without changing the data.
   - id: a-completion-check-is-argv-not-shell
     statement: >
       A completion_check is split into arguments and run with shell=False, and its

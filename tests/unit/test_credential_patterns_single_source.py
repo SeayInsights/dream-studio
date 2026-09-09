@@ -37,6 +37,7 @@ def test_single_source_and_no_pub_self_trip(tmp_path: Path):
 
     # 3. End-to-end: a PEM literal at an excluded fixture path is skipped, but the SAME literal
     #    at a normal path still fires — the exclusion narrows noise without weakening detection.
+    # security-scan: a PEM marker asserted against the pattern that detects it; no key material
     pem = "-----BEGIN RSA PRIVATE KEY-----"
     (tmp_path / "tests" / "unit").mkdir(parents=True)
     (tmp_path / "tests" / "unit" / "test_security_baseline.py").write_text(

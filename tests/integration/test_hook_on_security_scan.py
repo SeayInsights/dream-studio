@@ -28,6 +28,7 @@ def test_no_warning_on_clean_code(handler, capsys):
 
 
 def test_warns_on_hardcoded_password(handler, capsys):
+    # security-scan: fabricated credential fed to the scanner under test as its input payload
     payload = {
         "tool_name": "Write",
         "tool_input": {
@@ -64,6 +65,7 @@ def test_warns_on_shell_true(handler, capsys):
 
 
 def test_skips_test_files(handler, capsys):
+    # security-scan: fabricated credential fed to the scanner under test as its input payload
     payload = {
         "tool_name": "Edit",
         "tool_input": {
@@ -76,6 +78,7 @@ def test_skips_test_files(handler, capsys):
 
 
 def test_skips_non_source_extensions(handler, capsys):
+    # security-scan: fabricated credential fed to the scanner under test as its input payload
     payload = {
         "tool_name": "Write",
         "tool_input": {
