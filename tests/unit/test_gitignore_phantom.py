@@ -359,3 +359,63 @@ def test_asserting_a_path_absent_in_one_test_does_not_excuse_depending_on_it_in_
     reported_lines = {line for _text, line in found}
     assert 2 not in reported_lines, f"the absence assertion itself was reported: {found}"
     assert reported_lines <= {5, 6}, found
+
+
+# -- a segment joined to a RUNTIME base is not a repo path -------------------
+
+
+@pytest.mark.parametrize("base", ["isolated_home", "tmp_path", "operator_home", "install_dir"])
+def test_a_literal_joined_to_a_runtime_base_is_not_a_repo_reference(base):
+    """THE FALSE POSITIVE THAT BLOCKED A PUSH, and it was pre-existing.
+
+    `(isolated_home / ".dream-studio" / "meta" / "q.json").read_text()` in
+    tests/integration/test_hook_on_quality_score.py had been on origin/main for a long
+    time and this gate never fired, because it is DIFF-SCOPED and that file had not
+    changed. Adding a one-line comment elsewhere in the file put it in the diff, and the
+    gate failed the push: `.dream-studio` starts with a dot, so it was resolved against the
+    repo root and matched by `.gitignore`'s `**/.dream-studio/`.
+
+    But the base is a tmp_path fixture. The path is rooted in a directory the test creates,
+    so there is no repo file to ship and nothing to break on a fresh checkout -- which is
+    the entire concern this gate exists for. Left unfixed it would have blocked the next
+    change to that file for any reason at all.
+    """
+    source = f'x = ({base} / ".dream-studio" / "meta" / "q.json").read_text()\n'
+
+    # POSITIVE CONTROL FIRST. An unparseable fixture makes `referenced_literals` return [],
+    # so a bare `== []` passes vacuously -- which is exactly how the first version of this
+    # test passed: a generator wrote a literal two-character backslash-n and every fixture
+    # was a syntax error. Only the paired positive assertions caught it.
+    control = source.replace(base, 'Path(".")')
+    assert referenced_literals(control), "the fixture does not parse; this proves nothing"
+
+    assert referenced_literals(source) == []
+
+
+@pytest.mark.parametrize("base", ["REPO_ROOT", "PROJECT_ROOT", "repo_root", "source_root"])
+def test_a_literal_joined_to_a_repo_root_name_is_still_checked(base):
+    """The other half, and why this is a name heuristic rather than a blanket skip:
+    `REPO_ROOT / "docs" / "x.md"` IS a repo-relative reference and is exactly the shape the
+    gate should catch. An opaque runtime value cannot be resolved statically, so the choice
+    is between a name convention and a permanent false positive on every test that builds a
+    path under a fixture."""
+    source = f'x = ({base} / ".planning" / "notes.md").read_text()\n'
+    found = [text for text, _line in referenced_literals(source)]
+    assert ".planning" in found, found
+
+
+def test_a_literal_argument_path_base_is_still_checked():
+    """`Path(".planning") / "notes.md"` has a CALL as the leftmost operand of the chain. A
+    first cut of the fix treated any non-constant base as runtime-rooted and dropped this
+    shape, which is one of the two the gate most needs to catch -- found by testing the fix
+    rather than reading it."""
+    source = 'x = (Path(".planning") / "notes.md").read_text()\n'
+    found = [text for text, _line in referenced_literals(source)]
+    assert ".planning" in found, found
+
+
+def test_a_plain_literal_read_is_unaffected():
+    """The baseline the fix must not disturb."""
+    source = 'x = Path(".planning/notes.md").read_text()\n'
+    found = [text for text, _line in referenced_literals(source)]
+    assert ".planning/notes.md" in found, found

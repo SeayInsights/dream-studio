@@ -129,15 +129,76 @@ def ignore_rule(path: Path, *, repo_root: Path) -> str | None:
     return first.split("\t")[0].strip() or None
 
 
+#: Names that conventionally mean "the repository root". A literal joined to one of these
+#: IS a repo-relative reference and stays checked -- ``REPO_ROOT / "docs" / "x.md"`` is
+#: exactly the shape this gate should catch.
+_REPO_ROOT_NAMES = frozenset(
+    {
+        "REPO_ROOT",
+        "PROJECT_ROOT",
+        "ROOT",
+        "SOURCE_ROOT",
+        "repo_root",
+        "project_root",
+        "source_root",
+    }
+)
+
+
+def _runtime_rooted_literals(node: ast.AST) -> set[int]:
+    """``id()`` of every string constant rooted at a RUNTIME value rather than the repo.
+
+    A ``/`` chain like ``isolated_home / ".dream-studio" / "meta" / "x.json"`` builds a path
+    under whatever ``isolated_home`` points at -- a tmp_path fixture, an operator home, a
+    discovered install. Resolving its segments against the repo root and asking git about
+    them answers a question nobody asked: there is no repo file to ship and nothing to break
+    on a fresh checkout.
+
+    Left as a NAME heuristic on purpose. An opaque runtime value cannot be resolved
+    statically, so the alternative is a permanent false positive on every test that builds a
+    path under a fixture -- which is how this was found: a reference on origin/main that had
+    never fired, because the gate is diff-scoped and a one-line comment elsewhere in the file
+    put it in the diff.
+    """
+    skipped: set[int] = set()
+    for child in ast.walk(node):
+        if not (isinstance(child, ast.BinOp) and isinstance(child.op, ast.Div)):
+            continue
+        base = child
+        while isinstance(base, ast.BinOp) and isinstance(base.op, ast.Div):
+            base = base.left
+        if isinstance(base, ast.Constant):
+            continue  # a literal base is repo-relative; keep checking it
+        # `Path(".planning") / "notes.md"` has a CALL as its base and is still
+        # repo-relative. A first cut treated any non-constant base as runtime-rooted and
+        # dropped this shape, which is one of the two the gate most needs to catch.
+        if isinstance(base, ast.Call) and base.args:
+            first = base.args[0]
+            if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                continue
+        name = base.id if isinstance(base, ast.Name) else getattr(base, "attr", "")
+        if name in _REPO_ROOT_NAMES:
+            continue
+        for inner in ast.walk(child):
+            if isinstance(inner, ast.Constant) and isinstance(inner.value, str):
+                skipped.add(id(inner))
+    return skipped
+
+
 def _string_literals_in_call(node: ast.Call) -> list[tuple[str, int]]:
     """Every string literal reachable from a call's own expression, with line numbers.
 
     Walks the call rather than only its args, because the literal is usually in the
     receiver: ``Path("x/y.md").read_text()`` puts it inside ``func.value``.
+
+    Literals rooted at a runtime value are dropped -- see ``_runtime_rooted_literals``.
     """
+    runtime_rooted = _runtime_rooted_literals(node)
     found: list[tuple[str, int]] = []
     for child in ast.walk(node):
         if isinstance(child, ast.Constant) and isinstance(child.value, str):
+            if id(child) in runtime_rooted:
+                continue
             found.append((child.value, getattr(child, "lineno", node.lineno)))
     return found
 
