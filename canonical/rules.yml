@@ -582,3 +582,27 @@ rules:
       class of defect on its first run: `\s*\S` spans a newline, so `completion_check:` with
       an empty value matched the NEXT line and an empty check read as present -- found by a
       constructed-input test rather than by reading it.
+
+  - id: a-completion-check-names-its-subject
+    statement: >
+      A work order is bound to a workflow run explicitly at start, never inferred, so a
+      completion_check can name the work order it verifies.
+    source: control/execution/workflow/engine.py
+    enforced_by:
+      - tests/unit/test_workflow_nodes_declare_verification.py::test_a_bound_work_order_resolves_in_a_check
+      - tests/unit/test_workflow_nodes_declare_verification.py::test_an_unbound_work_order_leaves_the_literal_in_place
+      - tests/unit/test_workflow_nodes_declare_verification.py::test_the_orchestrators_scoped_checks_name_the_work_order
+    note: >
+      Eight orchestrator nodes could not be checked because <active_work_order_id> was a
+      prose placeholder nothing substituted, and it could not be inferred: 22 work orders
+      were in_progress in the authority at once, so "the active work order" is ambiguous.
+      Inferring by recency is the option deliberately NOT taken -- that is the attribution
+      guess the stop hook was corrected for, which stamped every edit in a project with
+      whichever work order started last and made the operator bypass enforcement for
+      months. A completion_check that verifies the WRONG work order is worse than an honest
+      "nobody looked". So `ds workflow start --work-order <id>` records the binding and
+      {{workflow.work_order_id}} resolves it. An UNBOUND reference leaves the literal in
+      place rather than substituting an empty string: the check then fails and the node
+      blocks with the reason, where an empty string would silently turn a work-order-scoped
+      query into a repo-global one that passes for anything. Orchestrator coverage went
+      0/14 to 3/14 to 9/14 on that change alone.

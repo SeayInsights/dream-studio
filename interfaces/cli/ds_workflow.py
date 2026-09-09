@@ -22,7 +22,9 @@ def cmd_start(args) -> int:
     import argparse
     from control.execution.workflow.state import cmd_start as _state_start
 
-    ns = argparse.Namespace(name=name, yaml_path=yaml_path)
+    ns = argparse.Namespace(
+        name=name, yaml_path=yaml_path, work_order=getattr(args, "work_order", None)
+    )
     try:
         _state_start(ns)
     except SystemExit as exc:
@@ -136,6 +138,18 @@ def add_workflow_subcommand(subparsers) -> None:
     p_start = wf_sub.add_parser("start", help="Initialise a workflow from a YAML file")
     p_start.add_argument("yaml_path", help="Path to workflow YAML")
     p_start.add_argument("--name", default=None, help="Workflow name (default: YAML stem)")
+    p_start.add_argument(
+        "--work-order",
+        dest="work_order",
+        default=None,
+        help=(
+            "The work order this run executes. Recorded on the run and resolvable in any"
+            " node as {{workflow.work_order_id}}, so a completion_check can name its"
+            " subject. Passed explicitly rather than inferred: several work orders are"
+            " in_progress at once, and picking by recency is the attribution guess the"
+            " stop hook was corrected for."
+        ),
+    )
     p_start.set_defaults(func=cmd_start)
 
     # status

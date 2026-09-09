@@ -95,6 +95,12 @@ def cmd_start(args: argparse.Namespace) -> None:
             "completed_nodes": [],
             "gates_passed": [],
             "gates_pending": [],
+            # WHAT THIS RUN IS FOR, bound at start rather than inferred. Resolvable in any
+            # node as {{workflow.work_order_id}}, which is what lets a completion_check
+            # name its subject. Empty when not supplied: an unbound run is honest, and a
+            # check referencing an unbound id leaves the literal in place and blocks the
+            # node with the reason, which is the right outcome.
+            "params": {"work_order_id": str(getattr(args, "work_order", None) or "")},
         }
         _write_state(data)
     _write_checkpoint(key, None, "running")
