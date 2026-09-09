@@ -395,27 +395,34 @@ def test_a_literal_joined_to_a_runtime_base_is_not_a_repo_reference(base):
 @pytest.mark.parametrize("base", ["REPO_ROOT", "PROJECT_ROOT", "repo_root", "source_root"])
 def test_a_literal_joined_to_a_repo_root_name_is_still_checked(base):
     """The other half, and why this is a name heuristic rather than a blanket skip:
-    `REPO_ROOT / "docs" / "x.md"` IS a repo-relative reference and is exactly the shape the
+    `REPO_ROOT / "docs/architecture" / "x.md"` IS a repo-relative reference and is exactly the shape the
     gate should catch. An opaque runtime value cannot be resolved statically, so the choice
     is between a name convention and a permanent false positive on every test that builds a
-    path under a fixture."""
-    source = f'x = ({base} / ".planning" / "notes.md").read_text()\n'
+    path under a fixture.
+
+    The fixture path is a TRACKED one on purpose. These tests exercise literal
+    COLLECTION, and `referenced_literals` never consults .gitignore -- the ignore lookup
+    happens later, in `find_phantom_references`. Using an ignored path here would make this
+    file trip the very gate it tests, and since the gate is diff-scoped that would mean the
+    file could never be edited again.
+    """
+    source = f'x = ({base} / "docs/architecture" / "notes.md").read_text()\n'
     found = [text for text, _line in referenced_literals(source)]
-    assert ".planning" in found, found
+    assert "docs/architecture" in found, found
 
 
 def test_a_literal_argument_path_base_is_still_checked():
-    """`Path(".planning") / "notes.md"` has a CALL as the leftmost operand of the chain. A
+    """`Path("docs/architecture") / "notes.md"` has a CALL as the leftmost operand of the chain. A
     first cut of the fix treated any non-constant base as runtime-rooted and dropped this
     shape, which is one of the two the gate most needs to catch -- found by testing the fix
     rather than reading it."""
-    source = 'x = (Path(".planning") / "notes.md").read_text()\n'
+    source = 'x = (Path("docs/architecture") / "notes.md").read_text()\n'
     found = [text for text, _line in referenced_literals(source)]
-    assert ".planning" in found, found
+    assert "docs/architecture" in found, found
 
 
 def test_a_plain_literal_read_is_unaffected():
     """The baseline the fix must not disturb."""
-    source = 'x = Path(".planning/notes.md").read_text()\n'
+    source = 'x = Path("docs/notes.md").read_text()\n'
     found = [text for text, _line in referenced_literals(source)]
-    assert ".planning/notes.md" in found, found
+    assert "docs/notes.md" in found, found
