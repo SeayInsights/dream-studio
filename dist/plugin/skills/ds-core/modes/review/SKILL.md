@@ -67,6 +67,43 @@ Spec compliance BEFORE code quality. Always. Catching "built the wrong thing" ma
 7. **Change discipline** — Commit subjects are conventional (`feat/fix/revert(scope):`), never the GitHub-UI `Revert "..."` (the revert-format guard rejects it). For a change touching auth, an API/route/schema contract, or a migration, a change-impact affirmation is recorded (`ds work-order affirm-impact`). Both are enforced at close — flag gaps here so they are not a surprise then.
 8. **Silent-default / fail-quiet (negative-space lens)** — Flag code that resolves identity, authority, or required state by elimination ("anything else → default") or swallows a correctness-changing failure (`except: pass`, bare `return None` / `""` / `[]`) so it yields a plausible-but-wrong result with **no alert**. The fix is affirmative: verify and **refuse what you cannot verify** (fail loud) rather than defaulting. *See ADR-0002:* a security scan that returned all-clear when its `git` call had actually failed — a false negative reporting success precisely when it was blind.
 
+### Stage 2 lanes from the registry
+
+`canonical/review_lanes.yml` is the source of truth for these, not this list. Each lane is
+held by a **seat at the round table**, and the seat says what it watches — the Warden (a
+guard enforced on one half), the Machinist (the real machine: which lane runs, and how long
+it takes), the Archivist (the record names every mechanism), the Surveyor (distance from the
+tree that ships), the Herald (a caller sees something different). Each is answered by a
+runnable detector, a graded eval, or a declared judgment; the `review-lane-registry` gate
+refuses a lane that is none of those. Run the detectors; ask the graded ones yourself.
+
+9. **The Warden — the other half enforced by nothing** — *two sites decide the same question; does the
+   second consult every predicate the first does, or a subset?* A fix "shares the predicate"
+   and shares one of the two the other site requires, under a comment saying the two cannot
+   drift — true of one predicate, false of the pair. Graded:
+   `tests/evals/test_review_lane_predicate_parity.py`. Not a detector on purpose: a
+   prototype found 26 candidates among 421 predicates and every one was an arity difference,
+   a module alias, or an unrelated decision, because parsing has no notion of *the same
+   question*.
+10. **The Machinist — an untested fallback lane** — *this fallback exists because the primary path can be
+    unavailable; does any test enter it?* Detector: `py -m core.gates.untested_fallback`
+    (diff-scoped). A fallback runs only in the condition nobody develops in, so it is the
+    code most likely to be wrong and least likely to be noticed.
+11. **The Machinist — a per-item wait with no aggregate deadline** — *this wait is bounded per item; how
+    many items can there be, and does anything bound the total?* Detector:
+    `py -m core.gates.aggregate_deadline`. Every wait bounded and nothing bounding the
+    product is a stall that scales with the data.
+12. **The Archivist — a contract that names one of two mechanisms** — *the code says X and Y make this claim
+    true; does the decision record name both, or only the one that was there first?*
+    Declared judgment: this repo has no ADRs yet, so a detector would pass vacuously.
+13. **The Surveyor — a branch behind its base** — *how far behind is this, and did anyone ask it to sync?*
+    Detector: `py -m core.gates.branch_freshness` (advisory). A clean trial-merge says the
+    texts do not collide, not that you read the tree that will ship.
+14. **The Herald — an unenumerated behaviour change** — *what does a caller see differently, and does the
+    change say so?* Graded:
+    `tests/evals/test_review_lane_behaviour_change_enumerated.py`. A status code becoming a
+    raise, with the PR body enumerating everything except that.
+
 ## Fast scan mode
 When invoked with Haiku for fast scan:
 1. Scan for: secrets, debug leftovers, obvious bugs, missing error handling
