@@ -1,0 +1,191 @@
+# Review lanes — the questions a Dream Studio review is obliged to ask.
+#
+# WHY THIS FILE EXISTS. Five named reviewers on the platform/gateway pass each found a
+# defect nobody else did, and each found it by asking one repeatable question. Those
+# questions lived in their heads. Adding them to the review skill's prose would put them
+# where the operator has already said guidance goes to die: "a lot of prose laid on top of
+# each other as suggestions with no rules, evals, or really any real test that doing
+# anything they are supposed to."
+#
+# THE ROUND TABLE. Every lane is held by a seat, and the seat says what it watches:
+#
+#   The Warden     is the predicate that admits also the predicate that delivers, or is one
+#                  half enforced by nothing?
+#   The Machinist  which lane actually runs, on which platform, and how long does it take
+#                  when the data is large?
+#   The Archivist  does the decision record name every mechanism the code now depends on?
+#   The Surveyor   how far from base is this, and is it the tree that ships?
+#   The Herald     if a caller sees something different, does the change say so?
+#
+# These arrived from an external review pass under their finders' real handles. A seat
+# anonymises and describes at once, and `_SEATS` in the gate is a closed set — so a lane
+# cannot be added under somebody's name, because a name is not a seat.
+#
+# THE CONTRACT IS THE SAME ONE canonical/rules.yml ALREADY RUNS ON — enforce or declare,
+# never advise. Each lane carries exactly ONE of:
+#
+#   detector:      a runnable `py -m ...` that decides the lane mechanically
+#   eval:          a path under tests/evals/ where a grader decides it, with a real fixture
+#   judgment: true + why:  neither is possible YET, and `why` names what is missing
+#
+# `core/gates/review_lane_registry.py` refuses the fourth option. A lane with no
+# enforcement key, or two, or a `why` that is a shrug, fails the push. That is the whole
+# point: a lane that decays back into advice is a lane that stops being asked.
+#
+# WHICH LANE IS WHICH WAS MEASURED, not guessed. A detector that fires on hundreds of sites
+# is a wall someone switches off; one that fires on nothing is decoration. Every
+# `detector:` below carries the count it produced against DS's own tree, and every
+# `eval:`/`judgment:` carries the measurement that ruled a detector out. Guessing here is
+# how a gate gets written that nobody can keep green.
+
+version: 1
+
+lanes:
+  - id: the-other-half-enforced-by-nothing
+    seat: The Warden
+    question: >
+      Two sites decide the same question. Does the second consult every predicate the
+      first does, or a subset of them?
+    signature: >
+      A fix makes site B "share the predicate" with site A, and shares one of the two that
+      A actually requires. The comment claims the two cannot drift; that is true of one
+      predicate and false of the pair.
+    precedent: >
+      The Warden, plat#814 (blocker-class, and the same defect the Herald had blocked on). Delivery
+      shared `_pat_rejected` (revoked-or-expired) with the acceptance paths at
+      app/auth.py:393+396 and :409 — but those also require `_user_is_active`, and delivery
+      consulted only the first. Reproduced with a control: a disabled account had
+      `_pat_rejected=False`, `_user_is_active=False`, auth accepts=False, file written=True.
+      A credential was DELIVERED that authentication refuses. The Herald's sentence — "treats
+      expired PATs as deliverable even though authentication rejects them" — applied
+      verbatim with `disabled` swapped for `expired`.
+    eval: tests/evals/test_review_lane_predicate_parity.py
+    measurement: >
+      A DETECTOR WAS PROTOTYPED AND REJECTED ON EVIDENCE. Collecting every private
+      predicate consulted in a boolean test across the tree found 421 of them and 26
+      "subset-suspects" — and spot-checking the 26 showed they are arity differences
+      (`_table_exists(conn)` beside `_table_exists(conn, table)`), module aliases (`_yaml`),
+      and unrelated decisions in different files. The detector has no notion of "the same
+      question", which is the entire content of the finding. So this lane is graded, and the
+      number is recorded here so the next person does not re-derive it.
+
+  - id: an-untested-fallback-lane
+    seat: The Machinist
+    question: >
+      This fallback exists because the primary path can be unavailable. Does any test ever
+      enter it, or do they all take the primary path?
+    signature: >
+      A platform or exception fallback whose tests all run the other branch — so the test
+      that validates the fix cannot run on the platform the fallback exists for.
+    precedent: >
+      The Machinist, gw#858. `fallback_lock` / `_pending_queue_thread_lock` had zero test hits;
+      every ack test ran the flock path. The Windows lane the docstring promised was
+      unexercised.
+    detector: py -m core.gates.untested_fallback
+    measurement: >
+      Deterministic and diff-scoped. Measured 10 candidates across 944 product files with
+      name-and-handler detection alone; 14 once an audit forced the detector to also see
+      PLATFORM-CONDITIONAL fallbacks, which it had been blind to — and gw#858 was a Windows
+      lane, so the detector could not see the shape of its own precedent. Diff-scoped because those
+      10 stand today: whole-tree would be a wall on day one, and the backlog drains as
+      those files are touched — the ratchet `normative-baseline` and
+      `workflow-node-verification` already use.
+
+  - id: a-per-item-wait-with-no-aggregate-deadline
+    seat: The Machinist
+    question: >
+      This wait is bounded per item. How many items can there be, and does anything bound
+      the total?
+    signature: >
+      A module that already solved unbounded stall for one loop grows a per-item retry in
+      another, with no aggregate deadline — so the ceiling multiplies by a data-dependent
+      count and passes the timeout the module itself cites.
+    precedent: >
+      The Machinist, gw#849 — the strongest finding of the pass. The module's own comment 40
+      lines above the new code says a per-slug ceiling times an agent's skill count is loop
+      stall time, and set `_LOCK_BATCH_BUDGET_S = 5.0` for exactly that reason. The new
+      per-card retry was 2 sleeps x 0.5s inside `for sid in ids:` with no aggregate
+      deadline: ~20s at 20 equipped skills, plus the equip retry's own 1.0s, scaling
+      linearly past the 30s timeout the operator control surface uses.
+    detector: py -m core.gates.aggregate_deadline
+    measurement: >
+      Deterministic ONLY once sharpened to the multiplication shape, and the sharpening came
+      from a false positive. The first cut — a sleep in a loop, in a module that defines a
+      budget constant — found 1 candidate, `core/work_orders/artifacts.py:216`, and reading
+      it showed `_LOCK_ATTEMPTS = 4` with a 0.15s backoff: 0.90s worst case, not inside any
+      outer per-item loop. Bounded, and not the finding. Requiring NESTING — a sleeping loop
+      inside another loop, neither consulting a deadline — drops DS's tree to 0, so this one
+      runs whole-tree rather than diff-scoped.
+
+  - id: a-contract-that-names-one-of-two-mechanisms
+    seat: The Archivist
+    question: >
+      The code says mechanisms X and Y make this claim true. Does the contract document
+      name both, or only the one that was there first?
+    signature: >
+      A normative line is generic enough to stay true while the decision record beneath it
+      still names a single mechanism — so availability now rests on two things and the
+      contract admits one.
+    precedent: >
+      The Archivist. The spec's normative line
+      (GATEWAY-HOSTED-AGENT-SESSION-001:274, "a transient failure is absorbed by retrying
+      the fetch") is generic and genuinely true. But ADR-024 point 4 still says "The equip
+      fetch retries", naming one of the two mechanisms availability now depends on, while
+      the code's own docstring says the per-card retry "is what makes gw-ADR-024's
+      availability claim true rather than aspirational." Same shape he blocked #837 on.
+    judgment: true
+    measurement: >
+      MEASURED AS ZERO SUBSTRATE, which is why this is the one lane with no detector and no
+      eval. `docs/adr/` contains exactly two files, `ADR-000-template.md` and `README.md` —
+      no decision record has been written, so there is nothing for a checker to compare a
+      code claim against. A detector would grep for `ADR-\d+` citations, collect the
+      mechanisms citing each, and assert the record names them; against zero records it
+      would pass vacuously, which reads like enforcement and is not. This lane was ALSO the
+      one an audit caught with no `measurement` field at all, while the registry header
+      claimed every lane carries one — so the gate now requires it.
+    why: >
+      THERE IS NOTHING TO CHECK AGAINST YET. This lane compares a code claim to the decision
+      record it cites, and `docs/adr/` in this repo holds only `ADR-000-template.md` and a
+      README — no ADR has been written. A detector would grep for `ADR-\d+` citations,
+      collect the mechanisms citing each one, and assert the ADR names them; with zero ADRs
+      it would pass vacuously, which is worse than an honest declaration. Convert this lane
+      the moment the first real ADR lands.
+
+  - id: a-branch-behind-its-base
+    seat: The Surveyor
+    question: >
+      How far behind its base is this branch, and did anyone ask it to sync?
+    signature: >
+      A PR that trial-merges clean while being far enough behind that the review read a
+      tree nobody will ship.
+    precedent: >
+      The Surveyor. In the pasted pass plat#812 and #814 were 38 commits behind and gw#849
+      and #858 were 5 behind; all four trial-merged clean, and the Herald asked #812 to sync
+      explicitly. Clean trial-merge is not currency.
+    detector: py -m core.gates.branch_freshness
+    measurement: >
+      Trivially deterministic — `git rev-list --count HEAD..origin/main` — and currently
+      PROSE: CLAUDE.md says "Never push to stale/old branches — check branch freshness
+      first", enforced by nothing. ADVISORY rather than blocking, because a deliberately
+      behind branch is legitimate (a revert, a hotfix off a tag) and blocking it would be a
+      wall; the lane's job is that nobody reviews a stale tree without knowing it.
+
+  - id: an-unenumerated-behaviour-change
+    seat: The Herald
+    question: >
+      What does a caller see differently after this change, and does the change say so?
+    signature: >
+      A response contract changes — a status code, a new raise on an existing path, a
+      changed return type — and the PR body enumerates everything except that.
+    precedent: >
+      The Herald, gw#858. A second ack now raises instead of returning 200, and the
+      consumer is the local UI. The change was real, the body did not name it.
+    eval: tests/evals/test_review_lane_behaviour_change_enumerated.py
+    measurement: >
+      A SIBLING OF AN EXISTING GATE, not a new one. `evidence-backed-output` already audits
+      what a push publishes — the commit messages of the commits being pushed and the lines
+      added to CHANGELOG.md — so the mechanism for "the outbound document must say it"
+      exists. What is missing is the diff side: recognising that a 200 became a raise. That
+      half is graded for now because "what a caller sees differently" is not decidable from
+      a textual diff in general, and the honest move is to extend the existing gate rather
+      than stand up a second one that audits the same documents.

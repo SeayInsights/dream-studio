@@ -408,6 +408,77 @@ gates:
       or delete it. If the definition genuinely precedes its caller, say why inline
       with '# reachability-gate: intentional: <reason>' (every exemption is printed).
 
+  - id: review-lane-registry
+    tier: blocking
+    description: >
+      Every lane in canonical/review_lanes.yml is answered by a runnable
+      detector, a graded eval, or a declared judgment with a reason naming
+      what is missing. Five named reviewers each found a defect nobody else
+      did by asking one repeatable question; those questions lived in their
+      heads, and prose is where the operator has already said guidance goes
+      to die. Same enforce-or-declare contract canonical/rules.yml runs on,
+      so the repo has one contract shape rather than two that drift. It
+      refused its own registry twice while being built, and an audit found
+      the gate, its test and the registry header stating the contract three
+      different ways.
+    command: [py, -m, core.gates.review_lane_registry]
+    fail_hint: >
+      A review lane declares no detector, no eval, and no judgment with a
+      reason -- or declares two, so nobody knows which one runs. Answer it or
+      say what is missing; a lane that decays into advice stops being asked.
+
+  - id: aggregate-deadline
+    tier: blocking
+    description: >
+      A per-item wait must be bounded in TOTAL, not only per item. Review
+      lane a-per-item-wait-with-no-aggregate-deadline, from the Machinist on
+      gw#849: a module that had already batch-capped one loop grew a
+      per-card retry in another with no aggregate deadline -- 2 x 0.5s
+      inside a loop over equipped skills is ~20s at 20 skills, past the 30s
+      timeout the module itself cited. Every wait was bounded; nothing
+      bounded the product. Requires NESTING, which is the multiplication
+      shape: a first cut without it produced one false positive
+      (core/work_orders/artifacts.py:216, bounded at 0.90s) and this repo
+      measures 0 with it, so it runs whole-tree.
+    command: [py, -m, core.gates.aggregate_deadline]
+    fail_hint: >
+      A wait inside a nested loop with nothing bounding the total. Consult a
+      deadline in the outer loop, or declare what bounds it inline with
+      '# aggregate-deadline: <what bounds the total>'.
+
+  - id: untested-fallback
+    tier: blocking
+    description: >
+      A fallback lane must be entered by some test. Review lane
+      an-untested-fallback-lane, from the Machinist on gw#858: fallback_lock had
+      zero test hits while every ack test ran the flock path, so the test
+      validating the fix could not run on the platform the fallback existed
+      for. A fallback runs only when the primary path is unavailable, which
+      is the condition nobody develops in. Diff-scoped: 14 candidates stand
+      in this tree, so whole-tree would be a wall and the backlog drains as
+      those files are touched.
+    command: [py, -m, core.gates.untested_fallback]
+    fail_hint: >
+      A changed module defines a fallback -- by name, in an exception
+      handler, or in a platform branch -- that no test mentions. Enter it
+      from a test, or say why it cannot be with
+      '# untested-fallback: <why>'.
+
+  - id: branch-freshness
+    tier: advisory
+    description: >
+      Says how far behind its base this branch is, before anyone reviews it.
+      Review lane a-branch-behind-its-base, from the Surveyor: four PRs
+      trial-merged CLEAN at 5 and 38 commits behind, and a clean trial-merge
+      says the texts do not collide, not that the review read the tree that
+      will ship. ADVISORY on purpose -- a behind branch is sometimes
+      deliberate (a revert off a tag, a hotfix from a release point), so
+      blocking would be a wall. This was prose in CLAUDE.md ("never push to
+      stale/old branches") enforced by nothing.
+    command: [py, -m, core.gates.branch_freshness]
+    warn_hint: >
+      This branch is behind its base. Sync before trusting a review of it.
+
   - id: gitignore-phantom
     tier: blocking
     description: >
