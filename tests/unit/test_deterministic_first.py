@@ -485,15 +485,43 @@ def test_the_detector_reports_this_repos_real_remaining_cases():
 
 # ── Task 5: the rule ships in canonical skill text ───────────────────────────
 
-_RULE_BEARING = [("core", "ds-core", "build"), ("core", "ds-core", "verify")]
+#: THE FOUR SURFACES THE WORK ORDER NAMED. This list IS the deliverable, not a
+#: convenience -- shrinking it is how the gap shipped. The first version covered the two
+#: ds-core modes, which were the two that already carried the rule, so it stayed green
+#: while `ds-workorder execute` and `ds-workorder close` carried nothing and an agent
+#: executing or closing a work order never read it. A test scoped to what exists cannot
+#: report what is missing. Removing an entry here is removing a deliverable.
+_RULE_BEARING = [
+    ("core", "ds-core", "build"),
+    ("core", "ds-core", "verify"),
+    ("ds-workorder", "ds-workorder", "execute"),
+    ("ds-workorder", "ds-workorder", "close"),
+]
 
-# The two modes carry DIFFERENT halves on purpose: build tells an agent how to prove a
-# claim, verify describes what the verdict already carries. Demanding one phrase from
-# both was the first version of this test and it failed on correct guidance.
+# Each surface carries a DIFFERENT half on purpose: build tells an agent how to prove a
+# claim, verify describes what the verdict already carries, execute is where a task is
+# claimed done, close is where the computed facts arrive. Demanding one phrase from all of
+# them was the first version of this test and it failed on correct guidance.
+#
+# Keyed by (pack, mode), not mode alone -- `close` could exist under more than one pack,
+# and a bare mode key would quietly hold one pack's file to another's expectations.
 _MODE_PHRASES = {
-    "build": ("grep is not a drive", "unknown"),
-    "verify": ("computed facts", "unknown"),
+    ("core", "build"): ("grep is not a drive", "unknown"),
+    ("core", "verify"): ("computed facts", "unknown"),
+    ("ds-workorder", "execute"): ("grep is not a drive", "unknown"),
+    ("ds-workorder", "close"): ("computed facts", "unknown"),
 }
+
+
+def test_every_surface_the_work_order_named_is_covered():
+    """The list above is the deliverable; this makes shrinking it a visible act.
+
+    Task 5 named four skill surfaces and the rule reached two. The parametrised test below
+    passed anyway, because it iterated the same list that had been narrowed. Pinning the
+    count separately means a future narrowing fails here rather than passing quietly.
+    """
+    assert len(_RULE_BEARING) == 4, _RULE_BEARING
+    assert {(pack, mode) for pack, _, mode in _RULE_BEARING} == set(_MODE_PHRASES)
 
 
 @pytest.mark.parametrize(("pack", "_projected", "mode"), _RULE_BEARING)
@@ -504,8 +532,8 @@ def test_skill_texts_require_computing_what_can_be_computed(pack, _projected, mo
     path = _REPO / "canonical" / "skills" / pack / "modes" / mode / "SKILL.md"
     assert path.is_file(), f"missing {path}"
     flat = re.sub(r"\s+", " ", path.read_text(encoding="utf-8").lower())
-    for phrase in _MODE_PHRASES[mode]:
-        assert phrase in flat, f"{mode}: must state {phrase!r}"
+    for phrase in _MODE_PHRASES[(pack, mode)]:
+        assert phrase in flat, f"{pack}/{mode}: does not state {phrase!r}"
 
 
 @pytest.mark.parametrize(("pack", "projected_pack", "mode"), _RULE_BEARING)
@@ -638,3 +666,199 @@ def test_the_sweep_reports_a_suspect_and_never_blocks(tmp_path, monkeypatch, cap
     assert exit_code == 0, "advisory: it must never block a push"
     assert "test_it_is_wired" in out, f"and it must name the suspect; output:\n{out}"
     assert "grep proves the line was typed" in out.replace("\n", " ")
+
+
+# ── an acceptance criterion must not become a pytest option ──────────────────
+
+
+def test_a_flag_shaped_expression_is_refused_not_collected():
+    """THE SHAPE `check_argv` ALREADY REFUSES, WRITTEN AGAIN IN A NEW FILE.
+
+    `resolve_node_ids` spliced acceptance-criteria text straight into a pytest argv, so a
+    criterion beginning `-p somemodule` loaded an arbitrary plugin — in a gate that runs on
+    every verify. `control/execution/workflow/runner.py::check_argv` refuses exactly this
+    for workflow checks (WO 26675b56, shipped in c9e81457) and I wrote it again two weeks
+    later. Found by this work order's own independent-review verdict.
+
+    REFUSED AND REPORTED, not dropped. A dropped token would leave the criterion unchecked
+    while `checked` still counted it — compared-nothing-reported-clean. It lands in
+    `undetermined`, which already means "named here, and not answerable here".
+    """
+    from core.gates.deterministic_evidence import resolve_node_ids
+
+    report = resolve_node_ids(["-p evil_module", "--rootdir=/tmp", "-x"])
+
+    assert report["checked"] == 0, "a flag reached the collector"
+    refused = {u["expr"] for u in report["undetermined"]}
+    assert refused == {"-p evil_module", "--rootdir=/tmp", "-x"}, refused
+    for entry in report["undetermined"]:
+        assert "option" in entry["reason"], entry
+
+
+def test_refusing_a_flag_does_not_discard_the_real_ids_beside_it():
+    """A criterion list is mixed. Refusing one entry must not lose the others, and must not
+    silently pass the whole batch either — both directions asserted, because a guard that
+    refuses everything would satisfy the test above on its own."""
+    from core.gates.deterministic_evidence import resolve_node_ids
+
+    real = (
+        "tests/unit/test_deterministic_first.py"
+        "::test_no_tasks_yields_no_coverage_rather_than_a_fake_one"
+    )
+    report = resolve_node_ids(["-p evil_module", real, "cmd: npm test"])
+
+    assert report["status"] == "computed"
+    assert report["checked"] == 1, "the real node id was dropped with the flag"
+    assert report["unresolved"] == [], report["unresolved"]
+    reasons = {u["expr"]: u["reason"] for u in report["undetermined"]}
+    assert set(reasons) == {"-p evil_module", "cmd: npm test"}
+    assert "option" in reasons["-p evil_module"]
+    assert "command" in reasons["cmd: npm test"], "the cmd: lane lost its own reason"
+
+
+def test_the_collector_is_called_with_an_end_of_options_barrier():
+    """The refusal above is a list of shapes, and a list is always incomplete. `--` makes a
+    shape it does not anticipate arrive as a path rather than a flag.
+
+    Asserted on the argv actually passed to subprocess.run, and that the barrier precedes
+    every id — `--` after a node id would leave the first one still option-parsed.
+    """
+    import subprocess
+
+    from core.gates import deterministic_evidence as de
+
+    seen: dict[str, list[str]] = {}
+
+    class _Result:
+        returncode = 0
+        stdout = "1 test collected"
+        stderr = ""
+
+    def _fake_run(argv, **kwargs):
+        seen["argv"] = list(argv)
+        return _Result()
+
+    original = subprocess.run
+    subprocess.run = _fake_run  # noqa: S001 - restored in the finally below
+    try:
+        de.resolve_node_ids(["tests/unit/test_x.py::test_a", "tests/unit/test_x.py::test_b"])
+    finally:
+        subprocess.run = original
+
+    argv = seen["argv"]
+    assert "--" in argv, argv
+    barrier = argv.index("--")
+    assert barrier < argv.index("tests/unit/test_x.py::test_a"), argv
+    # Built by index rather than sliced: black formats `argv[barrier + 1 :]` with a space
+    # before the colon and this repo's flake8 reports that as E203.
+    after = [arg for index, arg in enumerate(argv) if index > barrier]
+    assert all(not a.startswith("-") for a in after), after
+
+
+# ── the fourth fact Task 1 named ─────────────────────────────────────────────
+
+
+def test_an_absent_artifact_and_a_bare_one_are_different_findings(tmp_path):
+    """THE FACT THAT SHIPPED UNCOMPUTED, and why it is not a boolean.
+
+    Task 1 named four facts and `deterministic_facts` returned three, so "do these
+    artifacts carry provenance" went to a grader or to nobody — found by this work order's
+    own review verdict. The mechanism already existed.
+
+    Three-valued per kind on purpose: `_artifact_with_envelope` returns `(None, None)` for
+    an ABSENT artifact and `(text, None)` for a legacy BARE one. A missing security scan
+    and an old-format security scan have different remedies — generate versus regenerate —
+    and a boolean reports them identically.
+    """
+    from core.gates.deterministic_evidence import artifact_provenance
+    from core.work_orders.artifact_envelope import wrap
+    from core.work_orders.artifacts import KIND_TO_FILENAME
+
+    wo = "11111111-2222-3333-4444-555555555555"
+    wo_dir = tmp_path / "work-orders" / wo
+    wo_dir.mkdir(parents=True)
+    # Signature READ, not recalled. The first version of this line invented
+    # `wrap(content, work_order_id=..., project_root=...)` and raised TypeError — which is
+    # "a remembered artifact shape is not a read one", the rule this same change set
+    # writes into the skill texts, broken while writing it.
+    (wo_dir / KIND_TO_FILENAME["review_verdict"]).write_text(
+        wrap("{}", generator="test", head_commit_sha="abc1234"), encoding="utf-8"
+    )
+    (wo_dir / KIND_TO_FILENAME["security_scan"]).write_text("no envelope here", encoding="utf-8")
+
+    report = artifact_provenance(wo, planning_root=tmp_path)
+
+    assert report["status"] == "computed"
+    assert report["checked"] == len(KIND_TO_FILENAME)
+    assert "review_verdict" in report["provenanced"], report
+    assert "security_scan" in report["bare"], report
+    assert "api_contract" in report["absent"], report
+    assert not set(report["bare"]) & set(report["absent"]), "a kind lands in exactly one bucket"
+
+
+def test_no_work_order_id_is_unknown_with_a_reason_not_a_clean_report():
+    """An unasked question and a question answered "nothing wrong" are different claims.
+
+    Returning empty lists here would report every artifact kind as fine for a work order
+    nobody named — the compared-nothing-reported-clean shape this whole layer exists to
+    refuse.
+    """
+    from core.gates.deterministic_evidence import UNKNOWN, artifact_provenance
+
+    report = artifact_provenance(None)
+    assert report["status"] == UNKNOWN
+    assert report["reason"], "an unknown travels with its reason"
+    assert "provenanced" not in report, "an unknown must not look like a measurement"
+
+
+def test_the_provenance_fact_reaches_the_grader_prompt(tmp_path):
+    """A computed value with no reader is the invisibility defect wearing a new name —
+    this suite's own words. The block must state the fact AND distinguish bare from
+    absent, since that distinction is the reason the fact is not a boolean."""
+    import re
+
+    from core.gates.deterministic_evidence import artifact_provenance, facts_prompt_block
+    from core.work_orders.artifacts import KIND_TO_FILENAME
+
+    wo = "66666666-7777-8888-9999-000000000000"
+    wo_dir = tmp_path / "work-orders" / wo
+    wo_dir.mkdir(parents=True)
+    (wo_dir / KIND_TO_FILENAME["security_scan"]).write_text("no envelope", encoding="utf-8")
+
+    block = facts_prompt_block(
+        {"artifact_provenance": artifact_provenance(wo, planning_root=tmp_path)}
+    )
+    flat = re.sub(r"\s+", " ", block)
+
+    assert "Artifact provenance:" in flat
+    assert "BARE: security_scan" in flat
+    assert "ABSENT:" in flat
+    assert "NOT the same finding" in flat, "the two must not read as one finding"
+
+
+def test_an_unknown_provenance_fact_does_not_read_as_a_pass():
+    """Every fact in this layer can be unknown, and none may read as a silent pass."""
+    import re
+
+    from core.gates.deterministic_evidence import UNKNOWN, facts_prompt_block
+
+    block = facts_prompt_block(
+        {"artifact_provenance": {"status": UNKNOWN, "reason": "the store was unreadable"}}
+    )
+    flat = re.sub(r"\s+", " ", block)
+    assert "not determined" in flat
+    assert "the store was unreadable" in flat, "the reason travels with the unknown"
+
+
+def test_deterministic_facts_carries_all_four_named_facts():
+    """Task 1 named four. Three shipped. This pins the count so a fourth cannot quietly
+    become three again."""
+    from core.gates.deterministic_evidence import deterministic_facts
+
+    facts = deterministic_facts(tasks=[], repo_root=_REPO, check_node_ids=False)
+    assert set(facts) == {
+        "acceptance_criteria",
+        "projection_parity",
+        "node_ids",
+        "artifact_provenance",
+    }, sorted(facts)

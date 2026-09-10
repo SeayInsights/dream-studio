@@ -127,15 +127,44 @@ def resolve_node_ids(expressions: list[str], *, project_root: Path | None = None
     ``cmd:`` expressions are the target repo's own command, not pytest node ids, and are
     reported as undetermined rather than guessed at.
     """
-    node_ids = [e.strip() for e in expressions if e.strip()[:4].lower() != "cmd:"]
-    undetermined: list[dict[str, str]] = [
-        {
-            "expr": e,
-            "reason": "a 'cmd:' expression is the target repo's own command, not a pytest node id",
-        }
-        for e in expressions
-        if e.strip()[:4].lower() == "cmd:"
-    ]
+    node_ids: list[str] = []
+    undetermined: list[dict[str, str]] = []
+    for raw in expressions:
+        expr = raw.strip()
+        if not expr:
+            continue
+        if expr[:4].lower() == "cmd:":
+            undetermined.append(
+                {
+                    "expr": raw,
+                    "reason": (
+                        "a 'cmd:' expression is the target repo's own command, not a"
+                        " pytest node id"
+                    ),
+                }
+            )
+            continue
+        if expr.startswith("-"):
+            # AN ACCEPTANCE CRITERION IS NOT A PYTEST OPTION. `-p somemodule`
+            # loads an arbitrary plugin, and this runs on every verify. It is the shape
+            # `check_argv` already refuses for workflow checks (WO 26675b56, c9e81457),
+            # written again here and caught by this work order's own review verdict.
+            #
+            # Refused and REPORTED rather than dropped: a dropped token would leave the
+            # criterion unchecked while the count still claimed it, which is the
+            # compared-nothing-reported-clean shape. `undetermined` already means
+            # "named, and not answerable here".
+            undetermined.append(
+                {
+                    "expr": raw,
+                    "reason": (
+                        "an expression beginning with '-' is a pytest option, not a node"
+                        " id; refused rather than passed to the collector"
+                    ),
+                }
+            )
+            continue
+        node_ids.append(expr)
     if not node_ids:
         return {
             "status": "computed",
@@ -146,7 +175,19 @@ def resolve_node_ids(expressions: list[str], *, project_root: Path | None = None
 
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "pytest", "--collect-only", "-q", "--no-header", *node_ids],
+            # `--` ends option parsing, so a shape the refusal above does not
+            # anticipate reaches pytest as a path rather than a flag. Verified, not
+            # assumed: `--collect-only -q --no-header -- -p` collects 0 items.
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "--collect-only",
+                "-q",
+                "--no-header",
+                "--",
+                *node_ids,
+            ],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -300,12 +341,78 @@ def projection_parity(repo_root: Path | None = None) -> dict[str, Any]:
     }
 
 
+def artifact_provenance(
+    work_order_id: str | None,
+    *,
+    db_path: Path | None = None,
+    planning_root: Path | None = None,
+) -> dict[str, Any]:
+    """Which of this work order's stored artifacts carry a provenance envelope.
+
+    THE FOURTH FACT TASK 1 NAMED, and the one that shipped uncomputed -- found by this
+    work order's own review verdict. Gates that require provenance already read the
+    envelope back through ``close_shared._artifact_with_envelope``; asking a grader to
+    assert the same thing from a diff was spending judgement on a function call.
+
+    THREE-VALUED PER KIND, deliberately. ``_artifact_with_envelope`` returns ``(None,
+    None)`` for an artifact that is ABSENT and ``(text, None)`` for one stored as legacy
+    bare text. Those are different situations with different remedies -- generate it,
+    versus regenerate it -- and a boolean would report a missing security scan and an
+    old-format one identically. So each kind lands in ``provenanced``, ``bare`` or
+    ``absent`` by name.
+
+    Returns ``unknown`` with a reason rather than guessing when there is no work order id
+    to ask about, or when the artifact store cannot be read: an absent envelope and an
+    unreadable store are not the same claim, and only one of them is a finding.
+    """
+    if not work_order_id:
+        return _unknown("no work order id was supplied, so no artifact store to read")
+
+    try:
+        from core.work_orders.artifacts import KIND_TO_FILENAME
+        from core.work_orders.close_shared import _artifact_with_envelope
+    except ImportError as exc:  # pragma: no cover - the module is in-tree
+        return _unknown(f"the artifact store could not be imported ({exc})")
+
+    # Same resolution the gates that require provenance already use
+    # (core/gates/merge_readiness.py, core/work_orders/close_gates.py): the docstore is
+    # consulted first and this directory is the fallback for file-backed artifacts.
+    root = planning_root or (Path.cwd() / ".planning")
+    wo_dir = root / "work-orders" / work_order_id
+
+    provenanced: list[str] = []
+    bare: list[str] = []
+    absent: list[str] = []
+    for kind in sorted(KIND_TO_FILENAME):
+        try:
+            content, envelope = _artifact_with_envelope(work_order_id, wo_dir, kind, db_path)
+        except Exception as exc:
+            return _unknown(f"reading the {kind} artifact raised {type(exc).__name__}: {exc}")
+        if content is None:
+            absent.append(kind)
+        elif envelope:
+            provenanced.append(kind)
+        else:
+            bare.append(kind)
+
+    return {
+        "status": "computed",
+        "checked": len(KIND_TO_FILENAME),
+        "provenanced": provenanced,
+        "bare": bare,
+        "absent": absent,
+    }
+
+
 def deterministic_facts(
     *,
     tasks: list[dict[str, Any]],
     project_root: Path | None = None,
     repo_root: Path | None = None,
     check_node_ids: bool = True,
+    work_order_id: str | None = None,
+    db_path: Path | None = None,
+    planning_root: Path | None = None,
 ) -> dict[str, Any]:
     """Everything about this work order that can be established by computation.
 
@@ -316,6 +423,12 @@ def deterministic_facts(
     facts: dict[str, Any] = {
         "acceptance_criteria": acceptance_criteria_determinism(tasks),
         "projection_parity": projection_parity(repo_root),
+        # The fourth fact Task 1 named. Reports `unknown` with a reason when no work
+        # order id reaches here, rather than omitting the key -- an absent fact and an
+        # unasked one read identically to a grader, and only one is a finding.
+        "artifact_provenance": artifact_provenance(
+            work_order_id, db_path=db_path, planning_root=planning_root
+        ),
     }
     expressions = collect_test_check_expressions(tasks)
     if not check_node_ids:
@@ -387,6 +500,30 @@ def facts_prompt_block(facts: dict[str, Any]) -> str:
             "    A prose-only criterion is not a defect by itself — some claims cannot be"
             " computed — but its task's completion rests on your reading alone."
         )
+
+    provenance = facts.get("artifact_provenance") or {}
+    if provenance.get("status") == "computed":
+        bare, absent = provenance.get("bare") or [], provenance.get("absent") or []
+        lines.append(
+            f"- Artifact provenance: {provenance.get('checked', 0)} artifact kind(s)"
+            f" examined; {len(provenance.get('provenanced') or [])} carry a provenance"
+            f" envelope, {len(bare)} are stored as legacy bare text, {len(absent)} are"
+            " absent."
+        )
+        for kind in bare:
+            lines.append(
+                f"    BARE: {kind} exists but carries no provenance envelope — it was"
+                " stored before envelopes, or written outside the artifact writer."
+            )
+        for kind in absent:
+            lines.append(
+                f"    ABSENT: {kind} — no artifact of this kind exists. This is NOT the"
+                " same finding as a bare one, and most kinds are not required."
+            )
+    else:
+        lines.append(
+            "- Artifact provenance: not determined" f" ({provenance.get('reason', 'no reason')})."
+        )
     return "\n".join(lines)
 
 
@@ -427,7 +564,7 @@ GREP_EXEMPT_MARKER = "deterministic-first: structural assertion"
 def source_reading_tests(source: str, *, path: str) -> list[dict[str, Any]]:
     """Test functions whose evidence is the source TEXT of importable Python.
 
-    Returns one entry per suspect: ``{test, line, reads, exempt, exempt_reason, reason}``.
+    Returns one entry per suspect: ``{test, line, reads, symbols, exempt, exempt_reason, reason}``, where ``symbols`` names WHAT was read -- the argument each reader was applied to -- because "this test greps source" without "and here is the thing it could have called" leaves the actionable half to the reader.
 
     A grep proves the line was typed; only a drive proves it runs. Judgement caught this
     twice — the project-state test asserting ``work_order_execution_caveat`` appeared in
@@ -455,6 +592,7 @@ def source_reading_tests(source: str, *, path: str) -> list[dict[str, Any]]:
 
         body_text = ast.get_source_segment(source, node) or ""
         readers: list[str] = []
+        symbols: list[str] = []
         asserts = 0
         for inner in ast.walk(node):
             if isinstance(inner, ast.Assert):
@@ -463,6 +601,15 @@ def source_reading_tests(source: str, *, path: str) -> list[dict[str, Any]]:
                 name = getattr(inner.func, "attr", None) or getattr(inner.func, "id", None)
                 if name in _SOURCE_READERS:
                     readers.append(str(name))
+                    # NAME WHAT WAS READ, not just that something was. Reporting
+                    # "reads getsource" tells an operator a test greps source and
+                    # withholds the actionable half -- which symbol to import and
+                    # call instead -- so the reader has to open the file to find out.
+                    # The argument is right here in the AST; it was simply not captured.
+                    if inner.args:
+                        segment = ast.get_source_segment(source, inner.args[0])
+                        if segment:
+                            symbols.append(" ".join(segment.split()))
         if not (readers and asserts):
             continue
 
@@ -476,11 +623,14 @@ def source_reading_tests(source: str, *, path: str) -> list[dict[str, Any]]:
                 "test": node.name,
                 "line": node.lineno,
                 "reads": sorted(set(readers)),
+                "symbols": sorted(set(symbols)),
                 "exempt": exempt,
                 "exempt_reason": reason,
                 "reason": (
                     "asserts over the SOURCE TEXT of importable Python — a grep proves the"
-                    " line was typed, not that it runs. Drive the surface instead, or declare"
+                    " line was typed, not that it runs. Drive the surface instead"
+                    + (f" (import and call {', '.join(sorted(set(symbols)))})" if symbols else "")
+                    + ", or declare"
                     f" the structural claim with '# {GREP_EXEMPT_MARKER}: <why>'."
                 ),
             }
@@ -542,7 +692,12 @@ def main() -> int:
     print("deterministic-first: these tests offer SOURCE TEXT as their evidence:")
     for item in suspects:
         print(
-            f"  {item['file']}:{item['line']}  {item['test']}  (reads {', '.join(item['reads'])})"
+            f"  {item['file']}:{item['line']}  {item['test']}"
+            + (
+                f"  (reads {', '.join(item['reads'])} of" f" {', '.join(item['symbols'])})"
+                if item.get("symbols")
+                else f"  (reads {', '.join(item['reads'])})"
+            )
         )
     print()
     print("  A grep proves the line was typed; only a drive proves it runs. Import the")
