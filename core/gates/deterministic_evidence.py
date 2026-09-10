@@ -60,8 +60,8 @@ _COLLECT_TIMEOUT_SECONDS = 120
 _TEST_CHECK_LINE = re.compile(r"^\s*TEST-CHECK:\s*(.+)$", re.IGNORECASE)
 # pytest prints one of these per unresolvable target during collection.
 # Captures to END OF LINE, not the first whitespace: pytest echoes an absolute path
-# and this repo lives under "C:\Users\Dannis Seay\...", so a \S+ capture
-# reported the missing target as "C:\Users\Dannis".
+# and this repo lives under "C:\Users\<operator with a space in the name>\...", so a \S+ capture
+# reported the missing target as "C:\Users\<operator".
 _NOT_FOUND = re.compile(r"ERROR:\s+(?:file or directory )?not found:\s*(.+?)\s*$", re.M)
 # WHAT COUNTS AS EXECUTABLE IS NOT DECIDED HERE.
 #
