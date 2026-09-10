@@ -37,6 +37,7 @@ The call form is why this lane also carries a question for a human to ask.
 
 from __future__ import annotations
 
+import argparse
 import ast
 import json
 import re
@@ -61,7 +62,7 @@ _EXEMPTION = re.compile(r"#\s*aggregate-deadline:\s*(?P<reason>\S.*)")
 _MIN_REASON_CHARS = 20
 
 
-def _tracked_python() -> list[str]:
+def _tracked_python(repo_root: Path | None = None) -> list[str]:
     """Tracked ``.py`` files, excluding tests.
 
     Tests are excluded because a sleeping loop in a test is a test being slow, not a
@@ -70,7 +71,7 @@ def _tracked_python() -> list[str]:
     try:
         proc = subprocess.run(  # noqa: S603 - fixed argv, no shell
             ["git", "ls-files", "*.py"],
-            cwd=str(REPO_ROOT),
+            cwd=str(repo_root or REPO_ROOT),
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -198,12 +199,12 @@ def _declared_reason(lines: list[str], loop_line: int) -> str | None:
     return None
 
 
-def run() -> dict:
+def run(repo_root: Path | None = None) -> dict:
     """Scan every tracked non-test module."""
     offenders: list[dict] = []
     scanned = 0
-    for rel in _tracked_python():
-        path = REPO_ROOT / rel
+    for rel in _tracked_python(repo_root):
+        path = (repo_root or REPO_ROOT) / rel
         try:
             source = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
@@ -217,8 +218,24 @@ def run() -> dict:
     }
 
 
-def main() -> int:
-    result = run()
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Report a per-item wait with nothing bounding the total."
+    )
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help=(
+            "Review THIS tree instead of the one this gate lives in. The round table"
+            " appends it when convening against another project; without it the gate"
+            " scans its own install, which would report another project's result as"
+            " clean."
+        ),
+    )
+    args = parser.parse_args(argv)
+    root = Path(args.repo_root) if args.repo_root else None
+
+    result = run(root)
     if result["status"] != "pass":
         print(json.dumps(result, indent=2, sort_keys=True))
         print(

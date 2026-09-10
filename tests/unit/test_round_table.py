@@ -145,7 +145,7 @@ def test_a_detector_lane_is_reported_from_its_exit_status(monkeypatch):
     clean would satisfy the pass case."""
     calls: list[str] = []
 
-    def _fake(command: str) -> tuple[bool, str]:
+    def _fake(command: str, repo_root=None) -> tuple[bool, str]:
         calls.append(command)
         return (False, "found something") if "untested_fallback" in command else (True, "OK")
 
@@ -156,7 +156,7 @@ def test_a_detector_lane_is_reported_from_its_exit_status(monkeypatch):
     assert report["status"] == "fail", report
     assert "an-untested-fallback-lane" in report["detectors_unclean"], report
 
-    monkeypatch.setattr(round_table, "_run_detector", lambda command: (True, "OK"))
+    monkeypatch.setattr(round_table, "_run_detector", lambda command, repo_root=None: (True, "OK"))
     assert convene(run_detectors=True)["status"] == "pass"
 
 
@@ -170,7 +170,9 @@ def test_the_table_stops_at_its_own_budget(monkeypatch):
     """
     monkeypatch.setattr(round_table, "_TABLE_BUDGET_S", -1.0)
     monkeypatch.setattr(
-        round_table, "_run_detector", lambda command: pytest.fail("budget was not honoured")
+        round_table,
+        "_run_detector",
+        lambda command, repo_root=None: pytest.fail("budget was not honoured"),
     )
 
     report = convene(run_detectors=True)
@@ -248,3 +250,131 @@ def test_a_seat_longer_than_the_floor_still_aligns(monkeypatch):
     # The long seat pushed the column out; the Warden's question must move with it.
     assert len(warden[0]) - len(warden[0].lstrip()) == 2
     assert warden[0].index("Two sites") == min(question_columns)
+
+
+# ── WO 09118a8e: another project convenes its own table ─────────────────────
+
+
+def _foreign_project(tmp_path, lanes_yaml: str):
+    """A second tree with a registry of its own."""
+    registry = tmp_path / "canonical" / "review_lanes.yml"
+    registry.parent.mkdir(parents=True, exist_ok=True)
+    registry.write_text(lanes_yaml, encoding="utf-8")
+    return tmp_path
+
+
+FOREIGN_LANE = """
+lanes:
+  - id: a-lane-that-exists-only-over-there
+    seat: The Warden
+    question: >
+      Does the other project's own question get asked when its own table convenes?
+    signature: >
+      A convener that reads its own registry regardless of the tree it was pointed at would
+      ask this repository's questions about somebody else's code.
+    precedent: >
+      WO 09118a8e. The convener resolved the registry from its own tree, so another project
+      could only ever be asked dream-studio's questions.
+    judgment: true
+    why: >
+      A fixture lane, present to prove the registry travelled with the tree rather than with
+      the convener. It answers nothing about the code under review.
+    measurement: >
+      Not measured; this lane exists only inside a test fixture and is never registered in
+      the shipped registry.
+"""
+
+
+def test_the_table_convenes_against_another_repo(tmp_path):
+    """THE POINT OF THE WORK ORDER. The other project's lane is asked, and this repo's are
+    not -- which is only provable because the fixture registry differs from the shipped one.
+    """
+    foreign = _foreign_project(tmp_path, FOREIGN_LANE)
+
+    report = convene(run_detectors=False, repo_root=foreign)
+    seated = {seat["lane"] for seat in report["lanes"]}
+
+    assert seated == {"a-lane-that-exists-only-over-there"}, seated
+    # And none of this repository's lanes leaked in.
+    assert not (seated & _lane_ids()), seated & _lane_ids()
+
+
+def test_a_project_with_no_registry_raises_rather_than_reporting_a_clean_table(tmp_path):
+    """A convening that asked nothing is not a clean review. Reporting an empty table would
+    make "this project has no lanes" indistinguishable from "this project passed"."""
+    import pytest
+
+    with pytest.raises(FileNotFoundError, match="no review-lane registry"):
+        convene(run_detectors=False, repo_root=tmp_path)
+
+
+def test_a_detector_that_cannot_be_retargeted_is_unclean_not_clean(tmp_path, monkeypatch):
+    """THE FAIL-CLOSED PROPERTY, and the reason the whole feature is safe.
+
+    A detector without `--repo-root` exits 2 with "unrecognized arguments". The tempting
+    reading -- drop the flag and run anyway -- would scan the convener's own install and
+    report that as the other project's result: compared-nothing-reported-clean with an extra
+    step. So it is reported as a lane that could not be pointed at the target.
+    """
+    calls: list[list[str]] = []
+
+    class _Rejected:
+        returncode = 2
+        stdout = ""
+        stderr = "error: unrecognized arguments: --repo-root /somewhere"
+
+    def _fake_run(argv, **kwargs):
+        calls.append(argv)
+        return _Rejected()
+
+    monkeypatch.setattr(round_table.subprocess, "run", _fake_run)
+
+    clean, detail = round_table._run_detector("py -m core.gates.untested_fallback", tmp_path)
+    assert clean is False
+    assert "could not be pointed at the target" in detail, detail
+    assert "--repo-root" in calls[0], calls[0]
+
+
+def test_a_same_repo_convening_does_not_pass_the_flag(monkeypatch):
+    """Nothing about the existing behaviour changes: the flag is appended only when the
+    target differs from the convener's own root, so a lane whose detector predates this work
+    still runs here exactly as before."""
+    calls: list[list[str]] = []
+
+    class _Ok:
+        returncode = 0
+        stdout = "fine"
+        stderr = ""
+
+    monkeypatch.setattr(
+        round_table.subprocess, "run", lambda argv, **k: (calls.append(argv), _Ok())[1]
+    )
+
+    round_table._run_detector("py -m core.gates.untested_fallback", round_table.REPO_ROOT)
+    assert "--repo-root" not in calls[0], calls[0]
+
+
+# ── each seat callable on its own ───────────────────────────────────────────
+
+
+def test_a_single_seat_can_be_convened_and_a_typo_fails():
+    """One reviewer type at a time -- and an unknown seat RAISES with the valid set named.
+
+    Silently convening nothing for a typo would report a clean review of everything, which
+    is the substitution every lane at this table exists to refuse.
+    """
+    import pytest
+
+    one = convene(run_detectors=False, seat="The Falsifier")
+    seats = {seat["seat"] for seat in one["lanes"]}
+    assert seats == {"The Falsifier"}, seats
+    assert len(one["lanes"]) < len(convene(run_detectors=False)["lanes"])
+
+    with pytest.raises(KeyError, match="The Warden"):
+        convene(run_detectors=False, seat="The Wardn")
+
+    lane = convene(run_detectors=False, lane_id="a-test-that-cannot-fail")
+    assert [seat["lane"] for seat in lane["lanes"]] == ["a-test-that-cannot-fail"]
+
+    with pytest.raises(KeyError, match="a-test-that-cannot-fail"):
+        convene(run_detectors=False, lane_id="no-such-lane")
