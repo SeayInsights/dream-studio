@@ -612,6 +612,11 @@ def verify_work_order(
             tasks=tasks,
             project_root=resolve_project_root(work_order_id, db_path),
             repo_root=source_root,
+            # Without these the artifact-provenance fact is permanently `unknown`, which
+            # is worse than an absent key: it looks like a measurement that came back
+            # empty rather than one that was never given what it needed.
+            work_order_id=work_order_id,
+            db_path=db_path,
         )
         _facts_block = facts_prompt_block(_facts)
 
