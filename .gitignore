@@ -16,7 +16,14 @@ CONTEXT.md
 baselines/pre_phase_19/
 
 # Generated adapter output — build artifacts, never committed
-dist/
+# `dist/*`, NOT `dist/` — git cannot re-include a file whose PARENT DIRECTORY is
+# excluded, so `dist/` made the negations below dead letters and every new file under
+# dist/plugin was silently unstageable. Measured: `git check-ignore` reported
+# `dist/plugin/skills/probe.md` ignored by this line while the tracked files beside it were
+# fine, because a tracked file ignores .gitignore. Shipping the round table added
+# dist/plugin/review/ and CI caught it as a stale dist that could not be committed.
+# Excluding the CONTENTS instead lets the exception apply.
+dist/*
 # Exception: the synthesized public plugin artifact IS distributed — the marketplace
 # git-subdir source resolves it from dist/plugin, so the release flow commits it (WO 90a13043).
 !dist/plugin/

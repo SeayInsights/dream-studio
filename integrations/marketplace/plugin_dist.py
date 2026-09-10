@@ -155,6 +155,25 @@ def build_plugin_dist(
             shutil.copyfile(agent_md, target)
             written.append(target)
 
+    # 2b. The review round table — the registry and the convener.
+    #
+    # WITHOUT THESE AN INSTALL GETS THE LANES AS PROSE in a projected SKILL.md, which is
+    # guidance where a rule belongs for that project. The convener needs only stdlib and
+    # yaml, so it runs from an install; the DETECTOR packages live in the source repo, and
+    # a lane whose detector is absent reports UNRUN with a reason rather than a finding.
+    lanes_src = canonical_root / "review_lanes.yml"
+    if lanes_src.is_file():
+        target = out_dir / "review" / "review_lanes.yml"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(lanes_src, target)
+        written.append(target)
+    convener_src = repo_root / "core" / "gates" / "round_table.py"
+    if convener_src.is_file():
+        target = out_dir / "review" / "round_table.py"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(convener_src, target)
+        written.append(target)
+
     # 3. .mcp.json — copy the repo-root MCP server map.
     mcp_src = repo_root / ".mcp.json"
     if mcp_src.is_file():
