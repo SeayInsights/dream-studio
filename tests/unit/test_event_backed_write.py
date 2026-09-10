@@ -345,6 +345,44 @@ def create_thing(conn):
     conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
 """
 
+# Round three of the same reviewer's execution-verified holes. Match patterns bind
+# through string fields rather than Name nodes, and TYPE_CHECKING is false at runtime so
+# a name imported under it is simply not there when the call happens.
+SHADOWED_BY_MATCH_CAPTURE = """
+import spool.writer as _spool_writer
+
+
+def create_thing(conn, thing):
+    match thing:
+        case _spool_writer:
+            pass
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+TYPE_CHECKING_ONLY_IMPORT = """
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+TRY_GUARDED_IMPORT = """
+def create_thing(conn):
+    try:
+        import spool.writer as _spool_writer
+
+        _spool_writer.write_event({"a": 1})
+    except Exception:
+        pass
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+"""
+
 LIVE_NESTED_HELPER = """
 import spool.writer as _spool_writer
 
@@ -370,6 +408,8 @@ def create_thing(conn):
         ("rebound by a with-as", SHADOWED_BY_WITH_AS),
         ("dead nested helper", DEAD_NESTED_HELPER),
         ("dead lambda", DEAD_LAMBDA),
+        ("rebound by a match capture", SHADOWED_BY_MATCH_CAPTURE),
+        ("imported only under TYPE_CHECKING", TYPE_CHECKING_ONLY_IMPORT),
     ],
 )
 def test_a_receiver_that_is_not_the_imported_writer_is_still_reported(tmp_path, name, source):
@@ -383,6 +423,20 @@ def test_a_receiver_that_is_not_the_imported_writer_is_still_reported(tmp_path, 
     flagged = [item["function"] for item in ebw.offenders(repo)["offenders"]]
 
     assert "create_thing" in flagged, f"{name}: emits nothing but was not reported ({flagged})"
+
+
+def test_a_try_guarded_import_still_counts(tmp_path):
+    """The distinction that keeps the blocking gate off correct code.
+
+    Distrusting every conditional import was the obvious reading of the TYPE_CHECKING
+    hole, and it would have flagged every true positive in this repo: real emitters here
+    are written `try: import spool.writer as _spool_writer` with a fallback, so the
+    import genuinely executes. TYPE_CHECKING is the one guard that means the name is not
+    bound at runtime.
+    """
+    repo = _repo(tmp_path, {"guarded.py": TRY_GUARDED_IMPORT})
+
+    assert ebw.offenders(repo)["offenders"] == []
 
 
 def test_a_nested_helper_that_is_actually_called_still_counts(tmp_path):

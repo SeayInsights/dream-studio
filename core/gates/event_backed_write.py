@@ -170,6 +170,18 @@ def _dotted(node: ast.AST) -> str:
     return ".".join(reversed(parts))
 
 
+def _is_type_checking(test: ast.AST) -> bool:
+    """Is this `if TYPE_CHECKING:` / `if typing.TYPE_CHECKING:`?
+
+    The one guard that means "the names bound in here do not exist at runtime".
+    """
+    if isinstance(test, ast.Name):
+        return test.id == "TYPE_CHECKING"
+    if isinstance(test, ast.Attribute):
+        return test.attr == "TYPE_CHECKING"
+    return False
+
+
 def _writer_bindings(tree: ast.AST) -> tuple[set[str], set[str]]:
     """Names in this file that an import actually bound to the spool writer.
 
@@ -187,10 +199,29 @@ def _writer_bindings(tree: ast.AST) -> tuple[set[str], set[str]]:
 
     Provenance is therefore read from the import statements. A receiver counts only if
     THIS FILE imported the writer under that name.
+
+    AN IMPORT UNDER `if TYPE_CHECKING:` DOES NOT COUNT, because that constant is false at
+    runtime -- the name is simply not bound when the code executes, so a call through it
+    would raise NameError. Treating it as provenance let a non-emitting function read as
+    compliant (found by an independent reviewer, by execution).
+
+    A `try:`-guarded import DOES count, and the distinction is not a hedge. This
+    codebase's real emitters are written `try: import spool.writer as _spool_writer` with
+    a fallback, so the import genuinely executes; distrusting every conditional import
+    would flag every true positive in the tree and turn a blocking gate red on correct
+    code. `TYPE_CHECKING` is the one guard that means "this does not exist at runtime".
     """
+    type_checking_only = {
+        node
+        for guard in ast.walk(tree)
+        if isinstance(guard, ast.If) and _is_type_checking(guard.test)
+        for node in ast.walk(guard)
+    }
     module_aliases: set[str] = set()
     direct_names: set[str] = set()
     for node in ast.walk(tree):
+        if node in type_checking_only:
+            continue
         if isinstance(node, ast.Import):
             for alias in node.names:
                 if alias.name == _WRITER_MODULE:
@@ -228,7 +259,16 @@ def _shadowed_anywhere(tree: ast.AST) -> set[str]:
     a match capture. So the question is inverted: any Store-context binding of a name,
     anywhere in the file, makes that name untrustworthy as the writer. Store context is
     how Python itself marks "this name is being bound", so new syntax is covered without
-    being enumerated.
+    being enumerated. Comprehension targets, walrus and `except ... as` were all verified
+    covered by that inversion without being named.
+
+    MATCH PATTERNS ARE THE EXCEPTION, and needed handling because they do not use
+    `ast.Name` at all: `case _spool_writer:` binds through a string field on the pattern
+    node (`MatchAs.name`, `MatchStar.name`, `MatchMapping.rest`). An independent reviewer
+    found that gap by execution after the inversion above had already closed four others.
+    Rather than add the one shape they found, every `Match*` node's string `name`/`rest`
+    is read -- so the sub-patterns inside `MatchClass`/`MatchSequence`, and any future
+    pattern node shaped the same way, are covered without being enumerated either.
 
     This is deliberately FILE-WIDE and conservative. If any function in a file uses
     `writer` as a local, the gate stops believing `writer.write_event(...)` everywhere in
@@ -246,6 +286,14 @@ def _shadowed_anywhere(tree: ast.AST) -> set[str]:
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             # `def write_event(...)` in this file is a local definition, not the import.
             shadowed.add(node.name)
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            shadowed.update(node.names)
+        elif type(node).__name__.startswith("Match"):
+            # Pattern nodes carry their captures as plain strings, not Name nodes.
+            for field in ("name", "rest"):
+                bound = getattr(node, field, None)
+                if isinstance(bound, str):
+                    shadowed.add(bound)
     return shadowed
 
 
