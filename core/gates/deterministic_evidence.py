@@ -63,7 +63,24 @@ _TEST_CHECK_LINE = re.compile(r"^\s*TEST-CHECK:\s*(.+)$", re.IGNORECASE)
 # and this repo lives under "C:\Users\Dannis Seay\...", so a \S+ capture
 # reported the missing target as "C:\Users\Dannis".
 _NOT_FOUND = re.compile(r"ERROR:\s+(?:file or directory )?not found:\s*(.+?)\s*$", re.M)
-_EXECUTABLE_AC = re.compile(r"^\s*(SQL-CHECK|TEST-CHECK|API-CHECK)\s*:", re.IGNORECASE)
+# WHAT COUNTS AS EXECUTABLE IS NOT DECIDED HERE.
+#
+# The Warden's lane, asked of this module before it was pushed: two sites decided
+# "is this acceptance criterion executable", and this report is worthless if it
+# disagrees with the thing that actually runs them. A first cut named three kinds and
+# allowed a space before the colon; measured against the executor it disagreed in BOTH
+# directions -- `PERF-CHECK:` reported prose though the executor detects it (and then
+# fails it closed), `TEST-CHECK :` reported executable though the executor never sees
+# it. Retyping the executor's regex here would have produced two copies that merely
+# agree today, so the predicate is imported from the executor instead: there is one
+# definition, and this report cannot describe a rule the executor does not run.
+#
+# AND THE APPLIER IS WHAT IS IMPORTED, not the pattern. An audit mutated only this
+# module -- deleting the `.strip()` it applied before matching -- and all 30 tests
+# stayed green while an indented `  TEST-CHECK: x` became a criterion the executor
+# runs and this report calls prose. Sharing a constant cannot stop a caller from
+# applying it differently, so `check_token` strips and matches in one place and
+# there is no per-caller step left to drift.
 
 # The value that means "this could not be determined". Never omitted and never
 # collapsed into False: "we could not tell" and "no" have different remedies, the same
@@ -193,12 +210,17 @@ def acceptance_criteria_determinism(tasks: list[dict[str, Any]]) -> dict[str, An
     CHOICE: an author who sees the count can decide, and a reader can tell how much of
     a close rested on reading.
     """
+    # Function-level, as every other gate reaching into core.work_orders does -- a gate
+    # module is imported by the pre-push chain and should not pay for the executor's
+    # import graph to answer a question that may not be asked.
+    from core.work_orders.verify_executor import check_token
+
     executable: list[str] = []
     prose_only: list[str] = []
     for task in tasks:
         title = str(task.get("title") or "(untitled task)")
         criteria = task.get("acceptance_criteria") or ""
-        if any(_EXECUTABLE_AC.match(line) for line in criteria.splitlines()):
+        if any(check_token(line) for line in criteria.splitlines()):
             executable.append(title)
         else:
             prose_only.append(title)

@@ -235,6 +235,153 @@ def test_an_untitled_task_still_appears_in_the_report():
     assert report["prose_only"] == ["(untitled task)"]
 
 
+# ── the Warden's lane: one predicate, applied in one place ───────────────────
+
+#: Inputs an acceptance criterion is actually written with, including the ones that
+#: separated the two predicates. Driven against both sites rather than tabulated: the
+#: expected answer is not written down here, it is taken from the module that runs the
+#: checks, so this cannot become a hand-typed control table asserted against itself --
+#: the ceremony an audit caught in `5db3755e`.
+_CRITERION_CORPUS = [
+    "TEST-CHECK: tests/unit/test_x.py",
+    "API-CHECK: GET /health -> 200",
+    "SQL-CHECK: SELECT 1 WHERE 1",
+    "sql-check: SELECT 1 WHERE 1",
+    "    TEST-CHECK: tests/unit/test_x.py",
+    "\tTEST-CHECK: tests/unit/test_x.py",
+    "TEST-CHECK: tests/unit/test_x.py   ",
+    "PERF-CHECK: p99 under 200ms",
+    "PERF_2-CHECK: p99 under 200ms",
+    "TEST-CHECK : tests/unit/test_x.py",
+    "-CHECK: nothing names the kind",
+    "CHECK: nothing names the kind",
+    "see TEST-CHECK: tests/unit/test_x.py for the drive",
+    "the documentation reads clearly",
+    "",
+    "   ",
+]
+
+
+def _reported_executable(criterion: str) -> bool:
+    report = acceptance_criteria_determinism([{"title": "t", "acceptance_criteria": criterion}])
+    return report["executable"] == 1
+
+
+@pytest.mark.parametrize("criterion", _CRITERION_CORPUS)
+def test_the_report_agrees_with_the_applier_that_runs_the_checks(criterion):
+    """THE WARDEN'S LANE: is the predicate that ADMITS also the predicate that DELIVERS?
+
+    It was not. `acceptance_criteria_determinism` decided "is this criterion executable"
+    with its own regex naming three kinds and tolerating a space before the colon, while
+    `verify_executor` -- the module that runs them -- used a different one. Measured, they
+    disagreed on two of six criteria in BOTH directions: `PERF-CHECK:` was reported prose
+    though the executor detects any `*-CHECK` token and fails an unknown one CLOSED, and
+    `TEST-CHECK :` was reported executable though the executor never sees it. A report
+    that overstates how much of a close rested on computation is worse than no report.
+
+    The expected value comes from `check_token`, so this asserts AGREEMENT rather than a
+    remembered answer. Note what "executable" means in the report's vocabulary: the
+    executor will pass judgement on it, not that it will pass -- an unknown `*-CHECK`
+    token is adjudicated and fails closed, which is not prose.
+    """
+    from core.work_orders.verify_executor import check_token
+
+    assert _reported_executable(criterion) is (check_token(criterion) is not None), criterion
+
+
+def test_the_report_has_no_line_handling_of_its_own(monkeypatch):
+    """THE GAP AN INDEPENDENT AUDIT FOUND, which sharing the pattern did not close.
+
+    With `_CHECK_TOKEN` shared but each caller stripping for itself, the auditor deleted
+    the report's `.strip()` -- touching neither the pattern nor the executor -- and all 30
+    tests here stayed green, while `  TEST-CHECK: x` became a criterion the executor RUNS
+    and this report calls prose. So the applier is shared now, not just the pattern.
+
+    This drives that: replace the applier with one that does not strip, and the report must
+    follow it. A report that still stripped before calling would keep matching the indented
+    line and pass this while diverging in production.
+    """
+    import re
+
+    from core.work_orders import verify_executor
+
+    assert _reported_executable("    TEST-CHECK: tests/unit/test_x.py")
+
+    monkeypatch.setattr(
+        verify_executor,
+        "check_token",
+        lambda raw_line: re.match(r"^([A-Z][A-Z0-9_]*-CHECK):", raw_line, re.IGNORECASE),
+    )
+    assert not _reported_executable(
+        "    TEST-CHECK: tests/unit/test_x.py"
+    ), "the report is stripping lines itself instead of deferring to the applier"
+    assert _reported_executable("TEST-CHECK: tests/unit/test_x.py")
+
+
+def test_mutating_the_predicate_narrows_the_report(monkeypatch):
+    """One definition, proved by moving it rather than by retyping it.
+
+    Retyping the executor's regex here and asserting the two agree would be a
+    transcription: it passes for two copies that merely agree today, which is the defect
+    deferred rather than fixed. This mutates the pattern and requires the report to narrow.
+
+    It patches `_CHECK_TOKEN`, NOT `check_token`, deliberately. `check_token` reads that
+    global at call time, so the mutation is observed however and wherever the report
+    imported the applier -- the earlier version of this test only worked because one import
+    happened to sit inside a function body, and went red on a refactor to module level that
+    reintroduced no defect. That coupled the test to import placement instead of behaviour.
+    """
+    import re
+
+    from core.work_orders import verify_executor
+
+    assert _reported_executable("TEST-CHECK: tests/unit/test_x.py")
+
+    monkeypatch.setattr(
+        verify_executor, "_CHECK_TOKEN", re.compile(r"^(SQL-CHECK):\s*(.*)", re.IGNORECASE)
+    )
+    assert not _reported_executable(
+        "TEST-CHECK: tests/unit/test_x.py"
+    ), "the report kept a predicate of its own"
+    assert _reported_executable("SQL-CHECK: SELECT 1 WHERE 1")
+
+
+def test_the_executor_reaches_the_predicate_only_through_the_applier():
+    """The mutation tests above prove the REPORT holds no twin. This proves the executor's
+    own detection site does not either.
+
+    An inline `re.match` there, or a direct `_CHECK_TOKEN.match(line)`, would leave the
+    applier decorative: the report would still strip-and-match correctly through it while
+    the module that actually runs the checks handled lines its own way, which is where this
+    divergence started. Broadened from an earlier check for one exact regex spelling, which
+    a differently formatted copy would have slipped past.
+    """
+    import inspect
+
+    from core.work_orders import verify_executor
+
+    source = inspect.getsource(verify_executor.run_executable_checks)
+    assert "check_token(raw_line)" in source
+    assert "_CHECK_TOKEN" not in source, "the detection site reaches past its own applier"
+    assert "re.compile" not in source and "_re." not in source, "it compiles a copy"
+
+
+def test_the_narrower_third_declaration_is_gone():
+    """`_CHECK_PREFIXES` stated the same rule a third time -- three kinds, no arbitrary
+    token -- and was re-exported by the `verify` facade while nothing read it. Grepped
+    across every .py and .md in the tree it had three hits: its definition, the facade's
+    import, and the facade's `__all__`.
+
+    Left in place, this branch would have fixed two of three declarations of one rule and
+    left the EXPORTED one -- the one the next author reaches for first -- describing
+    something the executor does not do.
+    """
+    from core.work_orders import verify, verify_executor
+
+    assert not hasattr(verify_executor, "_CHECK_PREFIXES")
+    assert "_CHECK_PREFIXES" not in getattr(verify, "__all__", [])
+
+
 def test_no_tasks_yields_no_coverage_rather_than_a_fake_one():
     report = acceptance_criteria_determinism([])
     assert report["total"] == 0

@@ -21,7 +21,6 @@ from .verify_db import (
     _run_sql_checks,
 )
 from .verify_executor import (
-    _CHECK_PREFIXES,
     _TEST_CHECK_TIMEOUT,
     _emit_validation_result_event,
     _run_one_api_check,
@@ -94,7 +93,6 @@ def __getattr__(name: str):
 
 __all__ = [  # noqa: F822 -- _collect_git_commits/_run_graders_parallel/_spawn_grader/_collect_grader resolve via __getattr__ (flake8 reports F822 on this line, not the entries)
     "_ADVISORY_PROJECT_WIDE_CATEGORIES",
-    "_CHECK_PREFIXES",
     "_COMPLETION_PROMPT_TEMPLATE",
     "_CORRECTNESS_PROMPT_TEMPLATE",
     "_MIGRATION_PROMPT_TEMPLATE",
