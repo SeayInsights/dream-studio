@@ -378,3 +378,51 @@ def test_a_single_seat_can_be_convened_and_a_typo_fails():
 
     with pytest.raises(KeyError, match="a-test-that-cannot-fail"):
         convene(run_detectors=False, lane_id="no-such-lane")
+
+
+def test_every_detector_lane_can_be_pointed_at_another_project():
+    """THE GAP THE FAIL-CLOSED PATH FOUND, pinned so it cannot come back.
+
+    Portability was delivered claiming 4 files were the critical path, because
+    `event_backed_write.offenders()` already took a `repo_root`. It did -- and its CLI did
+    not, so the convener could not point that lane anywhere. It reported "could not be
+    pointed at the target tree" rather than scanning its own install and calling another
+    project's review clean, which is the safety property working, and it surfaced a wrong
+    count instead of hiding it.
+
+    Asserted by DRIVING each detector with the flag rather than by reading its source: a
+    grep for "--repo-root" would pass on a module that accepts the flag and ignores it.
+    """
+    import subprocess
+    import sys
+
+    lanes = [
+        lane
+        for lane in yaml.safe_load(
+            (REPO_ROOT / "canonical" / "review_lanes.yml").read_text(encoding="utf-8")
+        )["lanes"]
+        if "detector" in lane
+    ]
+    assert lanes, "no detector lane is registered"
+
+    unpointable = []
+    for lane in lanes:
+        argv = lane["detector"].split()
+        if argv and argv[0] in ("py", "python", "python3"):
+            argv[0] = sys.executable
+        proc = subprocess.run(
+            argv + ["--repo-root", str(REPO_ROOT), "--help"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=300,
+        )
+        if "--repo-root" not in (proc.stdout or "") + (proc.stderr or ""):
+            unpointable.append(lane["id"])
+
+    assert not unpointable, (
+        f"these lanes cannot be pointed at another project: {unpointable}."
+        " The convener reports them as unclean rather than scanning its own tree, so a"
+        " lane added without the flag makes every foreign convening report a finding."
+    )
