@@ -501,6 +501,89 @@ def test_an_import_that_really_runs_is_not_discarded_as_type_checking(tmp_path, 
     assert ebw.offenders(repo)["offenders"] == [], f"{name}: correct code was flagged"
 
 
+# Round five. These are FALSE NEGATIVES — the dangerous direction — and neither needs an
+# adversary: a large file with a common parameter name is enough. Guard detection was
+# being switched off for a whole file, silently.
+UNRELATED_PARAM_NAMED_TYPE_CHECKING = """
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import spool.writer as _spool_writer
+
+
+def unrelated(TYPE_CHECKING):
+    return TYPE_CHECKING
+
+
+def create_thing(conn):
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+REBOUND_AFTER_THE_GUARD = """
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import spool.writer as _spool_writer
+
+TYPE_CHECKING = True
+
+
+def create_thing(conn):
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+REBOUND_BEFORE_THE_GUARD = """
+from typing import TYPE_CHECKING
+
+TYPE_CHECKING = True
+
+if TYPE_CHECKING:
+    import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+
+@pytest.mark.parametrize(
+    "name,source",
+    [
+        ("an unrelated function's parameter", UNRELATED_PARAM_NAMED_TYPE_CHECKING),
+        ("a module rebind that happens after the guard", REBOUND_AFTER_THE_GUARD),
+    ],
+)
+def test_a_rebind_that_cannot_reach_the_guard_does_not_disable_it(tmp_path, name, source):
+    """The unsafe direction, and the reason the file-wide shadow set is not reused here.
+
+    Distrusting a writer alias means MORE reporting; distrusting `TYPE_CHECKING` means
+    the guard stops being fake and its import starts counting — LESS reporting. Same
+    subtraction, opposite correct answers. In both cases below the guarded import still
+    never executes, so the emission is not real and the write must be reported.
+    """
+    repo = _repo(tmp_path, {"x.py": source})
+    flagged = [item["function"] for item in ebw.offenders(repo)["offenders"]]
+
+    assert "create_thing" in flagged, (
+        f"{name}: guard detection was disabled, so an import that never runs was "
+        f"accepted as a real emission ({flagged})"
+    )
+
+
+def test_a_rebind_before_the_guard_does_disable_it(tmp_path):
+    """Source order, the other way: this one really does change what the guard reads.
+
+    Without this the fix above could be "module rebinds never matter", which would flag
+    correct code whose flag genuinely is true by the time the guard runs.
+    """
+    repo = _repo(tmp_path, {"x.py": REBOUND_BEFORE_THE_GUARD})
+
+    assert ebw.offenders(repo)["offenders"] == []
+
+
 def test_a_guard_that_is_always_false_still_discards_the_import(tmp_path):
     """`TYPE_CHECKING and True` never runs, so its import is not provenance.
 

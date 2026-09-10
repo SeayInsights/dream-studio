@@ -170,31 +170,78 @@ def _dotted(node: ast.AST) -> str:
     return ".".join(reversed(parts))
 
 
-def _type_checking_aliases(tree: ast.AST, shadowed: set[str]) -> tuple[set[str], set[str]]:
-    """Names in THIS file that actually refer to `typing.TYPE_CHECKING`.
+class _TypeCheckingProvenance:
+    """Where `TYPE_CHECKING` came from in this file, and where it stopped being typing's.
 
-    PROVENANCE AGAIN, BECAUSE SPELLING HAS LOST EVERY TIME IT WAS TRIED IN THIS FILE --
-    three times now, on receiver names, on shadow forms, and then here. Matching the bare
-    spelling `TYPE_CHECKING` meant a local `TYPE_CHECKING = True`, or some unrelated
-    module's `myflags.TYPE_CHECKING`, was read as typing's constant and its import block
-    discarded. Both were confirmed by execution. So the name must trace back to an actual
-    `typing` import, and a name this file rebinds is not trusted.
+    THE FILE-WIDE `shadowed` SET MUST NOT BE REUSED HERE, and reusing it reintroduced the
+    exact failure this gate exists to prevent. The two checks share a subtraction whose
+    correct outcomes are OPPOSITE:
+
+        writer alias   distrusted -> the import is not provenance -> MORE reporting -> safe
+        TYPE_CHECKING  distrusted -> the guard is not fake -> its import COUNTS -> LESS
+                                     reporting -> UNSAFE
+
+    So an unrelated function elsewhere in the file naming a parameter `TYPE_CHECKING`
+    silently switched off guard detection for the WHOLE file, and an import that never
+    runs then read as a durable emission. Found by an independent reviewer, by execution,
+    on a construction that needs no adversary -- just a large file and a common name.
+
+    SOURCE ORDER IS THE ACTUAL RULE, which is why "module-level only" is not enough on its
+    own: a module-level `TYPE_CHECKING = True` written AFTER the guard cannot affect what
+    the guard already evaluated. A rebind counts only if it is at module scope AND before
+    the guard's line. A function's local binding is a different scope and never reaches a
+    module-level guard at all.
+
+    KNOWN LIMIT, named rather than hidden: a guard spelled `match TYPE_CHECKING: case
+    True:` is not recognised, so its import is treated as real. That is a false negative,
+    it appears nowhere in this repo, and nobody writes the idiom that way.
     """
-    bare: set[str] = set()
-    typing_modules: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and (node.module or "") == "typing":
-            for alias in node.names:
-                if alias.name == "TYPE_CHECKING":
-                    bare.add(alias.asname or alias.name)
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name == "typing":
-                    typing_modules.add(alias.asname or "typing")
-    return bare - shadowed, typing_modules - shadowed
+
+    def __init__(self, tree: ast.AST) -> None:
+        self.bare: dict[str, int] = {}
+        self.typing_modules: dict[str, int] = {}
+        self.rebinds: dict[str, list[int]] = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and (node.module or "") == "typing":
+                for alias in node.names:
+                    if alias.name == "TYPE_CHECKING":
+                        name = alias.asname or alias.name
+                        self.bare.setdefault(name, node.lineno)
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "typing":
+                        name = alias.asname or "typing"
+                        self.typing_modules.setdefault(name, node.lineno)
+        # Only MODULE-SCOPE rebinds can change what a module-level guard reads, so the
+        # walk stops at each function or class boundary.
+        for statement in getattr(tree, "body", []):
+            if isinstance(statement, (ast.Import, ast.ImportFrom)):
+                continue
+            for node in _own_nodes_of(statement):
+                if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                    self.rebinds.setdefault(node.id, []).append(node.lineno)
+                elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    self.rebinds.setdefault(node.name, []).append(node.lineno)
+
+    def _trusted(self, name: str, table: dict[str, int], at_line: int) -> bool:
+        first = table.get(name)
+        if first is None or first > at_line:
+            return False
+        return not any(line < at_line for line in self.rebinds.get(name, ()))
 
 
-def _is_type_checking(test: ast.AST, aliases: tuple[set[str], set[str]]) -> bool:
+def _own_nodes_of(statement: ast.AST):
+    """`statement` and its descendants, not entering a nested function or class scope."""
+    stack = [statement]
+    while stack:
+        node = stack.pop()
+        yield node
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            continue
+        stack.extend(ast.iter_child_nodes(node))
+
+
+def _is_type_checking(test: ast.AST, prov: _TypeCheckingProvenance, at_line: int) -> bool:
     """Is this guard false at runtime, so its body's imports never execute?
 
     `and` / `or` are read for what they MEAN at runtime, not matched as shapes.
@@ -203,13 +250,14 @@ def _is_type_checking(test: ast.AST, aliases: tuple[set[str], set[str]]) -> bool
     and must still count. `not TYPE_CHECKING` is true at runtime and is likewise counted,
     by falling through to False here.
     """
-    bare, typing_modules = aliases
     if isinstance(test, ast.Name):
-        return test.id in bare
+        return prov._trusted(test.id, prov.bare, at_line)
     if isinstance(test, ast.Attribute):
-        return test.attr == "TYPE_CHECKING" and _dotted(test.value) in typing_modules
+        return test.attr == "TYPE_CHECKING" and prov._trusted(
+            _dotted(test.value), prov.typing_modules, at_line
+        )
     if isinstance(test, ast.BoolOp):
-        parts = [_is_type_checking(value, aliases) for value in test.values]
+        parts = [_is_type_checking(value, prov, at_line) for value in test.values]
         return any(parts) if isinstance(test.op, ast.And) else all(parts)
     return False
 
@@ -250,11 +298,11 @@ def _writer_bindings(tree: ast.AST, shadowed: set[str]) -> tuple[set[str], set[s
     # function reported as an offender. A blocking gate going red on correct, idiomatic
     # code is worse than one missing an edge case: it teaches people to paste exemption
     # markers onto working code, which is the habit this gate exists to break.
-    aliases = _type_checking_aliases(tree, shadowed)
+    prov = _TypeCheckingProvenance(tree)
     type_checking_only = {
         node
         for guard in ast.walk(tree)
-        if isinstance(guard, ast.If) and _is_type_checking(guard.test, aliases)
+        if isinstance(guard, ast.If) and _is_type_checking(guard.test, prov, guard.lineno)
         for statement in guard.body
         for node in ast.walk(statement)
     }
