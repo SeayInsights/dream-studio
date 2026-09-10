@@ -21,6 +21,7 @@ from interfaces.cli.commands.work_order_lifecycle import (
     _work_order_unblock,
 )
 from interfaces.cli.commands.work_order_query import (
+    _work_order_amend_boundary,
     _work_order_repoint_ac,
     _work_order_carry_over,
     _work_order_reconcile,
@@ -204,6 +205,29 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
     )
     wo_repoint.add_argument(
         "--reason", required=True, help="Enough to tell a typo fix from a moved goalpost"
+    )
+
+    # A BOUNDARY WAS THE ONE FIELD WITH NO CORRECTION PATH. It is composed into the
+    # description at create time, and the admission Surveyor lane judges attribution
+    # against it -- so a boundary authored before the work order's shape was known refused
+    # tasks that genuinely belonged to it, three times on 2026-09-10. The alternative to
+    # this command is a vaguer task description, since attribution only judges paths a
+    # description NAMES: an honest refusal traded for a silent misattribution.
+    wo_amend_boundary = work_order_sub.add_parser(
+        "amend-boundary",
+        help="Correct a work order's module boundary, recording the prior value and why",
+    )
+    wo_amend_boundary.add_argument("work_order_id", help="Work order UUID")
+    wo_amend_boundary.add_argument(
+        "--module-boundary",
+        required=True,
+        dest="module_boundary",
+        help="The corrected comma-separated paths this work order owns",
+    )
+    wo_amend_boundary.add_argument(
+        "--reason",
+        required=True,
+        help="Enough to tell a correction from a widening (30+ chars)",
     )
 
     wo_list = work_order_sub.add_parser("list", help="List work orders")
@@ -480,6 +504,14 @@ def dispatch(
         return _work_order_repoint_ac(
             task_id=args.task_id,
             acceptance_criteria=args.acceptance_criteria,
+            reason=args.reason,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+    if args.work_order_command == "amend-boundary":
+        return _work_order_amend_boundary(
+            work_order_id=args.work_order_id,
+            module_boundary=args.module_boundary,
             reason=args.reason,
             source_root=source_root,
             dream_studio_home=dream_studio_home,

@@ -646,7 +646,15 @@ def test_an_attached_task_emits_a_canonical_event_so_it_survives_a_rebuild(db, m
     import spool.writer as _writer
 
     monkeypatch.setattr(
-        _writer, "write_event", lambda envelope: emitted.append({"type": envelope.event_type})
+        # THE STUB MUST HAVE THE REAL WRITER'S CONTRACT. `spool.writer.write_event`
+        # takes a DICT; this stub read `envelope.event_type`, so it only accepted the
+        # envelope OBJECT -- the one shape the real writer rejects with TypeError. The
+        # test therefore passed for as long as production was broken, and went red the
+        # moment production was fixed. A stub whose contract differs from the thing it
+        # replaces certifies the caller against a writer that does not exist.
+        _writer,
+        "write_event",
+        lambda envelope: emitted.append({"type": envelope["event_type"]}),
     )
 
     conn = sqlite3.connect(str(db))
@@ -1003,14 +1011,19 @@ def test_an_attached_task_actually_survives_a_projection_rebuild(db, monkeypatch
         # first capture omitted it and the replay raised KeyError -- a defect in the
         # fixture, not the code, and exactly the derive-from-the-real-artifact rule this
         # suite keeps relearning.
+        # A DICT, because that is what `spool.writer.write_event` takes. This read
+        # `getattr(envelope, ...)`, which silently yields None for a mapping -- so every
+        # captured event had event_type None, nothing matched task.created, and the
+        # assertion below could only pass while production passed an OBJECT the real
+        # writer rejects. Three stubs in this file shared that wrong contract.
         captured.append(
             {
-                "event_id": getattr(envelope, "event_id", None) or str(uuid.uuid4()),
-                "event_type": envelope.event_type,
-                "event_timestamp": getattr(envelope, "timestamp", None),
-                "schema_version": getattr(envelope, "schema_version", 1),
-                "payload": envelope.payload,
-                "trace": getattr(envelope, "trace", {}) or {},
+                "event_id": envelope.get("event_id") or str(uuid.uuid4()),
+                "event_type": envelope["event_type"],
+                "event_timestamp": envelope.get("timestamp"),
+                "schema_version": envelope.get("schema_version", 1),
+                "payload": envelope.get("payload") or {},
+                "trace": envelope.get("trace") or {},
             }
         )
 
@@ -1082,7 +1095,15 @@ def test_a_gap_already_attached_is_not_attached_again(db, monkeypatch):
     import spool.writer as _writer
 
     monkeypatch.setattr(
-        _writer, "write_event", lambda envelope: emitted.append({"type": envelope.event_type})
+        # THE STUB MUST HAVE THE REAL WRITER'S CONTRACT. `spool.writer.write_event`
+        # takes a DICT; this stub read `envelope.event_type`, so it only accepted the
+        # envelope OBJECT -- the one shape the real writer rejects with TypeError. The
+        # test therefore passed for as long as production was broken, and went red the
+        # moment production was fixed. A stub whose contract differs from the thing it
+        # replaces certifies the caller against a writer that does not exist.
+        _writer,
+        "write_event",
+        lambda envelope: emitted.append({"type": envelope["event_type"]}),
     )
 
     conn = sqlite3.connect(str(db))

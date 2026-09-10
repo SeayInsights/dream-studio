@@ -622,6 +622,11 @@ def _attach_gap_tasks(
 
             from canonical.events.envelope import CanonicalEventEnvelope
 
+            # `.to_dict()` BECAUSE write_event TAKES A DICT. Passing the envelope object
+            # raised TypeError from `_validate_payload_keys`, the surrounding handler
+            # swallowed it, and this emission never once succeeded -- so every task this
+            # function attached was rebuild-fragile despite the comment above saying
+            # otherwise. 69 other call sites in the tree already pass a dict.
             _spool_writer.write_event(
                 CanonicalEventEnvelope(
                     event_type="task.created",
@@ -641,7 +646,7 @@ def _attach_gap_tasks(
                         "task_id": task_id,
                         "attribution_status": "fully_attributed",
                     },
-                )
+                ).to_dict()
             )
             _emitted = True
         except Exception:  # noqa: BLE001 - never lose the task because the spool is down
