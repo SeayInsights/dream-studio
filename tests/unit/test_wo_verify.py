@@ -198,7 +198,11 @@ def test_verify_gap_creates_work_orders(tmp_path: pytest.TempPathFactory) -> Non
                     "description": "T1 was not done",
                     "work_order_type": "cleanup",
                     "tasks": [
-                        {"title": "Implement T1", "description": "Add the missing code"},
+                        {
+                            "title": "Implement T1",
+                            "description": "Add the missing code",
+                            "acceptance_criteria": "TEST-CHECK: tests/unit/test_wo_verify.py::test_placeholder",
+                        },
                     ],
                 }
             ],
@@ -410,7 +414,13 @@ def test_spawned_gap_wos_visible_in_project(tmp_path: pytest.TempPathFactory) ->
                     "title": "Gap WO Alpha",
                     "description": "needs fixing",
                     "work_order_type": "infrastructure",
-                    "tasks": [{"title": "Fix alpha", "description": "do the fix"}],
+                    "tasks": [
+                        {
+                            "title": "Fix alpha",
+                            "description": "do the fix",
+                            "acceptance_criteria": "TEST-CHECK: tests/unit/test_wo_verify.py::test_placeholder",
+                        }
+                    ],
                 }
             ],
         },

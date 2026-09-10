@@ -89,12 +89,14 @@ class _Scratch:
         conn = sqlite3.connect(str(self.db))
         try:
             conn.execute(
+                # event-backed-write: this row lives in a DISPOSABLE scratch authority that `prove` creates and tears down, so it is never rebuilt and nothing needs to replay it -- the run sets DREAM_STUDIO_HOME and DREAM_STUDIO_DB_PATH at a temp dir for the whole process. Emitting canonical events here would write to the OPERATOR's live spool, which is the defect WO 8bd297f1 fixed (4194 connections, measured).
                 "INSERT INTO business_projects"
                 " (project_id, name, description, status, project_path, created_at, updated_at)"
                 " VALUES (?,?,?,?,?,?,?)",
                 (self.project_id, "prove-scratch", "", "active", str(self.project_dir), _NOW, _NOW),
             )
             conn.execute(
+                # event-backed-write: this row lives in a DISPOSABLE scratch authority that `prove` creates and tears down, so it is never rebuilt and nothing needs to replay it -- the run sets DREAM_STUDIO_HOME and DREAM_STUDIO_DB_PATH at a temp dir for the whole process. Emitting canonical events here would write to the OPERATOR's live spool, which is the defect WO 8bd297f1 fixed (4194 connections, measured).
                 "INSERT INTO business_milestones"
                 " (milestone_id, project_id, title, status, order_index, created_at, updated_at)"
                 " VALUES (?,?,?,?,?,?,?)",
@@ -111,6 +113,7 @@ class _Scratch:
         conn = sqlite3.connect(str(self.db))
         try:
             conn.execute(
+                # event-backed-write: this row lives in a DISPOSABLE scratch authority that `prove` creates and tears down, so it is never rebuilt and nothing needs to replay it -- the run sets DREAM_STUDIO_HOME and DREAM_STUDIO_DB_PATH at a temp dir for the whole process. Emitting canonical events here would write to the OPERATOR's live spool, which is the defect WO 8bd297f1 fixed (4194 connections, measured).
                 "INSERT INTO business_work_orders"
                 " (work_order_id, project_id, milestone_id, title, description,"
                 "  work_order_type, status, sequence_order, created_at, updated_at, last_updated_at)"
@@ -216,6 +219,7 @@ def _claim_defect_symptom_gate(s: _Scratch) -> tuple[bool, str]:
     try:
         # One task, marked complete; a passing executable AC so only the symptom can block.
         conn.execute(
+            # event-backed-write: this row lives in a DISPOSABLE scratch authority that `prove` creates and tears down, so it is never rebuilt and nothing needs to replay it -- the run sets DREAM_STUDIO_HOME and DREAM_STUDIO_DB_PATH at a temp dir for the whole process. Emitting canonical events here would write to the OPERATOR's live spool, which is the defect WO 8bd297f1 fixed (4194 connections, measured).
             "INSERT INTO business_tasks"
             " (task_id, work_order_id, project_id, title, description, acceptance_criteria,"
             "  status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
@@ -261,6 +265,7 @@ def _claim_defect_symptom_gate(s: _Scratch) -> tuple[bool, str]:
         conn = sqlite3.connect(str(s.db))
         try:
             conn.execute(
+                # event-backed-write: this row lives in a DISPOSABLE scratch authority that `prove` creates and tears down, so it is never rebuilt and nothing needs to replay it -- the run sets DREAM_STUDIO_HOME and DREAM_STUDIO_DB_PATH at a temp dir for the whole process. Emitting canonical events here would write to the OPERATOR's live spool, which is the defect WO 8bd297f1 fixed (4194 connections, measured).
                 "INSERT INTO business_projects"
                 " (project_id, name, description, status, created_at, updated_at)"
                 " VALUES (?,?,?,?,?,?)",

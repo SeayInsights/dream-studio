@@ -11,8 +11,15 @@ from __future__ import annotations
 
 import re
 import uuid
+from pathlib import Path
 from datetime import UTC, datetime
 from typing import Any
+
+#: This repo's root, used only to confirm that a path a finding NAMES actually
+#: exists before attribution is judged on it. A finding about another project's
+#: files will not resolve here, and `paths_named` returns [] rather than a guess --
+#: attribution then reports UNKNOWN, which is the honest answer.
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # ── Gap generation helpers ──────────────────────────────────────────────────────
 
@@ -514,10 +521,26 @@ def _attach_gap_tasks(
     tasks: list[dict[str, Any]],
     now: str,
     gap_key: str = "",
-) -> int:
-    """Add a gap's tasks to an existing work order. Returns how many were added.
+) -> dict[str, Any]:
+    """Add a gap's tasks to a work order, if the round table admits them.
 
-    Skips a task whose title is already on that work order, so re-reviewing does not
+    Returns ``{"added": int, "unfiled": [...]}``. Each unfiled entry names the task, the
+    seat that refused it and why, so the caller can surface it.
+
+    THIS WAS THE STUB FACTORY. Every task attached here was written with
+    ``acceptance_criteria: None`` -- a claim nobody can check, which is then marked done by
+    reading. Measured on the live authority before this changed: 1766 of 3278 tasks (53%)
+    carried no criterion, and this path produced most of them. Operator directive
+    2026-09-10: "no stubs, only real registered work ... an independent reviewer of whether
+    or not something can be added".
+
+    WHY IT RETURNS WHAT IT REFUSED, rather than dropping it. A stub is a visible claim
+    nobody can check; a finding discarded for lacking a criterion is an invisible one, and
+    that is strictly worse. So a refusal is a REPORT: the finding survives in the return
+    value and reaches the verdict, unfiled and named. The int return could not express
+    that, which is why the shape changed.
+
+    Still skips a task whose title is already on that work order, so re-reviewing does not
     accumulate duplicates of the same finding — the per-work-order equivalent of the
     gap-key dedup one level up.
     """
@@ -531,11 +554,49 @@ def _attach_gap_tasks(
     except Exception:  # noqa: BLE001 - never break a verify over dedup bookkeeping
         existing = set()
 
+    from core.work_orders.admission import admit_task, paths_named
+
+    wo_description = ""
+    try:
+        _row = conn.execute(
+            "SELECT description FROM business_work_orders WHERE work_order_id = ?",
+            (work_order_id,),
+        ).fetchone()
+        wo_description = (_row[0] if _row else "") or ""
+    except Exception:  # noqa: BLE001 - a missing description means attribution is unknown
+        wo_description = ""
+
     added = 0
+    unfiled: list[dict[str, Any]] = []
     for task in tasks:
         title = str(task.get("title", "") or "")
         if title.strip().lower() in existing:
             continue
+
+        # THE ROUND TABLE DECIDES WHETHER THIS MAY BE FILED AT ALL.
+        _criteria = task.get("acceptance_criteria")
+        _verdict = admit_task(
+            title=title,
+            acceptance_criteria=_criteria,
+            why=task.get("why"),
+            work_order_description=wo_description,
+            existing_titles=existing,
+            target_paths=paths_named(
+                f"{title} {task.get('description', '') or ''}", repo_root=REPO_ROOT
+            ),
+        )
+        if not _verdict["admitted"]:
+            unfiled.append(
+                {
+                    "title": title,
+                    "description": task.get("description", "") or "",
+                    "gap_key": gap_key,
+                    "refusals": _verdict["refusals"],
+                    "unknowns": _verdict["unknowns"],
+                }
+            )
+            continue
+
         task_id = str(uuid.uuid4())
         # The key rides the task so repeated attachment rounds are countable — title
         # dedup stops the SAME finding repeating, but says nothing about a NEW finding
@@ -568,7 +629,7 @@ def _attach_gap_tasks(
                     payload={
                         "title": title,
                         "description": description,
-                        "acceptance_criteria": None,
+                        "acceptance_criteria": _criteria,
                         "status": "created",
                     },
                     timestamp=now,
@@ -593,9 +654,9 @@ def _attach_gap_tasks(
         conn.execute(
             "INSERT INTO business_tasks"
             " (task_id, work_order_id, project_id, title, description,"
-            "  status, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)",
-            (task_id, work_order_id, project_id, title, description, now, now),
+            "  status, acceptance_criteria, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)",
+            (task_id, work_order_id, project_id, title, description, _criteria, now, now),
         )
         if not _emitted:
             # A row with no event is rebuild-fragile. Say so on the row itself rather
@@ -609,7 +670,7 @@ def _attach_gap_tasks(
             )
         existing.add(title.strip().lower())
         added += 1
-    return added
+    return {"added": added, "unfiled": unfiled}
 
 
 def _work_order_is_open(conn: Any, work_order_id: str) -> bool:
@@ -913,7 +974,7 @@ def _insert_gap_work_orders(
             and _work_order_is_open(conn, reviewed_work_order_id)
         ):
             prior_rounds = _attached_gap_keys(conn, reviewed_work_order_id)
-            added = _attach_gap_tasks(
+            _attach = _attach_gap_tasks(
                 conn,
                 work_order_id=reviewed_work_order_id,
                 project_id=project_id,
@@ -922,12 +983,18 @@ def _insert_gap_work_orders(
                 now=now,
                 gap_key=gap_key,
             )
+            added = _attach["added"]
+            # WHAT THE ROUND TABLE REFUSED TO FILE rides on the record, so a finding that
+            # could not be admitted is visible and unfiled rather than invisible and
+            # dropped. Omitted when empty so a clean attach reads clean.
+            _unfiled = _attach["unfiled"]
             record: dict[str, Any] = {
                 "work_order_id": reviewed_work_order_id,
                 "title": gap_title,
                 "type": wo_type,
                 "gap_key": gap_key,
                 "attached_to_reviewed": True,
+                **({"unfiled_findings": _unfiled} if _unfiled else {}),
                 "tasks_added": added,
             }
             # BOUND THE ATTACH LOOP, VISIBLY. Attaching makes a failing verdict block the
@@ -996,7 +1063,7 @@ def _insert_gap_work_orders(
 
         if existing_row:
             target_wo_id = existing_row[0]
-            _attach_gap_tasks(
+            _merge = _attach_gap_tasks(
                 conn,
                 work_order_id=target_wo_id,
                 project_id=project_id,
@@ -1010,6 +1077,10 @@ def _insert_gap_work_orders(
                     "type": wo_type,
                     "gap_key": gap_key,
                     "merged_into_existing": True,
+                    # This call site DISCARDED the return, which was an int and looked
+                    # harmless to ignore. Now it can carry refusals, and a refusal nobody
+                    # receives is the finding lost -- the one outcome worse than a stub.
+                    **({"unfiled_findings": _merge["unfiled"]} if _merge["unfiled"] else {}),
                 }
             )
         else:

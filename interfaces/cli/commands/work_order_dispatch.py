@@ -138,6 +138,15 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         help="Executable AC: TEST-CHECK / SQL-CHECK / API-CHECK plus what to run",
     )
     wo_add_task.add_argument(
+        "--why",
+        dest="why",
+        default=None,
+        help=(
+            "Why this task carries no executable criterion (20+ chars). A DECLARATION,"
+            " not a flag: some claims cannot be computed, and this records which"
+        ),
+    )
+    wo_add_task.add_argument(
         "--project",
         dest="project_id",
         default=None,
@@ -447,6 +456,7 @@ def dispatch(
             title=args.title,
             description=args.description,
             acceptance_criteria=args.acceptance_criteria,
+            why=args.why,
             project_id=args.project_id,
             source_root=source_root,
             dream_studio_home=dream_studio_home,

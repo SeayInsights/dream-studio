@@ -278,7 +278,13 @@ def test_a_gap_on_an_open_work_order_becomes_a_task_on_it(db):
                 "title": "Task 3 was never implemented",
                 "description": "d",
                 "work_order_type": "cleanup",
-                "tasks": [{"title": "Implement task 3", "description": "the remainder"}],
+                "tasks": [
+                    {
+                        "title": "Implement task 3",
+                        "description": "the remainder",
+                        "acceptance_criteria": "TEST-CHECK: tests/unit/test_gap_fanout.py::test_placeholder",
+                    }
+                ],
             }
         ],
         project_id=project_id,
@@ -332,7 +338,13 @@ def test_re_reviewing_does_not_duplicate_an_attached_task(db):
         "title": "A repeated finding",
         "description": "d",
         "work_order_type": "cleanup",
-        "tasks": [{"title": "Do the missing thing", "description": ""}],
+        "tasks": [
+            {
+                "title": "Do the missing thing",
+                "description": "",
+                "acceptance_criteria": "TEST-CHECK: tests/unit/test_gap_fanout.py::test_placeholder",
+            }
+        ],
     }
     for _ in range(4):
         _insert_gap_work_orders(
@@ -408,7 +420,13 @@ def test_a_passing_verdicts_advisory_gap_does_not_block_the_close_it_approved(db
                 "title": "An advisory note about finished work",
                 "description": "d",
                 "work_order_type": "documentation",
-                "tasks": [{"title": "Consider documenting this", "description": ""}],
+                "tasks": [
+                    {
+                        "title": "Consider documenting this",
+                        "description": "",
+                        "acceptance_criteria": "TEST-CHECK: tests/unit/test_gap_fanout.py::test_placeholder",
+                    }
+                ],
             }
         ],
         project_id=project_id,
@@ -443,7 +461,13 @@ def _attach(conn, project_id, reviewed, gap_title, task_title):
                 "title": gap_title,
                 "description": "d",
                 "work_order_type": "cleanup",
-                "tasks": [{"title": task_title, "description": ""}],
+                "tasks": [
+                    {
+                        "title": task_title,
+                        "description": "",
+                        "acceptance_criteria": "TEST-CHECK: tests/unit/test_gap_fanout.py::test_placeholder",
+                    }
+                ],
             }
         ],
         project_id=project_id,
@@ -1104,3 +1128,83 @@ def test_a_carried_away_task_still_blocks_its_finding_from_returning(db, monkeyp
         sum(x.get("tasks_added", 0) for x in again) == 0
     ), "a carried-away finding was re-attached, so carrying it only delayed it"
     conn.close()
+
+
+def _attach_without_criterion(conn, project_id, reviewed, gap_title, task_title):
+    """The same spawn path, with the criterion a grader actually omits."""
+    return _insert_gap_work_orders(
+        conn,
+        gaps=[
+            {
+                "title": gap_title,
+                "description": "d",
+                "work_order_type": "cleanup",
+                "tasks": [{"title": task_title, "description": ""}],
+            }
+        ],
+        project_id=project_id,
+        milestone_id=None,
+        reviewed_work_order_id=reviewed,
+        reviewed_wo_title="reviewed",
+        reviewed_wo_sequence=1,
+        reviewed_wo_incomplete=True,
+    )
+
+
+def test_a_criterion_less_finding_is_refused_and_returned(db):
+    """THE STUB FACTORY, CLOSED — and the finding still survives its own refusal.
+
+    `_attach_gap_tasks` wrote every auto-attached task with `acceptance_criteria: None`.
+    Measured on the live authority before this changed: 1766 of 3278 tasks (53%) carried no
+    criterion, and 0 of 87 gap tasks across 41 stored verdicts carried one — so this path
+    produced most of them, and a grader emits nothing this rule would admit.
+
+    BOTH HALVES ARE ASSERTED, and the second is the one that matters. Refusing the task is
+    easy; refusing it and dropping the finding would be worse than filing the stub, because
+    a stub is at least visible as work. So the refusal must come back naming the seat and
+    the reason.
+    """
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+    reviewed = _reviewed_wo(conn, project_id, status="in_progress")
+
+    before = conn.execute(
+        "SELECT COUNT(*) FROM business_tasks WHERE work_order_id = ?", (reviewed,)
+    ).fetchone()[0]
+
+    spawned = _attach_without_criterion(conn, project_id, reviewed, "A finding", "Do the thing")
+    conn.commit()
+
+    after = conn.execute(
+        "SELECT COUNT(*) FROM business_tasks WHERE work_order_id = ?", (reviewed,)
+    ).fetchone()[0]
+    assert after == before, "a task nobody can check must not be filed"
+
+    unfiled = [f for s in spawned for f in (s.get("unfiled_findings") or [])]
+    assert len(unfiled) == 1, f"the finding must survive its refusal; got {spawned}"
+    assert unfiled[0]["title"] == "Do the thing"
+    assert unfiled[0]["refusals"][0]["seat"] == "The Warden"
+    assert (
+        "TEST-CHECK" in unfiled[0]["refusals"][0]["reason"]
+    ), "a refusal that does not say what would have been admitted is a wall, not a review"
+
+
+def test_a_finding_with_a_criterion_is_still_filed(db):
+    """The other direction. Without it, an implementation that refused EVERYTHING would
+    satisfy the test above, and the review surface would quietly file nothing at all."""
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+    reviewed = _reviewed_wo(conn, project_id, status="in_progress")
+
+    spawned = _attach(conn, project_id, reviewed, "A finding", "Do the thing")
+    conn.commit()
+
+    rows = conn.execute(
+        "SELECT title, acceptance_criteria FROM business_tasks WHERE work_order_id = ?",
+        (reviewed,),
+    ).fetchall()
+    assert [r[0] for r in rows] == ["Do the thing"], rows
+    assert "TEST-CHECK" in (
+        rows[0][1] or ""
+    ), "the criterion must be PERSISTED, not merely accepted -- it was hardcoded to None"
+    assert not [f for s in spawned for f in (s.get("unfiled_findings") or [])]

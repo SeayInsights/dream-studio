@@ -45,20 +45,86 @@ _ENFORCEMENT_KEYS = ("detector", "eval", "judgment")
 
 #: THE ROUND TABLE. Every lane is held by a seat, and a seat says what it watches:
 #:
-#:   The Warden     is the predicate that admits also the predicate that delivers, or is
-#:                  one half enforced by nothing?
-#:   The Machinist  which lane actually runs, on which platform, and how long does it take
-#:                  when the data is large?
-#:   The Archivist  does the decision record name every mechanism the code now depends on?
-#:   The Surveyor   how far from base is this, and is it the tree that ships?
-#:   The Herald     if a caller sees something different, does the change say so?
+#:   The Warden      is the predicate that admits also the predicate that delivers, or is
+#:                   one half enforced by nothing?
+#:   The Machinist   which lane actually runs, on which platform, and how long does it take
+#:                   when the data is large?
+#:   The Archivist   does the decision record name every mechanism the code now depends on?
+#:   The Surveyor    how far from base is this, and is it the tree that ships?
+#:   The Herald      if a caller sees something different, does the change say so?
+#:   The Interpreter does this value reach a reader, and mean there what it meant here?
+#:   The Falsifier   this test is green -- show me it going red.
+#:   The Custodian   if this record were rebuilt from its events, would it still be here?
+#:   The Cartographer what is the full capability surface here, independent of what the
+#:                   thing says about itself?
+#:
+#: THIS LIST WAS THE FIRST FIVE FOR A DAY AFTER IT WAS EIGHT, which is the Archivist's own
+#: lane landing on the file that defines the Archivist. Kept in one place with the set
+#: below rather than restated anywhere else -- a second copy of a seat roster is a second
+#: thing to forget.
 #:
 #: A CLOSED SET on purpose. These lanes arrived from an external review pass carrying the
 #: reviewers' real handles, which is other people's names in a repo with a
 #: publication-readiness gate -- and a handle tells a later reader nothing about what the
 #: lane watches. Requiring a seat from this set retires the handles for good: a new lane
 #: cannot be added under somebody's name, because a name is not a seat.
-_SEATS = frozenset({"The Warden", "The Machinist", "The Archivist", "The Surveyor", "The Herald"})
+#:
+#: THE INTERPRETER WAS ADDED BY EVIDENCE, and adding a seat is meant to be this hard.
+#:
+#: A review pass on another project found two defects no seat here would have asked about.
+#: A fetch hook returned `{get, isLoading, stateById}` and both views destructured only
+#: `get`, so a FAILED FETCH rendered the all-`no_data` placeholder -- a chart asserting
+#: "measured, nothing found" when the request had failed. And `not_applicable`, emitted
+#: today for agents that do not heartbeat, fell through a renderer's known statuses to a
+#: numeric zero and drew as 0% uptime.
+#:
+#: Every existing seat asks about a mechanism at its own boundary. The Warden compares two
+#: predicates, and there was only one site because the consumer did not exist. The Herald
+#: asks whether a caller-visible CHANGE was enumerated, and nothing changed -- the value was
+#: never consumed at all. The finder's own diagnosis names what was missing: "I verified the
+#: hook's state transitions by mutation and stopped at the hook boundary instead of
+#: following the values to the pixels", and "I checked that the six axis keys matched the
+#: server and never asked what the statuses render as".
+#:
+#: So the Interpreter asks the terminus question: does this value reach a reader, and does
+#: it mean there what it meant here? Widening the Herald was rejected -- its question is
+#: about the RECORD of a change, and both defects exist with no change at all, so one lane
+#: would answer two questions and stop being falsifiable.
+#:
+#: THE FALSIFIER AND THE CUSTODIAN, both added on counted evidence rather than for
+#: symmetry. The Falsifier owns the family that produced more defects here than any other
+#: and had neither gate nor seat: a test whose verdict does not depend on the thing it
+#: tests. Every instance -- a byte-hash non-mutation test, a hand-typed control table, two
+#: tautologies green under a neutered checker, a `.strip()` whose deletion left 30 tests
+#: passing -- was found by an independent auditor and not by the suite. The Custodian asks
+#: whether a record survives the machinery that maintains it: 493 of 949 work orders and
+#: 1706 of 3286 tasks have no creation event, and `pre_rebuild` truncates before replaying.
+#:
+#: The Custodian is deliberately NOT the Archivist. That seat asks whether the DECISION
+#: record names every mechanism; this asks whether the AUTHORITY record survives a replay.
+#: Different records, and merging them would blur both questions into one unanswerable.
+#:
+#: THE CARTOGRAPHER IS THE NINTH AND THE MOST GENERAL, so it carries the most risk of
+#: becoming a shrug -- "did you think of everything?" is unanswerable. It is bounded by the
+#: correction its own precedent recorded: derive adversarial inputs from the PARSER's
+#: capability surface, not the guard's rule list. For an archive reader that is the format's
+#: metadata mechanisms; for a rule it is whether the rule is right; for a producer it is what
+#: renders. Not the Falsifier: the ten archive tests COULD have gone red, and passed because
+#: the guard really does enforce its caps -- nothing was vacuous. Not the Interpreter: that
+#: seat covers only the middle of the three variants.
+_SEATS = frozenset(
+    {
+        "The Warden",
+        "The Machinist",
+        "The Archivist",
+        "The Surveyor",
+        "The Herald",
+        "The Interpreter",
+        "The Falsifier",
+        "The Custodian",
+        "The Cartographer",
+    }
+)
 
 #: Prose fields every lane owes a reader, whatever answers it.
 #:
