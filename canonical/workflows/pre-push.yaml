@@ -520,6 +520,20 @@ gates:
       the fact it rests on -- a command and its output, a test count, a file:line, a
       commit sha, a run id -- or delete the claim. A checked box that says 'expected to'
       is a forecast, not a check.
+  - id: deterministic-first
+    tier: advisory
+    description: >
+      Deterministic-first sweep. Reports tests in this change set whose evidence is the
+      SOURCE TEXT of importable Python (inspect.getsource + an assertion) — a grep
+      proves the line was typed, only a drive proves it runs. Advisory because some
+      structural claims genuinely have no drivable surface; those are declared inline
+      with '# deterministic-first: structural assertion: <why>' and printed on every
+      run. Narrowed to getsource by measurement: treating any file read as a suspect
+      flagged 154 legitimate tests, and an unreadable report is read by nobody.
+    command: [py, -m, core.gates.deterministic_evidence]
+    warn_hint: >
+      A test is offering source text as its evidence. Import the thing and call it, or
+      declare the structural claim inline.
 
   - id: leanness
     tier: advisory

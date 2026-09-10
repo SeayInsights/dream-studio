@@ -600,6 +600,21 @@ def verify_work_order(
         _falsification_diff, _falsification_truncated = budget_falsification_diff(git_diff)
 
         # Build grader prompts.
+        # WO-DETERMINISTIC-FIRST: establish what can be established BEFORE anyone is
+        # asked to judge it. Graders were spending turns re-deriving exact answers
+        # ("all three named TEST-CHECK node IDs exist verbatim", "the dist/plugin copy
+        # matches canonical" — both verbatim from real verdicts), and sometimes could
+        # not compute them at all ("running pytest was denied by the sandbox"). Every
+        # fact here can be `unknown` WITH a reason; none may read as a silent pass.
+        from core.gates.deterministic_evidence import deterministic_facts, facts_prompt_block
+
+        _facts = deterministic_facts(
+            tasks=tasks,
+            project_root=resolve_project_root(work_order_id, db_path),
+            repo_root=source_root,
+        )
+        _facts_block = facts_prompt_block(_facts)
+
         prompts: dict[str, str] = {
             "completion": _COMPLETION_PROMPT_TEMPLATE.format(
                 direction_context=_direction_text
@@ -609,6 +624,7 @@ def verify_work_order(
                 work_order_id=work_order_id,
                 work_order_type=wo.get("work_order_type", "infrastructure"),
                 task_list=task_list_str,
+                computed_facts=_facts_block,
                 git_diff=git_diff,
             ),
             "correctness": _CORRECTNESS_PROMPT_TEMPLATE.format(
@@ -981,6 +997,10 @@ def verify_work_order(
             # from the current contents of some files -- very different strengths.
             "evidence_layer": _evidence_layer,
             "evidence_layer_note": evidence_layer_note(_evidence_layer),
+            # WO-DETERMINISTIC-FIRST: the facts established by computation rather than
+            # by reading, recorded so a reader can tell which half is which — and so a
+            # grader outage cannot take them with it.
+            "deterministic": _facts,
         }
         # WO-FALSIFY-FIRST-PASS: the falsification section and the UNVERIFIED
         # ledger ride the verdict. A falsification grader that could not run is

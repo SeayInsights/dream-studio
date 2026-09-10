@@ -541,6 +541,21 @@ def close_work_order(
 
         # Always-on AC gate: run all executable checks across every task.
         # Runs regardless of WO type; additional to (not replacing) the existing gates.
+        # WO-DETERMINISTIC-FIRST: how much of this close rests on computation, and how
+        # much on reading. Computed here because `conn` is live and the AC gate below
+        # reads the same tasks. A REPORT, never a block — some claims genuinely cannot
+        # be computed (a design judgement, an operator attestation), and a gate that
+        # demands the impossible is a gate people route around. What it makes visible is
+        # whether prose-only was a CHOICE.
+        _criteria_report: dict[str, Any] = {}
+        try:
+            from core.gates.deterministic_evidence import acceptance_criteria_determinism
+            from core.work_orders.close_gates import _read_wo_tasks
+
+            _criteria_report = acceptance_criteria_determinism(_read_wo_tasks(conn, work_order_id))
+        except Exception:
+            _criteria_report = {}
+
         _ac_stats: dict[str, Any] = {}
         ac_failures = _run_ac_gate(
             conn, work_order_id=work_order_id, db_path=db_path, stats=_ac_stats
@@ -817,6 +832,9 @@ def close_work_order(
     # ownership set does not block the close -- it makes a later verify grade a wider
     # range than it should, which is a thing the operator can only act on if told.
     result.update(_bookkeeping_errors)
+    if _criteria_report.get("prose_only"):
+        result["prose_only_criteria"] = _criteria_report["prose_only"]
+        result["criteria_coverage"] = _criteria_report.get("coverage")
 
     # WO-SEPARATE-TEST-RUNNER gap (e3a17189): a close whose review certified by
     # READING must not read the same as one a test run backs. all_tests_pass

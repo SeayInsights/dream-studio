@@ -511,8 +511,43 @@ def test_completion_prompt_template_work_order_type_interpolates() -> None:
         # is the fourth. A grep for the template name found it; my enumeration had
         # stopped at the non-test callers.
         direction_context="  (test: no surrounding work orders)",
+        # WO-DETERMINISTIC-FIRST added `{computed_facts}`, and this fourth formatter was
+        # missed AGAIN -- the same omission the comment above records, at the same site,
+        # one milestone later. The remedy recorded last time was "grep for the template
+        # name", which is a habit rather than a mechanism, and habits do not survive a
+        # milestone. `test_every_placeholder_has_a_supplier` below is the mechanism.
+        computed_facts="  (test: no computed facts)",
     )
     assert "infrastructure" in rendered
+
+
+def test_every_placeholder_has_a_supplier() -> None:
+    """Adding a placeholder to the completion template must break something immediately.
+
+    Twice now a placeholder was added to `_COMPLETION_PROMPT_TEMPLATE` and a formatter was
+    left behind, and both times the omission was found later by someone running a suite
+    they had no reason to run. `str.format` raises `KeyError` only for the caller that runs,
+    so a formatter nobody exercises stays broken silently -- and the test above IS that
+    formatter.
+
+    This derives the placeholder names from the template rather than listing them, so a new
+    placeholder fails here on the commit that introduces it, naming the field that has no
+    supplier. It is the enumeration the comment above says was done by hand and got wrong.
+    """
+    import string
+
+    from core.work_orders.verify import _COMPLETION_PROMPT_TEMPLATE
+
+    placeholders = {
+        field for _, field, _, _ in string.Formatter().parse(_COMPLETION_PROMPT_TEMPLATE) if field
+    }
+    assert placeholders, "the template has no placeholders -- has it been replaced?"
+
+    # Render with every derived name supplied. A missing one raises KeyError here, on the
+    # change that adds it, rather than in whichever unrelated suite runs next.
+    rendered = _COMPLETION_PROMPT_TEMPLATE.format(**{name: f"<{name}>" for name in placeholders})
+    for name in placeholders:
+        assert f"<{name}>" in rendered, f"{name} is parsed but never rendered"
 
 
 def test_completion_prompt_template_behavioral_ac_check_mentions_triggering_types() -> None:
