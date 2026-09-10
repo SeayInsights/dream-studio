@@ -19,23 +19,33 @@ can show that. So these tests run the real `ProjectionEngine.rebuild()` against 
 `WorkOrderProjection` / `TaskProjection` — including the real truncating `pre_rebuild` —
 and then look for the row.
 
-WHAT IS SUBSTITUTED, STATED PLAINLY. The spool→canonical ingestion stage is stood in for:
-`spool.writer.write_event` is replaced with a recorder that writes the envelope into
-`business_canonical_events`, which is what ingestion does. Everything after that point is
-production code.
+WHAT STANDS IN FOR THE SPOOL, AND WHY IT CALLS PRODUCTION CODE. `spool.writer.write_event`
+writes a JSON file that an out-of-process ingestor later denormalizes into
+`business_canonical_events`. Running that daemon in a unit test buys nothing, so the
+writer is replaced with a recorder — but the recorder does NOT hand-roll the canonical
+INSERT. It hands each envelope to the ingestor's own `_write_to_dual_canonical`, so the
+denormalization, the routing and the column set are production code.
 
-AND THE STAND-IN ENFORCES THE REAL CONTRACT, which is the whole reason it is safe. The
-production `write_event` takes a DICT; handing it a `CanonicalEventEnvelope` object raises
-TypeError from `_validate_payload_keys`, the caller's `except` swallows it, and the
-emission reads as present while never once succeeding. That exact bug shipped in this
-module, and three tests stayed green through it because their stubs accepted the envelope
-OBJECT. This recorder therefore rejects anything that is not a dict — so that defect fails
-here instead of passing.
+A FIRST VERSION OF THIS FILE DID HAND-ROLL THAT INSERT AND WAS WRONG IN TWO WAYS the
+independent runner caught: it denormalized only `project_id` and `work_order_id` of the
+four the ingestor writes, so `milestone_id` came back NULL after a rebuild and a test
+failed blaming production; and it wrote synchronously on a second connection while the
+caller still held an open write transaction, so every emission after the first hit
+`database is locked` and was swallowed. Both were the stand-in diverging from the thing it
+stood in for — the same failure as a stub that accepts an envelope object. Ingestion now
+runs AFTER the spawn transaction closes, which is also what actually happens in
+production, where it is asynchronous.
+
+AND THE RECORDER ENFORCES THE WRITER'S REAL CONTRACT. The production `write_event` takes a
+DICT; handing it a `CanonicalEventEnvelope` object raises TypeError from
+`_validate_payload_keys`, the caller's `except` swallows it, and the emission reads as
+present while never once succeeding. That exact bug shipped in this module, and three
+tests stayed green through it because their stubs accepted the envelope OBJECT. This
+recorder rejects anything that is not a dict, so that defect fails here instead.
 """
 
 from __future__ import annotations
 
-import json
 import sqlite3
 import uuid
 from pathlib import Path
@@ -75,11 +85,12 @@ def authority(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def ingest(authority, monkeypatch):
-    """Stand in for spool ingestion: emitted envelopes land in business_canonical_events.
+def emitted(monkeypatch):
+    """Capture what the spawn path emits, enforcing write_event's real contract.
 
-    Enforces write_event's real contract — a dict — so an envelope object fails loudly
-    rather than being silently accepted by a more permissive stub than production.
+    Capture only — nothing is written here. Ingestion is a separate step run after the
+    caller's transaction closes, because that is when it happens in production and
+    because writing on a second connection mid-transaction deadlocks SQLite.
     """
     captured: list[dict[str, Any]] = []
 
@@ -92,32 +103,25 @@ def ingest(authority, monkeypatch):
                 "present and never land. Add .to_dict()."
             )
         captured.append(envelope)
-        trace = envelope.get("trace") or {}
-        conn = sqlite3.connect(str(authority))
-        try:
-            conn.execute(
-                "INSERT INTO business_canonical_events"
-                " (event_id, event_type, event_timestamp, trace, payload,"
-                "  work_order_id, project_id)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (
-                    envelope.get("event_id") or str(uuid.uuid4()),
-                    envelope["event_type"],
-                    envelope.get("timestamp") or _NOW,
-                    json.dumps(trace),
-                    json.dumps(envelope.get("payload") or {}),
-                    trace.get("work_order_id"),
-                    trace.get("project_id"),
-                ),
-            )
-            conn.commit()
-        finally:
-            conn.close()
 
     import spool.writer as _spool_writer
 
     monkeypatch.setattr(_spool_writer, "write_event", _write_event)
     return captured
+
+
+def _ingest(db_path: Path, envelopes: list[dict[str, Any]]) -> int:
+    """Run the REAL ingestor write for each captured envelope.
+
+    Production code does the denormalization and the routing, so this stand-in cannot
+    drift from the column set the ingestor actually populates — which is exactly how the
+    first version of this file produced a false failure.
+    """
+    from spool.ingestor import _write_to_dual_canonical
+
+    for envelope in envelopes:
+        _write_to_dual_canonical(envelope, db_path)
+    return len(envelopes)
 
 
 def _seed_project(db_path: Path) -> tuple[str, str, str]:
@@ -201,7 +205,7 @@ def _count(db_path: Path, table: str, **where) -> int:
         conn.close()
 
 
-def test_a_spawned_work_order_survives_a_projection_rebuild(authority, ingest):
+def test_a_spawned_work_order_survives_a_projection_rebuild(authority, emitted):
     """The defect, stated as a test: spawn, rebuild, and the work order is still there."""
     from core.projections.work_order_projection import WorkOrderProjection
 
@@ -214,6 +218,10 @@ def test_a_spawned_work_order_survives_a_projection_rebuild(authority, ingest):
         "precondition: the spawn writes the row directly, so it must be present "
         "BEFORE the rebuild — otherwise this test proves nothing about the rebuild"
     )
+    assert _ingest(authority, emitted) >= 2, (
+        "precondition: the spawn must have emitted a work_order.created AND a "
+        f"task.created; captured {len(emitted)} envelope(s)"
+    )
 
     _rebuild(authority, WorkOrderProjection())
 
@@ -224,7 +232,7 @@ def test_a_spawned_work_order_survives_a_projection_rebuild(authority, ingest):
     )
 
 
-def test_a_spawned_task_survives_a_projection_rebuild(authority, ingest):
+def test_a_spawned_task_survives_a_projection_rebuild(authority, emitted):
     """Same claim for the child rows, which live in a different projection."""
     from core.projections.task_projection import TaskProjection
 
@@ -233,6 +241,7 @@ def test_a_spawned_task_survives_a_projection_rebuild(authority, ingest):
     new_id = spawned[0]["work_order_id"]
 
     assert _count(authority, "business_tasks", work_order_id=new_id) == 1
+    _ingest(authority, emitted)
 
     _rebuild(authority, TaskProjection())
 
@@ -242,7 +251,7 @@ def test_a_spawned_task_survives_a_projection_rebuild(authority, ingest):
     )
 
 
-def test_the_reconstructed_row_keeps_the_fields_the_event_carries(authority, ingest):
+def test_the_reconstructed_row_keeps_the_fields_the_event_carries(authority, emitted):
     """Surviving is not enough if it comes back as a different row.
 
     Scoped to the fields `work_order.created` actually carries. `sequence_order` is
@@ -265,6 +274,7 @@ def test_the_reconstructed_row_keeps_the_fields_the_event_carries(authority, ing
     )
     conn.close()
 
+    _ingest(authority, emitted)
     _rebuild(authority, WorkOrderProjection())
 
     conn = sqlite3.connect(str(authority))
@@ -283,7 +293,7 @@ def test_the_reconstructed_row_keeps_the_fields_the_event_carries(authority, ing
         )
 
 
-def test_the_writer_contract_is_enforced_so_an_envelope_object_would_fail(authority, ingest):
+def test_the_writer_contract_is_enforced_so_an_envelope_object_would_fail(authority, emitted):
     """Guard the guard: prove this suite rejects the bug that slipped past three tests.
 
     An emission that hands `write_event` a CanonicalEventEnvelope raises in production and

@@ -153,6 +153,42 @@ def _tracked_python(repo_root: Path) -> list[Path]:
     return [repo_root / name for name in names]
 
 
+#: Receivers a real `write_event` is called on. The spool writer is imported as a module
+#: throughout the tree (`import spool.writer as _spool_writer`), so the call is an
+#: attribute on one of these, or a bare name where the function itself was imported.
+_WRITER_RECEIVERS = frozenset({"_spool_writer", "spool", "writer", "spool.writer"})
+
+
+def _dotted(node: ast.AST) -> str:
+    """`a.b.c` for an attribute chain, `a` for a name, "" for anything else."""
+    parts: list[str] = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if isinstance(node, ast.Name):
+        parts.append(node.id)
+    else:
+        return ""
+    return ".".join(reversed(parts))
+
+
+def _is_writer_call(func: ast.AST) -> bool:
+    """Is this call the spool writer, rather than something else spelled the same?
+
+    `logger.write_event("inserted")` on an unrelated telemetry object is NOT an emission.
+    Counting it would be a false negative -- the gate blessing a row no replay can
+    rebuild, which is the one error this gate must not make. So a bare `write_event(...)`
+    counts (the function itself was imported), and an attribute call counts only when its
+    receiver is the spool writer module.
+    """
+    if isinstance(func, ast.Name):
+        return func.id in _EMITTERS
+    if isinstance(func, ast.Attribute) and func.attr in _EMITTERS:
+        receiver = _dotted(func.value)
+        return receiver in _WRITER_RECEIVERS
+    return False
+
+
 def _emission_reachers(tree: ast.AST) -> set[str]:
     """Names of functions in this module that reach an emission, directly or via a helper.
 
@@ -173,6 +209,11 @@ def _emission_reachers(tree: ast.AST) -> set[str]:
     followed. A function emitting through a helper imported from elsewhere still reports
     as an offender. That errs toward reporting, not toward silence, which is the safe
     direction for a gate whose whole subject is writes that look durable and are not.
+
+    THE RECEIVER IS CHECKED, NOT JUST THE METHOD NAME. `logger.write_event("inserted")`
+    on some unrelated telemetry object is not an emission, and counting it would be a
+    false NEGATIVE -- the gate silently blessing a row that no replay can rebuild. The
+    text match this replaced had the same hole; it is closed here rather than inherited.
     """
     calls: dict[str, set[str]] = {}
     reach: set[str] = set()
@@ -180,14 +221,17 @@ def _emission_reachers(tree: ast.AST) -> set[str]:
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         called: set[str] = set()
+        emits = False
         for call in ast.walk(node):
             if not isinstance(call, ast.Call):
                 continue
             name = getattr(call.func, "attr", None) or getattr(call.func, "id", None)
             if name:
                 called.add(name)
+            if _is_writer_call(call.func):
+                emits = True
         calls[node.name] = called
-        if called.intersection(_EMITTERS):
+        if emits:
             reach.add(node.name)
 
     changed = True

@@ -217,6 +217,55 @@ def test_the_helper_chain_is_followed_to_a_fixed_point(tmp_path):
     assert ebw.offenders(repo)["offenders"] == []
 
 
+UNRELATED_RECEIVER = """
+class TelemetryLogger:
+    def write_event(self, msg):
+        self._buf.append(msg)
+
+
+def create_thing(conn, logger):
+    conn.execute("INSERT INTO business_work_orders (work_order_id) VALUES (?)", ("x",))
+    logger.write_event("inserted")
+"""
+
+MODULE_ALIAS_RECEIVER = """
+import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    _spool_writer.write_event({"a": 1})
+    conn.execute("INSERT INTO business_work_orders (work_order_id) VALUES (?)", ("x",))
+"""
+
+
+def test_an_unrelated_object_named_write_event_does_not_count_as_an_emission(tmp_path):
+    """The false negative an independent reviewer constructed against this gate.
+
+    `logger.write_event(...)` on a telemetry object is not the spool writer. Counting it
+    would have the gate bless a row no replay can rebuild — the single error this gate
+    exists to prevent, committed by the gate itself. The text match this replaced had the
+    same hole.
+    """
+    repo = _repo(tmp_path, {"telemetry.py": UNRELATED_RECEIVER})
+    flagged = [item["function"] for item in ebw.offenders(repo)["offenders"]]
+
+    assert "create_thing" in flagged, (
+        "a write whose only 'emission' is an unrelated object's method must still be "
+        f"reported; got {flagged}"
+    )
+
+
+def test_the_real_module_alias_receiver_does_count(tmp_path):
+    """The other direction: the spelling production actually uses must be recognised.
+
+    Guards against fixing the false negative by making the check so strict that the real
+    call site stops counting — which would flag the entire tree.
+    """
+    repo = _repo(tmp_path, {"real.py": MODULE_ALIAS_RECEIVER})
+
+    assert ebw.offenders(repo)["offenders"] == []
+
+
 def test_calling_a_helper_that_does_not_emit_is_still_reported(tmp_path):
     """Show it going red: resolution must not become 'any function call counts'.
 
