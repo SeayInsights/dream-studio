@@ -214,9 +214,19 @@ def main(argv: list[str] | None = None) -> int:
         description="Report projection writes that no event can reconstruct."
     )
     parser.add_argument("--json", action="store_true", help="Emit the report as JSON.")
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help=(
+            "Review THIS tree instead of the one this gate lives in. `offenders()` always"
+            " took a root; this flag was missing, so the round table could not point the"
+            " lane at another project -- and said so rather than scanning its own install"
+            " and reporting that as the other project's result."
+        ),
+    )
     args = parser.parse_args(argv)
 
-    report = offenders()
+    report = offenders(Path(args.repo_root) if args.repo_root else None)
     if args.json:
         import json
 

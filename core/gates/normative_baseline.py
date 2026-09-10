@@ -50,6 +50,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -106,14 +107,60 @@ def _targets(repo_root: Path, spec: str) -> list[Path]:
     ]
 
 
+def _tracked(repo_root: Path) -> set[str]:
+    """Repo-relative paths git knows about.
+
+    A RATCHET MUST MEASURE WHAT A FRESH CHECKOUT CONTAINS. This gate walked the filesystem,
+    so it counted untracked files -- measured at 38 untracked docs files here, contributing
+    4 shouted words -- and the recorded baseline therefore encoded one machine's working
+    tree. Locally the numbers matched; on CI they could not, and full-ci on main failed on
+    every push for days as a result.
+
+    Deliberately the opposite of `untested_fallback._test_corpus`, which includes untracked
+    files on purpose: a corpus answers "does anything test this", and a test written in the
+    same change set counts even before it is committed. A ratchet answers "is this number
+    still true of what ships", and only tracked content ships.
+
+    Returns an empty set when git cannot be read, and the caller then falls back to the
+    filesystem walk -- a measurement taken is better than none, and the mismatch it can
+    cause is loud rather than silent.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "ls-files"],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    if out.returncode != 0:
+        return set()
+    return {line.strip().replace("\\", "/") for line in out.stdout.splitlines() if line.strip()}
+
+
 def measure(repo_root: Path = REPO_ROOT) -> dict[str, int]:
-    """Shouted normative statements per lane. The gate's only observation."""
+    """Shouted normative statements per lane, over TRACKED files only.
+
+    Tracked-only because this number is compared against a fresh checkout. Counting
+    untracked files made the local measurement disagree with CI permanently and baked one
+    machine's working tree into the shipped baseline -- see `_tracked`.
+    """
     counts: dict[str, int] = {}
+    tracked = _tracked(repo_root)
     for lane, specs in _LANES.items():
         total = 0
         for spec in specs:
             for path in _targets(repo_root, spec):
-                if _rel(path, repo_root) in _EXCLUDED:
+                rel = _rel(path, repo_root)
+                if rel in _EXCLUDED:
+                    continue
+                # An empty `tracked` means git could not be read; fall back to the walk
+                # rather than measuring nothing, which would read as a clean zero.
+                if tracked and rel.replace("\\", "/") not in tracked:
                     continue
                 try:
                     text = path.read_text(encoding="utf-8", errors="replace")

@@ -104,9 +104,9 @@ def test_an_absent_node_id_is_reported_as_unresolved_not_failed():
 
 
 def test_the_unresolved_target_is_named_in_full():
-    """A path with a SPACE in it. This repo lives under "C:\\Users\\Dannis Seay\\...",
+    """A path with a SPACE in it. This repo lives under "C:\\Users\\<operator with a space in the name>\\...",
     and the first parser captured ``(\\S+)`` — so it reported the missing target as
-    "C:\\Users\\Dannis". Found by driving it against real pytest, not by reading it."""
+    "C:\\Users\\<operator". Found by driving it against real pytest, not by reading it."""
     unresolved = resolve_node_ids([_ABSENT_NODE_ID])["unresolved"]
     assert unresolved, "the absent node id must be named"
     assert unresolved[0].endswith(
