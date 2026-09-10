@@ -436,8 +436,8 @@ def source_reading_tests(source: str, *, path: str) -> list[dict[str, Any]]:
     Both are mechanically detectable, which makes them the wrong thing to keep asking a
     grader about.
 
-    REPORTED, NEVER BLOCKED. Some structural claims have no drivable surface (that a
-    module does NOT import something; that a fallback is a chain rather than a
+    REPORTED, AND IT BLOCKS NOTHING. Some structural claims have no drivable surface
+    (that a module does not import something; that a fallback is a chain rather than a
     concatenation). Those are declared with ``GREP_EXEMPT_MARKER`` and still listed, so
     the exemption is visible rather than silent.
     """
