@@ -365,6 +365,49 @@ def _PATCH_TARGET_RE(name: str):
     return re.compile(r"patch[\w.]*\(\s*['\"][\w.]*(?<![\w])" + re.escape(name) + r"[^'\"]*['\"]")
 
 
+def _definition_modules(root: Path, name: str) -> int:
+    """How many files in the repo define ``name``.
+
+    A NAME DEFINED ONCE IDENTIFIES ITS SYMBOL; A NAME DEFINED EVERYWHERE DOES NOT. `main`
+    and `run` are defined in dozens of modules here, so a bare-name match against them
+    finds every unrelated mention in the tree -- measured at 720 findings on one PR, 682 of
+    them for those two names alone.
+    """
+    count = 0
+    pattern = re.compile(r"^\s*(?:async\s+)?def\s+" + re.escape(name) + r"\s*\(", re.M)
+    for _rel, text in _iter_code_files(root):
+        if pattern.search(text):
+            count += 1
+            if count > 1:
+                return count
+    return count
+
+
+def _qualified_reference(text: str, module_hint: str, name: str) -> bool:
+    """Does ``text`` reference ``name`` in a way that names its module?
+
+    Used only for AMBIGUOUS names. A dotted path (`monitor.thing`, or a quoted patch
+    target) or an import of the defining module ties the reference to this symbol; a bare
+    `main()` in a YAML file does not.
+    """
+    stem = module_hint.rsplit("/", 1)[-1].removesuffix(".py")
+    if not stem:
+        return False
+    # A DOTTED PATH NAMING THE MODULE, and nothing weaker. An earlier version also
+    # accepted "this file imports the changed module", which is FILE-level and so
+    # counted a same-named reference to an UNRELATED module:
+    # tests/unit/test_review_lane_registry.py imports the changed detectors and
+    # separately calls `review_lane_registry.run()`, and that bare `run` was
+    # attributed to the changed one. The dotted path ties the reference itself to the
+    # module, which is the actual question.
+    return bool(
+        re.search(
+            r"(?<!\w)" + re.escape(stem) + r"\s*\.\s*" + re.escape(name) + r"\b",
+            text,
+        )
+    )
+
+
 def detect_changed_signature_callers(
     diff_text: str, *, repo_root: Path | str = REPO_ROOT
 ) -> list[Finding]:
@@ -373,6 +416,7 @@ def detect_changed_signature_callers(
     changed_paths = {_normalize(f["path"]) for f in files}
 
     changed_sigs: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {}
+    sig_origin: dict[str, str] = {}
     for f in files:
         old: dict[str, str] = {}
         new: dict[str, str] = {}
@@ -387,8 +431,12 @@ def detect_changed_signature_callers(
         for name in set(old) & set(new):
             if _param_names(old[name]) != _param_names(new[name]):
                 changed_sigs[name] = (_param_names(old[name]), _param_names(new[name]))
+                sig_origin[name] = _normalize(f["path"])
     if not changed_sigs:
         return []
+
+    # Measured once per run, not per file: `_iter_code_files` walks the tree.
+    _ambiguous = {name: _definition_modules(root, name) > 1 for name in changed_sigs}
 
     # Match the name as a whole word, but ALLOW a leading "." so attribute and
     # patch-target references (e.g. monitor._write_handoff_packet_to_db, the real
@@ -399,6 +447,15 @@ def detect_changed_signature_callers(
         if rel in changed_paths:
             continue
         for name, pat in ref_res.items():
+            # AN AMBIGUOUS NAME NEEDS ITS MODULE NAMED. `main` and `run` are defined in
+            # dozens of modules here, so matching them bare finds every unrelated mention
+            # -- 720 findings on one PR, 682 for those two names. A name defined ONCE (the
+            # #353 symbol, and most real cases) keeps bare matching, so nothing this
+            # detector was built to catch is weakened.
+            if _ambiguous.get(name) and not _qualified_reference(
+                text, sig_origin.get(name, ""), name
+            ):
+                continue
             # A PATCH TARGET IS A REAL DEPENDENCY, AND IT LIVES IN A STRING.
             #
             # _code_only blanks comment and string contents so prose cannot raise false

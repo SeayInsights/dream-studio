@@ -40,7 +40,19 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+#: Kept for callers that import it. The registry is resolved from the TARGET root instead,
+#: so another project can carry its own lanes -- see `registry_for`.
 REGISTRY = REPO_ROOT / "canonical" / "review_lanes.yml"
+
+
+def registry_for(repo_root: Path | None = None) -> Path:
+    """Where the lanes live for the tree being reviewed.
+
+    Another project reviewing itself should be asked ITS questions, not this repo's, so the
+    registry travels with the tree rather than with the convener.
+    """
+    return (repo_root or REPO_ROOT) / "canonical" / "review_lanes.yml"
+
 
 #: Floor for the seat column. The real width is DERIVED per render, see `_seat_width`.
 _SEAT_WIDTH = 14
@@ -68,8 +80,15 @@ def _seat_width(report: dict) -> int:
 _TABLE_BUDGET_S = 900.0
 
 
-def _lanes() -> list[dict]:
-    data = yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))
+def _lanes(repo_root: Path | None = None) -> list[dict]:
+    registry = registry_for(repo_root)
+    if not registry.is_file():
+        raise FileNotFoundError(
+            f"no review-lane registry at {registry}. A convening with no lanes is not a"
+            " clean review -- it is a review that asked nothing, so this raises rather than"
+            " reporting an empty table."
+        )
+    data = yaml.safe_load(registry.read_text(encoding="utf-8"))
     return [lane for lane in (data or {}).get("lanes", []) if isinstance(lane, dict)]
 
 
@@ -78,7 +97,7 @@ def _one_line(text: object) -> str:
     return " ".join(str(text or "").split())
 
 
-def _run_detector(command: str) -> tuple[bool, str]:
+def _run_detector(command: str, repo_root: Path | None = None) -> tuple[bool, str]:
     """Run a lane's detector. Returns ``(clean, last_meaningful_line)``.
 
     A detector that cannot be RUN is reported as a failure, not skipped: silence from a
@@ -88,6 +107,16 @@ def _run_detector(command: str) -> tuple[bool, str]:
     argv = shlex.split(command)
     if argv and argv[0] in ("py", "python", "python3"):
         argv[0] = sys.executable
+
+    # TELL THE DETECTOR WHICH TREE TO SCAN, but only when it is not this one -- a same-repo
+    # convening is unchanged. A detector that does not accept the flag will exit non-zero on
+    # an unrecognised argument, and that is reported as a lane that could not be pointed at
+    # the target rather than as a clean lane. Dropping the flag and running anyway would
+    # scan the convener's own install and call another project green.
+    target = Path(repo_root) if repo_root else None
+    retargeted = bool(target and target.resolve() != REPO_ROOT.resolve())
+    if retargeted:
+        argv += ["--repo-root", str(target)]
     try:
         proc = subprocess.run(  # noqa: S603 - argv from the registry, shell=False
             argv,
@@ -102,14 +131,57 @@ def _run_detector(command: str) -> tuple[bool, str]:
         return False, f"could not run ({type(exc).__name__}: {exc})"
     stream = (proc.stdout or "") + (proc.stderr or "")
     lines = [line.strip() for line in stream.splitlines() if line.strip()]
+    if retargeted and _rejected_the_flag(stream):
+        return False, (
+            "could not be pointed at the target tree: this detector does not accept"
+            " --repo-root, so running it would have scanned the convener's own install and"
+            " reported that as this project's result. Parameterise the detector."
+        )
     return proc.returncode == 0, (lines[-1] if lines else "(no output)")
 
 
-def convene(*, run_detectors: bool = True) -> dict:
-    """The table's report for the current change set."""
+def _rejected_the_flag(stream: str) -> bool:
+    """Did the child refuse `--repo-root` rather than run and find something?
+
+    argparse says "unrecognized arguments" and exits 2. Distinguishing that from a genuine
+    finding matters: one is a defect in the lane and the other is a defect in the project,
+    and reporting the first as the second sends someone hunting in the wrong tree.
+    """
+    lowered = stream.lower()
+    return "unrecognized arguments" in lowered and "--repo-root" in lowered
+
+
+def convene(
+    *,
+    run_detectors: bool = True,
+    repo_root: Path | None = None,
+    seat: str | None = None,
+    lane_id: str | None = None,
+) -> dict:
+    """The table's report for a change set, in this tree or another.
+
+    `seat` and `lane_id` convene one reviewer rather than the whole table. An unknown value
+    RAISES with the valid set named: silently convening nothing for a typo would report a
+    clean review of everything, which is the failure every lane here exists to refuse.
+    """
     seats: list[dict] = []
     started = monotonic()
-    for lane in _lanes():
+    lanes = _lanes(repo_root)
+
+    if seat is not None:
+        available = sorted({str(item.get("seat", "?")) for item in lanes})
+        matched = [item for item in lanes if str(item.get("seat")) == seat]
+        if not matched:
+            raise KeyError(f"no seat {seat!r}. Seats at this table: {', '.join(available)}")
+        lanes = matched
+    if lane_id is not None:
+        available = sorted({str(item.get("id", "?")) for item in lanes})
+        matched = [item for item in lanes if str(item.get("id")) == lane_id]
+        if not matched:
+            raise KeyError(f"no lane {lane_id!r}. Lanes here: {', '.join(available)}")
+        lanes = matched
+
+    for lane in lanes:
         entry = {
             "seat": lane.get("seat", "?"),
             "lane": lane.get("id", "?"),
@@ -131,7 +203,7 @@ def convene(*, run_detectors: bool = True) -> dict:
                         " before reaching this lane"
                     )
                 else:
-                    clean, detail = _run_detector(lane["detector"])
+                    clean, detail = _run_detector(lane["detector"], repo_root)
                     entry["clean"] = clean
                     entry["detail"] = detail
             # THE SURVEYOR'S REACH, stated rather than assumed. Attribution needs a
@@ -258,9 +330,41 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="List the lanes without running the detectors (fast, and answers nothing).",
     )
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help=(
+            "Convene against THIS project instead of the one the convener lives in. Its"
+            " own canonical/review_lanes.yml is read, so a project is asked its own"
+            " questions, and each detector is told which tree to scan."
+        ),
+    )
+    parser.add_argument(
+        "--seat",
+        default=None,
+        help="Convene one seat alone (exact name). An unknown seat fails, naming the set.",
+    )
+    parser.add_argument(
+        "--lane",
+        dest="lane_id",
+        default=None,
+        help="Convene one lane alone (exact id). An unknown lane fails, naming the set.",
+    )
     args = parser.parse_args(argv)
 
-    report = convene(run_detectors=not args.no_detectors)
+    try:
+        report = convene(
+            run_detectors=not args.no_detectors,
+            repo_root=Path(args.repo_root) if args.repo_root else None,
+            seat=args.seat,
+            lane_id=args.lane_id,
+        )
+    except (KeyError, FileNotFoundError) as exc:
+        # NAMED, NOT SWALLOWED. A typo that convened nothing would print an empty table and
+        # exit 0 -- a clean review of everything, which is the substitution every lane here
+        # exists to refuse.
+        print(f"round-table: {exc}".replace('"', ""), file=sys.stderr)
+        return 2
     print(json.dumps(report, indent=2, sort_keys=True) if args.json else _render(report))
     # "unchecked" is a deliberate listing, not a failure -- but it is not a pass
     # either, and the report says so.
