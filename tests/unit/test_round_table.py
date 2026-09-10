@@ -2,8 +2,10 @@
 
 Operator instruction, 2026-09-09: "use the round table to review anything before it is
 pushed." `canonical/review_lanes.yml` holds the questions and `review_lane_registry` proves
-each is answerable — but proving a lane is answerable is not asking it, and three of the six
-are decided by judgment with nothing surfacing them when a reviewer needed them.
+each is answerable — but proving a lane is answerable is not asking it, and the lanes
+decided by judgment had nothing surfacing them when a reviewer needed them. No count is
+stated: the registry is the count, and a second copy of it here can only drift — which
+it already had, reading "three of the six" against eight lanes.
 
 THE FIRST CONVENING FOUND A DEFECT IN THE CONVENER. `status` was "pass" whenever no detector
 came back unclean — and under `run_detectors=False` no detector is anything, so a caller
@@ -101,10 +103,25 @@ def test_a_declared_judgment_lane_arrives_with_what_is_missing():
 
 
 def test_the_seats_are_the_round_table():
-    """Named seats rather than the handles these lanes arrived under."""
+    """Named seats rather than the handles these lanes arrived under.
+
+    DERIVED FROM `_SEATS`, NOT RETYPED. This listed the roster literally and had to be
+    edited every time a seat was added -- three times in two days -- which is the same
+    transcribed-from-the-thing-it-describes defect this file already fixed twice (a seat
+    count of 5, a detector count of 3). The property is that every seated lane is held by a
+    seat from the CLOSED set, so a lane cannot be filed under a person's name; the roster
+    itself lives in one place.
+    """
+    from core.gates import review_lane_registry
+
     report = convene(run_detectors=False)
     seats = {seat["seat"] for seat in report["lanes"]}
-    assert seats == {"The Warden", "The Machinist", "The Archivist", "The Surveyor", "The Herald"}
+
+    assert seats, "no lane was seated"
+    assert seats <= review_lane_registry._SEATS, seats - review_lane_registry._SEATS
+    # And a seat is a described role, never somebody's handle.
+    for seat in seats:
+        assert seat.startswith("The "), seat
 
 
 # ── a detector that cannot run is not a detector that found nothing ─────────
@@ -159,7 +176,75 @@ def test_the_table_stops_at_its_own_budget(monkeypatch):
     report = convene(run_detectors=True)
 
     assert report["status"] == "fail"
-    assert len(report["detectors_unclean"]) == 3, report["detectors_unclean"]
+    # DERIVED, NOT TRANSCRIBED. This read `== 3`, which is the number of detector lanes
+    # the registry happened to hold -- correct today and a false failure the moment a
+    # fourth is added. The property is that EVERY detector lane was skipped for budget
+    # and every one reported unclean, which is what the assertion actually means.
+    detector_lanes = [s["lane"] for s in report["lanes"] if s["kind"] == "detector"]
+    assert detector_lanes, "no detector lane was seated"
+    assert sorted(report["detectors_unclean"]) == sorted(detector_lanes), report
     for seat in report["lanes"]:
         if seat["kind"] == "detector":
             assert "budget" in seat["detail"], seat
+
+
+def test_the_seat_column_fits_the_longest_seat():
+    """THE INTERPRETER'S SECOND LANE, ASKED OF THIS MODULE AND IT FOUND SOMETHING.
+
+    `_SEAT_WIDTH` was a hardcoded 14 under a comment reading "wide enough for the longest
+    seat, so the table reads as a table" -- the promise in prose, kept by nothing. Seating
+    "The Interpreter" (15 characters) overflowed it and shifted every question one space
+    left. Nothing raised: a misaligned table still looks like a table, which is exactly that
+    lane's signature -- a producer grows a vocabulary member and the far end renders it
+    wrong instead of refusing it.
+
+    So the width is derived, and this pins the derivation rather than the number. It fails
+    for a seat added later without touching the constant, which the constant could not do.
+    """
+    report = convene(run_detectors=False)
+    width = round_table._seat_width(report)
+
+    longest = max(len(seat["seat"]) for seat in report["lanes"])
+    assert width >= longest, f"the column truncates {longest}-character seats"
+
+    # And every rendered seat cell really is padded to that width -- deriving the number is
+    # no use if the format string still reads the old constant, which is how the constant
+    # would have stayed decorative.
+    rendered = round_table._render(report)
+    for seat in report["lanes"]:
+        if seat["kind"] == "detector":
+            continue
+        assert f"  {seat['seat']:<{width}} {seat['question']}" in rendered, seat["seat"]
+
+
+def test_a_seat_longer_than_the_floor_still_aligns(monkeypatch):
+    """Drives the failure directly, since every seat today happens to fit the derived
+    width -- a test that only reads the current registry would pass on the hardcoded
+    constant it replaced."""
+    report = convene(run_detectors=False)
+    report["lanes"] = list(report["lanes"]) + [
+        {
+            "seat": "The Extremely Long Seat Name",
+            "lane": "a-hypothetical-lane",
+            "question": "does the column still line up?",
+            "signature": "s",
+            "kind": "judgment",
+            "why": "x" * 40,
+        }
+    ]
+
+    width = round_table._seat_width(report)
+    assert width == len("The Extremely Long Seat Name")
+
+    rendered = round_table._render(report)
+    question_columns = {
+        line.index("does the column still line up?")
+        for line in rendered.splitlines()
+        if "does the column still line up?" in line
+    }
+    warden = [line for line in rendered.splitlines() if line.strip().startswith("The Warden")]
+    assert warden, "the Warden's row should be rendered"
+    assert question_columns, "the long seat's question should be rendered"
+    # The long seat pushed the column out; the Warden's question must move with it.
+    assert len(warden[0]) - len(warden[0].lstrip()) == 2
+    assert warden[0].index("Two sites") == min(question_columns)

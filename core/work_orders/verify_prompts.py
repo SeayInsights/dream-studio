@@ -58,7 +58,9 @@ Return ONLY valid JSON with this exact schema (no prose, no markdown fences):
       "tasks": [
         {{
           "title": "<imperative task title>",
-          "description": "<specific acceptance criteria>"
+          "description": "<specific acceptance criteria>",
+          "acceptance_criteria": "<ONE line the machine can run, or omit and give `why`>",
+          "why": "<omit unless acceptance_criteria is omitted: why this claim cannot be computed, 20+ chars>"
         }}
       ]
     }}
@@ -67,6 +69,30 @@ Return ONLY valid JSON with this exact schema (no prose, no markdown fences):
 
 A gap entry is required for every task with verdict "partial" or "missing".
 If all tasks pass, return gaps as an empty array.
+
+CRITERION RULE — EVERY GAP TASK IS CHECKABLE, OR SAYS WHY NOT. A task nobody can check is
+a claim that gets marked done by reading, and a work order full of them cannot be verified.
+So each task you emit carries EXACTLY ONE of:
+
+  "acceptance_criteria": "TEST-CHECK: <pytest node id>"      runs that node; passes iff exit 0
+  "acceptance_criteria": "SQL-CHECK: SELECT 1 WHERE <cond>"   passes on a truthy first column
+  "acceptance_criteria": "API-CHECK: <METHOD path -> [status]>" boots the API; passes on the status
+  "why": "<20+ characters saying why this claim cannot be computed>"
+
+A task carrying neither is REFUSED at intake and reported unfiled — the finding is not lost,
+but it is not tracked as work either, so prefer a criterion whenever one is honest.
+
+NAME ONLY A TARGET YOU CAN SEE. A TEST-CHECK naming a node id that does not exist is WORSE
+than no criterion: the close path runs it, the run fails, and the failure reads as a defect
+in the work rather than a defect in the criterion. Name a node id, table or route that
+appears in the diff, the task list or the acceptance criteria shown above. If the fix you
+are asking for would need a test that does not exist yet, either name the node id the author
+must create — stating that in the description — or use `why`. Do NOT invent a plausible
+path. This is the GROUNDING RULE against invented thresholds, applied to acceptance criteria.
+
+An unknown "*-CHECK" kind is detected and FAILS CLOSED, so a misspelling blocks a close
+rather than being ignored. Use one of the three kinds above, spelled exactly, with the colon
+directly after the kind.
 
 GROUNDING RULE — NO INVENTED THRESHOLDS: Only flag a gap against the EXPLICIT
 acceptance-criteria text shown for each task above. Do NOT fabricate numeric
@@ -83,7 +109,7 @@ when", "emits Y spool event", "CLI outputs") — add one warning-severity gap:
   "title": "Add observable behavioral acceptance criteria to task descriptions",
   "description": "No task in this work order describes end-to-end observable behavior from the operator's perspective. Tasks should include at least one AC statement like 'Acceptance: <what the operator experiences>'. This is a documentation gap; it does not affect code correctness.",
   "work_order_type": "documentation",
-  "tasks": [{{ "title": "Add behavioral AC to task descriptions", "description": "Rewrite each task description to include an Acceptance: clause stating what the operator observes when the task is done correctly." }}]
+  "tasks": [{{ "title": "Add behavioral AC to task descriptions", "description": "Rewrite each task description to include an Acceptance: clause stating what the operator observes when the task is done correctly.", "why": "Whether a description reads as observable behaviour is a judgement about prose; no query or test can decide it." }}]
 }}
 Do NOT emit this gap if: (a) behavioral AC is already present, (b) work_order_type is not
 feature/infrastructure, or (c) the gap would duplicate a task-level gap already in the list.

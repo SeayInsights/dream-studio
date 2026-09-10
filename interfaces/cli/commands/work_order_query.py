@@ -510,6 +510,7 @@ def _work_order_add_task(
     project_id: str | None,
     source_root: Path,
     dream_studio_home: Path | None,
+    why: str | None = None,
 ) -> int:
     """Add a task through the authority. Tasks live in SQLite, never in a document.
 
@@ -523,6 +524,29 @@ def _work_order_add_task(
 
     from core.installed_runtime import resolve_installed_runtime_paths
     from core.work_orders.mutations import create_task
+
+    # ADMISSION RUNS FIRST, before the project lookup. The Warden's lane needs no
+    # database -- whether a criterion is executable is a property of the text -- and
+    # running it after the lookup let 'no such table' answer for a task that was
+    # simply unfilable, reporting the wrong reason to the author. The lanes that DO
+    # need context (boundary, sibling titles) degrade to quiet inside
+    # `_admit_or_report` when the authority cannot be read.
+    # THE ROUND TABLE DECIDES WHETHER THIS MAY BE FILED, before it is filed. This used to
+    # create the task and then print "No executable acceptance criterion. Close cannot
+    # verify this task without one" -- the consequence named exactly, and enforced by
+    # nothing. Measured: 1766 of 3278 tasks in the authority carry no criterion.
+    _admission = _admit_or_report(
+        work_order_id=work_order_id,
+        title=title,
+        description=description,
+        acceptance_criteria=acceptance_criteria,
+        why=why,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    if _admission is not None:
+        print(json.dumps(_admission, indent=2))
+        return 1
 
     nl = chr(10)
     if project_id is None:
@@ -553,6 +577,20 @@ def _work_order_add_task(
             return 1
         project_id = row[0]
 
+    # THE DECLARATION IS PERSISTED, not printed and discarded. Found by the
+    # task-criteria-baseline ratchet reporting `0 declared` while a task admitted on a
+    # declared reason sat in the authority: the reason reached stdout and nothing else, so
+    # `--why` was a bare bypass with a nicer spelling. Composed into the description with a
+    # stable marker, as `compose_module_boundary` already does for the boundary clause --
+    # the marker the ratchet reads is the marker written here, in one place.
+    from core.work_orders.admission import DECLARED_PREFIX as _DECLARED_PREFIX
+
+    _declared = " ".join((why or "").split())
+    if _declared and not acceptance_criteria:
+        _body = (description or "").rstrip()
+        _blank = chr(10) + chr(10)
+        description = (_body + _blank if _body else "") + (_DECLARED_PREFIX + " " + _declared)
+
     result = create_task(
         work_order_id=work_order_id,
         project_id=project_id,
@@ -568,12 +606,84 @@ def _work_order_add_task(
     if result.get("unverified_claims"):
         print(f"{nl}UNVERIFIED CLAIM: {result['unverified_claims']}")
     if not acceptance_criteria:
+        # Reached only when a reason was DECLARED -- admission refuses the bare case above.
+        # Said out loud so a declaration is visibly a trade rather than a silent pass.
         print(
-            f"{nl}No executable acceptance criterion. Close cannot verify this task "
-            f"without one -- add TEST-CHECK, SQL-CHECK or API-CHECK so the gate has "
-            f"something to run."
+            f"{nl}Filed with no executable criterion, on a declared reason. Close cannot"
+            f" verify this task by computation, so it rests on someone reading it:"
+            f"{nl}  {' '.join((why or '').split())}"
         )
     return 0
+
+
+def _admit_or_report(
+    *,
+    work_order_id: str,
+    title: str,
+    description: str,
+    acceptance_criteria: str | None,
+    why: str | None,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> dict | None:
+    """``None`` when the task may be filed; a printable refusal dict when it may not.
+
+    Reads the work order's own description (for its `Module boundary:` clause) and its
+    sibling task titles, so the Surveyor and Herald lanes have something to judge. A
+    missing or unprojected work order yields no context rather than an error: this is an
+    admission check, and failing to file a task because its work order row has not
+    projected yet would refuse for a reason that has nothing to do with the task.
+    """
+    import sqlite3 as _sqlite3
+
+    from core.installed_runtime import resolve_installed_runtime_paths
+    from core.work_orders.admission import admit_task, paths_named
+
+    wo_description = ""
+    existing_titles: list[str] = []
+    try:
+        db_path = resolve_installed_runtime_paths(
+            source_root=source_root, dream_studio_home=dream_studio_home
+        ).sqlite_path
+        conn = _sqlite3.connect(str(db_path))
+        try:
+            row = conn.execute(
+                "SELECT description FROM business_work_orders WHERE work_order_id = ?",
+                (work_order_id,),
+            ).fetchone()
+            wo_description = (row[0] if row else "") or ""
+            existing_titles = [
+                r[0] or ""
+                for r in conn.execute(
+                    "SELECT title FROM business_tasks WHERE work_order_id = ?",
+                    (work_order_id,),
+                ).fetchall()
+            ]
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001 - no context means the lanes that need it stay quiet
+        wo_description, existing_titles = "", []
+
+    verdict = admit_task(
+        title=title,
+        acceptance_criteria=acceptance_criteria,
+        why=why,
+        work_order_description=wo_description,
+        existing_titles=existing_titles,
+        target_paths=paths_named(f"{title} {description}", repo_root=source_root),
+    )
+    if verdict["admitted"]:
+        return None
+    return {
+        "ok": False,
+        "error": "the round table refused to file this task",
+        "refusals": verdict["refusals"],
+        "unknowns": verdict["unknowns"],
+        "remedy": (
+            "add --acceptance with a TEST-CHECK / SQL-CHECK / API-CHECK, or --why"
+            " '<20+ characters saying why this claim cannot be computed>'"
+        ),
+    }
 
 
 def _work_order_reconcile(

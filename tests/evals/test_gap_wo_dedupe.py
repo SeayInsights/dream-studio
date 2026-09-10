@@ -40,6 +40,10 @@ CREATE TABLE IF NOT EXISTS business_tasks (
     title TEXT NOT NULL,
     description TEXT,
     status TEXT NOT NULL DEFAULT 'pending',
+    -- Present because the real table has it and the code under test now writes it. A
+    -- hand-rolled fixture schema that lags the real one turns a correct production change
+    -- into a fake test failure, which is what `fixture-schema-parity` exists to catch.
+    acceptance_criteria TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -58,7 +62,14 @@ def _make_conn() -> sqlite3.Connection:
 
 
 def _gaps(title: str, *, category: str = "the-gap", tasks: list[str] | None = None) -> list[dict]:
-    task_list = [{"title": t, "description": ""} for t in (tasks or [title + " task"])]
+    task_list = [
+        {
+            "title": t,
+            "description": "",
+            "acceptance_criteria": "TEST-CHECK: tests/unit/test_gap_fanout.py::test_placeholder",
+        }
+        for t in (tasks or [title + " task"])
+    ]
     return [
         {
             "title": title,
