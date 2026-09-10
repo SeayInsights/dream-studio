@@ -153,10 +153,8 @@ def _tracked_python(repo_root: Path) -> list[Path]:
     return [repo_root / name for name in names]
 
 
-#: Receivers a real `write_event` is called on. The spool writer is imported as a module
-#: throughout the tree (`import spool.writer as _spool_writer`), so the call is an
-#: attribute on one of these, or a bare name where the function itself was imported.
-_WRITER_RECEIVERS = frozenset({"_spool_writer", "spool", "writer", "spool.writer"})
+#: The module that actually writes to the spool.
+_WRITER_MODULE = "spool.writer"
 
 
 def _dotted(node: ast.AST) -> str:
@@ -172,20 +170,90 @@ def _dotted(node: ast.AST) -> str:
     return ".".join(reversed(parts))
 
 
-def _is_writer_call(func: ast.AST) -> bool:
+def _writer_bindings(tree: ast.AST) -> tuple[set[str], set[str]]:
+    """Names in this file that an import actually bound to the spool writer.
+
+    Returns `(module_aliases, direct_names)` — receivers whose `.write_event(...)` is a
+    real emission, and bare names that ARE `write_event`.
+
+    A NAME ALLOWLIST WAS NOT ENOUGH, and an independent reviewer proved it by running it
+    rather than reading it: with the receiver merely required to be spelled `writer`,
+    `spool` or `_spool_writer`, three constructions slipped through as compliant -- an
+    ordinary parameter named `writer`, one named `spool`, and a local bound to an
+    unrelated object named `_spool_writer` -- each doing a raw INSERT with no emission at
+    all. Those are unremarkable names in this codebase's own vocabulary, so the collision
+    is likely rather than contrived, and the direction of the error is the unsafe one:
+    the gate blessing a row no replay can rebuild.
+
+    Provenance is therefore read from the import statements. A receiver counts only if
+    THIS FILE imported the writer under that name.
+    """
+    module_aliases: set[str] = set()
+    direct_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == _WRITER_MODULE:
+                    # `import spool.writer as w` binds `w`; plain `import spool.writer`
+                    # binds `spool`, and the call is then written out in full.
+                    module_aliases.add(alias.asname or _WRITER_MODULE)
+                    if alias.asname is None:
+                        module_aliases.add(_WRITER_MODULE)
+        elif isinstance(node, ast.ImportFrom):
+            source = node.module or ""
+            if source == _WRITER_MODULE:
+                for alias in node.names:
+                    if alias.name in _EMITTERS:
+                        direct_names.add(alias.asname or alias.name)
+            elif source == "spool":
+                for alias in node.names:
+                    if alias.name == "writer":
+                        module_aliases.add(alias.asname or "writer")
+    return module_aliases, direct_names
+
+
+def _rebound(node: ast.AST, name: str) -> bool:
+    """Does this function rebind `name`, so the import no longer refers to it here?
+
+    An imported alias shadowed by a parameter or a local assignment is a different
+    object, and treating the shadow as the writer is the same false negative one level
+    down.
+    """
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        args = node.args
+        for arg in [*args.posonlyargs, *args.args, *args.kwonlyargs]:
+            if arg.arg == name:
+                return True
+        if (args.vararg and args.vararg.arg == name) or (args.kwarg and args.kwarg.arg == name):
+            return True
+    for child in ast.walk(node):
+        if isinstance(child, ast.Assign):
+            for target in child.targets:
+                if isinstance(target, ast.Name) and target.id == name:
+                    return True
+        elif isinstance(child, (ast.AnnAssign, ast.AugAssign)):
+            target = child.target
+            if isinstance(target, ast.Name) and target.id == name:
+                return True
+    return False
+
+
+def _is_writer_call(func: ast.AST, scope: ast.AST, bindings: tuple[set[str], set[str]]) -> bool:
     """Is this call the spool writer, rather than something else spelled the same?
 
-    `logger.write_event("inserted")` on an unrelated telemetry object is NOT an emission.
-    Counting it would be a false negative -- the gate blessing a row no replay can
-    rebuild, which is the one error this gate must not make. So a bare `write_event(...)`
-    counts (the function itself was imported), and an attribute call counts only when its
-    receiver is the spool writer module.
+    `logger.write_event("inserted")` on an unrelated telemetry object is not an emission,
+    and neither is `writer.write_event(...)` where `writer` is a parameter. The name must
+    have been bound to the writer by an import IN THIS FILE and not rebound in the
+    function doing the calling.
     """
+    module_aliases, direct_names = bindings
     if isinstance(func, ast.Name):
-        return func.id in _EMITTERS
+        return func.id in direct_names and not _rebound(scope, func.id)
     if isinstance(func, ast.Attribute) and func.attr in _EMITTERS:
         receiver = _dotted(func.value)
-        return receiver in _WRITER_RECEIVERS
+        if receiver not in module_aliases:
+            return False
+        return not _rebound(scope, receiver.split(".")[0])
     return False
 
 
@@ -215,6 +283,7 @@ def _emission_reachers(tree: ast.AST) -> set[str]:
     false NEGATIVE -- the gate silently blessing a row that no replay can rebuild. The
     text match this replaced had the same hole; it is closed here rather than inherited.
     """
+    bindings = _writer_bindings(tree)
     calls: dict[str, set[str]] = {}
     reach: set[str] = set()
     for node in ast.walk(tree):
@@ -228,7 +297,7 @@ def _emission_reachers(tree: ast.AST) -> set[str]:
             name = getattr(call.func, "attr", None) or getattr(call.func, "id", None)
             if name:
                 called.add(name)
-            if _is_writer_call(call.func):
+            if _is_writer_call(call.func, node, bindings):
                 emits = True
         calls[node.name] = called
         if emits:

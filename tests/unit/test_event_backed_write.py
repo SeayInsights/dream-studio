@@ -94,7 +94,15 @@ def test_the_target_tables_come_from_the_projections_themselves():
 # ── detection, both directions ──────────────────────────────────────────────
 
 
+# The import is part of the fixture because it is part of the real shape: the gate reads
+# provenance, so a bare `write_event(...)` in a file that never imported it is not an
+# emission — it is a NameError waiting to happen. A fixture without the import would be a
+# stand-in with a different contract than production, which is the very defect class this
+# gate's own work order was about.
 WITH_EVENT = """
+from spool.writer import write_event
+
+
 def create_thing(conn):
     write_event(envelope)
     conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
@@ -167,6 +175,9 @@ def test_the_report_states_what_it_examined_even_when_clean(tmp_path):
 # block a third time — which is the condition that created the original bug.
 
 VIA_HELPER = """
+from spool.writer import write_event
+
+
 def _emit(payload):
     write_event(payload)
 
@@ -177,6 +188,9 @@ def create_thing(conn):
 """
 
 VIA_HELPER_CHAIN = """
+from spool.writer import write_event
+
+
 def _emit(payload):
     write_event(payload)
 
@@ -236,6 +250,66 @@ def create_thing(conn):
     _spool_writer.write_event({"a": 1})
     conn.execute("INSERT INTO business_work_orders (work_order_id) VALUES (?)", ("x",))
 """
+
+# The three constructions an independent reviewer EXECUTED against the first receiver
+# fix, each of which slipped through a name-only allowlist as a genuine emission while
+# doing a raw INSERT and emitting nothing. The names are ordinary ones in this
+# codebase's vocabulary, so the collision is likely rather than contrived.
+SHADOWED_BY_PARAM_WRITER = """
+import spool.writer as _spool_writer
+
+
+def create_thing(conn, writer):
+    conn.execute("INSERT INTO business_work_orders (work_order_id) VALUES (?)", ("x",))
+    writer.write_event("inserted")
+"""
+
+SHADOWED_BY_PARAM_SPOOL = """
+import spool.writer as _spool_writer
+
+
+def create_thing(conn, spool):
+    conn.execute("INSERT INTO business_work_orders (work_order_id) VALUES (?)", ("x",))
+    spool.write_event("inserted")
+"""
+
+SHADOWED_BY_LOCAL = """
+import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    _spool_writer = FakeWriter()
+    conn.execute("INSERT INTO business_work_orders (work_order_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+NO_IMPORT_AT_ALL = """
+def create_thing(conn):
+    conn.execute("INSERT INTO business_work_orders (work_order_id) VALUES (?)", ("x",))
+    write_event("inserted")
+"""
+
+
+@pytest.mark.parametrize(
+    "name,source",
+    [
+        ("param named writer", SHADOWED_BY_PARAM_WRITER),
+        ("param named spool", SHADOWED_BY_PARAM_SPOOL),
+        ("local named _spool_writer", SHADOWED_BY_LOCAL),
+        ("no import at all", NO_IMPORT_AT_ALL),
+    ],
+)
+def test_a_receiver_that_is_not_the_imported_writer_is_still_reported(tmp_path, name, source):
+    """Provenance, not spelling. Each of these emits nothing and must be reported.
+
+    A name-only allowlist passed all of the first three. The direction of that error is
+    the unsafe one — the gate blessing a row no replay can rebuild — which is the single
+    mistake this gate must not make, and it would have made it while reading as fixed.
+    """
+    repo = _repo(tmp_path, {"x.py": source})
+    flagged = [item["function"] for item in ebw.offenders(repo)["offenders"]]
+
+    assert "create_thing" in flagged, f"{name}: emits nothing but was not reported ({flagged})"
 
 
 def test_an_unrelated_object_named_write_event_does_not_count_as_an_emission(tmp_path):
