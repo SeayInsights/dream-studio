@@ -744,6 +744,28 @@ def _work_order_carry_over(
     return 0
 
 
+def _work_order_amend_boundary(
+    *,
+    work_order_id: str,
+    module_boundary: str,
+    reason: str,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """Correct a work order's module boundary through the recorded path."""
+    from core.work_orders.amend_boundary import amend_module_boundary
+
+    result = amend_module_boundary(
+        work_order_id=work_order_id,
+        module_boundary=module_boundary,
+        reason=reason,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
+
+
 def _work_order_repoint_ac(
     *,
     task_id: str,

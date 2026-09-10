@@ -51,9 +51,50 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 EXEMPT_MARKER = "# event-backed-write:"
 _MIN_REASON = 20
 
-#: How a function says it wrote to the event substrate. Both spellings, because the repo
-#: writes the envelope directly in some places and calls the writer in others.
-_EMITTERS = ("write_event", "CanonicalEventEnvelope")
+#: How a function says it wrote to the event substrate.
+#:
+#: `CanonicalEventEnvelope` ALONE IS NOT AN EMISSION, and treating it as one made this gate
+#: grep where it should check. `spool.writer.write_event` takes a DICT; passing the envelope
+#: object raises TypeError from its payload validation. `_attach_gap_tasks` did exactly that
+#: -- the emission was added, a comment said the rows would survive a rebuild, the
+#: surrounding handler swallowed the TypeError, and the call never once succeeded. This gate
+#: reported that function compliant, which is a grep standing in for a drive inside the gate
+#: built to catch writes no event can reconstruct.
+_EMITTERS = ("write_event",)
+
+#: The envelope class whose instances `write_event` cannot accept.
+_ENVELOPE_CLASS = "CanonicalEventEnvelope"
+
+
+def _broken_emission(node: ast.AST) -> bool:
+    """Is there a `write_event(CanonicalEventEnvelope(...))` here, with no `.to_dict()`?
+
+    PARSED, NOT MATCHED. A first cut used a negative lookahead and could not see past the
+    constructor's own closing parenthesis, so it flagged
+    `write_event(CanonicalEventEnvelope(...).to_dict())` -- the CORRECT form -- as broken.
+    A gate that fires on the fix is worse than one that misses the defect, because it
+    teaches that the fix is wrong. `security_scan` records the same lesson: parsing has no
+    window to get wrong.
+
+    A static gate cannot run the call. It can see that the argument is the envelope class
+    itself rather than a mapping, and that is the exact defect that shipped: `write_event`
+    takes a dict, so an envelope instance raises TypeError from its payload validation, the
+    caller's handler swallows it, and the row is as unreconstructable as one with no
+    emission -- while reading as compliant.
+    """
+    for call in ast.walk(node):
+        if not isinstance(call, ast.Call):
+            continue
+        name = getattr(call.func, "attr", None) or getattr(call.func, "id", None)
+        if name != "write_event" or not call.args:
+            continue
+        arg = call.args[0]
+        # `X(...).to_dict()` and `x.to_dict()` are Attribute calls -- fine.
+        if isinstance(arg, ast.Call):
+            inner = getattr(arg.func, "attr", None) or getattr(arg.func, "id", None)
+            if inner == _ENVELOPE_CLASS:
+                return True
+    return False
 
 
 def projection_targets() -> dict[str, set[str]]:
@@ -158,6 +199,25 @@ def offenders(repo_root: Path | None = None) -> dict[str, object]:
             if not written:
                 continue
             examined += 1
+            # AN EMISSION THAT CANNOT SUCCEED IS NOT AN EMISSION. A raw envelope handed
+            # to `write_event` raises, the caller's handler swallows it, and the row is
+            # exactly as unreconstructable as one with no emission at all -- while reading
+            # as compliant.
+            if _broken_emission(node):
+                found.append(
+                    {
+                        "file": relative,
+                        "function": node.name,
+                        "line": node.lineno,
+                        "tables": written,
+                        "detail": (
+                            "write_event is handed a CanonicalEventEnvelope object; it takes"
+                            " a dict, so this raises and the row is not reconstructable."
+                            " Add .to_dict()."
+                        ),
+                    }
+                )
+                continue
             if any(emitter in segment for emitter in _EMITTERS):
                 continue
             if _exempt(segment):
