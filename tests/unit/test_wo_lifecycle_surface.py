@@ -584,17 +584,41 @@ def test_a_task_with_no_executable_criterion_is_told_so(db, tmp_path):
     )
     wid = _one(db, "SELECT work_order_id FROM business_work_orders WHERE milestone_id = ?", (mid,))
 
-    _, bare = _run(["work-order", "add-task", wid, "--title", "T"], tmp_path)
-    assert "No executable acceptance criterion" in bare
+    # A WARNING BECAME A REFUSAL (rule 15, ds-workorder router). This test's own docstring
+    # says saying so at creation is the cheapest moment; refusing at creation serves that
+    # more strongly than printing after the row was already written. Measured cause: 1766
+    # of 3278 tasks carried no criterion under the warning.
+    code, bare = _run(["work-order", "add-task", wid, "--title", "T"], tmp_path)
+    assert code == 1, "a refusal that exits 0 is a suggestion"
+    assert "refused to file this task" in bare
+    assert "The Warden" in bare, "the refusal must name the seat that raised it"
     assert "TEST-CHECK" in bare, "the message must name what would satisfy it"
+    assert "--why" in bare, "and the escape it will accept"
 
-    _, withac = _run(
+    code, withac = _run(
         ["work-order", "add-task", wid, "--title", "T", "--acceptance", "TEST-CHECK: x::y"],
         tmp_path,
     )
+    assert code == 0, withac
     assert (
-        "No executable acceptance criterion" not in withac
-    ), "the warning fired on a task that HAS one -- it would be noise and get ignored"
+        "refused to file this task" not in withac
+    ), "it refused a task that HAS a criterion -- that would be a wall, not a review"
+
+    # And the declared escape files the task, saying out loud what it rests on.
+    code, declared = _run(
+        [
+            "work-order",
+            "add-task",
+            wid,
+            "--title",
+            "Operator attests the thing",
+            "--why",
+            "No computation can establish that a person accepted a risk; only they can.",
+        ],
+        tmp_path,
+    )
+    assert code == 0, declared
+    assert "on a declared reason" in declared
 
 
 def test_add_task_asks_for_the_project_rather_than_refusing_an_unprojected_work_order(db, tmp_path):
@@ -606,8 +630,22 @@ def test_add_task_asks_for_the_project_rather_than_refusing_an_unprojected_work_
     """
     import uuid
 
+    # CARRIES A CRITERION ON PURPOSE. Admission runs BEFORE the project lookup -- whether a
+    # criterion is executable is a property of the text and needs no database -- so a
+    # criterion-less fixture is refused by the Warden and never reaches the path this test
+    # is about. The cost of that ordering, recorded rather than hidden: an author with an
+    # unprojected work order AND no criterion gets the criterion refusal first and this
+    # guidance only on the next attempt.
     code, out = _run(
-        ["work-order", "add-task", str(uuid.uuid4()), "--title", "T"],
+        [
+            "work-order",
+            "add-task",
+            str(uuid.uuid4()),
+            "--title",
+            "T",
+            "--acceptance",
+            "TEST-CHECK: tests/unit/test_wo_lifecycle_surface.py::test_placeholder",
+        ],
         tmp_path,
     )
     assert code == 1
