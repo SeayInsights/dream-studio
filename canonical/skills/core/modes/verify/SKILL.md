@@ -179,6 +179,20 @@ The verify grader enforces these as quality rules 7 (DURABLE_STATE_ADVERSARIAL)
 and 8 (CONFIG_AS_PROXY); independent review runs by default at close for every
 non-documentation WO (`--skip-verify` opts out and is recorded as a gate bypass).
 
+## Computed facts precede judgement {#deterministic-first}
+
+Verify establishes what can be established before any grader is asked, and the verdict
+carries it under `deterministic`: whether each TEST-CHECK node id RESOLVES (distinct
+from passing), whether every projected skill file matches canonical, and how many task
+criteria are executable versus prose-only. The completion prompt receives these as
+ground truth — the same contract SQL-CHECK results already had — so a grader reads the
+residue instead of re-deriving facts.
+
+- **DO** treat an `unknown` as unknown. It carries its reason and is never a pass.
+- **DON'T** re-derive a computed fact, and don't let a green computed layer stand in for
+  review: it cannot see an inert parameter, a lying comment, or a guard test that cannot
+  fail.
+
 ## The runner is not the author {#separate-test-runner}
 
 Verify exists because self-certification is not evidence, and the same rule binds

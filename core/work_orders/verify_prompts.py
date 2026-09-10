@@ -25,6 +25,7 @@ A task with SQL-CHECK RESULT: FAIL MUST receive verdict "missing" regardless of 
 A task with SQL-CHECK RESULT: PASS may still receive "partial" if the diff evidence is otherwise
 incomplete, but the SQL check passing is strong evidence of completion.
 
+{computed_facts}
 WHERE THIS WORK IS HEADED (WO-MULTIROOT-REVIEW task 9). The diff under review is still
 the only thing you are grading -- this is context for two judgements that are not
 decidable from one diff alone. A mechanism that looks over-built for this work order

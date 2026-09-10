@@ -319,6 +319,12 @@ def _claim_graders_blind_to_tasks(_s: _Scratch) -> tuple[bool, str]:
         # with KeyError: 'rules_provenance' -- past a unit sweep that never reached
         # tests/integration.
         direction_context="  (prove harness: no surrounding work orders)",
+        # WO-DETERMINISTIC-FIRST added {computed_facts}. Supplied HERE, in the same
+        # change, for exactly the reason the comment above records: the rebase that
+        # brought that placeholder onto main left this call formatting the template
+        # without it, which is KeyError: 'computed_facts' -- the #684 failure again,
+        # in the same file, from the same cause.
+        computed_facts="  (prove harness: no computed facts)",
     )
     # WO-MULTIROOT-REVIEW made the correctness rules RESOLVED rather than hardcoded, so
     # the template gained rules_block / rules_provenance / rule_count. Formatting it with

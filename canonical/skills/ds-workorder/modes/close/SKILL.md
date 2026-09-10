@@ -76,6 +76,8 @@ Close is report-only: after a clean close on the interactive path, surface `next
         "verify_warning": str | absent,        # inline verify was unreviewable (no commit evidence) — surface verbatim
         "main_ci_warning": str | absent,       # post-merge Full CI for main is RED — surface verbatim, advisory
         "test_execution_warning": str | absent, # the review certified by reading, not running — verbatim, advisory
+        "prose_only_criteria": [str] | absent,  # tasks with no executable check — advisory, never blocks
+        "criteria_coverage": float | absent,    # fraction of tasks carrying an executable check
         "main_ci": {...} | absent,             # the reading behind it (status/red/head_sha/run_url/as_of/age_seconds/local_head_includes_run)
         "next_work_order": {...} | absent,     # next open WO in same milestone
         "next_command": str | absent,          # explicit next-step hint
@@ -86,10 +88,9 @@ Close is report-only: after a clean close on the interactive path, surface `next
         "spawned_work_orders": [{...}] | absent,  # remediation WOs registered from review gaps
       }
 
-    # Close is REPORT-ONLY: it advertises the next WO (`next_work_order` = the ready-set
-    # pick) and how to start it (`next_command`/`next_block`) but never starts it — there
-    # is no `auto_started`/`auto_start_error` key. Starting the next WO is an explicit
-    # operator action (or the execute-work-orders workflow's next-iteration node).
+    # Close is REPORT-ONLY: it advertises the next WO (`next_work_order` = the ready-set pick)
+    # and how to start it (`next_command`/`next_block`) but never starts it — there is no
+    # `auto_started` key. Starting it is an operator action (or the workflow's next-iteration node).
 
 ## `design_brief_locked` failed on a brief that IS locked {#brief-currency}
 
@@ -113,7 +114,7 @@ The gate asks two questions now, and the failure text says which one failed (WO-
 
 ## What the tests rest on {#separate-test-runner}
 
-`all_tests_pass` **executes** the TEST-CHECKs — no report is read, and the "a file containing PASSED" fallback is retired, so a self-reported pass cannot satisfy it. Two things still need your eyes. **What the review rested on:** close returns `test_execution_warning` when the verdict certified by reading rather than running (no TEST-CHECK registered, or none executed at verify) — print it verbatim; it never blocks, and `ds work-order merge-check` says the same thing earlier. **Who ran them:** whoever wrote the change does not run its own suite as the evidence — spawn a runner and hand it node ids, not a conclusion.
+`all_tests_pass` **executes** the TEST-CHECKs — no report is read and the "file containing PASSED" fallback is retired, so a self-reported pass cannot satisfy it. Three things still need your eyes, all advisory and none blocking: `test_execution_warning` (the review certified by reading, not running — print verbatim; `merge-check` says it earlier), `prose_only_criteria` (tasks with no executable check — some claims genuinely cannot be computed, so what matters is that prose-only was a *choice*), and **who ran the tests** — whoever wrote the change does not run its own suite as the evidence; spawn a runner and hand it node ids, not a conclusion.
 
 ## After the merge: pr-smoke green is not proof main is green
 

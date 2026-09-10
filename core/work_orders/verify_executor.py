@@ -8,13 +8,50 @@ changes — extracted verbatim from the original module.
 
 from __future__ import annotations
 
+import re
 import shlex
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
-_CHECK_PREFIXES = ("SQL-CHECK:", "TEST-CHECK:", "API-CHECK:")
+#: THE PREDICATE THAT DECIDES WHETHER A CRITERION IS ADJUDICATED BY MACHINE.
+#
+# Named here, at the executor, because the executor is the authority on what the
+# executor can run -- and because a second site now reports coverage against it
+# (`core.gates.deterministic_evidence.acceptance_criteria_determinism`). That site
+# began with its own regex naming three kinds and tolerating a space before the
+# colon; measured against this one it disagreed in both directions, reporting
+# `PERF-CHECK:` as prose (detected here, then failed closed below) and
+# `TEST-CHECK :` as executable (not seen here at all). Two agreeing copies would
+# only have deferred that, so there is one definition and the report imports it.
+#
+# Matched against a STRIPPED line. Group 1 is the token, group 2 the expression.
+_CHECK_TOKEN = re.compile(r"^([A-Z][A-Z0-9_]*-CHECK):\s*(.*)", re.IGNORECASE)
+
+
+def check_token(raw_line: str) -> "re.Match[str] | None":
+    """Apply the check predicate to one raw acceptance-criteria line.
+
+    Returns the match (group 1 the token, group 2 the expression) or None when the
+    line names no check. THE APPLICATION IS SHARED, NOT ONLY THE PATTERN, and that
+    distinction was found by audit rather than by reasoning: with `_CHECK_TOKEN`
+    shared but each caller stripping for itself, deleting the coverage report's own
+    `.strip()` left all 30 of its tests green while an indented `  TEST-CHECK: x`
+    became a criterion this module EXECUTES and that report calls prose. A shared
+    constant cannot prevent a caller from applying it differently; a shared function
+    can, so `core.gates.deterministic_evidence` calls this rather than matching.
+
+    `_CHECK_TOKEN` is read here as a module global at call time, which is also what
+    lets a test mutate the predicate and observe it through this function no matter
+    where the caller imported it -- the previous test only worked because one import
+    happened to sit inside a function body.
+    """
+    line = raw_line.strip()
+    if not line:
+        return None
+    return _CHECK_TOKEN.match(line)
+
 
 # Timeout in seconds for TEST-CHECK subprocess calls.
 _TEST_CHECK_TIMEOUT = 300
@@ -444,7 +481,6 @@ def run_executable_checks(
         verification happens in the repo where the work was done (resolve it with
         ``resolve_project_root``).  None runs in the current process dir (the DS repo).
     """
-    import re as _re
 
     results: dict[str, list[dict[str, Any]]] = {}
 
@@ -453,12 +489,11 @@ def run_executable_checks(
         checks: list[dict[str, Any]] = []
 
         for raw_line in ac.splitlines():
-            line = raw_line.strip()
-            if not line:
-                continue
-
-            # Detect any "*-CHECK:" token in this line.
-            token_match = _re.match(r"^([A-Z][A-Z0-9_]*-CHECK):\s*(.*)", line, _re.IGNORECASE)
+            # Detect any "*-CHECK:" token in this line. Applied through
+            # `check_token` rather than matched here, so the coverage report in
+            # core/gates/deterministic_evidence.py cannot strip differently than
+            # the module that runs the checks.
+            token_match = check_token(raw_line)
             if token_match is None:
                 continue
 

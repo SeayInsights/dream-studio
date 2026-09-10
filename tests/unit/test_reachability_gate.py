@@ -21,6 +21,7 @@ runs; these prove it is right.
 from __future__ import annotations
 
 import textwrap
+from pathlib import Path
 
 import pytest
 
@@ -511,19 +512,91 @@ def test_the_projected_manifest_matches_canonical():
     ), "the projected pre-push manifest is stale"
 
 
-def test_an_untracked_new_file_is_not_invisible():
-    """`git diff` NEVER reports an untracked file, so this gate's first dry run said
-    "nothing to check" while two brand-new modules sat in the tree — the files most
-    likely to contain a mechanism with no caller. Pinned at the seam that reads them."""
-    import inspect
+def _tiny_repo(root: Path) -> None:
+    """A throwaway git repo with one committed production file."""
+    import subprocess
 
+    def git(*args: str) -> None:
+        subprocess.run(
+            ["git", *args],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+
+    git("init", "-q")
+    git("config", "user.email", "t@example.com")
+    git("config", "user.name", "t")
+    (root / "core").mkdir()
+    (root / "core" / "existing.py").write_text("def wired():\n    return 1\n", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-q", "-m", "base")
+
+
+def _drive_gate(root: Path, monkeypatch) -> int:
     from core.gates import reachability
 
-    source = inspect.getsource(reachability.main)
-    assert (
-        "_untracked_production_python()" in source
-    ), "main() must fold untracked production files into the added-symbol set"
-    assert "ls-files" in inspect.getsource(reachability._untracked_production_python)
+    monkeypatch.setattr(reachability, "REPO_ROOT", root)
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.setenv("DREAM_STUDIO_BASE_REF", "HEAD")
+    return reachability.main()
+
+
+def test_an_untracked_new_file_is_not_invisible(tmp_path, monkeypatch, capsys):
+    """`git diff` NEVER reports an untracked file, so this gate's first dry run said
+    "nothing to check" while two brand-new modules sat in the tree — the files most
+    likely to contain a mechanism with no caller.
+
+    DRIVES main() END TO END in a throwaway git repo. The first version of this test
+    asserted `"_untracked_production_python()" in inspect.getsource(main)` — a grep
+    proving the line was typed, not that it runs. It was flagged by
+    `core/gates/deterministic_evidence.py::source_reading_tests`, the detector built in
+    the very next work order, on its first scan of this suite. Fixed rather than
+    exempted, because the surface was drivable all along.
+    """
+    _tiny_repo(tmp_path)
+    # UNTRACKED, never staged — invisible to `git diff` by construction.
+    (tmp_path / "core" / "brand_new.py").write_text(
+        "def arrives_with_no_caller():\n    return 1\n", encoding="utf-8"
+    )
+
+    exit_code = _drive_gate(tmp_path, monkeypatch)
+    out = capsys.readouterr().out
+
+    assert exit_code == 1, f"the gate must block on an untracked dead symbol; output:\n{out}"
+    assert "arrives_with_no_caller" in out, "and must name it"
+    assert "core/brand_new.py" in out.replace("\\", "/")
+
+
+def test_an_untracked_file_passes_once_it_is_referenced(tmp_path, monkeypatch, capsys):
+    """The converse, so the test above cannot be satisfied by a gate that always fails.
+
+    THE FIRST VERSION OF THIS FIXTURE WAS WRONG AND THE GATE WAS RIGHT. It rewrote the
+    committed file to add `def surface()` — itself a new public symbol with no caller —
+    so the gate correctly flagged `surface` and the test read as a false negative about
+    reachability. The committed function is now REUSED as the caller, adding a reference
+    and no new definition, which is the scenario actually under test.
+    """
+    _tiny_repo(tmp_path)
+    # `wired` already exists in the base commit, so it is not an added symbol. Only its
+    # body changes, to reference the brand-new untracked function.
+    (tmp_path / "core" / "existing.py").write_text(
+        "from core.brand_new import arrives_with_a_caller\n\n\n"
+        "def wired():\n    return arrives_with_a_caller()\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "core" / "brand_new.py").write_text(
+        "def arrives_with_a_caller():\n    return 1\n", encoding="utf-8"
+    )
+
+    exit_code = _drive_gate(tmp_path, monkeypatch)
+    out = capsys.readouterr().out
+    assert exit_code == 0, f"a referenced new symbol must pass; output:\n{out}"
+    assert "arrives_with_a_caller" not in out
 
 
 def test_a_symbol_called_only_from_its_own_module_is_reachable():
@@ -572,6 +645,9 @@ def test_the_module_states_the_rule_it_enforces():
     A comment left stating the opposite of the code is read as the specification by the
     next person, which is how the conflict would have come back. Deterministic to
     check, so checked rather than trusted.
+
+    # deterministic-first: structural assertion — a comment's CONTENT has no drivable
+    # surface. There is no behaviour to exercise here; the text IS the artifact.
     """
     import inspect
 
