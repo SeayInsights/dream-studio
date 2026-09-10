@@ -1,0 +1,5 @@
+{
+  "uncheckable": 1767,
+  "total_tasks": 3298,
+  "note": "Tasks with no acceptance criterion and no declared reason. This number may fall and may not rise. Operator direction 2026-09-10 was freeze-and-ratchet rather than backfill-before-enforcing; WO 09a00064 burns it down, triaging first, because a criterion invented for a closed work order proves nothing about work already delivered."
+}

@@ -545,3 +545,37 @@ gates:
       once existing findings are cleaned (WO-LEANNESS-GATE).
     command: [py, -m, core.gates.leanness]
     warn_hint: "Over-engineering / dead symbols present — reuse > new, one line > many, native > custom."
+  - id: event-backed-write
+    tier: advisory
+    description: >
+      A row written straight into a projection table with no canonical event beside it.
+      `pre_rebuild` truncates each projection's DECLARED target tables before replaying
+      events, so such a row cannot be reconstructed — measured on the live authority at 493
+      of 949 work orders and 1706 of 3286 tasks with no creation event, i.e. a rebuild
+      deletes 52% of both. Worst exactly when it matters: a rebuild is the recovery tool.
+      Target tables are derived from each projection's own `target_tables` rather than
+      listed, so a projection added later is covered without being named. Tests are out of
+      scope — a fixture building rows directly is what a fixture is.
+    command: [py, -m, core.gates.event_backed_write]
+    warn_hint: >
+      Emit the creation event beside the insert (see core/work_orders/mutations.py), or
+      declare at the site with '# event-backed-write: <20+ chars of why this row is
+      deliberately not reconstructable>'. ADVISORY until WO 17466550 fixes
+      _insert_gap_work_orders — a blocking gate that ships red teaches people to bypass it.
+  - id: task-criteria-baseline
+    tier: blocking
+    description: >
+      The number of tasks carrying no acceptance criterion and no declared reason may not
+      rise. Measured on the live authority when this landed: 1767 uncheckable of 3298
+      tasks (53% carried none at all before admission). A task nobody can check is a claim
+      that gets marked done by reading. Ratchet rather than a demand for zero, because
+      operator direction was freeze-and-burn-down: a criterion invented now for a closed
+      work order proves nothing about work already delivered. WO 09a00064 burns the backlog
+      down. Same shape as `normative-baseline` -- a recorded ceiling, `--update` as the only
+      way to move it, and the movement visible in the diff as a reviewable act.
+    command: [py, -m, core.gates.task_criteria_baseline]
+    fail_hint: >
+      Give the new task a TEST-CHECK / SQL-CHECK / API-CHECK, or record why the claim cannot
+      be computed (`ds work-order add-task ... --why '<20+ chars>'`). Raising the ceiling is
+      a reviewable act: `py -m core.gates.task_criteria_baseline --update`, in the same
+      change set as the reason it is earned.

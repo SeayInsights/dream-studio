@@ -121,7 +121,12 @@ def test_every_lane_is_held_by_a_seat():
     """
     seats = {lane.get("seat") for lane in _lanes()}
     assert seats <= review_lane_registry._SEATS, seats - review_lane_registry._SEATS
-    assert len(seats) == 5, f"all six lanes collapsed onto {seats}"
+    # THE PROPERTY IS DISTINCTNESS, NOT A COUNT. This asserted `== 5` and broke the
+    # moment a seventh lane arrived with a sixth seat -- a true statement about the
+    # registry of the day, pinned as though it were the rule. What matters is that the
+    # lanes do not collapse onto one seat, which would mean the seats describe nothing.
+    assert len(seats) >= 2, f"every lane collapsed onto {seats}"
+    assert len(seats) <= len(review_lane_registry._SEATS), seats
 
 
 def test_a_lane_seated_under_a_persons_name_is_refused(monkeypatch, tmp_path):

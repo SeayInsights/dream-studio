@@ -2,10 +2,13 @@
 
 WHY THIS EXISTS. `canonical/review_lanes.yml` holds the questions a review is obliged to
 ask, and `review_lane_registry` proves each one is answerable — but proving a lane is
-answerable is not asking it. Three of the six lanes are decided by a detector that the
-pre-push chain already runs; the other three are decided by JUDGMENT, and nothing surfaced
-them at the moment a reviewer needed them. A registry nobody can convene is half a
-mechanism.
+answerable is not asking it. Some lanes are decided by a detector the pre-push chain
+already runs; the rest are decided by JUDGMENT, and nothing surfaced those at the moment
+a reviewer needed them. A registry nobody can convene is half a mechanism.
+
+NO COUNT IS STATED HERE ON PURPOSE. This said "three of the six lanes" and was wrong
+within a day of the registry growing — the Archivist's lane, on this module. The
+registry is the count; a docstring restating it is a second source that can only drift.
 
 So this prints the table: it RUNS the detector lanes and reports what they found, and it
 puts the graded and declared lanes in front of the reviewer as questions to answer against
@@ -39,8 +42,26 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 REGISTRY = REPO_ROOT / "canonical" / "review_lanes.yml"
 
-#: Wide enough for the longest seat, so the table reads as a table.
+#: Floor for the seat column. The real width is DERIVED per render, see `_seat_width`.
 _SEAT_WIDTH = 14
+
+
+def _seat_width(report: dict) -> int:
+    """Width of the seat column, measured from the seats actually being rendered.
+
+    THE INTERPRETER'S SECOND LANE, FOUND ON THE CHANGE THAT ADDED THAT SEAT. This was
+    `_SEAT_WIDTH = 14` under a comment reading "wide enough for the longest seat, so the
+    table reads as a table" -- the intent stated in prose and enforced by nothing. Seating
+    "The Interpreter" (15 characters) overflowed the column, shifting every question one
+    space left, and nothing failed: a misaligned table still looks like a table, which is
+    that lane's own signature -- the producer grew a vocabulary member and the far end
+    rendered it wrong rather than refusing it.
+
+    Derived, so the next seat cannot repeat it.
+    """
+    seats = [str(seat.get("seat", "")) for seat in report.get("lanes", [])]
+    return max([_SEAT_WIDTH, *(len(seat) for seat in seats)])
+
 
 #: Total wall clock the table may spend running detectors. Each is separately bounded at
 #: 600s, and a per-item bound times a count is the very shape the Machinist watches for.
@@ -113,6 +134,23 @@ def convene(*, run_detectors: bool = True) -> dict:
                     clean, detail = _run_detector(lane["detector"])
                     entry["clean"] = clean
                     entry["detail"] = detail
+            # THE SURVEYOR'S REACH, stated rather than assumed. Attribution needs a
+            # declared `Module boundary:` clause and most open work orders have none, so a
+            # clean Surveyor lane usually means "not judged" rather than "judged and fine".
+            # Reported here because a lane whose reach is unknown reads as enforcement and
+            # is not -- and because `attribution_reach` with no caller was itself a
+            # mechanism that could not do the thing it was built to do (caught by the
+            # reachability gate on this change set).
+            if lane.get("seat") == "The Surveyor":
+                try:
+                    from core.work_orders.admission import attribution_reach
+
+                    entry["attribution_reach"] = attribution_reach()
+                except Exception as exc:  # noqa: BLE001 - a report must not fail the table
+                    entry["attribution_reach"] = {
+                        "status": "unknown",
+                        "reason": f"{type(exc).__name__}: {exc}",
+                    }
         elif "eval" in lane:
             entry["kind"] = "graded"
             entry["fixture"] = lane["eval"]
@@ -148,13 +186,32 @@ def convene(*, run_detectors: bool = True) -> dict:
 
 
 def _render(report: dict) -> str:
+    width = _seat_width(report)
     lines: list[str] = ["", "THE ROUND TABLE", ""]
 
     for seat in report["lanes"]:
         if seat["kind"] != "detector":
             continue
-        mark = "clean" if seat.get("clean") else "FOUND"
-        lines.append(f"  [{mark:>5}] {seat['seat']:<{_SEAT_WIDTH}} {seat['lane']}")
+        # THREE MARKS, BECAUSE "NOT RUN" IS NOT "FOUND SOMETHING". Under
+        # `--no-detectors` no lane has a `clean` key at all, and a two-way ternary rendered
+        # every unrun detector as FOUND -- a reader saw four findings in a listing that
+        # checked nothing. That is the Interpreter's own lane on this renderer: a value
+        # (absent) displayed as another value's meaning (a finding), the same shape as
+        # `not_applicable` drawn as 0% uptime.
+        if "clean" not in seat:
+            mark = "  -  "
+        elif seat["clean"]:
+            mark = "clean"
+        else:
+            mark = "FOUND"
+        lines.append(f"  [{mark:>5}] {seat['seat']:<{width}} {seat['lane']}")
+        reach = seat.get("attribution_reach") or {}
+        if reach.get("status") == "computed":
+            lines.append(
+                f"          reach: {reach['with_boundary']} of"
+                f" {reach['open_work_orders']} open work order(s) declare a boundary"
+                f" -- the rest are UNKNOWN, not judged"
+            )
         if not seat.get("clean"):
             lines.append(f"          {seat.get('detail', '')}")
 
@@ -162,12 +219,12 @@ def _render(report: dict) -> str:
     if awaiting:
         lines += ["", "  ASKED OF YOU — no detector can decide these:", ""]
         for seat in awaiting:
-            lines.append(f"  {seat['seat']:<{_SEAT_WIDTH}} {seat['question']}")
-            lines.append(f"  {'':<{_SEAT_WIDTH}} shape: {seat['signature']}")
+            lines.append(f"  {seat['seat']:<{width}} {seat['question']}")
+            lines.append(f"  {'':<{width}} shape: {seat['signature']}")
             if seat["kind"] == "graded":
-                lines.append(f"  {'':<{_SEAT_WIDTH}} fixture: {seat['fixture']}")
+                lines.append(f"  {'':<{width}} fixture: {seat['fixture']}")
             else:
-                lines.append(f"  {'':<{_SEAT_WIDTH}} unautomatable: {seat['why']}")
+                lines.append(f"  {'':<{width}} unautomatable: {seat['why']}")
             lines.append("")
 
     if report["status"] == "unchecked":

@@ -894,6 +894,18 @@ def verify_work_order(
         _pressure = [s["attachment_pressure"] for s in spawned if s.get("attachment_pressure")]
         attachment_pressure = _pressure[0] if _pressure else None
 
+        # WHAT THE ROUND TABLE REFUSED TO FILE, lifted the same way and for the same
+        # reason. `admit_task` refuses a finding nobody can check -- no executable
+        # criterion and no declared reason -- and returns it instead of filing it. Carried
+        # only inside `spawned`, that refusal reached no reader, which makes a refused
+        # finding invisible: strictly worse than the stub it replaced, because a stub at
+        # least shows up as work. Measured when this landed: 0 of 87 gap tasks across 41
+        # stored verdicts carried a criterion, so this list is where a review's findings
+        # now arrive until the graders emit one.
+        unfiled_findings = [
+            finding for s in spawned for finding in (s.get("unfiled_findings") or [])
+        ]
+
         # WO-VERIFY-GAP-RESOLUTION: a gap whose remediation WO is already CLOSED is
         # resolved, not open. Verify grades only WO-attributed commits, so remediation
         # committed under a spawned gap WO's own id is invisible to this diff — without
@@ -989,6 +1001,7 @@ def verify_work_order(
             # several reviews, so the honest exit (carry the remainder) is visible
             # instead of the work order quietly growing.
             "attachment_pressure": attachment_pressure,
+            "unfiled_findings": unfiled_findings,
             # WO-MULTIROOT-REVIEW task 3: which roots this verdict actually read.
             # "no violations found" and "nothing was read" are indistinguishable in a
             # score, so the ratio rides the verdict: all 28 open Fulcrum work orders
@@ -1071,6 +1084,7 @@ def verify_work_order(
         # WO-GAP-FANOUT: the attach-loop bound reaches the CLI, not just the stored
         # verdict — a bound nobody can see is not a bound.
         "attachment_pressure": attachment_pressure,
+        "unfiled_findings": unfiled_findings,
         # WO-MULTIROOT-REVIEW task 3: same rule for root coverage.
         "roots_summary": _union_summary,
         "roots_examined": _root_provenance,

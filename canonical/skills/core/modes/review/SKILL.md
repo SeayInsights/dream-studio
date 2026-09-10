@@ -114,6 +114,57 @@ refuses a lane that is none of those. Run the detectors; ask the graded ones you
     change say so?* Graded:
     `tests/evals/test_review_lane_behaviour_change_enumerated.py`. A status code becoming a
     raise, with the PR body enumerating everything except that.
+15. **The Interpreter — a produced value with no reader** — *does anything actually read this,
+    and when nothing does, what does the default say instead?* Graded:
+    `tests/evals/test_review_lane_value_reaches_a_reader.py`. A hook returned
+    `{get, isLoading, stateById}`, both views destructured only `get`, and a failed fetch
+    rendered the all-`no_data` placeholder — a chart asserting *measured, nothing found*
+    when the request had failed. **Follow the value to the last place a person reads it.**
+    Verifying the producer at its own boundary is what let this through: the hook's state
+    transitions were confirmed by mutation, and nobody asked what the screen says when the
+    fetch fails. A default admitting "unknown" is untidy; one asserting a measurement is
+    indistinguishable from a real one.
+16. **The Interpreter — a status the far end does not handle** — *the producer's vocabulary has
+    more members than the consumer has branches; what renders for the one it does not know?*
+    Graded: `tests/evals/test_review_lane_status_survives_translation.py`. `not_applicable`
+    fell through a renderer's known statuses to a numeric zero and drew as **0% uptime** for
+    an agent whose uptime was never measurable. Checking that the KEYS match the producer is
+    what makes this easy to miss — the envelope gets verified and the meaning inside it does
+    not. Ask what each status renders as, not whether the shape matches.
+17. **The Falsifier — a test that cannot fail** — *this test is green; show me it going red.*
+    Graded: `tests/evals/test_review_lane_a_test_that_cannot_fail.py`. **The most productive
+    family in this repo, and every instance was found by an auditor rather than by the suite
+    containing it.** A byte-hash test that failed WITHOUT a mutation (WAL checkpointing) and
+    could not fail FOR the real reason (conftest redirects the DB); a control table of
+    booleans asserted against itself; two tautologies green under a checker mutated to report
+    nothing; a `.strip()` whose deletion left 30 tests passing. **Assertion count is not the
+    signal** — the vacuous fixture in the eval has MORE assertions than the real one. Ask what
+    the assertions are ON, and whether the test only ever passes inputs that should succeed.
+    Measured: a static detector would flag 82 legitimate tests and none of the real defects,
+    so mutate the subject and watch.
+18. **The Custodian — a write no event can reconstruct** — *if this record were rebuilt from
+    its events tomorrow, would it still be here?* Detector:
+    `py -m core.gates.event_backed_write` (advisory). **493 of 949 work orders and 1706 of
+    3286 tasks carry no creation event**, and `pre_rebuild` truncates each projection's
+    declared targets before replaying — so a rebuild deletes 52% of both, and a rebuild is
+    the recovery tool. Nothing fails at write time; the row is real and reads as durable.
+    Not the Archivist: that seat asks whether the DECISION record names every mechanism, this
+    asks whether the AUTHORITY record survives a replay.
+19. **The Cartographer — a channel outside the accounting** — *what is the full capability
+    surface here, independent of what the guard says about itself?* Graded:
+    `tests/evals/test_review_lane_the_surface_outside_the_rules.py`. A reviewer built ten
+    archives against an archive guard — over the per-member cap, past the total cap, too
+    many members, wrong container, empty bytes — and reported it *"genuinely safe rather than
+    merely bounded."* **PAX headers were reachable the whole time**, because `tarfile`
+    expands the header internally and yields only the regular member, so the accounting never
+    sees it. **Every one of the ten was derived from a limit the guard declares**, and PAX is
+    not a way to exceed a declared cap. Three passes missed it, including one review
+    specifically for security. **Derive adversarial inputs from the parser's capability
+    surface, not the guard's rule list** — for a format, its own metadata mechanisms (PAX,
+    GNU long-name, sparse, nested compression); for a rule, whether the rule is right; for a
+    producer, what renders. This is the one lens that asks whether the artifact's own frame
+    is the right frame, so it is the last one applied and the one most easily reduced to a
+    shrug — answer it with a named mechanism or say you could not.
 
 ## Fast scan mode
 When invoked with Haiku for fast scan:
