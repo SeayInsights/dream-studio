@@ -364,18 +364,32 @@ def _shadowed_anywhere(tree: ast.AST) -> set[str]:
     that file, and those writes get reported. Over-reporting is the safe direction for a
     gate whose whole subject is rows that look durable and are not.
 
-    KNOWN AND ACCEPTED, rather than silently unaddressed -- three shapes an independent
-    reviewer confirmed by execution and judged not worth blocking on, none of which
-    occurs anywhere in this repo:
+    KNOWN AND ACCEPTED, rather than silently unaddressed. Five shapes an independent
+    reviewer confirmed BY EXECUTION across six adversarial rounds and judged not worth
+    blocking the ship on. None occurs anywhere in this repo, and each needs a developer
+    to go out of their way; they are listed so the boundary is written down instead of
+    re-derived, and they are tracked as tasks on WO 17466550 rather than left as prose:
+
       * a PEP 695 type parameter (`def f[_spool_writer](...)`) shadows without being
-        seen here, so a writer alias spelled as a type variable would still be trusted;
+        seen here, so a writer alias spelled as a type variable stays trusted
+        (false negative);
       * `from spool.writer import *` binds `write_event` invisibly, so a file using it
-        is reported despite emitting;
+        is reported despite emitting (false positive);
       * an instance attribute (`self._writer.write_event(...)`) is never resolved, so a
-        writer held on `self` is reported despite emitting.
-    The first is a false negative and vanishingly unlikely; the other two are false
-    positives in the safe direction and are tracked as work orders rather than left as
-    comments.
+        writer held on `self` is reported despite emitting (false positive);
+      * a guard spelled `match TYPE_CHECKING: case True:` or `if (TYPE_CHECKING := ...)`
+        is not recognised as a guard at all, so its import is treated as real
+        (false negative);
+      * A DELIBERATE MODULE-SCOPE REBIND OF `TYPE_CHECKING` BEFORE A LATER GUARD is
+        detected correctly, but the response is backwards: the guard is promoted to
+        trusted and its import counted, where uncertainty about what the name now means
+        should make this gate MORE suspicious, not less. Reproduces through `if`, `try`,
+        `for` and `with` bindings -- one logic bug, four spellings. It is accepted only
+        because reaching it means reusing that literal name at module scope for an
+        unrelated purpose, which no code does by accident and a reviewer would notice.
+        Distinct from the round-five defect that DID block: that one needed nothing but
+        an unrelated function parameter sharing a common name, which any large file
+        eventually has.
     """
     shadowed: set[str] = set()
     for node in ast.walk(tree):
