@@ -426,3 +426,121 @@ def test_every_detector_lane_can_be_pointed_at_another_project():
         " The convener reports them as unclean rather than scanning its own tree, so a"
         " lane added without the flag makes every foreign convening report a finding."
     )
+
+
+# ── WO 09118a8e task 3: the table ships, and says what it could not check ───
+
+
+def _fake_install(tmp_path):
+    """A plugin-shaped install: `review/` only, no `core.gates` anywhere."""
+    import shutil
+    import subprocess
+
+    review = tmp_path / "review"
+    review.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(REPO_ROOT / "canonical" / "review_lanes.yml", review / "review_lanes.yml")
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True, timeout=120)
+    (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True, timeout=120)
+    return tmp_path
+
+
+def test_an_install_without_the_repo_can_still_convene(tmp_path):
+    """THE POINT OF THE TASK. `dist/plugin` shipped agents and skills only, so an install
+    got the lanes as PROSE in a projected SKILL.md -- guidance where a rule belongs, for
+    that project.
+
+    The registry now travels in `review/review_lanes.yml`, and `registry_for` finds either
+    layout. Asserted by resolving against a tree that has ONLY the shipped layout, so a
+    convener still reading `canonical/` would fail here.
+    """
+    install = _fake_install(tmp_path)
+
+    resolved = round_table.registry_for(install)
+    assert resolved.name == "review_lanes.yml"
+    assert resolved.parent.name == "review", resolved
+    assert resolved.is_file()
+
+    report = convene(run_detectors=False, repo_root=install)
+    assert {seat["lane"] for seat in report["lanes"]} == _lane_ids()
+
+
+def test_the_source_layout_wins_when_both_exist(tmp_path):
+    """A developer in the repo must be asked the repo's LIVE questions, not a stale copy
+    inside `dist/`. Both layouts present, canonical chosen."""
+    install = _fake_install(tmp_path)
+    canonical = install / "canonical"
+    canonical.mkdir(parents=True, exist_ok=True)
+    (canonical / "review_lanes.yml").write_text("lanes: []\n", encoding="utf-8")
+
+    resolved = round_table.registry_for(install)
+    assert resolved.parent.name == "canonical", resolved
+
+
+def test_a_detector_that_is_not_installed_reports_unrun_not_found(monkeypatch, tmp_path):
+    """THE HALF THAT MATTERS MORE THAN THE COPYING.
+
+    In a skills-only install none of the detector lanes can run -- they are
+    `py -m core.gates.<module>` and that package is not there. An unrunnable detector used
+    to render as [FOUND], so such an install would report FOUR FINDINGS WHERE THERE ARE
+    NONE: the Interpreter's own lane, a value (could not run) displayed as another value's
+    meaning (a defect), and the same shape as `not_applicable` drawn as 0% uptime.
+
+    THE VERDICT STAYS FAIL-CLOSED and only the rendering changes -- a review whose
+    detectors could not run is not a clean review, and weakening that would recreate the
+    fail-open the three-state `status` exists to close.
+    """
+    clean, detail = round_table._run_detector("py -m core.gates.no_such_detector_at_all")
+
+    assert clean is False, "still not clean -- fail-closed is the point"
+    assert detail.startswith(round_table._UNRUNNABLE), detail
+    assert "not installed here" in detail
+
+    # AND THE RENDER IS DRIVEN WITH A REAL UNRUNNABLE DETECTOR, not a hand-built report.
+    #
+    # Two earlier attempts were wrong in instructive ways. The first mutated seats and left
+    # `status` at "unchecked", so it never reached the branch it asserted on -- a report
+    # constructed to match its own assertion. The second convened against a fake install and
+    # expected the detectors to be missing, but pytest runs INSIDE this repo, so
+    # `core.gates` is importable and the subprocesses genuinely ran and reported clean. The
+    # skills-only condition was verified by hand from a clean working directory; it cannot
+    # be reproduced from a test that has the package on its path without rewriting the
+    # child environment. So the lane registry is replaced with one pointing at a module
+    # that really does not exist, which exercises the same code path honestly.
+    monkeypatch.setattr(
+        round_table,
+        "_lanes",
+        lambda repo_root=None: [
+            {
+                "id": "a-lane-whose-detector-is-absent",
+                "seat": "The Machinist",
+                "question": "does an absent detector read as a finding?",
+                "signature": "s",
+                "detector": "py -m core.gates.no_such_detector_at_all",
+            }
+        ],
+    )
+    report = convene(run_detectors=True)
+    assert report["status"] == "fail", "a review whose detectors could not run is not clean"
+    assert all(
+        seat.get("unrunnable") for seat in report["lanes"] if seat["kind"] == "detector"
+    ), report["lanes"]
+    rendered = round_table._render(report)
+    assert "[UNRUN]" in rendered
+    assert "[FOUND]" not in rendered, rendered
+    assert "COULD NOT BE CHECKED" in rendered
+    assert "Not findings" in rendered
+
+
+def test_a_real_finding_still_reports_found(monkeypatch):
+    """The other direction, and without it the fix would be indistinguishable from
+    relabelling every failure as unrunnable."""
+    monkeypatch.setattr(
+        round_table,
+        "_run_detector",
+        lambda command, repo_root=None: (False, "found something real"),
+    )
+    rendered = round_table._render(convene(run_detectors=True))
+    assert "[FOUND]" in rendered
+    assert "found something" in rendered
+    assert "[UNRUN]" not in rendered, rendered

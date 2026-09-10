@@ -45,13 +45,31 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = REPO_ROOT / "canonical" / "review_lanes.yml"
 
 
+#: Where a shipped install keeps the registry, relative to the plugin root.
+_SHIPPED_REGISTRY = ("review", "review_lanes.yml")
+
+
 def registry_for(repo_root: Path | None = None) -> Path:
     """Where the lanes live for the tree being reviewed.
 
     Another project reviewing itself should be asked ITS questions, not this repo's, so the
     registry travels with the tree rather than with the convener.
+
+    TWO LAYOUTS, because the convener now ships. In a source checkout the registry is
+    `canonical/review_lanes.yml`; in a plugin install it is `review/review_lanes.yml`
+    beside the shipped convener. The source layout is preferred when both exist, so a
+    developer working in the repo is always asked the repo's live questions rather than a
+    stale copy inside `dist/`.
     """
-    return (repo_root or REPO_ROOT) / "canonical" / "review_lanes.yml"
+    root = repo_root or REPO_ROOT
+    canonical = root / "canonical" / "review_lanes.yml"
+    if canonical.is_file():
+        return canonical
+    shipped = root.joinpath(*_SHIPPED_REGISTRY)
+    if shipped.is_file():
+        return shipped
+    # Neither exists: return the canonical path so the error names the conventional home.
+    return canonical
 
 
 #: Floor for the seat column. The real width is DERIVED per render, see `_seat_width`.
@@ -97,6 +115,24 @@ def _one_line(text: object) -> str:
     return " ".join(str(text or "").split())
 
 
+#: Prefix marking a detail as "this lane could not be checked" rather than "this lane found
+#: something". Carried in the detail string so no call signature changes and every existing
+#: caller keeps working; `convene` reads it to set the seat's state.
+_UNRUNNABLE = "[unrunnable] "
+
+
+def _module_missing(returncode: int, stream: str) -> bool:
+    """Did the child fail because the detector is not installed?
+
+    A missing module is Python exiting 1 with "No module named". Distinguishing it from a
+    real finding is the whole point: in a skills-only install every detector is missing,
+    and reporting four findings where there are none is the Interpreter's lane -- a value
+    shown as another value's meaning.
+    """
+    lowered = stream.lower()
+    return returncode != 0 and ("no module named" in lowered or "can't open file" in lowered)
+
+
 def _run_detector(command: str, repo_root: Path | None = None) -> tuple[bool, str]:
     """Run a lane's detector. Returns ``(clean, last_meaningful_line)``.
 
@@ -128,9 +164,18 @@ def _run_detector(command: str, repo_root: Path | None = None) -> tuple[bool, st
             timeout=600,
         )
     except (OSError, subprocess.SubprocessError) as exc:
-        return False, f"could not run ({type(exc).__name__}: {exc})"
+        return False, f"{_UNRUNNABLE}could not run ({type(exc).__name__}: {exc})"
     stream = (proc.stdout or "") + (proc.stderr or "")
     lines = [line.strip() for line in stream.splitlines() if line.strip()]
+    if _module_missing(proc.returncode, stream):
+        # NOT A FINDING. The detector is absent -- which is the normal state of a
+        # skills-only install, where `core.gates` does not ship. Rendering it as FOUND
+        # would report four defects where there are none.
+        return False, (
+            f"{_UNRUNNABLE}the detector module is not installed here, so this lane was not"
+            " checked. A plugin install ships the registry and the convener; the detector"
+            " packages live in the source repo."
+        )
     if retargeted and _rejected_the_flag(stream):
         return False, (
             "could not be pointed at the target tree: this detector does not accept"
@@ -205,7 +250,8 @@ def convene(
                 else:
                     clean, detail = _run_detector(lane["detector"], repo_root)
                     entry["clean"] = clean
-                    entry["detail"] = detail
+                    entry["unrunnable"] = detail.startswith(_UNRUNNABLE)
+                    entry["detail"] = detail.removeprefix(_UNRUNNABLE)
             # THE SURVEYOR'S REACH, stated rather than assumed. Attribution needs a
             # declared `Module boundary:` clause and most open work orders have none, so a
             # clean Surveyor lane usually means "not judged" rather than "judged and fine".
@@ -274,6 +320,11 @@ def _render(report: dict) -> str:
             mark = "  -  "
         elif seat["clean"]:
             mark = "clean"
+        elif seat.get("unrunnable"):
+            # A FOURTH MARK, because "could not be checked" is not "found something". In a
+            # skills-only install every detector is absent, and FOUND would report four
+            # defects where there are none.
+            mark = "UNRUN"
         else:
             mark = "FOUND"
         lines.append(f"  [{mark:>5}] {seat['seat']:<{width}} {seat['lane']}")
@@ -311,10 +362,19 @@ def _render(report: dict) -> str:
             f" {len(report['awaiting_judgment'])} lane(s) need a person."
         )
     else:
-        lines.append(
-            f"round-table: {len(report['detectors_unclean'])} detector lane(s) found"
-            f" something — {', '.join(report['detectors_unclean'])}."
-        )
+        unrun = [s["lane"] for s in report["lanes"] if s.get("unrunnable")]
+        found = [lane for lane in report["detectors_unclean"] if lane not in unrun]
+        parts = []
+        if found:
+            parts.append(f"{len(found)} detector lane(s) found something — {', '.join(found)}")
+        if unrun:
+            # Said separately, and still not a pass: a review whose detectors could not run
+            # is not a clean review, which is why `status` stays non-pass here.
+            parts.append(
+                f"{len(unrun)} lane(s) COULD NOT BE CHECKED — {', '.join(unrun)}."
+                " Not findings; the detector packages are not installed here"
+            )
+        lines.append("round-table: " + ". ".join(parts) + ".")
     return "\n".join(lines)
 
 
