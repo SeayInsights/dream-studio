@@ -425,6 +425,94 @@ def test_a_receiver_that_is_not_the_imported_writer_is_still_reported(tmp_path, 
     assert "create_thing" in flagged, f"{name}: emits nothing but was not reported ({flagged})"
 
 
+# Round four. The first is a FALSE POSITIVE on an idiomatic pattern, which is the worst
+# kind for a blocking gate: it fails correct code and teaches people to paste exemption
+# markers onto working emitters. The next two are spelling-spoofs of the guard itself.
+ELSE_BRANCH_RUNTIME_IMPORT = """
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    pass
+else:
+    import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+LOCAL_FLAG_NAMED_TYPE_CHECKING = """
+TYPE_CHECKING = True
+
+if TYPE_CHECKING:
+    import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+UNRELATED_MODULE_TYPE_CHECKING = """
+import myflags
+
+if myflags.TYPE_CHECKING:
+    import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+COMPOUND_ALWAYS_FALSE_GUARD = """
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING and True:
+    import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+
+@pytest.mark.parametrize(
+    "name,source",
+    [
+        ("else-branch import actually runs", ELSE_BRANCH_RUNTIME_IMPORT),
+        ("a local flag named TYPE_CHECKING is not typing's", LOCAL_FLAG_NAMED_TYPE_CHECKING),
+        ("another module's TYPE_CHECKING is not typing's", UNRELATED_MODULE_TYPE_CHECKING),
+    ],
+)
+def test_an_import_that_really_runs_is_not_discarded_as_type_checking(tmp_path, name, source):
+    """False positives, and the reason this gate was held back from blocking.
+
+    Each of these imports genuinely executes, so each call really is an emission. The
+    first is the one that matters: `if TYPE_CHECKING: ... else: import ...` is an
+    ordinary, recommended idiom, and flagging it would fail correct code. The other two
+    are the guard being spoofed by spelling — the same mistake this file has now lost to
+    three times, so provenance decides here too.
+    """
+    repo = _repo(tmp_path, {"x.py": source})
+
+    assert ebw.offenders(repo)["offenders"] == [], f"{name}: correct code was flagged"
+
+
+def test_a_guard_that_is_always_false_still_discards_the_import(tmp_path):
+    """`TYPE_CHECKING and True` never runs, so its import is not provenance.
+
+    Read for meaning rather than matched as a shape: `and` with TYPE_CHECKING is always
+    false, while `TYPE_CHECKING or X` is just X at runtime and must still count.
+    """
+    repo = _repo(tmp_path, {"x.py": COMPOUND_ALWAYS_FALSE_GUARD})
+    flagged = [item["function"] for item in ebw.offenders(repo)["offenders"]]
+
+    assert "create_thing" in flagged, flagged
+
+
 def test_a_try_guarded_import_still_counts(tmp_path):
     """The distinction that keeps the blocking gate off correct code.
 

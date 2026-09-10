@@ -170,19 +170,51 @@ def _dotted(node: ast.AST) -> str:
     return ".".join(reversed(parts))
 
 
-def _is_type_checking(test: ast.AST) -> bool:
-    """Is this `if TYPE_CHECKING:` / `if typing.TYPE_CHECKING:`?
+def _type_checking_aliases(tree: ast.AST, shadowed: set[str]) -> tuple[set[str], set[str]]:
+    """Names in THIS file that actually refer to `typing.TYPE_CHECKING`.
 
-    The one guard that means "the names bound in here do not exist at runtime".
+    PROVENANCE AGAIN, BECAUSE SPELLING HAS LOST EVERY TIME IT WAS TRIED IN THIS FILE --
+    three times now, on receiver names, on shadow forms, and then here. Matching the bare
+    spelling `TYPE_CHECKING` meant a local `TYPE_CHECKING = True`, or some unrelated
+    module's `myflags.TYPE_CHECKING`, was read as typing's constant and its import block
+    discarded. Both were confirmed by execution. So the name must trace back to an actual
+    `typing` import, and a name this file rebinds is not trusted.
     """
+    bare: set[str] = set()
+    typing_modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and (node.module or "") == "typing":
+            for alias in node.names:
+                if alias.name == "TYPE_CHECKING":
+                    bare.add(alias.asname or alias.name)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "typing":
+                    typing_modules.add(alias.asname or "typing")
+    return bare - shadowed, typing_modules - shadowed
+
+
+def _is_type_checking(test: ast.AST, aliases: tuple[set[str], set[str]]) -> bool:
+    """Is this guard false at runtime, so its body's imports never execute?
+
+    `and` / `or` are read for what they MEAN at runtime, not matched as shapes.
+    `TYPE_CHECKING and X` is always false, so its body never runs -- exclude it.
+    `TYPE_CHECKING or X` is just X at runtime and may well be true, so its body may run
+    and must still count. `not TYPE_CHECKING` is true at runtime and is likewise counted,
+    by falling through to False here.
+    """
+    bare, typing_modules = aliases
     if isinstance(test, ast.Name):
-        return test.id == "TYPE_CHECKING"
+        return test.id in bare
     if isinstance(test, ast.Attribute):
-        return test.attr == "TYPE_CHECKING"
+        return test.attr == "TYPE_CHECKING" and _dotted(test.value) in typing_modules
+    if isinstance(test, ast.BoolOp):
+        parts = [_is_type_checking(value, aliases) for value in test.values]
+        return any(parts) if isinstance(test.op, ast.And) else all(parts)
     return False
 
 
-def _writer_bindings(tree: ast.AST) -> tuple[set[str], set[str]]:
+def _writer_bindings(tree: ast.AST, shadowed: set[str]) -> tuple[set[str], set[str]]:
     """Names in this file that an import actually bound to the spool writer.
 
     Returns `(module_aliases, direct_names)` — receivers whose `.write_event(...)` is a
@@ -211,11 +243,20 @@ def _writer_bindings(tree: ast.AST) -> tuple[set[str], set[str]]:
     would flag every true positive in the tree and turn a blocking gate red on correct
     code. `TYPE_CHECKING` is the one guard that means "this does not exist at runtime".
     """
+    # THE BODY ONLY, NEVER THE `else:`. Walking the whole `If` swept in its orelse, and
+    # the orelse is precisely the branch that DOES execute when TYPE_CHECKING is false --
+    # so `if TYPE_CHECKING: ... else: import spool.writer as _spool_writer`, an ordinary
+    # and widely recommended idiom, had its real runtime import discarded and the
+    # function reported as an offender. A blocking gate going red on correct, idiomatic
+    # code is worse than one missing an edge case: it teaches people to paste exemption
+    # markers onto working code, which is the habit this gate exists to break.
+    aliases = _type_checking_aliases(tree, shadowed)
     type_checking_only = {
         node
         for guard in ast.walk(tree)
-        if isinstance(guard, ast.If) and _is_type_checking(guard.test)
-        for node in ast.walk(guard)
+        if isinstance(guard, ast.If) and _is_type_checking(guard.test, aliases)
+        for statement in guard.body
+        for node in ast.walk(statement)
     }
     module_aliases: set[str] = set()
     direct_names: set[str] = set()
@@ -274,6 +315,19 @@ def _shadowed_anywhere(tree: ast.AST) -> set[str]:
     `writer` as a local, the gate stops believing `writer.write_event(...)` everywhere in
     that file, and those writes get reported. Over-reporting is the safe direction for a
     gate whose whole subject is rows that look durable and are not.
+
+    KNOWN AND ACCEPTED, rather than silently unaddressed -- three shapes an independent
+    reviewer confirmed by execution and judged not worth blocking on, none of which
+    occurs anywhere in this repo:
+      * a PEP 695 type parameter (`def f[_spool_writer](...)`) shadows without being
+        seen here, so a writer alias spelled as a type variable would still be trusted;
+      * `from spool.writer import *` binds `write_event` invisibly, so a file using it
+        is reported despite emitting;
+      * an instance attribute (`self._writer.write_event(...)`) is never resolved, so a
+        writer held on `self` is reported despite emitting.
+    The first is a false negative and vanishingly unlikely; the other two are false
+    positives in the safe direction and are tracked as work orders rather than left as
+    comments.
     """
     shadowed: set[str] = set()
     for node in ast.walk(tree):
@@ -362,10 +416,12 @@ def _emission_reachers(tree: ast.AST) -> set[str]:
     false NEGATIVE -- the gate silently blessing a row that no replay can rebuild. The
     text match this replaced had the same hole; it is closed here rather than inherited.
     """
-    module_aliases, direct_names = _writer_bindings(tree)
+    # Shadowing is resolved first: it decides which `TYPE_CHECKING` spellings are the
+    # real one as well as which writer aliases are trustworthy.
+    shadowed = _shadowed_anywhere(tree)
     # A name this file rebinds by ANY means is no longer the imported writer. Applied
     # once, file-wide, rather than re-derived per call site.
-    shadowed = _shadowed_anywhere(tree)
+    module_aliases, direct_names = _writer_bindings(tree, shadowed)
     bindings = (module_aliases - shadowed, direct_names - shadowed)
 
     calls: dict[str, set[str]] = {}
