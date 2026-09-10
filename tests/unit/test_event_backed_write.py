@@ -290,6 +290,74 @@ def create_thing(conn):
 """
 
 
+# A second round of execution-verified false negatives from the same reviewer. The first
+# three are shadow forms an enumerated check could not see; the fourth needs no name
+# collision at all, which is what makes it the worst of them.
+SHADOWED_AT_MODULE_LEVEL = """
+import spool.writer as _spool_writer
+
+_spool_writer = None
+
+
+def create_thing(conn):
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+SHADOWED_BY_FOR_TARGET = """
+import spool.writer as _spool_writer
+
+
+def create_thing(conn, things):
+    for _spool_writer in things:
+        pass
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+SHADOWED_BY_WITH_AS = """
+import spool.writer as _spool_writer
+
+
+def create_thing(conn, ctx):
+    with ctx as _spool_writer:
+        conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+        _spool_writer.write_event("inserted")
+"""
+
+DEAD_NESTED_HELPER = """
+import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    def _never_called():
+        _spool_writer.write_event({"a": 1})
+
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+"""
+
+DEAD_LAMBDA = """
+import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    _unused = lambda: _spool_writer.write_event({"a": 1})  # noqa: E731
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+"""
+
+LIVE_NESTED_HELPER = """
+import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    def _emit():
+        _spool_writer.write_event({"a": 1})
+
+    _emit()
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+"""
+
+
 @pytest.mark.parametrize(
     "name,source",
     [
@@ -297,6 +365,11 @@ def create_thing(conn):
         ("param named spool", SHADOWED_BY_PARAM_SPOOL),
         ("local named _spool_writer", SHADOWED_BY_LOCAL),
         ("no import at all", NO_IMPORT_AT_ALL),
+        ("rebound at module level", SHADOWED_AT_MODULE_LEVEL),
+        ("rebound by a for target", SHADOWED_BY_FOR_TARGET),
+        ("rebound by a with-as", SHADOWED_BY_WITH_AS),
+        ("dead nested helper", DEAD_NESTED_HELPER),
+        ("dead lambda", DEAD_LAMBDA),
     ],
 )
 def test_a_receiver_that_is_not_the_imported_writer_is_still_reported(tmp_path, name, source):
@@ -310,6 +383,19 @@ def test_a_receiver_that_is_not_the_imported_writer_is_still_reported(tmp_path, 
     flagged = [item["function"] for item in ebw.offenders(repo)["offenders"]]
 
     assert "create_thing" in flagged, f"{name}: emits nothing but was not reported ({flagged})"
+
+
+def test_a_nested_helper_that_is_actually_called_still_counts(tmp_path):
+    """The other direction, or the nested fix is just "nesting is never an emission".
+
+    Excluding nested scopes must not mean a real closure stops counting. `_emit` is
+    defined inside `create_thing` AND invoked, so the outer function reaches an emission
+    — through the call graph, which is the thing that actually answers the question, not
+    through lexical nesting, which does not.
+    """
+    repo = _repo(tmp_path, {"live.py": LIVE_NESTED_HELPER})
+
+    assert ebw.offenders(repo)["offenders"] == []
 
 
 def test_an_unrelated_object_named_write_event_does_not_count_as_an_emission(tmp_path):

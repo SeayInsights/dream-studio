@@ -212,49 +212,80 @@ def _writer_bindings(tree: ast.AST) -> tuple[set[str], set[str]]:
     return module_aliases, direct_names
 
 
-def _rebound(node: ast.AST, name: str) -> bool:
-    """Does this function rebind `name`, so the import no longer refers to it here?
+def _shadowed_anywhere(tree: ast.AST) -> set[str]:
+    """Every name this file binds by any means OTHER than an import.
 
-    An imported alias shadowed by a parameter or a local assignment is a different
-    object, and treating the shadow as the writer is the same false negative one level
-    down.
+    ENUMERATING THE SHADOW FORMS DID NOT WORK, and an independent reviewer proved it by
+    execution three times over. A first version checked parameters plus
+    `Assign`/`AnnAssign`/`AugAssign` inside the calling function, and missed a
+    module-level rebind (it only walked the function), a `for _spool_writer in things:`
+    target and a `with ctx as _spool_writer:` binding -- both of which are different AST
+    shapes it never looked at. Each one let an unrelated object's `.write_event(...)`
+    read as a real emission.
+
+    A list of the shapes to check is the wrong instrument, because the next shape is
+    whatever nobody thought of -- a comprehension target, a walrus, an `except ... as`,
+    a match capture. So the question is inverted: any Store-context binding of a name,
+    anywhere in the file, makes that name untrustworthy as the writer. Store context is
+    how Python itself marks "this name is being bound", so new syntax is covered without
+    being enumerated.
+
+    This is deliberately FILE-WIDE and conservative. If any function in a file uses
+    `writer` as a local, the gate stops believing `writer.write_event(...)` everywhere in
+    that file, and those writes get reported. Over-reporting is the safe direction for a
+    gate whose whole subject is rows that look durable and are not.
     """
-    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-        args = node.args
-        for arg in [*args.posonlyargs, *args.args, *args.kwonlyargs]:
-            if arg.arg == name:
-                return True
-        if (args.vararg and args.vararg.arg == name) or (args.kwarg and args.kwarg.arg == name):
-            return True
-    for child in ast.walk(node):
-        if isinstance(child, ast.Assign):
-            for target in child.targets:
-                if isinstance(target, ast.Name) and target.id == name:
-                    return True
-        elif isinstance(child, (ast.AnnAssign, ast.AugAssign)):
-            target = child.target
-            if isinstance(target, ast.Name) and target.id == name:
-                return True
-    return False
+    shadowed: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            shadowed.add(node.id)
+        elif isinstance(node, ast.arg):
+            shadowed.add(node.arg)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            shadowed.add(node.name)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            # `def write_event(...)` in this file is a local definition, not the import.
+            shadowed.add(node.name)
+    return shadowed
 
 
-def _is_writer_call(func: ast.AST, scope: ast.AST, bindings: tuple[set[str], set[str]]) -> bool:
+def _is_writer_call(func: ast.AST, bindings: tuple[set[str], set[str]]) -> bool:
     """Is this call the spool writer, rather than something else spelled the same?
 
     `logger.write_event("inserted")` on an unrelated telemetry object is not an emission,
     and neither is `writer.write_event(...)` where `writer` is a parameter. The name must
-    have been bound to the writer by an import IN THIS FILE and not rebound in the
-    function doing the calling.
+    have been bound to the writer by an import IN THIS FILE and never rebound in it.
     """
     module_aliases, direct_names = bindings
     if isinstance(func, ast.Name):
-        return func.id in direct_names and not _rebound(scope, func.id)
+        return func.id in direct_names
     if isinstance(func, ast.Attribute) and func.attr in _EMITTERS:
-        receiver = _dotted(func.value)
-        if receiver not in module_aliases:
-            return False
-        return not _rebound(scope, receiver.split(".")[0])
+        return _dotted(func.value) in module_aliases
     return False
+
+
+def _own_nodes(func: ast.AST):
+    """Nodes belonging to this function, NOT descending into a nested function or lambda.
+
+    `ast.walk` on a FunctionDef descends into every nested `def` and `lambda`, so a
+    function was credited with emitting because a helper defined inside it -- AND NEVER
+    CALLED -- contained the writer call. Found by an independent reviewer, and the worst
+    of the false negatives here because it needs no adversarial name at all: an ordinary
+    dead inner helper is enough, and the outer function's own raw INSERT then passes as
+    reconstructable.
+
+    Excluding nested scopes is not a loss of coverage, because a nested function is
+    itself walked at module level and gets its own entry in the call graph. If the outer
+    function actually CALLS it, the fixed point credits the outer through that call --
+    which is the real question, and the one lexical nesting cannot answer.
+    """
+    stack = list(ast.iter_child_nodes(func))
+    while stack:
+        node = stack.pop()
+        yield node
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            continue
+        stack.extend(ast.iter_child_nodes(node))
 
 
 def _emission_reachers(tree: ast.AST) -> set[str]:
@@ -283,7 +314,12 @@ def _emission_reachers(tree: ast.AST) -> set[str]:
     false NEGATIVE -- the gate silently blessing a row that no replay can rebuild. The
     text match this replaced had the same hole; it is closed here rather than inherited.
     """
-    bindings = _writer_bindings(tree)
+    module_aliases, direct_names = _writer_bindings(tree)
+    # A name this file rebinds by ANY means is no longer the imported writer. Applied
+    # once, file-wide, rather than re-derived per call site.
+    shadowed = _shadowed_anywhere(tree)
+    bindings = (module_aliases - shadowed, direct_names - shadowed)
+
     calls: dict[str, set[str]] = {}
     reach: set[str] = set()
     for node in ast.walk(tree):
@@ -291,13 +327,15 @@ def _emission_reachers(tree: ast.AST) -> set[str]:
             continue
         called: set[str] = set()
         emits = False
-        for call in ast.walk(node):
+        # OWN SCOPE ONLY -- a nested `def` or `lambda` is walked separately and earns its
+        # own entry below, so the outer function is credited only if it actually calls it.
+        for call in _own_nodes(node):
             if not isinstance(call, ast.Call):
                 continue
             name = getattr(call.func, "attr", None) or getattr(call.func, "id", None)
             if name:
                 called.add(name)
-            if _is_writer_call(call.func, node, bindings):
+            if _is_writer_call(call.func, bindings):
                 emits = True
         calls[node.name] = called
         if emits:
