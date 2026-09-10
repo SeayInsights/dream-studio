@@ -156,3 +156,77 @@ def test_the_report_states_what_it_examined_even_when_clean(tmp_path):
 
     assert "1 production write site(s) examined" in rendered, rendered
     assert "OK" in rendered
+
+
+# ── emission reached through a helper, not spelled in the function ──────────
+#
+# WO 17466550 collapsed two copied emission blocks in verify_gaps.py into one shared
+# `_emit_creation`. The literal-text check this gate used then flagged BOTH callers,
+# including the one that was already correct, because neither contained the string any
+# more. A gate that scores the correct refactor as the defect pushes people to paste the
+# block a third time — which is the condition that created the original bug.
+
+VIA_HELPER = """
+def _emit(payload):
+    write_event(payload)
+
+
+def create_thing(conn):
+    _emit({"a": 1})
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+"""
+
+VIA_HELPER_CHAIN = """
+def _emit(payload):
+    write_event(payload)
+
+
+def _emit_creation(payload):
+    _emit(payload)
+
+
+def create_thing(conn):
+    _emit_creation({"a": 1})
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+"""
+
+HELPER_THAT_DOES_NOT_EMIT = """
+def _log(payload):
+    print(payload)
+
+
+def create_thing(conn):
+    _log({"a": 1})
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+"""
+
+
+def test_a_write_emitting_through_a_helper_is_not_reported(tmp_path):
+    """The refactor the old text match punished."""
+    repo = _repo(tmp_path, {"helper.py": VIA_HELPER})
+    report = ebw.offenders(repo)
+
+    assert report["offenders"] == [], report["offenders"]
+    assert report["examined"] >= 1, "must have actually examined the write site"
+
+
+def test_the_helper_chain_is_followed_to_a_fixed_point(tmp_path):
+    """A helper calling a helper still counts, or the rule only survives one refactor."""
+    repo = _repo(tmp_path, {"chain.py": VIA_HELPER_CHAIN})
+
+    assert ebw.offenders(repo)["offenders"] == []
+
+
+def test_calling_a_helper_that_does_not_emit_is_still_reported(tmp_path):
+    """Show it going red: resolution must not become 'any function call counts'.
+
+    Without this, the previous two tests would pass against a check that treats every
+    call as an emission — which would silence the gate entirely while reading as a fix.
+    """
+    repo = _repo(tmp_path, {"quiet.py": HELPER_THAT_DOES_NOT_EMIT})
+    flagged = [item["function"] for item in ebw.offenders(repo)["offenders"]]
+
+    assert "create_thing" in flagged, (
+        "a function whose only call is a non-emitting helper must still be reported; "
+        f"got {flagged}"
+    )

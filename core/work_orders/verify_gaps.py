@@ -489,6 +489,47 @@ _NO_EVENT_WARNING = (
 )
 
 
+def _emit_creation(
+    event_type: str, *, payload: dict[str, Any], trace: dict[str, Any], now: str
+) -> bool:
+    """Emit one creation event; return whether it actually landed.
+
+    ONE EMITTER, BECAUSE COPYING THIS SHAPE IS THE DEFECT. Two functions in this module
+    disagreed about whether creation goes through the event substrate: `_attach_gap_tasks`
+    emitted, `_insert_gap_work_orders` did not, and the comment on the fixed one names the
+    broken one as the shape it wrongly copied. Fixing the sibling by pasting the block a
+    third time would reproduce exactly the condition that produced the bug -- three sites
+    that must be kept in agreement by whoever remembers all three. There is now one site.
+
+    `.to_dict()` because `spool.writer.write_event` takes a DICT; handing it the envelope
+    object raises TypeError from `_validate_payload_keys`, and a caller's `except` then
+    swallows it, so the emission reads as present and never once succeeds. That precise
+    bug shipped here.
+
+    Returns False rather than raising: a creation must never be lost because the spool is
+    down. The caller is expected to mark the row rebuild-fragile instead of pretending it
+    is durable.
+    """
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        _spool_writer.write_event(
+            CanonicalEventEnvelope(
+                event_type=event_type,
+                session_id=None,
+                payload=payload,
+                timestamp=now,
+                severity="info",
+                trace={"domain": "sdlc", "attribution_status": "fully_attributed", **trace},
+            ).to_dict()
+        )
+        return True
+    except Exception:  # noqa: BLE001 - never lose a row because the spool is down
+        return False
+
+
 def _attached_gap_keys(conn: Any, work_order_id: str) -> set[str]:
     """Distinct gap keys already attached to this work order as tasks."""
     marker = "[gap-attached: "
@@ -616,41 +657,21 @@ def _attach_gap_tasks(
         # on _attach_gap_tasks) — a data-loss defect I introduced hours earlier by copying
         # the shape of the sibling-spawn INSERT instead of the task-creation path in
         # mutations.py, which has always emitted task.created.
-        _emitted = False
-        try:
-            import spool.writer as _spool_writer
-
-            from canonical.events.envelope import CanonicalEventEnvelope
-
-            # `.to_dict()` BECAUSE write_event TAKES A DICT. Passing the envelope object
-            # raised TypeError from `_validate_payload_keys`, the surrounding handler
-            # swallowed it, and this emission never once succeeded -- so every task this
-            # function attached was rebuild-fragile despite the comment above saying
-            # otherwise. 69 other call sites in the tree already pass a dict.
-            _spool_writer.write_event(
-                CanonicalEventEnvelope(
-                    event_type="task.created",
-                    session_id=None,
-                    payload={
-                        "title": title,
-                        "description": description,
-                        "acceptance_criteria": _criteria,
-                        "status": "created",
-                    },
-                    timestamp=now,
-                    severity="info",
-                    trace={
-                        "domain": "sdlc",
-                        "project_id": project_id,
-                        "work_order_id": work_order_id,
-                        "task_id": task_id,
-                        "attribution_status": "fully_attributed",
-                    },
-                ).to_dict()
-            )
-            _emitted = True
-        except Exception:  # noqa: BLE001 - never lose the task because the spool is down
-            _emitted = False
+        _emitted = _emit_creation(
+            "task.created",
+            payload={
+                "title": title,
+                "description": description,
+                "acceptance_criteria": _criteria,
+                "status": "created",
+            },
+            trace={
+                "project_id": project_id,
+                "work_order_id": work_order_id,
+                "task_id": task_id,
+            },
+            now=now,
+        )
 
         # The row is still written directly, because verify holds an open transaction and
         # its callers read the tasks back immediately — waiting for ingestion would make
@@ -1096,6 +1117,34 @@ def _insert_gap_work_orders(
                 f"Spawned by review of '{reviewed_wo_title}' on {now[:10]}: "
                 f"{gap.get('description', '')} {marker}"
             )
+            # EMIT BEFORE INSERTING, because both tables are PROJECTIONS.
+            # WorkOrderProjection.target_tables == ["business_work_orders"] and
+            # TaskProjection.target_tables == ["business_tasks"]; neither overrides
+            # pre_rebuild, so both inherit the framework default that does
+            # `DELETE FROM <table>` before replaying. A row written here with no event was
+            # therefore destroyed by the very tool you reach for to recover -- and this is
+            # the spawn path, so what a rebuild would delete is every remediation work
+            # order a review has ever raised.
+            #
+            # This function is the ORIGINAL of the shape `_attach_gap_tasks` was fixed for.
+            # Its fix note named this function as the wrong pattern it had copied, and
+            # nobody came back. Both now call one emitter, so the next fix cannot land in
+            # one lane and miss its sibling.
+            _wo_emitted = _emit_creation(
+                "work_order.created",
+                payload={
+                    "title": gap_title,
+                    "status": "created",
+                    "type": wo_type or "",
+                    "description": desc,
+                },
+                trace={
+                    "project_id": project_id,
+                    "milestone_id": milestone_id,
+                    "work_order_id": new_wo_id,
+                },
+                now=now,
+            )
             conn.execute(
                 "INSERT INTO business_work_orders"
                 " (work_order_id, project_id, milestone_id, title, description,"
@@ -1106,7 +1155,7 @@ def _insert_gap_work_orders(
                     project_id,
                     milestone_id,
                     gap_title,
-                    desc,
+                    desc if _wo_emitted else desc + _NO_EVENT_WARNING,
                     wo_type,
                     seq,
                     now,
@@ -1116,6 +1165,24 @@ def _insert_gap_work_orders(
             )
             for task in gap.get("tasks", []):
                 task_id = str(uuid.uuid4())
+                _task_title = task.get("title", "")
+                _task_desc = task.get("description", "")
+                _task_emitted = _emit_creation(
+                    "task.created",
+                    payload={
+                        "title": _task_title,
+                        "description": _task_desc,
+                        "acceptance_criteria": task.get("acceptance_criteria"),
+                        "status": "created",
+                    },
+                    trace={
+                        "project_id": project_id,
+                        "milestone_id": milestone_id,
+                        "work_order_id": new_wo_id,
+                        "task_id": task_id,
+                    },
+                    now=now,
+                )
                 conn.execute(
                     "INSERT INTO business_tasks"
                     " (task_id, work_order_id, project_id, title, description,"
@@ -1125,8 +1192,8 @@ def _insert_gap_work_orders(
                         task_id,
                         new_wo_id,
                         project_id,
-                        task.get("title", ""),
-                        task.get("description", ""),
+                        _task_title,
+                        _task_desc if _task_emitted else _task_desc + _NO_EVENT_WARNING,
                         now,
                         now,
                     ),
@@ -1137,6 +1204,10 @@ def _insert_gap_work_orders(
                     "title": gap_title,
                     "type": wo_type,
                     "gap_key": gap_key,
+                    # SAID OUT LOUD when the event did not land: the row is then
+                    # rebuild-fragile, and a caller reading a successful spawn should
+                    # know which kind of row it got.
+                    **({} if _wo_emitted else {"event_emitted": False}),
                 }
             )
 

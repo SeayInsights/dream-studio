@@ -546,7 +546,7 @@ gates:
     command: [py, -m, core.gates.leanness]
     warn_hint: "Over-engineering / dead symbols present — reuse > new, one line > many, native > custom."
   - id: event-backed-write
-    tier: advisory
+    tier: blocking
     description: >
       A row written straight into a projection table with no canonical event beside it.
       `pre_rebuild` truncates each projection's DECLARED target tables before replaying
@@ -560,8 +560,13 @@ gates:
     warn_hint: >
       Emit the creation event beside the insert (see core/work_orders/mutations.py), or
       declare at the site with '# event-backed-write: <20+ chars of why this row is
-      deliberately not reconstructable>'. ADVISORY until WO 17466550 fixes
-      _insert_gap_work_orders — a blocking gate that ships red teaches people to bypass it.
+      deliberately not reconstructable>'. BLOCKING since WO 17466550 fixed
+      _insert_gap_work_orders: the gate was advisory only because it shipped red, and a
+      blocking gate that ships red teaches people to bypass it. It now reports 6 of 6
+      write sites emitting, so the reason for the exemption is gone. Emission is resolved
+      through same-module helpers rather than matched as text — a literal match on
+      'write_event' flagged both siblings the moment their shared emitter was extracted,
+      scoring the correct refactor as the defect.
   - id: task-criteria-baseline
     tier: blocking
     description: >

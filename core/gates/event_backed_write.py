@@ -153,6 +153,53 @@ def _tracked_python(repo_root: Path) -> list[Path]:
     return [repo_root / name for name in names]
 
 
+def _emission_reachers(tree: ast.AST) -> set[str]:
+    """Names of functions in this module that reach an emission, directly or via a helper.
+
+    A TEXT MATCH ON `write_event` PUNISHES THE CORRECT REFACTOR, which is how this
+    function came to exist. Two siblings in `verify_gaps.py` each carried their own copy
+    of the emission block; the fix for WO 17466550 collapsed them into one
+    `_emit_creation` helper -- and this gate promptly flagged BOTH, including the one that
+    was already correct, because neither function contains the literal string any more.
+    A check that reports the fix as the defect trains people to undo the fix, or to paste
+    the block a third time to satisfy it. That third copy is precisely the condition that
+    produced the original bug.
+
+    So reachability is resolved instead of matched: a function is emitting if it calls the
+    writer itself, or calls something in this module that does. Iterated to a fixed point,
+    so a helper calling a helper still counts.
+
+    THE LIMIT, STATED RATHER THAN HIDDEN: only calls resolvable WITHIN this module are
+    followed. A function emitting through a helper imported from elsewhere still reports
+    as an offender. That errs toward reporting, not toward silence, which is the safe
+    direction for a gate whose whole subject is writes that look durable and are not.
+    """
+    calls: dict[str, set[str]] = {}
+    reach: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        called: set[str] = set()
+        for call in ast.walk(node):
+            if not isinstance(call, ast.Call):
+                continue
+            name = getattr(call.func, "attr", None) or getattr(call.func, "id", None)
+            if name:
+                called.add(name)
+        calls[node.name] = called
+        if called.intersection(_EMITTERS):
+            reach.add(node.name)
+
+    changed = True
+    while changed:
+        changed = False
+        for name, called in calls.items():
+            if name not in reach and called.intersection(reach):
+                reach.add(name)
+                changed = True
+    return reach
+
+
 def _exempt(segment: str) -> bool:
     for line in segment.splitlines():
         stripped = line.strip()
@@ -187,6 +234,8 @@ def offenders(repo_root: Path | None = None) -> dict[str, object]:
         except (OSError, SyntaxError):
             continue
 
+        reachers = _emission_reachers(tree)
+
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
@@ -218,7 +267,11 @@ def offenders(repo_root: Path | None = None) -> dict[str, object]:
                     }
                 )
                 continue
-            if any(emitter in segment for emitter in _EMITTERS):
+            # RESOLVED, NOT MATCHED — see `_emission_reachers`. The literal-text check
+            # this replaces reported a function as non-emitting the moment its emission
+            # moved into a shared helper, so the gate scored the correct refactor as the
+            # defect it exists to catch.
+            if node.name in reachers:
                 continue
             if _exempt(segment):
                 continue
