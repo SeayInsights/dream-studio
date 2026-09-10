@@ -84,3 +84,91 @@ class TestDetectorNoFalsePositive:
         assert (
             "tests/unit/test_caller.py" in flagged
         ), f"genuine param addition must still flag the caller; got {flagged}"
+
+
+class TestAmbiguousSymbolNames:
+    """An ambiguous name needs its module named before it counts as a reference.
+
+    Measured on PR #707: 720 findings, 348 for `main` and 334 for `run`, in packs.yaml,
+    canonical/rules.yml, .github/workflows/*.yml and examples/ -- none of them a caller of
+    the changed `core.gates.untested_fallback.main`. All three platforms failed on a PR that
+    broke nothing.
+
+    A FIRST ATTEMPT AT THIS WAS WRONG AND THE EXISTING TESTS CAUGHT IT. Exempting
+    "compatible widening" -- a parameter added with a default breaks no caller -- would have
+    let #353 through, because #353 WAS that shape: `_write_handoff_packet_to_db(session_id,
+    cwd)` gained `handoff_path=None`, and the break was a test asserting the old call shape
+    through `assert_called_once_with`. A compatible signature still breaks a mock assertion.
+    The defect is ambiguity, not arity.
+    """
+
+    def test_an_ambiguous_bare_name_is_not_a_reference(self, tmp_path: Path) -> None:
+        repo = tmp_path
+        # `main` defined in two modules makes the name ambiguous.
+        _write(repo / "core" / "one.py", "def main():\n    return 1\n")
+        _write(repo / "core" / "two.py", "def main():\n    return 2\n")
+        # A bare mention, the shape that produced 682 of the 720 findings.
+        _write(repo / "elsewhere.py", "def go():\n    main()\n")
+
+        diff = (
+            "diff --git a/core/one.py b/core/one.py\n"
+            "--- a/core/one.py\n"
+            "+++ b/core/one.py\n"
+            "@@ -1,1 +1,1 @@\n"
+            "-def main():\n"
+            "+def main(argv=None):\n"
+        )
+        flagged = {f["path"] for f in detect_changed_signature_callers(diff, repo_root=repo)}
+        assert "elsewhere.py" not in flagged, flagged
+
+    def test_an_ambiguous_name_IS_a_reference_when_the_module_is_named(
+        self, tmp_path: Path
+    ) -> None:
+        """The other direction. Without this, the fix would be indistinguishable from
+        switching the detector off for every common name."""
+        repo = tmp_path
+        _write(repo / "core" / "one.py", "def main():\n    return 1\n")
+        _write(repo / "core" / "two.py", "def main():\n    return 2\n")
+        _write(repo / "elsewhere.py", "import core.one\n\ndef go():\n    core.one.main()\n")
+
+        diff = (
+            "diff --git a/core/one.py b/core/one.py\n"
+            "--- a/core/one.py\n"
+            "+++ b/core/one.py\n"
+            "@@ -1,1 +1,1 @@\n"
+            "-def main():\n"
+            "+def main(argv=None):\n"
+        )
+        flagged = {f["path"] for f in detect_changed_signature_callers(diff, repo_root=repo)}
+        assert "elsewhere.py" in flagged, flagged
+
+    def test_a_unique_name_keeps_bare_matching(self, tmp_path: Path) -> None:
+        """THE #353 PROPERTY, asserted here as well as in the regression test.
+
+        `_write_handoff_packet_to_db` is defined once in the repo, so it never reaches the
+        ambiguity branch and a bare reference to it still flags. If this narrowing had
+        applied to unique names, the regression this detector exists for would stop being
+        caught -- and the mock-assertion break it represents is invisible to any
+        signature-compatibility reasoning.
+        """
+        repo = tmp_path
+        _write(repo / "core" / "monitor.py", "def _write_packet(session_id, cwd):\n    pass\n")
+        _write(
+            repo / "tests" / "test_it.py",
+            "def test_x():\n    with patch('core.monitor._write_packet') as m:\n"
+            "        m.assert_called_once_with('s', 'c')\n",
+        )
+
+        diff = (
+            "diff --git a/core/monitor.py b/core/monitor.py\n"
+            "--- a/core/monitor.py\n"
+            "+++ b/core/monitor.py\n"
+            "@@ -1,1 +1,1 @@\n"
+            "-def _write_packet(session_id, cwd):\n"
+            "+def _write_packet(session_id, cwd, handoff_path=None):\n"
+        )
+        flagged = {f["path"] for f in detect_changed_signature_callers(diff, repo_root=repo)}
+        assert "tests/test_it.py" in flagged, (
+            "a unique name must keep bare matching -- this is the #353 shape, and a"
+            " compatible signature still breaks assert_called_once_with"
+        )
