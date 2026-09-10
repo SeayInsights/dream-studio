@@ -42,3 +42,23 @@ On success::
 ## Side effects
 
 - Emits a `task.completed` spool event with `tasks_remaining` in the payload, then runs a projection tick (`sync_tick()`) inline — so the TaskProjection applies it to the `business_tasks` row (status `complete`) before the call returns. No separate sync step is needed; `list_tasks` reflects the completion immediately (WO-TASKDONE-SYNC).
+
+## If it can be computed, compute it {#deterministic-first}
+
+Marking a task done is a claim, and a claim with an exact answer never rests on reading.
+**A grep is not a drive** — finding the symbol in a file's source proves the line was
+typed, not that it runs; import it and call it. A remembered artifact shape is not a read
+one. A symbol's existence is not its reachability: search for the caller rather than
+assuming one.
+
+**Do not certify your own work by reading it.** If the task's acceptance criterion is a
+`TEST-CHECK`, run that node and use the exit code — and where the rule is that an author
+does not run their own suite, hand the node ids to a separate runner and use what it
+reports, not a conclusion you wrote. `close_work_order` executes every criterion anyway,
+so a task marked done on a reading is a task that will fail at close, later and with less
+context.
+
+When a claim genuinely cannot be computed — a design judgement, an operator attestation —
+say so and say why. A fact recorded as `unknown` **with a reason** is honest; the same
+fact recorded as done because nobody could check it is the false-done every gate here
+exists to prevent.
