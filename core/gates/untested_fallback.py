@@ -38,6 +38,7 @@ inside a recognised platform branch are covered, which is the shape gw#858 actua
 
 from __future__ import annotations
 
+import argparse
 import ast
 import json
 import os
@@ -77,11 +78,11 @@ _EXEMPTION = re.compile(r"#\s*untested-fallback:\s*(?P<reason>\S.*)")
 _MIN_REASON_CHARS = 20
 
 
-def _git(argv: list[str]) -> list[str]:
+def _git(argv: list[str], repo_root: Path | None = None) -> list[str]:
     try:
         proc = subprocess.run(  # noqa: S603 - fixed argv, no shell
             argv,
-            cwd=str(REPO_ROOT),
+            cwd=str(repo_root or REPO_ROOT),
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -97,7 +98,7 @@ def _git(argv: list[str]) -> list[str]:
     ]
 
 
-def changed_python_files(base_ref: str | None = None) -> list[str]:
+def changed_python_files(base_ref: str | None = None, repo_root: Path | None = None) -> list[str]:
     """Product ``.py`` files this change set touches, staged, committed or untracked.
 
     Untracked included: ``git diff`` never reports one, and a brand-new module is exactly
@@ -111,13 +112,14 @@ def changed_python_files(base_ref: str | None = None) -> list[str]:
         ["git", "diff", "--name-only"],
         ["git", "ls-files", "--others", "--exclude-standard"],
     ):
-        for name in _git(argv):
+        for name in _git(argv, repo_root):
             if name.endswith(".py") and not name.startswith("tests/"):
                 paths.add(name)
-    return sorted(p for p in paths if (REPO_ROOT / p).is_file())
+    root = repo_root or REPO_ROOT
+    return sorted(p for p in paths if (root / p).is_file())
 
 
-def _test_corpus() -> str:
+def _test_corpus(repo_root: Path | None = None) -> str:
     """Every test file's text, concatenated. Read once; this is the expensive part.
 
     UNTRACKED TESTS COUNT. A first cut listed only tracked files and the gate then reported
@@ -127,15 +129,17 @@ def _test_corpus() -> str:
     case, not the exception.
     """
     blob: list[str] = []
-    tracked = _git(["git", "ls-files", "tests/**/*.py"]) + _git(["git", "ls-files", "tests/*.py"])
+    tracked = _git(["git", "ls-files", "tests/**/*.py"], repo_root) + _git(
+        ["git", "ls-files", "tests/*.py"], repo_root
+    )
     untracked = [
         name
-        for name in _git(["git", "ls-files", "--others", "--exclude-standard"])
+        for name in _git(["git", "ls-files", "--others", "--exclude-standard"], repo_root)
         if name.startswith("tests/") and name.endswith(".py")
     ]
     for rel in dict.fromkeys(tracked + untracked):
         try:
-            blob.append((REPO_ROOT / rel).read_text(encoding="utf-8"))
+            blob.append(((repo_root or REPO_ROOT) / rel).read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError):
             continue
     return "\n".join(blob)
@@ -275,15 +279,15 @@ def _declared_reason(lines: list[str], definition_line: int) -> str | None:
     return None
 
 
-def run(base_ref: str | None = None) -> dict:
-    changed = changed_python_files(base_ref)
+def run(base_ref: str | None = None, repo_root: Path | None = None) -> dict:
+    changed = changed_python_files(base_ref, repo_root)
     if not changed:
         return {"status": "pass", "files_checked": [], "offenders": []}
-    corpus = _test_corpus()
+    corpus = _test_corpus(repo_root)
     offenders: list[dict] = []
     for rel in changed:
         try:
-            source = (REPO_ROOT / rel).read_text(encoding="utf-8")
+            source = ((repo_root or REPO_ROOT) / rel).read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
         offenders.extend(offenders_in_text(source, rel, corpus))
@@ -294,8 +298,22 @@ def run(base_ref: str | None = None) -> dict:
     }
 
 
-def main() -> int:
-    result = run()
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Report a fallback lane no test enters.")
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help=(
+            "Review THIS tree instead of the one this gate lives in. The round table"
+            " appends it when convening against another project; without it the gate"
+            " scans its own install, which would report another project's result as"
+            " clean."
+        ),
+    )
+    args = parser.parse_args(argv)
+    root = Path(args.repo_root) if args.repo_root else None
+
+    result = run(None, root)
     if result["status"] != "pass":
         print(json.dumps(result, indent=2, sort_keys=True))
         print(

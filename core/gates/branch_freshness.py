@@ -23,6 +23,7 @@ read like a check that found nothing.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import subprocess
@@ -36,11 +37,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 _NOTABLE_DISTANCE = 5
 
 
-def _git(argv: list[str]) -> tuple[int, str]:
+def _git(argv: list[str], repo_root: Path | None = None) -> tuple[int, str]:
     try:
         proc = subprocess.run(  # noqa: S603 - fixed argv, no shell
             argv,
-            cwd=str(REPO_ROOT),
+            cwd=str(repo_root or REPO_ROOT),
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -52,7 +53,7 @@ def _git(argv: list[str]) -> tuple[int, str]:
     return proc.returncode, (proc.stdout or proc.stderr or "").strip()
 
 
-def measure(base_ref: str | None = None) -> dict:
+def measure(base_ref: str | None = None, repo_root: Path | None = None) -> dict:
     """How far behind and ahead of its base this branch is.
 
     Public so a test can drive it against a real repository state rather than asserting on
@@ -60,11 +61,11 @@ def measure(base_ref: str | None = None) -> dict:
     """
     base = base_ref or os.environ.get("DREAM_STUDIO_BASE_REF") or "origin/main"
 
-    code, head = _git(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+    code, head = _git(["git", "rev-parse", "--abbrev-ref", "HEAD"], repo_root)
     if code != 0:
         return {"measured": False, "reason": f"could not read HEAD ({head})", "base": base}
 
-    code, _ = _git(["git", "rev-parse", "--verify", base])
+    code, _ = _git(["git", "rev-parse", "--verify", base], repo_root)
     if code != 0:
         return {
             "measured": False,
@@ -73,7 +74,7 @@ def measure(base_ref: str | None = None) -> dict:
             "branch": head,
         }
 
-    code, counts = _git(["git", "rev-list", "--left-right", "--count", f"{base}...HEAD"])
+    code, counts = _git(["git", "rev-list", "--left-right", "--count", f"{base}...HEAD"], repo_root)
     if code != 0 or len(counts.split()) != 2:
         return {
             "measured": False,
@@ -92,8 +93,22 @@ def measure(base_ref: str | None = None) -> dict:
     }
 
 
-def main() -> int:
-    result = measure()
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Report how far this branch is from its base.")
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help=(
+            "Review THIS tree instead of the one this gate lives in. The round table"
+            " appends it when convening against another project; without it the gate"
+            " scans its own install, which would report another project's result as"
+            " clean."
+        ),
+    )
+    args = parser.parse_args(argv)
+    root = Path(args.repo_root) if args.repo_root else None
+
+    result = measure(None, root)
     if not result.get("measured"):
         # Stated, not silent: a check that could not run is not a check that passed.
         print(f"branch-freshness: UNMEASURED - {result.get('reason')}")
