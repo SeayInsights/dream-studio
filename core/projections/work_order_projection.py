@@ -14,6 +14,7 @@ from datetime import datetime, UTC
 from typing import Any
 
 from core.projections.framework import Projection, RetryPolicy
+from core.work_orders.task_status import creation_status, status_for
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ class WorkOrderProjection(Projection):
         "work_order.blocked",
         "work_order.unblocked",
         "work_order.closed",
+        "work_order.cancelled",
         "work_order.deleted",
     ]
     source_canonical = "business"
@@ -99,6 +101,8 @@ class WorkOrderProjection(Projection):
             return self._handle_unblocked(conn, work_order_id, event_id, ts, now)
         if event_type == "work_order.closed":
             return self._handle_closed(conn, work_order_id, event_id, ts, now)
+        if event_type == "work_order.cancelled":
+            return self._handle_cancelled(conn, work_order_id, event_id, ts, now)
         if event_type == "work_order.deleted":
             return self._handle_deleted(conn, work_order_id, event_id, now)
 
@@ -128,7 +132,7 @@ class WorkOrderProjection(Projection):
             "milestone_id": milestone_id,
             "title": payload.get("title"),
             "work_order_type": payload.get("type"),
-            "status": "created",
+            "status": creation_status(work_order=True),
             "created_at": ts,
             "source_event_id": event_id,
             "last_event_id": event_id,
@@ -200,7 +204,7 @@ class WorkOrderProjection(Projection):
             _TABLE,
             {
                 "work_order_id": work_order_id,
-                "status": "in_progress",
+                "status": status_for("work_order.started", work_order=True),
                 "started_at": ts,
                 "last_event_id": event_id,
                 "last_updated_at": now,
@@ -223,7 +227,7 @@ class WorkOrderProjection(Projection):
             _TABLE,
             {
                 "work_order_id": work_order_id,
-                "status": "blocked",
+                "status": status_for("work_order.blocked", work_order=True),
                 "blocked_at": ts,
                 "block_reason": block_reason,
                 "last_event_id": event_id,
@@ -245,7 +249,7 @@ class WorkOrderProjection(Projection):
             _TABLE,
             {
                 "work_order_id": work_order_id,
-                "status": "in_progress",
+                "status": status_for("work_order.unblocked", work_order=True),
                 "unblocked_at": ts,
                 "block_reason": None,
                 "last_event_id": event_id,
@@ -267,7 +271,39 @@ class WorkOrderProjection(Projection):
             _TABLE,
             {
                 "work_order_id": work_order_id,
-                "status": "closed",
+                "status": status_for("work_order.closed", work_order=True),
+                "closed_at": ts,
+                "last_event_id": event_id,
+                "last_updated_at": now,
+            },
+            conflict_key="work_order_id",
+        )
+
+    def _handle_cancelled(
+        self,
+        conn: sqlite3.Connection,
+        work_order_id: str,
+        event_id: str,
+        ts: str,
+        now: str,
+    ) -> int:
+        """Abandoned, and still visible as abandoned.
+
+        WO 20796691. `cancelled` was a status 53 work orders HELD that no event could
+        produce, because the gap drain wrote it with a bare UPDATE and emitted nothing.
+        A rebuild therefore reverted each of them to whatever their last handled event
+        said -- reopening work someone had deliberately abandoned.
+
+        Deliberately NOT folded into `_handle_deleted`. Deleted means the row should not
+        be there; cancelled means the work was real and is not going to happen, which a
+        reader needs to be able to tell apart.
+        """
+        return self.safe_upsert(
+            conn,
+            _TABLE,
+            {
+                "work_order_id": work_order_id,
+                "status": status_for("work_order.cancelled", work_order=True),
                 "closed_at": ts,
                 "last_event_id": event_id,
                 "last_updated_at": now,
@@ -287,7 +323,7 @@ class WorkOrderProjection(Projection):
             _TABLE,
             {
                 "work_order_id": work_order_id,
-                "status": "deleted",
+                "status": status_for("work_order.deleted", work_order=True),
                 "last_event_id": event_id,
                 "last_updated_at": now,
             },
@@ -312,7 +348,7 @@ class WorkOrderProjection(Projection):
             f"""
             INSERT OR IGNORE INTO {_TABLE}
                 (work_order_id, project_id, status, last_updated_at)
-            VALUES (?, ?, 'created', ?)
+            VALUES (?, ?, ?, ?)
             """,
-            (work_order_id, project_id, now),
+            (work_order_id, project_id, creation_status(work_order=True), now),
         )

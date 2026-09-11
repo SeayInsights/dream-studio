@@ -591,7 +591,7 @@ def test_a_task_with_no_executable_criterion_is_told_so(db, tmp_path):
     code, bare = _run(["work-order", "add-task", wid, "--title", "T"], tmp_path)
     assert code == 1, "a refusal that exits 0 is a suggestion"
     assert "refused to file this task" in bare
-    assert "The Warden" in bare, "the refusal must name the seat that raised it"
+    assert "Gate-integrity engineer" in bare, "the refusal must name the seat that raised it"
     assert "TEST-CHECK" in bare, "the message must name what would satisfy it"
     assert "--why" in bare, "and the escape it will accept"
 

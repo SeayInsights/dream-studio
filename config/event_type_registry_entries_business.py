@@ -118,6 +118,19 @@ _BUSINESS_ENTRIES: tuple[RegistryEntry, ...] = (
         "Work order deleted via cascade from project deletion",
         payload_required_keys=frozenset({"work_order_id", "project_id"}),
     ),
+    # WO 20796691. `cancelled` was a status the authority HELD and no event could
+    # PRODUCE: 53 work orders and 369 tasks sat at it, written by the gap drain as a bare
+    # `UPDATE ... SET status = 'cancelled'` with no emission, so a rebuild silently
+    # reverted every one of them to whatever their last handled event said. Distinct from
+    # `deleted`, which means the row should not be there at all; `cancelled` means the
+    # work was real, is abandoned, and should still be visible as abandoned.
+    RegistryEntry(
+        "work_order.cancelled",
+        _BUSINESS,
+        "meaningful-unit",
+        "Work order abandoned; the work was real and will not be done",
+        payload_required_keys=frozenset({"work_order_id", "project_id"}),
+    ),
     # Ordering/dependency mutations (core/work_orders/ordering.py). Emitted for
     # audit via AD-6 emit-then-SQL; not consumed by any projection, so no
     # payload_required_keys enforcement. Registered so the ingestor does not
@@ -178,6 +191,16 @@ _BUSINESS_ENTRIES: tuple[RegistryEntry, ...] = (
     ),
     RegistryEntry(
         "task.completed", _BUSINESS, "meaningful-unit", "Task marked complete within a work order"
+    ),
+    # WO 20796691, and the sibling of work_order.cancelled above. `cancelled` is already
+    # declared in TASK_ABANDONED_STATUSES as a real state -- the vocabulary knew about it
+    # while the event substrate did not, which is how 369 tasks came to hold a status no
+    # replay could reach.
+    RegistryEntry(
+        "task.cancelled",
+        _BUSINESS,
+        "meaningful-unit",
+        "Task abandoned within a work order; not done, and not to be counted as open work",
     ),
     RegistryEntry(
         "task.ac_repointed",

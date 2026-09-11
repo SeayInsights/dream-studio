@@ -48,7 +48,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 LANE_ID = "a-status-the-far-end-does-not-handle"
-SEAT = "The Interpreter"
+SEAT = "Failure semantics"
 
 #: THE PRODUCER's full vocabulary. `not_applicable` is emitted today, not hypothetically.
 PRODUCER = """

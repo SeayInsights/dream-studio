@@ -57,9 +57,9 @@ DECLARED_PREFIX = "Filed with no executable criterion, on a declared reason:"
 #: Seats, spelled as the registry spells them. Not imported from `core.gates`: a work-order
 #: mutation path must not depend on the gate package to file a task, and the registry gate
 #: already refuses a seat outside its closed set, so a typo here fails there.
-_WARDEN = "The Warden"
-_SURVEYOR = "The Surveyor"
-_HERALD = "The Herald"
+_WARDEN = "Gate-integrity engineer"
+_SURVEYOR = "Merge-order steward"
+_HERALD = "Claim and closure auditor"
 
 
 #: A path-shaped token: at least one "/" and a file extension. Deliberately narrow.

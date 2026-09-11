@@ -68,7 +68,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 LANE_ID = "a-channel-outside-the-accounting"
-SEAT = "The Cartographer"
+SEAT = "Untrusted input and abuse limits"
 
 #: The guard's declared dimensions. These are exactly what a rule-derived test list covers.
 MAX_MEMBER_BYTES = 100

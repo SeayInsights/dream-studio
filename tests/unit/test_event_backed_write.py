@@ -94,7 +94,15 @@ def test_the_target_tables_come_from_the_projections_themselves():
 # ── detection, both directions ──────────────────────────────────────────────
 
 
+# The import is part of the fixture because it is part of the real shape: the gate reads
+# provenance, so a bare `write_event(...)` in a file that never imported it is not an
+# emission — it is a NameError waiting to happen. A fixture without the import would be a
+# stand-in with a different contract than production, which is the very defect class this
+# gate's own work order was about.
 WITH_EVENT = """
+from spool.writer import write_event
+
+
 def create_thing(conn):
     write_event(envelope)
     conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
@@ -156,3 +164,534 @@ def test_the_report_states_what_it_examined_even_when_clean(tmp_path):
 
     assert "1 production write site(s) examined" in rendered, rendered
     assert "OK" in rendered
+
+
+# ── emission reached through a helper, not spelled in the function ──────────
+#
+# WO 17466550 collapsed two copied emission blocks in verify_gaps.py into one shared
+# `_emit_creation`. The literal-text check this gate used then flagged BOTH callers,
+# including the one that was already correct, because neither contained the string any
+# more. A gate that scores the correct refactor as the defect pushes people to paste the
+# block a third time — which is the condition that created the original bug.
+
+VIA_HELPER = """
+from spool.writer import write_event
+
+
+def _emit(payload):
+    write_event(payload)
+
+
+def create_thing(conn):
+    _emit({"a": 1})
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+"""
+
+VIA_HELPER_CHAIN = """
+from spool.writer import write_event
+
+
+def _emit(payload):
+    write_event(payload)
+
+
+def _emit_creation(payload):
+    _emit(payload)
+
+
+def create_thing(conn):
+    _emit_creation({"a": 1})
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+"""
+
+HELPER_THAT_DOES_NOT_EMIT = """
+def _log(payload):
+    print(payload)
+
+
+def create_thing(conn):
+    _log({"a": 1})
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+"""
+
+
+def test_a_write_emitting_through_a_helper_is_not_reported(tmp_path):
+    """The refactor the old text match punished."""
+    repo = _repo(tmp_path, {"helper.py": VIA_HELPER})
+    report = ebw.offenders(repo)
+
+    assert report["offenders"] == [], report["offenders"]
+    assert report["examined"] >= 1, "must have actually examined the write site"
+
+
+def test_the_helper_chain_is_followed_to_a_fixed_point(tmp_path):
+    """A helper calling a helper still counts, or the rule only survives one refactor."""
+    repo = _repo(tmp_path, {"chain.py": VIA_HELPER_CHAIN})
+
+    assert ebw.offenders(repo)["offenders"] == []
+
+
+UNRELATED_RECEIVER = """
+class TelemetryLogger:
+    def write_event(self, msg):
+        self._buf.append(msg)
+
+
+def create_thing(conn, logger):
+    conn.execute("INSERT INTO business_work_orders (work_order_id) VALUES (?)", ("x",))
+    logger.write_event("inserted")
+"""
+
+MODULE_ALIAS_RECEIVER = """
+import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    _spool_writer.write_event({"a": 1})
+    conn.execute("INSERT INTO business_work_orders (work_order_id) VALUES (?)", ("x",))
+"""
+
+# The three constructions an independent reviewer EXECUTED against the first receiver
+# fix, each of which slipped through a name-only allowlist as a genuine emission while
+# doing a raw INSERT and emitting nothing. The names are ordinary ones in this
+# codebase's vocabulary, so the collision is likely rather than contrived.
+SHADOWED_BY_PARAM_WRITER = """
+import spool.writer as _spool_writer
+
+
+def create_thing(conn, writer):
+    conn.execute("INSERT INTO business_work_orders (work_order_id) VALUES (?)", ("x",))
+    writer.write_event("inserted")
+"""
+
+SHADOWED_BY_PARAM_SPOOL = """
+import spool.writer as _spool_writer
+
+
+def create_thing(conn, spool):
+    conn.execute("INSERT INTO business_work_orders (work_order_id) VALUES (?)", ("x",))
+    spool.write_event("inserted")
+"""
+
+SHADOWED_BY_LOCAL = """
+import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    _spool_writer = FakeWriter()
+    conn.execute("INSERT INTO business_work_orders (work_order_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+NO_IMPORT_AT_ALL = """
+def create_thing(conn):
+    conn.execute("INSERT INTO business_work_orders (work_order_id) VALUES (?)", ("x",))
+    write_event("inserted")
+"""
+
+
+# A second round of execution-verified false negatives from the same reviewer. The first
+# three are shadow forms an enumerated check could not see; the fourth needs no name
+# collision at all, which is what makes it the worst of them.
+SHADOWED_AT_MODULE_LEVEL = """
+import spool.writer as _spool_writer
+
+_spool_writer = None
+
+
+def create_thing(conn):
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+SHADOWED_BY_FOR_TARGET = """
+import spool.writer as _spool_writer
+
+
+def create_thing(conn, things):
+    for _spool_writer in things:
+        pass
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+SHADOWED_BY_WITH_AS = """
+import spool.writer as _spool_writer
+
+
+def create_thing(conn, ctx):
+    with ctx as _spool_writer:
+        conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+        _spool_writer.write_event("inserted")
+"""
+
+DEAD_NESTED_HELPER = """
+import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    def _never_called():
+        _spool_writer.write_event({"a": 1})
+
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+"""
+
+DEAD_LAMBDA = """
+import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    _unused = lambda: _spool_writer.write_event({"a": 1})  # noqa: E731
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+"""
+
+# Round three of the same reviewer's execution-verified holes. Match patterns bind
+# through string fields rather than Name nodes, and TYPE_CHECKING is false at runtime so
+# a name imported under it is simply not there when the call happens.
+SHADOWED_BY_MATCH_CAPTURE = """
+import spool.writer as _spool_writer
+
+
+def create_thing(conn, thing):
+    match thing:
+        case _spool_writer:
+            pass
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+TYPE_CHECKING_ONLY_IMPORT = """
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+TRY_GUARDED_IMPORT = """
+def create_thing(conn):
+    try:
+        import spool.writer as _spool_writer
+
+        _spool_writer.write_event({"a": 1})
+    except Exception:
+        pass
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+"""
+
+LIVE_NESTED_HELPER = """
+import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    def _emit():
+        _spool_writer.write_event({"a": 1})
+
+    _emit()
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+"""
+
+
+@pytest.mark.parametrize(
+    "name,source",
+    [
+        ("param named writer", SHADOWED_BY_PARAM_WRITER),
+        ("param named spool", SHADOWED_BY_PARAM_SPOOL),
+        ("local named _spool_writer", SHADOWED_BY_LOCAL),
+        ("no import at all", NO_IMPORT_AT_ALL),
+        ("rebound at module level", SHADOWED_AT_MODULE_LEVEL),
+        ("rebound by a for target", SHADOWED_BY_FOR_TARGET),
+        ("rebound by a with-as", SHADOWED_BY_WITH_AS),
+        ("dead nested helper", DEAD_NESTED_HELPER),
+        ("dead lambda", DEAD_LAMBDA),
+        ("rebound by a match capture", SHADOWED_BY_MATCH_CAPTURE),
+        ("imported only under TYPE_CHECKING", TYPE_CHECKING_ONLY_IMPORT),
+    ],
+)
+def test_a_receiver_that_is_not_the_imported_writer_is_still_reported(tmp_path, name, source):
+    """Provenance, not spelling. Each of these emits nothing and must be reported.
+
+    A name-only allowlist passed all of the first three. The direction of that error is
+    the unsafe one — the gate blessing a row no replay can rebuild — which is the single
+    mistake this gate must not make, and it would have made it while reading as fixed.
+    """
+    repo = _repo(tmp_path, {"x.py": source})
+    flagged = [item["function"] for item in ebw.offenders(repo)["offenders"]]
+
+    assert "create_thing" in flagged, f"{name}: emits nothing but was not reported ({flagged})"
+
+
+# Round four. The first is a FALSE POSITIVE on an idiomatic pattern, which is the worst
+# kind for a blocking gate: it fails correct code and teaches people to paste exemption
+# markers onto working emitters. The next two are spelling-spoofs of the guard itself.
+ELSE_BRANCH_RUNTIME_IMPORT = """
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    pass
+else:
+    import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+LOCAL_FLAG_NAMED_TYPE_CHECKING = """
+TYPE_CHECKING = True
+
+if TYPE_CHECKING:
+    import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+UNRELATED_MODULE_TYPE_CHECKING = """
+import myflags
+
+if myflags.TYPE_CHECKING:
+    import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+COMPOUND_ALWAYS_FALSE_GUARD = """
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING and True:
+    import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+
+@pytest.mark.parametrize(
+    "name,source",
+    [
+        ("else-branch import actually runs", ELSE_BRANCH_RUNTIME_IMPORT),
+        ("a local flag named TYPE_CHECKING is not typing's", LOCAL_FLAG_NAMED_TYPE_CHECKING),
+        ("another module's TYPE_CHECKING is not typing's", UNRELATED_MODULE_TYPE_CHECKING),
+    ],
+)
+def test_an_import_that_really_runs_is_not_discarded_as_type_checking(tmp_path, name, source):
+    """False positives, and the reason this gate was held back from blocking.
+
+    Each of these imports genuinely executes, so each call really is an emission. The
+    first is the one that matters: `if TYPE_CHECKING: ... else: import ...` is an
+    ordinary, recommended idiom, and flagging it would fail correct code. The other two
+    are the guard being spoofed by spelling — the same mistake this file has now lost to
+    three times, so provenance decides here too.
+    """
+    repo = _repo(tmp_path, {"x.py": source})
+
+    assert ebw.offenders(repo)["offenders"] == [], f"{name}: correct code was flagged"
+
+
+# Round five. These are FALSE NEGATIVES — the dangerous direction — and neither needs an
+# adversary: a large file with a common parameter name is enough. Guard detection was
+# being switched off for a whole file, silently.
+UNRELATED_PARAM_NAMED_TYPE_CHECKING = """
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import spool.writer as _spool_writer
+
+
+def unrelated(TYPE_CHECKING):
+    return TYPE_CHECKING
+
+
+def create_thing(conn):
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+REBOUND_AFTER_THE_GUARD = """
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import spool.writer as _spool_writer
+
+TYPE_CHECKING = True
+
+
+def create_thing(conn):
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+REBOUND_BEFORE_THE_GUARD = """
+from typing import TYPE_CHECKING
+
+TYPE_CHECKING = True
+
+if TYPE_CHECKING:
+    import spool.writer as _spool_writer
+
+
+def create_thing(conn):
+    conn.execute("INSERT INTO business_tasks (task_id) VALUES (?)", ("x",))
+    _spool_writer.write_event("inserted")
+"""
+
+
+@pytest.mark.parametrize(
+    "name,source",
+    [
+        ("an unrelated function's parameter", UNRELATED_PARAM_NAMED_TYPE_CHECKING),
+        ("a module rebind that happens after the guard", REBOUND_AFTER_THE_GUARD),
+    ],
+)
+def test_a_rebind_that_cannot_reach_the_guard_does_not_disable_it(tmp_path, name, source):
+    """The unsafe direction, and the reason the file-wide shadow set is not reused here.
+
+    Distrusting a writer alias means MORE reporting; distrusting `TYPE_CHECKING` means
+    the guard stops being fake and its import starts counting — LESS reporting. Same
+    subtraction, opposite correct answers. In both cases below the guarded import still
+    never executes, so the emission is not real and the write must be reported.
+    """
+    repo = _repo(tmp_path, {"x.py": source})
+    flagged = [item["function"] for item in ebw.offenders(repo)["offenders"]]
+
+    assert "create_thing" in flagged, (
+        f"{name}: guard detection was disabled, so an import that never runs was "
+        f"accepted as a real emission ({flagged})"
+    )
+
+
+def test_a_rebind_before_the_guard_does_disable_it(tmp_path):
+    """Source order, the other way: this one really does change what the guard reads.
+
+    Without this the fix above could be "module rebinds never matter", which would flag
+    correct code whose flag genuinely is true by the time the guard runs.
+    """
+    repo = _repo(tmp_path, {"x.py": REBOUND_BEFORE_THE_GUARD})
+
+    assert ebw.offenders(repo)["offenders"] == []
+
+
+def test_a_guard_that_is_always_false_still_discards_the_import(tmp_path):
+    """`TYPE_CHECKING and True` never runs, so its import is not provenance.
+
+    Read for meaning rather than matched as a shape: `and` with TYPE_CHECKING is always
+    false, while `TYPE_CHECKING or X` is just X at runtime and must still count.
+    """
+    repo = _repo(tmp_path, {"x.py": COMPOUND_ALWAYS_FALSE_GUARD})
+    flagged = [item["function"] for item in ebw.offenders(repo)["offenders"]]
+
+    assert "create_thing" in flagged, flagged
+
+
+def test_a_try_guarded_import_still_counts(tmp_path):
+    """The distinction that keeps the blocking gate off correct code.
+
+    Distrusting every conditional import was the obvious reading of the TYPE_CHECKING
+    hole, and it would have flagged every true positive in this repo: real emitters here
+    are written `try: import spool.writer as _spool_writer` with a fallback, so the
+    import genuinely executes. TYPE_CHECKING is the one guard that means the name is not
+    bound at runtime.
+    """
+    repo = _repo(tmp_path, {"guarded.py": TRY_GUARDED_IMPORT})
+
+    assert ebw.offenders(repo)["offenders"] == []
+
+
+def test_a_nested_helper_that_is_actually_called_still_counts(tmp_path):
+    """The other direction, or the nested fix is just "nesting is never an emission".
+
+    Excluding nested scopes must not mean a real closure stops counting. `_emit` is
+    defined inside `create_thing` AND invoked, so the outer function reaches an emission
+    — through the call graph, which is the thing that actually answers the question, not
+    through lexical nesting, which does not.
+    """
+    repo = _repo(tmp_path, {"live.py": LIVE_NESTED_HELPER})
+
+    assert ebw.offenders(repo)["offenders"] == []
+
+
+def test_an_unrelated_object_named_write_event_does_not_count_as_an_emission(tmp_path):
+    """The false negative an independent reviewer constructed against this gate.
+
+    `logger.write_event(...)` on a telemetry object is not the spool writer. Counting it
+    would have the gate bless a row no replay can rebuild — the single error this gate
+    exists to prevent, committed by the gate itself. The text match this replaced had the
+    same hole.
+    """
+    repo = _repo(tmp_path, {"telemetry.py": UNRELATED_RECEIVER})
+    flagged = [item["function"] for item in ebw.offenders(repo)["offenders"]]
+
+    assert "create_thing" in flagged, (
+        "a write whose only 'emission' is an unrelated object's method must still be "
+        f"reported; got {flagged}"
+    )
+
+
+def test_the_real_module_alias_receiver_does_count(tmp_path):
+    """The other direction: the spelling production actually uses must be recognised.
+
+    Guards against fixing the false negative by making the check so strict that the real
+    call site stops counting — which would flag the entire tree.
+    """
+    repo = _repo(tmp_path, {"real.py": MODULE_ALIAS_RECEIVER})
+
+    assert ebw.offenders(repo)["offenders"] == []
+
+
+def test_calling_a_helper_that_does_not_emit_is_still_reported(tmp_path):
+    """Show it going red: resolution must not become 'any function call counts'.
+
+    Without this, the previous two tests would pass against a check that treats every
+    call as an emission — which would silence the gate entirely while reading as a fix.
+    """
+    repo = _repo(tmp_path, {"quiet.py": HELPER_THAT_DOES_NOT_EMIT})
+    flagged = [item["function"] for item in ebw.offenders(repo)["offenders"]]
+
+    assert "create_thing" in flagged, (
+        "a function whose only call is a non-emitting helper must still be reported; "
+        f"got {flagged}"
+    )
+
+
+def test_an_offender_says_why_the_receiver_was_distrusted(tmp_path):
+    """A gate that only says no teaches the bypass.
+
+    An independent reviewer asked for this directly: a developer whose emission is
+    correct but unrecognised currently gets a refusal and one documented way out, the
+    exemption marker, which is the habit this gate exists to break. Each of these writes
+    is uncredited for a DIFFERENT reason, and the report must say which.
+    """
+    repo = _repo(
+        tmp_path,
+        {
+            "shadowed.py": SHADOWED_BY_PARAM_WRITER,
+            "noimport.py": NO_IMPORT_AT_ALL,
+            "silent.py": WITHOUT_EVENT,
+        },
+    )
+    report = ebw.offenders(repo)
+    by_file = {item["file"]: item.get("why", "") for item in report["offenders"]}
+
+    assert by_file, "nothing was reported, so there is no reason to check"
+    for name, why in by_file.items():
+        assert why, f"{name} was refused with no reason given"
+
+    assert "not a name this file imported" in by_file["shadowed.py"], by_file["shadowed.py"]
+    assert "never imports" in by_file["noimport.py"], by_file["noimport.py"]
+    assert "no call to write_event" in by_file["silent.py"], by_file["silent.py"]
+
+    rendered = ebw._render(report)
+    assert "why:" in rendered, "the reason must reach the reader, not just the report dict"

@@ -80,7 +80,19 @@ def _normalize_pack_frontmatter(skill_id: str, skill_md: Path) -> None:
         return  # already the correct pack frontmatter
     fm = synthesize_skill_frontmatter(skill_id)
     if not fm:
-        return  # non-routable (e.g. ds-bootstrap) — never reached for the routable set
+        # A SKIP THAT SAYS WHICH KIND IT IS. This branch used to return on any
+        # frontmatter-synthesis miss, so a deliberately non-routable skill and one whose
+        # pack entry had gone wrong left the same trace: nothing. A review duly read the
+        # absence as a stale projection. Consulting the declared exclusions makes the two
+        # distinguishable at the moment the decision is taken, not months later.
+        declared = projection_exclusion(skill_id)
+        if declared:
+            return
+        raise ValueError(
+            f"{skill_id} has no synthesizable frontmatter and no declared exclusion."
+            " A skill that ships nowhere must say why: add it to NOT_PROJECTED with a"
+            " reason, or fix the packs.yaml entry that should make it routable."
+        )
     if has_frontmatter:
         # Strip the existing (mode-level) frontmatter block: everything through the 2nd '---'.
         parts = text.split("---", 2)
@@ -88,6 +100,32 @@ def _normalize_pack_frontmatter(skill_id: str, skill_md: Path) -> None:
     else:
         body = text
     skill_md.write_text(fm + body, encoding="utf-8", newline="\n")
+
+
+#: Canonical skill directories that are DELIBERATELY not projected into the plugin, and
+#: why. Declared as data rather than as prose in this module's docstring, because a
+#: freshness check cannot read a docstring: "excluded on purpose" and "silently missing"
+#: looked identical to every reader, which is what an independent review reported as a
+#: stale projection on a skill nobody intended to ship.
+#:
+#: Every entry carries a reason, held by test_every_declared_exclusion_carries_a_reason.
+#: An entry without one would be the same silence one directory further in.
+NOT_PROJECTED: dict[str, str] = {
+    "ds-bootstrap": (
+        "a passive system component, not a user-invocable skill: it carries no routable"
+        " pack in packs.yaml and synthesize_skill_frontmatter returns None for it, so a"
+        " projected copy would be a skill no router can reach"
+    ),
+}
+
+
+def projection_exclusion(skill_dir_name: str) -> str | None:
+    """The declared reason this canonical skill ships nowhere, or None if it should ship.
+
+    The one door for the question "is this absence intentional?", so a parity report can
+    distinguish a declared exclusion from a file somebody forgot to regenerate.
+    """
+    return NOT_PROJECTED.get(skill_dir_name)
 
 
 def build_plugin_dist(

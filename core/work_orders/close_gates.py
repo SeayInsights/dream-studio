@@ -415,6 +415,36 @@ def run_gate_check(
             verdict = _json.loads(verdict_raw)
         except Exception as exc:
             return False, f"independent_review: review-verdict.json is not valid JSON: {exc}"
+
+        # WO d0658106: A VERDICT THAT CONVENED NO LANE IS NOT A REVIEW.
+        #
+        # 29 seats sat in `canonical/review_lanes.yml` while `convene()` had two callers,
+        # its own CLI and its own test. A verdict carried scores and named no lens, so one
+        # produced with the whole bench and one produced with the table never opened read
+        # identically here. Recording the seats on the verdict is provenance; refusing a
+        # verdict that has none is what makes it enforcement.
+        #
+        # THE ATTESTATION PATH IS EXEMPT, AND KEYED OFF SOMETHING THAT ALREADY MEANS
+        # SOMETHING. `ds work-order attest` is a person certifying work that has no
+        # machine-traceable evidence -- there is no diff for a lane to be relevant to, so
+        # demanding a table would either block attestation or invite convening one nobody
+        # read. The exemption tests `certification_basis`, which this gate already trusts
+        # and only `attest_work_order` writes; it does NOT test a self-declared marker on
+        # the verdict, which anything could set.
+        if not verdict_is_operator_attested(verdict):
+            _table = verdict.get("round_table") or {}
+            if not _table.get("seats"):
+                _why = _table.get("unavailable") or (
+                    "the verdict carries no round-table section at all, so it predates the"
+                    " table or was produced by something that does not convene it"
+                )
+                return False, (
+                    "independent_review: the review convened no lane — "
+                    f"{_why}. A verdict with no lens is a score with no provenance."
+                    " Re-run: py -m interfaces.cli.ds work-order verify "
+                    f"{work_order_id}"
+                )
+
         if not verdict.get("passed"):
             # Unreviewable verdicts are NOT a certified pass — they indicate no commit
             # evidence was found (WO-REVIEW-TRACEABILITY).  Return a non-blocking failure
@@ -583,14 +613,26 @@ def _read_wo_tasks(conn: Any, work_order_id: str) -> list[dict[str, Any]]:
     ]
 
 
-def _is_operator_attested(work_order_id: str, db_path: Path) -> bool:
-    """True if the WO carries a passing OPERATOR attestation.
+def verdict_is_operator_attested(verdict: dict[str, Any]) -> bool:
+    """The ONE definition of "a person certified this", applied to a loaded verdict.
 
     ``ds work-order attest`` records a review verdict with
     ``certification_basis == "operator_attested"`` and ``passed == True`` — an explicit,
-    audited human certification. Used to exempt attested design-only WOs (no executable
-    check by nature) from the executable_ac force requirement.
+    audited human certification.
+
+    BOTH HALVES MATTER, and a second site inside this module originally checked only the
+    basis. Two gates exempt attested work: the executable_ac force requirement, and the
+    round-table requirement added by WO d0658106. With `passed` dropped, a FAILED
+    attestation would have been exempted from the second while still blocked by the
+    first — two sites deciding one question, one consulting a subset of the predicates
+    the other requires, which is the Gate-integrity seat's own signature. So the
+    predicate lives here once and both read it.
     """
+    return bool(verdict.get("passed")) and verdict.get("certification_basis") == "operator_attested"
+
+
+def _is_operator_attested(work_order_id: str, db_path: Path) -> bool:
+    """`verdict_is_operator_attested` for a work order whose verdict is not yet loaded."""
     import json as _json
 
     from core.work_orders.artifacts import get_wo_artifact
@@ -602,7 +644,7 @@ def _is_operator_attested(work_order_id: str, db_path: Path) -> bool:
         verdict = _json.loads(raw)
     except Exception:
         return False
-    return bool(verdict.get("passed")) and verdict.get("certification_basis") == "operator_attested"
+    return verdict_is_operator_attested(verdict)
 
 
 def _run_ac_gate(

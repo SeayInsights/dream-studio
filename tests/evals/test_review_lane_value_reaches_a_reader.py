@@ -58,7 +58,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 LANE_ID = "a-produced-value-with-no-reader"
-SEAT = "The Interpreter"
+SEAT = "Observability and audit trail"
 
 #: THE PRODUCER. Three fields, each honestly computed.
 PRODUCER = """

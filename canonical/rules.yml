@@ -51,6 +51,43 @@
 version: 1
 
 rules:
+  - id: dispatched-review-convenes-the-round-table
+    statement: >
+      A review run by a dispatched agent is conducted through the lane registry, not
+      through a checklist the agent invents, and every lane it does not examine is
+      reported as not examined rather than omitted.
+    source: canonical/skills/core/modes/review/SKILL.md
+    enforced_by:
+      - tests/unit/test_round_table.py::test_the_review_skill_dispatches_the_subagent_through_the_table
+      - tests/unit/test_round_table.py::test_the_shipped_skill_carries_the_same_dispatch_rule
+      - tests/unit/test_close_gates.py::test_a_verdict_that_convened_no_lane_is_refused
+    note: >
+      The operator's standing instruction, made a property of the substrate rather than of
+      anyone's memory: "i wanted the separate agent you spin up to use the roundtable".
+      Three layers hold it. The skill text instructs the dispatch, the shipped projection
+      under dist/plugin must carry the same text so an installed adapter reads it too, and
+      independent_review refuses a verdict whose round-table section convened no lane --
+      so the rule survives an agent that ignores the prose. Before this, convene() had two
+      callers: its own CLI and its own test.
+
+  - id: detector-lane-declares-what-it-leaves-undecided
+    statement: >
+      A lane answered by a mechanical detector must state what that detector does not
+      decide, or declare an empty list to claim it decides the lane's whole question.
+    source: canonical/review_lanes.yml
+    enforced_by:
+      - core/gates/review_lane_registry.py
+      - tests/unit/test_round_table.py::test_no_lane_asks_more_than_its_enforcement_answers
+      - tests/unit/test_round_table.py::test_the_deferred_half_is_printed_beside_the_clean_mark
+    note: >
+      A detector is a narrow predicate standing in for a prose question and the two are
+      rarely the same size. The merge-order lane asked how far behind a branch was AND
+      whether anyone had asked it to sync; its detector counts commits, so the lane
+      rendered clean with half its question answered by nobody. An empty list is a claim
+      that can be read and falsified; an absent key made "nothing deferred" and "nobody
+      considered it" identical. Measured before choosing the rule: flagging compound
+      questions textually would have fired on 21 of 30 lanes, because a setup sentence
+      followed by a question is this registry's house style.
   - id: work-order-declares-module-boundary
     statement: >
       Every work order must declare the paths it owns, so an edit is attributed by a

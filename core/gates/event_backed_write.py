@@ -153,6 +153,370 @@ def _tracked_python(repo_root: Path) -> list[Path]:
     return [repo_root / name for name in names]
 
 
+#: The module that actually writes to the spool.
+_WRITER_MODULE = "spool.writer"
+
+
+def _dotted(node: ast.AST) -> str:
+    """`a.b.c` for an attribute chain, `a` for a name, "" for anything else."""
+    parts: list[str] = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if isinstance(node, ast.Name):
+        parts.append(node.id)
+    else:
+        return ""
+    return ".".join(reversed(parts))
+
+
+class _TypeCheckingProvenance:
+    """Where `TYPE_CHECKING` came from in this file, and where it stopped being typing's.
+
+    The file-wide `shadowed` set is deliberately not reused here; reusing it reintroduced the
+    exact failure this gate exists to prevent. The two checks share a subtraction whose
+    correct outcomes are OPPOSITE:
+
+        writer alias   distrusted -> the import is not provenance -> MORE reporting -> safe
+        TYPE_CHECKING  distrusted -> the guard is not fake -> its import COUNTS -> LESS
+                                     reporting -> UNSAFE
+
+    So an unrelated function elsewhere in the file naming a parameter `TYPE_CHECKING`
+    silently switched off guard detection for the WHOLE file, and an import that never
+    runs then read as a durable emission. Found by an independent reviewer, by execution,
+    on a construction that needs no adversary -- just a large file and a common name.
+
+    SOURCE ORDER IS THE ACTUAL RULE, which is why "module-level only" is not enough on its
+    own: a module-level `TYPE_CHECKING = True` written AFTER the guard cannot affect what
+    the guard already evaluated. A rebind counts only if it is at module scope AND before
+    the guard's line. A function's local binding is a different scope and never reaches a
+    module-level guard at all.
+
+    KNOWN LIMIT, named rather than hidden: a guard spelled `match TYPE_CHECKING: case
+    True:` is not recognised, so its import is treated as real. That is a false negative,
+    it appears nowhere in this repo, and nobody writes the idiom that way.
+    """
+
+    def __init__(self, tree: ast.AST) -> None:
+        self.bare: dict[str, int] = {}
+        self.typing_modules: dict[str, int] = {}
+        self.rebinds: dict[str, list[int]] = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and (node.module or "") == "typing":
+                for alias in node.names:
+                    if alias.name == "TYPE_CHECKING":
+                        name = alias.asname or alias.name
+                        self.bare.setdefault(name, node.lineno)
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "typing":
+                        name = alias.asname or "typing"
+                        self.typing_modules.setdefault(name, node.lineno)
+        # Only MODULE-SCOPE rebinds can change what a module-level guard reads, so the
+        # walk stops at each function or class boundary.
+        for statement in getattr(tree, "body", []):
+            if isinstance(statement, (ast.Import, ast.ImportFrom)):
+                continue
+            for node in _own_nodes_of(statement):
+                if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                    self.rebinds.setdefault(node.id, []).append(node.lineno)
+                elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    self.rebinds.setdefault(node.name, []).append(node.lineno)
+
+    def _trusted(self, name: str, table: dict[str, int], at_line: int) -> bool:
+        first = table.get(name)
+        if first is None or first > at_line:
+            return False
+        return not any(line < at_line for line in self.rebinds.get(name, ()))
+
+
+def _own_nodes_of(statement: ast.AST):
+    """`statement` and its descendants, not entering a nested function or class scope."""
+    stack = [statement]
+    while stack:
+        node = stack.pop()
+        yield node
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            continue
+        stack.extend(ast.iter_child_nodes(node))
+
+
+def _is_type_checking(test: ast.AST, prov: _TypeCheckingProvenance, at_line: int) -> bool:
+    """Is this guard false at runtime, so its body's imports never execute?
+
+    `and` / `or` are read for what they MEAN at runtime, not matched as shapes.
+    `TYPE_CHECKING and X` is always false, so its body never runs -- exclude it.
+    `TYPE_CHECKING or X` is just X at runtime and may well be true, so its body may run
+    and must still count. `not TYPE_CHECKING` is true at runtime and is likewise counted,
+    by falling through to False here.
+    """
+    if isinstance(test, ast.Name):
+        return prov._trusted(test.id, prov.bare, at_line)
+    if isinstance(test, ast.Attribute):
+        return test.attr == "TYPE_CHECKING" and prov._trusted(
+            _dotted(test.value), prov.typing_modules, at_line
+        )
+    if isinstance(test, ast.BoolOp):
+        parts = [_is_type_checking(value, prov, at_line) for value in test.values]
+        return any(parts) if isinstance(test.op, ast.And) else all(parts)
+    return False
+
+
+def _writer_bindings(tree: ast.AST, shadowed: set[str]) -> tuple[set[str], set[str]]:
+    """Names in this file that an import actually bound to the spool writer.
+
+    Returns `(module_aliases, direct_names)` — receivers whose `.write_event(...)` is a
+    real emission, and bare names that ARE `write_event`.
+
+    A NAME ALLOWLIST WAS NOT ENOUGH, and an independent reviewer proved it by running it
+    rather than reading it: with the receiver merely required to be spelled `writer`,
+    `spool` or `_spool_writer`, three constructions slipped through as compliant -- an
+    ordinary parameter named `writer`, one named `spool`, and a local bound to an
+    unrelated object named `_spool_writer` -- each doing a raw INSERT with no emission at
+    all. Those are unremarkable names in this codebase's own vocabulary, so the collision
+    is likely rather than contrived, and the direction of the error is the unsafe one:
+    the gate blessing a row no replay can rebuild.
+
+    Provenance is therefore read from the import statements. A receiver counts only if
+    THIS FILE imported the writer under that name.
+
+    AN IMPORT UNDER `if TYPE_CHECKING:` DOES NOT COUNT, because that constant is false at
+    runtime -- the name is simply not bound when the code executes, so a call through it
+    would raise NameError. Treating it as provenance let a non-emitting function read as
+    compliant (found by an independent reviewer, by execution).
+
+    A `try:`-guarded import DOES count, and the distinction is not a hedge. This
+    codebase's real emitters are written `try: import spool.writer as _spool_writer` with
+    a fallback, so the import genuinely executes; distrusting every conditional import
+    would flag every true positive in the tree and turn a blocking gate red on correct
+    code. `TYPE_CHECKING` is the one guard that means "this does not exist at runtime".
+    """
+    # The guard's body only, not its `else:`. Walking the whole `If` swept in the orelse, and
+    # the orelse is precisely the branch that DOES execute when TYPE_CHECKING is false --
+    # so `if TYPE_CHECKING: ... else: import spool.writer as _spool_writer`, an ordinary
+    # and widely recommended idiom, had its real runtime import discarded and the
+    # function reported as an offender. A blocking gate going red on correct, idiomatic
+    # code is worse than one missing an edge case: it teaches people to paste exemption
+    # markers onto working code, which is the habit this gate exists to break.
+    prov = _TypeCheckingProvenance(tree)
+    type_checking_only = {
+        node
+        for guard in ast.walk(tree)
+        if isinstance(guard, ast.If) and _is_type_checking(guard.test, prov, guard.lineno)
+        for statement in guard.body
+        for node in ast.walk(statement)
+    }
+    module_aliases: set[str] = set()
+    direct_names: set[str] = set()
+    for node in ast.walk(tree):
+        if node in type_checking_only:
+            continue
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == _WRITER_MODULE:
+                    # `import spool.writer as w` binds `w`; plain `import spool.writer`
+                    # binds `spool`, and the call is then written out in full.
+                    module_aliases.add(alias.asname or _WRITER_MODULE)
+                    if alias.asname is None:
+                        module_aliases.add(_WRITER_MODULE)
+        elif isinstance(node, ast.ImportFrom):
+            source = node.module or ""
+            if source == _WRITER_MODULE:
+                for alias in node.names:
+                    if alias.name in _EMITTERS:
+                        direct_names.add(alias.asname or alias.name)
+            elif source == "spool":
+                for alias in node.names:
+                    if alias.name == "writer":
+                        module_aliases.add(alias.asname or "writer")
+    return module_aliases, direct_names
+
+
+def _shadowed_anywhere(tree: ast.AST) -> set[str]:
+    """Every name this file binds by any means OTHER than an import.
+
+    ENUMERATING THE SHADOW FORMS DID NOT WORK, and an independent reviewer proved it by
+    execution three times over. A first version checked parameters plus
+    `Assign`/`AnnAssign`/`AugAssign` inside the calling function, and missed a
+    module-level rebind (it only walked the function), a `for _spool_writer in things:`
+    target and a `with ctx as _spool_writer:` binding -- both of which are different AST
+    shapes it never looked at. Each one let an unrelated object's `.write_event(...)`
+    read as a real emission.
+
+    A list of the shapes to check is the wrong instrument, because the next shape is
+    whatever nobody thought of -- a comprehension target, a walrus, an `except ... as`,
+    a match capture. So the question is inverted: any Store-context binding of a name,
+    anywhere in the file, makes that name untrustworthy as the writer. Store context is
+    how Python itself marks "this name is being bound", so new syntax is covered without
+    being enumerated. Comprehension targets, walrus and `except ... as` were all verified
+    covered by that inversion without being named.
+
+    MATCH PATTERNS ARE THE EXCEPTION, and needed handling because they do not use
+    `ast.Name` at all: `case _spool_writer:` binds through a string field on the pattern
+    node (`MatchAs.name`, `MatchStar.name`, `MatchMapping.rest`). An independent reviewer
+    found that gap by execution after the inversion above had already closed four others.
+    Rather than add the one shape they found, every `Match*` node's string `name`/`rest`
+    is read -- so the sub-patterns inside `MatchClass`/`MatchSequence`, and any future
+    pattern node shaped the same way, are covered without being enumerated either.
+
+    This is deliberately FILE-WIDE and conservative. If any function in a file uses
+    `writer` as a local, the gate stops believing `writer.write_event(...)` everywhere in
+    that file, and those writes get reported. Over-reporting is the safe direction for a
+    gate whose whole subject is rows that look durable and are not.
+
+    KNOWN AND ACCEPTED, rather than silently unaddressed. Five shapes an independent
+    reviewer confirmed BY EXECUTION across six adversarial rounds and judged not worth
+    blocking the ship on. None occurs anywhere in this repo, and each needs a developer
+    to go out of their way; they are listed so the boundary is written down instead of
+    re-derived, and they are tracked as tasks on WO 17466550 rather than left as prose:
+
+      * a PEP 695 type parameter (`def f[_spool_writer](...)`) shadows without being
+        seen here, so a writer alias spelled as a type variable stays trusted
+        (false negative);
+      * `from spool.writer import *` binds `write_event` invisibly, so a file using it
+        is reported despite emitting (false positive);
+      * an instance attribute (`self._writer.write_event(...)`) is never resolved, so a
+        writer held on `self` is reported despite emitting (false positive);
+      * a guard spelled `match TYPE_CHECKING: case True:` or `if (TYPE_CHECKING := ...)`
+        is not recognised as a guard at all, so its import is treated as real
+        (false negative);
+      * A DELIBERATE MODULE-SCOPE REBIND OF `TYPE_CHECKING` BEFORE A LATER GUARD is
+        detected correctly, but the response is backwards: the guard is promoted to
+        trusted and its import counted, where uncertainty about what the name now means
+        should make this gate MORE suspicious, not less. Reproduces through `if`, `try`,
+        `for` and `with` bindings -- one logic bug, four spellings. It is accepted only
+        because reaching it means reusing that literal name at module scope for an
+        unrelated purpose, which no code does by accident and a reviewer would notice.
+        Distinct from the round-five defect that DID block: that one needed nothing but
+        an unrelated function parameter sharing a common name, which any large file
+        eventually has.
+    """
+    shadowed: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            shadowed.add(node.id)
+        elif isinstance(node, ast.arg):
+            shadowed.add(node.arg)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            shadowed.add(node.name)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            # `def write_event(...)` in this file is a local definition, not the import.
+            shadowed.add(node.name)
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            shadowed.update(node.names)
+        elif type(node).__name__.startswith("Match"):
+            # Pattern nodes carry their captures as plain strings, not Name nodes.
+            for field in ("name", "rest"):
+                bound = getattr(node, field, None)
+                if isinstance(bound, str):
+                    shadowed.add(bound)
+    return shadowed
+
+
+def _is_writer_call(func: ast.AST, bindings: tuple[set[str], set[str]]) -> bool:
+    """Is this call the spool writer, rather than something else spelled the same?
+
+    `logger.write_event("inserted")` on an unrelated telemetry object is not an emission,
+    and neither is `writer.write_event(...)` where `writer` is a parameter. The name must
+    have been bound to the writer by an import IN THIS FILE and never rebound in it.
+    """
+    module_aliases, direct_names = bindings
+    if isinstance(func, ast.Name):
+        return func.id in direct_names
+    if isinstance(func, ast.Attribute) and func.attr in _EMITTERS:
+        return _dotted(func.value) in module_aliases
+    return False
+
+
+def _own_nodes(func: ast.AST):
+    """Nodes belonging to this function, NOT descending into a nested function or lambda.
+
+    `ast.walk` on a FunctionDef descends into every nested `def` and `lambda`, so a
+    function was credited with emitting because a helper defined inside it -- one that is never
+    CALLED -- contained the writer call. Found by an independent reviewer, and the worst
+    of the false negatives here because it needs no adversarial name at all: an ordinary
+    dead inner helper is enough, and the outer function's own raw INSERT then passes as
+    reconstructable.
+
+    Excluding nested scopes is not a loss of coverage, because a nested function is
+    itself walked at module level and gets its own entry in the call graph. If the outer
+    function actually CALLS it, the fixed point credits the outer through that call --
+    which is the real question, and the one lexical nesting cannot answer.
+    """
+    stack = list(ast.iter_child_nodes(func))
+    while stack:
+        node = stack.pop()
+        yield node
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            continue
+        stack.extend(ast.iter_child_nodes(node))
+
+
+def _emission_reachers(tree: ast.AST) -> set[str]:
+    """Names of functions in this module that reach an emission, directly or via a helper.
+
+    A TEXT MATCH ON `write_event` PUNISHES THE CORRECT REFACTOR, which is how this
+    function came to exist. Two siblings in `verify_gaps.py` each carried their own copy
+    of the emission block; the fix for WO 17466550 collapsed them into one
+    `_emit_creation` helper -- and this gate promptly flagged BOTH, including the one that
+    was already correct, because neither function contains the literal string any more.
+    A check that reports the fix as the defect trains people to undo the fix, or to paste
+    the block a third time to satisfy it. That third copy is precisely the condition that
+    produced the original bug.
+
+    So reachability is resolved instead of matched: a function is emitting if it calls the
+    writer itself, or calls something in this module that does. Iterated to a fixed point,
+    so a helper calling a helper still counts.
+
+    THE LIMIT, STATED RATHER THAN HIDDEN: only calls resolvable WITHIN this module are
+    followed. A function emitting through a helper imported from elsewhere still reports
+    as an offender. That errs toward reporting, not toward silence, which is the safe
+    direction for a gate whose whole subject is writes that look durable and are not.
+
+    THE RECEIVER IS CHECKED, NOT JUST THE METHOD NAME. `logger.write_event("inserted")`
+    on some unrelated telemetry object is not an emission, and counting it would be a
+    false NEGATIVE -- the gate silently blessing a row that no replay can rebuild. The
+    text match this replaced had the same hole; it is closed here rather than inherited.
+    """
+    # Shadowing is resolved first: it decides which `TYPE_CHECKING` spellings are the
+    # real one as well as which writer aliases are trustworthy.
+    shadowed = _shadowed_anywhere(tree)
+    # A name this file rebinds by ANY means is no longer the imported writer. Applied
+    # once, file-wide, rather than re-derived per call site.
+    module_aliases, direct_names = _writer_bindings(tree, shadowed)
+    bindings = (module_aliases - shadowed, direct_names - shadowed)
+
+    calls: dict[str, set[str]] = {}
+    reach: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        called: set[str] = set()
+        emits = False
+        # OWN SCOPE ONLY -- a nested `def` or `lambda` is walked separately and earns its
+        # own entry below, so the outer function is credited only if it actually calls it.
+        for call in _own_nodes(node):
+            if not isinstance(call, ast.Call):
+                continue
+            name = getattr(call.func, "attr", None) or getattr(call.func, "id", None)
+            if name:
+                called.add(name)
+            if _is_writer_call(call.func, bindings):
+                emits = True
+        calls[node.name] = called
+        if emits:
+            reach.add(node.name)
+
+    changed = True
+    while changed:
+        changed = False
+        for name, called in calls.items():
+            if name not in reach and called.intersection(reach):
+                reach.add(name)
+                changed = True
+    return reach
+
+
 def _exempt(segment: str) -> bool:
     for line in segment.splitlines():
         stripped = line.strip()
@@ -161,6 +525,41 @@ def _exempt(segment: str) -> bool:
             if len(reason) >= _MIN_REASON:
                 return True
     return False
+
+
+def _why_not_credited(tree: ast.AST, node: ast.AST, bindings: tuple[set[str], set[str]]) -> str:
+    """Why this function's `write_event` call, if any, was not counted as an emission.
+
+    A GATE THAT ONLY SAYS NO TEACHES THE BYPASS. An independent reviewer asked for this
+    directly: a developer whose emission is correct but unrecognised currently gets a
+    refusal and one documented way out -- the exemption marker -- which is the habit this
+    gate exists to break. Naming the reason turns a refusal into an instruction.
+    """
+    module_aliases, direct_names = bindings
+    calls = [c for c in _own_nodes(node) if isinstance(c, ast.Call)]
+    named = [
+        c
+        for c in calls
+        if (getattr(c.func, "attr", None) or getattr(c.func, "id", None)) in _EMITTERS
+    ]
+    if not named:
+        return "no call to write_event in this function, and nothing it calls here emits"
+    for call in named:
+        func = call.func
+        if isinstance(func, ast.Attribute):
+            receiver = _dotted(func.value)
+            if receiver not in module_aliases:
+                return (
+                    f"`{receiver}.write_event(...)` is not credited: `{receiver}` is not a"
+                    " name this file imported from spool.writer, or it is rebound at module"
+                    " scope before this point"
+                )
+        elif isinstance(func, ast.Name) and func.id not in direct_names:
+            return (
+                f"bare `{func.id}(...)` is not credited: this file never imports"
+                " write_event from spool.writer"
+            )
+    return "the call is present but its receiver could not be resolved to spool.writer"
 
 
 def offenders(repo_root: Path | None = None) -> dict[str, object]:
@@ -186,6 +585,13 @@ def offenders(repo_root: Path | None = None) -> dict[str, object]:
             tree = ast.parse(source)
         except (OSError, SyntaxError):
             continue
+
+        reachers = _emission_reachers(tree)
+        # The same derivation the verdict uses, so the REASON cannot disagree with the
+        # decision it explains.
+        _shadowed = _shadowed_anywhere(tree)
+        _mods, _direct = _writer_bindings(tree, _shadowed)
+        bindings = (_mods - _shadowed, _direct - _shadowed)
 
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -218,7 +624,11 @@ def offenders(repo_root: Path | None = None) -> dict[str, object]:
                     }
                 )
                 continue
-            if any(emitter in segment for emitter in _EMITTERS):
+            # RESOLVED, NOT MATCHED — see `_emission_reachers`. The literal-text check
+            # this replaces reported a function as non-emitting the moment its emission
+            # moved into a shared helper, so the gate scored the correct refactor as the
+            # defect it exists to catch.
+            if node.name in reachers:
                 continue
             if _exempt(segment):
                 continue
@@ -228,6 +638,7 @@ def offenders(repo_root: Path | None = None) -> dict[str, object]:
                     "function": node.name,
                     "line": node.lineno,
                     "tables": written,
+                    "why": _why_not_credited(tree, node, bindings),
                 }
             )
 
@@ -255,6 +666,13 @@ def _render(report: dict[str, object]) -> str:
             f"  FOUND {item['file']}:{item['line']} {item['function']}()"
             f" -> {', '.join(item['tables'])}"
         )
+        # The reason, not just the refusal. A developer whose emission is correct but
+        # unrecognised otherwise has one documented way out -- the exemption marker --
+        # which is the habit this gate exists to break.
+        if item.get("why"):
+            lines.append(f"      why: {item['why']}")
+        elif item.get("detail"):
+            lines.append(f"      why: {item['detail']}")
     lines.append("")
     lines.append(
         "A row written straight into a projection cannot be replayed. Every one of these"

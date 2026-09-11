@@ -114,15 +114,35 @@ _ENFORCEMENT_KEYS = ("detector", "eval", "judgment")
 #: seat covers only the middle of the three variants.
 _SEATS = frozenset(
     {
-        "The Warden",
-        "The Machinist",
-        "The Archivist",
-        "The Surveyor",
-        "The Herald",
-        "The Interpreter",
-        "The Falsifier",
-        "The Custodian",
-        "The Cartographer",
+        "Chair and verdict owner",
+        "Evidence referee",
+        "Reviewer's reviewer",
+        "Merge-order steward",
+        "Claim and closure auditor",
+        "Gate-integrity engineer",
+        "Test-integrity inquisitor",
+        "AuthZ and identity",
+        "Untrusted input and abuse limits",
+        "Secrets and data-at-rest",
+        "Supply chain and provenance",
+        "Cloud IAM and IaC",
+        "GitOps and rollout safety",
+        "Release and version model",
+        "Distributed state and concurrency",
+        "Data and migration",
+        "Contract and protocol",
+        "Failure semantics",
+        "Observability and audit trail",
+        "Design-system conformance",
+        "Accessibility",
+        "Frontend behavior and payload",
+        "CLI and operator ergonomics",
+        "Agent and plugin runtime",
+        "Mission-domain consequence",
+        "Governance canon and board",
+        "Docs, style, and attribution",
+        "Code quality and structure",
+        "Event-substrate custodian",
     }
 )
 
@@ -236,6 +256,37 @@ def run() -> dict:
             problem = _detector_runnable(str(lane.get("detector") or ""))
             if problem:
                 errors.append(f"{lane_id}: detector is not runnable -- {problem}")
+            # Rule `detector-lane-declares-what-it-leaves-undecided` (canonical/rules.yml),
+            # which this branch is the enforcement of. WO d0658106.
+            #
+            # A detector is a narrow mechanical predicate standing in for a prose
+            # question, and the two are rarely the same size. `a-branch-behind-its-base`
+            # asks "how far behind its base is this branch, AND did anyone ask it to
+            # sync"; its detector counts commits, and the lane rendered `clean` with the
+            # second half answered by nobody. That is reporting clean on ground the check
+            # never examined -- the signature several seats at this table exist to refuse,
+            # found on the table itself.
+            #
+            # `defers: []` IS A CLAIM, NOT AN OPT-OUT: it asserts the check decides the
+            # whole question, and is falsifiable by reading the lane. An absent key is
+            # refused because "nothing deferred" and "nobody considered it" must not look
+            # the same -- which is the identical distinction this registry already draws
+            # between an enforced lane and a declared judgment.
+            #
+            # Asked only of detector lanes. An eval puts the lane's whole
+            # question to a grader and a judgment lane puts it to a person; neither
+            # narrows the question to a predicate, so there is nothing to defer and the
+            # key would be a box to tick.
+            if "defers" not in lane:
+                errors.append(
+                    f"{lane_id}: detector lane declares no `defers`. Name what this"
+                    " check does NOT decide, or declare `defers: []` to claim it decides"
+                    " the lane's whole question."
+                )
+            elif not isinstance(lane.get("defers"), list):
+                errors.append(
+                    f"{lane_id}: `defers` must be a list, not" f" {type(lane['defers']).__name__}."
+                )
         elif key == "eval":
             target = REPO_ROOT / str(lane.get("eval") or "")
             if not target.is_file():
