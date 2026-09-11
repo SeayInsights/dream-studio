@@ -222,7 +222,13 @@ def test_the_seat_column_fits_the_longest_seat():
     for seat in report["lanes"]:
         if seat["kind"] == "detector":
             continue
-        assert f"  {seat['seat']:<{width}} {seat['question']}" in rendered, seat["seat"]
+        # AN ABSTAINING SEAT RENDERS ITS REASON, NOT ITS QUESTION -- it is seated with
+        # nothing to judge yet, so no question is put to the reader. Still checked for
+        # padding here rather than skipped: excluding it from the alignment test is how a
+        # column would quietly stop fitting the longest seat, which is the one that
+        # abstains.
+        cell = seat.get("abstained_why") if seat.get("abstained") else seat["question"]
+        assert f"  {seat['seat']:<{width}} {cell}" in rendered, seat["seat"]
 
 
 def test_a_seat_longer_than_the_floor_still_aligns(monkeypatch):
@@ -557,3 +563,275 @@ def test_a_real_finding_still_reports_found(monkeypatch):
     assert "[FOUND]" in rendered
     assert "found something" in rendered
     assert "[UNRUN]" not in rendered, rendered
+
+
+# ── WO d0658106: the table is convened, not merely registered ──────────────────
+
+
+def test_a_change_set_that_edits_the_table_is_flagged_as_self_review():
+    """The table judging its own definition must say so.
+
+    When the change set edits `canonical/review_lanes.yml` or this module, the lens and
+    the subject are the same artifact -- a reviewer grading its own rubric. That is not a
+    reason to skip the review, but leaving it unsaid lets the report be read as
+    independent when it is not. The Grader-integrity seat refuses exactly this shape
+    elsewhere; it has to hold when the seat is looking at itself.
+    """
+    report = convene(run_detectors=False, paths=["canonical/review_lanes.yml", "README.md"])
+
+    assert report["self_review"] == ["canonical/review_lanes.yml"]
+    rendered = round_table._render(report)
+    assert "SELF-REVIEW" in rendered
+    assert "canonical/review_lanes.yml" in rendered
+
+
+def test_a_change_set_that_leaves_the_table_alone_is_not_flagged():
+    """The negative case, without which the flag could be unconditional."""
+    report = convene(run_detectors=False, paths=["core/work_orders/close.py"])
+
+    assert report["self_review"] == []
+    assert "SELF-REVIEW" not in round_table._render(report)
+
+
+def test_the_reviewers_reviewer_abstains_rather_than_passing_vacuously():
+    """The one seat with no input on a first pass must not read as a lane with no issues.
+
+    It audits other seats' findings, and on a first convening there are none. Asking the
+    question would put an unanswerable lane in front of a reader; answering it would be a
+    pass over an empty set. "Looked and found nothing" and "had nothing to look at" are
+    different answers, and only one of them is reassuring.
+    """
+    report = convene(run_detectors=False, all_seats=True)
+
+    seat = next(ln for ln in report["lanes"] if ln["lane"] == "reviewer-s-reviewer")
+    assert seat.get("abstained") is True
+    assert "no prior verdict" in seat.get("abstained_why", "")
+
+    # And it is NOT counted among the questions a person still owes an answer to.
+    assert "reviewer-s-reviewer" not in report["awaiting_judgment"]
+    assert "reviewer-s-reviewer" in report["abstained"]
+
+    rendered = round_table._render(report)
+    assert "ABSTAINED" in rendered
+
+
+def test_the_reviewers_reviewer_takes_its_seat_once_there_are_findings():
+    """The abstention is conditional on having nothing to re-check, not permanent.
+
+    Without this, `abstained = True` hardcoded would satisfy the test above forever and
+    the seat would never sit -- a lane that can only abstain is a lane that was removed.
+    """
+    report = convene(
+        run_detectors=False,
+        all_seats=True,
+        prior_findings=[{"title": "a finding from the previous pass"}],
+    )
+
+    seat = next(ln for ln in report["lanes"] if ln["lane"] == "reviewer-s-reviewer")
+    assert not seat.get("abstained"), "with a prior finding to re-check, the seat must sit"
+    assert "reviewer-s-reviewer" in report["awaiting_judgment"]
+
+
+def test_the_table_reports_its_own_reach_rather_than_hanging_it_on_a_lane():
+    """Attribution reach qualifies the TABLE, and used to ride on branch-freshness.
+
+    `attribution_reach()` counts how many open work orders declare a module boundary an
+    edit can be attributed to. It was attached to the `a-branch-behind-its-base` lane,
+    whose question is how many commits behind its base a branch is -- a number it
+    qualifies in no way. An honestly computed value reported against the wrong question is
+    the Observability seat's own signature, and it was on this module.
+    """
+    report = convene(run_detectors=False, all_seats=True)
+
+    assert "attribution_reach" in report, "the table's reach belongs to the table"
+    for lane in report["lanes"]:
+        assert (
+            "attribution_reach" not in lane
+        ), f"{lane['lane']} carries a reach number that says nothing about its question"
+
+
+def test_the_verdict_records_which_lanes_were_convened(tmp_path, monkeypatch):
+    """verify() must convene the table, and the verdict must name what it convened.
+
+    THE DEFECT: `convene()` had two callers, its own CLI and its own test. A verdict
+    carried scores and named no lens, so one produced against the whole bench and one
+    produced with the table never opened were indistinguishable to `independent_review`.
+
+    Driven through the REAL `verify_work_order` with canned graders rather than asserted
+    against the source text -- a grep for `convene(` would pass on a call that raises and
+    is swallowed, which is the failure mode most likely to actually happen here.
+    """
+    import uuid as _uuid
+
+    from tests.unit.test_verify_authority_gate import (
+        _make_db,
+        _make_git_repo,
+        _patch_db,
+        _seed_wo,
+    )
+
+    monkeypatch.setenv("DREAM_STUDIO_VERIFY_MOCK", "1")
+    repo = _make_git_repo(tmp_path, ["chore: unrelated"])
+    db_path = _make_db(tmp_path)
+    wo_id = str(_uuid.uuid4())
+    _seed_wo(db_path, work_order_id=wo_id, title="WO-TABLE - x", ac="SQL-CHECK: SELECT 1")
+    monkeypatch.setattr("core.work_orders.verify_git._collect_git_commits", lambda *a, **k: None)
+
+    with _patch_db(db_path):
+        from core.work_orders.verify import verify_work_order
+
+        result = verify_work_order(
+            work_order_id=wo_id,
+            source_root=repo,
+            dream_studio_home=tmp_path,
+            planning_root=tmp_path / "planning",
+        )
+
+    table = result.get("round_table")
+    assert table is not None, "the verdict must carry a round-table section, never omit it"
+    assert table.get("seats"), (
+        "verify convened no lane. A verdict with no lens is a score with no provenance, "
+        f"and independent_review now refuses it. Section was: {table}"
+    )
+    seat = table["seats"][0]
+    assert {"seat", "lane", "kind"} <= set(seat), f"a recorded seat must be identifiable: {seat}"
+    assert table.get("status") in {"pass", "fail", "unchecked", "unavailable"}
+
+
+def test_an_attestation_declares_that_it_convened_nothing(tmp_path, monkeypatch):
+    """The sibling path, which convenes no table ON PURPOSE.
+
+    `ds work-order attest` is a person certifying work with no machine-traceable
+    evidence -- there is no diff for a lane to be relevant to. But a MISSING key would be
+    indistinguishable from a verdict written before the table existed, and the close gate
+    has to tell those apart. The absence is declared rather than left blank.
+    """
+    import json as _json
+    import uuid as _uuid
+
+    from tests.unit.test_verify_authority_gate import _make_db, _make_git_repo, _patch_db, _seed_wo
+
+    repo = _make_git_repo(tmp_path, ["chore: unrelated"])
+    db_path = _make_db(tmp_path)
+    wo_id = str(_uuid.uuid4())
+    _seed_wo(db_path, work_order_id=wo_id, title="WO-ATTEST - x", ac=None)
+
+    with _patch_db(db_path):
+        from core.work_orders.artifacts import get_wo_artifact
+        from core.work_orders.verify import attest_work_order
+
+        out = attest_work_order(
+            work_order_id=wo_id,
+            reason="design-only work, verified by hand",
+            source_root=repo,
+            dream_studio_home=tmp_path,
+            planning_root=tmp_path / "planning",
+        )
+        assert out["ok"], out
+        stored = _json.loads(get_wo_artifact(wo_id, "review_verdict", db_path=db_path))
+
+    assert stored["round_table"]["status"] == "not_convened"
+    assert stored["round_table"]["seats"] == []
+    assert "attestation" in stored["round_table"]["why"]
+
+
+def test_the_review_skill_dispatches_the_subagent_through_the_table():
+    """The operator's rule, made a property of the skill rather than of anyone's memory.
+
+    A review is run by an agent that did not write the code, and that agent reviews
+    through the registry -- not through a checklist it invents on the spot. The subagent
+    section used to dispatch a "spec reviewer" and a "code quality reviewer" against a
+    generic JSON schema with no mention of the table at all, while the table appeared
+    only in a section addressed to the caller. So the bench existed and the dispatched
+    reviewer never saw it.
+
+    Asserted on the SUBAGENT SECTION specifically. The file mentions the table elsewhere,
+    and checking the whole document would pass on exactly the arrangement that was wrong.
+    """
+    text = (REPO_ROOT / "canonical/skills/core/modes/review/SKILL.md").read_text(encoding="utf-8")
+    start = text.index("## Subagent review")
+    end = text.index("## Findings format", start)
+    section = text[start:end]
+
+    assert "core.gates.round_table" in section, (
+        "the subagent dispatch does not name the round table, so a dispatched reviewer "
+        "has no instruction to convene it"
+    )
+    assert "ASKED OF YOU" in section, "the judgment lanes must be put to the subagent"
+    assert "not examined" in section, (
+        "a lane the reviewer did not examine must be reportable as such -- without it, "
+        "unexamined and clean are the same report"
+    )
+    assert "SELF-REVIEW" in section, "the circularity exception belongs in the dispatch"
+
+
+def test_the_shipped_skill_carries_the_same_dispatch_rule():
+    """A rule that lives only in canonical/ does not reach an installed adapter.
+
+    `dist/plugin` is the shipped projection and is tracked, so it goes stale the moment
+    canonical is edited without a rebuild -- which has happened four times in this repo
+    and is registered as WO e3b4713c. This is that defect's tripwire for this file.
+    """
+    shipped = REPO_ROOT / "dist/plugin/skills/ds-core/modes/review/SKILL.md"
+    if not shipped.is_file():
+        pytest.skip("dist/plugin not built in this checkout")
+
+    section = shipped.read_text(encoding="utf-8")
+    assert "core.gates.round_table" in section
+    assert "ASKED OF YOU" in section, (
+        "dist/plugin is stale: canonical instructs the subagent to convene the table and "
+        "the shipped copy does not. Rebuild with integrations.marketplace.plugin_dist"
+    )
+
+
+def test_no_lane_asks_more_than_its_enforcement_answers():
+    """A detector's question must not be wider than the detector, silently.
+
+    `a-branch-behind-its-base` asks "how far behind its base is this branch, AND did
+    anyone ask it to sync". Its detector counts commits. The second half was answered by
+    nobody while the lane rendered `clean` -- reporting clean on ground the check never
+    examined, which is the signature several seats at this table exist to refuse, found on
+    the table itself.
+
+    The remedy is a DECLARATION, not a text heuristic. Measured first: a rule flagging
+    compound questions would have flagged 21 of 30 lanes, because a setup sentence
+    followed by a question is the house framing style here -- signal that fires on 70% of
+    the population is noise. So each detector states what it does not decide, `defers: []`
+    is the positive claim that it decides everything, and an absent key is refused.
+    """
+    lanes = yaml.safe_load(
+        (REPO_ROOT / "canonical" / "review_lanes.yml").read_text(encoding="utf-8")
+    )["lanes"]
+    detectors = [ln for ln in lanes if "detector" in ln]
+    assert detectors, "no detector lanes found -- the fixture is wrong, not the registry"
+
+    for lane in detectors:
+        assert "defers" in lane, (
+            f"{lane['id']} runs a mechanical check and does not say what it leaves " "undecided"
+        )
+        assert isinstance(lane["defers"], list)
+
+    # The lane the defect was found on, held by name so a future edit cannot quietly drop
+    # the half that started this.
+    steward = next(ln for ln in lanes if ln["id"] == "a-branch-behind-its-base")
+    assert any("sync" in d for d in steward["defers"]), (
+        "the steward asks whether anyone asked this branch to sync and its detector "
+        "counts commits; that half must stay declared"
+    )
+
+
+def test_the_deferred_half_is_printed_beside_the_clean_mark():
+    """A declaration nobody renders is a comment.
+
+    The whole point is that a reviewer reading a `clean` detector lane is told, right
+    there, what that clean mark does not cover -- so it is printed even when the lane is
+    clean, which is the only case where the omission would mislead.
+    """
+    report = convene(run_detectors=False, all_seats=True)
+    rendered = round_table._render(report)
+
+    assert "NOT DECIDED HERE:" in rendered
+    assert "did anyone ask it to sync" in rendered or "ASKED this branch to sync" in rendered
+
+    steward = next(ln for ln in report["lanes"] if ln["lane"] == "a-branch-behind-its-base")
+    assert steward["defers"], "the report must carry the declaration, not just the file"

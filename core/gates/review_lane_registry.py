@@ -256,6 +256,36 @@ def run() -> dict:
             problem = _detector_runnable(str(lane.get("detector") or ""))
             if problem:
                 errors.append(f"{lane_id}: detector is not runnable -- {problem}")
+            # WO d0658106: A DETECTOR MUST SAY WHAT IT DOES NOT DECIDE.
+            #
+            # A detector is a narrow mechanical predicate standing in for a prose
+            # question, and the two are rarely the same size. `a-branch-behind-its-base`
+            # asks "how far behind its base is this branch, AND did anyone ask it to
+            # sync"; its detector counts commits, and the lane rendered `clean` with the
+            # second half answered by nobody. That is reporting clean on ground the check
+            # never examined -- the signature several seats at this table exist to refuse,
+            # found on the table itself.
+            #
+            # `defers: []` IS A CLAIM, NOT AN OPT-OUT: it asserts the check decides the
+            # whole question, and is falsifiable by reading the lane. An absent key is
+            # refused because "nothing deferred" and "nobody considered it" must not look
+            # the same -- which is the identical distinction this registry already draws
+            # between an enforced lane and a declared judgment.
+            #
+            # NOT REQUIRED OF eval OR judgment LANES. An eval puts the lane's whole
+            # question to a grader and a judgment lane puts it to a person; neither
+            # narrows the question to a predicate, so there is nothing to defer and the
+            # key would be a box to tick.
+            if "defers" not in lane:
+                errors.append(
+                    f"{lane_id}: detector lane declares no `defers`. Name what this"
+                    " check does NOT decide, or declare `defers: []` to claim it decides"
+                    " the lane's whole question."
+                )
+            elif not isinstance(lane.get("defers"), list):
+                errors.append(
+                    f"{lane_id}: `defers` must be a list, not" f" {type(lane['defers']).__name__}."
+                )
         elif key == "eval":
             target = REPO_ROOT / str(lane.get("eval") or "")
             if not target.is_file():

@@ -412,9 +412,7 @@ def convene(
     # subject are the same artifact -- a reviewer grading its own rubric. Not a reason to
     # skip the review; a reason nobody should read this report as independent.
     self_review = sorted(
-        path
-        for path in (changed_paths(repo_root) if paths is None else paths)
-        if path in _SELF
+        path for path in (changed_paths(repo_root) if paths is None else paths) if path in _SELF
     )
 
     # THE TABLE'S OWN REACH, at the table's level -- not hung on a lane. This number says
@@ -515,9 +513,7 @@ def _render(report: dict) -> str:
             lines.append(f"  {seat['seat']:<{width}} {seat.get('abstained_why', '')}")
         lines.append("")
 
-    awaiting = [
-        s for s in report["lanes"] if s["kind"] != "detector" and not s.get("abstained")
-    ]
+    awaiting = [s for s in report["lanes"] if s["kind"] != "detector" and not s.get("abstained")]
     if awaiting:
         lines += ["", "  ASKED OF YOU — no detector can decide these:", ""]
         for seat in awaiting:

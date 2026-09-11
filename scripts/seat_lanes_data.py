@@ -1357,6 +1357,50 @@ def _fold(key: str, text: str, indent: str = "    ") -> str:
     return "\n".join(out)
 
 
+#: WHAT A DETECTOR LANE'S CHECK DOES NOT DECIDE, in the lane's own words.
+#:
+#: A detector is a narrow mechanical predicate standing in for a prose question, and the
+#: two are rarely the same size. `a-branch-behind-its-base` asks "how far behind its base
+#: is this branch, AND did anyone ask it to sync" and its detector counts commits -- the
+#: second half is answered by nobody while the lane renders `clean`. That is reporting
+#: clean on ground the check never examined.
+#:
+#: ONLY DETECTOR LANES CARRY THIS. An eval puts the lane's whole question to a grader and
+#: a judgment lane puts it to a person; neither narrows the question to a predicate, so
+#: there is nothing for them to defer. Requiring the key of them would be a box to tick.
+#:
+#: Every entry below is quoted from the gate's OWN declared limits, not inferred -- each
+#: gate docstring states what it cannot see, and this table is where those statements
+#: become visible to a reviewer reading the lane rather than the source.
+DEFERS: dict[str, list[str]] = {
+    "an-untested-fallback-lane": [
+        "whether any test actually ENTERS the fallback branch -- any textual mention of"
+        " the symbol anywhere under tests/, a comment included, clears it, so this proves"
+        " a name is known to the tests rather than exercised by them",
+        "a platform dispatch written as a dict keyed on platform.system(), which has no"
+        " `if` node to find, and a platform predicate behind an abstracted name",
+        "fallbacks in files outside this change set -- the lane is diff-scoped, so the"
+        " standing backlog drains only as those files are touched",
+    ],
+    "a-per-item-wait-with-no-aggregate-deadline": [
+        "multiplication through a CALL -- a loop whose helper sleeps in its own loop is"
+        " the same defect and needs a call graph to see",
+    ],
+    "a-branch-behind-its-base": [
+        "whether anyone ASKED this branch to sync, which lives in review comments on the"
+        " pull request and not in the tree",
+        "whether being behind is a problem here -- a revert off a tag or a hotfix from a"
+        " release point is legitimately behind, which is why this lane is advisory",
+    ],
+    "a-write-no-event-can-reconstruct": [
+        "a bare UPDATE that changes a projected row's state: the scan matches"
+        " `INSERT INTO` and `INSERT OR REPLACE INTO` only, registered as WO 4fbe3282",
+        "whether replaying the emitted event actually REPRODUCES the row -- the lane"
+        " proves an event is emitted beside the write, not that its payload rebuilds it",
+    ],
+}
+
+
 def _block(lane_id: str, seat: str, spec) -> str:
     question, signature, precedent, measurement, enforcement = spec
     lines = [f"  - id: {lane_id}", f"    seat: {json.dumps(seat)}"]
@@ -1372,6 +1416,9 @@ def _block(lane_id: str, seat: str, spec) -> str:
             lines.append(f"    {key}:")
             lines += [f"      - {json.dumps(v)}" for v in table[seat]]
     kind, value = enforcement
+    if kind == "detector" and lane_id in DEFERS:
+        lines.append("    defers:")
+        lines += [f"      - {json.dumps(v)}" for v in DEFERS[lane_id]]
     if kind == "judgment":
         lines.append("    judgment: true")
         lines.append(_fold("why", value))

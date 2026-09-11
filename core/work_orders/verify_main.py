@@ -620,6 +620,28 @@ def verify_work_order(
         )
         _facts_block = facts_prompt_block(_facts)
 
+        # WO d0658106: CONVENE THE ROUND TABLE, rather than leaving 29 seats registered
+        # and called by nothing. `convene()` had exactly two callers before this -- its
+        # own CLI and its own test -- so a verdict produced with the table never convened
+        # was indistinguishable from one produced with the whole bench, and the registry
+        # was a document rather than a review.
+        #
+        # SELECTED BY RELEVANCE TO THE CHANGE SET, which the table computes itself. A
+        # second change-set computation here would be two sites deciding one question,
+        # which is the Gate-integrity seat's own signature.
+        try:
+            from core.gates.round_table import convene as _convene
+
+            _table = _convene(run_detectors=True)
+        except Exception as exc:  # noqa: BLE001 - a review must not die at its own table
+            # RECORDED AS UNAVAILABLE, NEVER OMITTED. An absent section would read as a
+            # review with no lanes to answer, which is the one reading it must never get.
+            _table = {
+                "status": "unavailable",
+                "lanes": [],
+                "unavailable": f"{type(exc).__name__}: {exc}"[:300],
+            }
+
         prompts: dict[str, str] = {
             "completion": _COMPLETION_PROMPT_TEMPLATE.format(
                 direction_context=_direction_text
@@ -1019,6 +1041,32 @@ def verify_work_order(
             # by reading, recorded so a reader can tell which half is which — and so a
             # grader outage cannot take them with it.
             "deterministic": _facts,
+            # WO d0658106: WHICH REVIEWER LENSES WERE APPLIED. Scores say how well the
+            # work did; this says what it was held against. `independent_review` refuses
+            # a verdict whose table convened nothing, so this is enforcement rather than
+            # provenance decoration.
+            "round_table": {
+                "status": _table.get("status"),
+                "seats": [
+                    {
+                        "seat": lane.get("seat"),
+                        "lane": lane.get("lane"),
+                        "kind": lane.get("kind"),
+                        "clean": lane.get("clean"),
+                        "abstained": bool(lane.get("abstained")),
+                    }
+                    for lane in _table.get("lanes", [])
+                ],
+                "selected_by_scope": _table.get("selected_by_scope"),
+                "detectors_run": _table.get("detectors_run"),
+                "detectors_unclean": _table.get("detectors_unclean"),
+                "awaiting_judgment": _table.get("awaiting_judgment"),
+                "abstained": _table.get("abstained"),
+                # The table judging its own definition, carried so a reader of the
+                # verdict is told rather than left to notice.
+                "self_review": _table.get("self_review"),
+                "unavailable": _table.get("unavailable"),
+            },
         }
         # WO-FALSIFY-FIRST-PASS: the falsification section and the UNVERIFIED
         # ledger ride the verdict. A falsification grader that could not run is
@@ -1107,6 +1155,7 @@ def verify_work_order(
         "falsification_unavailable": full_verdict.get("falsification_unavailable"),
         "falsification_diff_truncated": full_verdict.get("falsification_diff_truncated"),
         "verdict_path": str(verdict_path) if verdict_path else None,
+        "round_table": full_verdict.get("round_table"),
     }
 
 
@@ -1151,6 +1200,17 @@ def attest_work_order(
             "gaps": [],
             "spawned_work_orders": [],
             "verified_at": now,
+            # WO d0658106, and stated rather than left blank. An attestation is a HUMAN
+            # certification standing in for a machine review, so no lane is convened --
+            # but a missing key would be indistinguishable from a verdict written before
+            # the table existed, and `independent_review` has to tell those apart. The
+            # gate exempts this path by `certification_basis`, not by this marker; the
+            # marker is here so a reader of the verdict is not left guessing.
+            "round_table": {
+                "status": "not_convened",
+                "seats": [],
+                "why": "operator attestation: a person certified this, no lane was convened",
+            },
         }
         verdict_path = _persist_review_verdict(
             work_order_id,

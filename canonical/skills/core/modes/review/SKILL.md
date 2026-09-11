@@ -247,7 +247,56 @@ When invoked with Haiku for fast scan:
 
 Dispatch spec reviewer first, then code quality reviewer after spec passes. Review loops continue until all issues resolved.
 
-Each reviewer returns a JSON object matching the schema in ../../orchestration.md:
+### The dispatched reviewer convenes the table — it does not invent a checklist
+
+**Operator rule.** A review is run by an agent that did not write the code, and that agent
+reviews through `canonical/review_lanes.yml`, not through questions it thought of on the
+spot. A hand-written checklist is one agent's taste on the day; the registry is 29 seats
+derived from real review history, each held to a published standard where one governs.
+
+So the dispatch prompt MUST instruct the subagent to:
+
+1. Run `py -m core.gates.round_table` (add `--json` for a machine-readable report, `--all`
+   to convene the whole bench rather than the lanes relevant to this diff).
+2. Report the detector lanes as the table found them — `clean`, `FOUND`, or `UNRUN`. An
+   `UNRUN` lane is NOT a clean lane and must not be reported as one.
+3. Answer **every** lane in the `ASKED OF YOU` section against the diff. Each answer is
+   either a concrete defect with `file:line` and how it fails, or "no finding" with one
+   sentence naming what was checked. A lane the reviewer did not examine is reported as
+   **not examined** — never silently omitted, and never folded into "no findings".
+4. Respect the lanes the table declares it is not deciding. A lane prints
+   `NOT DECIDED HERE: …` for the half of its question its check does not answer; that half
+   is the reviewer's to answer, which is the whole reason it is printed.
+5. Report an `ABSTAINED` seat as abstained, not as clean.
+
+**Why the subagent and not the caller.** The author of a change cannot convene a table
+against their own work and have the result mean anything — the seats would be read by the
+party they are meant to constrain. `ds work-order verify` convenes the table itself and
+records the seats on the verdict; `independent_review` then refuses a verdict that convened
+no lane. The subagent path is the same rule applied to reviews that do not run through a
+work order.
+
+**When the change set edits the table itself** — `canonical/review_lanes.yml`,
+`core/gates/round_table.py`, `scripts/seat_lanes_data.py`, or
+`core/gates/review_lane_registry.py` — the report says `SELF-REVIEW` at the top. The lens
+and the subject are the same artifact. That is not a reason to skip the review; it is a
+reason the report must not be read as independent, and a second reviewer who did not write
+the registry change should answer the seats that govern review process itself
+(Chair and verdict owner, Evidence referee, Reviewer's reviewer, Grader-integrity).
+
+Each reviewer returns a JSON object matching the schema in ../../orchestration.md, extended
+with the table's own output:
+
+```json
+{
+  "seats": [
+    {"lane": "a-write-no-event-can-reconstruct", "seat": "Event-substrate custodian",
+     "answer": "no finding | not examined | <the defect>", "location": "file:line"}
+  ]
+}
+```
+
+The base schema:
 ```json
 {
   "signal": "compliant | non_compliant",

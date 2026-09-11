@@ -97,7 +97,7 @@ TASK_STATUS_EVENT: dict[str, str | None] = {
 WORK_ORDER_EVENT_STATUS: dict[str, str] = {
     "work_order.created": "created",
     "work_order.started": "in_progress",
-    "work_order.unblocked": "in_progress",
+    "work_order.unblocked": "blocked",
     "work_order.blocked": "blocked",
     "work_order.closed": "closed",
     "work_order.cancelled": "cancelled",
@@ -146,9 +146,7 @@ def creation_status(*, work_order: bool = False) -> str:
     Derived from the creation event rather than written out, so that moving the default
     cannot leave a projection's skeleton row writing the old one.
     """
-    return status_for(
-        "work_order.created" if work_order else "task.created", work_order=work_order
-    )
+    return status_for("work_order.created" if work_order else "task.created", work_order=work_order)
 
 
 def canonical_status(status: str | None, *, work_order: bool = False) -> str:

@@ -477,8 +477,7 @@ def test_the_two_status_maps_agree_where_they_overlap():
         declared = set(forward)
         for event, status in backward.items():
             assert status in declared, (
-                f"{kind} event {event!r} produces {status!r}, which is not a declared "
-                "status"
+                f"{kind} event {event!r} produces {status!r}, which is not a declared " "status"
             )
 
 
