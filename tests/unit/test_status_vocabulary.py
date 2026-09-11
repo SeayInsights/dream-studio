@@ -9,10 +9,23 @@ PRESENT found 459 rows the substrate could not express:
     business_tasks.done              27   no task.completed event on any of them
     business_tasks.open              10   only 1 of 10 had a task.created event
 
-The consequence is broader than the missing-creation-event defect it was found under: a
-rebuild misrepresents a `cancelled` row EVEN WHEN its creation event already exists,
-because replay reaches whatever the last handled event sets and no handled event set
-`cancelled`. Work someone deliberately abandoned came back open.
+THE CREATION-EVENT OVERLAP IS THE NUMBER THAT SEPARATES URGENT FROM LATENT, and the first
+pass of this work order did not compute it -- an independent review asked for it by status
+rather than in aggregate. Measured on the live authority 2026-09-11:
+
+    status                          rows   has creation event   missing it
+    business_work_orders.cancelled    53                    8           45
+    business_work_orders.deleted      16                    1           15
+    business_tasks.cancelled         369                   95          274
+    business_tasks.done               27                    1           26
+    business_tasks.open               10                    1            9
+
+The two columns fail DIFFERENTLY, which is why the split matters. The 369 rows MISSING a
+creation event are deleted outright by a rebuild -- destructive, and loud. The 106 that
+HAVE one survive and come back WRONG: replay reaches whatever the last handled event set,
+and no handled event set `cancelled`, so work someone deliberately abandoned returns as
+open. That half is the urgent one precisely because it looks like success -- a rebuild
+reports rows restored, and 95 abandoned tasks are back on the board.
 
 THE PRODUCIBLE SET IS DERIVED BY DRIVING A REBUILD, NOT BY READING THE HANDLERS. A test
 that greps handler source for status literals is a transcription of someone else's code
@@ -32,6 +45,7 @@ from __future__ import annotations
 
 import pathlib
 import sqlite3
+import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -49,6 +63,10 @@ from core.work_orders.task_status import (
 )
 
 _NOW = "2026-09-11T00:00:00+00:00"
+
+#: Located from the production module this test reads, not from this file, so moving the
+#: test does not silently repoint the paths it asserts about.
+_REPO_ROOT = Path(sys.modules[WorkOrderProjection.__module__].__file__).resolve().parents[2]
 
 #: Read from production, not redeclared here. A vocabulary a writer cannot import is a
 #: note, not a closed set -- this constant lived only in this test file until WO 20796691
@@ -370,29 +388,98 @@ def test_the_work_order_vocabulary_is_declared_in_production():
 def test_the_projections_read_the_declared_vocabulary():
     """A vocabulary nothing reads refuses nothing.
 
-    The constants were moved into production and an independent review pointed out the
-    obvious next question: who reads them. If no writer or consumer imports them, a new
-    status string is still admitted by everything and the declaration is a note.
+    THE FIRST VERSION OF THIS TEST DID NOT CHECK ITS OWN NAME. It asserted that each
+    projection CONSUMES the event types the vocabulary names -- event-type coverage, which
+    was already true and stayed true while both projections went on writing
+    `SET status = 'complete'` as inline SQL literals. An independent review caught the
+    gap: the test was named for the import-and-membership property and asserted something
+    adjacent to it, so the task it certified was marked done while the projections read
+    nothing.
 
-    What makes it binding is the map: every status a projection can produce must appear in
-    the declared vocabulary, and every declared status must name the event that produces
-    it. Derived by asking the projections what they consume, not by listing them here.
+    The property is that a projection CANNOT NAME A STATUS ITSELF. Every status it writes
+    comes back from `status_for` or `creation_status`, so a status the vocabulary does not
+    declare is unreachable from a projection rather than merely discouraged.
+
+    THIS TEST READS SOURCE, WHICH THIS MODULE'S DOCSTRING OTHERWISE FORBIDS, and the
+    distinction is real: the rebuild tests answer WHICH STATUSES ARE PRODUCIBLE and must
+    drive the engine to do it, because the handlers' behaviour is the answer. This one
+    answers WHERE THE STRING CAME FROM, which is a property of the source text and cannot
+    be observed from the outside -- a projection writing 'complete' inline and one asking
+    the vocabulary for it produce identical rows.
     """
-    import core.work_orders.task_status as vocab
+    import re
+
+    for module in (
+        "core/projections/work_order_projection.py",
+        "core/projections/task_projection.py",
+    ):
+        text = (_REPO_ROOT / module).read_text(encoding="utf-8")
+        assert "from core.work_orders.task_status import" in text, (
+            f"{module} does not import the status vocabulary, so nothing stops it "
+            "writing a status no event can produce"
+        )
+        # A status written as a literal into the status column, in either dialect the two
+        # projections use: a dict payload for safe_upsert, or inline SQL.
+        literals = re.findall(r'"status":\s*"([a-z_]+)"', text)
+        literals += re.findall(r"SET status = '([a-z_]+)'", text)
+        assert not literals, (
+            f"{module} still writes the status literal(s) {sorted(set(literals))} itself. "
+            "Every status must come from status_for()/creation_status(), or the "
+            "vocabulary and the write are two sites agreeing only by inspection"
+        )
+
+
+def test_every_consumed_event_either_produces_a_status_or_declares_it_does_not():
+    """The vocabulary must answer for every event a projection actually handles.
+
+    Coverage in the other direction from the map: `status_for` raising for an event a
+    projection consumes would be a crash at replay time, not a caught mistake.
+    `task.ac_repointed` is the one consumed event that legitimately produces no status --
+    it edits a criterion -- and it is named here so that a future event added without a
+    status is a failure rather than an omission.
+    """
     from core.projections.task_projection import TaskProjection
     from core.projections.work_order_projection import WorkOrderProjection
+    from core.work_orders.task_status import status_for
 
-    for projection, mapping in (
-        (WorkOrderProjection, vocab.WORK_ORDER_STATUS_EVENT),
-        (TaskProjection, vocab.TASK_STATUS_EVENT),
+    produces_no_status = {"task.ac_repointed"}
+    for projection, is_wo in ((WorkOrderProjection, True), (TaskProjection, False)):
+        for event in projection().consumed_event_types:
+            if event in produces_no_status:
+                continue
+            status = status_for(event, work_order=is_wo)
+            assert status, f"{event} produced an empty status"
+
+
+def test_the_two_status_maps_agree_where_they_overlap():
+    """Two maps decide what status goes with what event, in opposite directions.
+
+    They are NOT inverses: `work_order.started` and `work_order.unblocked` both produce
+    `in_progress`, so inverting either loses information. That is precisely why they can
+    drift -- the Gate-integrity lane's own signature, two sites deciding one question with
+    one consulting a subset. Every (status -> event) pair must round-trip back to that
+    status through the event -> status map.
+    """
+    from core.work_orders import task_status as vocab
+
+    for forward, backward, kind in (
+        (vocab.WORK_ORDER_STATUS_EVENT, vocab.WORK_ORDER_EVENT_STATUS, "work order"),
+        (vocab.TASK_STATUS_EVENT, vocab.TASK_EVENT_STATUS, "task"),
     ):
-        declared_events = {e for e in mapping.values() if e}
-        consumed = set(projection().consumed_event_types)
-        missing = declared_events - consumed
-        assert not missing, (
-            f"{projection.__name__} does not consume {sorted(missing)}, so the vocabulary "
-            "promises a status the projection can never reach"
-        )
+        for status, event in forward.items():
+            if event is None:
+                continue
+            assert backward.get(event) == status, (
+                f"{kind} vocabulary disagrees with itself: {status!r} names {event!r} as "
+                f"its event, but that event produces {backward.get(event)!r}"
+            )
+        # And nothing in the projection-facing map is a status the vocabulary disowns.
+        declared = set(forward)
+        for event, status in backward.items():
+            assert status in declared, (
+                f"{kind} event {event!r} produces {status!r}, which is not a declared "
+                "status"
+            )
 
 
 def test_canonical_status_has_a_production_reader():

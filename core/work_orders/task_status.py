@@ -85,6 +85,72 @@ TASK_STATUS_EVENT: dict[str, str | None] = {
 }
 
 
+#: Event -> the status a replay lands on when a projection handles it.
+#:
+#: THE DIRECTION A PROJECTION NEEDS, and NOT the inverse of the map above. Two events
+#: produce `in_progress` -- `work_order.started` and `work_order.unblocked` -- so neither
+#: map can be derived from the other: inverting status->event loses `unblocked`, and
+#: inverting event->status cannot say which of the two a backfill should emit for a row
+#: sitting at `in_progress`. They are two different questions that happen to share a
+#: vocabulary, which is exactly the arrangement that goes wrong quietly. Both are declared,
+#: and `tests/unit/test_status_vocabulary.py` fails if they disagree where they overlap.
+WORK_ORDER_EVENT_STATUS: dict[str, str] = {
+    "work_order.created": "created",
+    "work_order.started": "in_progress",
+    "work_order.unblocked": "in_progress",
+    "work_order.blocked": "blocked",
+    "work_order.closed": "closed",
+    "work_order.cancelled": "cancelled",
+    "work_order.deleted": "deleted",
+}
+
+#: The same for tasks. `task.ac_repointed` is absent deliberately: it changes a criterion
+#: and leaves the status alone, so it produces no status and must not appear here.
+TASK_EVENT_STATUS: dict[str, str] = {
+    "task.created": "pending",
+    "task.completed": "complete",
+    "task.cancelled": "cancelled",
+    "task.deleted": "deleted",
+}
+
+
+def status_for(event_type: str, *, work_order: bool = False) -> str:
+    """The status a replay lands on when this event is handled.
+
+    THE VOCABULARY AS THE SOURCE OF THE LITERAL, not a constant sitting beside one. A
+    projection that spells `SET status = 'complete'` inline has not read this module --
+    the declaration and the write are two sites that agree only by inspection, which is
+    the arrangement this module exists to end. Asking here means a projection CANNOT
+    write a status the vocabulary does not declare, because the string only ever comes
+    from the map.
+
+    An event that produces no status raises rather than returning a default. A silent
+    fallback would turn a typo'd event name into a confident write of the creation
+    status, which is the shape that put 369 tasks at `cancelled` with nothing able to
+    reproduce them.
+    """
+    mapping = WORK_ORDER_EVENT_STATUS if work_order else TASK_EVENT_STATUS
+    try:
+        return mapping[event_type]
+    except KeyError:
+        kind = "work order" if work_order else "task"
+        raise KeyError(
+            f"no {kind} status is produced by {event_type!r}."
+            f" Events that produce one: {', '.join(sorted(mapping))}"
+        ) from None
+
+
+def creation_status(*, work_order: bool = False) -> str:
+    """The status a freshly created row holds, named by the vocabulary rather than typed.
+
+    Derived from the creation event rather than written out, so that moving the default
+    cannot leave a projection's skeleton row writing the old one.
+    """
+    return status_for(
+        "work_order.created" if work_order else "task.created", work_order=work_order
+    )
+
+
 def canonical_status(status: str | None, *, work_order: bool = False) -> str:
     """The status a replay will actually land on for this row.
 

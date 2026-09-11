@@ -13,6 +13,7 @@ from datetime import datetime, UTC
 from typing import Any
 
 from core.projections.framework import Projection, RetryPolicy
+from core.work_orders.task_status import creation_status, status_for
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +144,7 @@ class TaskProjection(Projection):
             "title": payload.get("title") or _SKELETON_TITLE,
             "description": payload.get("description"),
             "acceptance_criteria": payload.get("acceptance_criteria"),
-            "status": "pending",
+            "status": creation_status(),
             "created_at": ts,
             "updated_at": now,
             "source_event_id": event_id,
@@ -195,9 +196,9 @@ class TaskProjection(Projection):
         # row exists before this runs.
         conn.execute(
             f"UPDATE {_TABLE}"
-            " SET status = 'complete', updated_at = ?, last_event_id = ?"
+            " SET status = ?, updated_at = ?, last_event_id = ?"
             " WHERE task_id = ?",
-            (now, event_id, task_id),
+            (status_for("task.completed"), now, event_id, task_id),
         )
         return 1
 
@@ -222,9 +223,9 @@ class TaskProjection(Projection):
         """
         conn.execute(
             f"UPDATE {_TABLE}"
-            " SET status = 'cancelled', updated_at = ?, last_event_id = ?"
+            " SET status = ?, updated_at = ?, last_event_id = ?"
             " WHERE task_id = ?",
-            (now, event_id, task_id),
+            (status_for("task.cancelled"), now, event_id, task_id),
         )
         return 1
 
@@ -237,9 +238,9 @@ class TaskProjection(Projection):
     ) -> int:
         conn.execute(
             f"UPDATE {_TABLE}"
-            " SET status = 'deleted', updated_at = ?, last_event_id = ?"
+            " SET status = ?, updated_at = ?, last_event_id = ?"
             " WHERE task_id = ?",
-            (now, event_id, task_id),
+            (status_for("task.deleted"), now, event_id, task_id),
         )
         return 1
 
@@ -262,7 +263,7 @@ class TaskProjection(Projection):
             f"""
             INSERT OR IGNORE INTO {_TABLE}
                 (task_id, work_order_id, project_id, title, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, 'pending', ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (task_id, work_order_id, project_id, _SKELETON_TITLE, now, now),
+            (task_id, work_order_id, project_id, _SKELETON_TITLE, creation_status(), now, now),
         )

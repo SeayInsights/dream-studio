@@ -14,6 +14,7 @@ from datetime import datetime, UTC
 from typing import Any
 
 from core.projections.framework import Projection, RetryPolicy
+from core.work_orders.task_status import creation_status, status_for
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +132,7 @@ class WorkOrderProjection(Projection):
             "milestone_id": milestone_id,
             "title": payload.get("title"),
             "work_order_type": payload.get("type"),
-            "status": "created",
+            "status": creation_status(work_order=True),
             "created_at": ts,
             "source_event_id": event_id,
             "last_event_id": event_id,
@@ -203,7 +204,7 @@ class WorkOrderProjection(Projection):
             _TABLE,
             {
                 "work_order_id": work_order_id,
-                "status": "in_progress",
+                "status": status_for("work_order.started", work_order=True),
                 "started_at": ts,
                 "last_event_id": event_id,
                 "last_updated_at": now,
@@ -226,7 +227,7 @@ class WorkOrderProjection(Projection):
             _TABLE,
             {
                 "work_order_id": work_order_id,
-                "status": "blocked",
+                "status": status_for("work_order.blocked", work_order=True),
                 "blocked_at": ts,
                 "block_reason": block_reason,
                 "last_event_id": event_id,
@@ -248,7 +249,7 @@ class WorkOrderProjection(Projection):
             _TABLE,
             {
                 "work_order_id": work_order_id,
-                "status": "in_progress",
+                "status": status_for("work_order.unblocked", work_order=True),
                 "unblocked_at": ts,
                 "block_reason": None,
                 "last_event_id": event_id,
@@ -270,7 +271,7 @@ class WorkOrderProjection(Projection):
             _TABLE,
             {
                 "work_order_id": work_order_id,
-                "status": "closed",
+                "status": status_for("work_order.closed", work_order=True),
                 "closed_at": ts,
                 "last_event_id": event_id,
                 "last_updated_at": now,
@@ -302,7 +303,7 @@ class WorkOrderProjection(Projection):
             _TABLE,
             {
                 "work_order_id": work_order_id,
-                "status": "cancelled",
+                "status": status_for("work_order.cancelled", work_order=True),
                 "closed_at": ts,
                 "last_event_id": event_id,
                 "last_updated_at": now,
@@ -322,7 +323,7 @@ class WorkOrderProjection(Projection):
             _TABLE,
             {
                 "work_order_id": work_order_id,
-                "status": "deleted",
+                "status": status_for("work_order.deleted", work_order=True),
                 "last_event_id": event_id,
                 "last_updated_at": now,
             },
@@ -347,7 +348,7 @@ class WorkOrderProjection(Projection):
             f"""
             INSERT OR IGNORE INTO {_TABLE}
                 (work_order_id, project_id, status, last_updated_at)
-            VALUES (?, ?, 'created', ?)
+            VALUES (?, ?, ?, ?)
             """,
-            (work_order_id, project_id, now),
+            (work_order_id, project_id, creation_status(work_order=True), now),
         )
