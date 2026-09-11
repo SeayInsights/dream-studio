@@ -821,6 +821,15 @@ def drain_fanned_out_categories(
                 # the read side understood the status while the write side kept making it
                 # unreconstructable. The sibling functions in this file were wired months
                 # ago; this one was named as the cause and left alone.
+                conn.execute(
+                    "UPDATE business_work_orders SET status = 'cancelled', updated_at = ?,"
+                    " description = COALESCE(description, '') || ? WHERE work_order_id = ?",
+                    (
+                        now,
+                        _DRAINED_NOTE.format(now=now, category=item["category"], keep=item["keep"]),
+                        wo_id,
+                    ),
+                )
                 _emit_creation(
                     "work_order.cancelled",
                     payload={
@@ -832,17 +841,17 @@ def drain_fanned_out_categories(
                     trace={"project_id": project_id, "work_order_id": wo_id},
                     now=now,
                 )
+        for item in task_plan:
+            for task_id in item["cancel"]:
                 conn.execute(
-                    "UPDATE business_work_orders SET status = 'cancelled', updated_at = ?,"
-                    " description = COALESCE(description, '') || ? WHERE work_order_id = ?",
+                    "UPDATE business_tasks SET status = 'cancelled', updated_at = ?,"
+                    " description = COALESCE(description, '') || ? WHERE task_id = ?",
                     (
                         now,
                         _DRAINED_NOTE.format(now=now, category=item["category"], keep=item["keep"]),
-                        wo_id,
+                        task_id,
                     ),
                 )
-        for item in task_plan:
-            for task_id in item["cancel"]:
                 _emit_creation(
                     "task.cancelled",
                     payload={
@@ -855,15 +864,6 @@ def drain_fanned_out_categories(
                         "task_id": task_id,
                     },
                     now=now,
-                )
-                conn.execute(
-                    "UPDATE business_tasks SET status = 'cancelled', updated_at = ?,"
-                    " description = COALESCE(description, '') || ? WHERE task_id = ?",
-                    (
-                        now,
-                        _DRAINED_NOTE.format(now=now, category=item["category"], keep=item["keep"]),
-                        task_id,
-                    ),
                 )
 
     return {
