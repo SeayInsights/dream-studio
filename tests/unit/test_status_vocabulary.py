@@ -30,6 +30,7 @@ no new event types; replaying their real lifecycle events normalises them.
 
 from __future__ import annotations
 
+import pathlib
 import sqlite3
 import uuid
 from datetime import UTC, datetime
@@ -40,16 +41,20 @@ import pytest
 from core.config.sqlite_bootstrap import bootstrap_database
 from core.projections.task_projection import TaskProjection
 from core.projections.work_order_projection import WorkOrderProjection
-from core.work_orders.task_status import TASK_ABANDONED_STATUSES, TASK_STATUSES
+from core.work_orders.task_status import (
+    CANONICAL_TASK_STATUSES,
+    CANONICAL_WORK_ORDER_STATUSES,
+    TASK_ABANDONED_STATUSES,
+    TASK_STATUS_SYNONYMS,
+)
 
 _NOW = "2026-09-11T00:00:00+00:00"
 
-#: Statuses the tables legitimately hold, against which the producible set is checked.
-#: `done` and `open` are absent deliberately — they are drift, and a replay normalises
-#: them onto `complete` and `pending`.
-_WORK_ORDER_STATUSES = frozenset(
-    {"created", "in_progress", "blocked", "closed", "cancelled", "deleted"}
-)
+#: Read from production, not redeclared here. A vocabulary a writer cannot import is a
+#: note, not a closed set -- this constant lived only in this test file until WO 20796691
+#: moved it beside TASK_STATUSES in the module whose docstring calls itself the one
+#: definition.
+_WORK_ORDER_STATUSES = frozenset(CANONICAL_WORK_ORDER_STATUSES)
 
 
 @pytest.fixture
@@ -215,7 +220,7 @@ def test_every_live_status_is_producible_by_some_consumed_event(authority):
         "a row holding one cannot be reconstructed by any replay"
     )
 
-    expected_tasks = set(TASK_STATUSES)
+    expected_tasks = set(CANONICAL_TASK_STATUSES)
     missing_tasks = expected_tasks - task_produced
     assert not missing_tasks, (
         f"no consumed event produces task status(es) {sorted(missing_tasks)}; "
@@ -234,10 +239,12 @@ def test_the_decision_is_recorded_and_the_vocabulary_is_closed(authority):
         "cancelled" in TASK_ABANDONED_STATUSES
     ), "cancelled is a declared abandoned state, which is why it earned event types"
     assert "done" not in _WORK_ORDER_STATUSES
-    assert "open" not in TASK_STATUSES, (
-        "open is not declared vocabulary — is_open() treats an unknown status as "
-        "outstanding, which is what pending already means"
+    assert TASK_STATUS_SYNONYMS == {"done": "complete", "open": "pending"}, (
+        "done is a second spelling of complete and open is not declared vocabulary at "
+        "all; both are normalised by a replay rather than given event types of their own"
     )
+    assert "done" not in CANONICAL_TASK_STATUSES
+    assert "open" not in CANONICAL_TASK_STATUSES
     # The two event types this work order added, named so their removal breaks a test
     # rather than silently reopening 422 rows on the next rebuild.
     assert "work_order.cancelled" in WorkOrderProjection.consumed_event_types
@@ -331,3 +338,93 @@ def test_a_row_of_every_live_status_survives_a_rebuild_unchanged(authority):
     for status, task_id in task_ids.items():
         got = _status(authority, "business_tasks", "task_id", task_id)
         assert got == status, f"task seeded {status!r} came back {got!r}"
+
+
+def test_the_work_order_vocabulary_is_declared_in_production():
+    """A vocabulary a writer cannot import is a note, not a closed set.
+
+    The task side was closed against `core/work_orders/task_status.py`, which readers
+    import. The work-order side had no equivalent: its constant was authored in this test
+    file and existed nowhere else, so a writer introducing a new status was refused by
+    nothing and the test would only complain after the value was already in the authority.
+    """
+    import core.work_orders.task_status as vocab
+
+    assert vocab.CANONICAL_WORK_ORDER_STATUSES, "the work-order vocabulary must be declared"
+    assert vocab.CANONICAL_TASK_STATUSES
+
+    # And the map that makes each one reachable by replay is declared beside it, so a
+    # status added without an event that produces it is visible at the declaration.
+    assert set(vocab.WORK_ORDER_STATUS_EVENT) == set(vocab.CANONICAL_WORK_ORDER_STATUSES), (
+        "every work-order status must name the event that produces it, or None where the "
+        "creation event alone lands on it"
+    )
+    assert set(vocab.TASK_STATUS_EVENT) == set(vocab.CANONICAL_TASK_STATUSES)
+
+    # Read from production by this test rather than redeclared in it -- the property the
+    # work order is about.
+    source = pathlib.Path(vocab.__file__).read_text(encoding="utf-8")
+    assert "CANONICAL_WORK_ORDER_STATUSES" in source
+
+
+def test_the_projections_read_the_declared_vocabulary():
+    """A vocabulary nothing reads refuses nothing.
+
+    The constants were moved into production and an independent review pointed out the
+    obvious next question: who reads them. If no writer or consumer imports them, a new
+    status string is still admitted by everything and the declaration is a note.
+
+    What makes it binding is the map: every status a projection can produce must appear in
+    the declared vocabulary, and every declared status must name the event that produces
+    it. Derived by asking the projections what they consume, not by listing them here.
+    """
+    import core.work_orders.task_status as vocab
+    from core.projections.task_projection import TaskProjection
+    from core.projections.work_order_projection import WorkOrderProjection
+
+    for projection, mapping in (
+        (WorkOrderProjection, vocab.WORK_ORDER_STATUS_EVENT),
+        (TaskProjection, vocab.TASK_STATUS_EVENT),
+    ):
+        declared_events = {e for e in mapping.values() if e}
+        consumed = set(projection().consumed_event_types)
+        missing = declared_events - consumed
+        assert not missing, (
+            f"{projection.__name__} does not consume {sorted(missing)}, so the vocabulary "
+            "promises a status the projection can never reach"
+        )
+
+
+def test_canonical_status_has_a_production_reader():
+    """A helper only its own test calls is dead, whatever its docstring says.
+
+    `canonical_status` resolves a row's status to the one a replay lands on, and exists to
+    be used by the repair that emits terminal lifecycle events. If the only caller were
+    this file, it would be test-only code in a production module -- which this repo
+    deletes rather than keeps.
+    """
+    import pathlib
+    import subprocess
+
+    import core.work_orders.task_status as vocab
+
+    root = pathlib.Path(vocab.__file__).resolve().parents[2]
+    proc = subprocess.run(
+        ["git", "grep", "-l", "canonical_status", "--", "core", "interfaces", "runtime"],
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=120,
+    )
+    readers = {
+        line.strip().replace("\\", "/")
+        for line in (proc.stdout or "").splitlines()
+        if line.strip() and "task_status.py" not in line
+    }
+    assert readers, (
+        "canonical_status is defined in production and called from nowhere in core/, "
+        "interfaces/ or runtime/ -- production-located code reachable only from tests is "
+        "dead, and this repo deletes dead code rather than keeping it"
+    )

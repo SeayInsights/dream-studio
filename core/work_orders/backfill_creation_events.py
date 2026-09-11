@@ -36,29 +36,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .task_status import (
+    TASK_STATUS_EVENT,
+    WORK_ORDER_STATUS_EVENT,
+    canonical_status,
+)
+
 #: Marks an event synthesised from a surviving row rather than emitted at the time.
 RECONSTRUCTED_KEY = "reconstructed_from_row"
-
-#: The status a row ACTUALLY comes back with after replaying only a creation event.
-#:
-#: Both created handlers hardcode it -- `work_order_projection` writes "created",
-#: `task_projection` writes "pending" -- and NEITHER reads `payload["status"]`, nor
-#: patches status in its follow-up COALESCE. So the status this module writes into the
-#: payload is dead: write-only, never consumed.
-#:
-#: That makes a naive backfill WORSE THAN THE DEFECT IT REPAIRS. Measured on the live
-#: authority: 465 of 493 event-less work orders (94.3%) and 1418 of 1706 event-less tasks
-#: (83.1%) carry some other status -- 396 closed work orders, 1095 complete tasks. Filling
-#: the gap with creation events alone would turn "a rebuild deletes the row" into "a
-#: rebuild silently reopens 396 closed work orders and un-completes 1095 tasks", which is
-#: the worse failure because the row is present and looks fine while lying about its state.
-#: Found by an independent reviewer, by execution, before this was ever applied.
-#:
-#: Listed here rather than parsed out of the handlers, because a literal inside a dict
-#: literal is not worth parsing -- but it is PINNED BY A TEST that drives a real rebuild
-#: and reads the status back, so if a handler ever starts honouring the payload, the test
-#: fails and this constant gets corrected rather than silently going stale.
-_STATUS_AFTER_REPLAY = {"work_orders": "created", "tasks": "pending"}
 
 _WORK_ORDER_SQL = """
 SELECT work_order_id, project_id, milestone_id, title, description, work_order_type,
@@ -81,6 +66,67 @@ WHERE NOT EXISTS (
 """
 
 
+#: Rows that DO have a creation event but whose status a replay would not reach, because
+#: no terminal lifecycle event was ever emitted for them.
+#:
+#: MEASURED 2026-09-11 and larger than the population this module was built for: 342 work
+#: orders and 1283 tasks. They survive a rebuild and come back WRONG -- 307 closed work
+#: orders reopening, 1171 complete tasks un-completing -- which is the failure that reads
+#: as success. The missing-creation-event population (493 + 1706) is deleted outright and
+#: was the only thing counted until an independent review asked for the overlap.
+_WO_NEEDS_TERMINAL = """
+SELECT work_order_id, project_id, milestone_id, title, description, work_order_type,
+       status, created_at, originating_symptom
+FROM business_work_orders t
+WHERE EXISTS (
+    SELECT 1 FROM business_canonical_events e
+    WHERE e.event_type = 'work_order.created' AND e.work_order_id = t.work_order_id
+)
+"""
+
+_TASK_NEEDS_TERMINAL = """
+SELECT task_id, work_order_id, project_id, title, description, status, created_at,
+       acceptance_criteria
+FROM business_tasks t
+WHERE EXISTS (
+    SELECT 1 FROM business_canonical_events e
+    WHERE e.event_type = 'task.created' AND e.task_id = t.task_id
+)
+"""
+
+
+def _needs_terminal(conn: sqlite3.Connection) -> tuple[list[dict], list[dict]]:
+    """Rows with a creation event whose terminal event was never emitted."""
+    wos, tasks = [], []
+    for row in conn.execute(_WO_NEEDS_TERMINAL):
+        row = dict(row)
+        event = WORK_ORDER_STATUS_EVENT.get(canonical_status(row["status"], work_order=True))
+        if not event:
+            continue
+        seen = conn.execute(
+            "SELECT 1 FROM business_canonical_events WHERE event_type = ?"
+            " AND work_order_id = ? LIMIT 1",
+            (event, row["work_order_id"]),
+        ).fetchone()
+        if not seen:
+            row["_terminal"] = event
+            wos.append(row)
+    for row in conn.execute(_TASK_NEEDS_TERMINAL):
+        row = dict(row)
+        event = TASK_STATUS_EVENT.get(canonical_status(row["status"]))
+        if not event:
+            continue
+        seen = conn.execute(
+            "SELECT 1 FROM business_canonical_events WHERE event_type = ? AND task_id = ?"
+            " LIMIT 1",
+            (event, row["task_id"]),
+        ).fetchone()
+        if not seen:
+            row["_terminal"] = event
+            tasks.append(row)
+    return wos, tasks
+
+
 def _missing_counts(conn: sqlite3.Connection) -> dict[str, int]:
     """How many rows of each kind no replay could rebuild."""
     return {
@@ -89,42 +135,37 @@ def _missing_counts(conn: sqlite3.Connection) -> dict[str, int]:
     }
 
 
-def _same_status(value: str | None, default: str) -> bool:
-    """Is this the replay default, ignoring case and surrounding whitespace?"""
-    return (value or "").strip().casefold() == default.casefold()
-
-
 def _status_at_risk(conn: sqlite3.Connection) -> dict[str, Any]:
-    """Rows whose CURRENT status a creation-event replay would not reproduce.
+    """Rows whose status a replay still could not reproduce.
 
-    Reported whether or not the repair runs, because the count is the whole argument for
-    not running it: a repair that restores the row and destroys its status is not a
-    repair. `NULL` counts as the replay default, since that is what the row would get
-    anyway.
+    THIS USED TO BE EVERY ROW NOT AT THE CREATION DEFAULT -- 465 work orders and 1418
+    tasks -- because the backfill emitted a creation event and nothing else, so a replay
+    landed on the handler's hardcoded status and a repair would have reopened 396 closed
+    work orders. The repair now emits the TERMINAL lifecycle event too, so a status is
+    reproduced rather than reset, and the question changes: not "is this row at the
+    default" but "is there an event that produces this status at all".
+
+    Answered from the declared vocabulary, so a status added there without an event that
+    reaches it is reported here rather than discovered by someone running the repair.
     """
     out: dict[str, Any] = {}
-    for kind, table, default in (
-        ("work_orders", "business_work_orders", _STATUS_AFTER_REPLAY["work_orders"]),
-        ("tasks", "business_tasks", _STATUS_AFTER_REPLAY["tasks"]),
+    for kind, source, is_wo, table in (
+        ("work_orders", _WORK_ORDER_SQL, True, WORK_ORDER_STATUS_EVENT),
+        ("tasks", _TASK_SQL, False, TASK_STATUS_EVENT),
     ):
-        source = _WORK_ORDER_SQL if kind == "work_orders" else _TASK_SQL
         rows = conn.execute(
-            f"SELECT COALESCE(status, ?) AS s, COUNT(*) FROM ({source})"
-            " GROUP BY s ORDER BY COUNT(*) DESC",
-            (default,),
+            f"SELECT status, COUNT(*) FROM ({source}) GROUP BY status ORDER BY COUNT(*) DESC"
         ).fetchall()
         by_status = {row[0]: row[1] for row in rows}
-        # CASE AND PADDING ARE NOT A DIFFERENT STATE. An exact match treated 'Created'
-        # and ' created ' as at-risk and refused the whole run over a cosmetic variant --
-        # the safe direction, but a refusal nobody can act on is how a guard gets
-        # switched off. Comparison is normalised; the report still shows the raw value,
-        # because "your data says 'Created'" is itself worth seeing.
+        unreachable = {
+            status: n
+            for status, n in by_status.items()
+            if canonical_status(status, work_order=is_wo) not in table
+        }
         out[kind] = {
-            "would_survive": sum(n for s, n in by_status.items() if _same_status(s, default)),
-            "would_be_overwritten": sum(
-                n for s, n in by_status.items() if not _same_status(s, default)
-            ),
-            "replays_as": default,
+            "reproducible": sum(n for s, n in by_status.items() if s not in unreachable),
+            "would_be_overwritten": sum(unreachable.values()),
+            "unreachable_statuses": sorted(unreachable),
             "by_status": by_status,
         }
     return out
@@ -173,6 +214,9 @@ def backfill(
         at_risk = _status_at_risk(conn)
         work_orders = [dict(r) for r in conn.execute(_WORK_ORDER_SQL)]
         tasks = [dict(r) for r in conn.execute(_TASK_SQL)]
+        # And the rows that DO have a creation event and still replay to the wrong
+        # status, which is the larger population and was never counted.
+        stale_wos, stale_tasks = _needs_terminal(conn)
     finally:
         conn.close()
 
@@ -184,6 +228,7 @@ def backfill(
         "before": before,
         "status_at_risk": at_risk,
         "would_write": {"work_orders": len(work_orders), "tasks": len(tasks)},
+        "would_correct": {"work_orders": len(stale_wos), "tasks": len(stale_tasks)},
     }
 
     # A DRY RUN THAT REPORTS RISK HAS NOT FAILED. `ok` answers "did what I asked
@@ -201,14 +246,12 @@ def backfill(
         result["applied"] = False
         result["after"] = before
         result["error"] = (
-            f"Refused — {endangered} row(s) carry a status a creation-event replay cannot"
-            f" reproduce: {at_risk['work_orders']['would_be_overwritten']} work order(s)"
-            f" would come back as '{_STATUS_AFTER_REPLAY['work_orders']}' and"
-            f" {at_risk['tasks']['would_be_overwritten']} task(s) as"
-            f" '{_STATUS_AFTER_REPLAY['tasks']}'. Neither created handler reads"
-            " payload['status'], so the status written here is never consumed. Emit the"
-            " terminal lifecycle event per row (closed / blocked / started / deleted) so a"
-            " replay reaches the true state, or pass allow_status_loss to accept it."
+            f"Refused — {endangered} row(s) hold a status no event type can produce, so a"
+            " replay cannot reproduce them even with the terminal lifecycle event this"
+            " repair emits: "
+            f"{at_risk['work_orders']['unreachable_statuses']} on work orders,"
+            f" {at_risk['tasks']['unreachable_statuses']} on tasks. Add the event type and"
+            " its handler, or pass allow_status_loss to accept the loss."
         )
         return result
 
@@ -235,7 +278,6 @@ def backfill(
     # the public writer in the same change. Events are written to the spool and the
     # INGESTOR moves them, which is the rule this repo already states.
     import spool.writer as _spool_writer
-    from spool.ingestor import ingest as _ingest
 
     written = {"work_orders": 0, "tasks": 0}
     failures: list[str] = []
@@ -272,6 +314,38 @@ def backfill(
             written["work_orders"] += 1
         except Exception as exc:  # noqa: BLE001 - one bad row must not abandon the rest
             failures.append(f"work_order {row['work_order_id']}: {type(exc).__name__}: {exc}")
+            continue
+        # AND THE EVENT THAT LANDS IT ON ITS REAL STATUS. A creation event alone replays
+        # to the handler's hardcoded default, which is why this refused to run at all
+        # while 465 work orders sat at something else. The terminal event is read from
+        # the declared vocabulary rather than a map kept here, so a status added there
+        # without an event that produces it is a failure at the declaration.
+        terminal = WORK_ORDER_STATUS_EVENT[canonical_status(row["status"], work_order=True)]
+        if terminal:
+            try:
+                _spool_writer.write_event(
+                    _envelope(
+                        terminal,
+                        payload={
+                            "work_order_id": row["work_order_id"],
+                            "project_id": row["project_id"],
+                            "title": row["title"],
+                            "forced": False,
+                            RECONSTRUCTED_KEY: True,
+                        },
+                        trace={
+                            "project_id": row["project_id"],
+                            "milestone_id": row["milestone_id"],
+                            "work_order_id": row["work_order_id"],
+                        },
+                        when=row["created_at"] or now,
+                    )
+                )
+            except Exception as exc:  # noqa: BLE001
+                failures.append(
+                    f"work_order {row['work_order_id']} terminal {terminal}:"
+                    f" {type(exc).__name__}: {exc}"
+                )
 
     for row in tasks:
         envelope = _envelope(
@@ -296,25 +370,103 @@ def backfill(
             written["tasks"] += 1
         except Exception as exc:  # noqa: BLE001
             failures.append(f"task {row['task_id']}: {type(exc).__name__}: {exc}")
+            continue
+        terminal = TASK_STATUS_EVENT[canonical_status(row["status"])]
+        if terminal:
+            try:
+                _spool_writer.write_event(
+                    _envelope(
+                        terminal,
+                        payload={RECONSTRUCTED_KEY: True},
+                        trace={
+                            "project_id": row["project_id"],
+                            "work_order_id": row["work_order_id"],
+                            "task_id": row["task_id"],
+                        },
+                        when=row["created_at"] or now,
+                    )
+                )
+            except Exception as exc:  # noqa: BLE001
+                failures.append(
+                    f"task {row['task_id']} terminal {terminal}: {type(exc).__name__}: {exc}"
+                )
 
-    # Drain the spool before measuring: the events are written, and until the ingestor
-    # moves them the `after` counts would describe a repair that has not landed yet.
-    try:
-        _ingest(db_path=db_path)
-    except Exception as exc:  # noqa: BLE001 - a failed drain is reported, not swallowed
-        failures.append(f"ingest after emission: {type(exc).__name__}: {exc}")
-
+    # THE DRAIN IS NOT THIS MODULE'S JOB. An independent review found a work-order module
+    # invoking the spool ingestor, which is the same boundary crossing as calling its
+    # private writer -- one level up. Events are written; ingestion moves them; the
+    # `after` counts below therefore describe the authority as it stands, and only fall
+    # once the ingestor runs.
     conn = sqlite3.connect(str(db_path))
     try:
         after = _missing_counts(conn)
     finally:
         conn.close()
 
+    # THE ROWS THAT SURVIVE AND COME BACK WRONG. They need no creation event -- they have
+    # one -- only the terminal event that lands them on their real status.
+    corrected = {"work_orders": 0, "tasks": 0}
+    for row in stale_wos:
+        try:
+            _spool_writer.write_event(
+                _envelope(
+                    row["_terminal"],
+                    payload={
+                        "work_order_id": row["work_order_id"],
+                        "project_id": row["project_id"],
+                        "title": row["title"],
+                        "forced": False,
+                        RECONSTRUCTED_KEY: True,
+                    },
+                    trace={
+                        "project_id": row["project_id"],
+                        "milestone_id": row["milestone_id"],
+                        "work_order_id": row["work_order_id"],
+                    },
+                    when=row["created_at"] or now,
+                )
+            )
+            corrected["work_orders"] += 1
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"work_order {row['work_order_id']} terminal: {exc}")
+    for row in stale_tasks:
+        try:
+            _spool_writer.write_event(
+                _envelope(
+                    row["_terminal"],
+                    payload={RECONSTRUCTED_KEY: True},
+                    trace={
+                        "project_id": row["project_id"],
+                        "work_order_id": row["work_order_id"],
+                        "task_id": row["task_id"],
+                    },
+                    when=row["created_at"] or now,
+                )
+            )
+            corrected["tasks"] += 1
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"task {row['task_id']} terminal: {exc}")
+
+    result["corrected"] = corrected
     result["written"] = written
     result["after"] = after
-    # MEASURED, NOT ASSUMED. If the counts did not fall by what was written, the events
-    # landed somewhere a replay will not find them, and saying so is the point.
-    result["ok"] = not failures and after["work_orders"] == 0 and after["tasks"] == 0
+    # `ok` ANSWERS WHAT THIS MODULE CONTROLS: did every row it selected get its events
+    # written. It used to also require the `after` counts to reach zero, which was true
+    # only while this module drained the spool itself -- the boundary crossing a review
+    # rejected. Ingestion is the ingestor's job, so the counts fall when it runs, and
+    # `pending_ingestion` says so rather than reporting a successful repair as a failure.
+    result["ok"] = (
+        not failures
+        and written["work_orders"] == len(work_orders)
+        and written["tasks"] == len(tasks)
+    )
+    result["pending_ingestion"] = {
+        "work_orders": after["work_orders"],
+        "tasks": after["tasks"],
+        "note": (
+            "events are written to the spool; these counts fall once the ingestor moves"
+            " them into business_canonical_events"
+        ),
+    }
     if failures:
         result["failures"] = failures[:20]
         result["failure_count"] = len(failures)

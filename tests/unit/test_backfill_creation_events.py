@@ -107,6 +107,19 @@ def _exists(db_path: Path, table: str, column: str, value: str) -> bool:
     return row is not None
 
 
+def _ingest_and_rebuild(db_path: Path) -> None:
+    """Drain the spool, then rebuild -- the two steps the module deliberately does not do.
+
+    The backfill writes events and stops there, because draining is the ingestor's job and
+    a work-order module reaching for it is the same boundary crossing as calling its
+    private writer. Tests drive both explicitly so the sequence is visible.
+    """
+    from spool.ingestor import ingest
+
+    ingest(db_path=db_path)
+    _rebuild(db_path)
+
+
 def test_without_the_backfill_a_historic_row_is_destroyed_by_a_rebuild(authority):
     """The defect this task exists for, shown going wrong first.
 
@@ -115,7 +128,7 @@ def test_without_the_backfill_a_historic_row_is_destroyed_by_a_rebuild(authority
     """
     wo_id, task_id, _ = _seed_eventless(authority)
 
-    _rebuild(authority)
+    _ingest_and_rebuild(authority)
 
     assert not _exists(authority, "business_work_orders", "work_order_id", wo_id)
     assert not _exists(authority, "business_tasks", "task_id", task_id)
@@ -128,9 +141,8 @@ def test_a_backfilled_row_survives_a_rebuild(authority):
     report = backfill(db_path=authority, apply=True)
     assert report["ok"], report
     assert report["written"] == {"work_orders": 1, "tasks": 1}, report
-    assert report["after"] == {"work_orders": 0, "tasks": 0}, report
 
-    _rebuild(authority)
+    _ingest_and_rebuild(authority)
 
     assert _exists(authority, "business_work_orders", "work_order_id", wo_id)
     assert _exists(authority, "business_tasks", "task_id", task_id)
@@ -158,11 +170,13 @@ def test_running_it_twice_writes_nothing_the_second_time(authority):
     _seed_eventless(authority)
 
     first = backfill(db_path=authority, apply=True)
+    from spool.ingestor import ingest
+
+    ingest(db_path=authority)
     second = backfill(db_path=authority, apply=True)
 
     assert first["written"] == {"work_orders": 1, "tasks": 1}
     assert second["written"] == {"work_orders": 0, "tasks": 0}, second
-    assert second["after"] == {"work_orders": 0, "tasks": 0}
 
 
 def test_the_event_says_it_is_a_reconstruction_and_keeps_the_original_date(authority):
@@ -173,6 +187,9 @@ def test_the_event_says_it_is_a_reconstruction_and_keeps_the_original_date(autho
     """
     wo_id, _, _ = _seed_eventless(authority)
     backfill(db_path=authority, apply=True)
+    from spool.ingestor import ingest
+
+    ingest(db_path=authority)
 
     conn = sqlite3.connect(str(authority))
     conn.row_factory = sqlite3.Row
@@ -201,6 +218,9 @@ def test_a_row_that_already_has_an_event_is_left_alone(authority):
     """Only the gap is filled — an original event is never duplicated or overwritten."""
     wo_id, _, _ = _seed_eventless(authority)
     backfill(db_path=authority, apply=True)
+    from spool.ingestor import ingest
+
+    ingest(db_path=authority)
 
     conn = sqlite3.connect(str(authority))
     try:
@@ -213,6 +233,7 @@ def test_a_row_that_already_has_an_event_is_left_alone(authority):
         conn.close()
 
     backfill(db_path=authority, apply=True)
+    ingest(db_path=authority)
 
     conn = sqlite3.connect(str(authority))
     try:
@@ -254,137 +275,83 @@ def _seed_with_status(db_path: Path, wo_status: str, task_status: str) -> tuple[
     return wo_id, task_id
 
 
-def test_apply_refuses_when_a_status_would_not_survive_the_replay(authority):
-    """The refusal is the feature, not an inconvenience."""
-    _seed_with_status(authority, "closed", "complete")
+def test_a_closed_work_order_comes_back_closed(authority):
+    """The repair the guard used to forbid, now doing the thing it forbade it for.
 
-    report = backfill(db_path=authority, apply=True)
-
-    assert report["ok"] is False, report
-    assert report["applied"] is False
-    assert "Refused" in report["error"]
-    assert report["status_at_risk"]["work_orders"]["would_be_overwritten"] == 1
-    assert report["status_at_risk"]["tasks"]["would_be_overwritten"] == 1
-
-    conn = sqlite3.connect(str(authority))
-    try:
-        events = conn.execute("SELECT COUNT(*) FROM business_canonical_events").fetchone()[0]
-    finally:
-        conn.close()
-    assert events == 0, "a refused run still wrote events"
-
-
-def test_the_refusal_names_the_counts_rather_than_saying_go_and_look(authority):
-    """An operator must be able to weigh the decision from the message itself."""
-    _seed_with_status(authority, "closed", "complete")
-
-    error = backfill(db_path=authority, apply=True)["error"]
-
-    assert "1 work order(s)" in error, error
-    assert "1 task(s)" in error, error
-    assert "'created'" in error and "'pending'" in error, error
-
-
-def test_rows_whose_status_is_the_replay_default_are_not_blocked(authority):
-    """The guard must not refuse work it has no reason to refuse.
-
-    A guard that blocks everything is as useless as one that blocks nothing — the 28
-    work orders and 288 tasks already at the default status are safe to repair.
+    A creation event alone replays to the handler's hardcoded default, so backfilling
+    one would have reopened 396 closed work orders and un-completed 1095 tasks -- worse
+    than the row loss it repairs, because the row is present and lying. The repair now
+    emits the TERMINAL lifecycle event as well, read from the declared vocabulary, so the
+    status is reproduced rather than reset. Driven through a real rebuild, because that
+    is the only thing that can show it.
     """
-    _seed_eventless(authority)  # seeds 'created' / 'pending', the replay defaults
-
-    report = backfill(db_path=authority, apply=True)
-
-    assert report["ok"] is True, report
-    assert report["written"] == {"work_orders": 1, "tasks": 1}
-
-
-def test_the_override_is_available_but_must_be_asked_for(authority):
-    """Deliberate and in writing, not cleared by habit."""
-    _seed_with_status(authority, "closed", "complete")
-
-    assert backfill(db_path=authority, apply=True)["ok"] is False
-    forced = backfill(db_path=authority, apply=True, allow_status_loss=True)
-
-    assert forced["ok"] is True, forced
-    assert forced["written"] == {"work_orders": 1, "tasks": 1}
-
-
-def test_the_replay_status_constant_matches_what_a_real_rebuild_produces(authority):
-    """Pin the constant to observed behaviour, or it silently goes stale.
-
-    `_STATUS_AFTER_REPLAY` is a literal, and a literal describing someone else's code is
-    a transcription. This drives the genuine rebuild and reads the status back, so the
-    day a handler starts honouring `payload["status"]` this fails and the guard gets
-    corrected instead of over-refusing forever.
-    """
-    from core.work_orders.backfill_creation_events import _STATUS_AFTER_REPLAY
+    from core.projections.task_projection import TaskProjection
+    from core.projections.work_order_projection import WorkOrderProjection
 
     wo_id, task_id = _seed_with_status(authority, "closed", "complete")
-    backfill(db_path=authority, apply=True, allow_status_loss=True)
-    _rebuild(authority)
+
+    report = backfill(db_path=authority, apply=True)
+    assert report["ok"], report
+    _ingest_and_rebuild(authority)
 
     conn = sqlite3.connect(str(authority))
     try:
-        wo_status = conn.execute(
+        wo = conn.execute(
             "SELECT status FROM business_work_orders WHERE work_order_id = ?", (wo_id,)
         ).fetchone()
-        task_status = conn.execute(
+        tk = conn.execute(
             "SELECT status FROM business_tasks WHERE task_id = ?", (task_id,)
         ).fetchone()
     finally:
         conn.close()
 
-    assert wo_status is not None and task_status is not None, "rows did not survive"
-    assert wo_status[0] == _STATUS_AFTER_REPLAY["work_orders"], (
-        f"a rebuild produced {wo_status[0]!r}, not {_STATUS_AFTER_REPLAY['work_orders']!r} — "
-        "the guard's constant is stale and it is now refusing or allowing the wrong rows"
-    )
-    assert task_status[0] == _STATUS_AFTER_REPLAY["tasks"], task_status[0]
+    assert wo is not None and tk is not None, "the rows did not survive the rebuild"
+    assert wo[0] == "closed", f"a closed work order came back {wo[0]!r} — reopened by its repair"
+    assert tk[0] == "complete", f"a complete task came back {tk[0]!r} — un-completed by its repair"
 
 
-def test_a_dry_run_that_reports_risk_has_not_failed(authority):
-    """`ok` answers "did what I asked succeed"; a dry run was asked to look.
+def test_a_legacy_spelling_is_normalised_rather_than_lost(authority):
+    """`done` and `open` are synonyms, not states, and a replay resolves them.
 
-    Collapsing the two made ok=False the normal result of an inspection, which trains a
-    caller to ignore it — and the first CLI wrapper would have rendered a routine look
-    as a crash. The refusal is carried on `would_refuse` instead.
+    27 tasks hold `done` and 10 hold `open` on the live authority. Neither has an event
+    type and neither should: `done` is a second spelling of `complete`, `open` of
+    `pending`. The repair must land them on the canonical spelling rather than refuse
+    them or invent a state.
     """
-    _seed_with_status(authority, "closed", "complete")
+    from core.projections.task_projection import TaskProjection
 
-    dry = backfill(db_path=authority, apply=False)
-    live = backfill(db_path=authority, apply=True)
+    _, task_id = _seed_with_status(authority, "created", "done")
 
-    assert dry["ok"] is True, dry
-    assert dry["would_refuse"] is True
-    assert "REFUSED" in dry["note"]
-    assert live["ok"] is False, "apply must still fail loudly"
-    assert live["would_refuse"] is True
+    assert backfill(db_path=authority, apply=True)["ok"]
+    _ingest_and_rebuild(authority)
+
+    conn = sqlite3.connect(str(authority))
+    try:
+        got = conn.execute(
+            "SELECT status FROM business_tasks WHERE task_id = ?", (task_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    assert got is not None and got[0] == "complete", got
 
 
-@pytest.mark.parametrize("variant", ["Created", " created ", "CREATED"])
-def test_a_cosmetic_variant_of_the_default_does_not_trigger_a_refusal(authority, variant):
-    """Case and padding are not a different state.
+def test_a_status_no_event_can_produce_is_still_refused(authority, monkeypatch):
+    """The guard still exists, for the case it is now actually about.
 
-    An exact match refused the whole run over 'Created'. That is the safe direction, but
-    a refusal nobody can act on is how a guard gets switched off.
+    It no longer asks "is this row at the creation default" -- the terminal event handles
+    that. It asks whether any event type produces this status at all, which is the
+    condition under which a repair genuinely cannot reproduce the row.
     """
-    _seed_with_status(authority, variant, "pending")
+    import core.work_orders.backfill_creation_events as mod
 
-    report = backfill(db_path=authority, apply=True)
-
-    assert report["ok"] is True, report
-    assert report["status_at_risk"]["work_orders"]["would_be_overwritten"] == 0
-
-
-def test_an_empty_status_is_still_treated_as_at_risk(authority):
-    """Normalising case must not quietly normalise 'unknown' into 'safe'."""
-    _seed_with_status(authority, "", "pending")
+    monkeypatch.setattr(mod, "WORK_ORDER_STATUS_EVENT", {"created": None})
+    _seed_with_status(authority, "closed", "pending")
 
     report = backfill(db_path=authority, apply=True)
 
     assert report["ok"] is False, report
-    assert report["status_at_risk"]["work_orders"]["would_be_overwritten"] == 1
+    assert "no event type can produce" in report["error"]
+    assert report["status_at_risk"]["work_orders"]["unreachable_statuses"] == ["closed"]
 
 
 def test_the_backfill_writes_through_the_public_writer(authority, monkeypatch):
@@ -442,7 +409,6 @@ def test_every_payload_key_written_survives_a_rebuild(authority):
     reading it, this fails and the guard that depends on it gets revisited.
     """
     from core.projections.work_order_projection import WorkOrderProjection
-    from core.work_orders.backfill_creation_events import _STATUS_AFTER_REPLAY
 
     wo_id, _, _ = _seed_eventless(authority)
     conn = sqlite3.connect(str(authority))
@@ -454,7 +420,7 @@ def test_every_payload_key_written_survives_a_rebuild(authority):
     conn.close()
 
     backfill(db_path=authority, apply=True)
-    _rebuild(authority)
+    _ingest_and_rebuild(authority)
 
     conn = sqlite3.connect(str(authority))
     conn.row_factory = sqlite3.Row
@@ -472,11 +438,8 @@ def test_every_payload_key_written_survives_a_rebuild(authority):
         "originating_symptom is written into the payload; if the handler stops reading it "
         "a defect WO loses the check that reproduces it"
     )
-    # `status` is deliberately NOT asserted here. It is required by the event contract
-    # and read by neither created handler, which is a defect in the contract rather than
-    # a property of this backfill -- registered as WO b52d7f4c. Asserting it either way
-    # from here would pin dead behaviour in place, which is how the dead thing survives.
-    assert row["status"] == _STATUS_AFTER_REPLAY["work_orders"], (
-        "a rebuild produced a different status than the constant the refusal guard is "
-        "built on -- the handler changed, so revisit _STATUS_AFTER_REPLAY"
-    )
+    # And the status the row actually had, which is the whole point of the terminal
+    # lifecycle event. `payload["status"]` is still required by the contract and read by
+    # nobody (WO b52d7f4c); what makes the status survive is the SECOND event, not that
+    # key, and this asserts the outcome rather than either mechanism.
+    assert row["status"] == "created", row["status"]

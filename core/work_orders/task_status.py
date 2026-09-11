@@ -40,6 +40,64 @@ TASK_ABANDONED_STATUSES: tuple[str, ...] = ("cancelled", "deleted")
 #: Every status the column is known to hold, so a caller can assert it has seen them all.
 TASK_STATUSES: tuple[str, ...] = TASK_DONE_STATUSES + TASK_ABANDONED_STATUSES + ("pending",)
 
+#: The statuses a REPLAY can produce, and the legacy spellings it normalises away.
+#:
+#: WO 20796691. A projection rebuild reaches whatever the last handled event sets, so the
+#: producible set is exactly one status per consumed event type. `done` and `open` are not
+#: in it and never will be: `done` is a second spelling of `complete` (TASK_DONE_STATUSES
+#: already treats them as one), and `open` is not declared vocabulary at all -- `is_open()`
+#: treats an unknown status as outstanding, which is what `pending` means. 27 tasks hold
+#: `done` and 10 hold `open` on the live authority; replaying their real lifecycle events
+#: normalises both, which is a repair rather than a loss.
+CANONICAL_TASK_STATUSES: tuple[str, ...] = ("pending", "complete", "cancelled", "deleted")
+
+#: Legacy spelling -> the canonical status a replay produces for it.
+TASK_STATUS_SYNONYMS: dict[str, str] = {"done": "complete", "open": "pending"}
+
+#: The same for work orders. Declared HERE rather than in a test, because a vocabulary a
+#: writer cannot import is not a closed set -- it is a note. `_WORK_ORDER_STATUSES` lived
+#: only in tests/unit/test_status_vocabulary.py until this work order moved it.
+CANONICAL_WORK_ORDER_STATUSES: tuple[str, ...] = (
+    "created",
+    "in_progress",
+    "blocked",
+    "closed",
+    "cancelled",
+    "deleted",
+)
+
+#: The lifecycle event that makes a replay land on each status. `created` needs no second
+#: event -- the creation event alone produces it -- so it maps to None.
+WORK_ORDER_STATUS_EVENT: dict[str, str | None] = {
+    "created": None,
+    "in_progress": "work_order.started",
+    "blocked": "work_order.blocked",
+    "closed": "work_order.closed",
+    "cancelled": "work_order.cancelled",
+    "deleted": "work_order.deleted",
+}
+
+TASK_STATUS_EVENT: dict[str, str | None] = {
+    "pending": None,
+    "complete": "task.completed",
+    "cancelled": "task.cancelled",
+    "deleted": "task.deleted",
+}
+
+
+def canonical_status(status: str | None, *, work_order: bool = False) -> str:
+    """The status a replay will actually land on for this row.
+
+    A legacy spelling resolves to the canonical one it is a synonym of; anything already
+    canonical is returned unchanged. An unrecognised value resolves to the creation
+    default, because that is what a replay would produce for it.
+    """
+    value = (status or "").strip().casefold()
+    if work_order:
+        return value if value in CANONICAL_WORK_ORDER_STATUSES else "created"
+    value = TASK_STATUS_SYNONYMS.get(value, value)
+    return value if value in CANONICAL_TASK_STATUSES else "pending"
+
 
 def is_done(status: str | None) -> bool:
     """True when this status means the task is finished."""
