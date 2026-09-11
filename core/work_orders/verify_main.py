@@ -42,6 +42,7 @@ Set DREAM_STUDIO_VERIFY_MOCK=1 to substitute deterministic fixtures for CI.
 from __future__ import annotations
 
 import os
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -213,6 +214,59 @@ def _resolve_protocol(protocol_dir: Path, name: str) -> Path | None:
 
 
 # ── Main entry point ────────────────────────────────────────────────────────────
+
+
+def _describe_graded_range(
+    work_order_id: str, *, repo_root: Path, db_path: Path | None
+) -> dict[str, Any]:
+    """The commit range a verdict is about to grade, and how far it is from HEAD.
+
+    Reports `commits_behind_head` so a reader can tell a finding about the work from a
+    finding about a tree that never contained the fix, and `stops_short_of_head` as the
+    plain statement of the same fact -- a number nobody interprets is how this went
+    unnoticed for three runs.
+    """
+    from .delivery_boundary import boundary_commit_range
+
+    out: dict[str, Any] = {}
+    try:
+        expr, why = boundary_commit_range(work_order_id, db_path=db_path)
+    except Exception as exc:  # noqa: BLE001 - provenance must not fail the review
+        return {"range": None, "unavailable": f"{type(exc).__name__}: {exc}"[:200]}
+    out["range"] = expr
+    if why:
+        out["caveat"] = why
+    if not expr:
+        return out
+    end = expr.split("..")[-1]
+    try:
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        ).stdout.strip()
+        behind = subprocess.run(
+            ["git", "rev-list", "--count", f"{end}..HEAD"],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        ).stdout.strip()
+    except Exception as exc:  # noqa: BLE001 - same rule as above
+        out["unavailable"] = f"{type(exc).__name__}: {exc}"[:200]
+        return out
+    out["head"] = head or None
+    if behind.isdigit():
+        out["commits_behind_head"] = int(behind)
+        out["stops_short_of_head"] = int(behind) > 0
+        if int(behind):
+            out["warning"] = (
+                f"this verdict graded a range ending {behind} commit(s) before HEAD."
+                " A finding here may already be fixed in a commit the grader never saw"
+            )
+    return out
 
 
 def prior_verdict_findings(
@@ -455,6 +509,15 @@ def verify_work_order(
         from .delivery_boundary import boundary_diff_text
 
         _boundary_diff, _boundary_note = boundary_diff_text(
+            work_order_id, repo_root=Path(_search_root), db_path=db_path
+        )
+        # WO 654a54d7: WHICH RANGE THIS VERDICT GRADED, AND WHERE HEAD WAS.
+        #
+        # Three verify runs on WO 20796691 re-reported findings that were false at HEAD,
+        # because the graded range ended four commits behind it. A grader noticed in prose;
+        # nothing computed it, and the verdict recorded only `evidence_layer`. This is the
+        # number separating "the fix did not work" from "the fix was never looked at".
+        _graded_range = _describe_graded_range(
             work_order_id, repo_root=Path(_search_root), db_path=db_path
         )
         # WO-BOUNDARY-OPEN-END review finding: the range-replaces-grep choice now
@@ -1090,6 +1153,8 @@ def verify_work_order(
             # by reading, recorded so a reader can tell which half is which — and so a
             # grader outage cannot take them with it.
             "deterministic": _facts,
+            # WO 654a54d7: the range this verdict is about, and its distance from HEAD.
+            "graded_range": _graded_range,
             # WO d0658106: WHICH REVIEWER LENSES WERE APPLIED. Scores say how well the
             # work did; this says what it was held against. `independent_review` refuses
             # a verdict whose table convened nothing, so this is enforcement rather than
@@ -1205,6 +1270,7 @@ def verify_work_order(
         "falsification_diff_truncated": full_verdict.get("falsification_diff_truncated"),
         "verdict_path": str(verdict_path) if verdict_path else None,
         "round_table": full_verdict.get("round_table"),
+        "graded_range": full_verdict.get("graded_range"),
     }
 
 

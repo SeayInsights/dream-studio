@@ -512,6 +512,50 @@ def boundary_diff_text(
     return "".join(sections), ("; ".join(notes) if notes else None)
 
 
+def _work_order_is_reopened(work_order_id: str, *, db_path: Path | None = None) -> bool:
+    """True only when the authority POSITIVELY says this work order is not closed.
+
+    THE PIN MEANS "FINISHED", AND ONLY CLOSE MEANS FINISHED.
+    `record_delivery_boundary_end` fires when the last task is marked done, which is a
+    weaker claim: a verdict can still fail and send the work order back to work, and its
+    remediation then lands after the pin.
+
+    THE DEFAULT KEEPS THE PIN, and that direction was chosen against a measurement rather
+    than by instinct. A first cut widened whenever the status could not be read, which
+    re-opened the defect `test_a_finished_boundary_does_not_range_to_head` exists for: an
+    open range on work order 3e6cf265 assembled 217,524 chars of three other work orders'
+    changes and timed the grader out at 360s twice. A stamped end is positive evidence
+    that the work finished; a missing or unreadable status row is not evidence that it
+    did not. So only an authority that explicitly reports a non-closed status widens the
+    range -- absence of an answer leaves the pin alone.
+    """
+    import sqlite3
+
+    if db_path is None:
+        try:
+            from core.config.database import _default_db_path
+
+            db_path = Path(_default_db_path())
+        except Exception:  # noqa: BLE001 - no answer is not "reopened"
+            return False
+    try:
+        conn = sqlite3.connect(f"file:{Path(db_path).as_posix()}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return False
+    try:
+        row = conn.execute(
+            "SELECT status FROM business_work_orders WHERE work_order_id = ?",
+            (work_order_id,),
+        ).fetchone()
+    except sqlite3.Error:
+        return False
+    finally:
+        conn.close()
+    if not row or row[0] is None:
+        return False
+    return str(row[0]) != "closed"
+
+
 def boundary_commit_range(
     work_order_id: str, *, db_path: Path | None = None
 ) -> tuple[str | None, str | None]:
@@ -531,10 +575,28 @@ def boundary_commit_range(
     if not isinstance(sha, str) or not sha:
         why = boundary.get("start_commit_reason") or "no start commit recorded"
         return None, f"no commit range available: {why}"
-    if end:
+    if end and not _work_order_is_reopened(work_order_id, db_path=db_path):
         # PINNED. The work is finished, so the range is what it delivered and nothing
         # after it.
         return f"{sha}..{end}", None
+    if end:
+        # PINNED ON WORK THAT IS STILL OPEN, which is a contradiction the authority can
+        # hold and used to act on. WO 654a54d7, measured on WO 20796691 across three
+        # verify runs: the end is stamped when the LAST TASK is marked done, and "every
+        # task done" is not "closed" -- a failing verdict sends the work order back to
+        # work. Every remediation commit then landed outside the graded range, so the
+        # grader re-reported findings the fix had already closed, forever. Two of those
+        # findings were provably false at HEAD while the range ended four commits behind
+        # it.
+        #
+        # The pin is kept in the record and simply not treated as authoritative yet, so
+        # closing the work order restores it without re-stamping.
+        return f"{sha}..HEAD", (
+            f"a delivery-boundary end is recorded ({end[:12]}) but this work order is not"
+            " closed, so the pin is not yet authoritative and the range runs to HEAD."
+            " Remediation after a failed verdict lands after that pin, and grading the"
+            " pinned range would re-report findings the fix already closed"
+        )
 
     # OPEN, and the caller is TOLD it is open. ..HEAD is correct while the work order is
     # genuinely in progress. For a finished work order with no end stamped -- anything
