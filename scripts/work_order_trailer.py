@@ -34,6 +34,11 @@ def staged_files(repo_root: Path) -> list[str]:
             cwd=str(repo_root),
             capture_output=True,
             text=True,
+            # A staged path can hold any byte a filesystem allows. Without this the
+            # locale codec decodes it, and on Windows that is cp1252 -- which raises or
+            # mangles, turning a trailer helper into a broken commit.
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
         ).stdout
     except Exception:  # noqa: BLE001 - a trailer is never worth failing a commit over

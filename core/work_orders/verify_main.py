@@ -256,6 +256,8 @@ def _describe_graded_range(
             cwd=str(repo_root),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
         ).stdout.strip()
         behind = subprocess.run(
@@ -263,6 +265,8 @@ def _describe_graded_range(
             cwd=str(repo_root),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
         ).stdout.strip()
     except Exception as exc:  # noqa: BLE001 - same rule as above
