@@ -764,6 +764,17 @@ def _projected_status_writers() -> list[str]:
                 if literal:
                     line = text[: match.start()].count("\n") + 1
                     offenders.append(f"{rel}:{line} writes '{literal.group(1)}'")
+            # INSERT TOO, WHICH THE FIRST VERSION OF THIS FINDER MISSED. It scanned
+            # UPDATE only, so two INSERTs spelling 'pending' and 'created' inline sat
+            # inside the very function this work order was opened about, and the guard
+            # reported the tree clean. A finder covering one of two statement kinds is
+            # the subset-of-what-it-writes shape, found in the check built to refuse it.
+            for match in re.finditer(rf"INSERT INTO {table}\b", text):
+                window = text[match.start() : match.start() + 600]
+                declared = "pending|created|complete|closed|in_progress|blocked|cancelled|deleted"
+                for literal in re.finditer(rf"'({declared})'", window):
+                    line = text[: match.start()].count("\n") + 1
+                    offenders.append(f"{rel}:{line} INSERTs literal '{literal.group(1)}'")
         for match in re.finditer(r'"status":\s*"([a-z_]+)"', text):
             if rel.startswith("core/projections/"):
                 offenders.append(f"{rel} writes dict literal '{match.group(1)}'")
