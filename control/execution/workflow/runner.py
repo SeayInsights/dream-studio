@@ -771,6 +771,36 @@ class WorkflowRunner:
 
         return any_failed
 
+    # WO 66069823 task 2 -- WHAT A SKILL NODE MEANS HERE, decided rather than left
+    # ambient.
+    #
+    # A COMMAND node runs a subprocess and is genuinely executable by this runner. A SKILL
+    # node names a pack:mode whose body is instructions for a model, and this runner has
+    # no model to hand them to. That is why "execution" became a file read: the option
+    # nobody chose was chosen by default.
+    #
+    # CHOSEN: skill nodes are DECLARED HANDOFF POINTS. The runner dispatches them -- loads
+    # the instructions, records the invocation, stamps the node -- and an agent reading
+    # the output performs the work. The node's completion_check is what observes that it
+    # happened, which is why such a node stays `unverified` until something external
+    # satisfies it, and why a headless `ds workflow run` correctly stalls at the first one.
+    #
+    # The two rejected options, and why:
+    #
+    #   - GIVE THE RUNNER A MODEL DISPATCH SURFACE. It would make skill nodes genuinely
+    #     executable and is the largest change: the runner gains a provider dependency,
+    #     a credential path, a cost model and a timeout policy, none of which exist here
+    #     today. Rejected for now on size, not on merit; if an orchestrator is ever meant
+    #     to run unattended end to end, this is the option that gets it there.
+    #   - DELETE SKILL NODES AND MAKE EVERY NODE A COMMAND. Honest, and it discards the
+    #     thing workflows are for. The prose nodes carry the judgment a command cannot.
+    #
+    # WHAT THE DECISION OBLIGES. A handoff must be legible as a handoff. The dispatch
+    # output leads with the statement that nothing was executed, `success` from this
+    # method means LOADED and is documented as such, and no count treats an unverified
+    # node as done. A runner that cannot execute must say so -- the same rule the review
+    # bench applies when an UNRUN detector lane is not reported as a clean one.
+
     def _invoke_skill(self, specifier: str, node_id: str) -> tuple[bool, str]:
         """Invoke a skill via direct imports of ``core.skills.invocation``.
 
