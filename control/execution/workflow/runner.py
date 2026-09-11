@@ -816,23 +816,44 @@ class WorkflowRunner:
 
             # Reproduce the legacy CLI handler's stdout block so workflow
             # state captures the same operator-facing text.
+            # WO 66069823: SAY WHAT THIS RETURN IS, ABOVE THE INSTRUCTIONS.
+            #
+            # This function LOADS a skill and records the invocation; it executes nothing.
+            # That is the design -- a skill node's body is instructions for an agent, and
+            # this runner has no model to hand them to -- but the output LED with the
+            # SKILL.md text while the footer's "should now execute them" sat up to 2000
+            # characters below it. Read back from a workflow status dump, the recorded
+            # output looked like a result: an operator reported the orchestrator as broken
+            # while it was faithfully waiting for a reader that, under `ds workflow run`,
+            # is not there at all.
+            header_lines = [
+                "[handoff] NOT EXECUTED. This node was DISPATCHED, not run: the runner",
+                "loads a skill's instructions and records the invocation. It has no model",
+                "to execute them. An agent reading this output performs the work, and the",
+                "node's completion_check is what observes that it happened -- which is why",
+                "this node stays `unverified` until something external satisfies it.",
+                "",
+                "--- instructions follow ---",
+                "",
+            ]
             footer_lines = [
                 "---",
                 f"Skill: {specifier}",
                 "Mode: direct",
                 "Target: not specified",
                 "Work order: none",
-                "Invocation recorded.",
-                "",
-                (
-                    "The AI reading this output has the skill instructions above "
-                    "and should now execute them."
-                ),
+                "Invocation recorded; no work was performed by the runner.",
             ]
             output = (
-                load_result["skill_content"].rstrip() + "\n" + "\n".join(footer_lines)
+                "\n".join(header_lines)
+                + load_result["skill_content"].rstrip()
+                + "\n"
+                + "\n".join(footer_lines)
             ).strip()
-            return True, output[:2000]
+            # The header is never truncated away: it is the part that says what the
+            # rest of this text is, so a budget that cut it would restore the exact
+            # confusion this change removes.
+            return True, output[: 2000 + len("\n".join(header_lines))]
         except Exception as exc:
             return False, str(exc)[:500]
 
