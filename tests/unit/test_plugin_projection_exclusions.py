@@ -85,3 +85,43 @@ def test_no_canonical_skill_is_silently_missing_from_the_plugin():
         f"canonical skills ship nowhere and declare no reason: {unexplained}. Either "
         "project them, or add them to NOT_PROJECTED with the reason they stay behind."
     )
+
+
+def test_an_undeclared_non_routable_skill_is_refused_at_build_time(tmp_path):
+    """The builder distinguishes a declared skip from a broken pack entry.
+
+    Both used to return silently, so a skill nobody meant to drop and one deliberately
+    held back left the identical trace: nothing. That is why a review read ds-bootstrap's
+    absence as staleness. The decision now fails at the moment it is taken.
+
+    Drives the real `_normalize_pack_frontmatter`. A first version of this test raised the
+    error itself and asserted it had been raised, which proves only that `raise` works --
+    the same do-nothing shape this whole file exists to catch.
+    """
+    import pytest
+
+    from integrations.marketplace import plugin_dist
+
+    skill_md = tmp_path / "SKILL.md"
+    skill_md.write_text("body with no frontmatter", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="no declared exclusion"):
+        plugin_dist._normalize_pack_frontmatter("ds-not-a-real-skill", skill_md)
+
+
+def test_a_declared_exclusion_is_skipped_without_raising(tmp_path):
+    """The other side of that branch: declared means silence is correct.
+
+    Without this the refusal could be unconditional, the test above would still pass, and
+    every build of ds-bootstrap would blow up.
+    """
+    from integrations.marketplace import plugin_dist
+
+    skill_md = tmp_path / "SKILL.md"
+    skill_md.write_text("body with no frontmatter", encoding="utf-8")
+
+    plugin_dist._normalize_pack_frontmatter("ds-bootstrap", skill_md)
+
+    assert (
+        skill_md.read_text(encoding="utf-8") == "body with no frontmatter"
+    ), "a declared exclusion must be left untouched, not rewritten"

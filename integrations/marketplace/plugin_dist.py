@@ -80,7 +80,19 @@ def _normalize_pack_frontmatter(skill_id: str, skill_md: Path) -> None:
         return  # already the correct pack frontmatter
     fm = synthesize_skill_frontmatter(skill_id)
     if not fm:
-        return  # non-routable (e.g. ds-bootstrap) — never reached for the routable set
+        # A SKIP THAT SAYS WHICH KIND IT IS. This branch used to return on any
+        # frontmatter-synthesis miss, so a deliberately non-routable skill and one whose
+        # pack entry had gone wrong left the same trace: nothing. A review duly read the
+        # absence as a stale projection. Consulting the declared exclusions makes the two
+        # distinguishable at the moment the decision is taken, not months later.
+        declared = projection_exclusion(skill_id)
+        if declared:
+            return
+        raise ValueError(
+            f"{skill_id} has no synthesizable frontmatter and no declared exclusion."
+            " A skill that ships nowhere must say why: add it to NOT_PROJECTED with a"
+            " reason, or fix the packs.yaml entry that should make it routable."
+        )
     if has_frontmatter:
         # Strip the existing (mode-level) frontmatter block: everything through the 2nd '---'.
         parts = text.split("---", 2)
