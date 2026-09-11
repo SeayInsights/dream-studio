@@ -835,3 +835,145 @@ def test_the_deferred_half_is_printed_beside_the_clean_mark():
 
     steward = next(ln for ln in report["lanes"] if ln["lane"] == "a-branch-behind-its-base")
     assert steward["defers"], "the report must carry the declaration, not just the file"
+
+
+# ── WO d0658106: the abstention is conditional END TO END, not at the signature ──
+#
+# The first version of this work order added `prior_findings` to convene() and made the
+# Reviewer's-reviewer seat abstain without it. Nothing in production ever supplied it, so
+# the seat abstained on every real run -- a conditional whose condition only a unit test
+# could satisfy. Its own close caught that and refused: "the same mechanism-with-no-caller
+# shape task 1 was written to end". These two tests are what stop it recurring.
+
+
+def _seed_verdict_with_findings(wo_id, db_path, project_root):
+    """Store a prior verdict carrying findings, the way a real first pass would."""
+    import json as _json
+
+    from core.work_orders.artifacts import set_wo_artifact
+
+    verdict = {
+        "work_order_id": wo_id,
+        "passed": False,
+        "summary": "a previous review that found things",
+        "gaps": [{"title": "a gap the last pass filed", "category": "correctness"}],
+        "unfiled_findings": [{"title": "a finding admission refused", "gap_key": "k"}],
+    }
+    set_wo_artifact(
+        wo_id,
+        "review_verdict",
+        _json.dumps(verdict),
+        db_path=db_path,
+        generator="ds work-order verify",
+        project_root=project_root,
+    )
+
+
+def test_verify_hands_the_prior_verdicts_findings_to_the_table(tmp_path, monkeypatch):
+    """The wiring itself: what verify reads must reach convene(), not stop at the reader.
+
+    Asserted on the kwarg convene actually receives. A test that only called
+    `prior_verdict_findings` directly would pass while verify went on calling
+    `convene(run_detectors=True)` with nothing -- which is precisely the state the close
+    refused.
+    """
+    import uuid as _uuid
+
+    from tests.unit.test_verify_authority_gate import (
+        _make_db,
+        _make_git_repo,
+        _patch_db,
+        _seed_wo,
+    )
+
+    monkeypatch.setenv("DREAM_STUDIO_VERIFY_MOCK", "1")
+    repo = _make_git_repo(tmp_path, ["chore: unrelated"])
+    db_path = _make_db(tmp_path)
+    wo_id = str(_uuid.uuid4())
+    _seed_wo(db_path, work_order_id=wo_id, title="WO-PRIOR - x", ac="SQL-CHECK: SELECT 1")
+    monkeypatch.setattr("core.work_orders.verify_git._collect_git_commits", lambda *a, **k: None)
+
+    seen = {}
+
+    def _spy(**kwargs):
+        seen.update(kwargs)
+        return {"status": "pass", "lanes": [], "selected_by_scope": False}
+
+    monkeypatch.setattr(round_table, "convene", _spy)
+
+    with _patch_db(db_path):
+        _seed_verdict_with_findings(wo_id, db_path, repo)
+
+        from core.work_orders.verify import verify_work_order
+
+        verify_work_order(
+            work_order_id=wo_id,
+            source_root=repo,
+            dream_studio_home=tmp_path,
+            planning_root=tmp_path / "planning",
+        )
+
+    assert "prior_findings" in seen, (
+        "verify convened the table without passing prior findings, so the "
+        "Reviewer's-reviewer seat can only ever abstain"
+    )
+    assert seen["prior_findings"], (
+        f"verify passed an empty finding set despite a stored verdict carrying two: "
+        f"{seen['prior_findings']!r}"
+    )
+    titles = {f.get("title") for f in seen["prior_findings"]}
+    assert "a gap the last pass filed" in titles
+    assert "a finding admission refused" in titles, (
+        "unfiled findings are claims the last review made too, and are exactly the ones "
+        "most likely to have been wrong"
+    )
+
+
+def test_the_reviewers_reviewer_sits_on_the_second_verify_pass(tmp_path, monkeypatch):
+    """End to end through the real convene(): abstains with no prior verdict, sits with one.
+
+    Both directions in one test on purpose. A permanently-abstaining seat passes any test
+    that only checks the first pass, and a permanently-sitting one passes any test that
+    only checks the second.
+    """
+    import json as _json
+    import uuid as _uuid
+
+    from core.work_orders.artifacts import get_wo_artifact
+    from tests.unit.test_verify_authority_gate import (
+        _make_db,
+        _make_git_repo,
+        _patch_db,
+        _seed_wo,
+    )
+
+    monkeypatch.setenv("DREAM_STUDIO_VERIFY_MOCK", "1")
+    repo = _make_git_repo(tmp_path, ["chore: unrelated"])
+    db_path = _make_db(tmp_path)
+    monkeypatch.setattr("core.work_orders.verify_git._collect_git_commits", lambda *a, **k: None)
+
+    def _abstained_after_verify(wo_id):
+        from core.work_orders.verify import verify_work_order
+
+        result = verify_work_order(
+            work_order_id=wo_id,
+            source_root=repo,
+            dream_studio_home=tmp_path,
+            planning_root=tmp_path / "planning",
+        )
+        return (result.get("round_table") or {}).get("abstained") or []
+
+    with _patch_db(db_path):
+        first = str(_uuid.uuid4())
+        _seed_wo(db_path, work_order_id=first, title="WO-FIRST - x", ac="SQL-CHECK: SELECT 1")
+        assert "reviewer-s-reviewer" in _abstained_after_verify(
+            first
+        ), "with no prior verdict the seat has nothing to re-check and must abstain"
+
+        second = str(_uuid.uuid4())
+        _seed_wo(db_path, work_order_id=second, title="WO-SECOND - x", ac="SQL-CHECK: SELECT 1")
+        _seed_verdict_with_findings(second, db_path, repo)
+        assert "reviewer-s-reviewer" not in _abstained_after_verify(second), (
+            "a prior verdict carrying findings exists, so the seat must sit and re-check "
+            "them rather than abstain"
+        )
