@@ -178,3 +178,93 @@ def test_the_one_attestation_predicate_is_what_both_gates_read() -> None:
     assert not f({"passed": False, "certification_basis": "operator_attested"})
     assert not f({"passed": True, "certification_basis": "git_diff"})
     assert not f({})
+
+
+# ── The legacy-envelope fallback, entered rather than assumed ──────────────────
+#
+# `_envelope_absence_is_legacy` decides whether a MISSING provenance envelope is expected
+# (the work order predates envelopes) or damning (it is hand-written). It had no test
+# mentioning it anywhere, and the untested-fallback gate caught that the moment this module
+# was touched -- a fallback runs only when the primary path is unavailable, which is the
+# condition nobody develops in, so it is the code most likely to be wrong and least likely
+# to be noticed.
+
+
+class _FakeConn:
+    """Answers the one query the helper makes, including by refusing to."""
+
+    def __init__(self, created_at=None, raises=False):
+        self._created_at = created_at
+        self._raises = raises
+
+    def execute(self, *_args, **_kwargs):
+        if self._raises:
+            raise RuntimeError("business_work_orders is not in this database")
+        row = (self._created_at,) if self._created_at is not None else None
+
+        class _Cursor:
+            def fetchone(self_inner):
+                return row
+
+        return _Cursor()
+
+
+def test_a_work_order_from_before_the_cutover_is_allowed_its_missing_envelope() -> None:
+    """The fallback's reason for existing: envelopes did not exist yet."""
+    assert close_gates._envelope_absence_is_legacy(
+        _FakeConn(created_at="2026-08-18T12:00:00+00:00"), "wo-old"
+    )
+
+
+def test_a_work_order_from_after_the_cutover_is_not_excused() -> None:
+    """The boundary in the other direction, without which the helper could return True
+    unconditionally and every test above would still pass."""
+    assert not close_gates._envelope_absence_is_legacy(
+        _FakeConn(created_at="2026-08-20T12:00:00+00:00"), "wo-new"
+    )
+
+
+def test_the_cutover_day_itself_is_not_excused() -> None:
+    """`<` not `<=`: a work order created ON the cutover day postdates it."""
+    assert not close_gates._envelope_absence_is_legacy(
+        _FakeConn(created_at=close_gates._PROVENANCE_CUTOVER + "T00:00:00+00:00"), "wo-edge"
+    )
+
+
+def test_an_unreadable_timestamp_fails_open_and_that_is_deliberate() -> None:
+    """The branch nobody develops in, entered on purpose.
+
+    Refusing to close a work order because its own timestamp is unreadable would be a
+    worse failure than accepting one envelope-less artifact -- and the staleness check
+    still applies to everything that DOES carry an envelope. Both unreadable shapes are
+    driven: no row at all, and a query that raises.
+    """
+    assert close_gates._envelope_absence_is_legacy(_FakeConn(created_at=None), "wo-missing")
+    assert close_gates._envelope_absence_is_legacy(_FakeConn(raises=True), "wo-no-table")
+
+
+def test_the_envelope_requirement_consults_the_fallback() -> None:
+    """The helper is reached from the gate, not merely defined beside it.
+
+    A fallback with correct logic that nothing calls is the mechanism-with-no-caller
+    shape; this drives `_envelope_required`, which is the only reason the helper exists.
+    """
+    old, new = _FakeConn("2026-08-18T00:00:00+00:00"), _FakeConn("2026-08-20T00:00:00+00:00")
+
+    assert (
+        close_gates._envelope_required(old, "wo-old", None, "review-verdict.json", "re-run verify")
+        is None
+    ), "a pre-cutover work order must not be refused for a missing envelope"
+
+    refusal = close_gates._envelope_required(
+        new, "wo-new", None, "review-verdict.json", "re-run verify"
+    )
+    assert refusal and "provenance envelope" in refusal
+    assert "re-run verify" in refusal, "a refusal must carry the remedy it was handed"
+
+    assert (
+        close_gates._envelope_required(
+            new, "wo-new", {"generator": "ds work-order verify"}, "review-verdict.json", "r"
+        )
+        is None
+    ), "a present envelope short-circuits before the fallback is consulted at all"
