@@ -345,3 +345,88 @@ def test_both_writing_functions_route_through_one_emitter(authority):
         f"{raw_sites}. Every additional site is one more place a future fix can land "
         "in one lane and miss its sibling — which is how this defect was created."
     )
+
+
+def test_no_row_in_the_authority_is_unreconstructable(authority):
+    """WO 17466550 task 2, driven end to end: repair, replay, and nothing is lost.
+
+    Task 1 stopped the spawn path CREATING unreplayable rows. This is the other half --
+    the rows already there. On the live authority that was 493 work orders and 1706 tasks
+    with no creation event, deleted outright by a rebuild, plus 131 that survive and come
+    back with the wrong status because no terminal lifecycle event was ever emitted.
+
+    A creation event alone is not enough and the first version of the repair proved it:
+    replay lands on the handler's hardcoded default, so backfilling one would have
+    reopened 396 closed work orders. The repair emits the terminal event as well, and
+    this drives the whole sequence -- seed rows with no events at all, back them up,
+    ingest, rebuild, and require every row back with the status it went in with.
+    """
+    from core.projections.task_projection import TaskProjection
+    from core.projections.work_order_projection import WorkOrderProjection
+    from core.work_orders.backfill_creation_events import backfill
+    from spool.ingestor import ingest
+
+    project_id, milestone_id, _ = _seed_project(authority)
+    seeded: dict[str, str] = {}
+    conn = sqlite3.connect(str(authority))
+    try:
+        for status in ("created", "in_progress", "blocked", "closed", "cancelled"):
+            wo_id = str(uuid.uuid4())
+            seeded[wo_id] = status
+            conn.execute(
+                "INSERT INTO business_work_orders (work_order_id, project_id, milestone_id,"
+                " title, description, work_order_type, status, created_at, updated_at)"
+                " VALUES (?, ?, ?, 'Historic', 'd', 'infrastructure', ?, ?, ?)",
+                (wo_id, project_id, milestone_id, status, _NOW, _NOW),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    before = backfill(db_path=authority, apply=False)
+    assert before["would_refuse"] is False, before
+    assert before["would_write"]["work_orders"] >= len(seeded), before
+
+    applied = backfill(db_path=authority, apply=True)
+    assert applied["ok"], applied
+    ingest(db_path=authority)
+    _rebuild(authority, WorkOrderProjection(), TaskProjection())
+
+    conn = sqlite3.connect(str(authority))
+    try:
+        got = {
+            row[0]: row[1]
+            for row in conn.execute(
+                "SELECT work_order_id, status FROM business_work_orders"
+            ).fetchall()
+        }
+    finally:
+        conn.close()
+
+    missing = [w for w in seeded if w not in got]
+    assert (
+        not missing
+    ), f"{len(missing)} row(s) deleted by the rebuild the repair was meant to survive"
+    wrong = {w: (seeded[w], got[w]) for w in seeded if got[w] != seeded[w]}
+    assert not wrong, f"rows came back with a status they did not go in with: {wrong}"
+
+
+def test_every_projection_write_site_emits_its_event(authority):
+    """WO 17466550 task 3: the class, checked by the gate rather than by reading.
+
+    The detector derives its target tables from each projection's own `target_tables` --
+    the set `pre_rebuild` truncates, so the real blast radius -- and reports every
+    production function that INSERTs into one without emitting. This asserts the gate is
+    clean against the repository it guards AND that it examined something, because a
+    sweep that examined nothing is the failure this gate was written to catch.
+    """
+    from core.gates.event_backed_write import offenders
+
+    report = offenders()
+
+    assert report["examined"] > 0, (
+        "the gate examined zero write sites, which is not a clean sweep -- it is a sweep "
+        "that measured nothing and reported compliance"
+    )
+    assert len(report["target_tables"]) >= 4, report["target_tables"]
+    assert report["offenders"] == [], report["offenders"]

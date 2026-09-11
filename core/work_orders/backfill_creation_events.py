@@ -191,6 +191,32 @@ def _envelope(event_type: str, *, payload: dict[str, Any], trace: dict[str, Any]
     ).to_dict()
 
 
+def _terminal_payload(event: str, row: dict, reason: str) -> dict[str, Any]:
+    """The payload each terminal event's contract actually requires.
+
+    READ FROM THE REGISTRY, NOT GUESSED. A first cut sent one shape to every terminal
+    event and two failed on emission: `work_order.started` requires `type` and
+    `work_order.blocked` requires `reason`, neither of which a closed-shaped payload
+    carries. The failure was visible only because the repair reports per-row failures
+    instead of swallowing them.
+    """
+    payload: dict[str, Any] = {
+        "work_order_id": row["work_order_id"],
+        "project_id": row["project_id"],
+        "title": row["title"],
+        RECONSTRUCTED_KEY: True,
+    }
+    if event == "work_order.started":
+        payload["type"] = row["work_order_type"] or ""
+    elif event == "work_order.blocked":
+        # The row records no historical reason; saying it was reconstructed is truer
+        # than inventing one.
+        payload["reason"] = reason
+    elif event == "work_order.closed":
+        payload["forced"] = False
+    return payload
+
+
 def backfill(
     *, db_path: Path, apply: bool = False, allow_status_loss: bool = False
 ) -> dict[str, Any]:
@@ -326,13 +352,11 @@ def backfill(
                 _spool_writer.write_event(
                     _envelope(
                         terminal,
-                        payload={
-                            "work_order_id": row["work_order_id"],
-                            "project_id": row["project_id"],
-                            "title": row["title"],
-                            "forced": False,
-                            RECONSTRUCTED_KEY: True,
-                        },
+                        payload=_terminal_payload(
+                            terminal,
+                            row,
+                            "reconstructed from the row; the original reason was not recorded",
+                        ),
                         trace={
                             "project_id": row["project_id"],
                             "milestone_id": row["milestone_id"],
@@ -410,13 +434,11 @@ def backfill(
             _spool_writer.write_event(
                 _envelope(
                     row["_terminal"],
-                    payload={
-                        "work_order_id": row["work_order_id"],
-                        "project_id": row["project_id"],
-                        "title": row["title"],
-                        "forced": False,
-                        RECONSTRUCTED_KEY: True,
-                    },
+                    payload=_terminal_payload(
+                        row["_terminal"],
+                        row,
+                        "reconstructed from the row; the original reason was not recorded",
+                    ),
                     trace={
                         "project_id": row["project_id"],
                         "milestone_id": row["milestone_id"],
