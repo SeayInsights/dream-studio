@@ -59,7 +59,9 @@ from core.work_orders.task_status import (
     CANONICAL_TASK_STATUSES,
     CANONICAL_WORK_ORDER_STATUSES,
     TASK_ABANDONED_STATUSES,
+    TASK_STATUS_EVENT,
     TASK_STATUS_SYNONYMS,
+    WORK_ORDER_STATUS_EVENT,
 )
 
 _NOW = "2026-09-11T00:00:00+00:00"
@@ -274,17 +276,17 @@ def test_a_row_of_every_live_status_survives_a_rebuild_unchanged(authority):
 
     This is the claim the work order makes, and only a replay can show it. Asserting an
     event type is registered proves it is registered.
+
+    THE POPULATION COMES FROM THE VOCABULARY, not from a list kept here. It used to be
+    two literal maps transcribed into this function -- the second-copy shape this work
+    order exists to end, sitting inside the test that exists to prove it ended. Reading
+    the declared maps means a status added to the vocabulary tomorrow is SEEDED AND
+    REBUILT here automatically; a new status that nobody proved survives a replay is the
+    exact gap that left 53 work orders and 369 tasks unreproducible.
     """
     project_id, milestone_id = _seed_parents(authority)
 
-    wo_terminal = {
-        "created": None,
-        "in_progress": "work_order.started",
-        "blocked": "work_order.blocked",
-        "closed": "work_order.closed",
-        "cancelled": "work_order.cancelled",
-        "deleted": "work_order.deleted",
-    }
+    wo_terminal = WORK_ORDER_STATUS_EVENT
     ids: dict[str, str] = {}
     for status, terminal in wo_terminal.items():
         wo_id = str(uuid.uuid4())
@@ -316,12 +318,7 @@ def test_a_row_of_every_live_status_survives_a_rebuild_unchanged(authority):
                 },
             )
 
-    task_terminal = {
-        "pending": None,
-        "complete": "task.completed",
-        "cancelled": "task.cancelled",
-        "deleted": "task.deleted",
-    }
+    task_terminal = TASK_STATUS_EVENT
     task_ids: dict[str, str] = {}
     for status, terminal in task_terminal.items():
         wo_id, task_id = str(uuid.uuid4()), str(uuid.uuid4())
