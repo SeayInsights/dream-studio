@@ -1,0 +1,621 @@
+"""The operator's 28-seat review bench, plus the one seat it has no equivalent for.
+
+WHY A DATA TABLE AND A GENERATOR RATHER THAN HAND-WRITTEN YAML. Twenty-nine seats and
+thirty lanes, each owing four prose fields of at least forty characters plus exactly one
+enforcement key, is a shape where a hand-typed file goes wrong silently -- a missing
+`measurement` reads as an ordinary entry. The registry gate is the check, and this table
+is the source, so a seat added later is one row rather than a block of YAML to imitate.
+
+THE ELEVEN EXISTING LANES KEEP THEIR ENFORCEMENT. Each already has a working detector or
+a graded eval; they are RE-SEATED onto the bench seat that asks the same question, never
+rewritten. Folding them in is the point: the bench enumerates DOMAINS OF DEFECT and the
+nine registered lanes enumerated SHAPES OF VERIFICATION FAILURE, and several were the
+same question filed twice under two names, which is how a lane stops being falsifiable.
+
+THE TWENTY-NINTH SEAT. Ten of the eleven map onto a bench seat. `a-write-no-event-can-
+reconstruct` does not: no bench seat asks whether a row survives being rebuilt from its
+own events, because that is a property of this substrate rather than of review practice.
+It keeps a seat of its own, which is what makes the roster 29 and not 28.
+
+Unit counts and PR precedents are the operator's, from real review history.
+"""
+
+from __future__ import annotations
+
+#: seat -> (question, signature, precedent, measurement, enforcement)
+#: `enforcement` is ("detector", cmd) | ("eval", path) | ("judgment", why)
+SEATS: dict[str, tuple[str, str, str, str, tuple[str, str]]] = {}
+
+
+def seat(name, *, question, signature, precedent, measurement, detector=None, eval=None, why=None):
+    if detector:
+        enforcement = ("detector", detector)
+    elif eval:
+        enforcement = ("eval", eval)
+    else:
+        enforcement = ("judgment", why)
+    SEATS[name] = (question, signature, precedent, measurement, enforcement)
+
+
+# ── Permanent bench (7) ──────────────────────────────────────────────────────
+seat(
+    "Chair and verdict owner",
+    question="What is the single merge recommendation here, and is every finding's"
+    " severity calibrated against it rather than stated in isolation?",
+    signature="Many opinions and no verdict. Findings arrive at assorted severities with"
+    " nothing reconciling them, so the author receives twenty-seven views instead of one"
+    " decision and picks whichever is cheapest.",
+    precedent="The review history already speaks this way -- 'Merge recommendation:"
+    " request changes' -- so the verdict is an existing artefact, not a new ceremony.",
+    measurement="Severity calibration is a judgement across a whole review; there is"
+    " nothing to count in a single diff, and a detector that fired per-finding would be"
+    " grading the parts while the seat exists to grade the whole.",
+    why="A verdict is one recommendation over a set of findings that do not exist until"
+    " the other seats have run, so nothing can be computed from the diff alone. It"
+    " becomes an eval once convene() returns a finding set worth grading.",
+)
+seat(
+    "Evidence referee",
+    question="Which SHA and which command prove this claim, and does reverting the fix"
+    " actually turn the check red?",
+    signature="A claim with no reproduction. The author's summary is taken as the"
+    " finding, the fix is read rather than run, and nobody checks that the guard fails"
+    " when the guarded thing is broken.",
+    precedent="platform#850's mutation table: enforcement verified adversarially by"
+    " reverting the fix and requiring red, rather than by reading the diff. 1,185 units.",
+    measurement="Whether a claim carries a reproduction is checkable in the review"
+    " artefact, but whether the reproduction PROVES the claim requires running it against"
+    " a mutated tree, which is a graded exercise rather than a static scan.",
+    why="No review artefact in this repo yet carries a per-finding reproduction command,"
+    " so there is no field to check. It becomes an eval the moment a verdict records the"
+    " command that proves each finding -- which is this seat's own first deliverable.",
+)
+seat(
+    "Reviewer's reviewer",
+    question="Does every finding still hold against current HEAD, and which ones should"
+    " be withdrawn?",
+    signature="A finding that was true at review time and is false now, or was never"
+    " true. Nobody re-checks, so the author argues with a stale objection and the"
+    " reviewer's overreach costs more than the defect.",
+    precedent="sarob's withdrawn ADR renumber on platform#850 and markgalpin's"
+    " self-correction on dogfood-appliances#17. 215 dismissed reviews is this function"
+    " happening informally.",
+    measurement="Re-checking a finding means re-running its own check at a newer commit,"
+    " which the finding must carry to be re-checkable at all -- so this seat depends on"
+    " the Evidence referee's output and is graded on the pair.",
+    why="It audits other seats' findings, which do not exist until they have run, so it"
+    " has no input at diff time. It becomes an eval once a verdict carries per-finding"
+    " reproductions that can be replayed at HEAD.",
+)
+seat(
+    "Merge-order steward",
+    question="How far behind its base is this, is it the tree that actually ships, and"
+    " does anything still-open have to land first?",
+    signature="A branch reviewed in isolation. It is clean against its own base, stale"
+    " against main, and the merged tree behaves differently from either.",
+    precedent="dogfood-appliances#34: a clean textual merge producing an invalid"
+    " lockfile. release#140: a superseded duplicate. 1,262 units.",
+    measurement="Distance from base and merge-state are both computable from git without"
+    " judgement, which is why this one is a detector and not prose.",
+    detector="py -m core.gates.branch_freshness",
+)
+seat(
+    "Claim and closure auditor",
+    question="Does the PR body, the comments and the docs say what the code does, and"
+    " will `Closes #N` close the right issue?",
+    signature="A description that describes an intention. Acceptance criteria partly met"
+    " and reported as met, or a closing keyword pointed at an issue this head cannot"
+    " satisfy.",
+    precedent="platform#834 would have auto-closed the wrong issue; platform#701's 'this"
+    " head cannot close #733'. 2,638 units, the second-largest theme.",
+    measurement="Whether a caller sees something different is derivable from the diff;"
+    " whether the change SAYS so is a judgement about prose, so this is graded rather"
+    " than detected.",
+    eval="tests/evals/test_review_lane_behaviour_change_enumerated.py",
+)
+seat(
+    "Gate-integrity engineer",
+    question="Is this a gate or a report? What does it do when the thing it checks is"
+    " absent, unreportable, or failing?",
+    signature="A workflow that reports is not a gate. Required checks that never report"
+    " because a path filter excluded them, always() where success() was meant, `bash -e`"
+    " without pipefail swallowing a red plan.",
+    precedent="release#7's masked plan failure, platform#621's cached merge ref,"
+    " release#141's fail-open scan matrix. 1,578 units.",
+    measurement="The admitting predicate and the delivering predicate can be compared"
+    " where both are code, and the disagreement is counted rather than argued -- which is"
+    " what made this an eval instead of prose.",
+    eval="tests/evals/test_review_lane_predicate_parity.py",
+)
+seat(
+    "Test-integrity inquisitor",
+    question="This test is green. Show me it going red -- what does it look like when the"
+    " thing it protects is broken?",
+    signature="An assertion true by construction, new logic with no committed test, a"
+    " happy path standing in for coverage, or a flake answered with a longer timeout"
+    " instead of a root cause.",
+    precedent="platform#853: timeout inflation offered in place of a diagnosis. 1,923"
+    " units.",
+    measurement="Vacuity is graded, not detected: a test that cannot fail is only"
+    " provable by mutating the code it guards and observing that it stays green.",
+    eval="tests/evals/test_review_lane_a_test_that_cannot_fail.py",
+)
+
+# ── Security bench (5) ───────────────────────────────────────────────────────
+seat(
+    "AuthZ and identity",
+    question="Which principal is this, what may it do, and what happens to the sessions"
+    " that already exist when that answer changes?",
+    signature="Permission derive-and-intersect that widens, a token class mistaken for"
+    " another, admin scope acquired by a path nobody enumerated, or a lifecycle where"
+    " revocation does not revoke.",
+    precedent="platform#846's principal and token-class confusion; platform#533, where"
+    " re-enabling an account resurrects JWTs issued before it was disabled. Largest"
+    " single theme at 3,245 units.",
+    measurement="Deriving the effective permission set needs the authorization model,"
+    " not the diff -- two intersecting grants are correct or catastrophic depending on"
+    " the principal, which no static scan of a changed file can decide.",
+    why="There is no machine-readable authorization model in this repo to diff a change"
+    " against. It becomes a detector the day the permission derivation is expressed as"
+    " data rather than as code paths.",
+)
+seat(
+    "Untrusted input and abuse limits",
+    question="What is the full capability surface of the thing being guarded, as opposed"
+    " to what the guard's own rule list says about it?",
+    signature="A guard that enumerates the attacks it knows. The format has a mechanism"
+    " the rule list never named -- a PAX header, a nested archive, a decompression ratio"
+    " -- and the guard reports clean.",
+    precedent="platform#737's PAX/tar traversal, platform#429 validating a raw request"
+    " value for truthiness rather than as an id, platform#720 returning 500 where the"
+    " documented path is fail-closed.",
+    measurement="The gap is between a format's real surface and a rule list, and only"
+    " reading the format's specification closes it -- which is a graded exercise, not a"
+    " pattern a scanner can hold.",
+    eval="tests/evals/test_review_lane_the_surface_outside_the_rules.py",
+)
+seat(
+    "Secrets and data-at-rest",
+    question="Where does this secret come to rest, who can read it there, and what"
+    " rotates it?",
+    signature="A credential written somewhere durable with the wrong mode or the wrong"
+    " scope -- a cluster dump in plaintext, a secret store with no condition, a PAT"
+    " seeded into a script that ships.",
+    precedent="platform#595's plaintext cluster dumps and file modes; release#140's"
+    " unconditioned ClusterSecretStore. 485 records.",
+    measurement="High-entropy strings are detectable and the existing security-scan gate"
+    " finds them; what this seat adds is scope and rotation, which are properties of the"
+    " deployment rather than of the text.",
+    why="Scope and rotation live in cluster and provider configuration this repo does not"
+    " contain, so there is nothing local to compute against. The literal-secret half is"
+    " already covered by the security-scan gate.",
+)
+seat(
+    "Supply chain and provenance",
+    question="What exactly is being installed and published here, and does the identity"
+    " signing it match the identity that built it?",
+    signature="A lockfile valid on the branch and invalid on the merge, a tag where a"
+    " digest was meant, a signature check that trusts any dispatch ref, or a name that"
+    " resolves to somebody else's package.",
+    precedent="fulcrum-gateway#811 publishing and attesting under one identity;"
+    " platform#647's signature verification trusting any dispatch ref; the third-party"
+    " fulcrum PyPI name. 1,421 units.",
+    measurement="Pinning and digest-versus-tag are mechanically checkable and worth a"
+    " detector later; provenance -- whether the signing identity is the building identity"
+    " -- needs the workflow's runtime trust relationships.",
+    why="Requires resolving registry and workflow identities outside this repo. The"
+    " pinning half could become a detector over lockfiles and action refs without"
+    " waiting for the rest.",
+)
+seat(
+    "Cloud IAM and IaC",
+    question="Which external identity can assume this role, and what can it reach once it"
+    " has?",
+    signature="An OIDC trust subject matched loosely, a policy pairing CreateRole with"
+    " PassRole on a wildcard resource, an unpinned provider, or a default region that"
+    " silently places data elsewhere.",
+    precedent="release#7's Azure exact-subject requirement; privilege-escalation"
+    " primitives from Resource '*'; demo#6's region defaults. 315 records, nearly all in"
+    " release.",
+    measurement="Trust-policy subject matching is checkable against a declared allowed"
+    " set, and would make a detector -- but this repo ships no Terraform or cloud IAM,"
+    " so a detector here would examine zero sites and report clean forever.",
+    why="No IaC in this repository for a detector to examine, and a detector that"
+    " examines nothing reports clean, which is the compared-nothing-reported-clean shape"
+    " this registry exists to refuse.",
+)
+
+# ── Delivery bench (2) ───────────────────────────────────────────────────────
+seat(
+    "GitOps and rollout safety",
+    question="What is the blast radius when this reconciles automatically, and what does"
+    " prune remove that nobody listed?",
+    signature="Automation whose failure mode is deletion. Self-heal and prune acting on"
+    " an incomplete inventory, or an optional mount that silently disables a provider"
+    " rather than failing.",
+    precedent="release#185, where an automated prune could remove a working HTTPS"
+    " endpoint; optional: true secret mounts disabling a provider quietly.",
+    measurement="Blast radius depends on live cluster inventory, which is not in the"
+    " diff; the same manifest is safe or destructive depending on what is deployed.",
+    why="Needs cluster state to compute what a prune would remove. Dream Studio ships no"
+    " GitOps manifests today, so this seat is registered for projects that do rather"
+    " than for this one.",
+)
+seat(
+    "Release and version model",
+    question="Does the version this produces mean what the ecosystem consuming it thinks"
+    " it means?",
+    signature="A tag treated as a release, an upgrade task scaffolded and presented as"
+    " validation, or a version string that is legal here and illegal to the platform"
+    " that reads it.",
+    precedent="dogfood-appliances#33 treating 'tag exists' as 'content released';"
+    " release#138's scaffolded upgrade tasks presented as validation; Apple's numeric"
+    " CFBundleShortVersionString. 452 records.",
+    measurement="Version-format law is per-ecosystem and mechanically checkable where the"
+    " ecosystem is known; the harder half -- whether a tag means a release -- depends on"
+    " the publishing pipeline's own semantics.",
+    why="The format rules differ per target ecosystem and this repo publishes to none of"
+    " them yet. The released-version sentinel is already guarded by its own migration"
+    " gate.",
+)
+
+# ── Correctness bench (5) ────────────────────────────────────────────────────
+seat(
+    "Distributed state and concurrency",
+    question="This wait is bounded per item. How many items can there be, and does"
+    " anything bound the total?",
+    signature="A per-item timeout with no aggregate deadline, a process-local cache in a"
+    " multi-replica deployment, or a guard evaluated outside the transaction it is meant"
+    " to protect.",
+    precedent="platform#701's process-local cache across replicas; platform#689's guard"
+    " outside the transaction; platform#696's stale-cache authorization leak; demo#68's"
+    " ledger double-spend.",
+    measurement="A per-item wait with no enclosing deadline is a shape visible in the"
+    " code, countable across the tree, and the count was small enough to hold at zero --"
+    " which is why it is a detector.",
+    detector="py -m core.gates.aggregate_deadline",
+)
+seat(
+    "Data and migration",
+    question="Does this migration go forward and back, and does the schema still hold"
+    " every invariant afterwards?",
+    signature="Forward-only in practice, numbering that collides or skips, a constraint"
+    " relaxed to make a migration pass, or orphan rows nobody counted.",
+    precedent="platform#848, the migration-hygiene guard itself. 834 units.",
+    measurement="Numbering, contiguity and rollback presence are mechanically checkable"
+    " and this repo already has migration gates covering them; what remains is whether"
+    " the data still means the same thing, which is graded.",
+    why="Dream Studio already runs migration-risk and migration-authority gates for the"
+    " mechanical half. This seat exists so the semantic half -- does the row still mean"
+    " what it meant -- has somewhere to be asked.",
+)
+seat(
+    "Contract and protocol",
+    question="The code says mechanisms X and Y make this claim true. Does the contract"
+    " document name both?",
+    signature="A decision record that names one of two mechanisms. The contract is"
+    " accurate about what it mentions and silent about the half that is also load"
+    " bearing, so the next author removes it.",
+    precedent="platform#721's response shape against the issue's acceptance criteria;"
+    " fulcrum-gateway#513's spec drifting from the code. 1,207 units combined.",
+    measurement="Whether a document names every mechanism the code depends on requires"
+    " reading both and deciding what counts as a mechanism -- there is no list to diff"
+    " against, which is why this stayed judgement.",
+    why="Naming every mechanism a claim depends on requires reading the code's intent,"
+    " not its text. It becomes an eval when contracts declare their mechanisms in a form"
+    " a grader can compare against the diff.",
+)
+seat(
+    "Failure semantics",
+    question="The producer's vocabulary has more members than the consumer has branches."
+    " What does the far end do with the ones it does not handle?",
+    signature="A confident silent default. An unknown status becomes a plausible known"
+    " one, a truncation is not reported, an exception is swallowed and the caller is told"
+    " everything succeeded.",
+    precedent="platform#583, where an unknown status becomes 'Backlog' -- a value"
+    " rendered as another value's meaning. 1,952 units.",
+    measurement="The two vocabularies are both readable and the gap between them is"
+    " countable, but deciding whether a default is confident or correct needs the"
+    " domain -- so it is graded on real translation sites.",
+    eval="tests/evals/test_review_lane_status_survives_translation.py",
+)
+seat(
+    "Observability and audit trail",
+    question="A value is produced and honestly computed. Does anything actually read it,"
+    " and does every path that matters leave a record?",
+    signature="A produced value with no reader, or a failure path that returns before it"
+    " audits. The diagnostic a document promises and the code never emits.",
+    precedent="platform#495, where a token-store failure returns 503 with nothing"
+    " audited. 934 units.",
+    measurement="Reachability from a producer to a reader is traceable in code, but"
+    " whether a reader is the RIGHT one, and whether an unaudited path matters, is a"
+    " judgement the grader makes on real call chains.",
+    eval="tests/evals/test_review_lane_value_reaches_a_reader.py",
+)
+
+# ── Product-surface bench (4) ────────────────────────────────────────────────
+seat(
+    "Design-system conformance",
+    question="Does this component take the promotion path, and does the styling actually"
+    " reach the browser?",
+    signature="A token bypassed for a raw value, a component that never enters the"
+    " barrel, or a stylesheet that is written, reviewed, merged, and never served.",
+    precedent="platform#709: a 625-line stylesheet that never reached the browser. 1,545"
+    " units.",
+    measurement="Token-versus-raw-value and barrel export are both greppable and would"
+    " make a detector in a repo with a design system; whether the CSS is delivered needs"
+    " a build, which is the half that actually bit.",
+    why="Dream Studio ships no design system or frontend bundle, so a detector would"
+    " examine zero sites. Registered for the projects the round table is called from,"
+    " not for this one.",
+)
+seat(
+    "Accessibility",
+    question="Can this be operated without a mouse, and does every control have a name a"
+    " screen reader will say?",
+    signature="An ARIA ownership tree that does not match the visual one, a collapsed nav"
+    " whose controls lose their accessible names, a tooltip with no association and no"
+    " Escape.",
+    precedent="platform#713's ARIA ownership trees. Real but thin at 71 records --"
+    " essentially one reviewer on one stack, which is itself the finding.",
+    measurement="Automated accessibility checking is mature and would be a detector in a"
+    " repo with markup; 71 records across one reviewer says the coverage gap is human,"
+    " not tooling.",
+    why="No rendered markup in this repository to check. The thinness of the evidence --"
+    " one reviewer, one stack -- is the reason to register the seat rather than a reason"
+    " to skip it.",
+)
+seat(
+    "Frontend behavior and payload",
+    question="Does this control do what it looks like it does, and what did it cost to"
+    " download?",
+    signature="A control that looks live and is dead, a hooks-rules violation that only"
+    " shows under a specific render order, or a payload nobody measured.",
+    precedent="platform#817's search field that looked functional and was inert;"
+    " platform#834's 903 KiB reduction. 2,371 units combined.",
+    measurement="Bundle size is measurable in CI and hooks rules are lintable; the"
+    " looks-live-and-is-dead class needs a rendered page, which is where the expensive"
+    " findings were.",
+    why="No frontend in this repository. Registered so a project convening this table"
+    " from its own tree is asked the question, which is the reason the table was made"
+    " portable.",
+)
+seat(
+    "CLI and operator ergonomics",
+    question="Can an operator run this from a clean box using only what the docs say?",
+    signature="Help text that contradicts the defaults, a deprecated alias the"
+    " documentation still recommends, an exit code that reports success on failure, or a"
+    " runbook with a missing step.",
+    precedent="fulcrum-gateway#645's deprecated aliases still recommended by docs;"
+    " fulcrum-gateway#215's help text contradicting defaults. 641 records.",
+    measurement="Help text can be diffed against declared defaults mechanically, and"
+    " Dream Studio is CLI-first, so this is the seat most likely to earn a real detector"
+    " next -- it is judgement only because nobody has built it yet.",
+    why="Comparing help text against actual default values needs a parse of both, which"
+    " is buildable here and simply is not built. This is the strongest detector"
+    " candidate on the bench.",
+)
+
+# ── Domain bench (3) ─────────────────────────────────────────────────────────
+seat(
+    "Agent and plugin runtime",
+    question="What does this cap or namespace do to the model rather than to the"
+    " operator?",
+    signature="A limit that misleads the thing consuming it. A silent truncation the"
+    " agent reads as the whole input, a manifest placeholder that ships, an allowlist"
+    " that widens a profile nobody reviewed.",
+    precedent="fulcrum-gateway#18's silent 10,000-byte truncation misleading the model;"
+    " fulcrum-gateway#648's MCP allowlists in agent profiles. 824 records.",
+    measurement="Manifest and placeholder checks are mechanical; the load-bearing half --"
+    " a cap that misleads the model -- requires knowing what the consumer infers from a"
+    " truncated value, which is judgement.",
+    why="Whether a truncation misleads depends on what the consumer infers from it, and"
+    " the consumer is a model. Registered because Dream Studio is an agent runtime and"
+    " this is its own failure surface.",
+)
+seat(
+    "Mission-domain consequence",
+    question="Weighted by mission effect rather than code severity, what is the worst"
+    " thing this change permits?",
+    signature="A control enforced as vocabulary rather than as a ceiling. A marking that"
+    " does not follow the data, a dissemination rule that is advisory, an air-gap"
+    " assumption contradicted by a default URL.",
+    precedent="platform#504's classification ceilings enforced as vocabulary;"
+    " platform#673's map toggling a CUI layer and marking nothing, called the"
+    " highest-weighted finding in that review; fulcrum-gateway#53's default SaaS URLs.",
+    measurement="Mission weight is the seat's whole point and is not derivable from code"
+    " -- the platform#673 finding was low code-severity and highest mission-severity,"
+    " which no measurement of the diff would have surfaced.",
+    why="Mission consequence is an external judgement about what the software is used"
+    " for, and cannot be computed from the change. It is the one seat where a human"
+    " re-weighting the others is the mechanism.",
+)
+seat(
+    "Governance canon and board",
+    question="Does this contradict another document that is also in force?",
+    signature="Two canonical documents authorizing and forbidding the same act, an ADR"
+    " edited rather than superseded, or canon propagated to one repo and not its"
+    " siblings.",
+    precedent="planning#28, where CONTRIBUTING authorized what TRIAGE forbade. 735"
+    " records.",
+    measurement="Cross-document contradiction needs the semantics of both documents;"
+    " ADR immutability and numbering are mechanical and this repo already gates the"
+    " numbering half.",
+    why="Detecting that two documents contradict each other requires reading both for"
+    " meaning. The mechanical half -- ADR numbering and immutability -- is already"
+    " covered by existing docs gates.",
+)
+
+# ── Hygiene bench (2) ────────────────────────────────────────────────────────
+seat(
+    "Docs, style, and attribution",
+    question="Does anything shipping here carry a name, a path, or a trailer that should"
+    " not leave this machine?",
+    signature="AI attribution trailers on commits, a personal absolute path in a shipped"
+    " file, a required section missing from SECURITY.md, or an entry-point link that"
+    " 404s.",
+    precedent="dogfood-appliances#2's PII and personal paths shipping to contractors;"
+    " demo#60's 404ing entry-point links. This repo removed five Co-Authored-By trailers"
+    " from main on 2026-09-10 for exactly this reason.",
+    measurement="Every one of these is mechanically checkable and Dream Studio already"
+    " gates most of them -- operator_absolute_path, docs-drift and the atlas-leak gate --"
+    " so the detector here is aggregation rather than new detection.",
+    why="The constituent checks exist as separate gates already; what is missing is one"
+    " lane that names them as a family so a new member is added here rather than"
+    " invented somewhere else.",
+)
+seat(
+    "Code quality and structure",
+    question="Is this reachable, is it duplicated, and does it sit on the right side of a"
+    " module boundary?",
+    signature="Dead code kept because deleting it felt risky, a second copy of a rule"
+    " that must agree with the first, or a layering violation that makes the next change"
+    " cost more.",
+    precedent="2,351 units, and the operator's note that this is the seat most often"
+    " folded into others -- which is the argument for giving it one of its own.",
+    measurement="Dead symbols and duplication are countable and Dream Studio's leanness"
+    " gate already reports them; the judgement is which findings are worth acting on,"
+    " which the gate deliberately leaves advisory.",
+    why="The leanness gate already measures this and is advisory on purpose, because the"
+    " count is large and the severity is contextual. This lane exists so the advisory"
+    " output has a seat that owns triaging it.",
+)
+
+# ── The twenty-ninth: no bench equivalent ────────────────────────────────────
+seat(
+    "Event-substrate custodian",
+    question="If this record were rebuilt from its events tomorrow, would it still be"
+    " here, and would it still say the same thing?",
+    signature="A row written straight into a projection. It is correct today and gone"
+    " after a rebuild, or present with a field the replay could not reproduce.",
+    precedent="Measured on this authority 2026-09-10: 493 of 956 work orders and 1706 of"
+    " 3311 tasks had no creation event, and 459 rows held a status no event type could"
+    " produce. A rebuild is the recovery tool.",
+    measurement="Projection target tables are derived from each projection's own"
+    " target_tables and the write sites are countable -- 6 of 6 examined and emitting --"
+    " which is small enough to hold at zero, so it is a detector.",
+    detector="py -m core.gates.event_backed_write",
+)
+
+
+# ── The industry standards each seat is measured against ─────────────────────
+#
+# THE OPERATOR SHIPPED WITH REVIEWERS HELD TO PUBLISHED STANDARDS, and a seat that asks a
+# good question against nothing external is one person's taste. Naming the standard makes
+# the finding arguable on something other than seniority, gives the author a document to
+# read rather than an opinion to satisfy, and lets a lane's `why` say precisely what a
+# detector would have to implement.
+#
+# ONLY WHERE ONE GENUINELY APPLIES. Several seats -- the Chair, the Evidence referee, the
+# Reviewer's reviewer -- govern review process itself, and inventing a standard for them
+# would be the decoration this registry exists to refuse. They are absent on purpose.
+STANDARDS: dict[str, tuple[str, ...]] = {
+    "Claim and closure auditor": ("Conventional Commits 1.0.0", "Keep a Changelog 1.1.0"),
+    "Gate-integrity engineer": ("OpenSSF Scorecard", "SLSA v1.0 Build L2+"),
+    "Test-integrity inquisitor": ("ISO/IEC/IEEE 29119-4 test techniques",),
+    "AuthZ and identity": (
+        "OWASP ASVS v4.0 V4 Access Control",
+        "OWASP Top 10 A01:2021 Broken Access Control",
+        "NIST SP 800-63B session lifecycle",
+    ),
+    "Untrusted input and abuse limits": (
+        "OWASP ASVS v4.0 V5 Validation, Sanitization and Encoding",
+        "OWASP Top 10 A03:2021 Injection",
+        "CWE-22 path traversal",
+        "CWE-409 decompression bomb",
+    ),
+    "Secrets and data-at-rest": (
+        "OWASP ASVS v4.0 V6 Stored Cryptography",
+        "CWE-312 cleartext storage of sensitive information",
+        "NIST SP 800-57 key management",
+    ),
+    "Supply chain and provenance": (
+        "SLSA v1.0",
+        "NIST SP 800-218 SSDF",
+        "OpenSSF Scorecard",
+        "SPDX or CycloneDX SBOM",
+        "Sigstore signature verification",
+    ),
+    "Cloud IAM and IaC": (
+        "CIS Benchmarks",
+        "NIST SP 800-53 AC family",
+        "CWE-269 improper privilege management",
+    ),
+    "GitOps and rollout safety": (
+        "CIS Kubernetes Benchmark",
+        "NIST SP 800-190 container security",
+    ),
+    "Release and version model": (
+        "Semantic Versioning 2.0.0",
+        "Keep a Changelog 1.1.0",
+    ),
+    "Distributed state and concurrency": (
+        "CWE-362 race condition",
+        "CWE-367 time-of-check time-of-use",
+    ),
+    "Data and migration": ("ACID transaction properties", "ISO/IEC 9075 SQL constraints"),
+    "Contract and protocol": (
+        "OpenAPI 3.1",
+        "JSON Schema 2020-12",
+        "RFC 9457 problem details",
+        "Semantic Versioning 2.0.0 for API surface",
+    ),
+    "Failure semantics": (
+        "CWE-703 improper check or handling of exceptional conditions",
+        "CWE-754 improper check for unusual conditions",
+        "Saltzer and Schroeder fail-safe defaults",
+    ),
+    "Observability and audit trail": (
+        "OWASP ASVS v4.0 V7 Error Handling and Logging",
+        "OWASP Top 10 A09:2021 Security Logging and Monitoring Failures",
+        "NIST SP 800-92 log management",
+        "OpenTelemetry semantic conventions",
+    ),
+    "Design-system conformance": ("W3C Design Tokens Community Group format",),
+    "Accessibility": (
+        "WCAG 2.2 Level AA",
+        "WAI-ARIA 1.2",
+        "EN 301 549",
+        "Section 508",
+    ),
+    "Frontend behavior and payload": ("WCAG 2.2 Level AA", "Core Web Vitals"),
+    "CLI and operator ergonomics": (
+        "POSIX Utility Syntax Guidelines (IEEE Std 1003.1)",
+        "GNU coding standards for command-line interfaces",
+    ),
+    "Mission-domain consequence": (
+        "32 CFR Part 2002 CUI",
+        "DoDI 5200.48 CUI marking",
+        "NIST SP 800-171",
+        "EO 13526 classification",
+    ),
+    "Governance canon and board": ("ISO/IEC/IEEE 42010 architecture description",),
+    "Docs, style, and attribution": (
+        "Diataxis documentation framework",
+        "Keep a Changelog 1.1.0",
+        "SPDX licence identifiers",
+    ),
+    "Code quality and structure": (
+        "PEP 8",
+        "PEP 484 type hints",
+        "CWE-561 dead code",
+    ),
+}
+
+
+#: Seats holding a SECOND lane. The Machinist and the Interpreter each held two before
+#: this roster existed, and folding every seat down to one lane would have silently
+#: dropped `an-untested-fallback-lane` -- a detector that runs today.
+EXTRA_LANES: dict[str, tuple[str, str, str, str, tuple[str, str]]] = {
+    "Test-integrity inquisitor": (
+        "This fallback exists because the primary path can be unavailable. Does any test"
+        " ever take it?",
+        "A fallback nothing exercises. It is written for the day the primary path fails,"
+        " and the first time it runs in anger is the first time it runs at all.",
+        "Carried from the Machinist's lane, which found untested fallback branches across"
+        " this tree and has held the count at zero since.",
+        "Fallback branches are countable in the source and the count was small enough to"
+        " drive to zero and hold, which is what made a detector the right instrument.",
+        ("detector", "py -m core.gates.untested_fallback"),
+    ),
+}

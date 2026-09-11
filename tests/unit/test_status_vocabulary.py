@@ -169,6 +169,22 @@ def _producible_task_statuses(db_path: Path, project_id: str) -> set:
     produced: set[str] = set()
     for event_type in TaskProjection.consumed_event_types:
         wo_id, task_id = str(uuid.uuid4()), str(uuid.uuid4())
+        # The parent MUST exist: business_tasks.work_order_id is NOT NULL REFERENCES
+        # business_work_orders. Without this every task insert failed the foreign key,
+        # every status came back None, and the task half of this test measured nothing
+        # while still going red for an unrelated reason.
+        _emit(
+            db_path,
+            "work_order.created",
+            {"project_id": project_id, "work_order_id": wo_id},
+            {
+                "title": "parent",
+                "status": "created",
+                "type": "infrastructure",
+                "work_order_id": wo_id,
+                "project_id": project_id,
+            },
+        )
         trace = {"project_id": project_id, "work_order_id": wo_id, "task_id": task_id}
         _emit(
             db_path, "task.created", trace, {"title": "t", "description": "d", "status": "created"}
@@ -285,6 +301,18 @@ def test_a_row_of_every_live_status_survives_a_rebuild_unchanged(authority):
     for status, terminal in task_terminal.items():
         wo_id, task_id = str(uuid.uuid4()), str(uuid.uuid4())
         task_ids[status] = task_id
+        _emit(
+            authority,
+            "work_order.created",
+            {"project_id": project_id, "work_order_id": wo_id},
+            {
+                "title": "parent",
+                "status": "created",
+                "type": "infrastructure",
+                "work_order_id": wo_id,
+                "project_id": project_id,
+            },
+        )
         trace = {"project_id": project_id, "work_order_id": wo_id, "task_id": task_id}
         _emit(
             authority,

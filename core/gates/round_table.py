@@ -232,6 +232,9 @@ def convene(
             "lane": lane.get("id", "?"),
             "question": _one_line(lane.get("question")),
             "signature": _one_line(lane.get("signature")),
+            # Carried through so the render can name it; absent on the seats that govern
+            # review process itself, where inventing a standard would be decoration.
+            "standards": list(lane.get("standards") or []),
         }
         if "detector" in lane:
             entry["kind"] = "detector"
@@ -344,6 +347,12 @@ def _render(report: dict) -> str:
         for seat in awaiting:
             lines.append(f"  {seat['seat']:<{width}} {seat['question']}")
             lines.append(f"  {'':<{width}} shape: {seat['signature']}")
+            # THE STANDARD IS WHAT MAKES A FINDING ARGUABLE ON SOMETHING OTHER THAN
+            # SENIORITY. A seat asking a good question against nothing external is one
+            # person's taste; naming the published standard gives the author a document
+            # to read rather than an opinion to satisfy.
+            if seat.get("standards"):
+                lines.append(f"  {'':<{width}} standards: {', '.join(seat['standards'])}")
             if seat["kind"] == "graded":
                 lines.append(f"  {'':<{width}} fixture: {seat['fixture']}")
             else:
