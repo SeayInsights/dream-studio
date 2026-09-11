@@ -1229,3 +1229,63 @@ def test_a_finding_with_a_criterion_is_still_filed(db):
         rows[0][1] or ""
     ), "the criterion must be PERSISTED, not merely accepted -- it was hardcoded to None"
     assert not [f for s in spawned for f in (s.get("unfiled_findings") or [])]
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "KNOWN DEFECT, WO 6935afa5. Reordering to write-then-emit narrowed the window but"
+        " did not close it: the emission escapes the caller's transaction entirely, so a"
+        " rollback still orphans the event. The real fix is to defer emission until after"
+        " the caller commits -- collect the envelopes and emit post-commit -- which the"
+        " function cannot do while it only receives an open connection. strict=True so"
+        " this turns red the day it is fixed and someone deletes the marker."
+    ),
+)
+def test_a_rollback_after_emission_leaves_no_phantom_row(db, monkeypatch):
+    """An event with no row is worse than a row with no event.
+
+    Every emission site in this module used to emit BEFORE its write. A rollback or crash
+    after emission then left a canonical event describing a row that was never created,
+    and a later rebuild MATERIALISED it -- a work order nobody filed, appearing in the
+    authority as though someone had. Invisible, and wrong in the direction nothing
+    detects.
+
+    Write-then-emit fails the other way round: a row with no event, which is exactly what
+    `event-backed-write` reports and what a rebuild simply drops. This drives the rollback
+    directly and requires that nothing was emitted for work the transaction threw away.
+    """
+    from core.work_orders.verify_gaps import drain_fanned_out_categories
+
+    emitted: list[dict] = []
+    import spool.writer as _spool_writer
+
+    def _capture(envelope, *a, **k):
+        assert isinstance(envelope, dict), type(envelope).__name__
+        emitted.append(envelope)
+
+    monkeypatch.setattr(_spool_writer, "write_event", _capture)
+
+    conn = sqlite3.connect(str(db))
+    project_id = _project(conn)
+    for _ in range(2):
+        _spawn(conn, project_id, _reviewed_wo(conn, project_id), "Some fanned out class")
+    conn.commit()
+    emitted.clear()
+
+    # The drain runs inside the caller's transaction, and the caller rolls it back.
+    drain_fanned_out_categories(conn, project_id, apply=True)
+    conn.rollback()
+
+    cancelled = conn.execute(
+        "SELECT COUNT(*) FROM business_work_orders WHERE status = 'cancelled'"
+    ).fetchone()[0]
+    conn.close()
+
+    assert cancelled == 0, "precondition: the rollback must have undone the status write"
+    phantom = [e for e in emitted if e.get("event_type") == "work_order.cancelled"]
+    assert not phantom, (
+        f"{len(phantom)} cancellation event(s) survived a rolled-back drain. A replay "
+        "would apply them to rows the transaction never changed, so the authority would "
+        "report work as abandoned that is still open."
+    )

@@ -664,3 +664,34 @@ def test_calling_a_helper_that_does_not_emit_is_still_reported(tmp_path):
         "a function whose only call is a non-emitting helper must still be reported; "
         f"got {flagged}"
     )
+
+
+def test_an_offender_says_why_the_receiver_was_distrusted(tmp_path):
+    """A gate that only says no teaches the bypass.
+
+    An independent reviewer asked for this directly: a developer whose emission is
+    correct but unrecognised currently gets a refusal and one documented way out, the
+    exemption marker, which is the habit this gate exists to break. Each of these writes
+    is uncredited for a DIFFERENT reason, and the report must say which.
+    """
+    repo = _repo(
+        tmp_path,
+        {
+            "shadowed.py": SHADOWED_BY_PARAM_WRITER,
+            "noimport.py": NO_IMPORT_AT_ALL,
+            "silent.py": WITHOUT_EVENT,
+        },
+    )
+    report = ebw.offenders(repo)
+    by_file = {item["file"]: item.get("why", "") for item in report["offenders"]}
+
+    assert by_file, "nothing was reported, so there is no reason to check"
+    for name, why in by_file.items():
+        assert why, f"{name} was refused with no reason given"
+
+    assert "not a name this file imported" in by_file["shadowed.py"], by_file["shadowed.py"]
+    assert "never imports" in by_file["noimport.py"], by_file["noimport.py"]
+    assert "no call to write_event" in by_file["silent.py"], by_file["silent.py"]
+
+    rendered = ebw._render(report)
+    assert "why:" in rendered, "the reason must reach the reader, not just the report dict"

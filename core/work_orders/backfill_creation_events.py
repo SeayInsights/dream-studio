@@ -228,7 +228,14 @@ def backfill(
             )
         return result
 
-    from spool.ingestor import _write_to_dual_canonical
+    # THE PUBLIC PATH, BECAUSE THE INGESTOR OWNS CANONICAL WRITES. An independent review
+    # found this module importing `spool.ingestor._write_to_dual_canonical` -- a private
+    # function -- and driving canonical-event writes itself, crossing the write boundary
+    # from outside the ingestor while its own sibling `verify_gaps._emit_creation` used
+    # the public writer in the same change. Events are written to the spool and the
+    # INGESTOR moves them, which is the rule this repo already states.
+    import spool.writer as _spool_writer
+    from spool.ingestor import ingest as _ingest
 
     written = {"work_orders": 0, "tasks": 0}
     failures: list[str] = []
@@ -255,7 +262,7 @@ def backfill(
             when=row["created_at"] or now,
         )
         try:
-            _write_to_dual_canonical(envelope, db_path)
+            _spool_writer.write_event(envelope)
             written["work_orders"] += 1
         except Exception as exc:  # noqa: BLE001 - one bad row must not abandon the rest
             failures.append(f"work_order {row['work_order_id']}: {type(exc).__name__}: {exc}")
@@ -279,10 +286,17 @@ def backfill(
             when=row["created_at"] or now,
         )
         try:
-            _write_to_dual_canonical(envelope, db_path)
+            _spool_writer.write_event(envelope)
             written["tasks"] += 1
         except Exception as exc:  # noqa: BLE001
             failures.append(f"task {row['task_id']}: {type(exc).__name__}: {exc}")
+
+    # Drain the spool before measuring: the events are written, and until the ingestor
+    # moves them the `after` counts would describe a repair that has not landed yet.
+    try:
+        _ingest(db_path=db_path)
+    except Exception as exc:  # noqa: BLE001 - a failed drain is reported, not swallowed
+        failures.append(f"ingest after emission: {type(exc).__name__}: {exc}")
 
     conn = sqlite3.connect(str(db_path))
     try:

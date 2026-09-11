@@ -527,6 +527,41 @@ def _exempt(segment: str) -> bool:
     return False
 
 
+def _why_not_credited(tree: ast.AST, node: ast.AST, bindings: tuple[set[str], set[str]]) -> str:
+    """Why this function's `write_event` call, if any, was not counted as an emission.
+
+    A GATE THAT ONLY SAYS NO TEACHES THE BYPASS. An independent reviewer asked for this
+    directly: a developer whose emission is correct but unrecognised currently gets a
+    refusal and one documented way out -- the exemption marker -- which is the habit this
+    gate exists to break. Naming the reason turns a refusal into an instruction.
+    """
+    module_aliases, direct_names = bindings
+    calls = [c for c in _own_nodes(node) if isinstance(c, ast.Call)]
+    named = [
+        c
+        for c in calls
+        if (getattr(c.func, "attr", None) or getattr(c.func, "id", None)) in _EMITTERS
+    ]
+    if not named:
+        return "no call to write_event in this function, and nothing it calls here emits"
+    for call in named:
+        func = call.func
+        if isinstance(func, ast.Attribute):
+            receiver = _dotted(func.value)
+            if receiver not in module_aliases:
+                return (
+                    f"`{receiver}.write_event(...)` is not credited: `{receiver}` is not a"
+                    " name this file imported from spool.writer, or it is rebound at module"
+                    " scope before this point"
+                )
+        elif isinstance(func, ast.Name) and func.id not in direct_names:
+            return (
+                f"bare `{func.id}(...)` is not credited: this file never imports"
+                " write_event from spool.writer"
+            )
+    return "the call is present but its receiver could not be resolved to spool.writer"
+
+
 def offenders(repo_root: Path | None = None) -> dict[str, object]:
     """Functions that insert into a projection target without emitting its event."""
     root = repo_root or REPO_ROOT
@@ -552,6 +587,11 @@ def offenders(repo_root: Path | None = None) -> dict[str, object]:
             continue
 
         reachers = _emission_reachers(tree)
+        # The same derivation the verdict uses, so the REASON cannot disagree with the
+        # decision it explains.
+        _shadowed = _shadowed_anywhere(tree)
+        _mods, _direct = _writer_bindings(tree, _shadowed)
+        bindings = (_mods - _shadowed, _direct - _shadowed)
 
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -598,6 +638,7 @@ def offenders(repo_root: Path | None = None) -> dict[str, object]:
                     "function": node.name,
                     "line": node.lineno,
                     "tables": written,
+                    "why": _why_not_credited(tree, node, bindings),
                 }
             )
 
@@ -625,6 +666,13 @@ def _render(report: dict[str, object]) -> str:
             f"  FOUND {item['file']}:{item['line']} {item['function']}()"
             f" -> {', '.join(item['tables'])}"
         )
+        # The reason, not just the refusal. A developer whose emission is correct but
+        # unrecognised otherwise has one documented way out -- the exemption marker --
+        # which is the habit this gate exists to break.
+        if item.get("why"):
+            lines.append(f"      why: {item['why']}")
+        elif item.get("detail"):
+            lines.append(f"      why: {item['detail']}")
     lines.append("")
     lines.append(
         "A row written straight into a projection cannot be replayed. Every one of these"

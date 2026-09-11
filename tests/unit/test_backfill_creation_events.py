@@ -15,6 +15,7 @@ so these tests exercise production code end to end against a temporary authority
 
 from __future__ import annotations
 
+import pathlib
 import sqlite3
 import uuid
 from pathlib import Path
@@ -384,3 +385,96 @@ def test_an_empty_status_is_still_treated_as_at_risk(authority):
 
     assert report["ok"] is False, report
     assert report["status_at_risk"]["work_orders"]["would_be_overwritten"] == 1
+
+
+def test_the_backfill_writes_through_the_public_writer(authority, monkeypatch):
+    """The ingestor owns canonical writes; this module must not reach past it.
+
+    An independent review found this module importing `spool.ingestor.
+    _write_to_dual_canonical` -- a private function -- and driving canonical-event writes
+    itself, while its own sibling `verify_gaps._emit_creation` used the public writer in
+    the same change set. Crossing a write boundary from outside the component that owns it
+    is the rule this repo already states; the sibling doing it correctly in the same diff
+    is what makes it a slip rather than a design.
+    """
+    import spool.writer as _spool_writer
+
+    seen: list[dict] = []
+    real = _spool_writer.write_event
+
+    def _watch(envelope, *a, **k):
+        assert isinstance(envelope, dict), type(envelope).__name__
+        seen.append(envelope)
+        return real(envelope, *a, **k)
+
+    monkeypatch.setattr(_spool_writer, "write_event", _watch)
+    _seed_eventless(authority)
+
+    backfill(db_path=authority, apply=True)
+
+    assert seen, (
+        "no event reached spool.writer.write_event -- the backfill is writing canonical "
+        "rows by another path, which is the boundary this test exists to hold"
+    )
+    assert {e["event_type"] for e in seen} == {"work_order.created", "task.created"}, seen
+
+    import core.work_orders.backfill_creation_events as mod
+
+    source = pathlib.Path(mod.__file__).read_text(encoding="utf-8")
+    offending = [
+        line
+        for line in source.splitlines()
+        if "_write_to_dual_canonical" in line and not line.lstrip().startswith("#")
+    ]
+    assert not offending, f"private ingestor API still called: {offending}"
+
+
+def test_every_payload_key_written_survives_a_rebuild(authority):
+    """A key written into an event and read by nobody repairs nothing.
+
+    The backfill writes title, description, type, originating_symptom, acceptance_criteria
+    and status into its creation payloads, and only row EXISTENCE was ever asserted. The
+    module already documents one key -- `status` -- as write-only, which is the whole
+    reason it refuses to run; a second key in the same condition would be invisible.
+
+    So each key is checked against what a real rebuild actually produces, and `status` is
+    pinned as KNOWN-DEAD rather than quietly expected to work. The day a handler starts
+    reading it, this fails and the guard that depends on it gets revisited.
+    """
+    from core.projections.work_order_projection import WorkOrderProjection
+    from core.work_orders.backfill_creation_events import _STATUS_AFTER_REPLAY
+
+    wo_id, _, _ = _seed_eventless(authority)
+    conn = sqlite3.connect(str(authority))
+    conn.execute(
+        "UPDATE business_work_orders SET originating_symptom = ? WHERE work_order_id = ?",
+        ("SQL-CHECK: SELECT 1", wo_id),
+    )
+    conn.commit()
+    conn.close()
+
+    backfill(db_path=authority, apply=True)
+    _rebuild(authority)
+
+    conn = sqlite3.connect(str(authority))
+    conn.row_factory = sqlite3.Row
+    row = conn.execute(
+        "SELECT * FROM business_work_orders WHERE work_order_id = ?", (wo_id,)
+    ).fetchone()
+    conn.close()
+    assert row is not None, "the row did not survive the rebuild"
+
+    # Carried through the event and read by the handler.
+    assert row["title"] == "Historic work order"
+    assert row["description"] == "a description"
+    assert row["work_order_type"] == "infrastructure"
+    assert row["originating_symptom"] == "SQL-CHECK: SELECT 1", (
+        "originating_symptom is written into the payload; if the handler stops reading it "
+        "a defect WO loses the check that reproduces it"
+    )
+    # KNOWN DEAD, and pinned so it cannot quietly start or stop being dead.
+    assert row["status"] == _STATUS_AFTER_REPLAY["work_orders"], (
+        "status is written into the payload and read by neither created handler. If this "
+        "now reflects the row's real status, the handler changed and the backfill's "
+        "refusal guard is measuring the wrong thing -- revisit _STATUS_AFTER_REPLAY."
+    )
