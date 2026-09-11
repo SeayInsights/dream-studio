@@ -232,11 +232,22 @@ def _describe_graded_range(
     try:
         expr, why = boundary_commit_range(work_order_id, db_path=db_path)
     except Exception as exc:  # noqa: BLE001 - provenance must not fail the review
-        return {"range": None, "unavailable": f"{type(exc).__name__}: {exc}"[:200]}
+        return {
+            "range": None,
+            "stops_short_of_head": None,
+            "unavailable": f"{type(exc).__name__}: {exc}"[:200],
+        }
     out["range"] = expr
     if why:
         out["caveat"] = why
     if not expr:
+        # THREE STATES, NOT TWO. "reaches HEAD", "stops short of it", and "there is no
+        # range to compare" are different answers, and an ABSENT key collapsed the last
+        # two into the first for any reader doing `if not described.get(...)`. Recorded
+        # as None with the reason, the same distinction `unchecked` draws against `pass`
+        # at the round table.
+        out["stops_short_of_head"] = None
+        out["undetermined"] = why or "no commit range available for this work order"
         return out
     end = expr.split("..")[-1]
     try:
@@ -255,9 +266,15 @@ def _describe_graded_range(
             timeout=30,
         ).stdout.strip()
     except Exception as exc:  # noqa: BLE001 - same rule as above
+        out["stops_short_of_head"] = None
         out["unavailable"] = f"{type(exc).__name__}: {exc}"[:200]
         return out
     out["head"] = head or None
+    if not behind.isdigit():
+        # git answered with something uncountable; say the question is unanswered rather
+        # than leaving the key off and reading as "reaches HEAD".
+        out["stops_short_of_head"] = None
+        out["undetermined"] = f"git rev-list returned {behind!r}"
     if behind.isdigit():
         out["commits_behind_head"] = int(behind)
         out["stops_short_of_head"] = int(behind) > 0

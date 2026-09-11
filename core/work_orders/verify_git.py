@@ -20,6 +20,33 @@ from typing import Callable
 from core.work_orders.project_roots import ProjectRoots, git_kind
 
 
+# WO 654a54d7 task 3 -- THE DECISION, recorded rather than left implicit.
+#
+# Two selectors exist for "which commits is this verdict about", and the repo ran both
+# with neither chosen. Message-grep (`_collect_git_commits`, below) reads commit prose an
+# author may forget to write. A branch range against the recorded delivery boundary reads
+# state the machine stamps. They fail in opposite directions: grep MISSES a fix commit
+# that does not name its work order, and a range INCLUDES a neighbour's work that merely
+# shares a branch.
+#
+# CHOSEN: the recorded delivery boundary is primary, and message-grep is the fallback for
+# work orders that predate boundary stamping. Grounds, both measured in this repo rather
+# than argued:
+#
+#   - The range's failure is BOUNDED and already has a remedy. 3e6cf265 assembled 217,524
+#     chars of three work orders' changes, and `attributed_diff` now removes commits
+#     positively claimed by another closed boundary.
+#   - The grep's failure is UNBOUNDED and silent. On 2026-09-11 a verify graded three
+#     commits ending at abd32796 while the commits fixing its findings sat unseen on the
+#     same branch, and the verdict recorded `graded_commits: []` -- there is no remedy an
+#     author can apply after the fact except rewriting history.
+#   - A squash merge destroys the grep's input by design. The repo's own docs say the id
+#     never survives a squash, so the fallback cannot be the primary for any merged work.
+#
+# Message-grep is NOT deleted: work orders started before boundaries were stamped have no
+# start commit, and for those a grep is the only locator there is. It stays a documented
+# fallback with a known failure mode rather than an unexamined equal.
+
 def _collect_git_commits(
     source_root: Path, work_order_id: str, title: str | None = None
 ) -> str | None:
