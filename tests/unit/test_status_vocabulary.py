@@ -452,59 +452,29 @@ def test_every_consumed_event_either_produces_a_status_or_declares_it_does_not()
 
 
 def test_every_event_produces_the_status_the_map_promises(authority):
-    """Drive each event through a real rebuild and require the promised status.
+    """Drive each event through a real rebuild: the PROJECTION must obey the map.
 
-    THE TEST BELOW THIS ONE DID NOT COVER THE CASE ITS OWN DOCSTRING NAMES. It walks the
-    status -> event map, whose only entry reaching `in_progress` is `work_order.started`;
-    `work_order.unblocked` appears in neither loop, and its second loop asks only whether
-    the produced status is SOME declared status -- and `blocked` is one. An independent
-    reviewer mutated `"work_order.unblocked": "in_progress"` to `"blocked"` and all eight
-    tests in this file still passed. The one thing it was written to catch, it could not.
+    This test pins the projections to the vocabulary and DOES NOT pin the vocabulary --
+    the two are different jobs and conflating them is what went wrong twice here. The
+    first attempt walked the status -> event map, whose only entry reaching `in_progress`
+    is `work_order.started`, so `work_order.unblocked` appeared in neither loop and an
+    independent reviewer's mutation of it passed all eight tests. The second compared the
+    rebuilt row against `status_for(event)` while the projection had just written
+    `status_for(event)` -- an identity, which passed the same mutant again. The third
+    wrote the whole expected map out as a literal, which a review called what it was: a
+    second transcription of the thing under test, free to drift.
 
-    A map is a claim about what a replay does, so a replay is what settles it. Every event
-    in the projection-facing map is emitted here and the row is read back after a genuine
-    `ProjectionEngine.rebuild()`.
-
-    THE EXPECTED STATUSES ARE WRITTEN OUT BELOW RATHER THAN READ FROM THE MAP, and the
-    first attempt at this test got that wrong too: it asserted the rebuilt row equalled
-    `status_for(event)` while the projection had just written `status_for(event)`, so both
-    sides read the same mutated entry and the mutant passed a second time. Comparing a
-    value against itself is not a test.
-
-    The projections now take every status from the vocabulary, which is what the work
-    order wanted -- but it means nothing in production can contradict the map any more.
-    The only remaining independent anchor is a statement of what each event MEANS, and
-    that statement belongs in a test. This is not a transcription of the handlers: it is
-    the specification they have to meet. `_MEANING` must also cover every event the
-    vocabulary declares, so adding one without saying what it means fails here.
+    So the map's own entries are held by RELATIONS in the test below this one, and this
+    one asks only the question a replay can answer: does a projection handling this event
+    land on what the vocabulary said it would. That is not an identity for this purpose --
+    a handler that ignored the map, or wrote to the wrong column, or never ran, all fail
+    here.
     """
-    from core.work_orders.task_status import TASK_EVENT_STATUS, WORK_ORDER_EVENT_STATUS
-
-    #: What each event means, stated independently of the code under test.
-    wo_meaning = {
-        "work_order.created": "created",
-        "work_order.started": "in_progress",
-        # The entry the reviewer's mutation flipped: unblocking returns a work order to
-        # the state it was in before it was blocked, which is in_progress -- NOT blocked.
-        "work_order.unblocked": "in_progress",
-        "work_order.blocked": "blocked",
-        "work_order.closed": "closed",
-        "work_order.cancelled": "cancelled",
-        "work_order.deleted": "deleted",
-    }
-    task_meaning = {
-        "task.created": "pending",
-        "task.completed": "complete",
-        "task.cancelled": "cancelled",
-        "task.deleted": "deleted",
-    }
-    assert set(wo_meaning) == set(WORK_ORDER_EVENT_STATUS), (
-        "the vocabulary declares an event this test does not state the meaning of "
-        f"(or vice versa): {set(wo_meaning) ^ set(WORK_ORDER_EVENT_STATUS)}"
+    from core.work_orders.task_status import (
+        TASK_EVENT_STATUS,
+        WORK_ORDER_EVENT_STATUS,
+        status_for,
     )
-    assert set(task_meaning) == set(
-        TASK_EVENT_STATUS
-    ), f"task vocabulary and stated meanings disagree: {set(task_meaning) ^ set(TASK_EVENT_STATUS)}"
 
     project_id, milestone_id = _seed_parents(authority)
 
@@ -569,15 +539,83 @@ def test_every_event_produces_the_status_the_map_promises(authority):
 
     for event, wo_id in wo_ids.items():
         got = _status(authority, "business_work_orders", "work_order_id", wo_id)
-        assert got == wo_meaning[event], (
-            f"{event!r} means the work order is {wo_meaning[event]!r}; "
-            f"a rebuild produced {got!r}"
+        assert got == status_for(event, work_order=True), (
+            f"the vocabulary says {event!r} produces "
+            f"{status_for(event, work_order=True)!r}; a rebuild produced {got!r}"
         )
     for event, task_id in task_ids.items():
         got = _status(authority, "business_tasks", "task_id", task_id)
+        assert got == status_for(event), (
+            f"the vocabulary says {event!r} produces {status_for(event)!r}; "
+            f"a rebuild produced {got!r}"
+        )
+
+
+def test_the_map_entries_hold_the_relations_that_define_them():
+    """What pins the vocabulary, without copying it.
+
+    Once the projections take every status from the map, nothing in production can
+    contradict it -- so a test comparing production to the map is an identity, and a test
+    restating the map is a second copy that drifts. What is left is the RELATIONS BETWEEN
+    ENTRIES, which are statements about meaning rather than duplicates of values: they
+    stay true if a status is renamed, and false if an entry is wrong.
+
+    The relation that matters most is the one a reviewer's mutation broke. `unblocked`
+    means a work order returns to the state `started` put it in. Written as
+    `status_for("work_order.unblocked") == status_for("work_order.started")`, that holds
+    whatever `in_progress` is eventually called, and fails the moment unblocking lands
+    somewhere else -- which is exactly the mutation that passed three earlier versions of
+    this file.
+    """
+    from core.work_orders.task_status import (
+        CANONICAL_TASK_STATUSES,
+        CANONICAL_WORK_ORDER_STATUSES,
+        TASK_EVENT_STATUS,
+        WORK_ORDER_EVENT_STATUS,
+        creation_status,
+        status_for,
+    )
+
+    started = status_for("work_order.started", work_order=True)
+    assert status_for("work_order.unblocked", work_order=True) == started, (
+        "unblocking returns a work order to the state starting it produced; an entry "
+        "that lands anywhere else silently reopens or re-blocks work on every rebuild"
+    )
+    assert status_for("work_order.blocked", work_order=True) != started, (
+        "blocked and working must be distinguishable, or a blocked work order is "
+        "indistinguishable from one in progress"
+    )
+    assert status_for("work_order.created", work_order=True) == creation_status(
+        work_order=True
+    ), "the creation event must produce the creation default, not a second spelling of it"
+    assert (
+        status_for("task.created") == creation_status()
+    ), "same for tasks: the creation event and the creation default are one status"
+
+    # A terminal event must not land on the creation default -- that is the exact shape
+    # that made a backfill reopen 396 closed work orders.
+    for event in ("work_order.closed", "work_order.cancelled", "work_order.deleted"):
+        assert status_for(event, work_order=True) != creation_status(
+            work_order=True
+        ), f"{event} produces the creation default, so replaying it would reopen the row"
+    for event in ("task.completed", "task.cancelled", "task.deleted"):
         assert (
-            got == task_meaning[event]
-        ), f"{event!r} means the task is {task_meaning[event]!r}; a rebuild produced {got!r}"
+            status_for(event) != creation_status()
+        ), f"{event} produces the creation default, so replaying it would un-finish the task"
+
+    # Every entry stays inside the declared vocabulary, so a typo cannot become a status.
+    for event, status in WORK_ORDER_EVENT_STATUS.items():
+        assert status in CANONICAL_WORK_ORDER_STATUSES, f"{event} produces undeclared {status!r}"
+    for event, status in TASK_EVENT_STATUS.items():
+        assert status in CANONICAL_TASK_STATUSES, f"{event} produces undeclared {status!r}"
+
+    # Distinct terminal events must stay distinct: collapsing two onto one status would
+    # make a rebuild unable to tell abandoned work from deleted rows.
+    terminals = [
+        status_for(e, work_order=True)
+        for e in ("work_order.closed", "work_order.cancelled", "work_order.deleted")
+    ]
+    assert len(set(terminals)) == 3, f"terminal work-order events collapsed onto {terminals}"
 
 
 def test_the_two_status_maps_agree_where_they_overlap():
@@ -643,3 +681,50 @@ def test_canonical_status_has_a_production_reader():
         "interfaces/ or runtime/ -- production-located code reachable only from tests is "
         "dead, and this repo deletes dead code rather than keeping it"
     )
+
+
+def test_the_docstring_table_records_the_measured_overlap():
+    """The blast-radius number this work order turns on must be IN the record.
+
+    A criterion named this test before it existed -- the overlap was measured, written
+    into the module docstring, and the check that holds it there was never written, so a
+    verify reported the node missing. That is the same shape as a lane with no detector:
+    a claim with nothing keeping it true.
+
+    WHAT MAKES THE NUMBER WORTH HOLDING. The misrepresented rows fail in two different
+    ways and only the split says which. Rows MISSING a creation event are deleted outright
+    by a rebuild -- destructive and loud. Rows that HAVE one survive and come back wrong,
+    because replay reaches whatever the last handled event set and no handled event set
+    `cancelled`. The second half is the urgent one precisely because it looks like
+    success. An aggregate count cannot tell them apart, which is why "493 + 1706" was not
+    an answer to the question the task asked.
+
+    Checked for ARITHMETIC, not for presence. Asserting the string is in the docstring
+    would pass on numbers someone edited to anything at all; requiring each row's two
+    columns to sum to its total means a number cannot be changed in isolation without
+    the table contradicting itself.
+    """
+    import re
+
+    doc = sys.modules[__name__].__doc__ or ""
+    assert "creation event" in doc.lower(), (
+        "the module docstring no longer records the creation-event overlap, which is the "
+        "measurement distinguishing rows a rebuild deletes from rows it returns wrong"
+    )
+
+    # Rows look like: <table>.<status>  <total>  <has>  <missing>
+    rows = re.findall(r"business_(?:work_orders|tasks)\.[a-z_]+\s+(\d+)\s+(\d+)\s+(\d+)", doc)
+    assert len(rows) >= 5, (
+        f"expected the per-status overlap table (5 misrepresented statuses), found "
+        f"{len(rows)} parseable row(s). An aggregate does not answer the question."
+    )
+    for total, has, missing in rows:
+        assert int(has) + int(missing) == int(total), (
+            f"overlap row does not add up: {has} with a creation event + {missing} "
+            f"without != {total} total. A number was edited without the others."
+        )
+
+    # And the split must be non-trivial in BOTH directions, or the distinction the table
+    # exists to draw is not present in the data it records.
+    assert any(int(h) > 0 for _, h, _ in rows), "no row records rows that HAVE a creation event"
+    assert any(int(m) > 0 for _, _, m in rows), "no row records rows that are MISSING one"
