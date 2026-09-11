@@ -251,7 +251,7 @@ def changed_paths(repo_root: Path | None = None) -> list[str]:
 def lane_is_relevant(lane: dict, paths: list[str]) -> bool:
     """Does this lane's scope match anything in the change set?
 
-    A lane with NO scope ALWAYS fires. Absence means "always relevant", not "forgotten" --
+    A lane with no scope fires unconditionally. Absence means always-relevant, not forgotten --
     the cost of wrongly hiding a lane is a defect nobody was asked about, while the cost of
     wrongly showing one is a line of output, so the default leans toward showing.
     """
@@ -301,7 +301,7 @@ def convene(
     if not all_seats and seat is None and lane_id is None:
         change_set = changed_paths(repo_root) if paths is None else paths
         relevant = [ln for ln in lanes if lane_is_relevant(ln, change_set)]
-        # NEVER NARROW TO NOTHING. An empty table reads as "no questions to ask", which is
+        # Narrowing to nothing is refused: an empty table reads as "no questions to ask", which is
         # the one answer a review must never give by accident.
         if relevant:
             selected_by_scope = len(relevant) < len(lanes)
@@ -437,7 +437,7 @@ def _render(report: dict) -> str:
             lines.append(f"          {seat.get('detail', '')}")
 
     if report.get("selected_by_scope"):
-        # A SHORT TABLE MUST NOT READ AS A CLEAN ONE. Naming the omission, and how
+        # A short table should not read as a clean one. Naming the omission, and how
         # to undo it, is the difference between a filter and a silent narrowing.
         lines += [
             "",

@@ -1,42 +1,30 @@
-# Review lanes — the questions a Dream Studio review is obliged to ask.
+# Review lanes - the questions a Dream Studio review is obliged to ask.
 #
-# WHY THIS FILE EXISTS. Five named reviewers on the platform/gateway pass each found a
-# defect nobody else did, and each found it by asking one repeatable question. Those
-# questions lived in their heads. Adding them to the review skill's prose would put them
-# where the operator has already said guidance goes to die: "a lot of prose laid on top of
-# each other as suggestions with no rules, evals, or really any real test that doing
-# anything they are supposed to."
+# WHY THIS FILE EXISTS. Reviewers each found defects nobody else did, and each found them
+# by asking one repeatable question. Those questions lived in their heads. Putting them in
+# a skill's prose would put them where the operator has already said guidance goes to die:
+# "a lot of prose laid on top of each other as suggestions with no rules, evals, or really
+# any real test that doing anything they are supposed to."
 #
-# THE ROUND TABLE. Every lane is held by a seat, and the seat says what it watches:
+# THE BENCH. 29 seats: the operator's 28-seat review bench, derived from real review
+# history with unit counts per theme, plus the Event-substrate custodian, which asks
+# whether a row survives being rebuilt from its own events -- a property of this substrate
+# with no equivalent on the bench.
 #
-#   The Warden     is the predicate that admits also the predicate that delivers, or is one
-#                  half enforced by nothing?
-#   The Machinist  which lane actually runs, on which platform, and how long does it take
-#                  when the data is large?
-#   The Archivist  does the decision record name every mechanism the code now depends on?
-#   The Surveyor   how far from base is this, and is it the tree that ships?
-#   The Herald     if a caller sees something different, does the change say so?
+# EVERY LANE OWES a question, the signature of the defect, a precedent it actually came
+# from, the measurement that decided how it is answered, and exactly ONE of a runnable
+# detector, a graded eval, or `judgment: true` with a `why` naming what is missing. The
+# `review-lane-registry` gate refuses anything else, because a lane that decays back into
+# advice is a lane that stops being asked.
 #
-# These arrived from an external review pass under their finders' real handles. A seat
-# anonymises and describes at once, and `_SEATS` in the gate is a closed set — so a lane
-# cannot be added under somebody's name, because a name is not a seat.
+# WHERE A PUBLISHED STANDARD GOVERNS A SEAT, THE SEAT NAMES IT, so a finding is arguable
+# on the standard rather than on seniority.
 #
-# THE CONTRACT IS THE SAME ONE canonical/rules.yml ALREADY RUNS ON — enforce or declare,
-# never advise. Each lane carries exactly ONE of:
+# LANES CARRY A SCOPE and fire on relevance to the change set. A lane with no scope always
+# fires, and `--all` convenes every seat regardless.
 #
-#   detector:      a runnable `py -m ...` that decides the lane mechanically
-#   eval:          a path under tests/evals/ where a grader decides it, with a real fixture
-#   judgment: true + why:  neither is possible YET, and `why` names what is missing
-#
-# `core/gates/review_lane_registry.py` refuses the fourth option. A lane with no
-# enforcement key, or two, or a `why` that is a shrug, fails the push. That is the whole
-# point: a lane that decays back into advice is a lane that stops being asked.
-#
-# WHICH LANE IS WHICH WAS MEASURED, not guessed. A detector that fires on hundreds of sites
-# is a wall someone switches off; one that fires on nothing is decoration. Every
-# `detector:` below carries the count it produced against DS's own tree, and every
-# `eval:`/`judgment:` carries the measurement that ruled a detector out. Guessing here is
-# how a gate gets written that nobody can keep green.
+# GENERATED from scripts/seat_lanes_data.py -- edit that table, not this file.
+# `py scripts/seat_lanes_data.py --check` fails if the two have drifted.
 
 version: 2
 lanes:

@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import json
 import shlex
+import os
 import subprocess
 from fnmatch import fnmatch
 import sys
@@ -218,8 +219,15 @@ def changed_paths(repo_root: Path | None = None) -> list[str]:
     compared-nothing-reported-clean shape every lane here exists to refuse.
     """
     root = repo_root or REPO_ROOT
+    # THE BRANCH, NOT JUST THE WORKING TREE. Reading only uncommitted state meant a clean
+    # checkout of a branch reported NO change set, and an untracked scratch file reported
+    # the WRONG one -- an independent reviewer hid the Gate-integrity lane from a diff
+    # touching three files under core/gates/ by leaving one unrelated note in the tree.
+    # Every other gate here honours DREAM_STUDIO_BASE_REF; this one did not.
+    base = os.environ.get("DREAM_STUDIO_BASE_REF", "origin/main")
     paths: set[str] = set()
     for args in (
+        ["git", "diff", "--name-only", f"{base}...HEAD"],
         ["git", "diff", "--name-only", "HEAD"],
         ["git", "diff", "--name-only", "--cached"],
         ["git", "ls-files", "--others", "--exclude-standard"],

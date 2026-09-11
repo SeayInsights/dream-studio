@@ -173,7 +173,7 @@ def _dotted(node: ast.AST) -> str:
 class _TypeCheckingProvenance:
     """Where `TYPE_CHECKING` came from in this file, and where it stopped being typing's.
 
-    THE FILE-WIDE `shadowed` SET MUST NOT BE REUSED HERE, and reusing it reintroduced the
+    The file-wide `shadowed` set is deliberately not reused here; reusing it reintroduced the
     exact failure this gate exists to prevent. The two checks share a subtraction whose
     correct outcomes are OPPOSITE:
 
@@ -291,7 +291,7 @@ def _writer_bindings(tree: ast.AST, shadowed: set[str]) -> tuple[set[str], set[s
     would flag every true positive in the tree and turn a blocking gate red on correct
     code. `TYPE_CHECKING` is the one guard that means "this does not exist at runtime".
     """
-    # THE BODY ONLY, NEVER THE `else:`. Walking the whole `If` swept in its orelse, and
+    # The guard's body only, not its `else:`. Walking the whole `If` swept in the orelse, and
     # the orelse is precisely the branch that DOES execute when TYPE_CHECKING is false --
     # so `if TYPE_CHECKING: ... else: import spool.writer as _spool_writer`, an ordinary
     # and widely recommended idiom, had its real runtime import discarded and the
@@ -432,7 +432,7 @@ def _own_nodes(func: ast.AST):
     """Nodes belonging to this function, NOT descending into a nested function or lambda.
 
     `ast.walk` on a FunctionDef descends into every nested `def` and `lambda`, so a
-    function was credited with emitting because a helper defined inside it -- AND NEVER
+    function was credited with emitting because a helper defined inside it -- one that is never
     CALLED -- contained the writer call. Found by an independent reviewer, and the worst
     of the false negatives here because it needs no adversarial name at all: an ordinary
     dead inner helper is enough, and the outer function's own raw INSERT then passes as

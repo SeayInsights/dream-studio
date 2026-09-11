@@ -690,7 +690,7 @@ SCOPES: dict[str, tuple[str, ...]] = {
 
 # ── The eleven lanes that already existed, carried over VERBATIM ─────────────
 #
-# THE RENAME MUST BE ONLY A RENAME. Regenerating these from fresh prose destroyed the
+# The rename was meant to be only a rename. Regenerating these from fresh prose destroyed the
 # evidence they carried -- measurements recording 421 predicates prototyped and
 # rejected, 2108 dict keys, 6249 test functions, 4 formats with their channel counts --
 # and an independent reviewer caught it through the eval fixtures, which assert on those
