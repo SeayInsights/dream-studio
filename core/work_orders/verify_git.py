@@ -19,7 +19,6 @@ from typing import Callable
 
 from core.work_orders.project_roots import ProjectRoots, git_kind
 
-
 # WO 654a54d7 task 3 -- THE DECISION, recorded rather than left implicit.
 #
 # Two selectors exist for "which commits is this verdict about", and the repo ran both
@@ -46,6 +45,7 @@ from core.work_orders.project_roots import ProjectRoots, git_kind
 # Message-grep is NOT deleted: work orders started before boundaries were stamped have no
 # start commit, and for those a grep is the only locator there is. It stays a documented
 # fallback with a known failure mode rather than an unexamined equal.
+
 
 def _collect_git_commits(
     source_root: Path, work_order_id: str, title: str | None = None
