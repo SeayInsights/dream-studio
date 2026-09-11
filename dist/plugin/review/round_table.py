@@ -32,6 +32,7 @@ import argparse
 import json
 import shlex
 import subprocess
+from fnmatch import fnmatch
 import sys
 from pathlib import Path
 from time import monotonic
@@ -107,7 +108,19 @@ def _lanes(repo_root: Path | None = None) -> list[dict]:
             " reporting an empty table."
         )
     data = yaml.safe_load(registry.read_text(encoding="utf-8"))
-    return [lane for lane in (data or {}).get("lanes", []) if isinstance(lane, dict)]
+    lanes = [lane for lane in (data or {}).get("lanes", []) if isinstance(lane, dict)]
+    if not lanes:
+        # A PRESENT-BUT-EMPTY REGISTRY WAS THE ONE PATH WITH NO GUARD, and an independent
+        # reviewer walked straight through it: convene() returned `status: pass`, zero
+        # lanes, and "0 detector lane(s) clean" -- a clean review that asked nothing.
+        # The missing-file case already raised; the malformed-file case reported success.
+        # Both are the same thing, so both raise.
+        raise ValueError(
+            f"the review-lane registry at {registry} parsed to zero lanes. A convening with"
+            " no lanes is not a clean review -- it is a review that asked nothing, and"
+            " reporting it as a pass is the failure every lane here exists to refuse."
+        )
+    return lanes
 
 
 def _one_line(text: object) -> str:
@@ -196,22 +209,95 @@ def _rejected_the_flag(stream: str) -> bool:
     return "unrecognized arguments" in lowered and "--repo-root" in lowered
 
 
+def changed_paths(repo_root: Path | None = None) -> list[str]:
+    """Repo-relative paths this change set touches, or [] when git cannot say.
+
+    [] IS NOT "NOTHING CHANGED" -- it is "I could not tell", and the caller treats it as a
+    reason to convene everything rather than nothing. A selector that silently narrows to
+    zero would report a clean review of a tree it never looked at, which is the
+    compared-nothing-reported-clean shape every lane here exists to refuse.
+    """
+    root = repo_root or REPO_ROOT
+    paths: set[str] = set()
+    for args in (
+        ["git", "diff", "--name-only", "HEAD"],
+        ["git", "diff", "--name-only", "--cached"],
+        ["git", "ls-files", "--others", "--exclude-standard"],
+    ):
+        try:
+            proc = subprocess.run(
+                args,
+                cwd=str(root),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=30,
+            )
+        except (OSError, subprocess.SubprocessError):
+            continue
+        paths.update(line.strip() for line in (proc.stdout or "").splitlines() if line.strip())
+    return sorted(paths)
+
+
+def lane_is_relevant(lane: dict, paths: list[str]) -> bool:
+    """Does this lane's scope match anything in the change set?
+
+    A lane with NO scope ALWAYS fires. Absence means "always relevant", not "forgotten" --
+    the cost of wrongly hiding a lane is a defect nobody was asked about, while the cost of
+    wrongly showing one is a line of output, so the default leans toward showing.
+    """
+    patterns = lane.get("scope") or []
+    if not patterns:
+        return True
+    if not paths:
+        return True
+    for pattern in patterns:
+        for path in paths:
+            if fnmatch(path, pattern) or fnmatch(path, f"*/{pattern}"):
+                return True
+            # `**/x` should also match a top-level `x`, which fnmatch does not do.
+            if pattern.startswith("**/") and fnmatch(path, pattern[3:]):
+                return True
+    return False
+
+
 def convene(
     *,
     run_detectors: bool = True,
     repo_root: Path | None = None,
     seat: str | None = None,
     lane_id: str | None = None,
+    all_seats: bool = False,
+    paths: list[str] | None = None,
 ) -> dict:
     """The table's report for a change set, in this tree or another.
 
     `seat` and `lane_id` convene one reviewer rather than the whole table. An unknown value
     RAISES with the valid set named: silently convening nothing for a typo would report a
     clean review of everything, which is the failure every lane here exists to refuse.
+
+    LANES ARE SELECTED BY RELEVANCE TO THE CHANGE SET, per the standing directive that a
+    capability fires when the diff makes it relevant. With 29 seats the unconditional
+    listing is a wall nobody reads, and an unread review surface enforces nothing.
+
+    `all_seats=True` convenes every lane regardless -- asking for the whole table directly
+    must always be possible, because relevance is an inference about a diff and an operator
+    who wants the full bench is not making an inference.
     """
     seats: list[dict] = []
     started = monotonic()
     lanes = _lanes(repo_root)
+
+    selected_by_scope = False
+    if not all_seats and seat is None and lane_id is None:
+        change_set = changed_paths(repo_root) if paths is None else paths
+        relevant = [ln for ln in lanes if lane_is_relevant(ln, change_set)]
+        # NEVER NARROW TO NOTHING. An empty table reads as "no questions to ask", which is
+        # the one answer a review must never give by accident.
+        if relevant:
+            selected_by_scope = len(relevant) < len(lanes)
+            lanes = relevant
 
     if seat is not None:
         available = sorted({str(item.get("seat", "?")) for item in lanes})
@@ -232,6 +318,9 @@ def convene(
             "lane": lane.get("id", "?"),
             "question": _one_line(lane.get("question")),
             "signature": _one_line(lane.get("signature")),
+            # Carried through so the render can name it; absent on the seats that govern
+            # review process itself, where inventing a standard would be decoration.
+            "standards": list(lane.get("standards") or []),
         }
         if "detector" in lane:
             entry["kind"] = "detector"
@@ -259,7 +348,7 @@ def convene(
             # is not -- and because `attribution_reach` with no caller was itself a
             # mechanism that could not do the thing it was built to do (caught by the
             # reachability gate on this change set).
-            if lane.get("seat") == "The Surveyor":
+            if lane.get("seat") == "Merge-order steward":
                 try:
                     from core.work_orders.admission import attribution_reach
 
@@ -297,6 +386,7 @@ def convene(
     return {
         "status": status,
         "lanes": seats,
+        "selected_by_scope": selected_by_scope,
         "detectors_run": len(detectors) if run_detectors else 0,
         "detectors_unclean": [s["lane"] for s in unclean] if run_detectors else [],
         "awaiting_judgment": [s["lane"] for s in seats if s["kind"] != "detector"],
@@ -338,12 +428,27 @@ def _render(report: dict) -> str:
         if not seat.get("clean"):
             lines.append(f"          {seat.get('detail', '')}")
 
+    if report.get("selected_by_scope"):
+        # A SHORT TABLE MUST NOT READ AS A CLEAN ONE. Naming the omission, and how
+        # to undo it, is the difference between a filter and a silent narrowing.
+        lines += [
+            "",
+            "  (lanes irrelevant to this change set were left out -- --all"
+            " convenes the whole bench)",
+        ]
+
     awaiting = [s for s in report["lanes"] if s["kind"] != "detector"]
     if awaiting:
         lines += ["", "  ASKED OF YOU — no detector can decide these:", ""]
         for seat in awaiting:
             lines.append(f"  {seat['seat']:<{width}} {seat['question']}")
             lines.append(f"  {'':<{width}} shape: {seat['signature']}")
+            # THE STANDARD IS WHAT MAKES A FINDING ARGUABLE ON SOMETHING OTHER THAN
+            # SENIORITY. A seat asking a good question against nothing external is one
+            # person's taste; naming the published standard gives the author a document
+            # to read rather than an opinion to satisfy.
+            if seat.get("standards"):
+                lines.append(f"  {'':<{width}} standards: {', '.join(seat['standards'])}")
             if seat["kind"] == "graded":
                 lines.append(f"  {'':<{width}} fixture: {seat['fixture']}")
             else:
@@ -400,6 +505,17 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--all",
+        dest="all_seats",
+        action="store_true",
+        help=(
+            "Convene every seat regardless of relevance to the change set."
+            " Asking for the whole bench directly must always be possible --"
+            " relevance is an inference about a diff, and an operator who wants"
+            " all of them is not making one."
+        ),
+    )
+    parser.add_argument(
         "--seat",
         default=None,
         help="Convene one seat alone (exact name). An unknown seat fails, naming the set.",
@@ -418,6 +534,7 @@ def main(argv: list[str] | None = None) -> int:
             repo_root=Path(args.repo_root) if args.repo_root else None,
             seat=args.seat,
             lane_id=args.lane_id,
+            all_seats=args.all_seats,
         )
     except (KeyError, FileNotFoundError) as exc:
         # NAMED, NOT SWALLOWED. A typo that convened nothing would print an empty table and

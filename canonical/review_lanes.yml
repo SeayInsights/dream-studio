@@ -1,45 +1,388 @@
-# Review lanes — the questions a Dream Studio review is obliged to ask.
+# Review lanes - the questions a Dream Studio review is obliged to ask.
 #
-# WHY THIS FILE EXISTS. Five named reviewers on the platform/gateway pass each found a
-# defect nobody else did, and each found it by asking one repeatable question. Those
-# questions lived in their heads. Adding them to the review skill's prose would put them
-# where the operator has already said guidance goes to die: "a lot of prose laid on top of
-# each other as suggestions with no rules, evals, or really any real test that doing
-# anything they are supposed to."
+# WHY THIS FILE EXISTS. Reviewers each found defects nobody else did, and each found them
+# by asking one repeatable question. Those questions lived in their heads. Putting them in
+# a skill's prose would put them where the operator has already said guidance goes to die:
+# "a lot of prose laid on top of each other as suggestions with no rules, evals, or really
+# any real test that doing anything they are supposed to."
 #
-# THE ROUND TABLE. Every lane is held by a seat, and the seat says what it watches:
+# THE BENCH. 29 seats: the operator's 28-seat review bench, derived from real review
+# history with unit counts per theme, plus the Event-substrate custodian, which asks
+# whether a row survives being rebuilt from its own events -- a property of this substrate
+# with no equivalent on the bench.
 #
-#   The Warden     is the predicate that admits also the predicate that delivers, or is one
-#                  half enforced by nothing?
-#   The Machinist  which lane actually runs, on which platform, and how long does it take
-#                  when the data is large?
-#   The Archivist  does the decision record name every mechanism the code now depends on?
-#   The Surveyor   how far from base is this, and is it the tree that ships?
-#   The Herald     if a caller sees something different, does the change say so?
+# EVERY LANE OWES a question, the signature of the defect, a precedent it actually came
+# from, the measurement that decided how it is answered, and exactly ONE of a runnable
+# detector, a graded eval, or `judgment: true` with a `why` naming what is missing. The
+# `review-lane-registry` gate refuses anything else, because a lane that decays back into
+# advice is a lane that stops being asked.
 #
-# These arrived from an external review pass under their finders' real handles. A seat
-# anonymises and describes at once, and `_SEATS` in the gate is a closed set — so a lane
-# cannot be added under somebody's name, because a name is not a seat.
+# WHERE A PUBLISHED STANDARD GOVERNS A SEAT, THE SEAT NAMES IT, so a finding is arguable
+# on the standard rather than on seniority.
 #
-# THE CONTRACT IS THE SAME ONE canonical/rules.yml ALREADY RUNS ON — enforce or declare,
-# never advise. Each lane carries exactly ONE of:
+# LANES CARRY A SCOPE and fire on relevance to the change set. A lane with no scope always
+# fires, and `--all` convenes every seat regardless.
 #
-#   detector:      a runnable `py -m ...` that decides the lane mechanically
-#   eval:          a path under tests/evals/ where a grader decides it, with a real fixture
-#   judgment: true + why:  neither is possible YET, and `why` names what is missing
-#
-# `core/gates/review_lane_registry.py` refuses the fourth option. A lane with no
-# enforcement key, or two, or a `why` that is a shrug, fails the push. That is the whole
-# point: a lane that decays back into advice is a lane that stops being asked.
-#
-# WHICH LANE IS WHICH WAS MEASURED, not guessed. A detector that fires on hundreds of sites
-# is a wall someone switches off; one that fires on nothing is decoration. Every
-# `detector:` below carries the count it produced against DS's own tree, and every
-# `eval:`/`judgment:` carries the measurement that ruled a detector out. Guessing here is
-# how a gate gets written that nobody can keep green.
+# GENERATED from scripts/seat_lanes_data.py -- edit that table, not this file.
+# `py scripts/seat_lanes_data.py --check` fails if the two have drifted.
 
 version: 2
 lanes:
+  - id: the-other-half-enforced-by-nothing
+    seat: "Gate-integrity engineer"
+    question: >-
+      Two sites decide the same question. Does the second consult every predicate the first does,
+      or a subset of them?
+    signature: >-
+      A fix makes site B "share the predicate" with site A, and shares one of the two that A
+      actually requires. The comment claims the two cannot drift; that is true of one predicate
+      and false of the pair.
+    precedent: >-
+      The Warden, plat#814 (blocker-class, and the same defect the Herald had blocked on).
+      Delivery shared `_pat_rejected` (revoked-or-expired) with the acceptance paths at
+      app/auth.py:393+396 and :409 — but those also require `_user_is_active`, and delivery
+      consulted only the first. Reproduced with a control: a disabled account had
+      `_pat_rejected=False`, `_user_is_active=False`, auth accepts=False, file written=True. A
+      credential was DELIVERED that authentication refuses. The Herald's sentence — "treats
+      expired PATs as deliverable even though authentication rejects them" — applied verbatim with
+      `disabled` swapped for `expired`.
+    measurement: >-
+      A DETECTOR WAS PROTOTYPED AND REJECTED ON EVIDENCE. Collecting every private predicate
+      consulted in a boolean test across the tree found 421 of them and 26 "subset-suspects" — and
+      spot-checking the 26 showed they are arity differences (`_table_exists(conn)` beside
+      `_table_exists(conn, table)`), module aliases (`_yaml`), and unrelated decisions in
+      different files. The detector has no notion of "the same question", which is the entire
+      content of the finding. So this lane is graded, and the number is recorded here so the next
+      person does not re-derive it.
+    standards:
+      - "OpenSSF Scorecard"
+      - "SLSA v1.0 Build L2+"
+    scope:
+      - ".github/workflows/**"
+      - "canonical/workflows/**"
+      - "core/gates/**"
+      - "hooks/**"
+      - "runtime/hooks/**"
+    eval: tests/evals/test_review_lane_predicate_parity.py
+  - id: an-untested-fallback-lane
+    seat: "Test-integrity inquisitor"
+    question: >-
+      This fallback exists because the primary path can be unavailable. Does any test ever enter
+      it, or do they all take the primary path?
+    signature: >-
+      A platform or exception fallback whose tests all run the other branch — so the test that
+      validates the fix cannot run on the platform the fallback exists for.
+    precedent: >-
+      The Machinist, gw#858. `fallback_lock` / `_pending_queue_thread_lock` had zero test hits;
+      every ack test ran the flock path. The Windows lane the docstring promised was unexercised.
+    measurement: >-
+      Deterministic and diff-scoped. Measured 10 candidates across 944 product files with
+      name-and-handler detection alone; 14 once an audit forced the detector to also see
+      PLATFORM-CONDITIONAL fallbacks, which it had been blind to — and gw#858 was a Windows lane,
+      so the detector could not see the shape of its own precedent. Diff-scoped because those 10
+      stand today: whole-tree would be a wall on day one, and the backlog drains as those files
+      are touched — the ratchet `normative-baseline` and `workflow-node-verification` already use.
+    standards:
+      - "ISO/IEC/IEEE 29119-4 test techniques"
+    detector: py -m core.gates.untested_fallback
+  - id: a-per-item-wait-with-no-aggregate-deadline
+    seat: "Distributed state and concurrency"
+    question: >-
+      This wait is bounded per item. How many items can there be, and does anything bound the
+      total?
+    signature: >-
+      A module that already solved unbounded stall for one loop grows a per-item retry in another,
+      with no aggregate deadline — so the ceiling multiplies by a data-dependent count and passes
+      the timeout the module itself cites.
+    precedent: >-
+      The Machinist, gw#849 — the strongest finding of the pass. The module's own comment 40 lines
+      above the new code says a per-slug ceiling times an agent's skill count is loop stall time,
+      and set `_LOCK_BATCH_BUDGET_S = 5.0` for exactly that reason. The new per-card retry was 2
+      sleeps x 0.5s inside `for sid in ids:` with no aggregate deadline: ~20s at 20 equipped
+      skills, plus the equip retry's own 1.0s, scaling linearly past the 30s timeout the operator
+      control surface uses.
+    measurement: >-
+      Deterministic ONLY once sharpened to the multiplication shape, and the sharpening came from
+      a false positive. The first cut — a sleep in a loop, in a module that defines a budget
+      constant — found 1 candidate, `core/work_orders/artifacts.py:216`, and reading it showed
+      `_LOCK_ATTEMPTS = 4` with a 0.15s backoff: 0.90s worst case, not inside any outer per-item
+      loop. Bounded, and not the finding. Requiring NESTING — a sleeping loop inside another loop,
+      neither consulting a deadline — drops DS's tree to 0, so this one runs whole-tree rather
+      than diff-scoped.
+    standards:
+      - "CWE-362 race condition"
+      - "CWE-367 time-of-check time-of-use"
+    detector: py -m core.gates.aggregate_deadline
+  - id: a-contract-that-names-one-of-two-mechanisms
+    seat: "Contract and protocol"
+    question: >-
+      The code says mechanisms X and Y make this claim true. Does the contract document name both,
+      or only the one that was there first?
+    signature: >-
+      A normative line is generic enough to stay true while the decision record beneath it still
+      names a single mechanism — so availability now rests on two things and the contract admits
+      one.
+    precedent: >-
+      The Archivist. The spec's normative line (GATEWAY-HOSTED-AGENT-SESSION-001:274, "a transient
+      failure is absorbed by retrying the fetch") is generic and genuinely true. But ADR-024 point
+      4 still says "The equip fetch retries", naming one of the two mechanisms availability now
+      depends on, while the code's own docstring says the per-card retry "is what makes
+      gw-ADR-024's availability claim true rather than aspirational." Same shape he blocked #837
+      on.
+    measurement: >-
+      MEASURED AS ZERO SUBSTRATE, which is why this is the one lane with no detector and no eval.
+      `docs/adr/` contains exactly two files, `ADR-000-template.md` and `README.md` — no decision
+      record has been written, so there is nothing for a checker to compare a code claim against.
+      A detector would grep for `ADR-\d+` citations, collect the mechanisms citing each, and
+      assert the record names them; against zero records it would pass vacuously, which reads like
+      enforcement and is not. This lane was ALSO the one an audit caught with no `measurement`
+      field at all, while the registry header claimed every lane carries one — so the gate now
+      requires it.
+    standards:
+      - "OpenAPI 3.1"
+      - "JSON Schema 2020-12"
+      - "RFC 9457 problem details"
+      - "Semantic Versioning 2.0.0 for API surface"
+    judgment: true
+    why: >-
+      THERE IS NOTHING TO CHECK AGAINST YET. This lane compares a code claim to the decision
+      record it cites, and `docs/adr/` in this repo holds only `ADR-000-template.md` and a README
+      — no ADR has been written. A detector would grep for `ADR-\d+` citations, collect the
+      mechanisms citing each one, and assert the ADR names them; with zero ADRs it would pass
+      vacuously, which is worse than an honest declaration. Convert this lane the moment the first
+      real ADR lands.
+  - id: a-branch-behind-its-base
+    seat: "Merge-order steward"
+    question: >-
+      How far behind its base is this branch, and did anyone ask it to sync?
+    signature: >-
+      A PR that trial-merges clean while being far enough behind that the review read a tree
+      nobody will ship.
+    precedent: >-
+      The Surveyor. In the pasted pass plat#812 and #814 were 38 commits behind and gw#849 and
+      #858 were 5 behind; all four trial-merged clean, and the Herald asked #812 to sync
+      explicitly. Clean trial-merge is not currency.
+    measurement: >-
+      Trivially deterministic — `git rev-list --count HEAD..origin/main` — and currently PROSE:
+      CLAUDE.md says "Never push to stale/old branches — check branch freshness first", enforced
+      by nothing. ADVISORY rather than blocking, because a deliberately behind branch is
+      legitimate (a revert, a hotfix off a tag) and blocking it would be a wall; the lane's job is
+      that nobody reviews a stale tree without knowing it.
+    detector: py -m core.gates.branch_freshness
+  - id: an-unenumerated-behaviour-change
+    seat: "Claim and closure auditor"
+    question: >-
+      What does a caller see differently after this change, and does the change say so?
+    signature: >-
+      A response contract changes — a status code, a new raise on an existing path, a changed
+      return type — and the PR body enumerates everything except that.
+    precedent: >-
+      The Herald, gw#858. A second ack now raises instead of returning 200, and the consumer is
+      the local UI. The change was real, the body did not name it.
+    measurement: >-
+      A SIBLING OF AN EXISTING GATE, not a new one. `evidence-backed-output` already audits what a
+      push publishes — the commit messages of the commits being pushed and the lines added to
+      CHANGELOG.md — so the mechanism for "the outbound document must say it" exists. What is
+      missing is the diff side: recognising that a 200 became a raise. That half is graded for now
+      because "what a caller sees differently" is not decidable from a textual diff in general,
+      and the honest move is to extend the existing gate rather than stand up a second one that
+      audits the same documents.
+    standards:
+      - "Conventional Commits 1.0.0"
+      - "Keep a Changelog 1.1.0"
+    eval: tests/evals/test_review_lane_behaviour_change_enumerated.py
+  - id: a-produced-value-with-no-reader
+    seat: "Observability and audit trail"
+    question: >-
+      A value is produced and honestly computed. Does anything actually read it, and when nothing
+      does, what does the default say in its place?
+    signature: >-
+      A producer returns several fields; the consumer destructures one. The unread field would
+      have said "still loading" or "the request failed", so a fallback speaks instead -- and the
+      fallback MAKES A POSITIVE CLAIM. A placeholder reading "no_data" is indistinguishable from a
+      real measurement of nothing, so a broken fetch and an empty result render identically. A
+      fallback admitting "unknown" would be untidy; one asserting a measurement is the
+      compared-nothing-reported-clean family.
+    precedent: >-
+      The Interpreter, an external review pass. A fetch hook returned `{get, isLoading,
+      stateById}` and both views destructured only `get`, so `isLoading` and `stateById` had no
+      production consumer and a failed fetch drew a hollow radar claiming "measured, nothing
+      found". An earlier review of the same code had reasoned that a spinner keyed off `isLoading`
+      would hang forever; the finder checked and there was no spinner. In this repo the same shape
+      is WO 48bd8ab3 (2026-09-09): `contract_docs_drift_gate` filtered domains on `status`, a key
+      the dicts do not carry (they carry `freshness_status`), so `record_gate_bypass` was
+      unreachable -- 350 recorded bypasses across 16 gates and zero for docs-drift.
+    measurement: >-
+      A DETECTOR WAS PROTOTYPED AND REJECTED ON EVIDENCE. Collecting every string key returned in
+      a dict literal across `git ls-files '*.py'` and subtracting every key read anywhere as a
+      subscript, a `.get()`/`.pop()`/`.setdefault()` argument or an `in` test measured 2108
+      distinct keys produced, 588 never read in-tree, across 198 files. Sampling showed why that
+      count is a wall rather than a finding: most are API response fields consumed by the
+      dashboard, or keys serialised to JSON for a reader outside Python entirely. A consumer in
+      another language is invisible to the analysis, which is precisely the shape of the precedent
+      -- a React view reading a Python-shaped hook -- so a detector would fire 588 times and still
+      miss the instance that created the lane. Graded against a fixture instead.
+    standards:
+      - "OWASP ASVS v4.0 V7 Error Handling and Logging"
+      - "OWASP Top 10 A09:2021 Security Logging and Monitoring Failures"
+      - "NIST SP 800-92 log management"
+      - "OpenTelemetry semantic conventions"
+    eval: tests/evals/test_review_lane_value_reaches_a_reader.py
+  - id: a-status-the-far-end-does-not-handle
+    seat: "Failure semantics"
+    question: >-
+      The producer's vocabulary has more members than the consumer has branches. What does the
+      consumer render for the member it does not know?
+    signature: >-
+      A status enum grows a member -- or always had one -- and the consumer branches on the ones
+      it knows and lets the rest fall to a default. The default is a MEMBER OF THE SAME VOCABULARY
+      rather than an error, so the unknown status renders as a different, plausible reading
+      instead of failing. Checking that the KEYS match the producer is what makes this easy to
+      miss: the envelope is verified and the meaning inside it is not.
+    precedent: >-
+      The Interpreter, the same external review pass. `measure_network_reliability` emits
+      `not_applicable` today for agents that do not heartbeat; the radar renderer branched on its
+      known statuses and let the rest fall through to a numeric zero, drawing a normal-weight
+      spoke to the centre vertex -- reading as 0% uptime for an agent whose uptime was never
+      measurable. The finder's diagnosis: "I checked that the six axis keys matched the server and
+      never asked what the statuses render as."
+    measurement: >-
+      SEPARATED FROM ITS SIBLING LANE DELIBERATELY, after asking what each remedy is: there the
+      consumer does not exist and the fix is to add one; here the consumer exists and is wrong,
+      and the fix is to make its branch set match the producer's vocabulary or fail loudly on a
+      member it does not know. One lane answering both would carry two questions and one verdict,
+      which is how a lane stops being falsifiable. Graded for the same measured reason as the
+      sibling -- the 588-of-2108 analysis that cannot see a non-Python consumer cannot see a
+      non-Python branch set either -- and additionally because a vocabulary member can arrive from
+      a database column, a config file or a provider's API without appearing as a literal
+      anywhere, so a detector restricted to the both-sides-Python case would pass on the very
+      shape that produced the finding.
+    standards:
+      - "CWE-703 improper check or handling of exceptional conditions"
+      - "CWE-754 improper check for unusual conditions"
+      - "Saltzer and Schroeder fail-safe defaults"
+    eval: tests/evals/test_review_lane_status_survives_translation.py
+  - id: a-test-that-cannot-fail
+    seat: "Test-integrity inquisitor"
+    question: >-
+      This test is green. Show me it going red — what does it look like when the thing it guards
+      is broken?
+    signature: >-
+      A test with assertions on computed values, reading as thorough, whose verdict does not
+      actually depend on the thing it tests. It passes against the correct code AND against the
+      defect it claims to catch. Often it has MORE assertions than a real test of the same
+      subject, which is why "it has assertions" and "it can fail" get confused. Two ordinary
+      shapes: it only ever passes inputs that should succeed, so the refusing branch is never
+      exercised; or it asserts on a value the test itself constructed rather than on the subject's
+      answer.
+    precedent: >-
+      The most productive family in this repo, and every instance was found by an independent
+      auditor rather than by the suite containing it. WO a9fa2368: a non-mutation test hashed the
+      live database's FILE BYTES, so it failed WITHOUT a mutation (WAL checkpointing rewrites
+      those bytes on a benign read) and could not fail FOR the real reason (conftest redirects the
+      database session-wide, so nothing in pytest reaches the live file) -- proved by removing the
+      override and watching a connection-recording version still pass. WO 5db3755e: a control test
+      asserted a hand-typed table of booleans against itself, never executing the fixture it
+      claimed to reproduce; two further tautologies passed under a checker mutated to report
+      nothing. WO eac7f657: a coverage report and the executor shared a PATTERN but each applied
+      it, and deleting the report's own `.strip()` left all 30 of its tests green while an
+      indented ` TEST-CHECK: x` became a criterion the executor runs and the report calls prose.
+    measurement: >-
+      TWO STATIC SHAPES WERE PROTOTYPED AND BOTH REJECTED. Across 6249 test functions, 79 have no
+      assertion of any kind and 3 assert only on literals. Both populations are almost entirely
+      legitimate: the 79 are `tests/evals/test_dependency_chain.py`'s deliberate `*_unknown` /
+      `*_untested` markers, which exist to record what is NOT covered, and the 3 are intentional
+      probes for other gates. Decisively, zero of the real instances above would have been caught
+      -- every one had assertions on computed values. A detector would flag 82 legitimate tests
+      and none of the defects, which is a wall and decoration at once. The only reliable answer is
+      to mutate the subject and watch, which is a reviewer's act rather than a gate's.
+    standards:
+      - "ISO/IEC/IEEE 29119-4 test techniques"
+    eval: tests/evals/test_review_lane_a_test_that_cannot_fail.py
+  - id: a-write-no-event-can-reconstruct
+    seat: "Event-substrate custodian"
+    question: >-
+      If this record were rebuilt from its events tomorrow, would it still be here?
+    signature: >-
+      A row written straight into a projection table, with no canonical event beside it. Nothing
+      fails and the row reads as durable, because the projection is a real table and the write
+      really happened -- but `pre_rebuild` truncates that table before replaying events, so a
+      replay cannot reconstruct what no event describes. Often arrives by copying a sibling write
+      site rather than the designated writer.
+    precedent: >-
+      The Custodian, WO 17466550, measured 2026-09-10: 493 of 949 work orders and 1706 of 3286
+      tasks in the live authority carry no creation event, so a rebuild deletes 52% of both -- and
+      a rebuild is the disaster-recovery tool, so the defect bites hardest exactly when it is
+      reached for. Verified by resolution rather than by reading the comment that asserts it:
+      `pre_rebuild` is absent from both projections' `__dict__` and both bind to
+      `framework_projection.py`, whose default does `DELETE FROM` each declared target. The source
+      was one unfixed sibling -- `_insert_gap_work_orders` writes both tables with no event, while
+      `_attach_gap_tasks` was fixed and carries a comment saying its author "copied the shape of
+      the sibling-spawn INSERT instead of the task-creation path in mutations.py", naming this
+      exact function as the wrong shape and never returning to it. Related: WO a08206a9, where
+      ownership records SHAs that squash-merge discarded (10 of 35 on one work order), and WO
+      6935afa5, where a drain writes status with no event.
+    measurement: >-
+      A DETECTOR, AND THE COUNT IS WHY. The target tables are DERIVED from each projection's own
+      `target_tables` declaration -- the set `pre_rebuild` truncates, so the actual blast radius
+      -- which measures 6 tables rather than the 2 this defect was found in; a hardcoded list
+      would have exempted the other 4, the same subset-of-what-it-writes shape as WO b56cca8a.
+      Across the tree, 214 functions INSERT into one of those tables and 211 emit no event, but
+      only 4 are outside `tests/`: a fixture building rows directly is what a fixture IS, so tests
+      are out of scope. Of the 4, three are `prove`'s DISPOSABLE scratch authority (declared at
+      the site, since emitting there would write the operator's live spool -- the defect WO
+      8bd297f1 fixed, 4194 connections measured) and one is the genuine finding. So the gate
+      reports exactly 1, which is small enough to hold at zero. ADVISORY until WO 17466550 fixes
+      that write, because a blocking gate that ships red teaches people to bypass it.
+    detector: py -m core.gates.event_backed_write
+  - id: a-channel-outside-the-accounting
+    seat: "Untrusted input and abuse limits"
+    question: >-
+      What is the full capability surface of the thing being guarded, independent of what the
+      guard says about itself?
+    signature: >-
+      A guard declares its dimensions -- caps, allowed values, a rule -- and enforces every one
+      correctly. The adversarial inputs are derived from that list, so they all probe stated
+      limits and all get refused, and the review reports the guard safe. The defect is a mechanism
+      of the underlying FORMAT or LIBRARY that the guard's accounting never sees: bytes consumed
+      and expanded internally before anything is handed back, so no accounting the caller writes
+      can count them. Three variants of one shape: verifying that a rule is ENFORCED rather than
+      whether the rule is RIGHT; verifying a producer's transitions rather than what RENDERS;
+      verifying the caps a guard DECLARES rather than a channel outside its accounting. Each time
+      the review took its frame from the artifact under review.
+    precedent: >-
+      The Cartographer, an external review pass on `_declaration_members`. A reviewer built ten
+      archives -- a member over the per-member cap, members summing past the total cap, more
+      members than the member cap, the wrong container, empty bytes -- ran them through the guard
+      and wrote "Ten for ten, on both container formats... genuinely safe rather than merely
+      bounded." PAX headers and GNU long-name were reachable the whole time, because `tarfile`
+      consumes and expands the header internally and yields only the regular member, so
+      `member.isfile()` never sees it. Every one of the ten cases was derived from a limit the
+      guard declares, and PAX is not a way to exceed a declared cap. THREE PASSES MISSED IT -- the
+      author twice, plus a review of this module specifically for security -- and it was found by
+      reasoning about `tarfile` rather than about the guard, which is what makes it a missing
+      question rather than a lapse. The recorded correction: derive adversarial inputs from the
+      parser's capability surface (PAX, GNU long-name/long-link, sparse members, nested
+      compression), not the guard's rule list.
+    measurement: >-
+      A DETECTOR WAS PROTOTYPED, MEASURED SMALL, AND REJECTED ANYWAY -- for a better reason than
+      volume. For each format this repo parses in production, it asked whether the test corpus
+      mentions that format's documented side channels: 4 formats, being csv (5 production sites, 0
+      of 3 channels named in tests), json (275 sites, 1 of 4), yaml (43 sites, 3 of 5) and zipfile
+      (3 sites, 1 of 4). Four rows is actionable, not a wall, and it did surface a real gap. It is
+      not shipped because THE SIGNAL IS A GREP STANDING IN FOR A DRIVE: "the string 'pax' occurs
+      somewhere under tests/" is not evidence that any guard was ever driven with a PAX header,
+      and that substitution is precisely what `core/gates/deterministic_evidence.py` exists to
+      report -- a gate committing the defect the repo already has a gate against would report
+      coverage this repo does not have. Neither is the lane a detector by nature: the capability
+      surface of a library is documented in the library, and no static read of this repo can
+      enumerate what `tarfile` does with bytes it never yields.
+    standards:
+      - "OWASP ASVS v4.0 V5 Validation, Sanitization and Encoding"
+      - "OWASP Top 10 A03:2021 Injection"
+      - "CWE-22 path traversal"
+      - "CWE-409 decompression bomb"
+    eval: tests/evals/test_review_lane_the_surface_outside_the_rules.py
   - id: chair-and-verdict-owner
     seat: "Chair and verdict owner"
     question: >-
@@ -101,81 +444,6 @@ lanes:
       It audits other seats' findings, which do not exist until they have run, so it has no input
       at diff time. It becomes an eval once a verdict carries per-finding reproductions that can
       be replayed at HEAD.
-  - id: merge-order-steward
-    seat: "Merge-order steward"
-    question: >-
-      How far behind its base is this, is it the tree that actually ships, and does anything
-      still-open have to land first?
-    signature: >-
-      A branch reviewed in isolation. It is clean against its own base, stale against main, and
-      the merged tree behaves differently from either.
-    precedent: >-
-      dogfood-appliances#34: a clean textual merge producing an invalid lockfile. release#140: a
-      superseded duplicate. 1,262 units.
-    measurement: >-
-      Distance from base and merge-state are both computable from git without judgement, which is
-      why this one is a detector and not prose.
-    detector: py -m core.gates.branch_freshness
-  - id: claim-and-closure-auditor
-    seat: "Claim and closure auditor"
-    question: >-
-      Does the PR body, the comments and the docs say what the code does, and will `Closes #N`
-      close the right issue?
-    signature: >-
-      A description that describes an intention. Acceptance criteria partly met and reported as
-      met, or a closing keyword pointed at an issue this head cannot satisfy.
-    precedent: >-
-      platform#834 would have auto-closed the wrong issue; platform#701's 'this head cannot close
-      #733'. 2,638 units, the second-largest theme.
-    measurement: >-
-      Whether a caller sees something different is derivable from the diff; whether the change
-      SAYS so is a judgement about prose, so this is graded rather than detected.
-    standards:
-      - "Conventional Commits 1.0.0"
-      - "Keep a Changelog 1.1.0"
-    eval: tests/evals/test_review_lane_behaviour_change_enumerated.py
-  - id: gate-integrity-engineer
-    seat: "Gate-integrity engineer"
-    question: >-
-      Is this a gate or a report? What does it do when the thing it checks is absent,
-      unreportable, or failing?
-    signature: >-
-      A workflow that reports is not a gate. Required checks that never report because a path
-      filter excluded them, always() where success() was meant, `bash -e` without pipefail
-      swallowing a red plan.
-    precedent: >-
-      release#7's masked plan failure, platform#621's cached merge ref, release#141's fail-open
-      scan matrix. 1,578 units.
-    measurement: >-
-      The admitting predicate and the delivering predicate can be compared where both are code,
-      and the disagreement is counted rather than argued -- which is what made this an eval
-      instead of prose.
-    standards:
-      - "OpenSSF Scorecard"
-      - "SLSA v1.0 Build L2+"
-    scope:
-      - ".github/workflows/**"
-      - "canonical/workflows/**"
-      - "core/gates/**"
-      - "hooks/**"
-      - "runtime/hooks/**"
-    eval: tests/evals/test_review_lane_predicate_parity.py
-  - id: test-integrity-inquisitor
-    seat: "Test-integrity inquisitor"
-    question: >-
-      This test is green. Show me it going red -- what does it look like when the thing it
-      protects is broken?
-    signature: >-
-      An assertion true by construction, new logic with no committed test, a happy path standing
-      in for coverage, or a flake answered with a longer timeout instead of a root cause.
-    precedent: >-
-      platform#853: timeout inflation offered in place of a diagnosis. 1,923 units.
-    measurement: >-
-      Vacuity is graded, not detected: a test that cannot fail is only provable by mutating the
-      code it guards and observing that it stays green.
-    standards:
-      - "ISO/IEC/IEEE 29119-4 test techniques"
-    eval: tests/evals/test_review_lane_a_test_that_cannot_fail.py
   - id: authz-and-identity
     seat: "AuthZ and identity"
     question: >-
@@ -200,27 +468,6 @@ lanes:
       There is no machine-readable authorization model in this repo to diff a change against. It
       becomes a detector the day the permission derivation is expressed as data rather than as
       code paths.
-  - id: untrusted-input-and-abuse-limits
-    seat: "Untrusted input and abuse limits"
-    question: >-
-      What is the full capability surface of the thing being guarded, as opposed to what the
-      guard's own rule list says about it?
-    signature: >-
-      A guard that enumerates the attacks it knows. The format has a mechanism the rule list never
-      named -- a PAX header, a nested archive, a decompression ratio -- and the guard reports
-      clean.
-    precedent: >-
-      platform#737's PAX/tar traversal, platform#429 validating a raw request value for truthiness
-      rather than as an id, platform#720 returning 500 where the documented path is fail-closed.
-    measurement: >-
-      The gap is between a format's real surface and a rule list, and only reading the format's
-      specification closes it -- which is a graded exercise, not a pattern a scanner can hold.
-    standards:
-      - "OWASP ASVS v4.0 V5 Validation, Sanitization and Encoding"
-      - "OWASP Top 10 A03:2021 Injection"
-      - "CWE-22 path traversal"
-      - "CWE-409 decompression bomb"
-    eval: tests/evals/test_review_lane_the_surface_outside_the_rules.py
   - id: secrets-and-data-at-rest
     seat: "Secrets and data-at-rest"
     question: >-
@@ -365,24 +612,6 @@ lanes:
     why: >-
       The format rules differ per target ecosystem and this repo publishes to none of them yet.
       The released-version sentinel is already guarded by its own migration gate.
-  - id: distributed-state-and-concurrency
-    seat: "Distributed state and concurrency"
-    question: >-
-      This wait is bounded per item. How many items can there be, and does anything bound the
-      total?
-    signature: >-
-      A per-item timeout with no aggregate deadline, a process-local cache in a multi-replica
-      deployment, or a guard evaluated outside the transaction it is meant to protect.
-    precedent: >-
-      platform#701's process-local cache across replicas; platform#689's guard outside the
-      transaction; platform#696's stale-cache authorization leak; demo#68's ledger double-spend.
-    measurement: >-
-      A per-item wait with no enclosing deadline is a shape visible in the code, countable across
-      the tree, and the count was small enough to hold at zero -- which is why it is a detector.
-    standards:
-      - "CWE-362 race condition"
-      - "CWE-367 time-of-check time-of-use"
-    detector: py -m core.gates.aggregate_deadline
   - id: data-and-migration
     seat: "Data and migration"
     question: >-
@@ -409,70 +638,6 @@ lanes:
       Dream Studio already runs migration-risk and migration-authority gates for the mechanical
       half. This seat exists so the semantic half -- does the row still mean what it meant -- has
       somewhere to be asked.
-  - id: contract-and-protocol
-    seat: "Contract and protocol"
-    question: >-
-      The code says mechanisms X and Y make this claim true. Does the contract document name both?
-    signature: >-
-      A decision record that names one of two mechanisms. The contract is accurate about what it
-      mentions and silent about the half that is also load bearing, so the next author removes it.
-    precedent: >-
-      platform#721's response shape against the issue's acceptance criteria; fulcrum-gateway#513's
-      spec drifting from the code. 1,207 units combined.
-    measurement: >-
-      Whether a document names every mechanism the code depends on requires reading both and
-      deciding what counts as a mechanism -- there is no list to diff against, which is why this
-      stayed judgement.
-    standards:
-      - "OpenAPI 3.1"
-      - "JSON Schema 2020-12"
-      - "RFC 9457 problem details"
-      - "Semantic Versioning 2.0.0 for API surface"
-    judgment: true
-    why: >-
-      Naming every mechanism a claim depends on requires reading the code's intent, not its text.
-      It becomes an eval when contracts declare their mechanisms in a form a grader can compare
-      against the diff.
-  - id: failure-semantics
-    seat: "Failure semantics"
-    question: >-
-      The producer's vocabulary has more members than the consumer has branches. What does the far
-      end do with the ones it does not handle?
-    signature: >-
-      A confident silent default. An unknown status becomes a plausible known one, a truncation is
-      not reported, an exception is swallowed and the caller is told everything succeeded.
-    precedent: >-
-      platform#583, where an unknown status becomes 'Backlog' -- a value rendered as another
-      value's meaning. 1,952 units.
-    measurement: >-
-      The two vocabularies are both readable and the gap between them is countable, but deciding
-      whether a default is confident or correct needs the domain -- so it is graded on real
-      translation sites.
-    standards:
-      - "CWE-703 improper check or handling of exceptional conditions"
-      - "CWE-754 improper check for unusual conditions"
-      - "Saltzer and Schroeder fail-safe defaults"
-    eval: tests/evals/test_review_lane_status_survives_translation.py
-  - id: observability-and-audit-trail
-    seat: "Observability and audit trail"
-    question: >-
-      A value is produced and honestly computed. Does anything actually read it, and does every
-      path that matters leave a record?
-    signature: >-
-      A produced value with no reader, or a failure path that returns before it audits. The
-      diagnostic a document promises and the code never emits.
-    precedent: >-
-      platform#495, where a token-store failure returns 503 with nothing audited. 934 units.
-    measurement: >-
-      Reachability from a producer to a reader is traceable in code, but whether a reader is the
-      RIGHT one, and whether an unaudited path matters, is a judgement the grader makes on real
-      call chains.
-    standards:
-      - "OWASP ASVS v4.0 V7 Error Handling and Logging"
-      - "OWASP Top 10 A09:2021 Security Logging and Monitoring Failures"
-      - "NIST SP 800-92 log management"
-      - "OpenTelemetry semantic conventions"
-    eval: tests/evals/test_review_lane_value_reaches_a_reader.py
   - id: design-system-conformance
     seat: "Design-system conformance"
     question: >-
@@ -703,37 +868,3 @@ lanes:
       The leanness gate already measures this and is advisory on purpose, because the count is
       large and the severity is contextual. This lane exists so the advisory output has a seat
       that owns triaging it.
-  - id: event-substrate-custodian
-    seat: "Event-substrate custodian"
-    question: >-
-      If this record were rebuilt from its events tomorrow, would it still be here, and would it
-      still say the same thing?
-    signature: >-
-      A row written straight into a projection. It is correct today and gone after a rebuild, or
-      present with a field the replay could not reproduce.
-    precedent: >-
-      Measured on this authority 2026-09-10: 493 of 956 work orders and 1706 of 3311 tasks had no
-      creation event, and 459 rows held a status no event type could produce. A rebuild is the
-      recovery tool.
-    measurement: >-
-      Projection target tables are derived from each projection's own target_tables and the write
-      sites are countable -- 6 of 6 examined and emitting -- which is small enough to hold at
-      zero, so it is a detector.
-    detector: py -m core.gates.event_backed_write
-  - id: test-integrity-inquisitor-untested-fallback
-    seat: "Test-integrity inquisitor"
-    question: >-
-      This fallback exists because the primary path can be unavailable. Does any test ever take
-      it?
-    signature: >-
-      A fallback nothing exercises. It is written for the day the primary path fails, and the
-      first time it runs in anger is the first time it runs at all.
-    precedent: >-
-      Carried from the Machinist's lane, which found untested fallback branches across this tree
-      and has held the count at zero since.
-    measurement: >-
-      Fallback branches are countable in the source and the count was small enough to drive to
-      zero and hold, which is what made a detector the right instrument.
-    standards:
-      - "ISO/IEC/IEEE 29119-4 test techniques"
-    detector: py -m core.gates.untested_fallback

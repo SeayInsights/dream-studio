@@ -57,7 +57,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 LANE_ID = "a-test-that-cannot-fail"
-SEAT = "The Falsifier"
+SEAT = "Test-integrity inquisitor"
 
 
 #: THE THING UNDER TEST. A guard that is supposed to refuse an unsafe path.

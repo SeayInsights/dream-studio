@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import json
 import shlex
+import os
 import subprocess
 from fnmatch import fnmatch
 import sys
@@ -108,7 +109,19 @@ def _lanes(repo_root: Path | None = None) -> list[dict]:
             " reporting an empty table."
         )
     data = yaml.safe_load(registry.read_text(encoding="utf-8"))
-    return [lane for lane in (data or {}).get("lanes", []) if isinstance(lane, dict)]
+    lanes = [lane for lane in (data or {}).get("lanes", []) if isinstance(lane, dict)]
+    if not lanes:
+        # A PRESENT-BUT-EMPTY REGISTRY WAS THE ONE PATH WITH NO GUARD, and an independent
+        # reviewer walked straight through it: convene() returned `status: pass`, zero
+        # lanes, and "0 detector lane(s) clean" -- a clean review that asked nothing.
+        # The missing-file case already raised; the malformed-file case reported success.
+        # Both are the same thing, so both raise.
+        raise ValueError(
+            f"the review-lane registry at {registry} parsed to zero lanes. A convening with"
+            " no lanes is not a clean review -- it is a review that asked nothing, and"
+            " reporting it as a pass is the failure every lane here exists to refuse."
+        )
+    return lanes
 
 
 def _one_line(text: object) -> str:
@@ -206,8 +219,15 @@ def changed_paths(repo_root: Path | None = None) -> list[str]:
     compared-nothing-reported-clean shape every lane here exists to refuse.
     """
     root = repo_root or REPO_ROOT
+    # THE BRANCH, NOT JUST THE WORKING TREE. Reading only uncommitted state meant a clean
+    # checkout of a branch reported NO change set, and an untracked scratch file reported
+    # the WRONG one -- an independent reviewer hid the Gate-integrity lane from a diff
+    # touching three files under core/gates/ by leaving one unrelated note in the tree.
+    # Every other gate here honours DREAM_STUDIO_BASE_REF; this one did not.
+    base = os.environ.get("DREAM_STUDIO_BASE_REF", "origin/main")
     paths: set[str] = set()
     for args in (
+        ["git", "diff", "--name-only", f"{base}...HEAD"],
         ["git", "diff", "--name-only", "HEAD"],
         ["git", "diff", "--name-only", "--cached"],
         ["git", "ls-files", "--others", "--exclude-standard"],

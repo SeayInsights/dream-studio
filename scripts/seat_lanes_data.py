@@ -22,6 +22,10 @@ Unit counts and PR precedents are the operator's, from real review history.
 
 from __future__ import annotations
 
+import json
+import pathlib
+import re
+
 #: seat -> (question, signature, precedent, measurement, enforcement)
 #: `enforcement` is ("detector", cmd) | ("eval", path) | ("judgment", why)
 SEATS: dict[str, tuple[str, str, str, str, tuple[str, str]]] = {}
@@ -134,8 +138,7 @@ seat(
     signature="An assertion true by construction, new logic with no committed test, a"
     " happy path standing in for coverage, or a flake answered with a longer timeout"
     " instead of a root cause.",
-    precedent="platform#853: timeout inflation offered in place of a diagnosis. 1,923"
-    " units.",
+    precedent="platform#853: timeout inflation offered in place of a diagnosis. 1,923" " units.",
     measurement="Vacuity is graded, not detected: a test that cannot fail is only"
     " provable by mutating the code it guards and observing that it stays green.",
     eval="tests/evals/test_review_lane_a_test_that_cannot_fail.py",
@@ -176,8 +179,7 @@ seat(
 )
 seat(
     "Secrets and data-at-rest",
-    question="Where does this secret come to rest, who can read it there, and what"
-    " rotates it?",
+    question="Where does this secret come to rest, who can read it there, and what" " rotates it?",
     signature="A credential written somewhere durable with the wrong mode or the wrong"
     " scope -- a cluster dump in plaintext, a secret store with no condition, a PAT"
     " seeded into a script that ships.",
@@ -209,8 +211,7 @@ seat(
 )
 seat(
     "Cloud IAM and IaC",
-    question="Which external identity can assume this role, and what can it reach once it"
-    " has?",
+    question="Which external identity can assume this role, and what can it reach once it" " has?",
     signature="An OIDC trust subject matched loosely, a policy pairing CreateRole with"
     " PassRole on a wildcard resource, an unpinned provider, or a default region that"
     " silently places data elsewhere.",
@@ -340,8 +341,7 @@ seat(
     " reach the browser?",
     signature="A token bypassed for a raw value, a component that never enters the"
     " barrel, or a stylesheet that is written, reviewed, merged, and never served.",
-    precedent="platform#709: a 625-line stylesheet that never reached the browser. 1,545"
-    " units.",
+    precedent="platform#709: a 625-line stylesheet that never reached the browser. 1,545" " units.",
     measurement="Token-versus-raw-value and barrel export are both greppable and would"
     " make a detector in a repo with a design system; whether the CSS is delivered needs"
     " a build, which is the half that actually bit.",
@@ -399,8 +399,7 @@ seat(
 # ── Domain bench (3) ─────────────────────────────────────────────────────────
 seat(
     "Agent and plugin runtime",
-    question="What does this cap or namespace do to the model rather than to the"
-    " operator?",
+    question="What does this cap or namespace do to the model rather than to the" " operator?",
     signature="A limit that misleads the thing consuming it. A silent truncation the"
     " agent reads as the whole input, a manifest placeholder that ships, an allowlist"
     " that widens a profile nobody reviewed.",
@@ -436,8 +435,7 @@ seat(
     signature="Two canonical documents authorizing and forbidding the same act, an ADR"
     " edited rather than superseded, or canon propagated to one repo and not its"
     " siblings.",
-    precedent="planning#28, where CONTRIBUTING authorized what TRIAGE forbade. 735"
-    " records.",
+    precedent="planning#28, where CONTRIBUTING authorized what TRIAGE forbade. 735" " records.",
     measurement="Cross-document contradiction needs the semantics of both documents;"
     " ADR immutability and numbering are mechanical and this repo already gates the"
     " numbering half.",
@@ -635,14 +633,25 @@ EXTRA_LANES: dict[str, tuple[str, str, str, str, tuple[str, str]]] = {
 SCOPES: dict[str, tuple[str, ...]] = {
     "Cloud IAM and IaC": ("*.tf", "*.tfvars", "**/terraform/**", "**/*iam*"),
     "GitOps and rollout safety": (
-        "**/k8s/**", "**/helm/**", "**/kustomize/**", "**/charts/**", "**/zarf*",
+        "**/k8s/**",
+        "**/helm/**",
+        "**/kustomize/**",
+        "**/charts/**",
+        "**/zarf*",
     ),
     "Supply chain and provenance": (
-        "requirements*.txt", "**/*.lock", "package.json", "pyproject.toml",
-        ".github/workflows/**", "**/uv.lock",
+        "requirements*.txt",
+        "**/*.lock",
+        "package.json",
+        "pyproject.toml",
+        ".github/workflows/**",
+        "**/uv.lock",
     ),
     "Gate-integrity engineer": (
-        ".github/workflows/**", "canonical/workflows/**", "core/gates/**", "hooks/**",
+        ".github/workflows/**",
+        "canonical/workflows/**",
+        "core/gates/**",
+        "hooks/**",
         "runtime/hooks/**",
     ),
     "Data and migration": ("**/migrations/**", "**/*.sql", "core/event_store/**"),
@@ -650,17 +659,784 @@ SCOPES: dict[str, tuple[str, ...]] = {
     "Design-system conformance": ("**/*.css", "**/*.scss", "**/*.tsx", "**/*.jsx"),
     "Accessibility": ("**/*.html", "**/*.tsx", "**/*.jsx", "**/*.vue"),
     "Frontend behavior and payload": (
-        "**/*.tsx", "**/*.jsx", "**/*.ts", "**/*.js", "**/*.css",
+        "**/*.tsx",
+        "**/*.jsx",
+        "**/*.ts",
+        "**/*.js",
+        "**/*.css",
     ),
     "Agent and plugin runtime": (
-        "canonical/skills/**", "canonical/agents/**", ".mcp.json", "integrations/marketplace/**",
+        "canonical/skills/**",
+        "canonical/agents/**",
+        ".mcp.json",
+        "integrations/marketplace/**",
     ),
     "Governance canon and board": ("docs/**", "canonical/**", "*.md"),
     "Docs, style, and attribution": ("docs/**", "*.md", "**/*.md"),
     "Secrets and data-at-rest": (
-        "**/*.env*", "**/secret*", "**/*credential*", ".github/workflows/**",
+        "**/*.env*",
+        "**/secret*",
+        "**/*credential*",
+        ".github/workflows/**",
     ),
     "Release and version model": (
-        "**/.released_version", "**/version*", ".github/workflows/**", "CHANGELOG.md",
+        "**/.released_version",
+        "**/version*",
+        ".github/workflows/**",
+        "CHANGELOG.md",
     ),
 }
+
+
+# ── The eleven lanes that already existed, carried over VERBATIM ─────────────
+#
+# THE RENAME MUST BE ONLY A RENAME. Regenerating these from fresh prose destroyed the
+# evidence they carried -- measurements recording 421 predicates prototyped and
+# rejected, 2108 dict keys, 6249 test functions, 4 formats with their channel counts --
+# and an independent reviewer caught it through the eval fixtures, which assert on those
+# exact numbers. A measurement is the load-bearing field: it is how a lane claiming "not
+# detectable" shows its work, and rewriting it as description threw that away.
+#
+# So the original question, signature, precedent, measurement and enforcement are
+# carried verbatim from the registry as it stood at 772f721f~1. Only the seat changes.
+RESEATED: dict[str, dict] = {
+    "the-other-half-enforced-by-nothing": {
+        "seat": "Gate-integrity engineer",
+        "question": "Two sites decide the same question. Does "
+        "the second consult every predicate the "
+        "first does, or a subset of them?",
+        "signature": 'A fix makes site B "share the predicate" '
+        "with site A, and shares one of the two "
+        "that A actually requires. The comment "
+        "claims the two cannot drift; that is "
+        "true of one predicate and false of the "
+        "pair.",
+        "precedent": "The Warden, plat#814 (blocker-class, and "
+        "the same defect the Herald had blocked "
+        "on). Delivery shared `_pat_rejected` "
+        "(revoked-or-expired) with the acceptance "
+        "paths at app/auth.py:393+396 and :409 — "
+        "but those also require "
+        "`_user_is_active`, and delivery "
+        "consulted only the first. Reproduced "
+        "with a control: a disabled account had "
+        "`_pat_rejected=False`, "
+        "`_user_is_active=False`, auth "
+        "accepts=False, file written=True. A "
+        "credential was DELIVERED that "
+        "authentication refuses. The Herald's "
+        'sentence — "treats expired PATs as '
+        "deliverable even though authentication "
+        'rejects them" — applied verbatim with '
+        "`disabled` swapped for `expired`.",
+        "measurement": "A DETECTOR WAS PROTOTYPED AND REJECTED "
+        "ON EVIDENCE. Collecting every private "
+        "predicate consulted in a boolean test "
+        "across the tree found 421 of them and "
+        '26 "subset-suspects" — and '
+        "spot-checking the 26 showed they are "
+        "arity differences "
+        "(`_table_exists(conn)` beside "
+        "`_table_exists(conn, table)`), module "
+        "aliases (`_yaml`), and unrelated "
+        "decisions in different files. The "
+        'detector has no notion of "the same '
+        'question", which is the entire content '
+        "of the finding. So this lane is "
+        "graded, and the number is recorded "
+        "here so the next person does not "
+        "re-derive it.",
+        "enforcement": ("eval", "tests/evals/test_review_lane_predicate_parity.py"),
+    },
+    "an-untested-fallback-lane": {
+        "seat": "Test-integrity inquisitor",
+        "question": "This fallback exists because the primary path can "
+        "be unavailable. Does any test ever enter it, or do "
+        "they all take the primary path?",
+        "signature": "A platform or exception fallback whose tests all "
+        "run the other branch — so the test that validates "
+        "the fix cannot run on the platform the fallback "
+        "exists for.",
+        "precedent": "The Machinist, gw#858. `fallback_lock` / "
+        "`_pending_queue_thread_lock` had zero test hits; "
+        "every ack test ran the flock path. The Windows "
+        "lane the docstring promised was unexercised.",
+        "measurement": "Deterministic and diff-scoped. Measured 10 "
+        "candidates across 944 product files with "
+        "name-and-handler detection alone; 14 once an "
+        "audit forced the detector to also see "
+        "PLATFORM-CONDITIONAL fallbacks, which it had "
+        "been blind to — and gw#858 was a Windows lane, "
+        "so the detector could not see the shape of its "
+        "own precedent. Diff-scoped because those 10 "
+        "stand today: whole-tree would be a wall on day "
+        "one, and the backlog drains as those files are "
+        "touched — the ratchet `normative-baseline` and "
+        "`workflow-node-verification` already use.",
+        "enforcement": ("detector", "py -m core.gates.untested_fallback"),
+    },
+    "a-per-item-wait-with-no-aggregate-deadline": {
+        "seat": "Distributed state and concurrency",
+        "question": "This wait is bounded per item. "
+        "How many items can there be, and "
+        "does anything bound the total?",
+        "signature": "A module that already solved "
+        "unbounded stall for one loop "
+        "grows a per-item retry in "
+        "another, with no aggregate "
+        "deadline — so the ceiling "
+        "multiplies by a data-dependent "
+        "count and passes the timeout the "
+        "module itself cites.",
+        "precedent": "The Machinist, gw#849 — the "
+        "strongest finding of the pass. "
+        "The module's own comment 40 "
+        "lines above the new code says a "
+        "per-slug ceiling times an "
+        "agent's skill count is loop "
+        "stall time, and set "
+        "`_LOCK_BATCH_BUDGET_S = 5.0` for "
+        "exactly that reason. The new "
+        "per-card retry was 2 sleeps x "
+        "0.5s inside `for sid in ids:` "
+        "with no aggregate deadline: ~20s "
+        "at 20 equipped skills, plus the "
+        "equip retry's own 1.0s, scaling "
+        "linearly past the 30s timeout "
+        "the operator control surface "
+        "uses.",
+        "measurement": "Deterministic ONLY once "
+        "sharpened to the "
+        "multiplication shape, and the "
+        "sharpening came from a false "
+        "positive. The first cut — a "
+        "sleep in a loop, in a module "
+        "that defines a budget constant "
+        "— found 1 candidate, "
+        "`core/work_orders/artifacts.py:216`, "
+        "and reading it showed "
+        "`_LOCK_ATTEMPTS = 4` with a "
+        "0.15s backoff: 0.90s worst "
+        "case, not inside any outer "
+        "per-item loop. Bounded, and "
+        "not the finding. Requiring "
+        "NESTING — a sleeping loop "
+        "inside another loop, neither "
+        "consulting a deadline — drops "
+        "DS's tree to 0, so this one "
+        "runs whole-tree rather than "
+        "diff-scoped.",
+        "enforcement": ("detector", "py -m " "core.gates.aggregate_deadline"),
+    },
+    "a-contract-that-names-one-of-two-mechanisms": {
+        "seat": "Contract and protocol",
+        "question": "The code says mechanisms X and Y "
+        "make this claim true. Does the "
+        "contract document name both, or "
+        "only the one that was there "
+        "first?",
+        "signature": "A normative line is generic "
+        "enough to stay true while the "
+        "decision record beneath it "
+        "still names a single mechanism "
+        "— so availability now rests on "
+        "two things and the contract "
+        "admits one.",
+        "precedent": "The Archivist. The spec's "
+        "normative line "
+        "(GATEWAY-HOSTED-AGENT-SESSION-001:274, "
+        '"a transient failure is '
+        "absorbed by retrying the "
+        'fetch") is generic and '
+        "genuinely true. But ADR-024 "
+        'point 4 still says "The equip '
+        'fetch retries", naming one of '
+        "the two mechanisms availability "
+        "now depends on, while the "
+        "code's own docstring says the "
+        'per-card retry "is what makes '
+        "gw-ADR-024's availability claim "
+        'true rather than aspirational." '
+        "Same shape he blocked #837 on.",
+        "measurement": "MEASURED AS ZERO SUBSTRATE, "
+        "which is why this is the one "
+        "lane with no detector and no "
+        "eval. `docs/adr/` contains "
+        "exactly two files, "
+        "`ADR-000-template.md` and "
+        "`README.md` — no decision "
+        "record has been written, so "
+        "there is nothing for a "
+        "checker to compare a code "
+        "claim against. A detector "
+        "would grep for `ADR-\\d+` "
+        "citations, collect the "
+        "mechanisms citing each, and "
+        "assert the record names them; "
+        "against zero records it would "
+        "pass vacuously, which reads "
+        "like enforcement and is not. "
+        "This lane was ALSO the one an "
+        "audit caught with no "
+        "`measurement` field at all, "
+        "while the registry header "
+        "claimed every lane carries "
+        "one — so the gate now "
+        "requires it.",
+        "enforcement": (
+            "judgment",
+            "THERE IS NOTHING TO CHECK "
+            "AGAINST YET. This lane "
+            "compares a code claim to the "
+            "decision record it cites, "
+            "and `docs/adr/` in this repo "
+            "holds only "
+            "`ADR-000-template.md` and a "
+            "README — no ADR has been "
+            "written. A detector would "
+            "grep for `ADR-\\d+` "
+            "citations, collect the "
+            "mechanisms citing each one, "
+            "and assert the ADR names "
+            "them; with zero ADRs it "
+            "would pass vacuously, which "
+            "is worse than an honest "
+            "declaration. Convert this "
+            "lane the moment the first "
+            "real ADR lands.",
+        ),
+    },
+    "a-branch-behind-its-base": {
+        "seat": "Merge-order steward",
+        "question": "How far behind its base is this branch, and did " "anyone ask it to sync?",
+        "signature": "A PR that trial-merges clean while being far "
+        "enough behind that the review read a tree nobody "
+        "will ship.",
+        "precedent": "The Surveyor. In the pasted pass plat#812 and #814 "
+        "were 38 commits behind and gw#849 and #858 were 5 "
+        "behind; all four trial-merged clean, and the "
+        "Herald asked #812 to sync explicitly. Clean "
+        "trial-merge is not currency.",
+        "measurement": "Trivially deterministic — `git rev-list --count "
+        "HEAD..origin/main` — and currently PROSE: "
+        'CLAUDE.md says "Never push to stale/old branches '
+        '— check branch freshness first", enforced by '
+        "nothing. ADVISORY rather than blocking, because "
+        "a deliberately behind branch is legitimate (a "
+        "revert, a hotfix off a tag) and blocking it "
+        "would be a wall; the lane's job is that nobody "
+        "reviews a stale tree without knowing it.",
+        "enforcement": ("detector", "py -m core.gates.branch_freshness"),
+    },
+    "an-unenumerated-behaviour-change": {
+        "seat": "Claim and closure auditor",
+        "question": "What does a caller see differently after "
+        "this change, and does the change say so?",
+        "signature": "A response contract changes — a status "
+        "code, a new raise on an existing path, a "
+        "changed return type — and the PR body "
+        "enumerates everything except that.",
+        "precedent": "The Herald, gw#858. A second ack now "
+        "raises instead of returning 200, and the "
+        "consumer is the local UI. The change was "
+        "real, the body did not name it.",
+        "measurement": "A SIBLING OF AN EXISTING GATE, not a new "
+        "one. `evidence-backed-output` already "
+        "audits what a push publishes — the "
+        "commit messages of the commits being "
+        "pushed and the lines added to "
+        'CHANGELOG.md — so the mechanism for "the '
+        'outbound document must say it" exists. '
+        "What is missing is the diff side: "
+        "recognising that a 200 became a raise. "
+        "That half is graded for now because "
+        '"what a caller sees differently" is not '
+        "decidable from a textual diff in "
+        "general, and the honest move is to "
+        "extend the existing gate rather than "
+        "stand up a second one that audits the "
+        "same documents.",
+        "enforcement": ("eval", "tests/evals/test_review_lane_behaviour_change_enumerated.py"),
+    },
+    "a-produced-value-with-no-reader": {
+        "seat": "Observability and audit trail",
+        "question": "A value is produced and honestly computed. "
+        "Does anything actually read it, and when "
+        "nothing does, what does the default say in "
+        "its place?",
+        "signature": "A producer returns several fields; the "
+        "consumer destructures one. The unread field "
+        'would have said "still loading" or "the '
+        'request failed", so a fallback speaks '
+        "instead -- and the fallback MAKES A "
+        "POSITIVE CLAIM. A placeholder reading "
+        '"no_data" is indistinguishable from a real '
+        "measurement of nothing, so a broken fetch "
+        "and an empty result render identically. A "
+        'fallback admitting "unknown" would be '
+        "untidy; one asserting a measurement is the "
+        "compared-nothing-reported-clean family.",
+        "precedent": "The Interpreter, an external review pass. A "
+        "fetch hook returned `{get, isLoading, "
+        "stateById}` and both views destructured "
+        "only `get`, so `isLoading` and `stateById` "
+        "had no production consumer and a failed "
+        "fetch drew a hollow radar claiming "
+        '"measured, nothing found". An earlier '
+        "review of the same code had reasoned that a "
+        "spinner keyed off `isLoading` would hang "
+        "forever; the finder checked and there was "
+        "no spinner. In this repo the same shape is "
+        "WO 48bd8ab3 (2026-09-09): "
+        "`contract_docs_drift_gate` filtered domains "
+        "on `status`, a key the dicts do not carry "
+        "(they carry `freshness_status`), so "
+        "`record_gate_bypass` was unreachable -- 350 "
+        "recorded bypasses across 16 gates and zero "
+        "for docs-drift.",
+        "measurement": "A DETECTOR WAS PROTOTYPED AND REJECTED ON "
+        "EVIDENCE. Collecting every string key "
+        "returned in a dict literal across `git "
+        "ls-files '*.py'` and subtracting every "
+        "key read anywhere as a subscript, a "
+        "`.get()`/`.pop()`/`.setdefault()` "
+        "argument or an `in` test measured 2108 "
+        "distinct keys produced, 588 never read "
+        "in-tree, across 198 files. Sampling "
+        "showed why that count is a wall rather "
+        "than a finding: most are API response "
+        "fields consumed by the dashboard, or keys "
+        "serialised to JSON for a reader outside "
+        "Python entirely. A consumer in another "
+        "language is invisible to the analysis, "
+        "which is precisely the shape of the "
+        "precedent -- a React view reading a "
+        "Python-shaped hook -- so a detector would "
+        "fire 588 times and still miss the "
+        "instance that created the lane. Graded "
+        "against a fixture instead.",
+        "enforcement": ("eval", "tests/evals/test_review_lane_value_reaches_a_reader.py"),
+    },
+    "a-status-the-far-end-does-not-handle": {
+        "seat": "Failure semantics",
+        "question": "The producer's vocabulary has more "
+        "members than the consumer has branches. "
+        "What does the consumer render for the "
+        "member it does not know?",
+        "signature": "A status enum grows a member -- or "
+        "always had one -- and the consumer "
+        "branches on the ones it knows and lets "
+        "the rest fall to a default. The "
+        "default is a MEMBER OF THE SAME "
+        "VOCABULARY rather than an error, so "
+        "the unknown status renders as a "
+        "different, plausible reading instead "
+        "of failing. Checking that the KEYS "
+        "match the producer is what makes this "
+        "easy to miss: the envelope is verified "
+        "and the meaning inside it is not.",
+        "precedent": "The Interpreter, the same external "
+        "review pass. "
+        "`measure_network_reliability` emits "
+        "`not_applicable` today for agents that "
+        "do not heartbeat; the radar renderer "
+        "branched on its known statuses and let "
+        "the rest fall through to a numeric "
+        "zero, drawing a normal-weight spoke to "
+        "the centre vertex -- reading as 0% "
+        "uptime for an agent whose uptime was "
+        "never measurable. The finder's "
+        'diagnosis: "I checked that the six '
+        "axis keys matched the server and never "
+        'asked what the statuses render as."',
+        "measurement": "SEPARATED FROM ITS SIBLING LANE "
+        "DELIBERATELY, after asking what each "
+        "remedy is: there the consumer does "
+        "not exist and the fix is to add one; "
+        "here the consumer exists and is "
+        "wrong, and the fix is to make its "
+        "branch set match the producer's "
+        "vocabulary or fail loudly on a "
+        "member it does not know. One lane "
+        "answering both would carry two "
+        "questions and one verdict, which is "
+        "how a lane stops being falsifiable. "
+        "Graded for the same measured reason "
+        "as the sibling -- the 588-of-2108 "
+        "analysis that cannot see a "
+        "non-Python consumer cannot see a "
+        "non-Python branch set either -- and "
+        "additionally because a vocabulary "
+        "member can arrive from a database "
+        "column, a config file or a "
+        "provider's API without appearing as "
+        "a literal anywhere, so a detector "
+        "restricted to the both-sides-Python "
+        "case would pass on the very shape "
+        "that produced the finding.",
+        "enforcement": ("eval", "tests/evals/test_review_lane_status_survives_translation.py"),
+    },
+    "a-test-that-cannot-fail": {
+        "seat": "Test-integrity inquisitor",
+        "question": "This test is green. Show me it going red — what does "
+        "it look like when the thing it guards is broken?",
+        "signature": "A test with assertions on computed values, reading "
+        "as thorough, whose verdict does not actually depend "
+        "on the thing it tests. It passes against the "
+        "correct code AND against the defect it claims to "
+        "catch. Often it has MORE assertions than a real "
+        'test of the same subject, which is why "it has '
+        'assertions" and "it can fail" get confused. Two '
+        "ordinary shapes: it only ever passes inputs that "
+        "should succeed, so the refusing branch is never "
+        "exercised; or it asserts on a value the test itself "
+        "constructed rather than on the subject's answer.",
+        "precedent": "The most productive family in this repo, and every "
+        "instance was found by an independent auditor rather "
+        "than by the suite containing it. WO a9fa2368: a "
+        "non-mutation test hashed the live database's FILE "
+        "BYTES, so it failed WITHOUT a mutation (WAL "
+        "checkpointing rewrites those bytes on a benign "
+        "read) and could not fail FOR the real reason "
+        "(conftest redirects the database session-wide, so "
+        "nothing in pytest reaches the live file) -- proved "
+        "by removing the override and watching a "
+        "connection-recording version still pass. WO "
+        "5db3755e: a control test asserted a hand-typed "
+        "table of booleans against itself, never executing "
+        "the fixture it claimed to reproduce; two further "
+        "tautologies passed under a checker mutated to "
+        "report nothing. WO eac7f657: a coverage report and "
+        "the executor shared a PATTERN but each applied it, "
+        "and deleting the report's own `.strip()` left all "
+        "30 of its tests green while an indented ` "
+        "TEST-CHECK: x` became a criterion the executor runs "
+        "and the report calls prose.",
+        "measurement": "TWO STATIC SHAPES WERE PROTOTYPED AND BOTH "
+        "REJECTED. Across 6249 test functions, 79 have no "
+        "assertion of any kind and 3 assert only on "
+        "literals. Both populations are almost entirely "
+        "legitimate: the 79 are "
+        "`tests/evals/test_dependency_chain.py`'s "
+        "deliberate `*_unknown` / `*_untested` markers, "
+        "which exist to record what is NOT covered, and "
+        "the 3 are intentional probes for other gates. "
+        "Decisively, zero of the real instances above "
+        "would have been caught -- every one had "
+        "assertions on computed values. A detector would "
+        "flag 82 legitimate tests and none of the defects, "
+        "which is a wall and decoration at once. The only "
+        "reliable answer is to mutate the subject and "
+        "watch, which is a reviewer's act rather than a "
+        "gate's.",
+        "enforcement": ("eval", "tests/evals/test_review_lane_a_test_that_cannot_fail.py"),
+    },
+    "a-write-no-event-can-reconstruct": {
+        "seat": "Event-substrate custodian",
+        "question": "If this record were rebuilt from its events "
+        "tomorrow, would it still be here?",
+        "signature": "A row written straight into a projection "
+        "table, with no canonical event beside it. "
+        "Nothing fails and the row reads as "
+        "durable, because the projection is a real "
+        "table and the write really happened -- but "
+        "`pre_rebuild` truncates that table before "
+        "replaying events, so a replay cannot "
+        "reconstruct what no event describes. Often "
+        "arrives by copying a sibling write site "
+        "rather than the designated writer.",
+        "precedent": "The Custodian, WO 17466550, measured "
+        "2026-09-10: 493 of 949 work orders and "
+        "1706 of 3286 tasks in the live authority "
+        "carry no creation event, so a rebuild "
+        "deletes 52% of both -- and a rebuild is "
+        "the disaster-recovery tool, so the defect "
+        "bites hardest exactly when it is reached "
+        "for. Verified by resolution rather than by "
+        "reading the comment that asserts it: "
+        "`pre_rebuild` is absent from both "
+        "projections' `__dict__` and both bind to "
+        "`framework_projection.py`, whose default "
+        "does `DELETE FROM` each declared target. "
+        "The source was one unfixed sibling -- "
+        "`_insert_gap_work_orders` writes both "
+        "tables with no event, while "
+        "`_attach_gap_tasks` was fixed and carries "
+        'a comment saying its author "copied the '
+        "shape of the sibling-spawn INSERT instead "
+        "of the task-creation path in "
+        'mutations.py", naming this exact function '
+        "as the wrong shape and never returning to "
+        "it. Related: WO a08206a9, where ownership "
+        "records SHAs that squash-merge discarded "
+        "(10 of 35 on one work order), and WO "
+        "6935afa5, where a drain writes status with "
+        "no event.",
+        "measurement": "A DETECTOR, AND THE COUNT IS WHY. The "
+        "target tables are DERIVED from each "
+        "projection's own `target_tables` "
+        "declaration -- the set `pre_rebuild` "
+        "truncates, so the actual blast radius -- "
+        "which measures 6 tables rather than the "
+        "2 this defect was found in; a hardcoded "
+        "list would have exempted the other 4, "
+        "the same subset-of-what-it-writes shape "
+        "as WO b56cca8a. Across the tree, 214 "
+        "functions INSERT into one of those "
+        "tables and 211 emit no event, but only 4 "
+        "are outside `tests/`: a fixture building "
+        "rows directly is what a fixture IS, so "
+        "tests are out of scope. Of the 4, three "
+        "are `prove`'s DISPOSABLE scratch "
+        "authority (declared at the site, since "
+        "emitting there would write the "
+        "operator's live spool -- the defect WO "
+        "8bd297f1 fixed, 4194 connections "
+        "measured) and one is the genuine "
+        "finding. So the gate reports exactly 1, "
+        "which is small enough to hold at zero. "
+        "ADVISORY until WO 17466550 fixes that "
+        "write, because a blocking gate that "
+        "ships red teaches people to bypass it.",
+        "enforcement": ("detector", "py -m core.gates.event_backed_write"),
+    },
+    "a-channel-outside-the-accounting": {
+        "seat": "Untrusted input and abuse limits",
+        "question": "What is the full capability surface of the "
+        "thing being guarded, independent of what "
+        "the guard says about itself?",
+        "signature": "A guard declares its dimensions -- caps, "
+        "allowed values, a rule -- and enforces "
+        "every one correctly. The adversarial "
+        "inputs are derived from that list, so they "
+        "all probe stated limits and all get "
+        "refused, and the review reports the guard "
+        "safe. The defect is a mechanism of the "
+        "underlying FORMAT or LIBRARY that the "
+        "guard's accounting never sees: bytes "
+        "consumed and expanded internally before "
+        "anything is handed back, so no accounting "
+        "the caller writes can count them. Three "
+        "variants of one shape: verifying that a "
+        "rule is ENFORCED rather than whether the "
+        "rule is RIGHT; verifying a producer's "
+        "transitions rather than what RENDERS; "
+        "verifying the caps a guard DECLARES rather "
+        "than a channel outside its accounting. "
+        "Each time the review took its frame from "
+        "the artifact under review.",
+        "precedent": "The Cartographer, an external review pass "
+        "on `_declaration_members`. A reviewer "
+        "built ten archives -- a member over the "
+        "per-member cap, members summing past the "
+        "total cap, more members than the member "
+        "cap, the wrong container, empty bytes -- "
+        'ran them through the guard and wrote "Ten '
+        "for ten, on both container formats... "
+        "genuinely safe rather than merely "
+        'bounded." PAX headers and GNU long-name '
+        "were reachable the whole time, because "
+        "`tarfile` consumes and expands the header "
+        "internally and yields only the regular "
+        "member, so `member.isfile()` never sees "
+        "it. Every one of the ten cases was derived "
+        "from a limit the guard declares, and PAX "
+        "is not a way to exceed a declared cap. "
+        "THREE PASSES MISSED IT -- the author "
+        "twice, plus a review of this module "
+        "specifically for security -- and it was "
+        "found by reasoning about `tarfile` rather "
+        "than about the guard, which is what makes "
+        "it a missing question rather than a lapse. "
+        "The recorded correction: derive "
+        "adversarial inputs from the parser's "
+        "capability surface (PAX, GNU "
+        "long-name/long-link, sparse members, "
+        "nested compression), not the guard's rule "
+        "list.",
+        "measurement": "A DETECTOR WAS PROTOTYPED, MEASURED "
+        "SMALL, AND REJECTED ANYWAY -- for a "
+        "better reason than volume. For each "
+        "format this repo parses in production, "
+        "it asked whether the test corpus "
+        "mentions that format's documented side "
+        "channels: 4 formats, being csv (5 "
+        "production sites, 0 of 3 channels named "
+        "in tests), json (275 sites, 1 of 4), "
+        "yaml (43 sites, 3 of 5) and zipfile (3 "
+        "sites, 1 of 4). Four rows is actionable, "
+        "not a wall, and it did surface a real "
+        "gap. It is not shipped because THE "
+        "SIGNAL IS A GREP STANDING IN FOR A "
+        "DRIVE: \"the string 'pax' occurs "
+        'somewhere under tests/" is not evidence '
+        "that any guard was ever driven with a "
+        "PAX header, and that substitution is "
+        "precisely what "
+        "`core/gates/deterministic_evidence.py` "
+        "exists to report -- a gate committing "
+        "the defect the repo already has a gate "
+        "against would report coverage this repo "
+        "does not have. Neither is the lane a "
+        "detector by nature: the capability "
+        "surface of a library is documented in "
+        "the library, and no static read of this "
+        "repo can enumerate what `tarfile` does "
+        "with bytes it never yields.",
+        "enforcement": ("eval", "tests/evals/test_review_lane_the_surface_outside_the_rules.py"),
+    },
+}
+
+
+# ── The generator this file claimed to be ────────────────────────────────────
+#
+# AN INDEPENDENT REVIEWER FOUND THIS MODULE INERT: no render function, no entry point, and
+# nothing in the repo importing it, while a commit message said the registry was generated
+# from it. The YAML had in fact been produced by a throwaway inline script and the claim
+# committed anyway -- which is prose with a registry entry, the exact failure this registry
+# exists to refuse, committed about the mechanism built to refuse it.
+#
+# So the generator is real now, and `--check` makes the claim falsifiable: it re-renders
+# and compares, so a hand-edit of the YAML or a change here that was never rendered fails
+# rather than drifting quietly.
+
+
+#: The registry's own preamble, kept HERE rather than read back out of the artifact.
+#: Reading it back meant the header survived every regeneration untouched, so it still
+#: described the retired five-handle bench while the body below it listed 29 generic
+#: seats -- a file contradicting itself in the same commit, which is the drift this
+#: registry exists to end.
+_HEADER = """# Review lanes - the questions a Dream Studio review is obliged to ask.
+#
+# WHY THIS FILE EXISTS. Reviewers each found defects nobody else did, and each found them
+# by asking one repeatable question. Those questions lived in their heads. Putting them in
+# a skill's prose would put them where the operator has already said guidance goes to die:
+# "a lot of prose laid on top of each other as suggestions with no rules, evals, or really
+# any real test that doing anything they are supposed to."
+#
+# THE BENCH. 29 seats: the operator's 28-seat review bench, derived from real review
+# history with unit counts per theme, plus the Event-substrate custodian, which asks
+# whether a row survives being rebuilt from its own events -- a property of this substrate
+# with no equivalent on the bench.
+#
+# EVERY LANE OWES a question, the signature of the defect, a precedent it actually came
+# from, the measurement that decided how it is answered, and exactly ONE of a runnable
+# detector, a graded eval, or `judgment: true` with a `why` naming what is missing. The
+# `review-lane-registry` gate refuses anything else, because a lane that decays back into
+# advice is a lane that stops being asked.
+#
+# WHERE A PUBLISHED STANDARD GOVERNS A SEAT, THE SEAT NAMES IT, so a finding is arguable
+# on the standard rather than on seniority.
+#
+# LANES CARRY A SCOPE and fire on relevance to the change set. A lane with no scope always
+# fires, and `--all` convenes every seat regardless.
+#
+# GENERATED from scripts/seat_lanes_data.py -- edit that table, not this file.
+# `py scripts/seat_lanes_data.py --check` fails if the two have drifted.
+"""
+
+
+REGISTRY = pathlib.Path(__file__).resolve().parents[1] / "canonical" / "review_lanes.yml"
+
+
+def _lane_id(seat: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", seat.lower()).strip("-")
+
+
+def _fold(key: str, text: str, indent: str = "    ") -> str:
+    out = [f"{indent}{key}: >-"]
+    line = ""
+    for word in text.split():
+        if len(line) + len(word) + 1 > 92:
+            out.append(f"{indent}  {line}")
+            line = word
+        else:
+            line = f"{line} {word}".strip()
+    if line:
+        out.append(f"{indent}  {line}")
+    return "\n".join(out)
+
+
+def _block(lane_id: str, seat: str, spec) -> str:
+    question, signature, precedent, measurement, enforcement = spec
+    lines = [f"  - id: {lane_id}", f"    seat: {json.dumps(seat)}"]
+    for key, value in (
+        ("question", question),
+        ("signature", signature),
+        ("precedent", precedent),
+        ("measurement", measurement),
+    ):
+        lines.append(_fold(key, value))
+    for key, table in (("standards", STANDARDS), ("scope", SCOPES)):
+        if table.get(seat):
+            lines.append(f"    {key}:")
+            lines += [f"      - {json.dumps(v)}" for v in table[seat]]
+    kind, value = enforcement
+    if kind == "judgment":
+        lines.append("    judgment: true")
+        lines.append(_fold("why", value))
+    else:
+        lines.append(f"    {kind}: {value}")
+    return "\n".join(lines)
+
+
+def render() -> str:
+    """The registry as this table says it should be.
+
+    THE ELEVEN PRE-EXISTING LANES ARE EMITTED FROM `RESEATED`, prose and enforcement
+    intact, under their new seat and keeping their original lane id. Only the seat
+    changes, because only the seat was meant to. Everything else comes from `SEATS`.
+    """
+    header = _HEADER.rstrip()
+    out = [header, "", "version: 2", "lanes:"]
+    carried_seats = {lane["seat"] for lane in RESEATED.values()}
+    for old_id, lane in RESEATED.items():
+        spec = (
+            lane["question"],
+            lane["signature"],
+            lane["precedent"],
+            lane["measurement"],
+            tuple(lane["enforcement"]),
+        )
+        out.append(_block(old_id, lane["seat"], spec))
+    for seat_name, spec in SEATS.items():
+        # A seat already answered by a carried-over lane does not also get a generated
+        # one -- that would file the same question twice under one name, which is how a
+        # lane stops being falsifiable.
+        if seat_name in carried_seats:
+            continue
+        out.append(_block(_lane_id(seat_name), seat_name, spec))
+    return "\n".join(out) + "\n"
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Render canonical/review_lanes.yml.")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Fail if the committed registry differs from what this table renders.",
+    )
+    args = parser.parse_args(argv)
+    rendered = render()
+    current = REGISTRY.read_text(encoding="utf-8").replace("\r\n", "\n")
+    if args.check:
+        if current == rendered:
+            print(f"review-lanes: OK - registry matches its generator ({len(SEATS)} seats).")
+            return 0
+        print(
+            "review-lanes: STALE - canonical/review_lanes.yml does not match what"
+            " scripts/seat_lanes_data.py renders. Re-run without --check, or the registry"
+            " and the table it claims to come from have already diverged."
+        )
+        return 1
+    REGISTRY.write_text(rendered, encoding="utf-8")
+    print(
+        f"review-lanes: wrote {REGISTRY} ({len(SEATS)} seats, {len(SEATS)+len(EXTRA_LANES)} lanes)"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -75,7 +75,9 @@ def test_every_registered_lane_takes_a_seat():
     The registry is the source of truth; this asserts the convener reads all of it rather
     than a subset it happened to know about when it was written.
     """
-    report = convene(run_detectors=False)
+    # all_seats, because lanes now fire on relevance to the change set; the claim here
+    # is that the convener reads the WHOLE registry, not that every lane is relevant.
+    report = convene(run_detectors=False, all_seats=True)
     seated = {seat["lane"] for seat in report["lanes"]}
     assert seated == _lane_ids(), _lane_ids() ^ seated
 
@@ -119,9 +121,13 @@ def test_the_seats_are_the_round_table():
 
     assert seats, "no lane was seated"
     assert seats <= review_lane_registry._SEATS, seats - review_lane_registry._SEATS
-    # And a seat is a described role, never somebody's handle.
+    # And a seat is a described role, never somebody's handle. The old convention was a
+    # "The X" prefix; the roster retired that for functional names, so the property is
+    # asserted directly instead of through the prefix that used to imply it.
     for seat in seats:
-        assert seat.startswith("The "), seat
+        assert seat == seat.strip() and len(seat) > 3, seat
+        assert not seat.startswith("@"), seat
+        assert " " in seat, f"a seat names a function, not a single word: {seat}"
 
 
 # ── a detector that cannot run is not a detector that found nothing ─────────
@@ -223,10 +229,10 @@ def test_a_seat_longer_than_the_floor_still_aligns(monkeypatch):
     """Drives the failure directly, since every seat today happens to fit the derived
     width -- a test that only reads the current registry would pass on the hardcoded
     constant it replaced."""
-    report = convene(run_detectors=False)
+    report = convene(run_detectors=False, all_seats=True)
     report["lanes"] = list(report["lanes"]) + [
         {
-            "seat": "The Extremely Long Seat Name",
+            "seat": "An Extremely Long Seat Name That Outgrows Every Real One",
             "lane": "a-hypothetical-lane",
             "question": "does the column still line up?",
             "signature": "s",
@@ -236,7 +242,7 @@ def test_a_seat_longer_than_the_floor_still_aligns(monkeypatch):
     ]
 
     width = round_table._seat_width(report)
-    assert width == len("The Extremely Long Seat Name")
+    assert width == len("An Extremely Long Seat Name That Outgrows Every Real One")
 
     rendered = round_table._render(report)
     question_columns = {
@@ -244,8 +250,15 @@ def test_a_seat_longer_than_the_floor_still_aligns(monkeypatch):
         for line in rendered.splitlines()
         if "does the column still line up?" in line
     }
-    warden = [line for line in rendered.splitlines() if line.strip().startswith("The Warden")]
-    assert warden, "the Warden's row should be rendered"
+    # Derived, not named: hardcoding a seat here is how this test rotted the last time
+    # the roster changed. Any real judgment seat proves the column moved with it.
+    real_seat = next(
+        s["seat"]
+        for s in report["lanes"]
+        if s["kind"] != "detector" and s["lane"] != "a-hypothetical-lane"
+    )
+    warden = [line for line in rendered.splitlines() if line.strip().startswith(real_seat)]
+    assert warden, f"{real_seat}'s row should be rendered"
     assert question_columns, "the long seat's question should be rendered"
     # The long seat pushed the column out; the Warden's question must move with it.
     assert len(warden[0]) - len(warden[0].lstrip()) == 2
@@ -365,13 +378,13 @@ def test_a_single_seat_can_be_convened_and_a_typo_fails():
     """
     import pytest
 
-    one = convene(run_detectors=False, seat="The Falsifier")
+    one = convene(run_detectors=False, seat="Test-integrity inquisitor")
     seats = {seat["seat"] for seat in one["lanes"]}
-    assert seats == {"The Falsifier"}, seats
-    assert len(one["lanes"]) < len(convene(run_detectors=False)["lanes"])
+    assert seats == {"Test-integrity inquisitor"}, seats
+    assert len(one["lanes"]) < len(convene(run_detectors=False, all_seats=True)["lanes"])
 
-    with pytest.raises(KeyError, match="The Warden"):
-        convene(run_detectors=False, seat="The Wardn")
+    with pytest.raises(KeyError, match="Gate-integrity engineer"):
+        convene(run_detectors=False, seat="Gate-integrity enginer")
 
     lane = convene(run_detectors=False, lane_id="a-test-that-cannot-fail")
     assert [seat["lane"] for seat in lane["lanes"]] == ["a-test-that-cannot-fail"]
@@ -461,7 +474,7 @@ def test_an_install_without_the_repo_can_still_convene(tmp_path):
     assert resolved.parent.name == "review", resolved
     assert resolved.is_file()
 
-    report = convene(run_detectors=False, repo_root=install)
+    report = convene(run_detectors=False, repo_root=install, all_seats=True)
     assert {seat["lane"] for seat in report["lanes"]} == _lane_ids()
 
 

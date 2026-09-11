@@ -30,7 +30,7 @@ def test_a_task_with_no_criterion_is_refused():
     verdict = admit_task(title="Fix the thing", acceptance_criteria=None)
 
     assert verdict["admitted"] is False
-    assert [r["seat"] for r in verdict["refusals"]] == ["The Warden"]
+    assert [r["seat"] for r in verdict["refusals"]] == ["Gate-integrity engineer"]
     assert verdict["refusals"][0]["lane"] == "a-criterion-nobody-can-run"
     assert "TEST-CHECK" in verdict["refusals"][0]["reason"], "the refusal must say what to do"
 
@@ -141,7 +141,7 @@ def test_a_finding_outside_the_boundary_is_refused():
         target_paths=["projections/api/lib/stack_helpers.py"],
     )
     assert verdict["admitted"] is False, verdict
-    assert verdict["refusals"][0]["seat"] == "The Surveyor"
+    assert verdict["refusals"][0]["seat"] == "Merge-order steward"
     assert "boundary" in verdict["refusals"][0]["reason"]
 
 
@@ -163,7 +163,7 @@ def test_no_declared_boundary_reports_unknown_and_does_not_refuse():
     assert verdict["admitted"] is True, "unknown must not refuse"
     assert verdict["refusals"] == []
     assert len(verdict["unknowns"]) == 1
-    assert verdict["unknowns"][0]["seat"] == "The Surveyor"
+    assert verdict["unknowns"][0]["seat"] == "Merge-order steward"
     assert "UNKNOWN" in verdict["unknowns"][0]["reason"]
     assert (
         "--module-boundary" in verdict["unknowns"][0]["reason"]
@@ -193,7 +193,7 @@ def test_a_duplicate_title_is_refused():
         existing_titles=["fix the   DRAIN "],
     )
     assert verdict["admitted"] is False
-    assert verdict["refusals"][0]["seat"] == "The Herald"
+    assert verdict["refusals"][0]["seat"] == "Claim and closure auditor"
 
 
 def test_a_new_title_is_not_mistaken_for_a_duplicate():
@@ -219,7 +219,9 @@ def test_every_refusal_names_a_seat_and_a_lane():
     assert verdict["admitted"] is False
     assert len(verdict["refusals"]) == 3, "all three lanes should have fired"
     for refusal in verdict["refusals"]:
-        assert refusal["seat"].startswith("The "), refusal
+        # Seats are functional names now, not handles; the property is that a refusal
+        # names a seat that exists on the bench, not that it follows a prefix.
+        assert refusal["seat"] and " " in refusal["seat"], refusal
         assert refusal["lane"] and " " not in refusal["lane"], refusal
         assert len(refusal["reason"]) >= 40, refusal
 
@@ -271,7 +273,7 @@ def test_the_cli_refuses_a_criterion_less_task_without_a_declared_reason(tmp_pat
     )
     assert code == 1, f"a refusal must fail the command; got {code}\n{out}"
     assert "refused to file this task" in out, out
-    assert "The Warden" in out, "the refusal must name the seat that raised it"
+    assert "Gate-integrity engineer" in out, "the refusal must name the seat that raised it"
     assert "--why" in out, "the refusal must name the escape it will accept"
 
 
@@ -290,7 +292,7 @@ def test_the_cli_admits_a_task_that_carries_a_criterion(tmp_path):
         home=tmp_path,
     )
     assert "refused to file this task" not in out, f"admission blocked an admissible task\n{out}"
-    assert "The Warden" not in out, out
+    assert "Gate-integrity engineer" not in out, out
     del code  # whether creation then succeeds is not this test's claim
 
 
@@ -423,4 +425,4 @@ def test_a_grader_task_carrying_a_criterion_is_admitted_and_one_without_is_not()
 
     neither = admit_task(title="Fix the thing")
     assert neither["admitted"] is False
-    assert neither["refusals"][0]["seat"] == "The Warden"
+    assert neither["refusals"][0]["seat"] == "Gate-integrity engineer"

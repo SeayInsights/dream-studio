@@ -1204,7 +1204,7 @@ def test_a_criterion_less_finding_is_refused_and_returned(db):
     unfiled = [f for s in spawned for f in (s.get("unfiled_findings") or [])]
     assert len(unfiled) == 1, f"the finding must survive its refusal; got {spawned}"
     assert unfiled[0]["title"] == "Do the thing"
-    assert unfiled[0]["refusals"][0]["seat"] == "The Warden"
+    assert unfiled[0]["refusals"][0]["seat"] == "Gate-integrity engineer"
     assert (
         "TEST-CHECK" in unfiled[0]["refusals"][0]["reason"]
     ), "a refusal that does not say what would have been admitted is a wall, not a review"

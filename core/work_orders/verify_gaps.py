@@ -814,6 +814,24 @@ def drain_fanned_out_categories(
         now = datetime.now(UTC).isoformat()
         for item in plan:
             for wo_id in item["cancel"]:
+                # EMIT BEFORE THE UPDATE, because business_work_orders is a PROJECTION and
+                # this bare UPDATE was the reason 53 work orders held a status no replay
+                # could reach. WO 20796691 added `work_order.cancelled` for exactly this
+                # write and an independent review found the event type had no producer:
+                # the read side understood the status while the write side kept making it
+                # unreconstructable. The sibling functions in this file were wired months
+                # ago; this one was named as the cause and left alone.
+                _emit_creation(
+                    "work_order.cancelled",
+                    payload={
+                        "work_order_id": wo_id,
+                        "project_id": project_id,
+                        "reason": "drained as a duplicate spawn of category"
+                        f" {item['category']}; kept {item['keep']}",
+                    },
+                    trace={"project_id": project_id, "work_order_id": wo_id},
+                    now=now,
+                )
                 conn.execute(
                     "UPDATE business_work_orders SET status = 'cancelled', updated_at = ?,"
                     " description = COALESCE(description, '') || ? WHERE work_order_id = ?",
@@ -825,6 +843,19 @@ def drain_fanned_out_categories(
                 )
         for item in task_plan:
             for task_id in item["cancel"]:
+                _emit_creation(
+                    "task.cancelled",
+                    payload={
+                        "reason": "drained as a duplicate attachment of category"
+                        f" {item['category']}; kept {item['keep']}",
+                    },
+                    trace={
+                        "project_id": project_id,
+                        "work_order_id": item["keep"],
+                        "task_id": task_id,
+                    },
+                    now=now,
+                )
                 conn.execute(
                     "UPDATE business_tasks SET status = 'cancelled', updated_at = ?,"
                     " description = COALESCE(description, '') || ? WHERE task_id = ?",
