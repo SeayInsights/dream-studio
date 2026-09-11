@@ -17,6 +17,7 @@ from typing import Any
 from core.event_store.studio_db import _connect
 
 from .start_shared import _check_sequence_order
+from core.work_orders.task_status import status_for
 
 
 def _resolve_wo_repo_root(work_order_id: str, db_path: Path, source_root: Path) -> Path:
@@ -243,9 +244,9 @@ def start_work_order(
         with _connect(_db) as conn:
             conn.execute(
                 "UPDATE business_work_orders"
-                " SET status = 'in_progress', started_at = ?, updated_at = ?, last_updated_at = ?"
+                " SET status = ?, started_at = ?, updated_at = ?, last_updated_at = ?"
                 " WHERE work_order_id = ?",
-                (now, now, now, work_order_id),
+                (status_for("work_order.started", work_order=True), now, now, now, work_order_id),
             )
     except Exception:
         pass

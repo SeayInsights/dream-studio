@@ -131,6 +131,19 @@ _BUSINESS_ENTRIES: tuple[RegistryEntry, ...] = (
         "Work order abandoned; the work was real and will not be done",
         payload_required_keys=frozenset({"work_order_id", "project_id"}),
     ),
+    # WO 1364e05e, and the third sibling of the cancelled pair. `reopen_work_order`
+    # emitted `work_order.reopened` and wrote status='in_progress' by hand; the event was
+    # registered nowhere and consumed by nothing, so a rebuild reverted every reopened
+    # work order to whatever its last CONSUMED event said -- exactly the failure that left
+    # 53 work orders at an unreachable `cancelled`. Measured 2026-09-11: 2 such events on
+    # the live authority.
+    RegistryEntry(
+        "work_order.reopened",
+        _BUSINESS,
+        "meaningful-unit",
+        "Work order reopened after closing; it returns to in-progress work",
+        payload_required_keys=frozenset({"work_order_id", "project_id"}),
+    ),
     # Ordering/dependency mutations (core/work_orders/ordering.py). Emitted for
     # audit via AD-6 emit-then-SQL; not consumed by any projection, so no
     # payload_required_keys enforcement. Registered so the ingestor does not

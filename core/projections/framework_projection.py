@@ -184,7 +184,10 @@ class Projection(ABC):
         Usage:
             self.safe_upsert(conn, "business_work_orders", {
                 "work_order_id": wo_id,
-                "status": "in_progress",
+                # Statuses come from the vocabulary, never spelled here: an EXAMPLE is how
+                # a pattern spreads, and this one taught the literal that seven production
+                # sites went on to copy (WO 1364e05e).
+                "status": status_for("work_order.started", work_order=True),
                 "started_at": ts,
                 "last_event_id": event["event_id"],
                 "last_updated_at": datetime.now(timezone.utc).isoformat(),

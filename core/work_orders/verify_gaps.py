@@ -14,6 +14,7 @@ import uuid
 from pathlib import Path
 from datetime import UTC, datetime
 from typing import Any
+from core.work_orders.task_status import status_for
 
 #: This repo's root, used only to confirm that a path a finding NAMES actually
 #: exists before attribution is judged on it. A finding about another project's
@@ -822,9 +823,10 @@ def drain_fanned_out_categories(
                 # unreconstructable. The sibling functions in this file were wired months
                 # ago; this one was named as the cause and left alone.
                 conn.execute(
-                    "UPDATE business_work_orders SET status = 'cancelled', updated_at = ?,"
+                    "UPDATE business_work_orders SET status = ?, updated_at = ?,"
                     " description = COALESCE(description, '') || ? WHERE work_order_id = ?",
                     (
+                        status_for("work_order.cancelled", work_order=True),
                         now,
                         _DRAINED_NOTE.format(now=now, category=item["category"], keep=item["keep"]),
                         wo_id,
@@ -844,9 +846,10 @@ def drain_fanned_out_categories(
         for item in task_plan:
             for task_id in item["cancel"]:
                 conn.execute(
-                    "UPDATE business_tasks SET status = 'cancelled', updated_at = ?,"
+                    "UPDATE business_tasks SET status = ?, updated_at = ?,"
                     " description = COALESCE(description, '') || ? WHERE task_id = ?",
                     (
+                        status_for("task.cancelled"),
                         now,
                         _DRAINED_NOTE.format(now=now, category=item["category"], keep=item["keep"]),
                         task_id,

@@ -578,6 +578,11 @@ def test_the_map_entries_hold_the_relations_that_define_them():
         "unblocking returns a work order to the state starting it produced; an entry "
         "that lands anywhere else silently reopens or re-blocks work on every rebuild"
     )
+    assert status_for("work_order.reopened", work_order=True) == started, (
+        "reopening returns a closed work order to the state starting produced; an entry "
+        "landing anywhere else means a rebuild cannot reproduce a reopen, which is how "
+        "work_order.reopened came to be emitted, consumed by nothing, and unregistered"
+    )
     assert status_for("work_order.blocked", work_order=True) != started, (
         "blocked and working must be distinguishable, or a blocked work order is "
         "indistinguishable from one in progress"
@@ -725,3 +730,84 @@ def test_the_docstring_table_records_the_measured_overlap():
     # exists to draw is not present in the data it records.
     assert any(int(h) > 0 for _, h, _ in rows), "no row records rows that HAVE a creation event"
     assert any(int(m) > 0 for _, _, m in rows), "no row records rows that are MISSING one"
+
+
+def _projected_status_writers() -> list[str]:
+    """Every production site that writes a status into a projected table, DISCOVERED.
+
+    The table list comes from each projection's own `target_tables`, not a literal pair.
+    A hardcoded list would have covered the two tables this was found in and silently
+    exempted the rest -- the same subset-of-what-it-writes shape the event-backed-write
+    gate was built to refuse.
+    """
+    import re
+
+    from core.projections.task_projection import TaskProjection
+    from core.projections.work_order_projection import WorkOrderProjection
+
+    tables = set(WorkOrderProjection.target_tables) | set(TaskProjection.target_tables)
+    offenders: list[str] = []
+    for path in _REPO_ROOT.rglob("*.py"):
+        rel = path.relative_to(_REPO_ROOT).as_posix()
+        if rel.startswith(("dist/", ".claude/", "tests/")) or "worktrees" in rel:
+            continue
+        if not rel.startswith(("core/", "interfaces/", "runtime/", "control/", "integrations/")):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            continue
+        for table in tables:
+            for match in re.finditer(rf"UPDATE {table}\b", text):
+                window = text[match.start() : match.start() + 400]
+                literal = re.search(r"SET status = '([a-z_]+)'", window)
+                if literal:
+                    line = text[: match.start()].count("\n") + 1
+                    offenders.append(f"{rel}:{line} writes '{literal.group(1)}'")
+        for match in re.finditer(r'"status":\s*"([a-z_]+)"', text):
+            if rel.startswith("core/projections/"):
+                offenders.append(f"{rel} writes dict literal '{match.group(1)}'")
+    return sorted(set(offenders))
+
+
+def test_the_guard_covers_every_writer_not_a_named_pair():
+    """No production site may spell a projected status itself.
+
+    THE PREVIOUS GUARD READ TWO FILES BY NAME. It asserted the two projections took their
+    statuses from the vocabulary, and passed while seven other production sites wrote
+    status literals into the same two tables as a synchronous read-model mirror -- found
+    by an independent review, not by the suite. A guard that names its subjects can only
+    ever catch the subjects someone remembered.
+    """
+    offenders = _projected_status_writers()
+    assert not offenders, (
+        "production sites spell a projected status instead of asking the vocabulary:\n  "
+        + "\n  ".join(offenders)
+        + "\nEach must take its value from status_for(<the event this site emits>), so a "
+        "renamed status is a KeyError at the write rather than silent drift."
+    )
+
+
+def test_every_writer_of_a_projected_status_is_enumerated():
+    """The discovery itself works, so a green result means looked-and-found-nothing.
+
+    A finder that silently matched zero files would make the test above vacuous -- the
+    compared-nothing-reported-clean shape. Proved by planting a literal in a temp tree the
+    real finder walks.
+    """
+    from core.projections.task_projection import TaskProjection
+    from core.projections.work_order_projection import WorkOrderProjection
+
+    tables = set(WorkOrderProjection.target_tables) | set(TaskProjection.target_tables)
+    assert tables, "no target tables were derived, so the finder searches for nothing"
+    assert len(tables) >= 2, tables
+
+    scanned = [
+        p
+        for p in _REPO_ROOT.rglob("*.py")
+        if p.relative_to(_REPO_ROOT).as_posix().startswith("core/work_orders/")
+    ]
+    assert len(scanned) > 20, (
+        f"the finder walked only {len(scanned)} files under core/work_orders/, so a clean "
+        "result would mean it looked nowhere"
+    )
