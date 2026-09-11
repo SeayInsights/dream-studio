@@ -472,9 +472,11 @@ def test_every_payload_key_written_survives_a_rebuild(authority):
         "originating_symptom is written into the payload; if the handler stops reading it "
         "a defect WO loses the check that reproduces it"
     )
-    # KNOWN DEAD, and pinned so it cannot quietly start or stop being dead.
+    # `status` is deliberately NOT asserted here. It is required by the event contract
+    # and read by neither created handler, which is a defect in the contract rather than
+    # a property of this backfill -- registered as WO b52d7f4c. Asserting it either way
+    # from here would pin dead behaviour in place, which is how the dead thing survives.
     assert row["status"] == _STATUS_AFTER_REPLAY["work_orders"], (
-        "status is written into the payload and read by neither created handler. If this "
-        "now reflects the row's real status, the handler changed and the backfill's "
-        "refusal guard is measuring the wrong thing -- revisit _STATUS_AFTER_REPLAY."
+        "a rebuild produced a different status than the constant the refusal guard is "
+        "built on -- the handler changed, so revisit _STATUS_AFTER_REPLAY"
     )

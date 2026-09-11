@@ -243,6 +243,12 @@ def backfill(
     for row in work_orders:
         payload = {
             "title": row["title"],
+            # The contract demands this key and no consumer reads it. `work_order.created`
+            # declares `status` in payload_required_keys, so omitting it fails
+            # emission -- but neither created handler reads it. Deleting it here was
+            # tried and broke every emission; deleting it from the contract is a
+            # cross-producer change, registered as WO b52d7f4c rather than done
+            # quietly inside a backfill.
             "status": row["status"] or "created",
             "type": row["work_order_type"] or "",
             "description": row["description"],
@@ -273,8 +279,8 @@ def backfill(
             payload={
                 "title": row["title"],
                 "description": row["description"],
-                "acceptance_criteria": row["acceptance_criteria"],
                 "status": row["status"] or "created",
+                "acceptance_criteria": row["acceptance_criteria"],
                 RECONSTRUCTED_KEY: True,
                 "reconstructed_at": now,
             },
