@@ -35,9 +35,6 @@ from pathlib import Path
 
 import pytest
 
-#: Located from this file, which sits two levels under the repo root.
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-
 from core.config.sqlite_bootstrap import bootstrap_database
 from core.work_orders.verify_gaps import (
     _violation_task_title,
@@ -49,6 +46,9 @@ from core.work_orders.verify_gaps import (
     _insert_gap_work_orders,
     _violations_to_gaps,
 )
+
+#: Located from this file, which sits two levels under the repo root.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 _NOW = "2026-08-21T00:00:00+00:00"
 
@@ -1312,10 +1312,8 @@ def test_an_attached_gap_carries_a_criterion_or_a_declared_reason():
     import re
 
     source = (_REPO_ROOT / "core/work_orders/verify_gaps.py").read_text(encoding="utf-8")
-    inserts = [
-        source[m.start() : m.start() + 400]
-        for m in re.finditer(r"INSERT INTO business_tasks", source)
-    ]
+    starts = [m.start() for m in re.finditer(r"INSERT INTO business_tasks", source)]
+    inserts = [source[begin:][:400] for begin in starts]
     assert len(inserts) >= 2, (
         f"expected both gap paths to insert tasks, found {len(inserts)} INSERT(s) -- the "
         "fixture is wrong, or a path was removed"

@@ -759,7 +759,8 @@ def _projected_status_writers() -> list[str]:
             continue
         for table in tables:
             for match in re.finditer(rf"UPDATE {table}\b", text):
-                window = text[match.start() : match.start() + 400]
+                begin = match.start()
+                window = text[begin:][:400]
                 literal = re.search(r"SET status = '([a-z_]+)'", window)
                 if literal:
                     line = text[: match.start()].count("\n") + 1
@@ -770,7 +771,8 @@ def _projected_status_writers() -> list[str]:
             # reported the tree clean. A finder covering one of two statement kinds is
             # the subset-of-what-it-writes shape, found in the check built to refuse it.
             for match in re.finditer(rf"INSERT INTO {table}\b", text):
-                window = text[match.start() : match.start() + 600]
+                begin = match.start()
+                window = text[begin:][:600]
                 declared = "pending|created|complete|closed|in_progress|blocked|cancelled|deleted"
                 for literal in re.finditer(rf"'({declared})'", window):
                     line = text[: match.start()].count("\n") + 1
