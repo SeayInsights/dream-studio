@@ -96,8 +96,8 @@ def _normalize_pack_frontmatter(skill_id: str, skill_md: Path) -> None:
 #: looked identical to every reader, which is what an independent review reported as a
 #: stale projection on a skill nobody intended to ship.
 #:
-#: A reason is REQUIRED. An entry with no reason would be the same silence one directory
-#: further in.
+#: Every entry carries a reason, held by test_every_declared_exclusion_carries_a_reason.
+#: An entry without one would be the same silence one directory further in.
 NOT_PROJECTED: dict[str, str] = {
     "ds-bootstrap": (
         "a passive system component, not a user-invocable skill: it carries no routable"
