@@ -84,6 +84,10 @@ lanes:
       are touched — the ratchet `normative-baseline` and `workflow-node-verification` already use.
     standards:
       - "ISO/IEC/IEEE 29119-4 test techniques"
+    defers:
+      - "whether any test actually ENTERS the fallback branch -- any textual mention of the symbol anywhere under tests/, a comment included, clears it, so this proves a name is known to the tests rather than exercised by them"
+      - "a platform dispatch written as a dict keyed on platform.system(), which has no `if` node to find, and a platform predicate behind an abstracted name"
+      - "fallbacks in files outside this change set -- the lane is diff-scoped, so the standing backlog drains only as those files are touched"
     detector: py -m core.gates.untested_fallback
   - id: a-per-item-wait-with-no-aggregate-deadline
     seat: "Distributed state and concurrency"
@@ -112,6 +116,8 @@ lanes:
     standards:
       - "CWE-362 race condition"
       - "CWE-367 time-of-check time-of-use"
+    defers:
+      - "multiplication through a CALL -- a loop whose helper sleeps in its own loop is the same defect and needs a call graph to see"
     detector: py -m core.gates.aggregate_deadline
   - id: a-contract-that-names-one-of-two-mechanisms
     seat: "Contract and protocol"
@@ -168,6 +174,9 @@ lanes:
       by nothing. ADVISORY rather than blocking, because a deliberately behind branch is
       legitimate (a revert, a hotfix off a tag) and blocking it would be a wall; the lane's job is
       that nobody reviews a stale tree without knowing it.
+    defers:
+      - "whether anyone ASKED this branch to sync, which lives in review comments on the pull request and not in the tree"
+      - "whether being behind is a problem here -- a revert off a tag or a hotfix from a release point is legitimately behind, which is why this lane is advisory"
     detector: py -m core.gates.branch_freshness
   - id: an-unenumerated-behaviour-change
     seat: "Claim and closure auditor"
@@ -334,6 +343,9 @@ lanes:
       8bd297f1 fixed, 4194 connections measured) and one is the genuine finding. So the gate
       reports exactly 1, which is small enough to hold at zero. ADVISORY until WO 17466550 fixes
       that write, because a blocking gate that ships red teaches people to bypass it.
+    defers:
+      - "a bare UPDATE that changes a projected row's state: the scan matches `INSERT INTO` and `INSERT OR REPLACE INTO` only, registered as WO 4fbe3282"
+      - "whether replaying the emitted event actually REPRODUCES the row -- the lane proves an event is emitted beside the write, not that its payload rebuilds it"
     detector: py -m core.gates.event_backed_write
   - id: a-channel-outside-the-accounting
     seat: "Untrusted input and abuse limits"

@@ -75,6 +75,17 @@ def registry_for(repo_root: Path | None = None) -> Path:
 
 
 #: Floor for the seat column. The real width is DERIVED per render, see `_seat_width`.
+# The artifacts that define the table. A change set touching any of them is reviewed by
+# the thing it changes.
+_SELF = frozenset(
+    {
+        "canonical/review_lanes.yml",
+        "core/gates/round_table.py",
+        "scripts/seat_lanes_data.py",
+        "core/gates/review_lane_registry.py",
+    }
+)
+
 _SEAT_WIDTH = 14
 
 
@@ -278,6 +289,7 @@ def convene(
     lane_id: str | None = None,
     all_seats: bool = False,
     paths: list[str] | None = None,
+    prior_findings: list | None = None,
 ) -> dict:
     """The table's report for a change set, in this tree or another.
 
@@ -292,6 +304,11 @@ def convene(
     `all_seats=True` convenes every lane regardless -- asking for the whole table directly
     must always be possible, because relevance is an inference about a diff and an operator
     who wants the full bench is not making an inference.
+
+    `prior_findings` is the previous verdict's findings, which the Reviewer's-reviewer seat
+    re-checks. Passing nothing is not passing an empty review: that seat ABSTAINS rather
+    than reporting a lane with no objections, because "looked and found nothing" and "had
+    nothing to look at" are different answers and only one of them is reassuring.
     """
     seats: list[dict] = []
     started = monotonic()
@@ -329,7 +346,23 @@ def convene(
             # Carried through so the render can name it; absent on the seats that govern
             # review process itself, where inventing a standard would be decoration.
             "standards": list(lane.get("standards") or []),
+            # WHAT THIS LANE'S CHECK DOES NOT DECIDE, in the lane's own words. A question
+            # wider than its enforcement reports clean on ground it never examined: the
+            # Merge-order steward asks "how far behind, AND did anyone ask it to sync" and
+            # its detector counts commits. Declaring the remainder is the difference
+            # between a narrow check and a broad claim resting on one.
+            "defers": list(lane.get("defers") or []),
         }
+        if lane.get("id") == "reviewer-s-reviewer" and not prior_findings:
+            # THE ONE SEAT WITH NO INPUT ON A FIRST PASS. It audits other seats' findings,
+            # and on a first convening there are none -- so asking the question would put a
+            # lane in front of a reader that cannot be answered, and answering it would be
+            # a pass over an empty set. It abstains, and says why.
+            entry["abstained"] = True
+            entry["abstained_why"] = (
+                "no prior verdict for this work order, so there is no finding to re-check"
+                " at HEAD -- this seat reports on the next pass, not this one"
+            )
         if "detector" in lane:
             entry["kind"] = "detector"
             entry["command"] = lane["detector"]
@@ -349,23 +382,6 @@ def convene(
                     entry["clean"] = clean
                     entry["unrunnable"] = detail.startswith(_UNRUNNABLE)
                     entry["detail"] = detail.removeprefix(_UNRUNNABLE)
-            # THE SURVEYOR'S REACH, stated rather than assumed. Attribution needs a
-            # declared `Module boundary:` clause and most open work orders have none, so a
-            # clean Surveyor lane usually means "not judged" rather than "judged and fine".
-            # Reported here because a lane whose reach is unknown reads as enforcement and
-            # is not -- and because `attribution_reach` with no caller was itself a
-            # mechanism that could not do the thing it was built to do (caught by the
-            # reachability gate on this change set).
-            if lane.get("seat") == "Merge-order steward":
-                try:
-                    from core.work_orders.admission import attribution_reach
-
-                    entry["attribution_reach"] = attribution_reach()
-                except Exception as exc:  # noqa: BLE001 - a report must not fail the table
-                    entry["attribution_reach"] = {
-                        "status": "unknown",
-                        "reason": f"{type(exc).__name__}: {exc}",
-                    }
         elif "eval" in lane:
             entry["kind"] = "graded"
             entry["fixture"] = lane["eval"]
@@ -391,19 +407,64 @@ def convene(
     else:
         status = "pass"
 
+    # THE TABLE JUDGING ITS OWN DEFINITION, declared rather than left for a reader to
+    # notice. When the change set edits the registry or this module, the lens and the
+    # subject are the same artifact -- a reviewer grading its own rubric. Not a reason to
+    # skip the review; a reason nobody should read this report as independent.
+    self_review = sorted(
+        path for path in (changed_paths(repo_root) if paths is None else paths) if path in _SELF
+    )
+
+    # THE TABLE'S OWN REACH, at the table's level -- not hung on a lane. This number says
+    # how many open work orders declare a boundary an edit can be attributed to; it
+    # qualifies NOTHING about how far a branch is behind its base, which is the lane it
+    # used to ride on. A value honestly computed and reported against the wrong question
+    # is the Observability seat's own signature, found here on this module.
+    try:
+        from core.work_orders.admission import attribution_reach
+
+        reach = attribution_reach()
+    except Exception as exc:  # noqa: BLE001 - a report must not fail the table
+        reach = {"status": "unknown", "reason": f"{type(exc).__name__}: {exc}"}
+
     return {
         "status": status,
         "lanes": seats,
+        "self_review": self_review,
+        "attribution_reach": reach,
+        "abstained": [s["lane"] for s in seats if s.get("abstained")],
         "selected_by_scope": selected_by_scope,
         "detectors_run": len(detectors) if run_detectors else 0,
         "detectors_unclean": [s["lane"] for s in unclean] if run_detectors else [],
-        "awaiting_judgment": [s["lane"] for s in seats if s["kind"] != "detector"],
+        # An abstaining seat is NOT awaiting a person: counting it would inflate the
+        # outstanding-questions number with a question nobody can answer yet.
+        "awaiting_judgment": [
+            s["lane"] for s in seats if s["kind"] != "detector" and not s.get("abstained")
+        ],
     }
 
 
 def _render(report: dict) -> str:
     width = _seat_width(report)
     lines: list[str] = ["", "THE ROUND TABLE", ""]
+
+    if report.get("self_review"):
+        lines += [
+            "  SELF-REVIEW: this change set edits the table itself"
+            f" ({', '.join(report['self_review'])}).",
+            "  The lens and the subject are the same artifact; read this report as the"
+            " author's, not as independent.",
+            "",
+        ]
+
+    reach = report.get("attribution_reach") or {}
+    if reach.get("status") == "computed":
+        lines += [
+            f"  Table reach: {reach['with_boundary']} of {reach['open_work_orders']} open"
+            " work order(s) declare a module boundary an edit can be attributed to;"
+            " the rest are UNKNOWN, not judged.",
+            "",
+        ]
 
     for seat in report["lanes"]:
         if seat["kind"] != "detector":
@@ -426,15 +487,15 @@ def _render(report: dict) -> str:
         else:
             mark = "FOUND"
         lines.append(f"  [{mark:>5}] {seat['seat']:<{width}} {seat['lane']}")
-        reach = seat.get("attribution_reach") or {}
-        if reach.get("status") == "computed":
-            lines.append(
-                f"          reach: {reach['with_boundary']} of"
-                f" {reach['open_work_orders']} open work order(s) declare a boundary"
-                f" -- the rest are UNKNOWN, not judged"
-            )
-        if not seat.get("clean"):
-            lines.append(f"          {seat.get('detail', '')}")
+        # Only when there IS a detail: under `--no-detectors` nothing ran, so there is
+        # nothing to say, and an indented blank line reads as a finding whose text is
+        # missing rather than as a lane that was never checked.
+        if not seat.get("clean") and seat.get("detail"):
+            lines.append(f"          {seat['detail']}")
+        for deferred in seat.get("defers", []):
+            # PRINTED EVEN WHEN THE LANE IS CLEAN, which is the whole point: a clean mark
+            # beside an unanswered half of the question is the reading this line prevents.
+            lines.append(f"          NOT DECIDED HERE: {deferred}")
 
     if report.get("selected_by_scope"):
         # A short table should not read as a clean one. Naming the omission, and how
@@ -445,7 +506,14 @@ def _render(report: dict) -> str:
             " convenes the whole bench)",
         ]
 
-    awaiting = [s for s in report["lanes"] if s["kind"] != "detector"]
+    abstained = [s for s in report["lanes"] if s.get("abstained")]
+    if abstained:
+        lines += ["", "  ABSTAINED — seated, with nothing to judge yet:", ""]
+        for seat in abstained:
+            lines.append(f"  {seat['seat']:<{width}} {seat.get('abstained_why', '')}")
+        lines.append("")
+
+    awaiting = [s for s in report["lanes"] if s["kind"] != "detector" and not s.get("abstained")]
     if awaiting:
         lines += ["", "  ASKED OF YOU — no detector can decide these:", ""]
         for seat in awaiting:
@@ -457,6 +525,8 @@ def _render(report: dict) -> str:
             # to read rather than an opinion to satisfy.
             if seat.get("standards"):
                 lines.append(f"  {'':<{width}} standards: {', '.join(seat['standards'])}")
+            for deferred in seat.get("defers", []):
+                lines.append(f"  {'':<{width}} NOT DECIDED HERE: {deferred}")
             if seat["kind"] == "graded":
                 lines.append(f"  {'':<{width}} fixture: {seat['fixture']}")
             else:
