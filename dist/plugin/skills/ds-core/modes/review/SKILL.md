@@ -254,7 +254,8 @@ reviews through `canonical/review_lanes.yml`, not through questions it thought o
 spot. A hand-written checklist is one agent's taste on the day; the registry is 29 seats
 derived from real review history, each held to a published standard where one governs.
 
-So the dispatch prompt MUST instruct the subagent to:
+This is rule `dispatched-review-convenes-the-round-table` in `canonical/rules.yml`,
+enforced by the tests named there. The dispatch prompt instructs the subagent to:
 
 1. Run `py -m core.gates.round_table` (add `--json` for a machine-readable report, `--all`
    to convene the whole bench rather than the lanes relevant to this diff).

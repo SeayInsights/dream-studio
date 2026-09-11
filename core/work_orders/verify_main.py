@@ -634,7 +634,7 @@ def verify_work_order(
 
             _table = _convene(run_detectors=True)
         except Exception as exc:  # noqa: BLE001 - a review must not die at its own table
-            # RECORDED AS UNAVAILABLE, NEVER OMITTED. An absent section would read as a
+            # Recorded as unavailable rather than omitted: an absent section reads as a
             # review with no lanes to answer, which is the one reading it must never get.
             _table = {
                 "status": "unavailable",

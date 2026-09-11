@@ -256,7 +256,8 @@ def run() -> dict:
             problem = _detector_runnable(str(lane.get("detector") or ""))
             if problem:
                 errors.append(f"{lane_id}: detector is not runnable -- {problem}")
-            # WO d0658106: A DETECTOR MUST SAY WHAT IT DOES NOT DECIDE.
+            # Rule `detector-lane-declares-what-it-leaves-undecided` (canonical/rules.yml),
+            # which this branch is the enforcement of. WO d0658106.
             #
             # A detector is a narrow mechanical predicate standing in for a prose
             # question, and the two are rarely the same size. `a-branch-behind-its-base`
@@ -272,7 +273,7 @@ def run() -> dict:
             # the same -- which is the identical distinction this registry already draws
             # between an enforced lane and a declared judgment.
             #
-            # NOT REQUIRED OF eval OR judgment LANES. An eval puts the lane's whole
+            # Asked only of detector lanes. An eval puts the lane's whole
             # question to a grader and a judgment lane puts it to a person; neither
             # narrows the question to a predicate, so there is nothing to defer and the
             # key would be a box to tick.
