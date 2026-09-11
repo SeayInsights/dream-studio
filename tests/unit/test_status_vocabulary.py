@@ -451,6 +451,135 @@ def test_every_consumed_event_either_produces_a_status_or_declares_it_does_not()
             assert status, f"{event} produced an empty status"
 
 
+def test_every_event_produces_the_status_the_map_promises(authority):
+    """Drive each event through a real rebuild and require the promised status.
+
+    THE TEST BELOW THIS ONE DID NOT COVER THE CASE ITS OWN DOCSTRING NAMES. It walks the
+    status -> event map, whose only entry reaching `in_progress` is `work_order.started`;
+    `work_order.unblocked` appears in neither loop, and its second loop asks only whether
+    the produced status is SOME declared status -- and `blocked` is one. An independent
+    reviewer mutated `"work_order.unblocked": "in_progress"` to `"blocked"` and all eight
+    tests in this file still passed. The one thing it was written to catch, it could not.
+
+    A map is a claim about what a replay does, so a replay is what settles it. Every event
+    in the projection-facing map is emitted here and the row is read back after a genuine
+    `ProjectionEngine.rebuild()`.
+
+    THE EXPECTED STATUSES ARE WRITTEN OUT BELOW RATHER THAN READ FROM THE MAP, and the
+    first attempt at this test got that wrong too: it asserted the rebuilt row equalled
+    `status_for(event)` while the projection had just written `status_for(event)`, so both
+    sides read the same mutated entry and the mutant passed a second time. Comparing a
+    value against itself is not a test.
+
+    The projections now take every status from the vocabulary, which is what the work
+    order wanted -- but it means nothing in production can contradict the map any more.
+    The only remaining independent anchor is a statement of what each event MEANS, and
+    that statement belongs in a test. This is not a transcription of the handlers: it is
+    the specification they have to meet. `_MEANING` must also cover every event the
+    vocabulary declares, so adding one without saying what it means fails here.
+    """
+    from core.work_orders.task_status import TASK_EVENT_STATUS, WORK_ORDER_EVENT_STATUS
+
+    #: What each event means, stated independently of the code under test.
+    wo_meaning = {
+        "work_order.created": "created",
+        "work_order.started": "in_progress",
+        # The entry the reviewer's mutation flipped: unblocking returns a work order to
+        # the state it was in before it was blocked, which is in_progress -- NOT blocked.
+        "work_order.unblocked": "in_progress",
+        "work_order.blocked": "blocked",
+        "work_order.closed": "closed",
+        "work_order.cancelled": "cancelled",
+        "work_order.deleted": "deleted",
+    }
+    task_meaning = {
+        "task.created": "pending",
+        "task.completed": "complete",
+        "task.cancelled": "cancelled",
+        "task.deleted": "deleted",
+    }
+    assert set(wo_meaning) == set(WORK_ORDER_EVENT_STATUS), (
+        "the vocabulary declares an event this test does not state the meaning of "
+        f"(or vice versa): {set(wo_meaning) ^ set(WORK_ORDER_EVENT_STATUS)}"
+    )
+    assert set(task_meaning) == set(
+        TASK_EVENT_STATUS
+    ), f"task vocabulary and stated meanings disagree: {set(task_meaning) ^ set(TASK_EVENT_STATUS)}"
+
+    project_id, milestone_id = _seed_parents(authority)
+
+    wo_ids: dict[str, str] = {}
+    for event in WORK_ORDER_EVENT_STATUS:
+        wo_id = str(uuid.uuid4())
+        wo_ids[event] = wo_id
+        trace = {"project_id": project_id, "milestone_id": milestone_id, "work_order_id": wo_id}
+        _emit(
+            authority,
+            "work_order.created",
+            trace,
+            {
+                "title": "t",
+                "status": "created",
+                "type": "infrastructure",
+                "work_order_id": wo_id,
+                "project_id": project_id,
+            },
+        )
+        if event != "work_order.created":
+            _emit(
+                authority,
+                event,
+                trace,
+                {
+                    "work_order_id": wo_id,
+                    "project_id": project_id,
+                    "title": "t",
+                    "forced": False,
+                    "block_reason": "r",
+                },
+            )
+
+    task_ids: dict[str, str] = {}
+    for event in TASK_EVENT_STATUS:
+        wo_id, task_id = str(uuid.uuid4()), str(uuid.uuid4())
+        task_ids[event] = task_id
+        _emit(
+            authority,
+            "work_order.created",
+            {"project_id": project_id, "work_order_id": wo_id},
+            {
+                "title": "parent",
+                "status": "created",
+                "type": "infrastructure",
+                "work_order_id": wo_id,
+                "project_id": project_id,
+            },
+        )
+        trace = {"project_id": project_id, "work_order_id": wo_id, "task_id": task_id}
+        _emit(
+            authority,
+            "task.created",
+            trace,
+            {"title": "t", "description": "d", "status": "created"},
+        )
+        if event != "task.created":
+            _emit(authority, event, trace, {})
+
+    _rebuild(authority)
+
+    for event, wo_id in wo_ids.items():
+        got = _status(authority, "business_work_orders", "work_order_id", wo_id)
+        assert got == wo_meaning[event], (
+            f"{event!r} means the work order is {wo_meaning[event]!r}; "
+            f"a rebuild produced {got!r}"
+        )
+    for event, task_id in task_ids.items():
+        got = _status(authority, "business_tasks", "task_id", task_id)
+        assert (
+            got == task_meaning[event]
+        ), f"{event!r} means the task is {task_meaning[event]!r}; a rebuild produced {got!r}"
+
+
 def test_the_two_status_maps_agree_where_they_overlap():
     """Two maps decide what status goes with what event, in opposite directions.
 

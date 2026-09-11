@@ -97,7 +97,7 @@ TASK_STATUS_EVENT: dict[str, str | None] = {
 WORK_ORDER_EVENT_STATUS: dict[str, str] = {
     "work_order.created": "created",
     "work_order.started": "in_progress",
-    "work_order.unblocked": "blocked",
+    "work_order.unblocked": "in_progress",
     "work_order.blocked": "blocked",
     "work_order.closed": "closed",
     "work_order.cancelled": "cancelled",
