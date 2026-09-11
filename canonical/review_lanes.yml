@@ -153,6 +153,12 @@ lanes:
     standards:
       - "OpenSSF Scorecard"
       - "SLSA v1.0 Build L2+"
+    scope:
+      - ".github/workflows/**"
+      - "canonical/workflows/**"
+      - "core/gates/**"
+      - "hooks/**"
+      - "runtime/hooks/**"
     eval: tests/evals/test_review_lane_predicate_parity.py
   - id: test-integrity-inquisitor
     seat: "Test-integrity inquisitor"
@@ -233,6 +239,11 @@ lanes:
       - "OWASP ASVS v4.0 V6 Stored Cryptography"
       - "CWE-312 cleartext storage of sensitive information"
       - "NIST SP 800-57 key management"
+    scope:
+      - "**/*.env*"
+      - "**/secret*"
+      - "**/*credential*"
+      - ".github/workflows/**"
     judgment: true
     why: >-
       Scope and rotation live in cluster and provider configuration this repo does not contain, so
@@ -260,6 +271,13 @@ lanes:
       - "OpenSSF Scorecard"
       - "SPDX or CycloneDX SBOM"
       - "Sigstore signature verification"
+    scope:
+      - "requirements*.txt"
+      - "**/*.lock"
+      - "package.json"
+      - "pyproject.toml"
+      - ".github/workflows/**"
+      - "**/uv.lock"
     judgment: true
     why: >-
       Requires resolving registry and workflow identities outside this repo. The pinning half
@@ -283,6 +301,11 @@ lanes:
       - "CIS Benchmarks"
       - "NIST SP 800-53 AC family"
       - "CWE-269 improper privilege management"
+    scope:
+      - "*.tf"
+      - "*.tfvars"
+      - "**/terraform/**"
+      - "**/*iam*"
     judgment: true
     why: >-
       No IaC in this repository for a detector to examine, and a detector that examines nothing
@@ -305,6 +328,12 @@ lanes:
     standards:
       - "CIS Kubernetes Benchmark"
       - "NIST SP 800-190 container security"
+    scope:
+      - "**/k8s/**"
+      - "**/helm/**"
+      - "**/kustomize/**"
+      - "**/charts/**"
+      - "**/zarf*"
     judgment: true
     why: >-
       Needs cluster state to compute what a prune would remove. Dream Studio ships no GitOps
@@ -327,6 +356,11 @@ lanes:
     standards:
       - "Semantic Versioning 2.0.0"
       - "Keep a Changelog 1.1.0"
+    scope:
+      - "**/.released_version"
+      - "**/version*"
+      - ".github/workflows/**"
+      - "CHANGELOG.md"
     judgment: true
     why: >-
       The format rules differ per target ecosystem and this repo publishes to none of them yet.
@@ -366,6 +400,10 @@ lanes:
     standards:
       - "ACID transaction properties"
       - "ISO/IEC 9075 SQL constraints"
+    scope:
+      - "**/migrations/**"
+      - "**/*.sql"
+      - "core/event_store/**"
     judgment: true
     why: >-
       Dream Studio already runs migration-risk and migration-authority gates for the mechanical
@@ -451,6 +489,11 @@ lanes:
       that actually bit.
     standards:
       - "W3C Design Tokens Community Group format"
+    scope:
+      - "**/*.css"
+      - "**/*.scss"
+      - "**/*.tsx"
+      - "**/*.jsx"
     judgment: true
     why: >-
       Dream Studio ships no design system or frontend bundle, so a detector would examine zero
@@ -474,6 +517,11 @@ lanes:
       - "WAI-ARIA 1.2"
       - "EN 301 549"
       - "Section 508"
+    scope:
+      - "**/*.html"
+      - "**/*.tsx"
+      - "**/*.jsx"
+      - "**/*.vue"
     judgment: true
     why: >-
       No rendered markup in this repository to check. The thinness of the evidence -- one
@@ -494,6 +542,12 @@ lanes:
     standards:
       - "WCAG 2.2 Level AA"
       - "Core Web Vitals"
+    scope:
+      - "**/*.tsx"
+      - "**/*.jsx"
+      - "**/*.ts"
+      - "**/*.js"
+      - "**/*.css"
     judgment: true
     why: >-
       No frontend in this repository. Registered so a project convening this table from its own
@@ -515,6 +569,10 @@ lanes:
     standards:
       - "POSIX Utility Syntax Guidelines (IEEE Std 1003.1)"
       - "GNU coding standards for command-line interfaces"
+    scope:
+      - "interfaces/cli/**"
+      - "**/*runbook*"
+      - "docs/operations/**"
     judgment: true
     why: >-
       Comparing help text against actual default values needs a parse of both, which is buildable
@@ -534,6 +592,11 @@ lanes:
       Manifest and placeholder checks are mechanical; the load-bearing half -- a cap that misleads
       the model -- requires knowing what the consumer infers from a truncated value, which is
       judgement.
+    scope:
+      - "canonical/skills/**"
+      - "canonical/agents/**"
+      - ".mcp.json"
+      - "integrations/marketplace/**"
     judgment: true
     why: >-
       Whether a truncation misleads depends on what the consumer infers from it, and the consumer
@@ -580,6 +643,10 @@ lanes:
       numbering are mechanical and this repo already gates the numbering half.
     standards:
       - "ISO/IEC/IEEE 42010 architecture description"
+    scope:
+      - "docs/**"
+      - "canonical/**"
+      - "*.md"
     judgment: true
     why: >-
       Detecting that two documents contradict each other requires reading both for meaning. The
@@ -605,6 +672,10 @@ lanes:
       - "Diataxis documentation framework"
       - "Keep a Changelog 1.1.0"
       - "SPDX licence identifiers"
+    scope:
+      - "docs/**"
+      - "*.md"
+      - "**/*.md"
     judgment: true
     why: >-
       The constituent checks exist as separate gates already; what is missing is one lane that

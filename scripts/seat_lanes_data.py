@@ -619,3 +619,48 @@ EXTRA_LANES: dict[str, tuple[str, str, str, str, tuple[str, str]]] = {
         ("detector", "py -m core.gates.untested_fallback"),
     ),
 }
+
+
+# ── Relevance scope ──────────────────────────────────────────────────────────
+#
+# THE OPERATOR'S STANDING DIRECTIVE IS THAT CAPABILITIES FIRE ON RELEVANCE, and with 20
+# judgment lanes printing unconditionally the table became a wall nobody reads -- which is
+# the Machinist's own signature turned on the review surface. A one-line CSS change must
+# not be asked about OIDC trust subjects.
+#
+# CONSERVATIVE BY CONSTRUCTION: a lane with NO scope always fires. Only seats whose domain
+# is unambiguously bound to a file shape are scoped, because the cost of wrongly hiding a
+# lane is a defect nobody was asked about, while the cost of wrongly showing one is a line
+# of output. Absence here means "always relevant", not "forgotten".
+SCOPES: dict[str, tuple[str, ...]] = {
+    "Cloud IAM and IaC": ("*.tf", "*.tfvars", "**/terraform/**", "**/*iam*"),
+    "GitOps and rollout safety": (
+        "**/k8s/**", "**/helm/**", "**/kustomize/**", "**/charts/**", "**/zarf*",
+    ),
+    "Supply chain and provenance": (
+        "requirements*.txt", "**/*.lock", "package.json", "pyproject.toml",
+        ".github/workflows/**", "**/uv.lock",
+    ),
+    "Gate-integrity engineer": (
+        ".github/workflows/**", "canonical/workflows/**", "core/gates/**", "hooks/**",
+        "runtime/hooks/**",
+    ),
+    "Data and migration": ("**/migrations/**", "**/*.sql", "core/event_store/**"),
+    "CLI and operator ergonomics": ("interfaces/cli/**", "**/*runbook*", "docs/operations/**"),
+    "Design-system conformance": ("**/*.css", "**/*.scss", "**/*.tsx", "**/*.jsx"),
+    "Accessibility": ("**/*.html", "**/*.tsx", "**/*.jsx", "**/*.vue"),
+    "Frontend behavior and payload": (
+        "**/*.tsx", "**/*.jsx", "**/*.ts", "**/*.js", "**/*.css",
+    ),
+    "Agent and plugin runtime": (
+        "canonical/skills/**", "canonical/agents/**", ".mcp.json", "integrations/marketplace/**",
+    ),
+    "Governance canon and board": ("docs/**", "canonical/**", "*.md"),
+    "Docs, style, and attribution": ("docs/**", "*.md", "**/*.md"),
+    "Secrets and data-at-rest": (
+        "**/*.env*", "**/secret*", "**/*credential*", ".github/workflows/**",
+    ),
+    "Release and version model": (
+        "**/.released_version", "**/version*", ".github/workflows/**", "CHANGELOG.md",
+    ),
+}
