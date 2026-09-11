@@ -42,6 +42,7 @@ class WorkOrderProjection(Projection):
         "work_order.blocked",
         "work_order.unblocked",
         "work_order.closed",
+        "work_order.cancelled",
         "work_order.deleted",
     ]
     source_canonical = "business"
@@ -99,6 +100,8 @@ class WorkOrderProjection(Projection):
             return self._handle_unblocked(conn, work_order_id, event_id, ts, now)
         if event_type == "work_order.closed":
             return self._handle_closed(conn, work_order_id, event_id, ts, now)
+        if event_type == "work_order.cancelled":
+            return self._handle_cancelled(conn, work_order_id, event_id, ts, now)
         if event_type == "work_order.deleted":
             return self._handle_deleted(conn, work_order_id, event_id, now)
 
@@ -268,6 +271,38 @@ class WorkOrderProjection(Projection):
             {
                 "work_order_id": work_order_id,
                 "status": "closed",
+                "closed_at": ts,
+                "last_event_id": event_id,
+                "last_updated_at": now,
+            },
+            conflict_key="work_order_id",
+        )
+
+    def _handle_cancelled(
+        self,
+        conn: sqlite3.Connection,
+        work_order_id: str,
+        event_id: str,
+        ts: str,
+        now: str,
+    ) -> int:
+        """Abandoned, and still visible as abandoned.
+
+        WO 20796691. `cancelled` was a status 53 work orders HELD that no event could
+        produce, because the gap drain wrote it with a bare UPDATE and emitted nothing.
+        A rebuild therefore reverted each of them to whatever their last handled event
+        said -- reopening work someone had deliberately abandoned.
+
+        Deliberately NOT folded into `_handle_deleted`. Deleted means the row should not
+        be there; cancelled means the work was real and is not going to happen, which a
+        reader needs to be able to tell apart.
+        """
+        return self.safe_upsert(
+            conn,
+            _TABLE,
+            {
+                "work_order_id": work_order_id,
+                "status": "cancelled",
                 "closed_at": ts,
                 "last_event_id": event_id,
                 "last_updated_at": now,

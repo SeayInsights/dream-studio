@@ -39,6 +39,7 @@ class TaskProjection(Projection):
     consumed_event_types = [
         "task.created",
         "task.completed",
+        "task.cancelled",
         "task.deleted",
         "task.ac_repointed",
     ]
@@ -87,6 +88,8 @@ class TaskProjection(Projection):
 
         if event_type == "task.completed":
             return self._handle_completed(conn, task_id, event_id, now)
+        if event_type == "task.cancelled":
+            return self._handle_cancelled(conn, task_id, event_id, now)
         if event_type == "task.deleted":
             return self._handle_deleted(conn, task_id, event_id, now)
         if event_type == "task.ac_repointed":
@@ -193,6 +196,33 @@ class TaskProjection(Projection):
         conn.execute(
             f"UPDATE {_TABLE}"
             " SET status = 'complete', updated_at = ?, last_event_id = ?"
+            " WHERE task_id = ?",
+            (now, event_id, task_id),
+        )
+        return 1
+
+    def _handle_cancelled(
+        self,
+        conn: sqlite3.Connection,
+        task_id: str,
+        event_id: str,
+        now: str,
+    ) -> int:
+        """Abandoned, and still countable as abandoned rather than as open work.
+
+        WO 20796691. `cancelled` is already declared a real state in
+        TASK_ABANDONED_STATUSES, and 369 tasks held it -- written by the gap drain as a
+        bare UPDATE with no emission, so a replay reverted every one of them to whatever
+        their last handled event said. The vocabulary knew about this state; the event
+        substrate did not.
+
+        Kept separate from `deleted` on purpose: `is_open()` treats both as not-open, but
+        a reader deciding whether work was abandoned or the row should never have existed
+        needs the two to stay distinguishable.
+        """
+        conn.execute(
+            f"UPDATE {_TABLE}"
+            " SET status = 'cancelled', updated_at = ?, last_event_id = ?"
             " WHERE task_id = ?",
             (now, event_id, task_id),
         )
