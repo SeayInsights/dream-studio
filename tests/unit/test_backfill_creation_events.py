@@ -340,3 +340,47 @@ def test_the_replay_status_constant_matches_what_a_real_rebuild_produces(authori
         "the guard's constant is stale and it is now refusing or allowing the wrong rows"
     )
     assert task_status[0] == _STATUS_AFTER_REPLAY["tasks"], task_status[0]
+
+
+def test_a_dry_run_that_reports_risk_has_not_failed(authority):
+    """`ok` answers "did what I asked succeed"; a dry run was asked to look.
+
+    Collapsing the two made ok=False the normal result of an inspection, which trains a
+    caller to ignore it — and the first CLI wrapper would have rendered a routine look
+    as a crash. The refusal is carried on `would_refuse` instead.
+    """
+    _seed_with_status(authority, "closed", "complete")
+
+    dry = backfill(db_path=authority, apply=False)
+    live = backfill(db_path=authority, apply=True)
+
+    assert dry["ok"] is True, dry
+    assert dry["would_refuse"] is True
+    assert "REFUSED" in dry["note"]
+    assert live["ok"] is False, "apply must still fail loudly"
+    assert live["would_refuse"] is True
+
+
+@pytest.mark.parametrize("variant", ["Created", " created ", "CREATED"])
+def test_a_cosmetic_variant_of_the_default_does_not_trigger_a_refusal(authority, variant):
+    """Case and padding are not a different state.
+
+    An exact match refused the whole run over 'Created'. That is the safe direction, but
+    a refusal nobody can act on is how a guard gets switched off.
+    """
+    _seed_with_status(authority, variant, "pending")
+
+    report = backfill(db_path=authority, apply=True)
+
+    assert report["ok"] is True, report
+    assert report["status_at_risk"]["work_orders"]["would_be_overwritten"] == 0
+
+
+def test_an_empty_status_is_still_treated_as_at_risk(authority):
+    """Normalising case must not quietly normalise 'unknown' into 'safe'."""
+    _seed_with_status(authority, "", "pending")
+
+    report = backfill(db_path=authority, apply=True)
+
+    assert report["ok"] is False, report
+    assert report["status_at_risk"]["work_orders"]["would_be_overwritten"] == 1

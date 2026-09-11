@@ -89,6 +89,11 @@ def _missing_counts(conn: sqlite3.Connection) -> dict[str, int]:
     }
 
 
+def _same_status(value: str | None, default: str) -> bool:
+    """Is this the replay default, ignoring case and surrounding whitespace?"""
+    return (value or "").strip().casefold() == default.casefold()
+
+
 def _status_at_risk(conn: sqlite3.Connection) -> dict[str, Any]:
     """Rows whose CURRENT status a creation-event replay would not reproduce.
 
@@ -109,9 +114,16 @@ def _status_at_risk(conn: sqlite3.Connection) -> dict[str, Any]:
             (default,),
         ).fetchall()
         by_status = {row[0]: row[1] for row in rows}
+        # CASE AND PADDING ARE NOT A DIFFERENT STATE. An exact match treated 'Created'
+        # and ' created ' as at-risk and refused the whole run over a cosmetic variant --
+        # the safe direction, but a refusal nobody can act on is how a guard gets
+        # switched off. Comparison is normalised; the report still shows the raw value,
+        # because "your data says 'Created'" is itself worth seeing.
         out[kind] = {
-            "would_survive": by_status.get(default, 0),
-            "would_be_overwritten": sum(n for s, n in by_status.items() if s != default),
+            "would_survive": sum(n for s, n in by_status.items() if _same_status(s, default)),
+            "would_be_overwritten": sum(
+                n for s, n in by_status.items() if not _same_status(s, default)
+            ),
             "replays_as": default,
             "by_status": by_status,
         }
@@ -174,7 +186,13 @@ def backfill(
         "would_write": {"work_orders": len(work_orders), "tasks": len(tasks)},
     }
 
-    if endangered and not allow_status_loss:
+    # A DRY RUN THAT REPORTS RISK HAS NOT FAILED. `ok` answers "did what I asked
+    # succeed", and what a dry run was asked to do is look. Collapsing the two made
+    # `ok=False` the normal outcome of an inspection, which trains a caller to ignore it
+    # -- and the first CLI wrapper would have rendered a routine look as a crash.
+    result["would_refuse"] = bool(endangered) and not allow_status_loss
+
+    if endangered and not allow_status_loss and apply:
         # THE REFUSAL IS THE FEATURE. Restoring a row while silently resetting its status
         # trades a visible loss for an invisible lie, and this tool exists for disaster
         # recovery, where a row that reads 'created' when it was closed is worse than a
@@ -196,7 +214,18 @@ def backfill(
 
     if not apply:
         result["after"] = before
-        result["note"] = "Dry run — nothing was written. Re-run with --apply to emit these events."
+        if result["would_refuse"]:
+            result["note"] = (
+                "Dry run — nothing was written, and --apply would be REFUSED:"
+                f" {endangered} row(s) carry a status a creation-event replay cannot"
+                f" reproduce ({at_risk['work_orders']['would_be_overwritten']} work"
+                f" order(s), {at_risk['tasks']['would_be_overwritten']} task(s)). Looking"
+                " succeeded; the repair is what is blocked."
+            )
+        else:
+            result["note"] = (
+                "Dry run — nothing was written. Re-run with --apply to emit these events."
+            )
         return result
 
     from spool.ingestor import _write_to_dual_canonical
