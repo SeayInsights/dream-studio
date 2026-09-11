@@ -225,3 +225,118 @@ def test_a_row_that_already_has_an_event_is_left_alone(authority):
 
     assert count == 1
     assert after == 1, "a second run duplicated the creation event"
+
+
+# ── the guard: a repair that resets status is worse than the defect ──────────
+#
+# Neither created handler reads payload["status"]; both hardcode it. So filling the gap
+# with creation events alone would make a rebuild reopen closed work orders and
+# un-complete finished tasks. Measured on the live authority before this guard existed:
+# 465 of 493 event-less work orders and 1418 of 1706 event-less tasks carry a status the
+# replay cannot reproduce.
+
+
+def _seed_with_status(db_path: Path, wo_status: str, task_status: str) -> tuple[str, str]:
+    wo_id, task_id, _ = _seed_eventless(db_path)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute(
+            "UPDATE business_work_orders SET status = ? WHERE work_order_id = ?",
+            (wo_status, wo_id),
+        )
+        conn.execute(
+            "UPDATE business_tasks SET status = ? WHERE task_id = ?", (task_status, task_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return wo_id, task_id
+
+
+def test_apply_refuses_when_a_status_would_not_survive_the_replay(authority):
+    """The refusal is the feature, not an inconvenience."""
+    _seed_with_status(authority, "closed", "complete")
+
+    report = backfill(db_path=authority, apply=True)
+
+    assert report["ok"] is False, report
+    assert report["applied"] is False
+    assert "Refused" in report["error"]
+    assert report["status_at_risk"]["work_orders"]["would_be_overwritten"] == 1
+    assert report["status_at_risk"]["tasks"]["would_be_overwritten"] == 1
+
+    conn = sqlite3.connect(str(authority))
+    try:
+        events = conn.execute("SELECT COUNT(*) FROM business_canonical_events").fetchone()[0]
+    finally:
+        conn.close()
+    assert events == 0, "a refused run still wrote events"
+
+
+def test_the_refusal_names_the_counts_rather_than_saying_go_and_look(authority):
+    """An operator must be able to weigh the decision from the message itself."""
+    _seed_with_status(authority, "closed", "complete")
+
+    error = backfill(db_path=authority, apply=True)["error"]
+
+    assert "1 work order(s)" in error, error
+    assert "1 task(s)" in error, error
+    assert "'created'" in error and "'pending'" in error, error
+
+
+def test_rows_whose_status_is_the_replay_default_are_not_blocked(authority):
+    """The guard must not refuse work it has no reason to refuse.
+
+    A guard that blocks everything is as useless as one that blocks nothing — the 28
+    work orders and 288 tasks already at the default status are safe to repair.
+    """
+    _seed_eventless(authority)  # seeds 'created' / 'pending', the replay defaults
+
+    report = backfill(db_path=authority, apply=True)
+
+    assert report["ok"] is True, report
+    assert report["written"] == {"work_orders": 1, "tasks": 1}
+
+
+def test_the_override_is_available_but_must_be_asked_for(authority):
+    """Deliberate and in writing, not cleared by habit."""
+    _seed_with_status(authority, "closed", "complete")
+
+    assert backfill(db_path=authority, apply=True)["ok"] is False
+    forced = backfill(db_path=authority, apply=True, allow_status_loss=True)
+
+    assert forced["ok"] is True, forced
+    assert forced["written"] == {"work_orders": 1, "tasks": 1}
+
+
+def test_the_replay_status_constant_matches_what_a_real_rebuild_produces(authority):
+    """Pin the constant to observed behaviour, or it silently goes stale.
+
+    `_STATUS_AFTER_REPLAY` is a literal, and a literal describing someone else's code is
+    a transcription. This drives the genuine rebuild and reads the status back, so the
+    day a handler starts honouring `payload["status"]` this fails and the guard gets
+    corrected instead of over-refusing forever.
+    """
+    from core.work_orders.backfill_creation_events import _STATUS_AFTER_REPLAY
+
+    wo_id, task_id = _seed_with_status(authority, "closed", "complete")
+    backfill(db_path=authority, apply=True, allow_status_loss=True)
+    _rebuild(authority)
+
+    conn = sqlite3.connect(str(authority))
+    try:
+        wo_status = conn.execute(
+            "SELECT status FROM business_work_orders WHERE work_order_id = ?", (wo_id,)
+        ).fetchone()
+        task_status = conn.execute(
+            "SELECT status FROM business_tasks WHERE task_id = ?", (task_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+
+    assert wo_status is not None and task_status is not None, "rows did not survive"
+    assert wo_status[0] == _STATUS_AFTER_REPLAY["work_orders"], (
+        f"a rebuild produced {wo_status[0]!r}, not {_STATUS_AFTER_REPLAY['work_orders']!r} — "
+        "the guard's constant is stale and it is now refusing or allowing the wrong rows"
+    )
+    assert task_status[0] == _STATUS_AFTER_REPLAY["tasks"], task_status[0]
