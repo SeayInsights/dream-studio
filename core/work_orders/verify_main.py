@@ -217,7 +217,11 @@ def _resolve_protocol(protocol_dir: Path, name: str) -> Path | None:
 
 
 def _describe_graded_range(
-    work_order_id: str, *, repo_root: Path, db_path: Path | None
+    work_order_id: str,
+    *,
+    repo_root: Path,
+    db_path: Path | None,
+    evidence_layer: str | None = None,
 ) -> dict[str, Any]:
     """The BOUNDARY commit range and how far it is from HEAD.
 
@@ -226,16 +230,33 @@ def _describe_graded_range(
     plain statement of the same fact -- a number nobody interprets is how this went
     unnoticed for three runs.
 
-    WHAT THIS IS NOT. It re-derives the range from the recorded delivery boundary; it does
-    NOT report the commit set the locator actually chose. Those agree on the ordinary
-    path, and diverge when `choose_locator` falls back to message-grep or to authority
-    evidence -- where this then describes a boundary nobody graded. Named by WO 654a54d7's
-    own review as worth knowing rather than as a defect, and carried on the report as
-    `describes` so a reader is never left inferring which one they are looking at.
+    WHAT THIS IS AND IS NOT. It re-derives the range from the recorded delivery boundary.
+    That IS the graded commit set when the locator used the boundary, and is NOT when
+    `choose_locator` fell back to message-grep or to authority evidence -- where this
+    would otherwise describe a range nobody graded.
+
+    So it is told which locator won and says whether the two agree. Disclosure alone was
+    the first fix and WO 654a54d7's review was right to refuse it: naming the field
+    `describes` tells a reader what they are looking at, and still leaves them to work out
+    whether it matches what was graded. `range_is_what_was_graded` answers that, and
+    `not_graded_reason` says why when it is False.
     """
     from .delivery_boundary import boundary_commit_range
 
-    out: dict[str, Any] = {"describes": "recorded_delivery_boundary"}
+    # The layers on which the boundary range IS the graded set. Anything else means the
+    # locator built the diff another way, and this range describes something nobody read.
+    _BOUNDARY_LAYERS = {"recorded_delivery_boundary", "boundary_working_tree", None}
+    out: dict[str, Any] = {
+        "describes": "recorded_delivery_boundary",
+        "evidence_layer": evidence_layer,
+        "range_is_what_was_graded": evidence_layer in _BOUNDARY_LAYERS,
+    }
+    if evidence_layer not in _BOUNDARY_LAYERS:
+        out["not_graded_reason"] = (
+            f"the locator used {evidence_layer!r}, so the commit set graded is not this"
+            " boundary range -- the distance-from-HEAD numbers below describe a range"
+            " that was not read"
+        )
     try:
         expr, why = boundary_commit_range(work_order_id, db_path=db_path)
     except Exception as exc:  # noqa: BLE001 - provenance must not fail the review
@@ -545,9 +566,7 @@ def verify_work_order(
         # because the graded range ended four commits behind it. A grader noticed in prose;
         # nothing computed it, and the verdict recorded only `evidence_layer`. This is the
         # number separating "the fix did not work" from "the fix was never looked at".
-        _graded_range = _describe_graded_range(
-            work_order_id, repo_root=Path(_search_root), db_path=db_path
-        )
+
         # WO-BOUNDARY-OPEN-END review finding: the range-replaces-grep choice now
         # lives in choose_locator, where a test can drive it. The guard that used to
         # protect it grepped this function's source, broke on a refactor that changed
@@ -566,6 +585,15 @@ def verify_work_order(
                 title=wo["title"],
                 fallback_root=_search_root,
             ),
+        )
+        # WO 654a54d7: placed AFTER choose_locator so the report can say whether the
+        # boundary range is the set that was actually graded, rather than only naming
+        # which range it is. Disclosure was the first fix and the review refused it.
+        _graded_range = _describe_graded_range(
+            work_order_id,
+            repo_root=Path(_search_root),
+            db_path=db_path,
+            evidence_layer=_evidence_layer,
         )
         _union_summary = (
             f"recorded delivery boundary in {_search_root} (roots not searched: the "

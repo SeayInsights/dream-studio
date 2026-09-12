@@ -1867,3 +1867,36 @@ def test_the_range_report_names_what_it_describes(db, tmp_path):
         "the range report does not say which range it is, so a reader cannot tell it "
         "from the commit set that was actually graded"
     )
+
+
+def test_the_range_report_says_whether_it_is_what_was_graded(db, tmp_path):
+    """Naming the range is not the same as saying it was the one read.
+
+    The first fix for this added a  key -- true, and still leaving a reader to
+    work out whether it matched the commit set the locator chose. WO 654a54d7's review
+    refused that as disclosure standing in for the comparison the task asked for.
+
+    Both directions, because a field that is always True and a field that is always False
+    are equally useless.
+    """
+    from core.work_orders.verify_main import _describe_graded_range
+
+    repo, _ = _git_repo(tmp_path / "graded")
+    wo_id = str(uuid.uuid4())
+    _seed_work_order(db, wo_id, "in_progress")
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+
+    matched = _describe_graded_range(
+        wo_id, repo_root=repo, db_path=db, evidence_layer="recorded_delivery_boundary"
+    )
+    assert matched["range_is_what_was_graded"] is True
+    assert "not_graded_reason" not in matched
+
+    diverged = _describe_graded_range(
+        wo_id, repo_root=repo, db_path=db, evidence_layer="authority_executable_checks"
+    )
+    assert diverged["range_is_what_was_graded"] is False, (
+        "the report claims the boundary range was graded while the locator used "
+        "authority evidence, so its HEAD-distance numbers describe a range nobody read"
+    )
+    assert "authority_executable_checks" in diverged["not_graded_reason"]
