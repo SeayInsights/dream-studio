@@ -783,14 +783,15 @@ def _projected_status_writers() -> list[str]:
     return sorted(set(offenders))
 
 
-def test_the_guard_covers_every_writer_not_a_named_pair():
-    """No production site may spell a projected status itself.
+def test_no_production_writer_spells_a_projected_status():
+    """THE OUTCOME: no production site names a status the vocabulary owns.
 
-    THE PREVIOUS GUARD READ TWO FILES BY NAME. It asserted the two projections took their
-    statuses from the vocabulary, and passed while seven other production sites wrote
-    status literals into the same two tables as a synchronous read-model mirror -- found
-    by an independent review, not by the suite. A guard that names its subjects can only
-    ever catch the subjects someone remembered.
+    Seven sites wrote a literal into `business_work_orders` / `business_tasks` as a
+    synchronous read-model mirror -- `mutations.py` three times, `start_main.py`,
+    `close_main.py`, and both drain sites in `verify_gaps.py`. Each now takes its value
+    from `status_for(<the event this site emits>)`, so the row and the event cannot
+    disagree about the word and a renamed status is a KeyError at the write rather than
+    silent drift.
     """
     offenders = _projected_status_writers()
     assert not offenders, (
@@ -799,6 +800,101 @@ def test_the_guard_covers_every_writer_not_a_named_pair():
         + "\nEach must take its value from status_for(<the event this site emits>), so a "
         "renamed status is a KeyError at the write rather than silent drift."
     )
+
+
+def test_the_guard_covers_every_writer_not_a_named_pair():
+    """THE MECHANISM: the guard DISCOVERS its subjects rather than naming them.
+
+    The previous guard read two projection files by name. It asserted those two took
+    their statuses from the vocabulary, and passed while seven other production sites
+    drifted -- found by an independent review, not by the suite. A guard that names its
+    subjects can only ever catch the subjects someone remembered, which is why this test
+    is about how the finder is built and not about today's result.
+    """
+    from core.projections.task_projection import TaskProjection
+    from core.projections.work_order_projection import WorkOrderProjection
+
+    # The table list is DERIVED from each projection's own declaration.
+    declared = set(WorkOrderProjection.target_tables) | set(TaskProjection.target_tables)
+    assert declared >= {"business_work_orders", "business_tasks"}, declared
+
+    source = pathlib.Path(__file__).read_text(encoding="utf-8")
+    start = source.index("def _projected_status_writers")
+    finder = source[start:]
+    end = finder.index("def test_")
+    finder = finder[:end]
+
+    assert "target_tables" in finder, (
+        "the finder hardcodes its tables instead of reading each projection's own "
+        "target_tables, so a new projected table is exempt the day it is added"
+    )
+    assert "rglob" in finder, (
+        "the finder walks a fixed list of files rather than the tree, which is exactly "
+        "how seven writers stayed invisible to a green suite"
+    )
+    for statement in ("UPDATE {table}", "INSERT INTO {table}"):
+        assert statement in finder, (
+            f"the finder does not scan {statement.split()[0]}; covering one statement "
+            "kind and not the other is the subset-of-what-it-writes shape"
+        )
+
+
+def test_the_projection_check_rejects_a_reintroduced_literal(tmp_path):
+    """The guard is self-driving: it proves it can fail, on every run.
+
+    Two mutations were run by hand to show the guard worked -- an inline SQL literal and
+    a dict literal -- and the proof lived in a transcript. A check whose falsifiability
+    is demonstrated once and then trusted is exactly what this file exists to refuse, and
+    the first mutation of the INSERT scan PASSED because the regex had been written with
+    a stray 0x08 byte and matched nothing.
+
+    So the plant-and-detect runs here, against a temp tree the real finder logic walks.
+    """
+    import re
+
+    from core.projections.task_projection import TaskProjection
+    from core.projections.work_order_projection import WorkOrderProjection
+
+    tables = set(WorkOrderProjection.target_tables) | set(TaskProjection.target_tables)
+    declared = "pending|created|complete|closed|in_progress|blocked|cancelled|deleted"
+
+    def offenders_in(text: str) -> list[str]:
+        """The finder's own predicates, applied to one supplied body of source."""
+        found: list[str] = []
+        for table in tables:
+            for match in re.finditer(rf"UPDATE {table}\b", text):
+                begin = match.start()
+                if re.search(r"SET status = '([a-z_]+)'", text[begin:][:400]):
+                    found.append(f"UPDATE {table}")
+            for match in re.finditer(rf"INSERT INTO {table}", text):
+                begin = match.start()
+                if re.search(rf"'({declared})'", text[begin:][:600]):
+                    found.append(f"INSERT INTO {table}")
+        return found
+
+    clean = (
+        'conn.execute("UPDATE business_tasks SET status = ?, updated_at = ?"'
+        ' " WHERE task_id = ?", (status_for("task.completed"), now, task_id))'
+    )
+    assert not offenders_in(clean), "a compliant write was flagged; the guard is too eager"
+
+    for mutant, kind in (
+        (
+            "conn.execute(\"UPDATE business_tasks SET status = 'complete', updated_at = ?\""
+            ' " WHERE task_id = ?", (now, task_id))',
+            "an inline SQL literal",
+        ),
+        (
+            'conn.execute("INSERT INTO business_tasks (task_id, status) VALUES (?, ?)",'
+            " (task_id, 'pending'))",
+            "an INSERT literal",
+        ),
+    ):
+        assert offenders_in(mutant), (
+            f"the guard did not reject {kind}. A check that cannot fail reports a clean "
+            "tree whatever is in it -- which is what a stray 0x08 byte in this regex "
+            "already caused once."
+        )
 
 
 def test_every_writer_of_a_projected_status_is_enumerated():
