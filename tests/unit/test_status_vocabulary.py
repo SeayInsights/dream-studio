@@ -922,7 +922,7 @@ def test_every_writer_of_a_projected_status_is_enumerated():
     )
 
 
-def test_the_mirror_decision_is_anchored_in_the_module_docstring():
+def test_the_mirror_decision_is_recorded_in_the_module_docstring():
     """A recorded decision with nothing holding it there is a comment waiting to be deleted.
 
     WO 1364e05e task 4 required the synchronous-mirror decision to be recorded in

@@ -1842,3 +1842,28 @@ def test_a_non_terminal_status_still_widens(db, tmp_path):
             "is invisible to its own re-verification"
         )
         assert why and "not closed" in why
+
+
+def test_the_range_report_names_what_it_describes(db, tmp_path):
+    """A range report that does not say which range it is invites the wrong reading.
+
+    _describe_graded_range re-derives the range from the recorded delivery boundary. It
+    does NOT report the commit set choose_locator actually graded, and the two diverge
+    when the locator falls back to message-grep or to authority evidence -- where this
+    then describes a boundary nobody graded. WO 654a54d7's own review named it as worth
+    knowing rather than as a defect, which is exactly the kind of thing that becomes a
+    defect once someone reads the field as authoritative.
+    """
+    from core.work_orders.verify_main import _describe_graded_range
+
+    repo, _ = _git_repo(tmp_path / "named")
+    wo_id = str(uuid.uuid4())
+    _seed_work_order(db, wo_id, "in_progress")
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+
+    described = _describe_graded_range(wo_id, repo_root=repo, db_path=db)
+
+    assert described["describes"] == "recorded_delivery_boundary", (
+        "the range report does not say which range it is, so a reader cannot tell it "
+        "from the commit set that was actually graded"
+    )

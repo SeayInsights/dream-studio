@@ -219,16 +219,23 @@ def _resolve_protocol(protocol_dir: Path, name: str) -> Path | None:
 def _describe_graded_range(
     work_order_id: str, *, repo_root: Path, db_path: Path | None
 ) -> dict[str, Any]:
-    """The commit range a verdict is about to grade, and how far it is from HEAD.
+    """The BOUNDARY commit range and how far it is from HEAD.
 
     Reports `commits_behind_head` so a reader can tell a finding about the work from a
     finding about a tree that never contained the fix, and `stops_short_of_head` as the
     plain statement of the same fact -- a number nobody interprets is how this went
     unnoticed for three runs.
+
+    WHAT THIS IS NOT. It re-derives the range from the recorded delivery boundary; it does
+    NOT report the commit set the locator actually chose. Those agree on the ordinary
+    path, and diverge when `choose_locator` falls back to message-grep or to authority
+    evidence -- where this then describes a boundary nobody graded. Named by WO 654a54d7's
+    own review as worth knowing rather than as a defect, and carried on the report as
+    `describes` so a reader is never left inferring which one they are looking at.
     """
     from .delivery_boundary import boundary_commit_range
 
-    out: dict[str, Any] = {}
+    out: dict[str, Any] = {"describes": "recorded_delivery_boundary"}
     try:
         expr, why = boundary_commit_range(work_order_id, db_path=db_path)
     except Exception as exc:  # noqa: BLE001 - provenance must not fail the review
