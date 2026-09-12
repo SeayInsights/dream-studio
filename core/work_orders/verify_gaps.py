@@ -646,6 +646,22 @@ def _attach_gap_tasks(
         description = (task.get("description", "") or "") + (
             _GAP_ATTACHED_STAMP.format(gap_key=gap_key) if gap_key else ""
         )
+        # WO 82f608ca: THE REASON THAT ADMITTED THIS TASK IS RECORDED, NOT SPENT.
+        #
+        # `why` was handed to admit_task for the decision and then dropped, so a task
+        # admitted on a declared reason reached the authority with no trace of it --
+        # indistinguishable from a stub, and counted as one by the blocking
+        # task-criteria-baseline ceiling, whose only notion of "declared" is
+        # DECLARED_PREFIX appearing in this description. The same bare-bypass-with-a-nicer-
+        # spelling shape #706 fixed in the CLI, surviving in the gap path.
+        #
+        # Composed HERE rather than earlier because this is the value that reaches both
+        # the row and the emitted event; a copy computed before this line would be a
+        # variable nothing reads.
+        if not _criteria:
+            from core.work_orders.admission import compose_declared_reason
+
+            description = compose_declared_reason(description, task.get("why"))
 
         # EMIT THE CANONICAL EVENT, NOT JUST THE ROW. business_tasks is a PROJECTION:
         # TaskProjection.target_tables == ["business_tasks"], and the framework's default
@@ -966,6 +982,9 @@ def _insert_gap_work_orders(
 ) -> list[dict[str, Any]]:
     now = datetime.now(UTC).isoformat()
     spawned: list[dict[str, Any]] = []
+    # Findings the spawn path refused, carried out the same way the attach path carries
+    # its own: a refusal is a report, never a silent drop.
+    unfiled_on_spawn: list[dict[str, Any]] = []
 
     base_seq = reviewed_wo_sequence or 0
     if milestone_id:
@@ -1213,6 +1232,54 @@ def _insert_gap_work_orders(
                 task_id = str(uuid.uuid4())
                 _task_title = task.get("title", "")
                 _task_desc = task.get("description", "")
+                _task_criteria = task.get("acceptance_criteria")
+
+                # WO 82f608ca: THE SPAWN PATH ASKS ADMISSION TOO.
+                #
+                # `_attach_gap_tasks` has been gated by `admit_task` since the stub
+                # factory was closed; this path -- its sibling, spawning tasks onto a NEW
+                # work order -- called no seat at all, so a review could file an
+                # uncheckable claim by the other route and push the blocking
+                # task-criteria-baseline ceiling upward. These two functions have now
+                # diverged four times: twice on event emission, once on the criterion
+                # column, and here on admission itself.
+                #
+                # A declared reason is COMPOSED INTO THE DESCRIPTION, not spent on the
+                # decision, for the same reason it is in the attach path: the ceiling's
+                # only notion of "declared" is DECLARED_PREFIX appearing there.
+                from core.work_orders.admission import (
+                    admit_task,
+                    compose_declared_reason,
+                    paths_named,
+                )
+
+                if not _task_criteria:
+
+                    _task_desc = compose_declared_reason(_task_desc, task.get("why"))
+
+                _spawn_verdict = admit_task(
+                    title=_task_title,
+                    acceptance_criteria=_task_criteria,
+                    why=task.get("why"),
+                    work_order_description=desc,
+                    existing_titles=set(),
+                    target_paths=paths_named(f"{_task_title} {_task_desc}", repo_root=REPO_ROOT),
+                )
+                if not _spawn_verdict["admitted"]:
+                    # REPORTED, NOT DROPPED. A refused finding that vanishes is an
+                    # invisible claim, which is strictly worse than a visible stub -- the
+                    # rule the attach path already follows by returning what it refused.
+                    unfiled_on_spawn.append(
+                        {
+                            "title": _task_title,
+                            "description": _task_desc,
+                            "gap_key": gap.get("gap_key", ""),
+                            "refusals": _spawn_verdict["refusals"],
+                            "unknowns": _spawn_verdict["unknowns"],
+                            "spawned_work_order_id": new_wo_id,
+                        }
+                    )
+                    continue
                 _task_emitted = _emit_creation(
                     "task.created",
                     payload={
@@ -1252,7 +1319,7 @@ def _insert_gap_work_orders(
                         _task_title,
                         _task_desc if _task_emitted else _task_desc + _NO_EVENT_WARNING,
                         creation_status(),
-                        task.get("acceptance_criteria"),
+                        _task_criteria,
                         now,
                         now,
                     ),

@@ -164,7 +164,17 @@ def _spawn(db_path: Path, project_id: str, milestone_id: str, reviewed_id: str) 
             "description": "raised by review",
             "category": "durability",
             "type": "infrastructure",
-            "tasks": [{"title": "A spawned task", "description": "do the thing"}],
+            # WO 82f608ca: the spawn path now asks admission, exactly as its attach
+            # sibling always has, so a fixture filing a criterion-less task is refused.
+            # These tests are about REBUILD SURVIVAL, not about admission -- the criterion
+            # is what lets the row exist to be rebuilt at all.
+            "tasks": [
+                {
+                    "title": "A spawned task",
+                    "description": "do the thing",
+                    "acceptance_criteria": "TEST-CHECK: tests/unit/test_verify_gaps.py::test_a_spawned_task_survives_a_projection_rebuild",
+                }
+            ],
         }
     ]
     conn = sqlite3.connect(str(db_path))
@@ -430,3 +440,113 @@ def test_every_projection_write_site_emits_its_event(authority):
     )
     assert len(report["target_tables"]) >= 4, report["target_tables"]
     assert report["offenders"] == [], report["offenders"]
+
+
+def test_the_spawn_path_refuses_a_task_nobody_can_check(authority):
+    """These two gap functions have diverged four times; this pins the fourth shut.
+
+    Twice on event emission, once on the acceptance-criteria column, and once on
+    admission itself -- `_attach_gap_tasks` has been gated by `admit_task` since the stub
+    factory was closed, while `_insert_gap_work_orders` called no seat at all. A review
+    could therefore file an uncheckable claim by the spawn route and push the blocking
+    task-criteria-baseline ceiling upward, which is how a push came to be refused at 1776
+    against 1767.
+
+    DRIVEN, NOT GREPPED. The first version of this test searched the source for
+    `admit_task(` in both function bodies. A mutation that kept the call textually while
+    neutering its result -- `dict(admitted=True, ...) or admit_task(...)` -- passed it,
+    because a grep proves a call exists and not that its answer is honoured. That is the
+    grep-standing-in-for-a-drive shape this repo names, written into the check meant to
+    close a divergence.
+    """
+    db_path = authority
+    project_id, milestone_id, reviewed_id = _seed_project(db_path)
+
+    gaps = [
+        {
+            "title": "A gap whose task nobody can check",
+            "description": "raised by review",
+            "category": "durability",
+            "type": "infrastructure",
+            "tasks": [{"title": "unverifiable claim", "description": "no criterion at all"}],
+        }
+    ]
+    conn = sqlite3.connect(str(db_path))
+    try:
+        from core.work_orders.verify_gaps import _insert_gap_work_orders
+
+        _insert_gap_work_orders(
+            conn,
+            gaps=gaps,
+            project_id=project_id,
+            milestone_id=milestone_id,
+            reviewed_work_order_id=reviewed_id,
+            reviewed_wo_title="Reviewed",
+            reviewed_wo_sequence=1,
+        )
+        conn.commit()
+        rows = conn.execute(
+            "SELECT title, acceptance_criteria FROM business_tasks"
+            " WHERE title = 'unverifiable claim'"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    assert rows == [], (
+        "the spawn path filed a task with no criterion and no declared reason, so a "
+        f"review run raises the blocking uncheckable ceiling by itself: {rows}"
+    )
+
+
+def test_the_spawn_path_records_the_reason_it_admits_on(authority):
+    """A declared reason must reach the row, not be spent on the decision.
+
+    `why` was handed to admit_task and dropped. The ceiling's only notion of "declared"
+    is DECLARED_PREFIX appearing in the description, so a task admitted on a reason that
+    never got written is counted as a stub -- a bare bypass with a nicer spelling.
+    """
+    from core.work_orders.admission import DECLARED_PREFIX
+
+    db_path = authority
+    project_id, milestone_id, reviewed_id = _seed_project(db_path)
+
+    gaps = [
+        {
+            "title": "A gap resting on judgment",
+            "description": "raised by review",
+            "category": "durability",
+            "type": "infrastructure",
+            "tasks": [
+                {
+                    "title": "a judgment call",
+                    "description": "decide and record it",
+                    "why": "no check settles an architecture decision; the deliverable is the record",
+                }
+            ],
+        }
+    ]
+    conn = sqlite3.connect(str(db_path))
+    try:
+        from core.work_orders.verify_gaps import _insert_gap_work_orders
+
+        _insert_gap_work_orders(
+            conn,
+            gaps=gaps,
+            project_id=project_id,
+            milestone_id=milestone_id,
+            reviewed_work_order_id=reviewed_id,
+            reviewed_wo_title="Reviewed",
+            reviewed_wo_sequence=1,
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT description FROM business_tasks WHERE title = 'a judgment call'"
+        ).fetchone()
+    finally:
+        conn.close()
+
+    assert row, "a task admitted on a declared reason was not filed at all"
+    assert DECLARED_PREFIX in row[0], (
+        "the declared reason never reached the row, so the ceiling counts this task as a "
+        f"stub and the reviewer's reason is unauditable: {row[0][:160]!r}"
+    )

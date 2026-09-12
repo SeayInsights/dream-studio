@@ -54,6 +54,28 @@ _MIN_WHY = 20
 #: lane, so the phrase lives here and both import it.
 DECLARED_PREFIX = "Filed with no executable criterion, on a declared reason:"
 
+
+def compose_declared_reason(description: str | None, why: str | None) -> str:
+    """Fold a declared reason into a task description, where the ratchet reads it.
+
+    WO 82f608ca. The `--why` a reviewer supplies is what ADMITS a criterion-less task, and
+    for the gap paths it was used to grant admission and then dropped -- a bare bypass
+    with a nicer spelling, which is what #706 fixed for the CLI and what this function
+    exists to stop recurring elsewhere. `task_criteria_baseline` counts a task as declared
+    only when `DECLARED_PREFIX` appears in its description, so a reason that never reaches
+    the description is a reason nobody can audit and a row the blocking ceiling counts.
+
+    One composer beside the marker, because the writer and the reader agreed on a
+    hardcoded phrase once already and the Warden's lane was asked of it.
+    """
+    declared = " ".join((why or "").split())
+    if not declared:
+        return description or ""
+    body = (description or "").rstrip()
+    separator = chr(10) + chr(10) if body else ""
+    return body + separator + DECLARED_PREFIX + " " + declared
+
+
 #: Seats, spelled as the registry spells them. Not imported from `core.gates`: a work-order
 #: mutation path must not depend on the gate package to file a task, and the registry gate
 #: already refuses a seat outside its closed set, so a typo here fails there.
