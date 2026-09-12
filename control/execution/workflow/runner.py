@@ -783,7 +783,18 @@ class WorkflowRunner:
     # the instructions, records the invocation, stamps the node -- and an agent reading
     # the output performs the work. The node's completion_check is what observes that it
     # happened, which is why such a node stays `unverified` until something external
-    # satisfies it, and why a headless `ds workflow run` correctly stalls at the first one.
+    # satisfies it.
+    #
+    # WHAT THAT DOES NOT MEAN, corrected after this decision's own review read the engine
+    # rather than this paragraph. An earlier draft said a headless run "stalls at the
+    # first" such node. It does not. `any_failed` is set only when `not success`
+    # (runner.py:768), and an unverified node is a success as far as the wave is
+    # concerned -- so the wave COMPLETES and the run advances. It halts later, at the
+    # first DEPENDENT node whose own completion cannot be established, which is exactly
+    # how orch-verify reached a blocked `implement-tasks` with three unverified nodes
+    # behind it rather than stopping at the first of them. The distinction matters: a
+    # reader who believes the run stops at the dispatch point will look for the problem
+    # in the wrong node.
     #
     # The two rejected options, and why:
     #
