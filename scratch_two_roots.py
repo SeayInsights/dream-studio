@@ -16,9 +16,9 @@ new_sig = """    all_seats: bool = False,
 assert s.count(old_sig) == 1
 s = s.replace(old_sig, new_sig)
 
-old_doc = '''    `prior_findings` is the previous verdict's findings, which the Reviewer's-reviewer seat
-    re-checks.'''
-new_doc = '''    TWO ROOTS, BECAUSE THEY ARE TWO QUESTIONS. `repo_root` says where the REGISTRY lives
+old_doc = """    `prior_findings` is the previous verdict's findings, which the Reviewer's-reviewer seat
+    re-checks."""
+new_doc = """    TWO ROOTS, BECAUSE THEY ARE TWO QUESTIONS. `repo_root` says where the REGISTRY lives
     -- the Dream Studio tree, or an install that ships only `review/review_lanes.yml`.
     `change_root` says which working tree holds the CHANGE SET being reviewed, and is
     where the detectors run. For a work order delivering into another repository these
@@ -28,7 +28,7 @@ new_doc = '''    TWO ROOTS, BECAUSE THEY ARE TWO QUESTIONS. `repo_root` says whe
     defaults to `repo_root`, so a caller reviewing this repo passes neither.
 
     `prior_findings` is the previous verdict's findings, which the Reviewer's-reviewer seat
-    re-checks.'''
+    re-checks."""
 assert s.count(old_doc) == 1
 s = s.replace(old_doc, new_doc)
 
