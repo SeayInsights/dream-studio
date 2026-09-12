@@ -597,17 +597,21 @@ def _read_wo_tasks(conn: Any, work_order_id: str) -> list[dict[str, Any]]:
         r[1] == "acceptance_criteria"
         for r in conn.execute("PRAGMA table_info(business_tasks)").fetchall()
     )
-    cols = "title, description, status" + (", acceptance_criteria" if has_ac else "")
+    cols = "task_id, title, description, status" + (", acceptance_criteria" if has_ac else "")
     rows = conn.execute(
         f"SELECT {cols} FROM business_tasks WHERE work_order_id = ? ORDER BY created_at ASC",
         (work_order_id,),
     ).fetchall()
     return [
         {
-            "title": r[0],
-            "description": r[1] or "",
-            "status": r[2],
-            "acceptance_criteria": (r[3] or "") if has_ac else "",
+            # WO b273cc92: carried by the row so a caller can match it against the
+            # carry-over record. Without the id the AC gate could only filter on status,
+            # and filtering on status is the escape hatch `_check_tasks_done` refuses.
+            "task_id": r[0],
+            "title": r[1],
+            "description": r[2] or "",
+            "status": r[3],
+            "acceptance_criteria": (r[4] or "") if has_ac else "",
         }
         for r in rows
     ]
@@ -671,6 +675,31 @@ def _run_ac_gate(
     from core.work_orders.verify import resolve_project_root, run_executable_checks
 
     tasks = _read_wo_tasks(conn, work_order_id)
+
+    # WO b273cc92: A CARRIED TASK IS NOT THIS WORK ORDER'S WORK, AND BOTH GATES MUST
+    # AGREE ON THAT.
+    #
+    # `_check_tasks_done` already exempts a task the carry record moved elsewhere, and
+    # keys on the RECORD rather than on status for a stated reason: excluding
+    # status='deleted' outright would make deleting a task a way to close a work order
+    # with its work undone. This gate read the same rows and ran their criteria anyway.
+    #
+    # Measured on WO 17466550: three tasks carried to another work order, all three carry
+    # records present, `tasks_done` passing -- and `executable_ac` failing on all three of
+    # their TEST-CHECKs, naming tests nobody wrote because the work had moved. The close
+    # was blocked for work this work order no longer owned, with no remedy but --force.
+    #
+    # Keyed on the record here too, so deletion never becomes the escape hatch: a task
+    # deleted WITHOUT a carry record keeps its criterion and keeps blocking.
+    try:
+        from core.work_orders.carry_over import carried_task_ids
+
+        carried = carried_task_ids(work_order_id, db_path=db_path)
+    except Exception:  # noqa: BLE001 - an unreadable record exempts nothing
+        carried = set()
+    if carried:
+        tasks = [t for t in tasks if t.get("task_id") not in carried]
+
     ac_results = run_executable_checks(
         tasks, db_path, project_root=resolve_project_root(work_order_id, db_path)
     )

@@ -268,3 +268,140 @@ def test_the_envelope_requirement_consults_the_fallback() -> None:
         )
         is None
     ), "a present envelope short-circuits before the fallback is consulted at all"
+
+
+# -- WO b273cc92: both gates agree about whose work a carried task is ----------
+#
+# `_check_tasks_done` exempts a task the carry record moved to another work order, and
+# keys on the RECORD rather than on status for a stated reason: excluding
+# status='deleted' outright would make deleting a task a way to close a work order with
+# its work undone. `_run_ac_gate` read the same rows and ran their criteria anyway.
+#
+# Measured on WO 17466550: three tasks carried away, all three carry records present,
+# `tasks_done` passing, and `executable_ac` failing on all three of their TEST-CHECKs --
+# tests nobody wrote, because the work had moved. The close was blocked for work the work
+# order no longer owned, with no remedy but --force.
+
+
+def _ac_gate_failures(monkeypatch, tmp_path, tasks, carried):
+    """Run the REAL _run_ac_gate over supplied tasks with a supplied carry record."""
+    monkeypatch.setattr(close_gates, "_read_wo_tasks", lambda conn, wid: tasks)
+    monkeypatch.setattr(
+        "core.work_orders.carry_over.carried_task_ids", lambda wid, *, db_path: carried
+    )
+
+    seen = {}
+
+    def _run(task_list, db_path, project_root=None):
+        seen["titles"] = [t["title"] for t in task_list]
+        return {
+            t["title"]: [
+                {
+                    "kind": "TEST-CHECK",
+                    "expr": t["acceptance_criteria"],
+                    "passed": False,
+                    "detail": "deliberately failing",
+                }
+            ]
+            for t in task_list
+            if t.get("acceptance_criteria")
+        }
+
+    monkeypatch.setattr("core.work_orders.verify.run_executable_checks", _run)
+    monkeypatch.setattr("core.work_orders.verify.resolve_project_root", lambda *a, **k: tmp_path)
+    failures = close_gates._run_ac_gate(
+        None, work_order_id="wo-under-test", db_path=tmp_path / "studio.db"
+    )
+    return failures, seen.get("titles", [])
+
+
+def test_the_ac_gate_skips_a_carried_tasks_criterion(monkeypatch, tmp_path) -> None:
+    """A task the carry record moved is not this work order's outstanding work."""
+    tasks = [
+        {
+            "task_id": "kept",
+            "title": "still here",
+            "description": "",
+            "status": "complete",
+            "acceptance_criteria": "TEST-CHECK: a::b",
+        },
+        {
+            "task_id": "moved",
+            "title": "carried away",
+            "description": "",
+            "status": "deleted",
+            "acceptance_criteria": "TEST-CHECK: gone::missing",
+        },
+    ]
+    _, ran = _ac_gate_failures(monkeypatch, tmp_path, tasks, {"moved"})
+
+    assert "carried away" not in ran, (
+        "the AC gate ran a carried task's criterion, blocking the close for work that "
+        "now belongs to another work order"
+    )
+    assert "still here" in ran, "the remaining task's criterion must still run"
+
+
+def test_an_uncarried_deleted_task_still_blocks_on_its_criterion(monkeypatch, tmp_path) -> None:
+    """Deletion must not become the escape hatch.
+
+    This is the line the fix must not cross. `_check_tasks_done` refuses to key on status
+    precisely so that deleting a task cannot close a work order with its work undone, and
+    this gate now keys on the same record for the same reason. A task deleted with NO
+    carry record keeps its criterion and keeps blocking.
+    """
+    tasks = [
+        {
+            "task_id": "vanished",
+            "title": "deleted without a record",
+            "description": "",
+            "status": "deleted",
+            "acceptance_criteria": "TEST-CHECK: a::b",
+        },
+    ]
+    failures, ran = _ac_gate_failures(monkeypatch, tmp_path, tasks, set())
+
+    assert "deleted without a record" in ran, (
+        "a task deleted with no carry record was exempted, which makes `task.deleted` a "
+        "way to delete your way to a green close"
+    )
+    assert failures, "its failing criterion must still surface as a blocker"
+
+
+def test_an_unreadable_carry_record_exempts_nothing(monkeypatch, tmp_path) -> None:
+    """Fail toward running the checks, not toward skipping them.
+
+    If the carry record cannot be read, the safe answer is that nothing was carried --
+    which runs every criterion. Failing the other way would silently exempt whatever the
+    unreadable record might have named, and an exemption granted by an error is the
+    shape this gate exists to refuse.
+    """
+
+    def _boom(wid, *, db_path):
+        raise RuntimeError("carry record unreadable")
+
+    tasks = [
+        {
+            "task_id": "t1",
+            "title": "a task",
+            "description": "",
+            "status": "deleted",
+            "acceptance_criteria": "TEST-CHECK: a::b",
+        },
+    ]
+    monkeypatch.setattr(close_gates, "_read_wo_tasks", lambda conn, wid: tasks)
+    monkeypatch.setattr("core.work_orders.carry_over.carried_task_ids", _boom)
+
+    ran = {}
+
+    def _run(task_list, db_path, project_root=None):
+        ran["titles"] = [t["title"] for t in task_list]
+        return {}
+
+    monkeypatch.setattr("core.work_orders.verify.run_executable_checks", _run)
+    monkeypatch.setattr("core.work_orders.verify.resolve_project_root", lambda *a, **k: tmp_path)
+    close_gates._run_ac_gate(None, work_order_id="wo", db_path=tmp_path / "studio.db")
+
+    assert ran.get("titles") == [
+        "a task"
+    ], "an unreadable carry record exempted a task, granting an exemption by error"
