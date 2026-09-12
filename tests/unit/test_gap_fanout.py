@@ -1370,7 +1370,7 @@ def test_a_review_run_does_not_raise_the_uncheckable_count():
     )
 
 
-def test_a_review_run_does_not_raise_the_uncheckable_count_by_either_route():
+def test_a_gap_run_leaves_the_uncheckable_count_unmoved():
     """Both gap paths ask admission, and a declared reason survives to the row.
 
     THE TWO HOLES THIS CLOSES, named by this work order's own independent review. The

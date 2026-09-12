@@ -840,7 +840,7 @@ def test_the_guard_covers_every_writer_not_a_named_pair():
         )
 
 
-def test_the_projection_check_rejects_a_reintroduced_literal(tmp_path):
+def test_the_mutation_proof_runs_the_real_finder(tmp_path):
     """The guard proves it can fail, THROUGH THE GUARD, on every run.
 
     Two mutations were once run by hand with the proof living in a transcript, and the
@@ -902,7 +902,7 @@ def test_the_projection_check_rejects_a_reintroduced_literal(tmp_path):
         )
 
 
-def test_every_writer_of_a_projected_status_is_enumerated():
+def test_the_enumeration_is_driven_through_the_real_finder():
     """The discovery itself works, so a green result means looked-and-found-nothing.
 
     A finder that silently matched zero files would make the test above vacuous -- the

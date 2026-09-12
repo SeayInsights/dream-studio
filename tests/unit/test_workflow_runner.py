@@ -859,35 +859,51 @@ def test_the_handoff_statement_survives_the_output_budget():
 
 
 def test_every_progress_count_agrees_on_what_done_means():
-    """Five sites compute `done`, and they must not drift apart.
+    """Every site computing `done` must agree, and the guard must FIND them.
 
-    Checked because the premise of the task that opened this was WRONG: the count was
-    suspected of including `unverified` nodes, and all five computations already excluded
-    it -- `1/14` was accurate. What the check did surface is that the same question is
-    answered in five places, which is the shape that goes wrong quietly. This pins them
-    together rather than inventing a fix for a defect that was not there.
+    The task that opened this was WRONG -- it assumed the count included `unverified`
+    nodes, and all sites already excluded them, so `1/14` was accurate. What the check
+    surfaced is that the same question is answered in several places, which is the shape
+    that goes wrong quietly.
+
+    THE FIRST VERSION NAMED THREE FILES AND A COUNT BY HAND. Its own review said so: a
+    guard that lists its sources holds the invariant for the sources someone remembered,
+    and the telemetry site writing `nodes_done` into a permanent event was outside the
+    list. This one discovers every done-computation under control/execution/workflow/ and
+    fails if any disagrees, so a fourth site added tomorrow is covered without an edit.
     """
     import re
 
-    root = Path(__file__).resolve().parents[2]
-    sources = [
-        root / "control/execution/workflow/runner.py",
-        root / "control/execution/workflow/state_commands.py",
-        root / "control/execution/workflow/tracking.py",
-    ]
-    found = []
-    for src in sources:
-        text = src.read_text(encoding="utf-8")
-        found += re.findall(r'n\.get\("status"\) in \(([^)]*)\)', text)
-        found += re.findall(r"for s in statuses if s in \(([^)]*)\)", text)
+    root = Path(__file__).resolve().parents[2] / "control" / "execution" / "workflow"
+    assert root.is_dir(), root
 
-    assert len(found) >= 5, f"expected at least 5 done-computations, found {len(found)}"
-    normalised = {frozenset(x.strip().strip('"') for x in f.split(",") if x.strip()) for f in found}
-    assert len(normalised) == 1, (
-        f"the sites disagree about what counts as done: {normalised}. One of them will be "
-        "updated without the others."
+    # ANCHORED ON THE DONE-COUNT ASSIGNMENT, not on any membership test mentioning
+    # "completed". A broader pattern caught six distinct sets and failed, correctly: this
+    # tree also asks "is this node finished" (completed|failed|skipped) and "is it
+    # settled" (completed|unverified), which are different questions with different right
+    # answers. Only the count reported as progress is claimed to be one question.
+    pattern = re.compile(r"done\s*=\s*sum\(.*?\bin\s+\(([^)]*)\)", re.S)
+    found: list[tuple[str, frozenset[str]]] = []
+    for path in sorted(root.rglob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        for match in pattern.finditer(text):
+            statuses = frozenset(
+                x.strip().strip('"').strip("'") for x in match.group(1).split(",") if x.strip()
+            )
+            found.append((path.name, statuses))
+
+    assert len(found) >= 4, (
+        f"the finder located only {len(found)} done-computations under {root.name}/, so a "
+        "clean result would mean it looked almost nowhere"
     )
-    only = next(iter(normalised))
+
+    distinct = {statuses for _, statuses in found}
+    assert len(distinct) == 1, (
+        "the sites disagree about what counts as done, so one will be updated without the "
+        f"others: {[(n, sorted(s)) for n, s in found]}"
+    )
+
+    only = next(iter(distinct))
     assert "unverified" not in only, (
         "a node whose completion nobody established counts as done, which is the "
         "compared-nothing-reported-clean shape"

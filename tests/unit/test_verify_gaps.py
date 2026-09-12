@@ -442,7 +442,7 @@ def test_every_projection_write_site_emits_its_event(authority):
     assert report["offenders"] == [], report["offenders"]
 
 
-def test_the_spawn_path_refuses_a_task_nobody_can_check(authority):
+def test_the_spawn_path_admits_its_tasks_like_the_attach_path(authority):
     """These two gap functions have diverged four times; this pins the fourth shut.
 
     Twice on event emission, once on the acceptance-criteria column, and once on
@@ -498,7 +498,7 @@ def test_the_spawn_path_refuses_a_task_nobody_can_check(authority):
     )
 
 
-def test_the_spawn_path_records_the_reason_it_admits_on(authority):
+def test_a_declared_reason_is_recorded_on_the_row(authority):
     """A declared reason must reach the row, not be spent on the decision.
 
     `why` was handed to admit_task and dropped. The ceiling's only notion of "declared"

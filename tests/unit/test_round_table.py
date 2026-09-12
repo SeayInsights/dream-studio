@@ -979,7 +979,7 @@ def test_the_reviewers_reviewer_sits_on_the_second_verify_pass(tmp_path, monkeyp
         )
 
 
-def test_the_registry_root_and_the_change_root_are_separate(tmp_path):
+def test_the_table_convenes_against_the_work_orders_own_repo_root(tmp_path):
     """Where the lanes live and which tree they judge are two questions.
 
     WO d0658106's own review found verify convening against the Dream Studio repository's
