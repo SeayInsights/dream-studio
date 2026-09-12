@@ -676,8 +676,8 @@ def _run_ac_gate(
 
     tasks = _read_wo_tasks(conn, work_order_id)
 
-    # WO b273cc92: A CARRIED TASK IS NOT THIS WORK ORDER'S WORK, AND BOTH GATES MUST
-    # AGREE ON THAT.
+    # Rule `carried-work-is-exempt-by-record-never-by-status` (canonical/rules.yml),
+    # which this branch is the enforcement of. WO b273cc92.
     #
     # `_check_tasks_done` already exempts a task the carry record moved elsewhere, and
     # keys on the RECORD rather than on status for a stated reason: excluding
