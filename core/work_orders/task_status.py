@@ -27,6 +27,35 @@ fails if they diverge AND asserts that the justification still holds -- if the h
 ever takes a module-level repo import, the copy and its parity test should both be deleted.
 A parity test is the correct instrument for a constant that has to exist twice, and it is
 what this repo lacked.
+
+THE SYNCHRONOUS MIRROR -- a decision, recorded where it cannot drift loose.
+
+Seven production sites write a projected status directly beside the event they emit, so
+a CLI read sees the change without waiting for the next drain. Writing the status twice
+is what produced 53 work orders and 369 tasks at a status no replay could reach, so the
+arrangement had to be chosen or removed rather than left unexamined.
+
+CHOSEN: the mirror STAYS, and is accepted as deliberate duplication held by a check --
+the same treatment runtime/lib/enforcement.py's second copy of this vocabulary already
+gets, and for the same reason: a parity test is the correct instrument for a value that
+has to exist twice.
+
+Grounds, measured rather than argued:
+  - Removing it means every read waits for a drain. `ds work-order start` followed
+    immediately by `ds work-order tasks` is the common path, and the drain is not
+    synchronous with either.
+  - The duplication is no longer free-form. Every one of the seven now takes its value
+    from `status_for(<the event this site emits>)`, so the row and the event cannot
+    disagree about the word, and a renamed status is a KeyError at the write rather than
+    silent drift. That removes the failure mode; it does not remove the write.
+  - `test_the_guard_covers_every_writer_not_a_named_pair` DISCOVERS writers from each
+    projection's declared target_tables rather than a list, so a new mirror added
+    tomorrow is caught by the check rather than by the next review. The previous guard
+    read two files by name and passed while seven other sites drifted.
+
+What is NOT claimed: that the row and the event are written atomically. They are not --
+the emission escapes the caller's transaction, which is WO 6935afa5 and has its own
+xfail marker. This decision is about the word, not the window.
 """
 
 from __future__ import annotations
@@ -126,36 +155,6 @@ TASK_EVENT_STATUS: dict[str, str] = {
     "task.cancelled": "cancelled",
     "task.deleted": "deleted",
 }
-
-
-# WO 1364e05e task 4 -- THE SYNCHRONOUS MIRROR, decided rather than left ambient.
-#
-# Seven production sites write a projected status directly beside the event they emit, so
-# a CLI read sees the change without waiting for the next drain. Writing the status twice
-# is what produced 53 work orders and 369 tasks at a status no replay could reach, so the
-# arrangement had to be chosen or removed rather than left unexamined.
-#
-# CHOSEN: the mirror STAYS, and is accepted as deliberate duplication held by a check --
-# the same treatment runtime/lib/enforcement.py's second copy of this vocabulary already
-# gets, and for the same reason: a parity test is the correct instrument for a value that
-# has to exist twice.
-#
-# Grounds, measured rather than argued:
-#   - Removing it means every read waits for a drain. `ds work-order start` followed
-#     immediately by `ds work-order tasks` is the common path, and the drain is not
-#     synchronous with either.
-#   - The duplication is no longer free-form. Every one of the seven now takes its value
-#     from `status_for(<the event this site emits>)`, so the row and the event cannot
-#     disagree about the word, and a renamed status is a KeyError at the write rather than
-#     silent drift. That removes the failure mode; it does not remove the write.
-#   - `test_the_guard_covers_every_writer_not_a_named_pair` DISCOVERS writers from each
-#     projection's declared target_tables rather than a list, so a new mirror added
-#     tomorrow is caught by the check rather than by the next review. The previous guard
-#     read two files by name and passed while seven other sites drifted.
-#
-# What is NOT claimed: that the row and the event are written atomically. They are not --
-# the emission escapes the caller's transaction, which is WO 6935afa5 and has its own
-# xfail marker. This decision is about the word, not the window.
 
 
 def status_for(event_type: str, *, work_order: bool = False) -> str:

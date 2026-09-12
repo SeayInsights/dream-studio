@@ -920,3 +920,38 @@ def test_every_writer_of_a_projected_status_is_enumerated():
         f"the finder walked only {len(scanned)} files under core/work_orders/, so a clean "
         "result would mean it looked nowhere"
     )
+
+
+def test_the_mirror_decision_is_anchored_in_the_module_docstring():
+    """A recorded decision with nothing holding it there is a comment waiting to be deleted.
+
+    WO 1364e05e task 4 required the synchronous-mirror decision to be recorded in
+    `core/work_orders/task_status.py`. It was written, and it was substantive, and it
+    lived in a free-floating comment above `status_for` -- so a future edit could remove
+    the only record of why seven production sites still write a status beside the event
+    they emit, and nothing would notice. Its own independent review said so.
+
+    Anchored on the MODULE DOCSTRING via `ast.get_docstring`, not on a string search of
+    the file, because the claim is that the decision is part of what the module says
+    about itself. A comment anywhere in the file would satisfy a grep and would be
+    exactly the arrangement this test exists to end.
+    """
+    import ast
+
+    import core.work_orders.task_status as vocab
+
+    source = pathlib.Path(vocab.__file__).read_text(encoding="utf-8")
+    doc = ast.get_docstring(ast.parse(source)) or ""
+
+    assert doc, "the vocabulary module has no docstring at all"
+    for marker in ("SYNCHRONOUS MIRROR", "CHOSEN"):
+        assert marker in doc, (
+            f"the module docstring no longer records the mirror decision ({marker!r} is "
+            "missing). Seven production sites write a projected status beside the event "
+            "they emit, and this is the only record of why that is deliberate."
+        )
+    # The rejected alternative matters as much as the choice: without it a reader cannot
+    # tell a decision from a description of what happens to be true.
+    assert (
+        "drain" in doc.lower()
+    ), "the docstring records the choice but not what it was chosen against"
