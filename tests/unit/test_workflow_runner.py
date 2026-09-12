@@ -178,7 +178,22 @@ def test_invoke_skill_calls_load_and_record_in_process(tmp_path):
     assert success is True
     assert "PLAN BODY" in output
     assert "Skill: core:plan" in output
-    assert "Invocation recorded." in output
+    assert "Invocation recorded; no work was performed by the runner." in output
+
+    # WO 66069823: the output must say WHAT IT IS before it says anything else.
+    #
+    # `success is True` above means the skill LOADED, not that anything ran -- and the
+    # recorded output used to open with the SKILL.md body, so a workflow status dump
+    # showed what looked like a result. An operator read a stalled run as a broken
+    # orchestrator when it was correctly waiting for a reader that `ds workflow run` does
+    # not provide. The disclaimer leads, and leads for every skill node.
+    assert output.startswith("[handoff] NOT EXECUTED"), (
+        "the handoff disclaimer must come FIRST; below the instructions it is 2000 "
+        f"characters from where a reader starts. Output began: {output[:80]!r}"
+    )
+    assert output.index("[handoff]") < output.index(
+        "PLAN BODY"
+    ), "the instructions must not precede the statement of what they are"
 
 
 def test_invoke_skill_returns_false_when_load_fails(tmp_path):
@@ -778,3 +793,102 @@ def test_the_completion_decision_ignores_the_nodes_text_entirely():
     body = body.split(chr(34) * 3)[2]  # past the docstring
     for banned in ("raw_output", "expected in output", "in (output"):
         assert banned not in body, f"the decision is reading node text again: {banned!r}"
+
+
+# -- WO 66069823: a dispatched node is not an executed one --------------------
+
+
+def test_a_skill_node_that_executed_nothing_is_not_a_success(tmp_path):
+    """`success` from _invoke_skill means LOADED, and the output must not imply more.
+
+    THE REPORT THIS COMES FROM. An operator asked why the orchestrator was not working.
+    Workflow `orch-verify` sat at 1/14 with three nodes `unverified` and one `blocked`,
+    and the recorded output of its `implement-tasks` node began with the SKILL.md
+    frontmatter -- `dream_studio: skill_id: ds-core, pack: core, mode: b`. That is the
+    file, not a result.
+
+    The runner was behaving correctly: it loads a skill's instructions, records the
+    invocation, and leaves the work to an agent reading the output. Under
+    `ds workflow run` there is no such reader, so the node correctly never completes. What
+    was wrong is that nothing SAID so where anyone would look, and a faithful wait was
+    indistinguishable from a failure.
+    """
+    from unittest.mock import MagicMock, patch
+
+    runner = WorkflowRunner("wf-test", dry_run=False)
+    fake_load = MagicMock(
+        return_value={"ok": True, "skill_content": "---\nfrontmatter: yes\n---\nBODY"}
+    )
+    with (
+        patch("core.skills.invocation.load_skill_content", fake_load),
+        patch("core.skills.invocation.record_skill_invocation", MagicMock()),
+    ):
+        success, output = runner._invoke_skill("core:build", "implement-tasks")
+
+    assert success is True, "loading succeeded; that is what this boolean means"
+    assert not output.startswith("---"), (
+        "the output still opens with skill frontmatter, which is what made a dispatched "
+        "node read as an executed one"
+    )
+    for phrase in ("NOT EXECUTED", "DISPATCHED, not run", "no model"):
+        assert phrase in output, f"the handoff statement omits {phrase!r}: {output[:160]!r}"
+
+
+def test_the_handoff_statement_survives_the_output_budget():
+    """Truncation must never remove the sentence that explains the rest.
+
+    The output is capped so a huge SKILL.md cannot flood workflow state. A budget applied
+    before the header would cut exactly the part a reader needs -- restoring the confusion
+    this change removes, and doing it only for the largest skills, which are the ones
+    least likely to be read closely.
+    """
+    from unittest.mock import MagicMock, patch
+
+    runner = WorkflowRunner("wf-test", dry_run=False)
+    fake_load = MagicMock(return_value={"ok": True, "skill_content": "X" * 50_000})
+    with (
+        patch("core.skills.invocation.load_skill_content", fake_load),
+        patch("core.skills.invocation.record_skill_invocation", MagicMock()),
+    ):
+        _, output = runner._invoke_skill("core:build", "n1")
+
+    assert output.startswith(
+        "[handoff] NOT EXECUTED"
+    ), "a 50k skill body pushed the disclaimer out of the recorded output"
+    assert len(output) < 60_000, "the budget stopped applying entirely"
+
+
+def test_every_progress_count_agrees_on_what_done_means():
+    """Five sites compute `done`, and they must not drift apart.
+
+    Checked because the premise of the task that opened this was WRONG: the count was
+    suspected of including `unverified` nodes, and all five computations already excluded
+    it -- `1/14` was accurate. What the check did surface is that the same question is
+    answered in five places, which is the shape that goes wrong quietly. This pins them
+    together rather than inventing a fix for a defect that was not there.
+    """
+    import re
+
+    root = Path(__file__).resolve().parents[2]
+    sources = [
+        root / "control/execution/workflow/runner.py",
+        root / "control/execution/workflow/state_commands.py",
+        root / "control/execution/workflow/tracking.py",
+    ]
+    found = []
+    for src in sources:
+        text = src.read_text(encoding="utf-8")
+        found += re.findall(r'n\.get\("status"\) in \(([^)]*)\)', text)
+        found += re.findall(r"for s in statuses if s in \(([^)]*)\)", text)
+
+    assert len(found) >= 5, f"expected at least 5 done-computations, found {len(found)}"
+    normalised = {frozenset(x.strip().strip('"') for x in f.split(",") if x.strip()) for f in found}
+    assert len(normalised) == 1, (
+        f"the sites disagree about what counts as done: {normalised}. One of them will be "
+        "updated without the others."
+    )
+    only = next(iter(normalised))
+    assert "unverified" not in only, (
+        "a node whose completion nobody established counts as done, which is the "
+        "compared-nothing-reported-clean shape"
+    )

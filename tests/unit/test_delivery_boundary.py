@@ -1601,3 +1601,169 @@ def test_the_live_attribution_does_not_carry_a_standing_neighbour_caveat(db):
         "the neighbour caveat is firing on commits that cannot be in this range; a "
         "caveat that is always present is one a grader learns to ignore"
     )
+
+
+# ── WO 654a54d7: a pin means finished, and only close means finished ───────────
+
+
+def _seed_work_order(db_path: Path, wo_id: str, status: str) -> None:
+    """A row the boundary code can read a status from."""
+    import sqlite3
+
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT OR REPLACE INTO business_work_orders"
+        " (work_order_id, project_id, title, status, created_at)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (wo_id, str(uuid.uuid4()), "t", status, "2026-09-11T00:00:00+00:00"),
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_an_in_progress_work_order_is_never_graded_on_a_pinned_range(db, tmp_path):
+    """The trap this work order exists for, held shut.
+
+    `record_delivery_boundary_end` fires when the LAST TASK is marked done, and every
+    task done is not closed -- a failing verdict sends the work order back to work. With
+    the pin treated as authoritative, every remediation commit lands outside the graded
+    range, so re-verification re-reports findings the fix already closed. Measured on
+    WO 20796691 across three runs: the same two findings, both provably false at HEAD,
+    while the range ended four commits behind it.
+
+    A pinned end on a work order that is not closed is the state that must be unreachable.
+    """
+    from core.work_orders.delivery_boundary import record_delivery_boundary_end
+
+    repo, start = _git_repo(tmp_path / "repo")
+    wo_id = str(uuid.uuid4())
+    _seed_work_order(db, wo_id, "in_progress")
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+    record_delivery_boundary_end(wo_id, repo_root=repo, db_path=db)
+
+    # The pin IS recorded -- this is not about refusing to stamp it.
+    assert read_delivery_boundary(wo_id, db_path=db)["end_commit"] == start
+
+    expr, reason = boundary_commit_range(wo_id, db_path=db)
+    assert expr == f"{start}..HEAD", (
+        "an open work order was graded on its pinned range, so any commit made after the "
+        "pin -- which is where remediation lives -- is invisible to its own re-review"
+    )
+    assert (
+        reason and "not closed" in reason
+    ), "the widening must be explained, or a reader cannot tell it from a missing pin"
+
+
+def test_a_closed_work_order_keeps_its_pinned_range(db, tmp_path):
+    """The other direction, without which the fix is just 'ignore the pin'.
+
+    A closed work order's pin is the whole reason ends are stamped: an open range absorbs
+    every later commit, which is how one boundary came to hold 217,524 chars of three
+    other work orders' changes.
+    """
+    from core.work_orders.delivery_boundary import record_delivery_boundary_end
+
+    repo, start = _git_repo(tmp_path / "repo")
+    wo_id = str(uuid.uuid4())
+    _seed_work_order(db, wo_id, "closed")
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+    record_delivery_boundary_end(wo_id, repo_root=repo, db_path=db)
+
+    expr, reason = boundary_commit_range(wo_id, db_path=db)
+    assert expr == f"{start}..{start}", "a closed work order must keep its pin"
+    assert reason is None
+
+
+def test_an_unreadable_status_keeps_the_pin(db, tmp_path):
+    """Which way this fails, decided against a measurement rather than by instinct.
+
+    The first cut of this fix widened whenever the status could not be read. That
+    re-opened the defect `test_a_finished_boundary_does_not_range_to_head` exists for:
+    an open range on work order 3e6cf265 assembled 217,524 chars of three other work
+    orders' changes and timed the grader out at 360s twice -- and that test duly went red,
+    which is how the direction got corrected.
+
+    A stamped end is positive evidence the work finished. A missing status row is not
+    evidence it did not. So only an authority that explicitly reports a non-closed status
+    widens the range; silence leaves the pin alone.
+    """
+    from core.work_orders.delivery_boundary import record_delivery_boundary_end
+
+    repo, start_sha = _git_repo(tmp_path / "repo")
+    wo_id = str(uuid.uuid4())
+    # No business_work_orders row at all: unreadable, which is not "reopened".
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+    end_sha = record_delivery_boundary_end(wo_id, repo_root=repo, db_path=db)["end_commit"]
+    _second_commit(repo)
+
+    expr, why = boundary_commit_range(wo_id, db_path=db)
+
+    assert expr == f"{start_sha}..{end_sha}", (
+        "an unreadable status widened the range, which is the 217,524-char grader timeout "
+        "this repo already measured once"
+    )
+    assert why is None
+
+
+def test_the_verdict_says_when_its_range_stops_short_of_head(db, tmp_path):
+    """The number that would have turned three wasted runs into one.
+
+    A grader noticed in prose that later commits sat outside the graded range. Nothing
+    computed it, and the verdict recorded only `evidence_layer` -- so a failed verdict
+    whose range excluded the fix was indistinguishable from a failed verdict about the fix.
+    """
+    from core.work_orders.verify_main import _describe_graded_range
+
+    repo, first = _git_repo(tmp_path / "repo")
+    wo_id = str(uuid.uuid4())
+    _seed_work_order(db, wo_id, "closed")
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+
+    from core.work_orders.delivery_boundary import record_delivery_boundary_end
+
+    record_delivery_boundary_end(wo_id, repo_root=repo, db_path=db)
+
+    # Land two commits AFTER the pin, the way remediation does.
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    for n in (1, 2):
+        (repo / f"later{n}.txt").write_text("x", encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=repo, env=env, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", f"later {n}"],
+            cwd=repo,
+            env=env,
+            check=True,
+            capture_output=True,
+        )
+
+    described = _describe_graded_range(wo_id, repo_root=repo, db_path=db)
+
+    assert described["range"] == f"{first}..{first}"
+    assert described["commits_behind_head"] == 2, described
+    assert described["stops_short_of_head"] is True
+    assert "may already be fixed" in described["warning"], (
+        "the number must come with the reading it needs, or it goes unnoticed the way it "
+        "did for three runs"
+    )
+
+
+def test_a_range_that_reaches_head_says_so_without_a_warning(db, tmp_path):
+    """No false alarm on the ordinary case, or the warning stops being read."""
+    from core.work_orders.verify_main import _describe_graded_range
+
+    repo, _ = _git_repo(tmp_path / "repo")
+    wo_id = str(uuid.uuid4())
+    _seed_work_order(db, wo_id, "in_progress")
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+
+    described = _describe_graded_range(wo_id, repo_root=repo, db_path=db)
+
+    assert described["commits_behind_head"] == 0
+    assert described["stops_short_of_head"] is False
+    assert "warning" not in described

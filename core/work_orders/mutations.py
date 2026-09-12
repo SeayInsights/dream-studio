@@ -14,6 +14,7 @@ from core.work_orders.task_status import (
     TASK_DONE_STATUSES,
     is_open,
     sql_placeholders,
+    status_for,
 )
 
 
@@ -235,10 +236,17 @@ def block_work_order(
 
         conn.execute(
             "UPDATE business_work_orders"
-            " SET status = 'blocked', blocked_at = ?, block_reason = ?,"
+            " SET status = ?, blocked_at = ?, block_reason = ?,"
             " updated_at = ?, last_updated_at = ?"
             " WHERE work_order_id = ?",
-            (now, reason, now, now, work_order_id),
+            (
+                status_for("work_order.blocked", work_order=True),
+                now,
+                reason,
+                now,
+                now,
+                work_order_id,
+            ),
         )
 
         try:
@@ -304,10 +312,10 @@ def unblock_work_order(
 
         conn.execute(
             "UPDATE business_work_orders"
-            " SET status = 'in_progress', unblocked_at = ?, block_reason = NULL,"
+            " SET status = ?, unblocked_at = ?, block_reason = NULL,"
             " updated_at = ?, last_updated_at = ?"
             " WHERE work_order_id = ?",
-            (now, now, now, work_order_id),
+            (status_for("work_order.unblocked", work_order=True), now, now, now, work_order_id),
         )
 
     try:
@@ -375,9 +383,9 @@ def reopen_work_order(
 
         conn.execute(
             "UPDATE business_work_orders"
-            " SET status = 'in_progress', updated_at = ?, last_updated_at = ?"
+            " SET status = ?, updated_at = ?, last_updated_at = ?"
             " WHERE work_order_id = ?",
-            (now, now, work_order_id),
+            (status_for("work_order.reopened", work_order=True), now, now, work_order_id),
         )
 
     try:

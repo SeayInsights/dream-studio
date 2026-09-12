@@ -47,6 +47,9 @@ from core.work_orders.verify_gaps import (
     _violations_to_gaps,
 )
 
+#: Located from this file, which sits two levels under the repo root.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 _NOW = "2026-08-21T00:00:00+00:00"
 
 # The exact titles measured in the live authority, so this suite tracks the real classes
@@ -1288,4 +1291,80 @@ def test_a_rollback_after_emission_leaves_no_phantom_row(db, monkeypatch):
         f"{len(phantom)} cancellation event(s) survived a rolled-back drain. A replay "
         "would apply them to rows the transaction never changed, so the authority would "
         "report work as abandoned that is still open."
+    )
+
+
+# ── WO 82f608ca: a reviewer must not file a claim nobody can check ─────────────
+
+
+def test_an_attached_gap_carries_a_criterion_or_a_declared_reason():
+    """Both gap paths must put the criterion in the ROW, not only in the event.
+
+    `_attach_gap_tasks` has always carried `acceptance_criteria` in its INSERT column
+    list. Its sibling `_insert_gap_work_orders` omitted it while its event payload three
+    lines above carried it, so every task spawned onto a sibling work order landed NULL.
+    The same two functions had already diverged twice on event emission.
+
+    Read from the SQL rather than driven, deliberately: the property is that the column is
+    present in the statement at all, which no amount of running the function can show when
+    the caller happens to pass None.
+    """
+    import re
+
+    source = (_REPO_ROOT / "core/work_orders/verify_gaps.py").read_text(encoding="utf-8")
+    starts = [m.start() for m in re.finditer(r"INSERT INTO business_tasks", source)]
+    inserts = [source[begin:][:400] for begin in starts]
+    assert len(inserts) >= 2, (
+        f"expected both gap paths to insert tasks, found {len(inserts)} INSERT(s) -- the "
+        "fixture is wrong, or a path was removed"
+    )
+    for stmt in inserts:
+        columns = stmt[: stmt.index("VALUES")] if "VALUES" in stmt else stmt
+        assert "acceptance_criteria" in columns, (
+            "a gap-task INSERT omits acceptance_criteria from its column list, so the "
+            "criterion the event carries never reaches the row a reviewer reads:\n"
+            f"{stmt[:240]}"
+        )
+
+
+def test_a_review_run_does_not_raise_the_uncheckable_count():
+    """The reviewer must not breach a ceiling only a person can lower.
+
+    task-criteria-baseline is blocking and counts tasks with no criterion and no declared
+    reason. Because every verify run attached several, the count rose on review activity
+    alone until a push was refused for work no author chose to do -- measured 2026-09-11
+    at 1776 against a ceiling of 1767, all nine new offenders attached in one session.
+
+    Held on the PROPERTY rather than the live number: a task written by the gap paths
+    carries a criterion, so a review cannot manufacture an uncheckable row.
+    """
+    from core.work_orders.admission import admit_task
+
+    refused = admit_task(
+        title="A finding with nothing to check",
+        acceptance_criteria=None,
+        why=None,
+        work_order_description="Module boundary: core/work_orders.",
+        existing_titles=set(),
+        target_paths=[],
+    )
+    assert not refused["admitted"], (
+        "admission let through a task with neither a criterion nor a declared reason, "
+        "which is exactly what the blocking ceiling counts"
+    )
+    assert any(
+        "no executable criterion" in r.get("reason", "") for r in refused["refusals"]
+    ), refused["refusals"]
+
+    admitted = admit_task(
+        title="A finding with a check",
+        acceptance_criteria="TEST-CHECK: tests/unit/test_gap_fanout.py::test_a_review_run_does_not_raise_the_uncheckable_count",
+        why=None,
+        work_order_description="Module boundary: core/work_orders.",
+        existing_titles=set(),
+        target_paths=[],
+    )
+    assert admitted["admitted"], (
+        f"a task carrying a real criterion was refused, which would push reviewers back "
+        f"toward filing nothing: {admitted['refusals']}"
     )

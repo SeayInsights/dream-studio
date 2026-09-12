@@ -9,6 +9,20 @@ repos:
       - id: flake8
   - repo: local
     hooks:
+      - id: work-order-trailer
+        name: Derive the Work-Order trailer from the staged files
+        description: >
+          WO 654a54d7. A commit that does not name its work order is invisible to that
+          work order's own re-verification, and the trailer was remembered only after a
+          verdict had already graded the wrong range -- by which point adding it means
+          rewriting history. The attribution is computable: the on-edit hook already
+          calls in_progress_work_order on every edit. Advisory, never blocking: an
+          ambiguous or recency-based attribution writes nothing rather than guessing.
+        entry: python scripts/work_order_trailer.py
+        language: system
+        stages: [commit-msg]
+        always_run: true
+        pass_filenames: true
       - id: conventional-commits
         name: Conventional commit message format
         language: pygrep

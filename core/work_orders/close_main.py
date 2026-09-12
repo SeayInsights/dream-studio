@@ -29,6 +29,7 @@ from .close_gates import (
 )
 from .close_shared import _lookup_work_order_and_gates, _require_db
 from .models import TERMINAL_WO_STATUSES, terminal_wo_status_placeholders
+from core.work_orders.task_status import status_for
 
 # WO-GRADER-ADVERSARIAL: independent review is default-on at close for every WO
 # type except these (no code to review — their deliverable is the document, and
@@ -785,9 +786,9 @@ def close_work_order(
 
         conn.execute(
             "UPDATE business_work_orders"
-            " SET status = 'closed', closed_at = ?, updated_at = ?, last_updated_at = ?"
+            " SET status = ?, closed_at = ?, updated_at = ?, last_updated_at = ?"
             " WHERE work_order_id = ?",
-            (now, now, now, work_order_id),
+            (status_for("work_order.closed", work_order=True), now, now, now, work_order_id),
         )
 
         next_wo: dict[str, Any] | None = None

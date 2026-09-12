@@ -771,6 +771,36 @@ class WorkflowRunner:
 
         return any_failed
 
+    # WO 66069823 task 2 -- WHAT A SKILL NODE MEANS HERE, decided rather than left
+    # ambient.
+    #
+    # A COMMAND node runs a subprocess and is genuinely executable by this runner. A SKILL
+    # node names a pack:mode whose body is instructions for a model, and this runner has
+    # no model to hand them to. That is why "execution" became a file read: the option
+    # nobody chose was chosen by default.
+    #
+    # CHOSEN: skill nodes are DECLARED HANDOFF POINTS. The runner dispatches them -- loads
+    # the instructions, records the invocation, stamps the node -- and an agent reading
+    # the output performs the work. The node's completion_check is what observes that it
+    # happened, which is why such a node stays `unverified` until something external
+    # satisfies it, and why a headless `ds workflow run` correctly stalls at the first one.
+    #
+    # The two rejected options, and why:
+    #
+    #   - GIVE THE RUNNER A MODEL DISPATCH SURFACE. It would make skill nodes genuinely
+    #     executable and is the largest change: the runner gains a provider dependency,
+    #     a credential path, a cost model and a timeout policy, none of which exist here
+    #     today. Rejected for now on size, not on merit; if an orchestrator is ever meant
+    #     to run unattended end to end, this is the option that gets it there.
+    #   - DELETE SKILL NODES AND MAKE EVERY NODE A COMMAND. Honest, and it discards the
+    #     thing workflows are for. The prose nodes carry the judgment a command cannot.
+    #
+    # WHAT THE DECISION OBLIGES. A handoff must be legible as a handoff. The dispatch
+    # output leads with the statement that nothing was executed, `success` from this
+    # method means LOADED and is documented as such, and no count treats an unverified
+    # node as done. A runner that cannot execute must say so -- the same rule the review
+    # bench applies when an UNRUN detector lane is not reported as a clean one.
+
     def _invoke_skill(self, specifier: str, node_id: str) -> tuple[bool, str]:
         """Invoke a skill via direct imports of ``core.skills.invocation``.
 
@@ -816,23 +846,44 @@ class WorkflowRunner:
 
             # Reproduce the legacy CLI handler's stdout block so workflow
             # state captures the same operator-facing text.
+            # WO 66069823: SAY WHAT THIS RETURN IS, ABOVE THE INSTRUCTIONS.
+            #
+            # This function LOADS a skill and records the invocation; it executes nothing.
+            # That is the design -- a skill node's body is instructions for an agent, and
+            # this runner has no model to hand them to -- but the output LED with the
+            # SKILL.md text while the footer's "should now execute them" sat up to 2000
+            # characters below it. Read back from a workflow status dump, the recorded
+            # output looked like a result: an operator reported the orchestrator as broken
+            # while it was faithfully waiting for a reader that, under `ds workflow run`,
+            # is not there at all.
+            header_lines = [
+                "[handoff] NOT EXECUTED. This node was DISPATCHED, not run: the runner",
+                "loads a skill's instructions and records the invocation. It has no model",
+                "to execute them. An agent reading this output performs the work, and the",
+                "node's completion_check is what observes that it happened -- which is why",
+                "this node stays `unverified` until something external satisfies it.",
+                "",
+                "--- instructions follow ---",
+                "",
+            ]
             footer_lines = [
                 "---",
                 f"Skill: {specifier}",
                 "Mode: direct",
                 "Target: not specified",
                 "Work order: none",
-                "Invocation recorded.",
-                "",
-                (
-                    "The AI reading this output has the skill instructions above "
-                    "and should now execute them."
-                ),
+                "Invocation recorded; no work was performed by the runner.",
             ]
             output = (
-                load_result["skill_content"].rstrip() + "\n" + "\n".join(footer_lines)
+                "\n".join(header_lines)
+                + load_result["skill_content"].rstrip()
+                + "\n"
+                + "\n".join(footer_lines)
             ).strip()
-            return True, output[:2000]
+            # The header is never truncated away: it is the part that says what the
+            # rest of this text is, so a budget that cut it would restore the exact
+            # confusion this change removes.
+            return True, output[: 2000 + len("\n".join(header_lines))]
         except Exception as exc:
             return False, str(exc)[:500]
 

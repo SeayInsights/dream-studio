@@ -14,6 +14,7 @@ import uuid
 from pathlib import Path
 from datetime import UTC, datetime
 from typing import Any
+from core.work_orders.task_status import creation_status, status_for
 
 #: This repo's root, used only to confirm that a path a finding NAMES actually
 #: exists before attribution is judged on it. A finding about another project's
@@ -681,8 +682,18 @@ def _attach_gap_tasks(
             "INSERT INTO business_tasks"
             " (task_id, work_order_id, project_id, title, description,"
             "  status, acceptance_criteria, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)",
-            (task_id, work_order_id, project_id, title, description, _criteria, now, now),
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                task_id,
+                work_order_id,
+                project_id,
+                title,
+                description,
+                creation_status(),
+                _criteria,
+                now,
+                now,
+            ),
         )
         if not _emitted:
             # A row with no event is rebuild-fragile. Say so on the row itself rather
@@ -822,9 +833,10 @@ def drain_fanned_out_categories(
                 # unreconstructable. The sibling functions in this file were wired months
                 # ago; this one was named as the cause and left alone.
                 conn.execute(
-                    "UPDATE business_work_orders SET status = 'cancelled', updated_at = ?,"
+                    "UPDATE business_work_orders SET status = ?, updated_at = ?,"
                     " description = COALESCE(description, '') || ? WHERE work_order_id = ?",
                     (
+                        status_for("work_order.cancelled", work_order=True),
                         now,
                         _DRAINED_NOTE.format(now=now, category=item["category"], keep=item["keep"]),
                         wo_id,
@@ -844,9 +856,10 @@ def drain_fanned_out_categories(
         for item in task_plan:
             for task_id in item["cancel"]:
                 conn.execute(
-                    "UPDATE business_tasks SET status = 'cancelled', updated_at = ?,"
+                    "UPDATE business_tasks SET status = ?, updated_at = ?,"
                     " description = COALESCE(description, '') || ? WHERE task_id = ?",
                     (
+                        status_for("task.cancelled"),
                         now,
                         _DRAINED_NOTE.format(now=now, category=item["category"], keep=item["keep"]),
                         task_id,
@@ -1179,8 +1192,9 @@ def _insert_gap_work_orders(
             conn.execute(
                 "INSERT INTO business_work_orders"
                 " (work_order_id, project_id, milestone_id, title, description,"
-                "  work_order_type, status, sequence_order, created_at, updated_at, last_updated_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, 'created', ?, ?, ?, ?)",
+                "  work_order_type, status, sequence_order, created_at, updated_at,"
+                "  last_updated_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     new_wo_id,
                     project_id,
@@ -1188,6 +1202,7 @@ def _insert_gap_work_orders(
                     gap_title,
                     desc if _wo_emitted else desc + _NO_EVENT_WARNING,
                     wo_type,
+                    creation_status(work_order=True),
                     seq,
                     now,
                     now,
@@ -1214,17 +1229,30 @@ def _insert_gap_work_orders(
                     },
                     now=now,
                 )
+                # WO 82f608ca: THE CRITERION REACHES THE ROW, NOT ONLY THE EVENT.
+                #
+                # This INSERT omitted `acceptance_criteria` from its column list while the
+                # event payload three lines above carried it, so every task spawned onto a
+                # sibling work order landed with a NULL criterion no matter what the
+                # reviewer had supplied. Its sibling `_attach_gap_tasks` has carried the
+                # column all along -- the same two functions, diverged a third time, after
+                # diverging on event emission twice before. The blocking
+                # task-criteria-baseline gate counts exactly these rows, so a review run
+                # pushed the authority toward a ceiling only a person could then lower by
+                # hand, which is what happened on 2026-09-11 at 1776 against 1767.
                 conn.execute(
                     "INSERT INTO business_tasks"
                     " (task_id, work_order_id, project_id, title, description,"
-                    "  status, created_at, updated_at)"
-                    " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)",
+                    "  status, acceptance_criteria, created_at, updated_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         task_id,
                         new_wo_id,
                         project_id,
                         _task_title,
                         _task_desc if _task_emitted else _task_desc + _NO_EVENT_WARNING,
+                        creation_status(),
+                        task.get("acceptance_criteria"),
                         now,
                         now,
                     ),

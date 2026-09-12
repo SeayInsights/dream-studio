@@ -42,6 +42,7 @@ class WorkOrderProjection(Projection):
         "work_order.started",
         "work_order.blocked",
         "work_order.unblocked",
+        "work_order.reopened",
         "work_order.closed",
         "work_order.cancelled",
         "work_order.deleted",
@@ -99,6 +100,8 @@ class WorkOrderProjection(Projection):
             return self._handle_blocked(conn, work_order_id, payload, event_id, ts, now)
         if event_type == "work_order.unblocked":
             return self._handle_unblocked(conn, work_order_id, event_id, ts, now)
+        if event_type == "work_order.reopened":
+            return self._handle_reopened(conn, work_order_id, event_id, ts, now)
         if event_type == "work_order.closed":
             return self._handle_closed(conn, work_order_id, event_id, ts, now)
         if event_type == "work_order.cancelled":
@@ -252,6 +255,41 @@ class WorkOrderProjection(Projection):
                 "status": status_for("work_order.unblocked", work_order=True),
                 "unblocked_at": ts,
                 "block_reason": None,
+                "last_event_id": event_id,
+                "last_updated_at": now,
+            },
+            conflict_key="work_order_id",
+        )
+
+    def _handle_reopened(
+        self,
+        conn: sqlite3.Connection,
+        work_order_id: str,
+        event_id: str,
+        ts: str,
+        now: str,
+    ) -> int:
+        """A closed work order returns to work, and a replay can now reproduce that.
+
+        WO 1364e05e. `reopen_work_order` wrote status='in_progress' directly and emitted
+        `work_order.reopened`, which was registered nowhere and consumed by nothing -- so
+        a rebuild reverted every reopened work order to `closed`, the last status a
+        consumed event had set. The same shape that left 53 work orders at an unreachable
+        `cancelled`, in the sibling nobody checked. Measured 2026-09-11: 2 such events on
+        the live authority.
+
+        `closed_at` is cleared deliberately. A row that is open again while still carrying
+        the timestamp of the close it undid is the kind of half-reverted state a reader
+        cannot interpret -- and `closed_at` is what several callers use to mean "this
+        finished".
+        """
+        return self.safe_upsert(
+            conn,
+            _TABLE,
+            {
+                "work_order_id": work_order_id,
+                "status": status_for("work_order.reopened", work_order=True),
+                "closed_at": None,
                 "last_event_id": event_id,
                 "last_updated_at": now,
             },
