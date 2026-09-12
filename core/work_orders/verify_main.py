@@ -765,7 +765,24 @@ def verify_work_order(
         try:
             from core.gates.round_table import convene as _convene
 
-            _table = _convene(run_detectors=True, prior_findings=_prior_findings)
+            # CONVENED AGAINST THE WORK ORDER'S OWN ROOT, not this process's cwd.
+            #
+            # This called convene() with no repo_root, so it defaulted to the Dream Studio
+            # repository and read ITS branch diff -- for a work order whose delivery lives
+            # in another repository, the table selected lanes by relevance to the wrong
+            # change set entirely, and the detectors ran over the wrong tree. The resolved
+            # root was already computed and in hand on the line that built the diff; it
+            # simply was not passed. Found by this work order's own independent review.
+            _table = _convene(
+                run_detectors=True,
+                prior_findings=_prior_findings,
+                # The CHANGE set only. The registry stays where convene() finds it by
+                # default: a work order delivering into another repository has no
+                # canonical/review_lanes.yml of its own, and passing this as repo_root
+                # made the whole table unavailable rather than merely misaimed -- which
+                # a test caught the moment it was tried.
+                change_root=Path(_search_root),
+            )
         except Exception as exc:  # noqa: BLE001 - a review must not die at its own table
             # Recorded as unavailable rather than omitted: an absent section reads as a
             # review with no lanes to answer, which is the one reading it must never get.

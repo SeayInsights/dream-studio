@@ -290,6 +290,7 @@ def convene(
     all_seats: bool = False,
     paths: list[str] | None = None,
     prior_findings: list | None = None,
+    change_root: Path | None = None,
 ) -> dict:
     """The table's report for a change set, in this tree or another.
 
@@ -305,6 +306,16 @@ def convene(
     must always be possible, because relevance is an inference about a diff and an operator
     who wants the full bench is not making an inference.
 
+    TWO ROOTS, BECAUSE THEY ARE TWO QUESTIONS. `repo_root` says where the REGISTRY lives
+    -- the Dream Studio tree, or an install shipping only `review/review_lanes.yml`.
+    `change_root` says which working tree holds the CHANGE SET under review, and is where
+    the detectors run. For a work order delivering into another repository these differ,
+    and collapsing them breaks whichever one loses: pointing both at the target repo
+    raises `no review-lane registry` and makes the whole table unavailable, while pointing
+    both at Dream Studio selects lanes by relevance to the wrong diff and runs detectors
+    over the wrong tree. `change_root` defaults to `repo_root`, so a caller reviewing this
+    repository passes neither.
+
     `prior_findings` is the previous verdict's findings, which the Reviewer's-reviewer seat
     re-checks. Passing nothing is not passing an empty review: that seat ABSTAINS rather
     than reporting a lane with no objections, because "looked and found nothing" and "had
@@ -313,10 +324,11 @@ def convene(
     seats: list[dict] = []
     started = monotonic()
     lanes = _lanes(repo_root)
+    _change_root = change_root if change_root is not None else repo_root
 
     selected_by_scope = False
     if not all_seats and seat is None and lane_id is None:
-        change_set = changed_paths(repo_root) if paths is None else paths
+        change_set = changed_paths(_change_root) if paths is None else paths
         relevant = [ln for ln in lanes if lane_is_relevant(ln, change_set)]
         # Narrowing to nothing is refused: an empty table reads as "no questions to ask", which is
         # the one answer a review must never give by accident.
@@ -378,7 +390,7 @@ def convene(
                         " before reaching this lane"
                     )
                 else:
-                    clean, detail = _run_detector(lane["detector"], repo_root)
+                    clean, detail = _run_detector(lane["detector"], _change_root)
                     entry["clean"] = clean
                     entry["unrunnable"] = detail.startswith(_UNRUNNABLE)
                     entry["detail"] = detail.removeprefix(_UNRUNNABLE)
@@ -412,7 +424,7 @@ def convene(
     # subject are the same artifact -- a reviewer grading its own rubric. Not a reason to
     # skip the review; a reason nobody should read this report as independent.
     self_review = sorted(
-        path for path in (changed_paths(repo_root) if paths is None else paths) if path in _SELF
+        path for path in (changed_paths(_change_root) if paths is None else paths) if path in _SELF
     )
 
     # THE TABLE'S OWN REACH, at the table's level -- not hung on a lane. This number says
