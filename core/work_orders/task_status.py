@@ -85,6 +85,16 @@ TASK_STATUS_EVENT: dict[str, str | None] = {
 }
 
 
+#: The work-order statuses that mean the work is FINISHED and will not resume.
+#:
+#: WO 654a54d7, found by the review of its own fix. `_work_order_is_reopened` asked
+#: `status != "closed"`, so a CANCELLED or DELETED work order read as reopened and had its
+#: pinned delivery boundary widened to HEAD -- handing a grader every later commit for work
+#: that had been abandoned. Closed is not the only way to finish; it is only the most
+#: common one. Declared here rather than inline so the next site asking "is this work order
+#: over" reads the same answer.
+TERMINAL_WORK_ORDER_STATUSES: tuple[str, ...] = ("closed", "cancelled", "deleted")
+
 #: Event -> the status a replay lands on when a projection handles it.
 #:
 #: THE DIRECTION A PROJECTION NEEDS, and NOT the inverse of the map above. Two events
