@@ -732,7 +732,7 @@ def test_the_docstring_table_records_the_measured_overlap():
     assert any(int(m) > 0 for _, _, m in rows), "no row records rows that are MISSING one"
 
 
-def _projected_status_writers() -> list[str]:
+def _projected_status_writers(root: Path | None = None) -> list[str]:
     """Every production site that writes a status into a projected table, DISCOVERED.
 
     The table list comes from each projection's own `target_tables`, not a literal pair.
@@ -747,8 +747,9 @@ def _projected_status_writers() -> list[str]:
 
     tables = set(WorkOrderProjection.target_tables) | set(TaskProjection.target_tables)
     offenders: list[str] = []
-    for path in _REPO_ROOT.rglob("*.py"):
-        rel = path.relative_to(_REPO_ROOT).as_posix()
+    base = root or _REPO_ROOT
+    for path in base.rglob("*.py"):
+        rel = path.relative_to(base).as_posix()
         if rel.startswith(("dist/", ".claude/", "tests/")) or "worktrees" in rel:
             continue
         if not rel.startswith(("core/", "interfaces/", "runtime/", "control/", "integrations/")):
@@ -840,59 +841,63 @@ def test_the_guard_covers_every_writer_not_a_named_pair():
 
 
 def test_the_projection_check_rejects_a_reintroduced_literal(tmp_path):
-    """The guard is self-driving: it proves it can fail, on every run.
+    """The guard proves it can fail, THROUGH THE GUARD, on every run.
 
-    Two mutations were run by hand to show the guard worked -- an inline SQL literal and
-    a dict literal -- and the proof lived in a transcript. A check whose falsifiability
-    is demonstrated once and then trusted is exactly what this file exists to refuse, and
-    the first mutation of the INSERT scan PASSED because the regex had been written with
-    a stray 0x08 byte and matched nothing.
+    Two mutations were once run by hand with the proof living in a transcript, and the
+    first of them PASSED because the finder's regex carried a stray 0x08 byte and matched
+    nothing. So plant-and-detect was made automatic -- and the first automatic version
+    RE-IMPLEMENTED the finder's regexes locally, which meant the same broken finder would
+    have left it green. Its own independent review caught that: a mutation proof that does
+    not invoke the thing it certifies proves nothing about it.
 
-    So the plant-and-detect runs here, against a temp tree the real finder logic walks.
+    This drives `_projected_status_writers` itself against a planted tree. If the real
+    finder stops matching -- a stray control byte, a narrowed pattern, a lost statement
+    kind -- this test goes red with it.
     """
-    import re
+    pkg = tmp_path / "core" / "work_orders"
+    pkg.mkdir(parents=True)
 
-    from core.projections.task_projection import TaskProjection
-    from core.projections.work_order_projection import WorkOrderProjection
-
-    tables = set(WorkOrderProjection.target_tables) | set(TaskProjection.target_tables)
-    declared = "pending|created|complete|closed|in_progress|blocked|cancelled|deleted"
-
-    def offenders_in(text: str) -> list[str]:
-        """The finder's own predicates, applied to one supplied body of source."""
-        found: list[str] = []
-        for table in tables:
-            for match in re.finditer(rf"UPDATE {table}\b", text):
-                begin = match.start()
-                if re.search(r"SET status = '([a-z_]+)'", text[begin:][:400]):
-                    found.append(f"UPDATE {table}")
-            for match in re.finditer(rf"INSERT INTO {table}", text):
-                begin = match.start()
-                if re.search(rf"'({declared})'", text[begin:][:600]):
-                    found.append(f"INSERT INTO {table}")
-        return found
-
-    clean = (
-        'conn.execute("UPDATE business_tasks SET status = ?, updated_at = ?"'
-        ' " WHERE task_id = ?", (status_for("task.completed"), now, task_id))'
+    clean = pkg / "compliant.py"
+    clean.write_text(
+        "conn.execute(\n"
+        '    "UPDATE business_tasks SET status = ?, updated_at = ?"\n'
+        '    " WHERE task_id = ?",\n'
+        '    (status_for("task.completed"), now, task_id),\n'
+        ")\n",
+        encoding="utf-8",
     )
-    assert not offenders_in(clean), "a compliant write was flagged; the guard is too eager"
+    assert _projected_status_writers(tmp_path) == [], (
+        "the real finder flagged a compliant write, so a green result elsewhere means "
+        "nothing -- it cannot tell compliant from offending"
+    )
 
-    for mutant, kind in (
+    for name, body, kind in (
         (
-            "conn.execute(\"UPDATE business_tasks SET status = 'complete', updated_at = ?\""
-            ' " WHERE task_id = ?", (now, task_id))',
+            "sql_literal.py",
+            "conn.execute(\n"
+            "    \"UPDATE business_tasks SET status = 'complete', updated_at = ?\"\n"
+            '    " WHERE task_id = ?",\n'
+            "    (now, task_id),\n"
+            ")\n",
             "an inline SQL literal",
         ),
         (
-            'conn.execute("INSERT INTO business_tasks (task_id, status) VALUES (?, ?)",'
-            " (task_id, 'pending'))",
+            "insert_literal.py",
+            "conn.execute(\n"
+            '    "INSERT INTO business_tasks (task_id, status) VALUES (?, ?)",\n'
+            "    (task_id, 'pending'),\n"
+            ")\n",
             "an INSERT literal",
         ),
     ):
-        assert offenders_in(mutant), (
-            f"the guard did not reject {kind}. A check that cannot fail reports a clean "
-            "tree whatever is in it -- which is what a stray 0x08 byte in this regex "
+        planted = pkg / name
+        planted.write_text(body, encoding="utf-8")
+        found = _projected_status_writers(tmp_path)
+        planted.unlink()
+
+        assert found, (
+            f"the real finder did not reject {kind}. A check that cannot fail reports a "
+            "clean tree whatever is in it -- which is what a stray 0x08 byte in its regex "
             "already caused once."
         )
 
