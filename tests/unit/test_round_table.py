@@ -1028,3 +1028,36 @@ def test_a_change_root_without_a_registry_does_not_silence_the_table(tmp_path):
     # two states the table deliberately keeps apart, and either is the right answer here.
     with pytest.raises((FileNotFoundError, ValueError)):
         convene(run_detectors=False, repo_root=bare)
+
+
+def test_a_local_install_is_told_when_its_review_skill_is_behind():
+    """The third copy of the dispatch rule, and the one nobody was checking.
+
+    The rule lives in three places: `canonical/skills/core/modes/review/SKILL.md` is the
+    source, `dist/plugin/.../review/SKILL.md` is the shipped projection a plugin install
+    reads, and `~/.claude/skills/ds-core/modes/review/SKILL.md` is the LOCAL install that
+    this operator's own sessions read. The first two are tested. The third was named by
+    WO d0658106 task 5 and checked by nothing -- so the operator whose rule this is could
+    be running a review skill that never mentions the table.
+
+    SKIPPED WHEN THERE IS NO INSTALL, which is the state of a fresh checkout and of CI.
+    A test that required the file would fail everywhere it does not exist, which is how a
+    check gets deleted rather than fixed. When an install IS present, being behind is a
+    real finding and this says so with the command that repairs it.
+    """
+    installed = Path.home() / ".claude" / "skills" / "ds-core" / "modes" / "review" / "SKILL.md"
+    if not installed.is_file():
+        pytest.skip("no local Dream Studio install in this environment")
+
+    text = installed.read_text(encoding="utf-8", errors="replace")
+    missing = [
+        marker
+        for marker in ("core.gates.round_table", "ASKED OF YOU", "not examined")
+        if marker not in text
+    ]
+    assert not missing, (
+        f"the installed review skill is behind canonical and lacks {missing}. A subagent "
+        "dispatched through this install would invent a checklist instead of convening "
+        "the table, which is the rule WO d0658106 exists to make a property of the "
+        "substrate. Refresh the install with `ds update`."
+    )
