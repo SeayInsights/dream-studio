@@ -1145,20 +1145,35 @@ def test_both_call_sites_report_the_same_keys(authority):
     Twice on event emission, once on the acceptance criterion, once on `noted`. Each was
     found separately, after shipping, by someone reading the diff.
 
-    COMPARED TO EACH OTHER, NOT TO A NAMED LIST, so a fifth key is covered without an
-    edit -- and driven rather than read out of the source, because a key read into a
-    branch nothing reaches would satisfy a source comparison exactly as well as a live
-    one. Both branches are exercised with the same duplicate criterion, and the reporting
-    keys of the two records are required to match.
+    COMPARED TO EACH OTHER, NOT TO A NAMED LIST -- and the first version of this test did
+    not do that, despite saying so. It built both key sets by iterating a hardcoded
+    `{"unfiled_findings", "admission_unknowns"}`, so it could only ever see the two keys
+    that had already diverged. The independent review of 8a2d68a1 disproved the docstring
+    empirically: it added a fifth key to the merge record alone and this test passed. The
+    claim "a fifth key is covered without an edit" was false as written.
 
-    Scoped to keys that carry a FINDING: the records legitimately differ on which branch
-    they took (`attached_to_reviewed` versus `merged_into_existing`), and comparing those
-    would be asserting the two records are the same record.
+    WHAT DISTINGUISHES A FINDING KEY, without naming any. Every key that carries a finding
+    holds a LIST of them; every other key on these records is a string, a bool or an int
+    (`work_order_id`, `gap_key`, `attached_to_reviewed`, `tasks_added`). So the sets are
+    built from the records' own items by VALUE SHAPE, and a fifth list-valued key added to
+    one call site is caught with no edit here -- which is what the docstring claimed and
+    now describes.
+
+    Empty lists fall out on both sides, which matters: `_insert_gap_work_orders` runs
+    `record.setdefault("unfiled_findings", [])` over every record, so membership would be
+    universally true and prove nothing. Truthiness is what keeps that from masking a real
+    divergence.
+
+    Driven rather than read out of the source, because a key read into a branch nothing
+    reaches would satisfy a source comparison exactly as well as a live one.
     """
     from core.work_orders.verify_gaps import _insert_gap_work_orders
 
+    def finding_keys(record: dict) -> set[str]:
+        """Keys carrying findings: the list-valued ones, by shape and not by name."""
+        return {k for k, v in record.items() if isinstance(v, list) and v}
+
     db_path = authority
-    reporting = {"unfiled_findings", "admission_unknowns"}
 
     # ATTACH BRANCH: the reviewed work order is open and incomplete, so the gap is its own
     # unfinished work and lands as a task on it. Seed the criterion first so the Herald has
@@ -1212,8 +1227,8 @@ def test_both_call_sites_report_the_same_keys(authority):
     assert a_rec is not None, f"the attach branch was not reached: {attached}"
     assert m_rec is not None, f"the merge branch was not reached: {merged_run}"
 
-    a_keys = {k for k in reporting if a_rec.get(k)}
-    m_keys = {k for k in reporting if m_rec.get(k)}
+    a_keys = finding_keys(a_rec)
+    m_keys = finding_keys(m_rec)
     assert a_keys == m_keys, (
         f"the attach record reports {sorted(a_keys)} and the merge record reports "
         f"{sorted(m_keys)} for the same finding. One caller of _attach_gap_tasks carries "
