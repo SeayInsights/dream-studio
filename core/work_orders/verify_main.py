@@ -302,6 +302,20 @@ def _describe_graded_range(
         out["unavailable"] = f"{type(exc).__name__}: {exc}"[:200]
         return out
     out["head"] = head or None
+
+    # WO 654a54d7: WITHHELD WHEN THIS IS NOT THE RANGE THAT WAS GRADED.
+    #
+    # A flag saying the boundary range was not the graded set, printed BESIDE a
+    # commits_behind_head and a "may already be fixed" warning measured from that same
+    # unread range, still puts a number in front of a reader that means nothing -- and the
+    # warning is the most quotable line in the report. Its own review refused the flag as
+    # disclosure standing in for the comparison. So on a locator that did not use the
+    # boundary, the distance is not computed and the report says why instead.
+    if not out["range_is_what_was_graded"]:
+        out["commits_behind_head"] = None
+        out["stops_short_of_head"] = None
+        return out
+
     if not behind.isdigit():
         # git answered with something uncountable; say the question is unanswered rather
         # than leaving the key off and reading as "reaches HEAD".

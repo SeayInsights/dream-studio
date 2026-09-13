@@ -1900,3 +1900,42 @@ def test_the_range_report_says_whether_it_is_what_was_graded(db, tmp_path):
         "authority evidence, so its HEAD-distance numbers describe a range nobody read"
     )
     assert "authority_executable_checks" in diverged["not_graded_reason"]
+
+
+def test_the_graded_range_reports_the_commit_set_that_was_actually_graded(db, tmp_path):
+    """No distance number is printed for a range nobody read.
+
+    A flag saying "this is not the graded set" printed BESIDE a commits_behind_head and a
+    "may already be fixed" warning measured from that same unread range still puts a
+    meaningless number in front of a reader -- and the warning is the most quotable line
+    in the report. WO 654a54d7's review refused the flag as disclosure standing in for the
+    comparison, twice. The numbers are now withheld rather than annotated.
+    """
+    from core.work_orders.verify_main import _describe_graded_range
+
+    repo, _ = _git_repo(tmp_path / "withheld")
+    wo_id = str(uuid.uuid4())
+    _seed_work_order(db, wo_id, "in_progress")
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+    _second_commit(repo)
+
+    graded = _describe_graded_range(
+        wo_id, repo_root=repo, db_path=db, evidence_layer="recorded_delivery_boundary"
+    )
+    assert graded["range_is_what_was_graded"] is True
+    assert isinstance(
+        graded["commits_behind_head"], int
+    ), "the ordinary path must still report the distance, or the fix is just silence"
+
+    for layer in ("authority_executable_checks", "commit_message_grep"):
+        other = _describe_graded_range(wo_id, repo_root=repo, db_path=db, evidence_layer=layer)
+        assert other["range_is_what_was_graded"] is False, layer
+        assert other["commits_behind_head"] is None, (
+            f"a HEAD distance was measured from a boundary range the {layer} locator did "
+            "not grade, which is the number the task was filed against"
+        )
+        assert other["stops_short_of_head"] is None, layer
+        assert (
+            "warning" not in other
+        ), "the may-already-be-fixed warning was emitted for a range nobody read"
+        assert layer in other["not_graded_reason"]
