@@ -787,12 +787,26 @@ def _projected_status_writers(root: Path | None = None) -> list[str]:
 def test_no_production_writer_spells_a_projected_status():
     """THE OUTCOME: no production site names a status the vocabulary owns.
 
-    Seven sites wrote a literal into `business_work_orders` / `business_tasks` as a
-    synchronous read-model mirror -- `mutations.py` three times, `start_main.py`,
-    `close_main.py`, and both drain sites in `verify_gaps.py`. Each now takes its value
-    from `status_for(<the event this site emits>)`, so the row and the event cannot
-    disagree about the word and a renamed status is a KeyError at the write rather than
-    silent drift.
+    THE COUNT, RE-MEASURED, AND THIS FILE HELD THE OLD ONE. "Seven" was an independent
+    review's list and it counted UPDATE sites only. Measured across core/, interfaces/,
+    runtime/, control/ and integrations/ on 2026-09-13: TWELVE sites write a status into a
+    projected table -- 7 via UPDATE and 5 via INSERT. The module docstring of
+    `core/work_orders/task_status.py` was corrected and this docstring was not, so the
+    test asserting the outcome still described a smaller problem than the one it checks.
+    A later review caught the split; the correction belongs in both places or the next
+    reader learns the wrong number from whichever they open.
+
+    TEN of the twelve take their value from `status_for(<the event this site emits>)`, so
+    the row and the event cannot disagree about the word and a renamed status is a
+    KeyError at the write rather than silent drift. The other two are in
+    `interfaces/cli/commands/prove.py`, which binds status as a parameter in a DISPOSABLE
+    scratch authority it creates and tears down, and carries its own recorded exemption
+    for exactly that reason.
+
+    Note what this docstring does NOT claim any more: that the routed sites are the UPDATE
+    sites. The INSERT writers are routed too, which is the distinction the earlier wording
+    lost by naming only `mutations.py`, `start_main.py`, `close_main.py` and the two drain
+    sites in `verify_gaps.py`.
     """
     offenders = _projected_status_writers()
     assert not offenders, (
@@ -807,8 +821,9 @@ def test_the_guard_covers_every_writer_not_a_named_pair():
     """THE MECHANISM: the guard DISCOVERS its subjects rather than naming them.
 
     The previous guard read two projection files by name. It asserted those two took
-    their statuses from the vocabulary, and passed while seven other production sites
-    drifted -- found by an independent review, not by the suite. A guard that names its
+    their statuses from the vocabulary, and passed while the other ten production sites
+    drifted -- found by an independent review, not by the suite. Ten, not seven: the
+    original figure counted UPDATE sites only and missed five INSERT writers. A guard that names its
     subjects can only ever catch the subjects someone remembered, which is why this test
     is about how the finder is built and not about today's result.
     """
@@ -831,7 +846,7 @@ def test_the_guard_covers_every_writer_not_a_named_pair():
     )
     assert "rglob" in finder, (
         "the finder walks a fixed list of files rather than the tree, which is exactly "
-        "how seven writers stayed invisible to a green suite"
+        "how ten writers stayed invisible to a green suite"
     )
     for statement in ("UPDATE {table}", "INSERT INTO {table}"):
         assert statement in finder, (
