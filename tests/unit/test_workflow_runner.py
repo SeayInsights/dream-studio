@@ -872,6 +872,7 @@ def test_every_progress_count_agrees_on_what_done_means():
     list. This one discovers every done-computation under control/execution/workflow/ and
     fails if any disagrees, so a fourth site added tomorrow is covered without an edit.
     """
+    import os
     import re
 
     root = Path(__file__).resolve().parents[2] / "control" / "execution" / "workflow"
@@ -884,13 +885,32 @@ def test_every_progress_count_agrees_on_what_done_means():
     # answers. Only the count reported as progress is claimed to be one question.
     pattern = re.compile(r"done\s*=\s*sum\(.*?\bin\s+\(([^)]*)\)", re.S)
     found: list[tuple[str, frozenset[str]]] = []
+    walked: list[str] = []
     for path in sorted(root.rglob("*.py")):
+        walked.append(path.name)
         text = path.read_text(encoding="utf-8")
         for match in pattern.finditer(text):
             statuses = frozenset(
                 x.strip().strip('"').strip("'") for x in match.group(1).split(",") if x.strip()
             )
             found.append((path.name, statuses))
+
+    # THE WALK MUST COVER THE PACKAGE, AND THAT IS ESTABLISHED AGAINST A SECOND
+    # ENUMERATION. Counting "how many files did I walk" from the walk itself agrees with
+    # any narrowing of it -- restrict the glob to one module and the self-count shrinks to
+    # match, reporting full coverage of one file. So the denominator comes from os.walk,
+    # a different mechanism reading the same tree: narrowing the rglob leaves this
+    # comparison short and turns the guard red even though four done-computations are
+    # still matched and every one of them still agrees.
+    in_package = sum(
+        1 for _dir, _subdirs, files in os.walk(root) for f in files if f.endswith(".py")
+    )
+    assert in_package > 0, f"no python files under {root}, so the walk proves nothing"
+    assert len(walked) >= in_package, (
+        f"the finder walked {len(walked)} of the {in_package} python files under "
+        f"{root.name}/, so the invariant is claimed for a subset of the package. Walked: "
+        f"{sorted(walked)}"
+    )
 
     assert len(found) >= 4, (
         f"the finder located only {len(found)} done-computations under {root.name}/, so a "
@@ -910,7 +930,7 @@ def test_every_progress_count_agrees_on_what_done_means():
     )
 
 
-def test_a_dispatched_node_is_distinguishable_without_reading_its_text():
+def test_a_dispatched_node_is_distinguishable_without_reading_its_text(tmp_path):
     """A caller that never reads prose must still be able to tell the two apart.
 
     The dispatch output was made to open with NOT EXECUTED, and this work order's own
@@ -919,26 +939,55 @@ def test_a_dispatched_node_is_distinguishable_without_reading_its_text():
     looked exactly like an executed one. A fact carried only in text is unavailable to
     every consumer except a human.
 
-    The node record now carries `executed`. Asserted on _update_node's contract rather
-    than on a full workflow run, because the claim is that the field reaches the record.
+    The node record now carries `executed`. THIS WAS A SOURCE GREP and is now a drive:
+    the first version asserted `'node["executed"] = executed' in src`, which is satisfied
+    by the line existing and says nothing about the value arriving in the record. A
+    statement can be present and unreached. So _update_node is called for real against a
+    real workflows.json, the file is read back off disk, and the two node kinds are told
+    apart from the record alone -- no `output` string is consulted anywhere below.
     """
     import inspect
 
-    src = inspect.getsource(WorkflowRunner._update_node)
-    assert "executed" in inspect.signature(WorkflowRunner._update_node).parameters, (
-        "_update_node cannot record whether the work was performed, so the distinction "
-        "exists only in the output text"
-    )
-    assert 'node["executed"] = executed' in src, (
-        "the parameter is accepted and never written to the node, which is a signature "
-        "that looks like a fact and stores nothing"
-    )
+    state_dir = _make_state(tmp_path, "wf-executed", ["skill_node", "command_node"])
 
-    caller = inspect.getsource(WorkflowRunner._execute_wave)
-    assert "executed=bool(is_command_node)" in caller, (
-        "the wave does not tell _update_node which kind of node this was, so every node "
-        "records the same value and the field says nothing"
+    with patch("control.execution.workflow.runner.paths") as mock_paths:
+        mock_paths.state_dir.return_value = state_dir
+        runner = WorkflowRunner("wf-executed", dry_run=False)
+        runner._update_node(
+            "skill_node", "unverified", "[handoff] NOT EXECUTED ...", executed=False
+        )
+        runner._update_node("command_node", "completed", "ok", executed=True)
+
+    nodes = json.loads((state_dir / "workflows.json").read_text(encoding="utf-8"))[
+        "active_workflows"
+    ]["wf-executed"]["nodes"]
+
+    # THE WHOLE CLAIM, IN ONE LINE: a reader that never touches `output` can still tell
+    # the dispatched node from the executed one.
+    assert nodes["skill_node"].get("executed") is False, nodes["skill_node"]
+    assert nodes["command_node"].get("executed") is True, nodes["command_node"]
+
+    # Not by their status, either -- status answers a different question, and a node can
+    # be `unverified` for reasons that have nothing to do with dispatch.
+    assert nodes["skill_node"]["executed"] != nodes["command_node"]["executed"]
+
+    # AND A NAMED CONSUMER READS IT. A field written and read by nobody is the
+    # mechanism-with-no-caller shape this work order was opened for; the marker existing
+    # on the record is only half of what was asked. `ds workflow status` is the surface an
+    # operator actually looks at, and it is driven here through the same record.
+    from control.execution.workflow import state_commands
+
+    consumer = inspect.getsource(state_commands)
+    assert 'node.get("executed") is False' in consumer, (
+        "no surface reads `executed`, so the distinction is recorded and invisible -- "
+        "which is where this work order started, one layer down"
     )
+    # `absent is not False`: a node stamped before the field existed must not be reported
+    # as dispatched. Driven, because that distinction is exactly what `is False` buys and
+    # what a truthiness test would silently lose.
+    assert "executed" not in _make_state(tmp_path / "older", "wf-old", ["n1"]).joinpath(
+        "workflows.json"
+    ).read_text(encoding="utf-8"), "the fixture already stamps executed, so absence is untested"
 
 
 def test_an_unverified_skill_node_still_releases_the_next_wave(tmp_path, monkeypatch):
@@ -956,8 +1005,19 @@ def test_an_unverified_skill_node_still_releases_the_next_wave(tmp_path, monkeyp
     wave reports no failure and the run advances -- halting later at a dependent node.
     orch-verify reached a blocked implement-tasks with three unverified nodes behind it,
     which is what that looks like in practice.
+
+    TWO CLAIMS, AND THE SECOND WAS THE ONE THE DECISION RESTS ON. "The wave reports no
+    failure" is not "the next wave is released" -- a wave can report clean and the engine
+    can still refuse to schedule anything behind an unverified node, which is precisely
+    the wall the decision text in engine.py says was removed. Both are driven below: the
+    wave first, then `_compute_ready_nodes` itself, which is where the choice actually
+    lives (`all(s in ("completed", "unverified") ...)`). Dropping "unverified" from that
+    tuple turns the second half red while the first half stays green -- which is why the
+    first half alone never held this.
     """
     from unittest.mock import MagicMock, patch
+
+    from control.execution.workflow.engine import _compute_ready_nodes
 
     runner = WorkflowRunner("wf-wave", dry_run=False)
 
@@ -989,6 +1049,26 @@ def test_an_unverified_skill_node_still_releases_the_next_wave(tmp_path, monkeyp
         "is now wrong"
     )
 
+    # THE ENGINE, DRIVEN DIRECTLY. Two nodes, the upstream one unverified, the downstream
+    # one on the default all_success rule -- no trigger_rule key, because the claim is
+    # about what all_success does by default and spelling it would let a changed default
+    # slip past.
+    ready, skipped = _compute_ready_nodes(
+        {"n1": {"skill": "core:build"}, "n2": {"skill": "core:verify", "depends_on": ["n1"]}},
+        {"n1": {"status": "unverified"}, "n2": {"status": "pending"}},
+        {},
+    )
+
+    assert "n2" in ready, (
+        "an unverified upstream node held the next wave, so `ds workflow run` is a wall "
+        "again: nothing a prompt-delivering runner dispatches can be confirmed, so every "
+        "node is unverified and no run gets past node 1. The decision recorded in "
+        f"engine.py says unverified advances and is never called completed. ready={ready}"
+    )
+    assert (
+        "n2" not in skipped
+    ), f"the downstream node was skipped by condition rather than scheduled: {skipped}"
+
 
 def test_the_done_count_guard_discovers_its_own_sources():
     """The guard must find the done-counts, not be told where they are.
@@ -999,6 +1079,18 @@ def test_the_done_count_guard_discovers_its_own_sources():
 
     This asserts the guard's own construction: that it walks the tree and anchors on the
     assignment, which is what makes a fourth site free.
+
+    AND THAT THE WALK IS MEASURED. `rglob` being present says the guard uses a glob; it
+    says nothing about how MUCH of the package the glob reaches. A walk narrowed to one
+    module still uses rglob, still matches four done-computations, and still finds them in
+    agreement -- a clean result from looking almost nowhere, which is the
+    compared-nothing-reported-clean shape this bench names. So the coverage comparison
+    against a second enumeration is asserted here too.
+
+    Source inspection is the honest instrument for a guard-on-a-guard -- the claim IS
+    about how the other test is built -- but it is worth stating its limit: this
+    establishes the comparison is written, not that it binds. What establishes that it
+    binds is the mutation recorded on the task: narrowing the rglob turns the finder red.
     """
     import inspect
 
@@ -1014,3 +1106,13 @@ def test_the_done_count_guard_discovers_its_own_sources():
             f"the guard names {hardcoded} explicitly, which is the transcription its own "
             "review refused"
         )
+
+    assert "os.walk" in src, (
+        "the guard counts nothing but its own walk, so narrowing that walk to one module "
+        "reports full coverage of one module. The denominator has to come from a second "
+        "enumeration of the tree or it agrees with any narrowing."
+    )
+    assert "len(walked) >= in_package" in src, (
+        "the guard enumerates the package and never compares its walk against it, which "
+        "is a measurement taken and discarded"
+    )

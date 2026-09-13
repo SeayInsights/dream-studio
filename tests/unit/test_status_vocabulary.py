@@ -961,6 +961,15 @@ def test_the_mirror_decision_is_recorded_in_the_module_docstring():
     the file, because the claim is that the decision is part of what the module says
     about itself. A comment anywhere in the file would satisfy a grep and would be
     exactly the arrangement this test exists to end.
+
+    AND IT MUST NAME ITS INSTRUMENT. A decision that says "the mirror stays, held by a
+    check" is only as good as the check, and a reader who cannot find the check cannot
+    tell whether the decision is still enforced or merely still written down. The
+    docstring's own argument rests on the guard DISCOVERING writers rather than listing
+    them -- that is the sentence that distinguishes this arrangement from the named-pair
+    guard it replaced, which passed while the other sites drifted. So the name of the
+    discovering check is asserted here: delete the sentence that names it and the
+    decision loses the thing that makes it a decision rather than a hope.
     """
     import ast
 
@@ -973,7 +982,7 @@ def test_the_mirror_decision_is_recorded_in_the_module_docstring():
     for marker in ("SYNCHRONOUS MIRROR", "CHOSEN"):
         assert marker in doc, (
             f"the module docstring no longer records the mirror decision ({marker!r} is "
-            "missing). Seven production sites write a projected status beside the event "
+            "missing). Twelve production sites write a projected status beside the event "
             "they emit, and this is the only record of why that is deliberate."
         )
     # The rejected alternative matters as much as the choice: without it a reader cannot
@@ -981,3 +990,19 @@ def test_the_mirror_decision_is_recorded_in_the_module_docstring():
     assert (
         "drain" in doc.lower()
     ), "the docstring records the choice but not what it was chosen against"
+
+    # THE INSTRUMENT, BY NAME. The guard has to exist as well as be named, or this
+    # asserts the presence of a string rather than the presence of a check.
+    instrument = "test_the_guard_covers_every_writer_not_a_named_pair"
+    assert instrument in doc, (
+        "the module docstring no longer names the discovering check that holds this "
+        f"decision over every writer ({instrument!r} is missing). The decision's own "
+        "grounds are that the guard DISCOVERS writers from each projection's declared "
+        "target_tables instead of reading a fixed pair by name; without that sentence a "
+        "reader cannot tell the mirror is still supervised."
+    )
+    assert instrument in globals(), (
+        f"the docstring names {instrument!r} as the instrument holding the mirror "
+        "decision, but no such test exists in this module -- the decision names a check "
+        "that cannot run, which is the failure mode it was written to prevent."
+    )
