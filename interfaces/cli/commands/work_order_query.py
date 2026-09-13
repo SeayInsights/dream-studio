@@ -583,13 +583,10 @@ def _work_order_add_task(
     # `--why` was a bare bypass with a nicer spelling. Composed into the description with a
     # stable marker, as `compose_module_boundary` already does for the boundary clause --
     # the marker the ratchet reads is the marker written here, in one place.
-    from core.work_orders.admission import DECLARED_PREFIX as _DECLARED_PREFIX
+    from core.work_orders.admission import compose_declared_reason
 
-    _declared = " ".join((why or "").split())
-    if _declared and not acceptance_criteria:
-        _body = (description or "").rstrip()
-        _blank = chr(10) + chr(10)
-        description = (_body + _blank if _body else "") + (_DECLARED_PREFIX + " " + _declared)
+    if not acceptance_criteria:
+        description = compose_declared_reason(description, why)
 
     result = create_task(
         work_order_id=work_order_id,

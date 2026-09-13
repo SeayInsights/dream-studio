@@ -51,6 +51,24 @@
 version: 1
 
 rules:
+  - id: carried-work-is-exempt-by-record-never-by-status
+    statement: >
+      A close gate that exempts a task because its work moved to another work order must
+      decide that from the carry-over record, never from the task's status.
+    source: core/work_orders/close_gates.py
+    enforced_by:
+      - tests/unit/test_close_gates.py::test_the_ac_gate_skips_a_carried_tasks_criterion
+      - tests/unit/test_close_gates.py::test_an_uncarried_deleted_task_still_blocks_on_its_criterion
+      - tests/unit/test_close_gates.py::test_an_unreadable_carry_record_exempts_nothing
+    note: >
+      Two gates answer "is this still this work order's outstanding work" and only
+      _check_tasks_done consulted the record; _run_ac_gate ran a carried task's criteria
+      anyway, blocking WO 17466550's close on three TEST-CHECKs naming tests nobody wrote
+      because the work had moved. The record is the key and status is not, because
+      exempting on status would make `task.deleted` a way to close a work order with its
+      work undone -- the escape hatch the sibling gate already refuses. An unreadable
+      record exempts nothing: the gate fails toward running every criterion, since an
+      exemption granted by an error is the shape it exists to refuse.
   - id: dispatched-review-convenes-the-round-table
     statement: >
       A review run by a dispatched agent is conducted through the lane registry, not

@@ -646,6 +646,22 @@ def _attach_gap_tasks(
         description = (task.get("description", "") or "") + (
             _GAP_ATTACHED_STAMP.format(gap_key=gap_key) if gap_key else ""
         )
+        # WO 82f608ca: THE REASON THAT ADMITTED THIS TASK IS RECORDED, NOT SPENT.
+        #
+        # `why` was handed to admit_task for the decision and then dropped, so a task
+        # admitted on a declared reason reached the authority with no trace of it --
+        # indistinguishable from a stub, and counted as one by the blocking
+        # task-criteria-baseline ceiling, whose only notion of "declared" is
+        # DECLARED_PREFIX appearing in this description. The same bare-bypass-with-a-nicer-
+        # spelling shape #706 fixed in the CLI, surviving in the gap path.
+        #
+        # Composed HERE rather than earlier because this is the value that reaches both
+        # the row and the emitted event; a copy computed before this line would be a
+        # variable nothing reads.
+        if not _criteria:
+            from core.work_orders.admission import compose_declared_reason
+
+            description = compose_declared_reason(description, task.get("why"))
 
         # EMIT THE CANONICAL EVENT, NOT JUST THE ROW. business_tasks is a PROJECTION:
         # TaskProjection.target_tables == ["business_tasks"], and the framework's default
@@ -966,6 +982,9 @@ def _insert_gap_work_orders(
 ) -> list[dict[str, Any]]:
     now = datetime.now(UTC).isoformat()
     spawned: list[dict[str, Any]] = []
+    # Findings the spawn path refused, carried out the same way the attach path carries
+    # its own: a refusal is a report, never a silent drop.
+    unfiled_on_spawn: list[dict[str, Any]] = []
 
     base_seq = reviewed_wo_sequence or 0
     if milestone_id:
@@ -1213,6 +1232,54 @@ def _insert_gap_work_orders(
                 task_id = str(uuid.uuid4())
                 _task_title = task.get("title", "")
                 _task_desc = task.get("description", "")
+                _task_criteria = task.get("acceptance_criteria")
+
+                # WO 82f608ca: THE SPAWN PATH ASKS ADMISSION TOO.
+                #
+                # `_attach_gap_tasks` has been gated by `admit_task` since the stub
+                # factory was closed; this path -- its sibling, spawning tasks onto a NEW
+                # work order -- called no seat at all, so a review could file an
+                # uncheckable claim by the other route and push the blocking
+                # task-criteria-baseline ceiling upward. These two functions have now
+                # diverged four times: twice on event emission, once on the criterion
+                # column, and here on admission itself.
+                #
+                # A declared reason is COMPOSED INTO THE DESCRIPTION, not spent on the
+                # decision, for the same reason it is in the attach path: the ceiling's
+                # only notion of "declared" is DECLARED_PREFIX appearing there.
+                from core.work_orders.admission import (
+                    admit_task,
+                    compose_declared_reason,
+                    paths_named,
+                )
+
+                if not _task_criteria:
+
+                    _task_desc = compose_declared_reason(_task_desc, task.get("why"))
+
+                _spawn_verdict = admit_task(
+                    title=_task_title,
+                    acceptance_criteria=_task_criteria,
+                    why=task.get("why"),
+                    work_order_description=desc,
+                    existing_titles=set(),
+                    target_paths=paths_named(f"{_task_title} {_task_desc}", repo_root=REPO_ROOT),
+                )
+                if not _spawn_verdict["admitted"]:
+                    # REPORTED, NOT DROPPED. A refused finding that vanishes is an
+                    # invisible claim, which is strictly worse than a visible stub -- the
+                    # rule the attach path already follows by returning what it refused.
+                    unfiled_on_spawn.append(
+                        {
+                            "title": _task_title,
+                            "description": _task_desc,
+                            "gap_key": gap.get("gap_key", ""),
+                            "refusals": _spawn_verdict["refusals"],
+                            "unknowns": _spawn_verdict["unknowns"],
+                            "spawned_work_order_id": new_wo_id,
+                        }
+                    )
+                    continue
                 _task_emitted = _emit_creation(
                     "task.created",
                     payload={
@@ -1252,7 +1319,7 @@ def _insert_gap_work_orders(
                         _task_title,
                         _task_desc if _task_emitted else _task_desc + _NO_EVENT_WARNING,
                         creation_status(),
-                        task.get("acceptance_criteria"),
+                        _task_criteria,
                         now,
                         now,
                     ),
@@ -1270,4 +1337,35 @@ def _insert_gap_work_orders(
                 }
             )
 
+    # WO 82f608ca: WHAT WAS REFUSED COMES BACK WITH WHAT WAS FILED.
+    #
+    # `unfiled_on_spawn` was accumulated and never returned -- a list built, appended to,
+    # and read by nothing, so a finding refused for lacking a criterion was silently
+    # discarded. Task 4 called that outcome strictly worse than a visible stub, and the
+    # fix for it shipped containing it. Its sibling `_attach_gap_tasks` has returned
+    # `{"added": ..., "unfiled": [...]}` since refusals were introduced, for exactly this
+    # reason: a refusal is a report, and a report nobody receives is a drop.
+    #
+    # THE FIELD NAME IS THE ONE THE CALLER ALREADY HARVESTS. verify_main builds
+    # `unfiled_findings` from `s.get("unfiled_findings")` across spawned records, and a
+    # first cut of this fix invented a second name and appended to the caller's list
+    # directly -- above the line that assigns it, which is an UnboundLocalError on the
+    # first spawn. The channel existed; it was not being filled.
+    for record in spawned:
+        record.setdefault("unfiled_findings", [])
+    if unfiled_on_spawn:
+        by_wo: dict[str, list[dict[str, Any]]] = {}
+        for item in unfiled_on_spawn:
+            by_wo.setdefault(item.get("spawned_work_order_id") or "", []).append(item)
+        for record in spawned:
+            record["unfiled_findings"] = by_wo.get(record.get("work_order_id") or "", [])
+        # Refusals whose spawned work order is not in `spawned` (a dedup skip, say) would
+        # otherwise vanish; they ride the first record rather than being dropped.
+        orphaned = [
+            item
+            for item in unfiled_on_spawn
+            if item.get("spawned_work_order_id") not in {r.get("work_order_id") for r in spawned}
+        ]
+        if orphaned and spawned:
+            spawned[0].setdefault("unfiled_findings", []).extend(orphaned)
     return spawned
