@@ -274,10 +274,21 @@ def _describe_graded_range(
     try:
         expr, why = boundary_commit_range(work_order_id, db_path=db_path)
     except Exception as exc:  # noqa: BLE001 - provenance must not fail the review
+        # ONE KEY FOR "WHY IS THERE NO NUMBER HERE" (WO 654a54d7 task 11). This path and
+        # the git-subprocess path below answered under `unavailable` while the no-range,
+        # non-boundary-layer and uncountable-output paths answered under `undetermined` --
+        # two independently spelled answers to one question, which is how a reader learns
+        # to check only one of them and reads a withheld distance as a measured zero.
+        # `undetermined` is the spelling the rest of the repo already uses
+        # (core/gates/deterministic_evidence.py). The exception text is kept INSIDE the
+        # reason rather than beside it in a second key, for the same reason.
         return {
             "range": None,
             "stops_short_of_head": None,
-            "unavailable": f"{type(exc).__name__}: {exc}"[:200],
+            "undetermined": (
+                "the recorded delivery boundary could not be read: "
+                f"{type(exc).__name__}: {exc}"[:200]
+            ),
         }
     out["range"] = expr
     if why:
@@ -313,7 +324,10 @@ def _describe_graded_range(
         ).stdout.strip()
     except Exception as exc:  # noqa: BLE001 - same rule as above
         out["stops_short_of_head"] = None
-        out["unavailable"] = f"{type(exc).__name__}: {exc}"[:200]
+        out["undetermined"] = (
+            f"git could not be asked how far {end} is from HEAD: "
+            f"{type(exc).__name__}: {exc}"[:200]
+        )
         return out
     out["head"] = head or None
 
