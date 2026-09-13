@@ -43,15 +43,61 @@ SOURCE_ROOTS = ("core", "control", "interfaces", "integrations", "runtime", "spo
 UNIT_DIR = Path("tests") / "unit"
 
 
+def _modules_sharing_stem(stem: str) -> list[str]:
+    """Every source module with this basename, across packages."""
+    hits: list[str] = []
+    for root in SOURCE_ROOTS:
+        base = REPO_ROOT / root
+        if not base.is_dir():
+            continue
+        for found in base.rglob(f"{stem}.py"):
+            hits.append(found.relative_to(REPO_ROOT).as_posix())
+    return sorted(hits)
+
+
 def suite_for(path: str) -> str | None:
-    """The unit suite bearing this module's name, when the repo has one."""
+    """The unit suite bearing this module's name, when the repo has one AND it reaches it.
+
+    THE STEM IS NOT A UNIQUE KEY, and the first version of this assumed it was. An
+    independent review constructed the live case: `core/release/repo_publication_readiness.py`
+    and `interfaces/cli/repo_publication_readiness.py` both mapped to
+    `tests/unit/test_repo_publication_readiness.py`, which imports only the former. Editing
+    the CLI wrapper made this gate run a suite that cannot exercise it and report the change
+    covered -- a FALSE PASS, and the exact shape the module docstring says this gate exists
+    to catch, reintroduced by the gate.
+
+    SO AMBIGUITY IS RESOLVED BY EVIDENCE, and only when there IS ambiguity. A stem owned by
+    one module keeps the plain mapping; nothing is gained by making the common case prove
+    itself. When two or more modules share a stem, the suite must actually reference the
+    package this module lives in, or it is reported UNMAPPED rather than claimed as
+    covering. Unmapped is the honest answer: it says "nothing here is known to cover this",
+    which is what the operator needs, where "covered" would have been a lie.
+    """
     p = Path(path)
     if p.suffix != ".py" or p.name == "__init__.py":
         return None
     if not p.parts or p.parts[0] not in SOURCE_ROOTS:
         return None
     candidate = UNIT_DIR / f"test_{p.stem}.py"
-    return candidate.as_posix() if (REPO_ROOT / candidate).is_file() else None
+    if not (REPO_ROOT / candidate).is_file():
+        return None
+
+    siblings = _modules_sharing_stem(p.stem)
+    if len(siblings) <= 1:
+        return candidate.as_posix()
+
+    # Ambiguous: the suite has to name this module's package, in either import or path
+    # form. Matched on the PACKAGE rather than the full dotted module path because
+    # `from core.gates import task_criteria_baseline` never spells the two contiguously,
+    # and a check that only understood one import spelling would report false UNMAPPED --
+    # trading a false pass for a false alarm, which is how a gate gets switched off.
+    try:
+        text = (REPO_ROOT / candidate).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    package = p.parent
+    forms = {".".join(package.parts), package.as_posix(), p.as_posix()}
+    return candidate.as_posix() if any(f and f in text for f in forms) else None
 
 
 def changed_files(base: str) -> list[str]:

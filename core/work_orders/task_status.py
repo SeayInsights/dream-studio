@@ -59,6 +59,12 @@ Grounds, measured rather than argued:
   - Removing it means every read waits for a drain. `ds work-order start` followed
     immediately by `ds work-order tasks` is the common path, and the drain is not
     synchronous with either.
+  - WRITER-COUNTS: total=12 routed=10
+    The authoritative figures, in one declared form so a check reads them instead of
+    guessing at prose. `test_both_records_state_the_same_writer_counts` parses this line
+    out of BOTH records and holds them against what the finder discovers, so the numbers
+    cannot drift from the code or from each other. Prose below may describe and explain
+    them; this line is what is checked.
   - THE COUNT, RE-MEASURED. "Seven" was the number an independent review listed, and it
     counted UPDATE sites only. Measured across core/, interfaces/, runtime/, control/ and
     integrations/ on 2026-09-13: 12 sites write a status into a projected table -- 7 via

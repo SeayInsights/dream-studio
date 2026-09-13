@@ -9,6 +9,17 @@ PRESENT found 459 rows the substrate could not express:
     business_tasks.done              27   no task.completed event on any of them
     business_tasks.open              10   only 1 of 10 had a task.created event
 
+WRITER-COUNTS: total=12 routed=10
+
+The authoritative figures for the synchronous-mirror decision, in the same declared form
+`core/work_orders/task_status.py` carries. `test_both_records_state_the_same_writer_counts`
+parses this line out of both records and holds them against what the finder discovers, so
+the two records cannot disagree with each other or with the code. It replaced a scan of
+prose that an independent review defeated twice: once by putting a wrong number further
+than eighty characters from the word "site", and once by writing "re-measured" in a
+sentence asserting a CURRENT count, which the historical exemption silenced. A number a
+check has to go looking for in prose is a number the prose can hide.
+
 THE CREATION-EVENT OVERLAP IS THE NUMBER THAT SEPARATES URGENT FROM LATENT, and the first
 pass of this work order did not compute it -- an independent review asked for it by status
 rather than in aggregate. Measured on the live authority 2026-09-11:
@@ -1080,16 +1091,22 @@ def test_both_records_state_the_same_writer_counts():
     disagreed outright. Correcting prose in one of the two places it lives is what
     produced both rounds.
 
-    SO THE NUMBERS ARE EXTRACTED AND COMPARED, not proof-read. Every spelled-out or
-    digit form of a writer count in either file is collected and required to agree with
-    the measurement, which is itself taken from the guard that DISCOVERS the writers --
-    not from a constant either file could be edited to match. A number that appears in a
-    docstring and nowhere else is a number nothing holds.
+    SO THE NUMBERS ARE DECLARED, NOT HUNTED FOR IN PROSE. Both records carry one line
+    reading `WRITER-COUNTS: total=N routed=M`, and this parses that line out of each and
+    holds the pair against what the finder discovers.
 
-    The one number allowed to differ is the historical one, and only where the text says
-    it is historical: "seven" survives in sentences that explain what the old figure
-    counted and why it was wrong. A record that cannot say "this used to read X" loses
-    the reason, so the exemption is by CONTEXT and not by a per-file allowance.
+    THE PROSE SCAN IT REPLACED WAS DEFEATED TWICE, by a reviewer constructing the cases
+    rather than arguing them. It matched a number only within eighty characters of the
+    word "site", so a wrong count placed further away sat in the docstring undetected. And
+    it exempted "historical" mentions by keyword, so a sentence asserting a CURRENT count
+    silenced itself merely by containing "re-measured". Both stayed green with a false
+    number present.
+
+    Widening the window or hardening the keyword list would only move the next
+    counter-example, because the check was guessing which numbers were claims. So it
+    stopped guessing and the records started declaring. Prose may still describe these
+    figures and say what the old ones counted and why they were wrong -- that is what a
+    future reader needs, and it is no longer load-bearing.
     """
     import ast
     import re
@@ -1120,50 +1137,27 @@ def test_both_records_state_the_same_writer_counts():
         "should be equal -- re-derive both rather than leaving a difference the code no "
         "longer produces"
     )
-    derivable = {total, routed}
+    declared = re.compile(r"WRITER-COUNTS:\s*total=(\d+)\s+routed=(\d+)")
 
-    words = {
-        "seven": 7,
-        "eight": 8,
-        "nine": 9,
-        "ten": 10,
-        "eleven": 11,
-        "twelve": 12,
-        "thirteen": 13,
-    }
-    pattern = re.compile(
-        r"\b(" + "|".join(words) + r")\b(?=[^.]{0,80}?(?:production site|writer|site))",
-        re.I,
-    )
+    def stated(text: str, where: str) -> tuple[int, int]:
+        found = declared.search(text)
+        assert found, (
+            f"{where} carries no WRITER-COUNTS line. Both records must declare the figures "
+            "in one machine-readable form; a count living only in prose is one a check "
+            "cannot hold, which is how this drifted twice"
+        )
+        return int(found.group(1)), int(found.group(2))
 
-    def stated(text: str) -> set[int]:
-        found: set[int] = set()
-        for m in pattern.finditer(text):
-            # The sentence this number sits in, so a historical mention can be recognised.
-            start = text.rfind(".", 0, m.start()) + 1
-            end = text.find(".", m.end())
-            sentence = text[start : end if end > 0 else len(text)]
-            if re.search(
-                r"was the number|used to|old figure|counted UPDATE|not seven|re-measured",
-                sentence,
-                re.I,
-            ):
-                continue
-            found.add(words[m.group(1).lower()])
-        return found
+    in_module = stated(module_doc or "", "the module docstring")
+    in_tests = stated(test_src, "the test module docstring")
 
-    in_module = stated(module_doc or "")
-    in_tests = stated(test_src)
-
-    assert in_module, "the module records no writer count at all, so the decision is unanchored"
     assert in_module == in_tests, (
-        f"the module states {sorted(in_module)} and the test file states {sorted(in_tests)} "
-        "for the same writer count. Two files carry this decision and a correction landed "
-        "in one of them, which is how this drifted twice already"
+        f"the module declares total={in_module[0]} routed={in_module[1]} and the test file "
+        f"declares total={in_tests[0]} routed={in_tests[1]}. Two files carry this decision "
+        "and a correction landed in one of them, which is how this drifted twice already"
     )
-    assert in_module <= derivable, (
-        f"the records state {sorted(in_module)} but the finder discovers {total} write "
-        f"sites of which {routed} are routed through this module. A number in a docstring "
-        "that the code does not produce is a transcription, and transcriptions are what "
-        "drifted twice here"
+    assert in_module == (total, routed), (
+        f"the records declare total={in_module[0]} routed={in_module[1]} but the finder "
+        f"discovers {total} write sites of which {routed} are routed through this module. "
+        "A declared number the code does not produce is still a transcription"
     )
