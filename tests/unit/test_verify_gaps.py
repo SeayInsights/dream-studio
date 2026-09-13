@@ -625,3 +625,143 @@ def test_a_refused_spawn_task_comes_back_instead_of_vanishing(authority):
     finally:
         conn.close()
     assert [r[0] for r in filed] == ["checkable"], filed
+
+
+def test_a_gap_run_leaves_the_uncheckable_count_unmoved(authority):
+    """Measured across a real gap run, not asserted about admit_task in isolation.
+
+    THE SUBSTITUTION THIS ENDS. The property is that RUNNING A REVIEW does not raise the
+    blocking uncheckable count -- that is what refused a push at 1776 against a ceiling of
+    1767. Two earlier attempts asserted that `admit_task` refuses a criterion-less task
+    and that `compose_declared_reason` produces a marker. Both are true, both are units,
+    and neither can see a gap path that files rows without asking either one. The review
+    named the substitution twice before this was written.
+
+    So this measures `task_criteria_baseline.measure()` before and after driving both gap
+    paths with every task shape a reviewer can supply: a criterion, a declared reason, and
+    neither.
+    """
+    from core.gates.task_criteria_baseline import measure
+    from core.work_orders.verify_gaps import _attach_gap_tasks, _insert_gap_work_orders
+
+    db_path = authority
+    project_id, milestone_id, reviewed_id = _seed_project(db_path)
+
+    before = measure(db_path)["uncheckable"]
+
+    shapes = [
+        {
+            "title": "has a criterion",
+            "description": "checkable",
+            "acceptance_criteria": "TEST-CHECK: tests/unit/test_verify_gaps.py::test_a_gap_run_leaves_the_uncheckable_count_unmoved",
+        },
+        {
+            "title": "has a declared reason",
+            "description": "judgment",
+            "why": "no check settles an architecture decision; the deliverable is the record",
+        },
+        {"title": "has neither", "description": "a stub by any other name"},
+    ]
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        _insert_gap_work_orders(
+            conn,
+            gaps=[
+                {
+                    "title": "spawned gap",
+                    "description": "raised by review",
+                    "category": "durability",
+                    "type": "infrastructure",
+                    "tasks": [dict(t) for t in shapes],
+                }
+            ],
+            project_id=project_id,
+            milestone_id=milestone_id,
+            reviewed_work_order_id=reviewed_id,
+            reviewed_wo_title="Reviewed",
+            reviewed_wo_sequence=1,
+        )
+        _attach_gap_tasks(
+            conn,
+            work_order_id=reviewed_id,
+            project_id=project_id,
+            tasks=[dict(t) for t in shapes],
+            now=_NOW,
+            gap_key="k",
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    after = measure(db_path)["uncheckable"]
+
+    assert after == before, (
+        f"a review run raised the uncheckable count from {before} to {after}. That count "
+        "is a blocking ceiling, so a reviewer filing findings can refuse an author's push "
+        "for work the author never chose to do."
+    )
+
+
+def test_both_gap_paths_compose_the_declared_reason(authority):
+    """The attach path's composition line was executed by no test at all.
+
+    The spawn path was driven and the attach path was not, so half the fix rested on
+    reading. Both are driven here, and the marker is checked on the ROW each writes --
+    which is the only place `task_criteria_baseline` looks.
+    """
+    from core.work_orders.admission import DECLARED_PREFIX
+    from core.work_orders.verify_gaps import _attach_gap_tasks, _insert_gap_work_orders
+
+    db_path = authority
+    project_id, milestone_id, reviewed_id = _seed_project(db_path)
+    task = {
+        "title": "a judgment call",
+        "description": "decide and record it",
+        "why": "no check settles an architecture decision; the deliverable is the record",
+    }
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        _insert_gap_work_orders(
+            conn,
+            gaps=[
+                {
+                    "title": "spawned",
+                    "description": "raised",
+                    "category": "durability",
+                    "type": "infrastructure",
+                    "tasks": [dict(task)],
+                }
+            ],
+            project_id=project_id,
+            milestone_id=milestone_id,
+            reviewed_work_order_id=reviewed_id,
+            reviewed_wo_title="Reviewed",
+            reviewed_wo_sequence=1,
+        )
+        _attach_gap_tasks(
+            conn,
+            work_order_id=reviewed_id,
+            project_id=project_id,
+            tasks=[dict(task)],
+            now=_NOW,
+            gap_key="k2",
+        )
+        conn.commit()
+        rows = conn.execute(
+            "SELECT work_order_id, description FROM business_tasks WHERE title = ?",
+            (task["title"],),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    assert len(rows) == 2, (
+        f"expected the task filed by BOTH paths, got {len(rows)} row(s) -- one of the two "
+        "paths refused it or never ran"
+    )
+    for wo_id, description in rows:
+        assert DECLARED_PREFIX in description, (
+            f"the row filed under {wo_id[:8]} carries no declared-reason marker, so the "
+            "ceiling counts it as a stub and the reviewer's reason is unauditable"
+        )

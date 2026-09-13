@@ -44,14 +44,21 @@ Grounds, measured rather than argued:
   - Removing it means every read waits for a drain. `ds work-order start` followed
     immediately by `ds work-order tasks` is the common path, and the drain is not
     synchronous with either.
-  - The duplication is no longer free-form. Every one of the seven now takes its value
+  - THE COUNT, RE-MEASURED. "Seven" was the number an independent review listed, and it
+    counted UPDATE sites only. Measured across core/, interfaces/, runtime/, control/ and
+    integrations/ on 2026-09-13: 12 sites write a status into a projected table -- 7 via
+    UPDATE and 5 via INSERT. Ten of those take their value from the vocabulary. The other
+    two are in interfaces/cli/commands/prove.py, which binds status as a parameter in a
+    DISPOSABLE scratch authority it creates and tears down, and carries its own recorded
+    exemption for exactly that reason.
+  - The duplication is no longer free-form. Every one of the ten now takes its value
     from `status_for(<the event this site emits>)`, so the row and the event cannot
     disagree about the word, and a renamed status is a KeyError at the write rather than
     silent drift. That removes the failure mode; it does not remove the write.
   - `test_the_guard_covers_every_writer_not_a_named_pair` DISCOVERS writers from each
     projection's declared target_tables rather than a list, so a new mirror added
     tomorrow is caught by the check rather than by the next review. The previous guard
-    read two files by name and passed while seven other sites drifted.
+    read two files by name and passed while the other sites drifted.
 
 What is NOT claimed: that the row and the event are written atomically. They are not --
 the emission escapes the caller's transaction, which is WO 6935afa5 and has its own

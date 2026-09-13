@@ -902,28 +902,49 @@ def test_the_mutation_proof_runs_the_real_finder(tmp_path):
         )
 
 
-def test_the_enumeration_is_driven_through_the_real_finder():
-    """The discovery itself works, so a green result means looked-and-found-nothing.
+def test_the_enumeration_is_driven_through_the_real_finder(tmp_path):
+    """The finder is proved to LOOK, by planting something for it to find.
 
-    A finder that silently matched zero files would make the test above vacuous -- the
-    compared-nothing-reported-clean shape. Proved by planting a literal in a temp tree the
-    real finder walks.
+    A finder that silently matched nothing would make every green result above vacuous --
+    the compared-nothing-reported-clean shape. The previous version of this test claimed
+    in its docstring to plant a literal in a temp tree, and actually re-implemented a file
+    walk and asserted a file count: it never called `_projected_status_writers` at all.
+    A docstring describing a drive over a test that greps is the substitution this bench
+    refuses, stated in the test's own words.
+
+    This plants, calls the real finder, and requires it to look in the places that matter:
+    a nested package, and both statement kinds.
     """
-    from core.projections.task_projection import TaskProjection
-    from core.projections.work_order_projection import WorkOrderProjection
+    deep = tmp_path / "core" / "work_orders" / "nested"
+    deep.mkdir(parents=True)
 
-    tables = set(WorkOrderProjection.target_tables) | set(TaskProjection.target_tables)
-    assert tables, "no target tables were derived, so the finder searches for nothing"
-    assert len(tables) >= 2, tables
+    (deep / "buried.py").write_text(
+        "conn.execute(\n"
+        "    \"UPDATE business_work_orders SET status = 'closed', updated_at = ?\"\n"
+        '    " WHERE work_order_id = ?",\n'
+        "    (now, wo_id),\n"
+        ")\n",
+        encoding="utf-8",
+    )
+    found = _projected_status_writers(tmp_path)
+    assert any("buried.py" in f for f in found), (
+        "the finder did not reach a file nested two directories down, so a clean result "
+        f"says nothing about most of the tree. Found: {found}"
+    )
+    assert any("closed" in f for f in found), found
 
-    scanned = [
-        p
-        for p in _REPO_ROOT.rglob("*.py")
-        if p.relative_to(_REPO_ROOT).as_posix().startswith("core/work_orders/")
-    ]
-    assert len(scanned) > 20, (
-        f"the finder walked only {len(scanned)} files under core/work_orders/, so a clean "
-        "result would mean it looked nowhere"
+    # A file OUTSIDE the scanned prefixes must not be reported, or the finder is simply
+    # flagging everything and its silence elsewhere is meaningless.
+    outside = tmp_path / "docs"
+    outside.mkdir()
+    (outside / "example.py").write_text(
+        "\"UPDATE business_tasks SET status = 'complete', updated_at = ?\"\n",
+        encoding="utf-8",
+    )
+    still = _projected_status_writers(tmp_path)
+    assert not any("example.py" in f for f in still), (
+        "the finder reported a file outside core/, interfaces/, runtime/, control/ and "
+        "integrations/, so it cannot distinguish production from documentation"
     )
 
 
@@ -933,7 +954,7 @@ def test_the_mirror_decision_is_recorded_in_the_module_docstring():
     WO 1364e05e task 4 required the synchronous-mirror decision to be recorded in
     `core/work_orders/task_status.py`. It was written, and it was substantive, and it
     lived in a free-floating comment above `status_for` -- so a future edit could remove
-    the only record of why seven production sites still write a status beside the event
+    the only record of why ten production sites still write a status beside the event
     they emit, and nothing would notice. Its own independent review said so.
 
     Anchored on the MODULE DOCSTRING via `ast.get_docstring`, not on a string search of
