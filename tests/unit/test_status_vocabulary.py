@@ -732,6 +732,43 @@ def test_the_docstring_table_records_the_measured_overlap():
     assert any(int(m) > 0 for _, _, m in rows), "no row records rows that are MISSING one"
 
 
+def _projected_status_write_sites(root: Path | None = None) -> list[str]:
+    """EVERY site writing a status into a projected table, routed or not.
+
+    `_projected_status_writers` reports only OFFENDERS -- sites spelling a literal -- so it
+    is empty when the tree is clean and cannot say how many writers there are. The prose
+    records state a COUNT, and a count checked against nothing is a transcription. This
+    discovers the sites the same way, from each projection's declared `target_tables`, and
+    returns all of them so the docstrings can be held against a measurement.
+    """
+    import re
+
+    from core.projections.task_projection import TaskProjection
+    from core.projections.work_order_projection import WorkOrderProjection
+
+    tables = set(WorkOrderProjection.target_tables) | set(TaskProjection.target_tables)
+    sites: list[str] = []
+    base = root or _REPO_ROOT
+    for path in base.rglob("*.py"):
+        rel = path.relative_to(base).as_posix()
+        if rel.startswith(("dist/", ".claude/", "tests/")) or "worktrees" in rel:
+            continue
+        if not rel.startswith(("core/", "interfaces/", "runtime/", "control/", "integrations/")):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            continue
+        for table in tables:
+            for match in re.finditer(rf"UPDATE {table}\b", text):
+                if re.search(r"SET[^;]{0,200}?\bstatus\s*=", text[match.start() :][:400]):
+                    sites.append(f"{rel}:{text[: match.start()].count(chr(10)) + 1}:UPDATE")
+            for match in re.finditer(rf"INSERT INTO {table}\b", text):
+                if "status" in text[match.start() :][:600]:
+                    sites.append(f"{rel}:{text[: match.start()].count(chr(10)) + 1}:INSERT")
+    return sorted(set(sites))
+
+
 def _projected_status_writers(root: Path | None = None) -> list[str]:
     """Every production site that writes a status into a projected table, DISCOVERED.
 
@@ -1031,3 +1068,102 @@ def test_the_mirror_decision_is_recorded_in_the_module_docstring():
     # weakened, or no longer covers every writer, the decision that rests on it fails here
     # too rather than continuing to read as true.
     globals()[instrument]()
+
+
+def test_both_records_state_the_same_writer_counts():
+    """Two files carry this decision's numbers, and they drifted apart twice.
+
+    The count was re-measured once and restated in `core/work_orders/task_status.py`
+    only, so the test file still said seven. That was corrected here, and the module's
+    OPENING sentence still said seven while its own grounds nine lines below said twelve
+    -- so a round-table verdict could truthfully report that the three prose records
+    disagreed outright. Correcting prose in one of the two places it lives is what
+    produced both rounds.
+
+    SO THE NUMBERS ARE EXTRACTED AND COMPARED, not proof-read. Every spelled-out or
+    digit form of a writer count in either file is collected and required to agree with
+    the measurement, which is itself taken from the guard that DISCOVERS the writers --
+    not from a constant either file could be edited to match. A number that appears in a
+    docstring and nowhere else is a number nothing holds.
+
+    The one number allowed to differ is the historical one, and only where the text says
+    it is historical: "seven" survives in sentences that explain what the old figure
+    counted and why it was wrong. A record that cannot say "this used to read X" loses
+    the reason, so the exemption is by CONTEXT and not by a per-file allowance.
+    """
+    import ast
+    import re
+
+    import core.work_orders.task_status as vocab
+
+    module_doc = ast.get_docstring(ast.parse(pathlib.Path(vocab.__file__).read_text("utf-8")))
+    test_src = pathlib.Path(__file__).read_text(encoding="utf-8")
+
+    # THE MEASUREMENT, TAKEN FROM THE FINDER rather than transcribed. `_projected_status_writers`
+    # reports offenders; the routed writers are what the two records count, so the total is
+    # derived from the same discovery the guard uses.
+    sites = _projected_status_write_sites()
+    total = len(sites)
+    assert total >= 10, f"the finder located only {total} writers, so agreement proves little"
+
+    # TWO LEGITIMATE NUMBERS, BOTH DERIVED. The records state a TOTAL (every site writing a
+    # status into a projected table) and a ROUTED count (those taking their value from this
+    # module). They differ by the recorded exemption in `prove.py`, which binds status as a
+    # parameter in a disposable scratch authority it creates and tears down. The first
+    # version of this check allowed only the total and went red on the routed figure --
+    # correctly, because it had no way to tell a second true number from a stale one. Both
+    # come from the finder now, so neither is a transcription.
+    exempt = {s for s in sites if s.startswith("interfaces/cli/commands/prove.py")}
+    routed = total - len(exempt)
+    assert exempt, (
+        "no site carries the prove.py exemption any more, so the routed and total counts "
+        "should be equal -- re-derive both rather than leaving a difference the code no "
+        "longer produces"
+    )
+    derivable = {total, routed}
+
+    words = {
+        "seven": 7,
+        "eight": 8,
+        "nine": 9,
+        "ten": 10,
+        "eleven": 11,
+        "twelve": 12,
+        "thirteen": 13,
+    }
+    pattern = re.compile(
+        r"\b(" + "|".join(words) + r")\b(?=[^.]{0,80}?(?:production site|writer|site))",
+        re.I,
+    )
+
+    def stated(text: str) -> set[int]:
+        found: set[int] = set()
+        for m in pattern.finditer(text):
+            # The sentence this number sits in, so a historical mention can be recognised.
+            start = text.rfind(".", 0, m.start()) + 1
+            end = text.find(".", m.end())
+            sentence = text[start : end if end > 0 else len(text)]
+            if re.search(
+                r"was the number|used to|old figure|counted UPDATE|not seven|re-measured",
+                sentence,
+                re.I,
+            ):
+                continue
+            found.add(words[m.group(1).lower()])
+        return found
+
+    in_module = stated(module_doc or "")
+    in_tests = stated(test_src)
+
+    assert in_module, "the module records no writer count at all, so the decision is unanchored"
+    assert in_module == in_tests, (
+        f"the module states {sorted(in_module)} and the test file states {sorted(in_tests)} "
+        "for the same writer count. Two files carry this decision and a correction landed "
+        "in one of them, which is how this drifted twice already"
+    )
+    assert in_module <= derivable, (
+        f"the records state {sorted(in_module)} but the finder discovers {total} write "
+        f"sites of which {routed} are routed through this module. A number in a docstring "
+        "that the code does not produce is a transcription, and transcriptions are what "
+        "drifted twice here"
+    )

@@ -30,10 +30,25 @@ what this repo lacked.
 
 THE SYNCHRONOUS MIRROR -- a decision, recorded where it cannot drift loose.
 
-Seven production sites write a projected status directly beside the event they emit, so
+TWELVE production sites write a projected status directly beside the event they emit, so
 a CLI read sees the change without waiting for the next drain. Writing the status twice
 is what produced 53 work orders and 369 tasks at a status no replay could reach, so the
 arrangement had to be chosen or removed rather than left unexamined.
+
+SEVEN UPDATE AND FIVE INSERT, and the difference is why this opening said "seven" for two
+rounds while the grounds below said twelve. The UPDATE writers are ``mutations.py`` (three
+sites), ``start_main.py``, ``close_main.py`` and both drain sites in ``verify_gaps.py``.
+The INSERT writers are ``verify_gaps.py``'s ``_attach_gap_tasks`` and
+``_insert_gap_work_orders``, the CLI ``add-task`` path, and the work-order and task
+creation paths in ``mutations.py`` -- these take ``creation_status()`` rather than
+``status_for(<event>)``, because a row being INSERTED has no prior event to name.
+
+So "each site takes its value from ``status_for(<the event this site emits>)``" is true of
+the UPDATE writers and NOT of the INSERT writers, which is the sentence that kept reading
+as though it covered all twelve. Ten of the twelve route through this module by one of
+those two functions; the remaining two are in ``interfaces/cli/commands/prove.py``, which
+binds status as a parameter in a DISPOSABLE scratch authority it creates and tears down,
+and carries its own recorded exemption.
 
 CHOSEN: the mirror STAYS, and is accepted as deliberate duplication held by a check --
 the same treatment runtime/lib/enforcement.py's second copy of this vocabulary already
@@ -52,9 +67,13 @@ Grounds, measured rather than argued:
     DISPOSABLE scratch authority it creates and tears down, and carries its own recorded
     exemption for exactly that reason.
   - The duplication is no longer free-form. Every one of the ten now takes its value
-    from `status_for(<the event this site emits>)`, so the row and the event cannot
-    disagree about the word, and a renamed status is a KeyError at the write rather than
-    silent drift. That removes the failure mode; it does not remove the write.
+    from THIS MODULE -- the UPDATE writers from `status_for(<the event this site emits>)`
+    and the INSERT writers from `creation_status()`, which is the correct function for a
+    row that has no prior event to name. An earlier wording said all ten used
+    `status_for`, which read as though the INSERT writers were unrouted or ignored; they
+    are routed, by the other function. Either way the row and the event cannot disagree
+    about the word, and a renamed status is a KeyError at the write rather than silent
+    drift. That removes the failure mode; it does not remove the write.
   - `test_the_guard_covers_every_writer_not_a_named_pair` DISCOVERS writers from each
     projection's declared target_tables rather than a list, so a new mirror added
     tomorrow is caught by the check rather than by the next review. The previous guard
