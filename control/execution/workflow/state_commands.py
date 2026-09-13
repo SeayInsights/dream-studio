@@ -247,6 +247,14 @@ def cmd_status(args: argparse.Namespace) -> None:
                 out = node.get("output", "")
                 dur = node.get("duration_s")
                 line = f"  {s:12s} {nid}"
+                # WO 66069823: a node the runner DISPATCHED and did not execute says so
+                # here, where an operator reads workflow state. The marker was added to
+                # the node record and consumed by nothing, which is the shape that put a
+                # SKILL.md body in a status dump and had an operator reading a faithful
+                # wait as a broken orchestrator. `executed` is absent on nodes stamped
+                # before it existed, and absent is not False.
+                if node.get("executed") is False:
+                    line += "  [dispatched, not executed]"
                 if out:
                     line += f" -> {out[:60]}"
                 if dur:

@@ -941,34 +941,52 @@ def test_a_dispatched_node_is_distinguishable_without_reading_its_text():
     )
 
 
-def test_an_unverified_skill_node_still_releases_the_next_wave():
-    """The behaviour the corrected decision record describes, pinned.
+def test_an_unverified_skill_node_still_releases_the_next_wave(tmp_path, monkeypatch):
+    """DRIVEN through _execute_wave, because an engine change must turn this red.
 
-    An earlier draft of that record claimed a headless run stalls at the first skill node
-    carrying a completion_check. It does not: `any_failed` is set only when `not success`,
-    and an unverified node is a success as far as the wave is concerned, so the wave
-    completes and the run advances -- halting later at a dependent node. orch-verify
-    reached a blocked implement-tasks with three unverified nodes BEHIND it, which is what
-    that distinction looks like in practice.
+    The first version searched _execute_wave's source for "if not success:" and asserted
+    the word "unverified" did not appear in the failure block. An engine change treating
+    unverified as blocking -- the very thing this pins -- could satisfy both greps and
+    leave the test green. That is the substitution of a grep for a drive this bench
+    refuses elsewhere in the same diff, written into the check meant to hold an engine
+    behaviour.
 
-    Held on the engine rather than on the prose, so the record cannot drift back.
+    The behaviour: `any_failed` is set only when the invocation FAILS. A node whose
+    completion could not be established is `unverified`, which is not a failure, so the
+    wave reports no failure and the run advances -- halting later at a dependent node.
+    orch-verify reached a blocked implement-tasks with three unverified nodes behind it,
+    which is what that looks like in practice.
     """
-    import inspect
+    from unittest.mock import MagicMock, patch
 
-    src = inspect.getsource(WorkflowRunner._execute_wave)
+    runner = WorkflowRunner("wf-wave", dry_run=False)
 
-    assert (
-        "if not success:" in src and "any_failed = True" in src
-    ), "the wave-failure condition changed shape; this test pins what it is"
-    # The failure flag must not be set for a non-success STATUS -- only for a failed call.
-    begin = src.index("if not success:")
-    failure_block = src[begin:]
-    stop = failure_block.index("return any_failed")
-    failure_block = failure_block[:stop]
-    assert "unverified" not in failure_block, (
-        "an unverified node now sets any_failed, which means the wave stops at the "
-        "dispatch point -- the decision record in runner.py says it does not, and one of "
-        "the two is now wrong"
+    # A node that INVOKES fine and whose completion cannot be established.
+    monkeypatch.setattr(runner, "_invoke_skill", lambda spec, nid: (True, "[handoff] x"))
+    monkeypatch.setattr(
+        runner, "_verify_completion", lambda nid, ynode: ("unverified", "nothing observed")
+    )
+    recorded: dict[str, str] = {}
+    monkeypatch.setattr(
+        runner,
+        "_update_node",
+        lambda nid, status, output, duration=None, executed=None: recorded.__setitem__(nid, status),
+    )
+    monkeypatch.setattr(runner, "_emit_node_event", lambda *a, **k: None)
+    monkeypatch.setattr(runner, "_emit_progress_event", lambda *a, **k: None)
+    monkeypatch.setattr(runner, "_write_command_context", lambda *a, **k: tmp_path / "ctx")
+
+    any_failed = runner._execute_wave(
+        ["n1"],
+        {"n1": {"skill": "core:build"}},
+        {},
+    )
+
+    assert recorded.get("n1") == "unverified", recorded
+    assert any_failed is False, (
+        "an unverified node reported a wave failure, so the run stops at the dispatch "
+        "point -- the decision record in runner.py says it does not, and one of the two "
+        "is now wrong"
     )
 
 

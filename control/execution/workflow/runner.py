@@ -807,6 +807,24 @@ class WorkflowRunner:
     #     a credential path, a cost model and a timeout policy, none of which exist here
     #     today. Rejected for now on size, not on merit; if an orchestrator is ever meant
     #     to run unattended end to end, this is the option that gets it there.
+    # STOPPING THE WAVE AT AN UNVERIFIED NODE was considered and REJECTED, which the
+    # first version of this record left unsaid -- a decision document that names one
+    # option reads as though no other was weighed.
+    #
+    # The case for stopping: a dispatched node has done no work, so advancing past it
+    # builds on nothing, and the run halts later at a dependent node where the cause is
+    # one step removed from the symptom -- which is exactly how orch-verify presented, a
+    # blocked implement-tasks with three unverified nodes behind it.
+    #
+    # Rejected because `unverified` is not only the dispatch case. `_verify_completion`
+    # returns it for any node whose effect nobody looked at, INCLUDING a command node
+    # that ran fine and declared no completion_check. Treating it as blocking would stop
+    # every workflow at its first uninstrumented node, which is most of them, and the
+    # failure would read as an engine fault rather than a missing declaration. The
+    # narrower signal is `executed`, which says what this runner did rather than what
+    # could be observed afterwards -- so that is the field a caller branches on, and the
+    # wave keeps advancing.
+    #
     #   - DELETE SKILL NODES AND MAKE EVERY NODE A COMMAND. Honest, and it discards the
     #     thing workflows are for. The prose nodes carry the judgment a command cannot.
     #
