@@ -771,12 +771,21 @@ def _projected_status_write_sites(root: Path | None = None) -> list[str]:
         except Exception:  # noqa: BLE001
             continue
         for table in tables:
+            # The slice bounds are BOUND TO NAMES rather than written inline. black formats
+            # `text[m.start() :]` with a space before the colon when the bound is an
+            # expression, and flake8 reports that as E203; the two tools cannot both be
+            # satisfied in one line, and this repo does not extend-ignore E203.
             for match in re.finditer(rf"UPDATE {table}\b", text):
-                if re.search(r"SET[^;]{0,200}?\bstatus\s*=", text[match.start() :][:400]):
-                    sites.append(f"{rel}:{text[: match.start()].count(chr(10)) + 1}:UPDATE")
+                begin = match.start()
+                window = text[begin:][:400]
+                line_no = text[:begin].count(chr(10)) + 1
+                if re.search(r"SET[^;]{0,200}?\bstatus\s*=", window):
+                    sites.append(f"{rel}:{line_no}:UPDATE")
             for match in re.finditer(rf"INSERT INTO {table}\b", text):
-                if "status" in text[match.start() :][:600]:
-                    sites.append(f"{rel}:{text[: match.start()].count(chr(10)) + 1}:INSERT")
+                begin = match.start()
+                line_no = text[:begin].count(chr(10)) + 1
+                if "status" in text[begin:][:600]:
+                    sites.append(f"{rel}:{line_no}:INSERT")
     return sorted(set(sites))
 
 
