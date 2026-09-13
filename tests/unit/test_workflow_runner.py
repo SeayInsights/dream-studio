@@ -961,8 +961,10 @@ def test_an_unverified_skill_node_still_releases_the_next_wave():
         "if not success:" in src and "any_failed = True" in src
     ), "the wave-failure condition changed shape; this test pins what it is"
     # The failure flag must not be set for a non-success STATUS -- only for a failed call.
-    failure_block = src[src.index("if not success:") :]
-    failure_block = failure_block[: failure_block.index("return any_failed")]
+    begin = src.index("if not success:")
+    failure_block = src[begin:]
+    stop = failure_block.index("return any_failed")
+    failure_block = failure_block[:stop]
     assert "unverified" not in failure_block, (
         "an unverified node now sets any_failed, which means the wave stops at the "
         "dispatch point -- the decision record in runner.py says it does not, and one of "
