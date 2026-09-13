@@ -550,3 +550,78 @@ def test_a_declared_reason_is_recorded_on_the_row(authority):
         "the declared reason never reached the row, so the ceiling counts this task as a "
         f"stub and the reviewer's reason is unauditable: {row[0][:160]!r}"
     )
+
+
+def test_a_refused_spawn_task_comes_back_instead_of_vanishing(authority):
+    """A refusal is a report, and a report nobody receives is a drop.
+
+    The spawn path was gated by admission and its refusals were accumulated into a list
+    that NOTHING RETURNED -- built, appended to, read by nowhere. So a finding refused for
+    lacking a criterion was discarded in silence, which is the outcome the task called
+    strictly worse than a visible stub, shipped inside the fix for it.
+
+    The first correction then appended to the caller's `unfiled_findings` ABOVE the line
+    that assigns it -- an UnboundLocalError on the first real spawn, invisible to a suite
+    that never reaches that path. The channel already existed and simply was not being
+    filled; this drives it.
+    """
+    db_path = authority
+    project_id, milestone_id, reviewed_id = _seed_project(db_path)
+
+    gaps = [
+        {
+            "title": "A gap with one checkable task and one not",
+            "description": "raised by review",
+            "category": "durability",
+            "type": "infrastructure",
+            "tasks": [
+                {
+                    "title": "checkable",
+                    "description": "has a criterion",
+                    "acceptance_criteria": "TEST-CHECK: tests/unit/test_verify_gaps.py::test_a_refused_spawn_task_comes_back_instead_of_vanishing",
+                },
+                {"title": "unverifiable claim", "description": "no criterion at all"},
+            ],
+        }
+    ]
+    conn = sqlite3.connect(str(db_path))
+    try:
+        from core.work_orders.verify_gaps import _insert_gap_work_orders
+
+        spawned = _insert_gap_work_orders(
+            conn,
+            gaps=gaps,
+            project_id=project_id,
+            milestone_id=milestone_id,
+            reviewed_work_order_id=reviewed_id,
+            reviewed_wo_title="Reviewed",
+            reviewed_wo_sequence=1,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    assert spawned, "nothing was spawned at all, so the fixture is wrong"
+
+    refused = [f for record in spawned for f in (record.get("unfiled_findings") or [])]
+    titles = {f.get("title") for f in refused}
+    assert "unverifiable claim" in titles, (
+        "the refused task did not come back from the spawn path, so a finding raised by a "
+        f"review was discarded in silence. Returned: {refused}"
+    )
+
+    # The field name matters: verify_main harvests exactly this key across spawned records.
+    assert all("unfiled_findings" in record for record in spawned), (
+        "a spawned record omits the key the caller harvests, so its refusals never reach "
+        "the verdict even though they were returned"
+    )
+
+    # And the checkable one was still filed -- a gate that refuses everything is not a fix.
+    conn = sqlite3.connect(str(db_path))
+    try:
+        filed = conn.execute(
+            "SELECT title FROM business_tasks WHERE title IN ('checkable', 'unverifiable claim')"
+        ).fetchall()
+    finally:
+        conn.close()
+    assert [r[0] for r in filed] == ["checkable"], filed

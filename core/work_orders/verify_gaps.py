@@ -1337,4 +1337,35 @@ def _insert_gap_work_orders(
                 }
             )
 
+    # WO 82f608ca: WHAT WAS REFUSED COMES BACK WITH WHAT WAS FILED.
+    #
+    # `unfiled_on_spawn` was accumulated and never returned -- a list built, appended to,
+    # and read by nothing, so a finding refused for lacking a criterion was silently
+    # discarded. Task 4 called that outcome strictly worse than a visible stub, and the
+    # fix for it shipped containing it. Its sibling `_attach_gap_tasks` has returned
+    # `{"added": ..., "unfiled": [...]}` since refusals were introduced, for exactly this
+    # reason: a refusal is a report, and a report nobody receives is a drop.
+    #
+    # THE FIELD NAME IS THE ONE THE CALLER ALREADY HARVESTS. verify_main builds
+    # `unfiled_findings` from `s.get("unfiled_findings")` across spawned records, and a
+    # first cut of this fix invented a second name and appended to the caller's list
+    # directly -- above the line that assigns it, which is an UnboundLocalError on the
+    # first spawn. The channel existed; it was not being filled.
+    for record in spawned:
+        record.setdefault("unfiled_findings", [])
+    if unfiled_on_spawn:
+        by_wo: dict[str, list[dict[str, Any]]] = {}
+        for item in unfiled_on_spawn:
+            by_wo.setdefault(item.get("spawned_work_order_id") or "", []).append(item)
+        for record in spawned:
+            record["unfiled_findings"] = by_wo.get(record.get("work_order_id") or "", [])
+        # Refusals whose spawned work order is not in `spawned` (a dedup skip, say) would
+        # otherwise vanish; they ride the first record rather than being dropped.
+        orphaned = [
+            item
+            for item in unfiled_on_spawn
+            if item.get("spawned_work_order_id") not in {r.get("work_order_id") for r in spawned}
+        ]
+        if orphaned and spawned:
+            spawned[0].setdefault("unfiled_findings", []).extend(orphaned)
     return spawned
