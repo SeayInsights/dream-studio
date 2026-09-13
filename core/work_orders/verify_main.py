@@ -243,19 +243,33 @@ def _describe_graded_range(
     """
     from .delivery_boundary import boundary_commit_range
 
-    # The layers on which the boundary range IS the graded set. Anything else means the
+    # The layer on which the boundary range IS the graded set. Anything else means the
     # locator built the diff another way, and this range describes something nobody read.
-    _BOUNDARY_LAYERS = {"recorded_delivery_boundary", "boundary_working_tree", None}
+    #
+    # NAMED FROM THE DECLARED VOCABULARY, NOT FROM MEMORY. A first cut listed
+    # "boundary_working_tree", which appears nowhere in this repository except that line --
+    # an invented layer that could never match, silently widening the "this is the graded
+    # set" branch to nothing. `choose_locator` returns exactly recorded_delivery_boundary,
+    # commit_search_union or none, and verify_main additionally sets
+    # authority_executable_checks; EVIDENCE_LAYERS in verify_git is the list of all four.
+    from .verify_git import EVIDENCE_LAYERS
+
+    _DECLARED_LAYERS = {name for name, _ in EVIDENCE_LAYERS}
+    _BOUNDARY_LAYERS = {"recorded_delivery_boundary", None}
+    assert (
+        _BOUNDARY_LAYERS - {None} <= _DECLARED_LAYERS
+    ), "a layer named here is not one the system produces"
     out: dict[str, Any] = {
         "describes": "recorded_delivery_boundary",
         "evidence_layer": evidence_layer,
         "range_is_what_was_graded": evidence_layer in _BOUNDARY_LAYERS,
     }
     if evidence_layer not in _BOUNDARY_LAYERS:
-        out["not_graded_reason"] = (
+        # The SAME key the no-range path uses. Two independently spelled answers to
+        # "why is there no number here" is how a reader learns to check only one of them.
+        out["undetermined"] = (
             f"the locator used {evidence_layer!r}, so the commit set graded is not this"
-            " boundary range -- the distance-from-HEAD numbers below describe a range"
-            " that was not read"
+            " boundary range -- no distance is measured from a range that was not read"
         )
     try:
         expr, why = boundary_commit_range(work_order_id, db_path=db_path)

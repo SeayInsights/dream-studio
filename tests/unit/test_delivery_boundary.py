@@ -1890,7 +1890,10 @@ def test_the_range_report_says_whether_it_is_what_was_graded(db, tmp_path):
         wo_id, repo_root=repo, db_path=db, evidence_layer="recorded_delivery_boundary"
     )
     assert matched["range_is_what_was_graded"] is True
-    assert "not_graded_reason" not in matched
+    # ONE spelling, shared with the no-range path: `undetermined`. An earlier version of
+    # this fix answered under `not_graded_reason` while the no-range path used
+    # `undetermined`, which is two vocabularies for one question.
+    assert "undetermined" not in matched
 
     diverged = _describe_graded_range(
         wo_id, repo_root=repo, db_path=db, evidence_layer="authority_executable_checks"
@@ -1899,18 +1902,25 @@ def test_the_range_report_says_whether_it_is_what_was_graded(db, tmp_path):
         "the report claims the boundary range was graded while the locator used "
         "authority evidence, so its HEAD-distance numbers describe a range nobody read"
     )
-    assert "authority_executable_checks" in diverged["not_graded_reason"]
+    assert "authority_executable_checks" in diverged["undetermined"]
 
 
 def test_the_graded_range_reports_the_commit_set_that_was_actually_graded(db, tmp_path):
-    """No distance number is printed for a range nobody read.
+    """No distance is measured from a range nobody read, for any layer the system produces.
 
     A flag saying "this is not the graded set" printed BESIDE a commits_behind_head and a
     "may already be fixed" warning measured from that same unread range still puts a
-    meaningless number in front of a reader -- and the warning is the most quotable line
-    in the report. WO 654a54d7's review refused the flag as disclosure standing in for the
-    comparison, twice. The numbers are now withheld rather than annotated.
+    meaningless number in front of a reader. WO 654a54d7's review refused the flag twice.
+
+    DRIVEN ACROSS THE DECLARED VOCABULARY, NOT AN INVENTED NAME. The first version of this
+    test exercised its fallback arm with 'commit_message_grep', a layer string
+    `choose_locator` cannot return -- so the branch it claimed to cover was never reached,
+    while the real grep layer 'commit_search_union' went untested. The production code had
+    the mirror-image bug: it listed 'boundary_working_tree' among the layers on which the
+    boundary range IS the graded set, and that name appears nowhere else in the repository.
+    Two independently invented vocabularies, neither checked against the one that exists.
     """
+    from core.work_orders.verify_git import EVIDENCE_LAYERS
     from core.work_orders.verify_main import _describe_graded_range
 
     repo, _ = _git_repo(tmp_path / "withheld")
@@ -1919,6 +1929,9 @@ def test_the_graded_range_reports_the_commit_set_that_was_actually_graded(db, tm
     record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
     _second_commit(repo)
 
+    declared = [name for name, _ in EVIDENCE_LAYERS]
+    assert "recorded_delivery_boundary" in declared and "commit_search_union" in declared, declared
+
     graded = _describe_graded_range(
         wo_id, repo_root=repo, db_path=db, evidence_layer="recorded_delivery_boundary"
     )
@@ -1926,16 +1939,24 @@ def test_the_graded_range_reports_the_commit_set_that_was_actually_graded(db, tm
     assert isinstance(
         graded["commits_behind_head"], int
     ), "the ordinary path must still report the distance, or the fix is just silence"
+    assert "undetermined" not in graded
 
-    for layer in ("authority_executable_checks", "commit_message_grep"):
+    # EVERY other declared layer, so a new one cannot be added without a decision here.
+    for layer in declared:
+        if layer == "recorded_delivery_boundary":
+            continue
         other = _describe_graded_range(wo_id, repo_root=repo, db_path=db, evidence_layer=layer)
         assert other["range_is_what_was_graded"] is False, layer
         assert other["commits_behind_head"] is None, (
-            f"a HEAD distance was measured from a boundary range the {layer} locator did "
+            f"a HEAD distance was measured from a boundary range the {layer!r} locator did "
             "not grade, which is the number the task was filed against"
         )
         assert other["stops_short_of_head"] is None, layer
         assert (
             "warning" not in other
-        ), "the may-already-be-fixed warning was emitted for a range nobody read"
-        assert layer in other["not_graded_reason"]
+        ), f"the may-already-be-fixed warning was emitted for a range nobody read ({layer})"
+        # ONE spelling for "no number here", shared with the no-range path.
+        assert layer in other["undetermined"], (
+            f"the withheld answer for {layer!r} is spelled under a different key than the "
+            "no-range path uses, which is two vocabularies again"
+        )
