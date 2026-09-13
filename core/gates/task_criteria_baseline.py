@@ -76,6 +76,23 @@ def measure(db_path: Path | None = None) -> dict[str, object]:
             "SELECT COALESCE(description, '') FROM business_tasks"
             " WHERE acceptance_criteria IS NULL OR TRIM(acceptance_criteria) = ''"
         ).fetchall()
+        # A SECOND WAY TO BE UNCHECKABLE, and the count above cannot see it (WO f769de79).
+        # A task with no criterion is uncheckable because nothing names a check. A task
+        # whose criterion is ALSO carried by an open sibling is uncheckable for the
+        # opposite reason: a check names it and names the other one too, so one run marks
+        # both done and neither can independently fail. `executable_ac` certifies the
+        # second on evidence about the first.
+        shared = conn.execute(
+            "SELECT COUNT(*) FROM business_tasks t"
+            " WHERE t.status IN ('pending', 'in_progress')"
+            "   AND TRIM(COALESCE(t.acceptance_criteria, '')) != ''"
+            "   AND EXISTS (SELECT 1 FROM business_tasks o"
+            "               WHERE o.work_order_id = t.work_order_id"
+            "                 AND o.task_id != t.task_id"
+            "                 AND o.status IN ('pending', 'in_progress')"
+            "                 AND TRIM(COALESCE(o.acceptance_criteria, ''))"
+            "                     = TRIM(COALESCE(t.acceptance_criteria, '')))"
+        ).fetchone()[0]
     except sqlite3.Error as exc:
         return {"status": "unknown", "reason": f"business_tasks could not be read ({exc})"}
     finally:
@@ -88,6 +105,11 @@ def measure(db_path: Path | None = None) -> dict[str, object]:
         "without_criterion": len(rows),
         "of_those_declared": declared,
         "uncheckable": len(rows) - declared,
+        # REPORTED, NOT ADDED TO THE CEILING. Folding this into `uncheckable` would move a
+        # blocking baseline under everyone mid-stream and refuse pushes for a number that
+        # just changed meaning. Enforcement for new tasks is the Herald refusing them at
+        # admission; this is the standing count of what is already filed.
+        "shared_criterion": shared,
     }
 
 

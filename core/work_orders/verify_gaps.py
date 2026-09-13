@@ -585,16 +585,30 @@ def _attach_gap_tasks(
     Still skips a task whose title is already on that work order, so re-reviewing does not
     accumulate duplicates of the same finding — the per-work-order equivalent of the
     gap-key dedup one level up.
+
+    AND THE CRITERIA ALONGSIDE THE TITLES (WO f769de79). A grader that rewords a finding
+    between rounds produces a new title carrying the same TEST-CHECK, which title dedup
+    cannot see: measured, all 35 same-gap-key duplicate groups on the live authority differ
+    by title. The Herald is now given both fields, so "already filed?" is asked of the
+    criterion — the identity — as well as the label.
+
+    OPEN TASKS ONLY. A criterion carried by a COMPLETE task is not outstanding work, and
+    refusing against it would block re-filing a regression of something already fixed.
     """
     try:
-        existing = {
-            (r[0] or "").strip().lower()
-            for r in conn.execute(
-                "SELECT title FROM business_tasks WHERE work_order_id = ?", (work_order_id,)
-            ).fetchall()
+        _rows = conn.execute(
+            "SELECT title, acceptance_criteria, status FROM business_tasks"
+            " WHERE work_order_id = ?",
+            (work_order_id,),
+        ).fetchall()
+        existing = {(r[0] or "").strip().lower() for r in _rows}
+        existing_criteria = {
+            (r[1] or "").strip() for r in _rows if (r[2] or "") in ("pending", "in_progress")
         }
+        existing_criteria.discard("")
     except Exception:  # noqa: BLE001 - never break a verify over dedup bookkeeping
         existing = set()
+        existing_criteria = set()
 
     from core.work_orders.admission import admit_task, paths_named
 
@@ -610,6 +624,11 @@ def _attach_gap_tasks(
 
     added = 0
     unfiled: list[dict[str, Any]] = []
+    # ADMITTED AND NOT UNREMARKED. A lane that reports UNKNOWN does not refuse, so the task
+    # is filed -- and if the unknown stopped there it would be a lane whose only effect is
+    # on a code path nobody reaches, which is the mechanism-with-no-caller shape three work
+    # orders in this milestone were opened for. The observation rides out beside `unfiled`.
+    noted: list[dict[str, Any]] = []
     for task in tasks:
         title = str(task.get("title", "") or "")
         if title.strip().lower() in existing:
@@ -623,6 +642,7 @@ def _attach_gap_tasks(
             why=task.get("why"),
             work_order_description=wo_description,
             existing_titles=existing,
+            existing_criteria=existing_criteria,
             target_paths=paths_named(
                 f"{title} {task.get('description', '') or ''}", repo_root=REPO_ROOT
             ),
@@ -638,6 +658,15 @@ def _attach_gap_tasks(
                 }
             )
             continue
+
+        if _verdict["unknowns"]:
+            noted.append(
+                {
+                    "title": title,
+                    "gap_key": gap_key,
+                    "unknowns": _verdict["unknowns"],
+                }
+            )
 
         task_id = str(uuid.uuid4())
         # The key rides the task so repeated attachment rounds are countable — title
@@ -722,8 +751,14 @@ def _attach_gap_tasks(
                 ),
             )
         existing.add(title.strip().lower())
+        # THE CRITERION JOINS THE SET THE SAME WAY THE TITLE DOES. Without this, dedup
+        # holds only against what was already in the database, so one gap carrying two
+        # rewordings of the same finding files both in a single pass -- the defect
+        # surviving inside its own fix, one loop iteration apart.
+        if _criteria and str(_criteria).strip():
+            existing_criteria.add(str(_criteria).strip())
         added += 1
-    return {"added": added, "unfiled": unfiled}
+    return {"added": added, "unfiled": unfiled, "noted": noted}
 
 
 def _work_order_is_open(conn: Any, work_order_id: str) -> bool:
@@ -1077,6 +1112,11 @@ def _insert_gap_work_orders(
             # could not be admitted is visible and unfiled rather than invisible and
             # dropped. Omitted when empty so a clean attach reads clean.
             _unfiled = _attach["unfiled"]
+            # AND WHAT WAS FILED WITH A QUESTION AGAINST IT. A shared acceptance criterion
+            # is admitted and reported, because a restatement and two changes one check
+            # covers are indistinguishable at admission time. Omitted when empty so a clean
+            # attach still reads clean.
+            _noted = _attach.get("noted") or []
             record: dict[str, Any] = {
                 "work_order_id": reviewed_work_order_id,
                 "title": gap_title,
@@ -1084,6 +1124,7 @@ def _insert_gap_work_orders(
                 "gap_key": gap_key,
                 "attached_to_reviewed": True,
                 **({"unfiled_findings": _unfiled} if _unfiled else {}),
+                **({"admission_unknowns": _noted} if _noted else {}),
                 "tasks_added": added,
             }
             # BOUND THE ATTACH LOOP, VISIBLY. Attaching makes a failing verdict block the
