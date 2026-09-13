@@ -114,6 +114,27 @@ gates:
       or a renamed symbol. Fix the import; do not skip. This mirrors what the
       full-CI unit run does before it can even start.
 
+  - id: changed-module-suites
+    tier: advisory
+    description: >
+      Runs the unit suite NAMED AFTER each module this change edited, derived from
+      the diff. The static complement already exists and cannot cover this:
+      pin-tests runs a hardcoded list, and test-list-completeness exists because
+      that list rots. A list answers "did the suites someone remembered pass"; it
+      cannot answer "did the suite covering the file you just edited run at all".
+      Written after a change to core/gates/task_criteria_baseline.py was pushed
+      through three unrelated suites and never through its own, leaving five tests
+      red and the blocking gate reporting UNKNOWN on any authority missing two
+      columns. Found by a reviewer reading the diff, by no gate.
+      ADVISORY PENDING AN OPERATOR CALL: by the classification rule this is
+      correctness and belongs at blocking, but promoting it changes what refuses a
+      push, which is the operator's decision and not the author's.
+    command: [py, -m, core.gates.changed_module_suites]
+    fail_hint: >
+      A suite named after a module you edited is red. Run it directly -- the gate
+      names the file and the module that mapped to it. Do not skip: this is the
+      suite most likely to cover what you just changed.
+
   - id: test-list-completeness
     tier: blocking
     description: >
