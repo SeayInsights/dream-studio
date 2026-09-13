@@ -930,7 +930,9 @@ def test_every_progress_count_agrees_on_what_done_means():
     )
 
 
-def test_a_dispatched_node_is_distinguishable_without_reading_its_text(tmp_path):
+def test_a_dispatched_node_is_distinguishable_without_reading_its_text(
+    tmp_path, monkeypatch, capsys
+):
     """A caller that never reads prose must still be able to tell the two apart.
 
     The dispatch output was made to open with NOT EXECUTED, and this work order's own
@@ -946,9 +948,9 @@ def test_a_dispatched_node_is_distinguishable_without_reading_its_text(tmp_path)
     real workflows.json, the file is read back off disk, and the two node kinds are told
     apart from the record alone -- no `output` string is consulted anywhere below.
     """
-    import inspect
+    import argparse
 
-    state_dir = _make_state(tmp_path, "wf-executed", ["skill_node", "command_node"])
+    state_dir = _make_state(tmp_path, "wf-executed", ["skill_node", "command_node", "never_ran"])
 
     with patch("control.execution.workflow.runner.paths") as mock_paths:
         mock_paths.state_dir.return_value = state_dir
@@ -971,23 +973,46 @@ def test_a_dispatched_node_is_distinguishable_without_reading_its_text(tmp_path)
     # be `unverified` for reasons that have nothing to do with dispatch.
     assert nodes["skill_node"]["executed"] != nodes["command_node"]["executed"]
 
-    # AND A NAMED CONSUMER READS IT. A field written and read by nobody is the
-    # mechanism-with-no-caller shape this work order was opened for; the marker existing
-    # on the record is only half of what was asked. `ds workflow status` is the surface an
-    # operator actually looks at, and it is driven here through the same record.
+    # AND A NAMED CONSUMER READS IT, DRIVEN. A field written and read by nobody is the
+    # mechanism-with-no-caller shape this work order was opened for; the marker on the
+    # record is only half of what was asked.
+    #
+    # THIS WAS A SOURCE GREP AND THE INDEPENDENT REVIEW OF cc54ab90 REFUSED IT. It
+    # asserted `'node.get("executed") is False' in inspect.getsource(state_commands)`,
+    # which a comment, a dead branch, or a function no command reaches satisfies just as
+    # well as a live one -- the same "present and unreached" failure this test's own
+    # docstring rejects two assertions higher up, in the same diff. `ds workflow status`
+    # is now RUN against the record `_update_node` just wrote, and the rendered line is
+    # what gets asserted.
     from control.execution.workflow import state_commands
 
-    consumer = inspect.getsource(state_commands)
-    assert 'node.get("executed") is False' in consumer, (
-        "no surface reads `executed`, so the distinction is recorded and invisible -- "
-        "which is where this work order started, one layer down"
+    monkeypatch.setattr(
+        state_commands,
+        "_read_state",
+        lambda: json.loads((state_dir / "workflows.json").read_text(encoding="utf-8")),
     )
-    # `absent is not False`: a node stamped before the field existed must not be reported
-    # as dispatched. Driven, because that distinction is exactly what `is False` buys and
-    # what a truthiness test would silently lose.
-    assert "executed" not in _make_state(tmp_path / "older", "wf-old", ["n1"]).joinpath(
-        "workflows.json"
-    ).read_text(encoding="utf-8"), "the fixture already stamps executed, so absence is untested"
+    state_commands.cmd_status(argparse.Namespace(key="wf-executed"))
+    rendered = capsys.readouterr().out
+    lines = {
+        nid: next(ln for ln in rendered.splitlines() if nid in ln)
+        for nid in ("skill_node", "command_node", "never_ran")
+    }
+
+    assert "[dispatched, not executed]" in lines["skill_node"], rendered
+    assert "[dispatched, not executed]" not in lines["command_node"], rendered
+
+    # `absent is not False`, DRIVEN rather than asserted about a fixture. The previous
+    # version checked that a freshly-built fixture file did not contain the string
+    # "executed" -- true by construction of `_make_state`, which never writes that key
+    # under any circumstances, so it would have passed identically had the `is False`
+    # check been replaced by a truthiness test or deleted outright. `never_ran` is a node
+    # `_update_node` was never called for, so its record genuinely lacks the key, and a
+    # truthiness test would report it as dispatched.
+    assert "executed" not in nodes["never_ran"], nodes["never_ran"]
+    assert "[dispatched, not executed]" not in lines["never_ran"], (
+        "a node stamped before the field existed is reported as dispatched, so `absent` "
+        f"is being read as `False`: {lines['never_ran']!r}"
+    )
 
 
 def test_an_unverified_skill_node_still_releases_the_next_wave(tmp_path, monkeypatch):

@@ -153,3 +153,88 @@ def test_the_shipped_baseline_is_recorded_and_holds():
 
     # The control: the measurement is non-trivial, so a checker returning nothing fails here.
     assert report["total_tasks"] > 0, "a zero-task authority would make the pass meaningless"
+
+
+def test_a_missing_observation_does_not_take_the_gate_to_unknown(tmp_path, monkeypatch):
+    """The blocking count must not be vetoable by a decoration.
+
+    `shared_criterion` was added inside the same try/except as the count that BLOCKS, and
+    it reads `status` and `work_order_id` -- columns the primary count never touches. On
+    any authority lacking them the whole gate reported "business_tasks could not be read"
+    and went UNKNOWN, which fails closed and refuses every push. Five tests in this file
+    went red exactly that way, which is how it was found.
+
+    The fixture here is the narrow schema deliberately: it is the shape that broke it.
+    """
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text(json.dumps({"uncheckable": 3}), encoding="utf-8")
+    monkeypatch.setattr(tcb, "BASELINE_PATH", baseline)
+
+    report = tcb.run(_authority(tmp_path, [("t1", "one", "", None)]))
+
+    assert report["status"] == "computed", (
+        "an observation this gate does not decide on took the whole measurement to "
+        f"unknown, so a supplementary number can refuse a push: {report}"
+    )
+    assert report["uncheckable"] == 1, report
+    assert report["shared_criterion"] is None, (
+        "the observation reported a NUMBER on a schema that cannot answer it -- 'I could "
+        "not look' and 'there are none' have different meanings and this must not collapse "
+        f"them: {report}"
+    )
+    assert "NOTED" not in tcb._render(
+        report
+    ), "an unmeasurable observation was rendered as though it had been measured"
+
+
+def test_the_default_rendering_names_the_shared_criterion_count(tmp_path, monkeypatch):
+    """A number reachable only under --json is a number nobody reads.
+
+    `shared_criterion` is deliberately outside the ok decision -- a check can legitimately
+    cover two changes, so this is an observation and not a ceiling. But the independent
+    review of cc54ab90 pointed out it was computed, tested, serialised, and never printed
+    by `_render`, which is the same mechanism-with-no-reader shape the count exists to
+    surface. Asserted on the RENDERED text, because that is what a person reads.
+    """
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text(json.dumps({"uncheckable": 9}), encoding="utf-8")
+    monkeypatch.setattr(tcb, "BASELINE_PATH", baseline)
+
+    db = tmp_path / "studio.db"
+    conn = sqlite3.connect(str(db))
+    conn.executescript(
+        "CREATE TABLE business_tasks (task_id TEXT PRIMARY KEY, work_order_id TEXT,"
+        " title TEXT, description TEXT, acceptance_criteria TEXT, status TEXT);"
+    )
+    shared = "TEST-CHECK: tests/unit/test_x.py::test_one"
+    conn.executemany(
+        "INSERT INTO business_tasks (task_id, work_order_id, title, description,"
+        " acceptance_criteria, status) VALUES (?, ?, ?, '', ?, 'pending')",
+        [("t1", "wo", "one", shared), ("t2", "wo", "two", shared)],
+    )
+    conn.commit()
+    conn.close()
+
+    report = tcb.run(db)
+    assert report["shared_criterion"] == 2, report
+    rendered = tcb._render(report)
+    assert "NOTED" in rendered and "2 open task(s) share" in rendered, rendered
+    # An observation must not read as a failure: the gate still passes.
+    assert report["ok"] is True, report
+    assert "OK" in rendered, rendered
+
+    # Silent at zero, so a clean run stays clean.
+    solo = tmp_path / "solo.db"
+    conn = sqlite3.connect(str(solo))
+    conn.executescript(
+        "CREATE TABLE business_tasks (task_id TEXT PRIMARY KEY, work_order_id TEXT,"
+        " title TEXT, description TEXT, acceptance_criteria TEXT, status TEXT);"
+    )
+    conn.execute(
+        "INSERT INTO business_tasks (task_id, work_order_id, title, description,"
+        " acceptance_criteria, status) VALUES ('t1', 'wo', 'one', '', ?, 'pending')",
+        (shared,),
+    )
+    conn.commit()
+    conn.close()
+    assert "NOTED" not in tcb._render(tcb.run(solo))

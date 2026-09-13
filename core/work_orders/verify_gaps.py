@@ -1210,7 +1210,18 @@ def _insert_gap_work_orders(
                     # This call site DISCARDED the return, which was an int and looked
                     # harmless to ignore. Now it can carry refusals, and a refusal nobody
                     # receives is the finding lost -- the one outcome worse than a stub.
+                    #
+                    # AND IT HAPPENED AGAIN, ONE KEY LATER. `noted` was added to the
+                    # return and wired into the sibling call site above and not into this
+                    # one, so a Herald observation on the merge branch was computed and
+                    # dropped -- the fourth divergence between these two paths, committed
+                    # inside the change that added the key, directly beneath a comment
+                    # recording the lesson. Found by the independent review of cc54ab90,
+                    # not by me. Both keys are read here now, and
+                    # test_both_call_sites_report_the_same_keys fails if the two records
+                    # ever carry different ones again.
                     **({"unfiled_findings": _merge["unfiled"]} if _merge["unfiled"] else {}),
+                    **({"admission_unknowns": _merge.get("noted")} if _merge.get("noted") else {}),
                 }
             )
         else:

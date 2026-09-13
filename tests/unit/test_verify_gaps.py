@@ -1073,3 +1073,153 @@ def test_no_open_task_shares_a_criterion_with_a_sibling(authority):
         "a criterion shared with a COMPLETE task was counted as a duplicate, so the "
         "number reports finished work as outstanding"
     )
+
+
+def _gap_carrying(criterion: str, title: str) -> dict:
+    return {
+        "title": "a class with a tracker",
+        "description": "raised by review",
+        "category": "durability",
+        "type": "infrastructure",
+        "tasks": [{"title": title, "description": "x", "acceptance_criteria": criterion}],
+    }
+
+
+def test_the_merge_path_carries_the_observation_too(authority):
+    """The sibling call site dropped it, for the fourth time.
+
+    `_attach_gap_tasks` returns `noted`. The attach-onto-the-reviewed-work-order call site
+    folds it into the record as `admission_unknowns`; the merge-into-an-existing-work-order
+    call site read only `unfiled`, so on that branch a Herald observation was computed and
+    silently dropped. Found by the independent review of cc54ab90 -- in the change that
+    added the key, directly beneath a comment recording the same lesson from last time.
+
+    Driven through `_insert_gap_work_orders`, not through `_attach_gap_tasks`, because the
+    callee returned the value correctly both times. The defect is in which keys a CALL SITE
+    reads, and only the real dispatch reaches the branch that chooses between them.
+    """
+    from core.work_orders.verify_gaps import _insert_gap_work_orders
+
+    db_path = authority
+    project_id, milestone_id, reviewed_id = _seed_project(db_path)
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        # Pass one spawns the sibling tracker and files the criterion on it.
+        _insert_gap_work_orders(
+            conn,
+            gaps=[_gap_carrying(_DUP_CRITERION, "the first wording")],
+            project_id=project_id,
+            milestone_id=milestone_id,
+            reviewed_work_order_id=reviewed_id,
+            reviewed_wo_title="Reviewed",
+            reviewed_wo_sequence=1,
+        )
+        # Pass two finds that tracker and MERGES into it -- the branch under test --
+        # carrying a differently-titled task whose criterion is already filed there.
+        second = _insert_gap_work_orders(
+            conn,
+            gaps=[_gap_carrying(_DUP_CRITERION, "the second wording")],
+            project_id=project_id,
+            milestone_id=milestone_id,
+            reviewed_work_order_id=reviewed_id,
+            reviewed_wo_title="Reviewed",
+            reviewed_wo_sequence=1,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    merged = [r for r in second if r.get("merged_into_existing")]
+    assert merged, f"pass two did not take the merge branch, so this proves nothing: {second}"
+    assert any(r.get("admission_unknowns") for r in merged), (
+        "the merge call site filed a task carrying a criterion already on that work order "
+        "and reported nothing. The callee computed the observation and the caller dropped "
+        f"it, which is the whole defect: {merged}"
+    )
+
+
+def test_both_call_sites_report_the_same_keys(authority):
+    """Two callers of one function, diverged four times now.
+
+    Twice on event emission, once on the acceptance criterion, once on `noted`. Each was
+    found separately, after shipping, by someone reading the diff.
+
+    COMPARED TO EACH OTHER, NOT TO A NAMED LIST, so a fifth key is covered without an
+    edit -- and driven rather than read out of the source, because a key read into a
+    branch nothing reaches would satisfy a source comparison exactly as well as a live
+    one. Both branches are exercised with the same duplicate criterion, and the reporting
+    keys of the two records are required to match.
+
+    Scoped to keys that carry a FINDING: the records legitimately differ on which branch
+    they took (`attached_to_reviewed` versus `merged_into_existing`), and comparing those
+    would be asserting the two records are the same record.
+    """
+    from core.work_orders.verify_gaps import _insert_gap_work_orders
+
+    db_path = authority
+    reporting = {"unfiled_findings", "admission_unknowns"}
+
+    # ATTACH BRANCH: the reviewed work order is open and incomplete, so the gap is its own
+    # unfinished work and lands as a task on it. Seed the criterion first so the Herald has
+    # something to observe.
+    p_a, m_a, wo_a = _seed_project(db_path)
+    _open_task(db_path, wo_a, p_a, "already on the reviewed work order", _DUP_CRITERION)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        attached = _insert_gap_work_orders(
+            conn,
+            gaps=[_gap_carrying(_DUP_CRITERION, "reworded for the attach branch")],
+            project_id=p_a,
+            milestone_id=m_a,
+            reviewed_work_order_id=wo_a,
+            reviewed_wo_title="Reviewed",
+            reviewed_wo_sequence=1,
+            reviewed_wo_incomplete=True,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    # MERGE BRANCH: a prior spawn exists, so the second pass merges into it.
+    p_b, m_b, wo_b = _seed_project(db_path)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        _insert_gap_work_orders(
+            conn,
+            gaps=[_gap_carrying(_DUP_CRITERION, "the first wording")],
+            project_id=p_b,
+            milestone_id=m_b,
+            reviewed_work_order_id=wo_b,
+            reviewed_wo_title="Reviewed",
+            reviewed_wo_sequence=1,
+        )
+        merged_run = _insert_gap_work_orders(
+            conn,
+            gaps=[_gap_carrying(_DUP_CRITERION, "the second wording")],
+            project_id=p_b,
+            milestone_id=m_b,
+            reviewed_work_order_id=wo_b,
+            reviewed_wo_title="Reviewed",
+            reviewed_wo_sequence=1,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    a_rec = next((r for r in attached if r.get("attached_to_reviewed")), None)
+    m_rec = next((r for r in merged_run if r.get("merged_into_existing")), None)
+    assert a_rec is not None, f"the attach branch was not reached: {attached}"
+    assert m_rec is not None, f"the merge branch was not reached: {merged_run}"
+
+    a_keys = {k for k in reporting if a_rec.get(k)}
+    m_keys = {k for k in reporting if m_rec.get(k)}
+    assert a_keys == m_keys, (
+        f"the attach record reports {sorted(a_keys)} and the merge record reports "
+        f"{sorted(m_keys)} for the same finding. One caller of _attach_gap_tasks carries "
+        "something the other drops, which has now happened four times in this pair"
+    )
+    assert "admission_unknowns" in a_keys, (
+        "neither branch reported the shared criterion, so this test would pass with the "
+        f"observation dropped on BOTH sides: attach={a_rec} merge={m_rec}"
+    )

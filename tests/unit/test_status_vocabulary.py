@@ -1006,3 +1006,13 @@ def test_the_mirror_decision_is_recorded_in_the_module_docstring():
         "decision, but no such test exists in this module -- the decision names a check "
         "that cannot run, which is the failure mode it was written to prevent."
     )
+
+    # AND THE INSTRUMENT IS RUN, because substring containment cannot read negation.
+    # The independent review of cc54ab90 made the point: a docstring edited to say "we
+    # REMOVED test_the_guard_covers_every_writer_not_a_named_pair and no longer discover
+    # writers" satisfies `instrument in doc` exactly as well as the affirmative sentence,
+    # so the assertions above hold a STRING and not a claim. Calling the guard is what
+    # makes the decision's own grounds executable: if the discovering check is broken,
+    # weakened, or no longer covers every writer, the decision that rests on it fails here
+    # too rather than continuing to read as true.
+    globals()[instrument]()
