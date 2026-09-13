@@ -765,3 +765,476 @@ def test_both_gap_paths_compose_the_declared_reason(authority):
             f"the row filed under {wo_id[:8]} carries no declared-reason marker, so the "
             "ceiling counts it as a stub and the reviewer's reason is unauditable"
         )
+
+
+# ── The criterion is the identity; the title is a label for it (WO f769de79) ──
+
+
+_DUP_CRITERION = (
+    "TEST-CHECK: tests/unit/test_verify_gaps.py"
+    "::test_the_criterion_comparison_is_what_raises_the_question"
+)
+_OTHER_CRITERION = (
+    "TEST-CHECK: tests/unit/test_verify_gaps.py"
+    "::test_admission_is_given_the_criteria_not_only_the_titles"
+)
+
+
+def _open_task(db_path: Path, work_order_id: str, project_id: str, title: str, criterion: str):
+    """Put one OPEN task carrying `criterion` on the work order."""
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute(
+            "INSERT INTO business_tasks"
+            " (task_id, work_order_id, project_id, title, description,"
+            "  acceptance_criteria, status, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, '', ?, 'pending', ?, ?)",
+            (str(uuid.uuid4()), work_order_id, project_id, title, criterion, _NOW, _NOW),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _criteria_on(db_path: Path, work_order_id: str) -> list[str]:
+    conn = sqlite3.connect(str(db_path))
+    try:
+        return [
+            r[0] or ""
+            for r in conn.execute(
+                "SELECT acceptance_criteria FROM business_tasks WHERE work_order_id = ?",
+                (work_order_id,),
+            ).fetchall()
+        ]
+    finally:
+        conn.close()
+
+
+def test_admission_is_given_the_criteria_not_only_the_titles(authority):
+    """The decision cannot be made from evidence the decider was never handed.
+
+    `admit_task` was given the candidate's `acceptance_criteria` and the existing TITLES,
+    so it could compare a new title against old titles and could not compare a new
+    criterion against old criteria. This drives the parameter rather than reading the
+    signature: one candidate, two calls, and the only difference is whether the criteria
+    set holds its criterion -- so the parameter is what changed the answer.
+
+    The caller half is driven too, through `_attach_gap_tasks`, because a parameter
+    accepted by the callee and never populated by the caller is a signature that looks like
+    a fact and carries nothing -- the shape this work order's siblings keep finding.
+    """
+    from core.work_orders.admission import admit_task
+    from core.work_orders.verify_gaps import _attach_gap_tasks
+
+    candidate = {
+        "title": "a title nothing else on the work order uses",
+        "acceptance_criteria": _DUP_CRITERION,
+    }
+
+    free = admit_task(**candidate, existing_titles=(), existing_criteria=())
+    assert free["admitted"], f"a brand-new task was refused with nothing filed: {free}"
+    assert not free["unknowns"], f"nothing is filed, so nothing can be shared: {free}"
+
+    held = admit_task(**candidate, existing_titles=(), existing_criteria=(_DUP_CRITERION,))
+    assert held["admitted"], (
+        "a shared criterion REFUSED the task. It reports unknown and admits: a restatement "
+        "and two changes one check covers are indistinguishable here, and refusing would "
+        "drop the second kind"
+    )
+    assert held["unknowns"], (
+        "admit_task was handed a criterion already carried and said nothing, so the "
+        "parameter is accepted and not consulted"
+    )
+    assert any("criterion" in u["reason"] for u in held["unknowns"]), held
+
+    # THE CALLER POPULATES IT. Seed one open task, attach a differently-titled task with
+    # the same criterion, and the observation can only have come from the caller building
+    # the set -- nothing else in this path carries criteria.
+    db_path = authority
+    project_id, _milestone_id, reviewed_id = _seed_project(db_path)
+    _open_task(db_path, reviewed_id, project_id, "the task that already holds it", _DUP_CRITERION)
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        result = _attach_gap_tasks(
+            conn,
+            work_order_id=reviewed_id,
+            project_id=project_id,
+            tasks=[dict(candidate, description="a reworded restatement")],
+            now=_NOW,
+            gap_key="k",
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    assert result["noted"], (
+        "the attach path filed a second task for a criterion already open on the work "
+        f"order and observed nothing, so the caller is not passing the criteria: {result}"
+    )
+
+
+def test_a_shared_criterion_is_reported_rather_than_dropped(authority):
+    """Admitted is not the end of it. The observation has to reach the verdict.
+
+    Measured on the live authority: 4 groups covering 9 OPEN tasks share a work order and
+    an acceptance criterion, and in all 35 same-gap-key duplicate groups the titles DIFFER
+    -- so title dedup caught none of them.
+
+    An unknown that stops inside the lane is a lane whose only effect is on a path nobody
+    reaches, which is the mechanism-with-no-caller shape three work orders in this
+    milestone were opened for. So this asserts BOTH halves: the task IS filed, because
+    refusing would drop the legitimate case, AND the observation comes back out.
+    """
+    from core.work_orders.verify_gaps import _attach_gap_tasks
+
+    db_path = authority
+    project_id, _milestone_id, reviewed_id = _seed_project(db_path)
+    _open_task(db_path, reviewed_id, project_id, "the original wording", _DUP_CRITERION)
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        result = _attach_gap_tasks(
+            conn,
+            work_order_id=reviewed_id,
+            project_id=project_id,
+            tasks=[
+                {
+                    "title": "the same finding, reworded by a later grader",
+                    "description": "restatement",
+                    "acceptance_criteria": _DUP_CRITERION,
+                }
+            ],
+            now=_NOW,
+            gap_key="k",
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    assert result["added"] == 1, f"the shared criterion refused the task: {result}"
+    assert result["noted"], (
+        "a second task carrying an open criterion was filed with no observation, so one "
+        "check run will mark both done and nothing said so"
+    )
+    reasons = " ".join(u["reason"] for n in result["noted"] for u in n["unknowns"])
+    assert "criterion" in reasons, reasons
+    assert "reported rather than decided" in reasons, (
+        "the observation does not say it is an observation, so a reader cannot tell a "
+        f"question from a verdict: {reasons}"
+    )
+
+
+def test_the_criterion_comparison_is_what_raises_the_question(authority):
+    """Which field did the observing -- asserted, not assumed.
+
+    The Herald acts on title OR criterion, so a test that only shows "something was said
+    about the second task" is satisfied by the title check that was already there. This
+    separates them: both candidates below carry titles that appear nowhere on the work
+    order, so the title lane cannot fire, and the ONLY difference between the quiet one and
+    the observed one is whether its criterion is already open.
+
+    That is what makes this falsifiable: drop `existing_criteria` from the Herald and the
+    observed case goes quiet, turning this red while a title-only test stays green.
+    """
+    from core.work_orders.verify_gaps import _attach_gap_tasks
+
+    db_path = authority
+    project_id, _milestone_id, reviewed_id = _seed_project(db_path)
+    _open_task(db_path, reviewed_id, project_id, "already here", _DUP_CRITERION)
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        result = _attach_gap_tasks(
+            conn,
+            work_order_id=reviewed_id,
+            project_id=project_id,
+            tasks=[
+                {
+                    "title": "distinct wording, distinct claim",
+                    "description": "genuinely new work",
+                    "acceptance_criteria": _OTHER_CRITERION,
+                },
+                {
+                    "title": "distinct wording, same claim",
+                    "description": "a restatement",
+                    "acceptance_criteria": _DUP_CRITERION,
+                },
+            ],
+            now=_NOW,
+            gap_key="k",
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    assert result["added"] == 2, f"both are admitted; only one is remarked on: {result}"
+    observed = {n["title"] for n in result["noted"]}
+    assert observed == {"distinct wording, same claim"}, (
+        "the wrong candidate was flagged, so the comparison is not keyed on the criterion: "
+        f"{observed}"
+    )
+
+    # AND TWO REWORDINGS IN ONE BATCH. A set built only from what was already in the
+    # database says nothing about what this very loop just wrote -- the condition
+    # surviving inside its own fix, one iteration apart.
+    project_b, _m_b, wo_b = _seed_project(db_path)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        batch = _attach_gap_tasks(
+            conn,
+            work_order_id=wo_b,
+            project_id=project_b,
+            tasks=[
+                {
+                    "title": "first wording",
+                    "description": "x",
+                    "acceptance_criteria": _OTHER_CRITERION,
+                },
+                {
+                    "title": "second wording",
+                    "description": "x",
+                    "acceptance_criteria": _OTHER_CRITERION,
+                },
+            ],
+            now=_NOW,
+            gap_key="k",
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    assert [n["title"] for n in batch["noted"]] == ["second wording"], (
+        "a criterion written by this loop was not compared against, so two rewordings "
+        f"filed in one pass with nothing said: {batch}"
+    )
+    assert len(_criteria_on(db_path, wo_b)) == 2, "both are filed; that is the point"
+
+
+def test_no_open_task_shares_a_criterion_with_a_sibling(authority):
+    """The count of how much of this is already filed.
+
+    The Herald reports on NEW tasks. This is the standing count of what is already in the
+    authority, and it belongs beside the other uncheckable count because it is the same
+    failure with the opposite cause: a task with no criterion is uncheckable because
+    nothing names a check; a task whose criterion is also a sibling's is uncheckable
+    because one run marks both done and neither can fail alone.
+
+    Driven on a seeded authority rather than asserted against the operator's live database
+    -- a test that reads live state passes or fails on whose machine it runs, and in CI it
+    would be skipped or green for no reason. The live number is held by this work order's
+    originating symptom, which close re-runs.
+    """
+    from core.gates.task_criteria_baseline import measure
+
+    db_path = authority
+    project_id, _milestone_id, reviewed_id = _seed_project(db_path)
+
+    clean = measure(db_path)
+    assert clean["status"] == "computed", clean
+    assert clean["shared_criterion"] == 0, clean
+
+    _open_task(db_path, reviewed_id, project_id, "one wording", _DUP_CRITERION)
+    _open_task(db_path, reviewed_id, project_id, "another wording", _DUP_CRITERION)
+
+    both = measure(db_path)
+    assert both["shared_criterion"] == 2, (
+        "two open tasks on one work order carry one criterion and the count did not see "
+        f"them, so the condition is unreported: {both}"
+    )
+
+    # SCOPED TO ONE WORK ORDER. Two work orders may name the same node without either
+    # being a duplicate of the other -- they are different work verified the same way.
+    project_b, _m_b, wo_b = _seed_project(db_path)
+    _open_task(db_path, wo_b, project_b, "elsewhere entirely", _DUP_CRITERION)
+    assert measure(db_path)["shared_criterion"] == 2, (
+        "a criterion shared ACROSS work orders was counted, so the number reports "
+        "unrelated work orders as duplicating each other"
+    )
+
+    # A criterion shared with a task that is DONE is not outstanding duplicate work, and
+    # counting it would report a condition nobody can act on.
+    project_c, _m_c, wo_c = _seed_project(db_path)
+    _open_task(db_path, wo_c, project_c, "still open", _DUP_CRITERION)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute(
+            "INSERT INTO business_tasks"
+            " (task_id, work_order_id, project_id, title, description,"
+            "  acceptance_criteria, status, created_at, updated_at)"
+            " VALUES (?, ?, ?, 'finished', '', ?, 'complete', ?, ?)",
+            (str(uuid.uuid4()), wo_c, project_c, _DUP_CRITERION, _NOW, _NOW),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    assert measure(db_path)["shared_criterion"] == 2, (
+        "a criterion shared with a COMPLETE task was counted as a duplicate, so the "
+        "number reports finished work as outstanding"
+    )
+
+
+def _gap_carrying(criterion: str, title: str) -> dict:
+    return {
+        "title": "a class with a tracker",
+        "description": "raised by review",
+        "category": "durability",
+        "type": "infrastructure",
+        "tasks": [{"title": title, "description": "x", "acceptance_criteria": criterion}],
+    }
+
+
+def test_the_merge_path_carries_the_observation_too(authority):
+    """The sibling call site dropped it, for the fourth time.
+
+    `_attach_gap_tasks` returns `noted`. The attach-onto-the-reviewed-work-order call site
+    folds it into the record as `admission_unknowns`; the merge-into-an-existing-work-order
+    call site read only `unfiled`, so on that branch a Herald observation was computed and
+    silently dropped. Found by the independent review of cc54ab90 -- in the change that
+    added the key, directly beneath a comment recording the same lesson from last time.
+
+    Driven through `_insert_gap_work_orders`, not through `_attach_gap_tasks`, because the
+    callee returned the value correctly both times. The defect is in which keys a CALL SITE
+    reads, and only the real dispatch reaches the branch that chooses between them.
+    """
+    from core.work_orders.verify_gaps import _insert_gap_work_orders
+
+    db_path = authority
+    project_id, milestone_id, reviewed_id = _seed_project(db_path)
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        # Pass one spawns the sibling tracker and files the criterion on it.
+        _insert_gap_work_orders(
+            conn,
+            gaps=[_gap_carrying(_DUP_CRITERION, "the first wording")],
+            project_id=project_id,
+            milestone_id=milestone_id,
+            reviewed_work_order_id=reviewed_id,
+            reviewed_wo_title="Reviewed",
+            reviewed_wo_sequence=1,
+        )
+        # Pass two finds that tracker and MERGES into it -- the branch under test --
+        # carrying a differently-titled task whose criterion is already filed there.
+        second = _insert_gap_work_orders(
+            conn,
+            gaps=[_gap_carrying(_DUP_CRITERION, "the second wording")],
+            project_id=project_id,
+            milestone_id=milestone_id,
+            reviewed_work_order_id=reviewed_id,
+            reviewed_wo_title="Reviewed",
+            reviewed_wo_sequence=1,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    merged = [r for r in second if r.get("merged_into_existing")]
+    assert merged, f"pass two did not take the merge branch, so this proves nothing: {second}"
+    assert any(r.get("admission_unknowns") for r in merged), (
+        "the merge call site filed a task carrying a criterion already on that work order "
+        "and reported nothing. The callee computed the observation and the caller dropped "
+        f"it, which is the whole defect: {merged}"
+    )
+
+
+def test_both_call_sites_report_the_same_keys(authority):
+    """Two callers of one function, diverged four times now.
+
+    Twice on event emission, once on the acceptance criterion, once on `noted`. Each was
+    found separately, after shipping, by someone reading the diff.
+
+    COMPARED TO EACH OTHER, NOT TO A NAMED LIST -- and the first version of this test did
+    not do that, despite saying so. It built both key sets by iterating a hardcoded
+    `{"unfiled_findings", "admission_unknowns"}`, so it could only ever see the two keys
+    that had already diverged. The independent review of 8a2d68a1 disproved the docstring
+    empirically: it added a fifth key to the merge record alone and this test passed. The
+    claim "a fifth key is covered without an edit" was false as written.
+
+    WHAT DISTINGUISHES A FINDING KEY, without naming any. Every key that carries a finding
+    holds a LIST of them; every other key on these records is a string, a bool or an int
+    (`work_order_id`, `gap_key`, `attached_to_reviewed`, `tasks_added`). So the sets are
+    built from the records' own items by VALUE SHAPE, and a fifth list-valued key added to
+    one call site is caught with no edit here -- which is what the docstring claimed and
+    now describes.
+
+    Empty lists fall out on both sides, which matters: `_insert_gap_work_orders` runs
+    `record.setdefault("unfiled_findings", [])` over every record, so membership would be
+    universally true and prove nothing. Truthiness is what keeps that from masking a real
+    divergence.
+
+    Driven rather than read out of the source, because a key read into a branch nothing
+    reaches would satisfy a source comparison exactly as well as a live one.
+    """
+    from core.work_orders.verify_gaps import _insert_gap_work_orders
+
+    def finding_keys(record: dict) -> set[str]:
+        """Keys carrying findings: the list-valued ones, by shape and not by name."""
+        return {k for k, v in record.items() if isinstance(v, list) and v}
+
+    db_path = authority
+
+    # ATTACH BRANCH: the reviewed work order is open and incomplete, so the gap is its own
+    # unfinished work and lands as a task on it. Seed the criterion first so the Herald has
+    # something to observe.
+    p_a, m_a, wo_a = _seed_project(db_path)
+    _open_task(db_path, wo_a, p_a, "already on the reviewed work order", _DUP_CRITERION)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        attached = _insert_gap_work_orders(
+            conn,
+            gaps=[_gap_carrying(_DUP_CRITERION, "reworded for the attach branch")],
+            project_id=p_a,
+            milestone_id=m_a,
+            reviewed_work_order_id=wo_a,
+            reviewed_wo_title="Reviewed",
+            reviewed_wo_sequence=1,
+            reviewed_wo_incomplete=True,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    # MERGE BRANCH: a prior spawn exists, so the second pass merges into it.
+    p_b, m_b, wo_b = _seed_project(db_path)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        _insert_gap_work_orders(
+            conn,
+            gaps=[_gap_carrying(_DUP_CRITERION, "the first wording")],
+            project_id=p_b,
+            milestone_id=m_b,
+            reviewed_work_order_id=wo_b,
+            reviewed_wo_title="Reviewed",
+            reviewed_wo_sequence=1,
+        )
+        merged_run = _insert_gap_work_orders(
+            conn,
+            gaps=[_gap_carrying(_DUP_CRITERION, "the second wording")],
+            project_id=p_b,
+            milestone_id=m_b,
+            reviewed_work_order_id=wo_b,
+            reviewed_wo_title="Reviewed",
+            reviewed_wo_sequence=1,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    a_rec = next((r for r in attached if r.get("attached_to_reviewed")), None)
+    m_rec = next((r for r in merged_run if r.get("merged_into_existing")), None)
+    assert a_rec is not None, f"the attach branch was not reached: {attached}"
+    assert m_rec is not None, f"the merge branch was not reached: {merged_run}"
+
+    a_keys = finding_keys(a_rec)
+    m_keys = finding_keys(m_rec)
+    assert a_keys == m_keys, (
+        f"the attach record reports {sorted(a_keys)} and the merge record reports "
+        f"{sorted(m_keys)} for the same finding. One caller of _attach_gap_tasks carries "
+        "something the other drops, which has now happened four times in this pair"
+    )
+    assert "admission_unknowns" in a_keys, (
+        "neither branch reported the shared criterion, so this test would pass with the "
+        f"observation dropped on BOTH sides: attach={a_rec} merge={m_rec}"
+    )

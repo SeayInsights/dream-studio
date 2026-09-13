@@ -219,7 +219,50 @@ def _surveyor(
     }, None
 
 
-def _herald(title: str, existing_titles: Iterable[str]) -> dict[str, Any] | None:
+def _herald(
+    title: str,
+    existing_titles: Iterable[str],
+    acceptance_criteria: str | None = None,
+    existing_criteria: Iterable[str] = (),
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Is this finding already filed on this work order? Returns ``(refusal, unknown)``.
+
+    THE TITLE WAS THE WRONG FIELD TO ASK ALONE. This lane's question has always been
+    "already filed?"; it answered it from free text, which a grader rewords between verify
+    rounds without meaning anything by it. Measured on the live authority: 4 groups
+    covering 9 OPEN tasks share a work order and an acceptance criterion, and in every one
+    of the 35 same-key duplicate groups the titles DIFFER -- so title dedup caught none of
+    them. Two are confirmed restatements of one item, filed on WO 1364e05e and WO 66069823
+    as "Add the instrument assertion to the docstring test" and "Add the instrument
+    assertion to the MIRROR-DECISION docstring test".
+
+    A SHARED CRITERION REPORTS UNKNOWN AND DOES NOT REFUSE, and the first cut of this lane
+    had it as a refusal. What changed it was a counter-example in the same measurement it
+    was built from. WO 20796691 carries "Fold the producibility column into the
+    measured-overlap table" and "Add the absence assertion the node was named for" under
+    one node: the first edits the docstring, the second strengthens the assertion that
+    reads it, and the node only passes once BOTH are done. That is two genuine pieces of
+    work one check legitimately covers, and a refusal would have called it a duplicate.
+
+    So the two cases are indistinguishable from here. A restatement and a
+    one-node-two-changes pair look identical in the fields this lane can see, and the
+    difference is whether the check actually exercises both -- which nothing at admission
+    time knows. `_surveyor` already had this shape for the boundary it cannot resolve, and
+    the module docstring already says why: a decision made on evidence the reviewer does
+    not have is a guess wearing a verdict's clothes. Reported, and reported is not
+    admitted-quietly -- the caller surfaces it, which is what creates the pressure to
+    either distinguish the criteria or merge the tasks.
+
+    WHY NOT THE GAP KEY, which was the obvious candidate. The gap key names a CATEGORY, not
+    an item: `advisory::add-missing-adversarial-tests-for-durable-reachable-failure-modes`
+    legitimately covers nine different functions. Deduping there would drop real work. The
+    criterion is the level at which two tasks are plausibly the same claim -- plausibly,
+    which is why this reports rather than decides.
+
+    Only a criterion something can RUN is compared. A declared-reason task carries no
+    criterion, and treating two absent criteria as equal would flag every second declared
+    task on a work order -- a report about a shared blank, which is no signal at all.
+    """
     existing = {_normalised(t) for t in existing_titles}
     if _normalised(title) in existing:
         return {
@@ -230,8 +273,36 @@ def _herald(title: str, existing_titles: Iterable[str]) -> dict[str, Any] | None
                 " second row for one finding, and the count of open work stops meaning"
                 " anything"
             ),
-        }
-    return None
+        }, None
+
+    if has_executable_criterion(acceptance_criteria):
+        mine = _normalised(acceptance_criteria or "")
+        already = {_normalised(c or "") for c in existing_criteria if has_executable_criterion(c)}
+        if mine in already:
+            return None, {
+                "seat": _HERALD,
+                "lane": "a-finding-already-filed",
+                # TWO KINDS OF UNKNOWN, AND ONLY ONE IS WORTH INTERRUPTING SOMEONE WITH.
+                # The Surveyor's unknown means "I could not look" -- it fires wherever no
+                # boundary is declared, which is 155 of 175 open work orders, so surfacing
+                # it on every filing would be noise an operator learns to scroll past.
+                # This one means "I looked, and here is the specific thing I found." A
+                # caller that wants to print unknowns can tell them apart by this flag
+                # instead of by matching a seat name, which would bind the surface to the
+                # roster.
+                "observed": True,
+                "reason": (
+                    "an open task on this work order already carries this exact acceptance"
+                    f" criterion ({str(acceptance_criteria or '').strip()[:120]}). One check"
+                    " run will mark both done, so neither can fail independently of the"
+                    " other. That is correct when the check genuinely exercises both"
+                    " changes and wrong when this is the earlier finding reworded -- and"
+                    " which one it is cannot be told from a title and a criterion, so it is"
+                    " reported rather than decided. Confirm the check covers both, or give"
+                    " this one a criterion that distinguishes it"
+                ),
+            }
+    return None, None
 
 
 def admit_task(
@@ -241,6 +312,7 @@ def admit_task(
     why: str | None = None,
     work_order_description: str = "",
     existing_titles: Iterable[str] = (),
+    existing_criteria: Iterable[str] = (),
     target_paths: Iterable[str] = (),
 ) -> dict[str, Any]:
     """Decide whether one proposed task may be filed. Never files, never deletes.
@@ -252,22 +324,28 @@ def admit_task(
     A lane that reports UNKNOWN does not refuse. That is not softness: an admission
     decision made on evidence the reviewer does not have is a guess wearing a verdict's
     clothes, and the unknown is returned so the caller can say so.
+
+    `existing_criteria` carries the acceptance criteria of the work order's OPEN tasks.
+    The Herald was handed the candidate's criterion and the existing TITLES, so it could
+    compare a new title against old titles and could not compare a new criterion against
+    old criteria -- the comparison that spots a possible restatement. Defaults to empty so
+    every existing caller keeps its current behaviour rather than silently gaining a
+    finding it was never given the evidence for.
     """
     refusals: list[dict[str, Any]] = []
     unknowns: list[dict[str, Any]] = []
 
-    for finding in (
-        _warden(acceptance_criteria, why),
-        _herald(title, existing_titles),
-    ):
-        if finding:
-            refusals.append(finding)
+    if warden := _warden(acceptance_criteria, why):
+        refusals.append(warden)
 
-    refusal, unknown = _surveyor(target_paths, work_order_description)
-    if refusal:
-        refusals.append(refusal)
-    if unknown:
-        unknowns.append(unknown)
+    for refusal, unknown in (
+        _herald(title, existing_titles, acceptance_criteria, existing_criteria),
+        _surveyor(target_paths, work_order_description),
+    ):
+        if refusal:
+            refusals.append(refusal)
+        if unknown:
+            unknowns.append(unknown)
 
     return {"admitted": not refusals, "refusals": refusals, "unknowns": unknowns}
 

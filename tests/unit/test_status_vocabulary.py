@@ -9,6 +9,17 @@ PRESENT found 459 rows the substrate could not express:
     business_tasks.done              27   no task.completed event on any of them
     business_tasks.open              10   only 1 of 10 had a task.created event
 
+WRITER-COUNTS: total=12 routed=10
+
+The authoritative figures for the synchronous-mirror decision, in the same declared form
+`core/work_orders/task_status.py` carries. `test_both_records_state_the_same_writer_counts`
+parses this line out of both records and holds them against what the finder discovers, so
+the two records cannot disagree with each other or with the code. It replaced a scan of
+prose that an independent review defeated twice: once by putting a wrong number further
+than eighty characters from the word "site", and once by writing "re-measured" in a
+sentence asserting a CURRENT count, which the historical exemption silenced. A number a
+check has to go looking for in prose is a number the prose can hide.
+
 THE CREATION-EVENT OVERLAP IS THE NUMBER THAT SEPARATES URGENT FROM LATENT, and the first
 pass of this work order did not compute it -- an independent review asked for it by status
 rather than in aggregate. Measured on the live authority 2026-09-11:
@@ -732,6 +743,52 @@ def test_the_docstring_table_records_the_measured_overlap():
     assert any(int(m) > 0 for _, _, m in rows), "no row records rows that are MISSING one"
 
 
+def _projected_status_write_sites(root: Path | None = None) -> list[str]:
+    """EVERY site writing a status into a projected table, routed or not.
+
+    `_projected_status_writers` reports only OFFENDERS -- sites spelling a literal -- so it
+    is empty when the tree is clean and cannot say how many writers there are. The prose
+    records state a COUNT, and a count checked against nothing is a transcription. This
+    discovers the sites the same way, from each projection's declared `target_tables`, and
+    returns all of them so the docstrings can be held against a measurement.
+    """
+    import re
+
+    from core.projections.task_projection import TaskProjection
+    from core.projections.work_order_projection import WorkOrderProjection
+
+    tables = set(WorkOrderProjection.target_tables) | set(TaskProjection.target_tables)
+    sites: list[str] = []
+    base = root or _REPO_ROOT
+    for path in base.rglob("*.py"):
+        rel = path.relative_to(base).as_posix()
+        if rel.startswith(("dist/", ".claude/", "tests/")) or "worktrees" in rel:
+            continue
+        if not rel.startswith(("core/", "interfaces/", "runtime/", "control/", "integrations/")):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            continue
+        for table in tables:
+            # The slice bounds are BOUND TO NAMES rather than written inline. black formats
+            # `text[m.start() :]` with a space before the colon when the bound is an
+            # expression, and flake8 reports that as E203; the two tools cannot both be
+            # satisfied in one line, and this repo does not extend-ignore E203.
+            for match in re.finditer(rf"UPDATE {table}\b", text):
+                begin = match.start()
+                window = text[begin:][:400]
+                line_no = text[:begin].count(chr(10)) + 1
+                if re.search(r"SET[^;]{0,200}?\bstatus\s*=", window):
+                    sites.append(f"{rel}:{line_no}:UPDATE")
+            for match in re.finditer(rf"INSERT INTO {table}\b", text):
+                begin = match.start()
+                line_no = text[:begin].count(chr(10)) + 1
+                if "status" in text[begin:][:600]:
+                    sites.append(f"{rel}:{line_no}:INSERT")
+    return sorted(set(sites))
+
+
 def _projected_status_writers(root: Path | None = None) -> list[str]:
     """Every production site that writes a status into a projected table, DISCOVERED.
 
@@ -787,12 +844,26 @@ def _projected_status_writers(root: Path | None = None) -> list[str]:
 def test_no_production_writer_spells_a_projected_status():
     """THE OUTCOME: no production site names a status the vocabulary owns.
 
-    Seven sites wrote a literal into `business_work_orders` / `business_tasks` as a
-    synchronous read-model mirror -- `mutations.py` three times, `start_main.py`,
-    `close_main.py`, and both drain sites in `verify_gaps.py`. Each now takes its value
-    from `status_for(<the event this site emits>)`, so the row and the event cannot
-    disagree about the word and a renamed status is a KeyError at the write rather than
-    silent drift.
+    THE COUNT, RE-MEASURED, AND THIS FILE HELD THE OLD ONE. "Seven" was an independent
+    review's list and it counted UPDATE sites only. Measured across core/, interfaces/,
+    runtime/, control/ and integrations/ on 2026-09-13: TWELVE sites write a status into a
+    projected table -- 7 via UPDATE and 5 via INSERT. The module docstring of
+    `core/work_orders/task_status.py` was corrected and this docstring was not, so the
+    test asserting the outcome still described a smaller problem than the one it checks.
+    A later review caught the split; the correction belongs in both places or the next
+    reader learns the wrong number from whichever they open.
+
+    TEN of the twelve take their value from `status_for(<the event this site emits>)`, so
+    the row and the event cannot disagree about the word and a renamed status is a
+    KeyError at the write rather than silent drift. The other two are in
+    `interfaces/cli/commands/prove.py`, which binds status as a parameter in a DISPOSABLE
+    scratch authority it creates and tears down, and carries its own recorded exemption
+    for exactly that reason.
+
+    Note what this docstring does NOT claim any more: that the routed sites are the UPDATE
+    sites. The INSERT writers are routed too, which is the distinction the earlier wording
+    lost by naming only `mutations.py`, `start_main.py`, `close_main.py` and the two drain
+    sites in `verify_gaps.py`.
     """
     offenders = _projected_status_writers()
     assert not offenders, (
@@ -807,8 +878,9 @@ def test_the_guard_covers_every_writer_not_a_named_pair():
     """THE MECHANISM: the guard DISCOVERS its subjects rather than naming them.
 
     The previous guard read two projection files by name. It asserted those two took
-    their statuses from the vocabulary, and passed while seven other production sites
-    drifted -- found by an independent review, not by the suite. A guard that names its
+    their statuses from the vocabulary, and passed while the other ten production sites
+    drifted -- found by an independent review, not by the suite. Ten, not seven: the
+    original figure counted UPDATE sites only and missed five INSERT writers. A guard that names its
     subjects can only ever catch the subjects someone remembered, which is why this test
     is about how the finder is built and not about today's result.
     """
@@ -831,7 +903,7 @@ def test_the_guard_covers_every_writer_not_a_named_pair():
     )
     assert "rglob" in finder, (
         "the finder walks a fixed list of files rather than the tree, which is exactly "
-        "how seven writers stayed invisible to a green suite"
+        "how ten writers stayed invisible to a green suite"
     )
     for statement in ("UPDATE {table}", "INSERT INTO {table}"):
         assert statement in finder, (
@@ -961,6 +1033,15 @@ def test_the_mirror_decision_is_recorded_in_the_module_docstring():
     the file, because the claim is that the decision is part of what the module says
     about itself. A comment anywhere in the file would satisfy a grep and would be
     exactly the arrangement this test exists to end.
+
+    AND IT MUST NAME ITS INSTRUMENT. A decision that says "the mirror stays, held by a
+    check" is only as good as the check, and a reader who cannot find the check cannot
+    tell whether the decision is still enforced or merely still written down. The
+    docstring's own argument rests on the guard DISCOVERING writers rather than listing
+    them -- that is the sentence that distinguishes this arrangement from the named-pair
+    guard it replaced, which passed while the other sites drifted. So the name of the
+    discovering check is asserted here: delete the sentence that names it and the
+    decision loses the thing that makes it a decision rather than a hope.
     """
     import ast
 
@@ -973,7 +1054,7 @@ def test_the_mirror_decision_is_recorded_in_the_module_docstring():
     for marker in ("SYNCHRONOUS MIRROR", "CHOSEN"):
         assert marker in doc, (
             f"the module docstring no longer records the mirror decision ({marker!r} is "
-            "missing). Seven production sites write a projected status beside the event "
+            "missing). Twelve production sites write a projected status beside the event "
             "they emit, and this is the only record of why that is deliberate."
         )
     # The rejected alternative matters as much as the choice: without it a reader cannot
@@ -981,3 +1062,111 @@ def test_the_mirror_decision_is_recorded_in_the_module_docstring():
     assert (
         "drain" in doc.lower()
     ), "the docstring records the choice but not what it was chosen against"
+
+    # THE INSTRUMENT, BY NAME. The guard has to exist as well as be named, or this
+    # asserts the presence of a string rather than the presence of a check.
+    instrument = "test_the_guard_covers_every_writer_not_a_named_pair"
+    assert instrument in doc, (
+        "the module docstring no longer names the discovering check that holds this "
+        f"decision over every writer ({instrument!r} is missing). The decision's own "
+        "grounds are that the guard DISCOVERS writers from each projection's declared "
+        "target_tables instead of reading a fixed pair by name; without that sentence a "
+        "reader cannot tell the mirror is still supervised."
+    )
+    assert instrument in globals(), (
+        f"the docstring names {instrument!r} as the instrument holding the mirror "
+        "decision, but no such test exists in this module -- the decision names a check "
+        "that cannot run, which is the failure mode it was written to prevent."
+    )
+
+    # AND THE INSTRUMENT IS RUN, because substring containment cannot read negation.
+    # The independent review of cc54ab90 made the point: a docstring edited to say "we
+    # REMOVED test_the_guard_covers_every_writer_not_a_named_pair and no longer discover
+    # writers" satisfies `instrument in doc` exactly as well as the affirmative sentence,
+    # so the assertions above hold a STRING and not a claim. Calling the guard is what
+    # makes the decision's own grounds executable: if the discovering check is broken,
+    # weakened, or no longer covers every writer, the decision that rests on it fails here
+    # too rather than continuing to read as true.
+    globals()[instrument]()
+
+
+def test_both_records_state_the_same_writer_counts():
+    """Two files carry this decision's numbers, and they drifted apart twice.
+
+    The count was re-measured once and restated in `core/work_orders/task_status.py`
+    only, so the test file still said seven. That was corrected here, and the module's
+    OPENING sentence still said seven while its own grounds nine lines below said twelve
+    -- so a round-table verdict could truthfully report that the three prose records
+    disagreed outright. Correcting prose in one of the two places it lives is what
+    produced both rounds.
+
+    SO THE NUMBERS ARE DECLARED, NOT HUNTED FOR IN PROSE. Both records carry one line
+    reading `WRITER-COUNTS: total=N routed=M`, and this parses that line out of each and
+    holds the pair against what the finder discovers.
+
+    THE PROSE SCAN IT REPLACED WAS DEFEATED TWICE, by a reviewer constructing the cases
+    rather than arguing them. It matched a number only within eighty characters of the
+    word "site", so a wrong count placed further away sat in the docstring undetected. And
+    it exempted "historical" mentions by keyword, so a sentence asserting a CURRENT count
+    silenced itself merely by containing "re-measured". Both stayed green with a false
+    number present.
+
+    Widening the window or hardening the keyword list would only move the next
+    counter-example, because the check was guessing which numbers were claims. So it
+    stopped guessing and the records started declaring. Prose may still describe these
+    figures and say what the old ones counted and why they were wrong -- that is what a
+    future reader needs, and it is no longer load-bearing.
+    """
+    import ast
+    import re
+
+    import core.work_orders.task_status as vocab
+
+    module_doc = ast.get_docstring(ast.parse(pathlib.Path(vocab.__file__).read_text("utf-8")))
+    test_src = pathlib.Path(__file__).read_text(encoding="utf-8")
+
+    # THE MEASUREMENT, TAKEN FROM THE FINDER rather than transcribed. `_projected_status_writers`
+    # reports offenders; the routed writers are what the two records count, so the total is
+    # derived from the same discovery the guard uses.
+    sites = _projected_status_write_sites()
+    total = len(sites)
+    assert total >= 10, f"the finder located only {total} writers, so agreement proves little"
+
+    # TWO LEGITIMATE NUMBERS, BOTH DERIVED. The records state a TOTAL (every site writing a
+    # status into a projected table) and a ROUTED count (those taking their value from this
+    # module). They differ by the recorded exemption in `prove.py`, which binds status as a
+    # parameter in a disposable scratch authority it creates and tears down. The first
+    # version of this check allowed only the total and went red on the routed figure --
+    # correctly, because it had no way to tell a second true number from a stale one. Both
+    # come from the finder now, so neither is a transcription.
+    exempt = {s for s in sites if s.startswith("interfaces/cli/commands/prove.py")}
+    routed = total - len(exempt)
+    assert exempt, (
+        "no site carries the prove.py exemption any more, so the routed and total counts "
+        "should be equal -- re-derive both rather than leaving a difference the code no "
+        "longer produces"
+    )
+    declared = re.compile(r"WRITER-COUNTS:\s*total=(\d+)\s+routed=(\d+)")
+
+    def stated(text: str, where: str) -> tuple[int, int]:
+        found = declared.search(text)
+        assert found, (
+            f"{where} carries no WRITER-COUNTS line. Both records must declare the figures "
+            "in one machine-readable form; a count living only in prose is one a check "
+            "cannot hold, which is how this drifted twice"
+        )
+        return int(found.group(1)), int(found.group(2))
+
+    in_module = stated(module_doc or "", "the module docstring")
+    in_tests = stated(test_src, "the test module docstring")
+
+    assert in_module == in_tests, (
+        f"the module declares total={in_module[0]} routed={in_module[1]} and the test file "
+        f"declares total={in_tests[0]} routed={in_tests[1]}. Two files carry this decision "
+        "and a correction landed in one of them, which is how this drifted twice already"
+    )
+    assert in_module == (total, routed), (
+        f"the records declare total={in_module[0]} routed={in_module[1]} but the finder "
+        f"discovers {total} write sites of which {routed} are routed through this module. "
+        "A declared number the code does not produce is still a transcription"
+    )

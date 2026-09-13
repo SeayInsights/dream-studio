@@ -638,6 +638,10 @@ def _admit_or_report(
 
     wo_description = ""
     existing_titles: list[str] = []
+    # THE SAME EVIDENCE THE GAP PATH GETS. A lane wired into one of its two writers holds
+    # for whichever writer someone remembered, which is the shape this milestone keeps
+    # paying for -- and this is the writer an OPERATOR uses by hand.
+    existing_criteria: list[str] = []
     try:
         db_path = resolve_installed_runtime_paths(
             source_root=source_root, dream_studio_home=dream_studio_home
@@ -649,17 +653,23 @@ def _admit_or_report(
                 (work_order_id,),
             ).fetchone()
             wo_description = (row[0] if row else "") or ""
-            existing_titles = [
-                r[0] or ""
-                for r in conn.execute(
-                    "SELECT title FROM business_tasks WHERE work_order_id = ?",
-                    (work_order_id,),
-                ).fetchall()
+            _rows = conn.execute(
+                "SELECT title, acceptance_criteria, status FROM business_tasks"
+                " WHERE work_order_id = ?",
+                (work_order_id,),
+            ).fetchall()
+            existing_titles = [r[0] or "" for r in _rows]
+            # OPEN tasks only: a criterion carried by finished work is not a second claim
+            # on the same check, and flagging it would report closed work as outstanding.
+            existing_criteria = [
+                r[1] or ""
+                for r in _rows
+                if (r[2] or "") in ("pending", "in_progress") and (r[1] or "").strip()
             ]
         finally:
             conn.close()
     except Exception:  # noqa: BLE001 - no context means the lanes that need it stay quiet
-        wo_description, existing_titles = "", []
+        wo_description, existing_titles, existing_criteria = "", [], []
 
     verdict = admit_task(
         title=title,
@@ -667,9 +677,23 @@ def _admit_or_report(
         why=why,
         work_order_description=wo_description,
         existing_titles=existing_titles,
+        existing_criteria=existing_criteria,
         target_paths=paths_named(f"{title} {description}", repo_root=source_root),
     )
     if verdict["admitted"]:
+        # ADMITTED, AND SAID OUT LOUD -- the same trade the declared-reason branch below
+        # makes visible. An unknown that reaches no surface is a lane whose only effect is
+        # on a path nobody reads, and the operator filing this task is the one person who
+        # can say whether the shared check actually covers both pieces of work.
+        #
+        # Only unknowns that OBSERVED something are printed. The Surveyor's boundary
+        # unknown means "I could not look" and fires on 155 of 175 open work orders;
+        # printing it on every filing would be noise, and noise is how a signal gets
+        # switched off. Keyed on the flag rather than on a seat name, so the surface does
+        # not have to be edited when the roster is.
+        for _unknown in verdict["unknowns"]:
+            if _unknown.get("observed"):
+                print(f"{chr(10)}NOTED ({_unknown['lane']}): {_unknown['reason']}")
         return None
     return {
         "ok": False,

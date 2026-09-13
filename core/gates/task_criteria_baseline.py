@@ -77,7 +77,38 @@ def measure(db_path: Path | None = None) -> dict[str, object]:
             " WHERE acceptance_criteria IS NULL OR TRIM(acceptance_criteria) = ''"
         ).fetchall()
     except sqlite3.Error as exc:
+        conn.close()
         return {"status": "unknown", "reason": f"business_tasks could not be read ({exc})"}
+
+    # A SECOND WAY TO BE UNCHECKABLE, and the count above cannot see it (WO f769de79). A
+    # task with no criterion is uncheckable because nothing names a check. A task whose
+    # criterion is ALSO carried by an open sibling is uncheckable for the opposite reason:
+    # a check names it and names the other one too, so one run marks both done and neither
+    # can independently fail.
+    #
+    # MEASURED SEPARATELY, AND ITS FAILURE IS NOT THE GATE'S FAILURE. This began inside the
+    # try above, sharing one except with the count that BLOCKS -- so a supplementary
+    # observation touching columns the primary count never needed could take the whole gate
+    # to UNKNOWN, which fails closed and refuses every push. It did exactly that: the gate's
+    # own test fixture has no `status` or `work_order_id` column, and five tests went red
+    # reporting "business_tasks could not be read". An observation that can veto the
+    # measurement it decorates is worse than no observation, so this one reports None and
+    # the ceiling is decided without it.
+    shared: int | None
+    try:
+        shared = conn.execute(
+            "SELECT COUNT(*) FROM business_tasks t"
+            " WHERE t.status IN ('pending', 'in_progress')"
+            "   AND TRIM(COALESCE(t.acceptance_criteria, '')) != ''"
+            "   AND EXISTS (SELECT 1 FROM business_tasks o"
+            "               WHERE o.work_order_id = t.work_order_id"
+            "                 AND o.task_id != t.task_id"
+            "                 AND o.status IN ('pending', 'in_progress')"
+            "                 AND TRIM(COALESCE(o.acceptance_criteria, ''))"
+            "                     = TRIM(COALESCE(t.acceptance_criteria, '')))"
+        ).fetchone()[0]
+    except sqlite3.Error:
+        shared = None
     finally:
         conn.close()
 
@@ -88,6 +119,11 @@ def measure(db_path: Path | None = None) -> dict[str, object]:
         "without_criterion": len(rows),
         "of_those_declared": declared,
         "uncheckable": len(rows) - declared,
+        # REPORTED, NOT ADDED TO THE CEILING. Folding this into `uncheckable` would move a
+        # blocking baseline under everyone mid-stream and refuse pushes for a number that
+        # just changed meaning. Enforcement for new tasks is the Herald refusing them at
+        # admission; this is the standing count of what is already filed.
+        "shared_criterion": shared,
     }
 
 
@@ -165,9 +201,24 @@ def _render(report: dict[str, object]) -> str:
         f" {report['total_tasks']} task(s)"
         f" (ceiling {report['ceiling']}; {report['of_those_declared']} declared)"
     )
+    # THE OBSERVATION IS PRINTED, NOT ONLY SERIALISED. Deliberately outside the ok
+    # decision -- this is not a ceiling -- but a number that appears only under --json is
+    # a number nobody reads, which is the same mechanism-with-no-reader shape the count
+    # itself exists to surface. Phrased as an observation, and silent at zero so a clean
+    # run stays clean.
+    # `None` means the observation could not be taken, which is not the same as zero and
+    # is not worth a line either -- the gate's own verdict does not rest on it.
+    shared = report.get("shared_criterion") or 0
+    note = (
+        f"\n  NOTED: {shared} open task(s) share an acceptance criterion with a sibling,"
+        " so one check run marks both done. Not counted against the ceiling -- a check"
+        " can legitimately cover two changes -- but worth confirming it covers both."
+        if shared
+        else ""
+    )
     if report.get("ok"):
-        return head + "\n  OK - the count has not risen."
-    return head + "\n  " + str(report.get("reason"))
+        return head + note + "\n  OK - the count has not risen."
+    return head + note + "\n  " + str(report.get("reason"))
 
 
 def main(argv: list[str] | None = None) -> int:
