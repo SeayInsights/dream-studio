@@ -977,3 +977,87 @@ def test_the_reviewers_reviewer_sits_on_the_second_verify_pass(tmp_path, monkeyp
             "a prior verdict carrying findings exists, so the seat must sit and re-check "
             "them rather than abstain"
         )
+
+
+def test_the_table_convenes_against_the_work_orders_own_repo_root(tmp_path):
+    """Where the lanes live and which tree they judge are two questions.
+
+    WO d0658106's own review found verify convening against the Dream Studio repository's
+    branch diff for work orders delivering elsewhere -- lanes selected by relevance to the
+    wrong change set, detectors run over the wrong tree. The first fix passed the work
+    order's root as `repo_root` and broke it the other way: a target repository has no
+    `canonical/review_lanes.yml`, so the whole table came back `unavailable` and
+    `independent_review` refused every verdict. A test caught that within a minute.
+
+    Both directions are held here, because collapsing the two roots fails whichever one
+    loses and neither failure is visible from the other's test.
+    """
+    foreign = tmp_path / "target-repo"
+    (foreign / "src").mkdir(parents=True)
+    (foreign / "src" / "thing.py").write_text("x = 1\n", encoding="utf-8")
+
+    # Registry from THIS repo, change set from the foreign tree.
+    report = convene(run_detectors=False, change_root=foreign)
+
+    assert report["lanes"], (
+        "the table came back empty when the change set lived elsewhere; the registry must "
+        "still be read from the Dream Studio tree"
+    )
+    assert report["status"] == "unchecked", report["status"]
+
+    # And the default still works for a caller reviewing this repository.
+    here = convene(run_detectors=False)
+    assert here["lanes"], "the no-argument path must keep working"
+
+
+def test_a_change_root_without_a_registry_does_not_silence_the_table(tmp_path):
+    """The failure mode the first fix introduced, pinned so it cannot return.
+
+    Passing a registry-less tree as `repo_root` raises, which is correct -- a convening
+    with no lanes is not a clean review. What must not happen is that a caller reaches
+    that state merely by naming which tree holds the diff.
+    """
+    bare = tmp_path / "no-registry"
+    bare.mkdir()
+
+    # As the CHANGE root: fine, lanes still come from here.
+    assert convene(run_detectors=False, change_root=bare)["lanes"]
+
+    # As the REGISTRY root: still raises, because that is a different claim. A MISSING
+    # registry raises FileNotFoundError and a present-but-empty one raises ValueError --
+    # two states the table deliberately keeps apart, and either is the right answer here.
+    with pytest.raises((FileNotFoundError, ValueError)):
+        convene(run_detectors=False, repo_root=bare)
+
+
+def test_a_local_install_is_told_when_its_review_skill_is_behind():
+    """The third copy of the dispatch rule, and the one nobody was checking.
+
+    The rule lives in three places: `canonical/skills/core/modes/review/SKILL.md` is the
+    source, `dist/plugin/.../review/SKILL.md` is the shipped projection a plugin install
+    reads, and `~/.claude/skills/ds-core/modes/review/SKILL.md` is the LOCAL install that
+    this operator's own sessions read. The first two are tested. The third was named by
+    WO d0658106 task 5 and checked by nothing -- so the operator whose rule this is could
+    be running a review skill that never mentions the table.
+
+    SKIPPED WHEN THERE IS NO INSTALL, which is the state of a fresh checkout and of CI.
+    A test that required the file would fail everywhere it does not exist, which is how a
+    check gets deleted rather than fixed. When an install IS present, being behind is a
+    real finding and this says so with the command that repairs it.
+    """
+    installed = Path.home() / ".claude" / "skills" / "ds-core" / "modes" / "review" / "SKILL.md"
+    if not installed.is_file():
+        pytest.skip("no local Dream Studio install in this environment")
+
+    text = installed.read_text(encoding="utf-8", errors="replace")
+    missing = [
+        marker
+        for marker in ("core.gates.round_table", "ASKED OF YOU", "not examined")
+        if marker not in text
+    ]
+    assert not missing, (
+        f"the installed review skill is behind canonical and lacks {missing}. A subagent "
+        "dispatched through this install would invent a checklist instead of convening "
+        "the table, which is the rule WO d0658106 exists to make a property of the "
+        "substrate. Refresh the install with `ds update`."
+    )

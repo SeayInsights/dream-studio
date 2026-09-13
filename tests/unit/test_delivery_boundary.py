@@ -933,12 +933,20 @@ def test_the_end_is_stamped_before_close_grades_anything():
 
     Asserted on source ORDER rather than behaviour because the ordering IS the property;
     a behavioural test would need a full close with graders to observe it.
+
+    THE LOCATOR IS THE STATEMENT, NOT THE LITERAL. This found the mutation by searching
+    for `SET status = 'closed'`, and WO 1364e05e routed that write through the status
+    vocabulary -- the literal became a bound parameter, `source.index` raised
+    ValueError, and the test broke on a change that altered nothing it cares about.
+    Twice now a source-reading guard in this repo has been tied to text the refactor
+    was always going to touch. The UPDATE statement is what this test is locating, so
+    that is what it looks for.
     """
     source = Path("core/work_orders/close_main.py").read_text(encoding="utf-8")
 
     stamp = source.index("record_delivery_boundary_end")
     verify = source.index("_verify_wo(")
-    mutate = source.index("SET status = 'closed'")
+    mutate = source.index("UPDATE business_work_orders")
 
     assert stamp < verify, (
         "the boundary end must be pinned BEFORE the auto-verify, or the verify that gates "
@@ -1767,3 +1775,167 @@ def test_a_range_that_reaches_head_says_so_without_a_warning(db, tmp_path):
     assert described["commits_behind_head"] == 0
     assert described["stops_short_of_head"] is False
     assert "warning" not in described
+
+
+def test_every_terminal_status_keeps_its_pin_not_just_closed(db, tmp_path):
+    """Closed is not the only way for a work order to finish.
+
+    `_work_order_is_reopened` asked `status != "closed"`, so a CANCELLED or DELETED work
+    order read as reopened and had its pinned range widened to HEAD -- handing a grader
+    every later commit for work that had been abandoned. Found by the independent review
+    of this work order's own fix, inside the letter of the task and reported anyway.
+
+    Driven across the whole declared terminal set rather than the two that were wrong, so
+    a status added to TERMINAL_WORK_ORDER_STATUSES tomorrow is covered without editing
+    this test.
+    """
+    from core.work_orders.delivery_boundary import record_delivery_boundary_end
+    from core.work_orders.task_status import TERMINAL_WORK_ORDER_STATUSES
+
+    assert len(TERMINAL_WORK_ORDER_STATUSES) >= 3, TERMINAL_WORK_ORDER_STATUSES
+
+    for status in TERMINAL_WORK_ORDER_STATUSES:
+        repo, start = _git_repo(tmp_path / f"repo-{status}")
+        wo_id = str(uuid.uuid4())
+        _seed_work_order(db, wo_id, status)
+        record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+        record_delivery_boundary_end(wo_id, repo_root=repo, db_path=db)
+        _second_commit(repo)
+
+        expr, why = boundary_commit_range(wo_id, db_path=db)
+
+        assert expr == f"{start}..{start}", (
+            f"a {status!r} work order had its pinned range widened to HEAD. That work is "
+            "finished, so the grader would be handed every commit made after it ended"
+        )
+        assert why is None, f"a {status!r} pin carries no widening caveat: {why!r}"
+
+
+def test_a_non_terminal_status_still_widens(db, tmp_path):
+    """The other direction, without which the fix is just 'always keep the pin'.
+
+    An in-progress or blocked work order can still acquire remediation commits after its
+    end was stamped, which is the whole defect this work order exists for.
+    """
+    from core.work_orders.delivery_boundary import record_delivery_boundary_end
+    from core.work_orders.task_status import (
+        CANONICAL_WORK_ORDER_STATUSES,
+        TERMINAL_WORK_ORDER_STATUSES,
+    )
+
+    open_statuses = [
+        s for s in CANONICAL_WORK_ORDER_STATUSES if s not in TERMINAL_WORK_ORDER_STATUSES
+    ]
+    assert open_statuses, "every declared status is terminal, which cannot be right"
+
+    for status in open_statuses:
+        repo, start = _git_repo(tmp_path / f"open-{status}")
+        wo_id = str(uuid.uuid4())
+        _seed_work_order(db, wo_id, status)
+        record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+        record_delivery_boundary_end(wo_id, repo_root=repo, db_path=db)
+
+        expr, why = boundary_commit_range(wo_id, db_path=db)
+
+        assert expr == f"{start}..HEAD", (
+            f"a {status!r} work order kept its pin, so remediation landing after the stamp "
+            "is invisible to its own re-verification"
+        )
+        assert why and "not closed" in why
+
+
+def test_the_range_report_names_what_it_describes(db, tmp_path):
+    """A range report that does not say which range it is invites the wrong reading.
+
+    _describe_graded_range re-derives the range from the recorded delivery boundary. It
+    does NOT report the commit set choose_locator actually graded, and the two diverge
+    when the locator falls back to message-grep or to authority evidence -- where this
+    then describes a boundary nobody graded. WO 654a54d7's own review named it as worth
+    knowing rather than as a defect, which is exactly the kind of thing that becomes a
+    defect once someone reads the field as authoritative.
+    """
+    from core.work_orders.verify_main import _describe_graded_range
+
+    repo, _ = _git_repo(tmp_path / "named")
+    wo_id = str(uuid.uuid4())
+    _seed_work_order(db, wo_id, "in_progress")
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+
+    described = _describe_graded_range(wo_id, repo_root=repo, db_path=db)
+
+    assert described["describes"] == "recorded_delivery_boundary", (
+        "the range report does not say which range it is, so a reader cannot tell it "
+        "from the commit set that was actually graded"
+    )
+
+
+def test_the_range_report_says_whether_it_is_what_was_graded(db, tmp_path):
+    """Naming the range is not the same as saying it was the one read.
+
+    The first fix for this added a  key -- true, and still leaving a reader to
+    work out whether it matched the commit set the locator chose. WO 654a54d7's review
+    refused that as disclosure standing in for the comparison the task asked for.
+
+    Both directions, because a field that is always True and a field that is always False
+    are equally useless.
+    """
+    from core.work_orders.verify_main import _describe_graded_range
+
+    repo, _ = _git_repo(tmp_path / "graded")
+    wo_id = str(uuid.uuid4())
+    _seed_work_order(db, wo_id, "in_progress")
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+
+    matched = _describe_graded_range(
+        wo_id, repo_root=repo, db_path=db, evidence_layer="recorded_delivery_boundary"
+    )
+    assert matched["range_is_what_was_graded"] is True
+    assert "not_graded_reason" not in matched
+
+    diverged = _describe_graded_range(
+        wo_id, repo_root=repo, db_path=db, evidence_layer="authority_executable_checks"
+    )
+    assert diverged["range_is_what_was_graded"] is False, (
+        "the report claims the boundary range was graded while the locator used "
+        "authority evidence, so its HEAD-distance numbers describe a range nobody read"
+    )
+    assert "authority_executable_checks" in diverged["not_graded_reason"]
+
+
+def test_the_graded_range_reports_the_commit_set_that_was_actually_graded(db, tmp_path):
+    """No distance number is printed for a range nobody read.
+
+    A flag saying "this is not the graded set" printed BESIDE a commits_behind_head and a
+    "may already be fixed" warning measured from that same unread range still puts a
+    meaningless number in front of a reader -- and the warning is the most quotable line
+    in the report. WO 654a54d7's review refused the flag as disclosure standing in for the
+    comparison, twice. The numbers are now withheld rather than annotated.
+    """
+    from core.work_orders.verify_main import _describe_graded_range
+
+    repo, _ = _git_repo(tmp_path / "withheld")
+    wo_id = str(uuid.uuid4())
+    _seed_work_order(db, wo_id, "in_progress")
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+    _second_commit(repo)
+
+    graded = _describe_graded_range(
+        wo_id, repo_root=repo, db_path=db, evidence_layer="recorded_delivery_boundary"
+    )
+    assert graded["range_is_what_was_graded"] is True
+    assert isinstance(
+        graded["commits_behind_head"], int
+    ), "the ordinary path must still report the distance, or the fix is just silence"
+
+    for layer in ("authority_executable_checks", "commit_message_grep"):
+        other = _describe_graded_range(wo_id, repo_root=repo, db_path=db, evidence_layer=layer)
+        assert other["range_is_what_was_graded"] is False, layer
+        assert other["commits_behind_head"] is None, (
+            f"a HEAD distance was measured from a boundary range the {layer} locator did "
+            "not grade, which is the number the task was filed against"
+        )
+        assert other["stops_short_of_head"] is None, layer
+        assert (
+            "warning" not in other
+        ), "the may-already-be-fixed warning was emitted for a range nobody read"
+        assert layer in other["not_graded_reason"]

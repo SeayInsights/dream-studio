@@ -761,7 +761,11 @@ class WorkflowRunner:
                 status, reason = self._verify_completion(node_id, _node_yaml)
             if reason:
                 output = f"{output}\n\n[completion] {status.upper()}: {reason}"
-            self._update_node(node_id, status, output, duration=duration)
+            # A command node runs a subprocess; a skill node hands instructions to an
+            # agent this runner cannot invoke. That difference is what `executed` records.
+            self._update_node(
+                node_id, status, output, duration=duration, executed=bool(is_command_node)
+            )
             self._emit_node_event(node_id, status)
             self._emit_progress_event(wf_state)
 
@@ -783,7 +787,18 @@ class WorkflowRunner:
     # the instructions, records the invocation, stamps the node -- and an agent reading
     # the output performs the work. The node's completion_check is what observes that it
     # happened, which is why such a node stays `unverified` until something external
-    # satisfies it, and why a headless `ds workflow run` correctly stalls at the first one.
+    # satisfies it.
+    #
+    # WHAT THAT DOES NOT MEAN, corrected after this decision's own review read the engine
+    # rather than this paragraph. An earlier draft said a headless run "stalls at the
+    # first" such node. It does not. `any_failed` is set only when `not success`
+    # (runner.py:768), and an unverified node is a success as far as the wave is
+    # concerned -- so the wave COMPLETES and the run advances. It halts later, at the
+    # first DEPENDENT node whose own completion cannot be established, which is exactly
+    # how orch-verify reached a blocked `implement-tasks` with three unverified nodes
+    # behind it rather than stopping at the first of them. The distinction matters: a
+    # reader who believes the run stops at the dispatch point will look for the problem
+    # in the wrong node.
     #
     # The two rejected options, and why:
     #
@@ -1079,8 +1094,17 @@ class WorkflowRunner:
         status: str,
         output: str | None,
         duration: float | None = None,
+        executed: bool | None = None,
     ) -> None:
-        """Atomically update a node's status in workflows.json."""
+        """Atomically update a node's status in workflows.json.
+
+        `executed` records whether this runner PERFORMED the node's work or merely
+        dispatched it. WO 66069823: the dispatch output was made to say NOT EXECUTED in
+        its first line, and its own review pointed out that a caller which does not read
+        the text -- every caller except a human -- still cannot tell a dispatched node
+        from an executed one. A fact carried only in prose is not available to a check,
+        a status command, or a completion gate.
+        """
         import json
 
         now = datetime.now(UTC).isoformat()
@@ -1113,6 +1137,11 @@ class WorkflowRunner:
                     completed.append(node_id)
             if output is not None:
                 node["output"] = output
+            if executed is not None:
+                # False means this runner dispatched instructions and ran nothing. Kept
+                # on the node so `ds workflow status`, a gate, or a later reader can
+                # distinguish the two without parsing the output text.
+                node["executed"] = executed
             if duration is not None:
                 node["duration_s"] = duration
 

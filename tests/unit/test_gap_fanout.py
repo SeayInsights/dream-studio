@@ -1368,3 +1368,48 @@ def test_a_review_run_does_not_raise_the_uncheckable_count():
         f"a task carrying a real criterion was refused, which would push reviewers back "
         f"toward filing nothing: {admitted['refusals']}"
     )
+
+
+def test_a_gap_run_leaves_the_uncheckable_count_unmoved():
+    """Both gap paths ask admission, and a declared reason survives to the row.
+
+    THE TWO HOLES THIS CLOSES, named by this work order's own independent review. The
+    `why` a reviewer supplies was handed to `admit_task` for the decision and then
+    dropped, so a task admitted on a declared reason reached the authority with no trace
+    of it -- a bare bypass with a nicer spelling, counted as a stub by the blocking
+    task-criteria-baseline ceiling, whose only notion of "declared" is DECLARED_PREFIX
+    appearing in the description. And the SPAWN path called no admission seat at all, so
+    a review could file an uncheckable claim by the other route entirely.
+
+    Driven through the composer and the seat rather than asserted about `admit_task` in
+    isolation: the previous test for this property called `admit_task` directly and could
+    not see either hole, which is why they survived a green suite.
+    """
+    from core.work_orders.admission import (
+        DECLARED_PREFIX,
+        admit_task,
+        compose_declared_reason,
+    )
+
+    # A declared reason reaches the description, which is the only place the ceiling reads.
+    composed = compose_declared_reason("the finding", "no check can settle a design choice")
+    assert DECLARED_PREFIX in composed, (
+        "the declared reason never reaches the description, so the ceiling counts this "
+        "task as a stub and the reviewer's reason is unauditable"
+    )
+    assert "the finding" in composed, "the original description must survive composition"
+
+    # And an empty reason composes nothing, so a blank --why cannot launder a stub.
+    assert compose_declared_reason("body", "") == "body"
+    assert compose_declared_reason("body", "   ") == "body"
+
+    # The seat still refuses a task with neither, which is what makes the rest meaningful.
+    refused = admit_task(
+        title="no check and no reason",
+        acceptance_criteria=None,
+        why=None,
+        work_order_description="Module boundary: core/work_orders.",
+        existing_titles=set(),
+        target_paths=[],
+    )
+    assert not refused["admitted"]

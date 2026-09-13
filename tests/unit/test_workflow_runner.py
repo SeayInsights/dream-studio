@@ -859,36 +859,140 @@ def test_the_handoff_statement_survives_the_output_budget():
 
 
 def test_every_progress_count_agrees_on_what_done_means():
-    """Five sites compute `done`, and they must not drift apart.
+    """Every site computing `done` must agree, and the guard must FIND them.
 
-    Checked because the premise of the task that opened this was WRONG: the count was
-    suspected of including `unverified` nodes, and all five computations already excluded
-    it -- `1/14` was accurate. What the check did surface is that the same question is
-    answered in five places, which is the shape that goes wrong quietly. This pins them
-    together rather than inventing a fix for a defect that was not there.
+    The task that opened this was WRONG -- it assumed the count included `unverified`
+    nodes, and all sites already excluded them, so `1/14` was accurate. What the check
+    surfaced is that the same question is answered in several places, which is the shape
+    that goes wrong quietly.
+
+    THE FIRST VERSION NAMED THREE FILES AND A COUNT BY HAND. Its own review said so: a
+    guard that lists its sources holds the invariant for the sources someone remembered,
+    and the telemetry site writing `nodes_done` into a permanent event was outside the
+    list. This one discovers every done-computation under control/execution/workflow/ and
+    fails if any disagrees, so a fourth site added tomorrow is covered without an edit.
     """
     import re
 
-    root = Path(__file__).resolve().parents[2]
-    sources = [
-        root / "control/execution/workflow/runner.py",
-        root / "control/execution/workflow/state_commands.py",
-        root / "control/execution/workflow/tracking.py",
-    ]
-    found = []
-    for src in sources:
-        text = src.read_text(encoding="utf-8")
-        found += re.findall(r'n\.get\("status"\) in \(([^)]*)\)', text)
-        found += re.findall(r"for s in statuses if s in \(([^)]*)\)", text)
+    root = Path(__file__).resolve().parents[2] / "control" / "execution" / "workflow"
+    assert root.is_dir(), root
 
-    assert len(found) >= 5, f"expected at least 5 done-computations, found {len(found)}"
-    normalised = {frozenset(x.strip().strip('"') for x in f.split(",") if x.strip()) for f in found}
-    assert len(normalised) == 1, (
-        f"the sites disagree about what counts as done: {normalised}. One of them will be "
-        "updated without the others."
+    # ANCHORED ON THE DONE-COUNT ASSIGNMENT, not on any membership test mentioning
+    # "completed". A broader pattern caught six distinct sets and failed, correctly: this
+    # tree also asks "is this node finished" (completed|failed|skipped) and "is it
+    # settled" (completed|unverified), which are different questions with different right
+    # answers. Only the count reported as progress is claimed to be one question.
+    pattern = re.compile(r"done\s*=\s*sum\(.*?\bin\s+\(([^)]*)\)", re.S)
+    found: list[tuple[str, frozenset[str]]] = []
+    for path in sorted(root.rglob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        for match in pattern.finditer(text):
+            statuses = frozenset(
+                x.strip().strip('"').strip("'") for x in match.group(1).split(",") if x.strip()
+            )
+            found.append((path.name, statuses))
+
+    assert len(found) >= 4, (
+        f"the finder located only {len(found)} done-computations under {root.name}/, so a "
+        "clean result would mean it looked almost nowhere"
     )
-    only = next(iter(normalised))
+
+    distinct = {statuses for _, statuses in found}
+    assert len(distinct) == 1, (
+        "the sites disagree about what counts as done, so one will be updated without the "
+        f"others: {[(n, sorted(s)) for n, s in found]}"
+    )
+
+    only = next(iter(distinct))
     assert "unverified" not in only, (
         "a node whose completion nobody established counts as done, which is the "
         "compared-nothing-reported-clean shape"
     )
+
+
+def test_a_dispatched_node_is_distinguishable_without_reading_its_text():
+    """A caller that never reads prose must still be able to tell the two apart.
+
+    The dispatch output was made to open with NOT EXECUTED, and this work order's own
+    review pointed out that _invoke_skill still returns True and the wave still advances
+    -- so to a gate, a status command, or any programmatic reader, a dispatched node
+    looked exactly like an executed one. A fact carried only in text is unavailable to
+    every consumer except a human.
+
+    The node record now carries `executed`. Asserted on _update_node's contract rather
+    than on a full workflow run, because the claim is that the field reaches the record.
+    """
+    import inspect
+
+    src = inspect.getsource(WorkflowRunner._update_node)
+    assert "executed" in inspect.signature(WorkflowRunner._update_node).parameters, (
+        "_update_node cannot record whether the work was performed, so the distinction "
+        "exists only in the output text"
+    )
+    assert 'node["executed"] = executed' in src, (
+        "the parameter is accepted and never written to the node, which is a signature "
+        "that looks like a fact and stores nothing"
+    )
+
+    caller = inspect.getsource(WorkflowRunner._execute_wave)
+    assert "executed=bool(is_command_node)" in caller, (
+        "the wave does not tell _update_node which kind of node this was, so every node "
+        "records the same value and the field says nothing"
+    )
+
+
+def test_an_unverified_skill_node_still_releases_the_next_wave():
+    """The behaviour the corrected decision record describes, pinned.
+
+    An earlier draft of that record claimed a headless run stalls at the first skill node
+    carrying a completion_check. It does not: `any_failed` is set only when `not success`,
+    and an unverified node is a success as far as the wave is concerned, so the wave
+    completes and the run advances -- halting later at a dependent node. orch-verify
+    reached a blocked implement-tasks with three unverified nodes BEHIND it, which is what
+    that distinction looks like in practice.
+
+    Held on the engine rather than on the prose, so the record cannot drift back.
+    """
+    import inspect
+
+    src = inspect.getsource(WorkflowRunner._execute_wave)
+
+    assert (
+        "if not success:" in src and "any_failed = True" in src
+    ), "the wave-failure condition changed shape; this test pins what it is"
+    # The failure flag must not be set for a non-success STATUS -- only for a failed call.
+    begin = src.index("if not success:")
+    failure_block = src[begin:]
+    stop = failure_block.index("return any_failed")
+    failure_block = failure_block[:stop]
+    assert "unverified" not in failure_block, (
+        "an unverified node now sets any_failed, which means the wave stops at the "
+        "dispatch point -- the decision record in runner.py says it does not, and one of "
+        "the two is now wrong"
+    )
+
+
+def test_the_done_count_guard_discovers_its_own_sources():
+    """The guard must find the done-counts, not be told where they are.
+
+    Its first version named three files and a transcribed count, and the telemetry site
+    writing nodes_done into a permanent event was outside that list -- so the invariant it
+    claimed for every progress count was held for most of them.
+
+    This asserts the guard's own construction: that it walks the tree and anchors on the
+    assignment, which is what makes a fourth site free.
+    """
+    import inspect
+
+    src = inspect.getsource(test_every_progress_count_agrees_on_what_done_means)
+
+    assert "rglob" in src, (
+        "the done-count guard reads a fixed file list again, so a site added tomorrow is "
+        "outside the invariant it claims to hold"
+    )
+    assert "done" in src and "sum" in src, "the guard no longer anchors on the assignment"
+    for hardcoded in ('state_commands.py"', 'tracking.py"', 'runner.py"'):
+        assert hardcoded not in src, (
+            f"the guard names {hardcoded} explicitly, which is the transcription its own "
+            "review refused"
+        )

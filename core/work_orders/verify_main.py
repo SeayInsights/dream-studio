@@ -217,18 +217,46 @@ def _resolve_protocol(protocol_dir: Path, name: str) -> Path | None:
 
 
 def _describe_graded_range(
-    work_order_id: str, *, repo_root: Path, db_path: Path | None
+    work_order_id: str,
+    *,
+    repo_root: Path,
+    db_path: Path | None,
+    evidence_layer: str | None = None,
 ) -> dict[str, Any]:
-    """The commit range a verdict is about to grade, and how far it is from HEAD.
+    """The BOUNDARY commit range and how far it is from HEAD.
 
     Reports `commits_behind_head` so a reader can tell a finding about the work from a
     finding about a tree that never contained the fix, and `stops_short_of_head` as the
     plain statement of the same fact -- a number nobody interprets is how this went
     unnoticed for three runs.
+
+    WHAT THIS IS AND IS NOT. It re-derives the range from the recorded delivery boundary.
+    That IS the graded commit set when the locator used the boundary, and is NOT when
+    `choose_locator` fell back to message-grep or to authority evidence -- where this
+    would otherwise describe a range nobody graded.
+
+    So it is told which locator won and says whether the two agree. Disclosure alone was
+    the first fix and WO 654a54d7's review was right to refuse it: naming the field
+    `describes` tells a reader what they are looking at, and still leaves them to work out
+    whether it matches what was graded. `range_is_what_was_graded` answers that, and
+    `not_graded_reason` says why when it is False.
     """
     from .delivery_boundary import boundary_commit_range
 
-    out: dict[str, Any] = {}
+    # The layers on which the boundary range IS the graded set. Anything else means the
+    # locator built the diff another way, and this range describes something nobody read.
+    _BOUNDARY_LAYERS = {"recorded_delivery_boundary", "boundary_working_tree", None}
+    out: dict[str, Any] = {
+        "describes": "recorded_delivery_boundary",
+        "evidence_layer": evidence_layer,
+        "range_is_what_was_graded": evidence_layer in _BOUNDARY_LAYERS,
+    }
+    if evidence_layer not in _BOUNDARY_LAYERS:
+        out["not_graded_reason"] = (
+            f"the locator used {evidence_layer!r}, so the commit set graded is not this"
+            " boundary range -- the distance-from-HEAD numbers below describe a range"
+            " that was not read"
+        )
     try:
         expr, why = boundary_commit_range(work_order_id, db_path=db_path)
     except Exception as exc:  # noqa: BLE001 - provenance must not fail the review
@@ -274,6 +302,20 @@ def _describe_graded_range(
         out["unavailable"] = f"{type(exc).__name__}: {exc}"[:200]
         return out
     out["head"] = head or None
+
+    # WO 654a54d7: WITHHELD WHEN THIS IS NOT THE RANGE THAT WAS GRADED.
+    #
+    # A flag saying the boundary range was not the graded set, printed BESIDE a
+    # commits_behind_head and a "may already be fixed" warning measured from that same
+    # unread range, still puts a number in front of a reader that means nothing -- and the
+    # warning is the most quotable line in the report. Its own review refused the flag as
+    # disclosure standing in for the comparison. So on a locator that did not use the
+    # boundary, the distance is not computed and the report says why instead.
+    if not out["range_is_what_was_graded"]:
+        out["commits_behind_head"] = None
+        out["stops_short_of_head"] = None
+        return out
+
     if not behind.isdigit():
         # git answered with something uncountable; say the question is unanswered rather
         # than leaving the key off and reading as "reaches HEAD".
@@ -538,9 +580,7 @@ def verify_work_order(
         # because the graded range ended four commits behind it. A grader noticed in prose;
         # nothing computed it, and the verdict recorded only `evidence_layer`. This is the
         # number separating "the fix did not work" from "the fix was never looked at".
-        _graded_range = _describe_graded_range(
-            work_order_id, repo_root=Path(_search_root), db_path=db_path
-        )
+
         # WO-BOUNDARY-OPEN-END review finding: the range-replaces-grep choice now
         # lives in choose_locator, where a test can drive it. The guard that used to
         # protect it grepped this function's source, broke on a refactor that changed
@@ -559,6 +599,15 @@ def verify_work_order(
                 title=wo["title"],
                 fallback_root=_search_root,
             ),
+        )
+        # WO 654a54d7: placed AFTER choose_locator so the report can say whether the
+        # boundary range is the set that was actually graded, rather than only naming
+        # which range it is. Disclosure was the first fix and the review refused it.
+        _graded_range = _describe_graded_range(
+            work_order_id,
+            repo_root=Path(_search_root),
+            db_path=db_path,
+            evidence_layer=_evidence_layer,
         )
         _union_summary = (
             f"recorded delivery boundary in {_search_root} (roots not searched: the "
@@ -765,7 +814,24 @@ def verify_work_order(
         try:
             from core.gates.round_table import convene as _convene
 
-            _table = _convene(run_detectors=True, prior_findings=_prior_findings)
+            # CONVENED AGAINST THE WORK ORDER'S OWN ROOT, not this process's cwd.
+            #
+            # This called convene() with no repo_root, so it defaulted to the Dream Studio
+            # repository and read ITS branch diff -- for a work order whose delivery lives
+            # in another repository, the table selected lanes by relevance to the wrong
+            # change set entirely, and the detectors ran over the wrong tree. The resolved
+            # root was already computed and in hand on the line that built the diff; it
+            # simply was not passed. Found by this work order's own independent review.
+            _table = _convene(
+                run_detectors=True,
+                prior_findings=_prior_findings,
+                # The CHANGE set only. The registry stays where convene() finds it by
+                # default: a work order delivering into another repository has no
+                # canonical/review_lanes.yml of its own, and passing this as repo_root
+                # made the whole table unavailable rather than merely misaimed -- which
+                # a test caught the moment it was tried.
+                change_root=Path(_search_root),
+            )
         except Exception as exc:  # noqa: BLE001 - a review must not die at its own table
             # Recorded as unavailable rather than omitted: an absent section reads as a
             # review with no lanes to answer, which is the one reading it must never get.

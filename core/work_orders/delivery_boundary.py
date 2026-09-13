@@ -553,7 +553,14 @@ def _work_order_is_reopened(work_order_id: str, *, db_path: Path | None = None) 
         conn.close()
     if not row or row[0] is None:
         return False
-    return str(row[0]) != "closed"
+    # CLOSED IS NOT THE ONLY WAY TO FINISH. This asked `!= "closed"`, so a CANCELLED or
+    # DELETED work order read as reopened and had its pinned range widened to HEAD --
+    # handing the grader every later commit for work that had been abandoned. Found by the
+    # review of this work order's own fix, inside the letter of the task and reported
+    # anyway, which is the seat doing its job.
+    from core.work_orders.task_status import TERMINAL_WORK_ORDER_STATUSES
+
+    return str(row[0]) not in TERMINAL_WORK_ORDER_STATUSES
 
 
 def boundary_commit_range(

@@ -732,7 +732,7 @@ def test_the_docstring_table_records_the_measured_overlap():
     assert any(int(m) > 0 for _, _, m in rows), "no row records rows that are MISSING one"
 
 
-def _projected_status_writers() -> list[str]:
+def _projected_status_writers(root: Path | None = None) -> list[str]:
     """Every production site that writes a status into a projected table, DISCOVERED.
 
     The table list comes from each projection's own `target_tables`, not a literal pair.
@@ -747,8 +747,9 @@ def _projected_status_writers() -> list[str]:
 
     tables = set(WorkOrderProjection.target_tables) | set(TaskProjection.target_tables)
     offenders: list[str] = []
-    for path in _REPO_ROOT.rglob("*.py"):
-        rel = path.relative_to(_REPO_ROOT).as_posix()
+    base = root or _REPO_ROOT
+    for path in base.rglob("*.py"):
+        rel = path.relative_to(base).as_posix()
         if rel.startswith(("dist/", ".claude/", "tests/")) or "worktrees" in rel:
             continue
         if not rel.startswith(("core/", "interfaces/", "runtime/", "control/", "integrations/")):
@@ -783,14 +784,15 @@ def _projected_status_writers() -> list[str]:
     return sorted(set(offenders))
 
 
-def test_the_guard_covers_every_writer_not_a_named_pair():
-    """No production site may spell a projected status itself.
+def test_no_production_writer_spells_a_projected_status():
+    """THE OUTCOME: no production site names a status the vocabulary owns.
 
-    THE PREVIOUS GUARD READ TWO FILES BY NAME. It asserted the two projections took their
-    statuses from the vocabulary, and passed while seven other production sites wrote
-    status literals into the same two tables as a synchronous read-model mirror -- found
-    by an independent review, not by the suite. A guard that names its subjects can only
-    ever catch the subjects someone remembered.
+    Seven sites wrote a literal into `business_work_orders` / `business_tasks` as a
+    synchronous read-model mirror -- `mutations.py` three times, `start_main.py`,
+    `close_main.py`, and both drain sites in `verify_gaps.py`. Each now takes its value
+    from `status_for(<the event this site emits>)`, so the row and the event cannot
+    disagree about the word and a renamed status is a KeyError at the write rather than
+    silent drift.
     """
     offenders = _projected_status_writers()
     assert not offenders, (
@@ -801,7 +803,106 @@ def test_the_guard_covers_every_writer_not_a_named_pair():
     )
 
 
-def test_every_writer_of_a_projected_status_is_enumerated():
+def test_the_guard_covers_every_writer_not_a_named_pair():
+    """THE MECHANISM: the guard DISCOVERS its subjects rather than naming them.
+
+    The previous guard read two projection files by name. It asserted those two took
+    their statuses from the vocabulary, and passed while seven other production sites
+    drifted -- found by an independent review, not by the suite. A guard that names its
+    subjects can only ever catch the subjects someone remembered, which is why this test
+    is about how the finder is built and not about today's result.
+    """
+    from core.projections.task_projection import TaskProjection
+    from core.projections.work_order_projection import WorkOrderProjection
+
+    # The table list is DERIVED from each projection's own declaration.
+    declared = set(WorkOrderProjection.target_tables) | set(TaskProjection.target_tables)
+    assert declared >= {"business_work_orders", "business_tasks"}, declared
+
+    source = pathlib.Path(__file__).read_text(encoding="utf-8")
+    start = source.index("def _projected_status_writers")
+    finder = source[start:]
+    end = finder.index("def test_")
+    finder = finder[:end]
+
+    assert "target_tables" in finder, (
+        "the finder hardcodes its tables instead of reading each projection's own "
+        "target_tables, so a new projected table is exempt the day it is added"
+    )
+    assert "rglob" in finder, (
+        "the finder walks a fixed list of files rather than the tree, which is exactly "
+        "how seven writers stayed invisible to a green suite"
+    )
+    for statement in ("UPDATE {table}", "INSERT INTO {table}"):
+        assert statement in finder, (
+            f"the finder does not scan {statement.split()[0]}; covering one statement "
+            "kind and not the other is the subset-of-what-it-writes shape"
+        )
+
+
+def test_the_mutation_proof_runs_the_real_finder(tmp_path):
+    """The guard proves it can fail, THROUGH THE GUARD, on every run.
+
+    Two mutations were once run by hand with the proof living in a transcript, and the
+    first of them PASSED because the finder's regex carried a stray 0x08 byte and matched
+    nothing. So plant-and-detect was made automatic -- and the first automatic version
+    RE-IMPLEMENTED the finder's regexes locally, which meant the same broken finder would
+    have left it green. Its own independent review caught that: a mutation proof that does
+    not invoke the thing it certifies proves nothing about it.
+
+    This drives `_projected_status_writers` itself against a planted tree. If the real
+    finder stops matching -- a stray control byte, a narrowed pattern, a lost statement
+    kind -- this test goes red with it.
+    """
+    pkg = tmp_path / "core" / "work_orders"
+    pkg.mkdir(parents=True)
+
+    clean = pkg / "compliant.py"
+    clean.write_text(
+        "conn.execute(\n"
+        '    "UPDATE business_tasks SET status = ?, updated_at = ?"\n'
+        '    " WHERE task_id = ?",\n'
+        '    (status_for("task.completed"), now, task_id),\n'
+        ")\n",
+        encoding="utf-8",
+    )
+    assert _projected_status_writers(tmp_path) == [], (
+        "the real finder flagged a compliant write, so a green result elsewhere means "
+        "nothing -- it cannot tell compliant from offending"
+    )
+
+    for name, body, kind in (
+        (
+            "sql_literal.py",
+            "conn.execute(\n"
+            "    \"UPDATE business_tasks SET status = 'complete', updated_at = ?\"\n"
+            '    " WHERE task_id = ?",\n'
+            "    (now, task_id),\n"
+            ")\n",
+            "an inline SQL literal",
+        ),
+        (
+            "insert_literal.py",
+            "conn.execute(\n"
+            '    "INSERT INTO business_tasks (task_id, status) VALUES (?, ?)",\n'
+            "    (task_id, 'pending'),\n"
+            ")\n",
+            "an INSERT literal",
+        ),
+    ):
+        planted = pkg / name
+        planted.write_text(body, encoding="utf-8")
+        found = _projected_status_writers(tmp_path)
+        planted.unlink()
+
+        assert found, (
+            f"the real finder did not reject {kind}. A check that cannot fail reports a "
+            "clean tree whatever is in it -- which is what a stray 0x08 byte in its regex "
+            "already caused once."
+        )
+
+
+def test_the_enumeration_is_driven_through_the_real_finder():
     """The discovery itself works, so a green result means looked-and-found-nothing.
 
     A finder that silently matched zero files would make the test above vacuous -- the
@@ -824,3 +925,38 @@ def test_every_writer_of_a_projected_status_is_enumerated():
         f"the finder walked only {len(scanned)} files under core/work_orders/, so a clean "
         "result would mean it looked nowhere"
     )
+
+
+def test_the_mirror_decision_is_recorded_in_the_module_docstring():
+    """A recorded decision with nothing holding it there is a comment waiting to be deleted.
+
+    WO 1364e05e task 4 required the synchronous-mirror decision to be recorded in
+    `core/work_orders/task_status.py`. It was written, and it was substantive, and it
+    lived in a free-floating comment above `status_for` -- so a future edit could remove
+    the only record of why seven production sites still write a status beside the event
+    they emit, and nothing would notice. Its own independent review said so.
+
+    Anchored on the MODULE DOCSTRING via `ast.get_docstring`, not on a string search of
+    the file, because the claim is that the decision is part of what the module says
+    about itself. A comment anywhere in the file would satisfy a grep and would be
+    exactly the arrangement this test exists to end.
+    """
+    import ast
+
+    import core.work_orders.task_status as vocab
+
+    source = pathlib.Path(vocab.__file__).read_text(encoding="utf-8")
+    doc = ast.get_docstring(ast.parse(source)) or ""
+
+    assert doc, "the vocabulary module has no docstring at all"
+    for marker in ("SYNCHRONOUS MIRROR", "CHOSEN"):
+        assert marker in doc, (
+            f"the module docstring no longer records the mirror decision ({marker!r} is "
+            "missing). Seven production sites write a projected status beside the event "
+            "they emit, and this is the only record of why that is deliberate."
+        )
+    # The rejected alternative matters as much as the choice: without it a reader cannot
+    # tell a decision from a description of what happens to be true.
+    assert (
+        "drain" in doc.lower()
+    ), "the docstring records the choice but not what it was chosen against"
