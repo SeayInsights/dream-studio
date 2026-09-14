@@ -2131,3 +2131,55 @@ def test_the_withheld_state_is_driven_with_the_canonical_evidence_layers(db, tmp
         f"no non-boundary layer was exercised; declared layers are {declared} and all of "
         "them are treated as boundary layers, so the withheld branch is untested"
     )
+
+
+def test_two_reasons_both_survive_when_both_apply(db, tmp_path, monkeypatch):
+    """The combination no earlier test reached, named by a second review round.
+
+    The accumulator fix routed three branches through `_undetermined` and left the
+    boundary-read exception returning a literal dict -- so a non-boundary locator meeting
+    an unreadable boundary still lost the locator's reason, which is the exact overwrite
+    the fix was filed against surviving in the one branch that skipped the accumulator.
+    Neither existing test drove both conditions at once: one varied the layer with a
+    readable boundary, the other broke the boundary with a boundary layer.
+
+    The literal also dropped `describes`, `evidence_layer` and `range_is_what_was_graded`,
+    so a reader could not tell WHICH locator had been used on the one path that most needed
+    saying so.
+    """
+    import core.work_orders.delivery_boundary as db_mod
+    from core.work_orders.verify_git import EVIDENCE_LAYERS
+    from core.work_orders.verify_main import _describe_graded_range
+
+    repo, _first = _git_repo(tmp_path / "repo")
+    wo_id = str(uuid.uuid4())
+    _seed_work_order(db, wo_id, "closed")
+
+    non_boundary = [n for n, _ in EVIDENCE_LAYERS if n != "recorded_delivery_boundary"]
+    assert non_boundary, "no non-boundary layer is declared, so this case cannot be driven"
+    layer = non_boundary[0]
+
+    def _boom(*a, **k):
+        raise RuntimeError("boundary unreadable")
+
+    monkeypatch.setattr(db_mod, "boundary_commit_range", _boom)
+    described = _describe_graded_range(wo_id, repo_root=repo, db_path=db, evidence_layer=layer)
+
+    reason = str(described.get("undetermined", ""))
+    assert layer in reason, (
+        "the locator's reason was discarded when the boundary read also failed, so a "
+        f"reader is told the boundary was unreadable and never that the graded set was "
+        f"not this range anyway: {described}"
+    )
+    assert (
+        "could not be read" in reason
+    ), f"the boundary failure itself went unreported: {described}"
+    assert (
+        reason.count(";") >= 1
+    ), f"both causes applied and only one reason is recorded: {reason!r}"
+
+    # The fields the literal dropped. A path that cannot say which locator ran is the one
+    # where naming it matters most.
+    assert described["evidence_layer"] == layer, described
+    assert described["range_is_what_was_graded"] is False, described
+    assert described["stops_short_of_head"] is None, described

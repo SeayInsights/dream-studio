@@ -602,13 +602,16 @@ def _attach_gap_tasks(
             (work_order_id,),
         ).fetchall()
         existing = {(r[0] or "").strip().lower() for r in _rows}
+        # criterion -> the OPEN task title that holds it, so the observation can name the
+        # sibling rather than only quote the shared check.
         existing_criteria = {
-            (r[1] or "").strip() for r in _rows if (r[2] or "") in ("pending", "in_progress")
+            (r[1] or "").strip(): (r[0] or "")
+            for r in _rows
+            if (r[2] or "") in ("pending", "in_progress") and (r[1] or "").strip()
         }
-        existing_criteria.discard("")
     except Exception:  # noqa: BLE001 - never break a verify over dedup bookkeeping
         existing = set()
-        existing_criteria = set()
+        existing_criteria = {}
 
     from core.work_orders.admission import admit_task, paths_named
 
@@ -756,7 +759,7 @@ def _attach_gap_tasks(
         # rewordings of the same finding files both in a single pass -- the defect
         # surviving inside its own fix, one loop iteration apart.
         if _criteria and str(_criteria).strip():
-            existing_criteria.add(str(_criteria).strip())
+            existing_criteria[str(_criteria).strip()] = title
         added += 1
     return {"added": added, "unfiled": unfiled, "noted": noted}
 

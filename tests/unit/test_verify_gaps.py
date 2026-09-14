@@ -1238,3 +1238,67 @@ def test_both_call_sites_report_the_same_keys(authority):
         "neither branch reported the shared criterion, so this test would pass with the "
         f"observation dropped on BOTH sides: attach={a_rec} merge={m_rec}"
     )
+
+
+def test_the_observation_names_the_sibling_that_holds_the_criterion(authority):
+    """ "A duplicate exists" with nowhere to look is not actionable.
+
+    The first cut plumbed bare criterion strings, so the Herald could quote the shared
+    check and could not say WHICH open task already carried it. A second review round
+    named the gap: an operator is told a sibling exists and given no way to find it, so
+    the observation costs attention and buys nothing.
+
+    The criteria now arrive as criterion -> open task title. A plain iterable still works
+    and still produces the observation WITHOUT the name -- callers that have only the
+    strings keep working rather than the lane going silent for them, which is the failure
+    mode a stricter signature would have introduced.
+    """
+    from core.work_orders.admission import admit_task
+    from core.work_orders.verify_gaps import _attach_gap_tasks
+
+    candidate = {"title": "a new wording entirely", "acceptance_criteria": _DUP_CRITERION}
+
+    named = admit_task(
+        **candidate,
+        existing_titles=(),
+        existing_criteria={_DUP_CRITERION: "the task that already holds it"},
+    )
+    assert named["unknowns"], named
+    unknown = named["unknowns"][0]
+    assert unknown.get("holder") == "the task that already holds it", unknown
+    assert "the task that already holds it" in unknown["reason"], (
+        "the sibling is known and the reason does not name it, so the operator still has "
+        f"nowhere to look: {unknown['reason']}"
+    )
+
+    # A bare iterable keeps working, observation intact, name absent.
+    bare = admit_task(**candidate, existing_titles=(), existing_criteria=(_DUP_CRITERION,))
+    assert bare["unknowns"], "the lane went silent for a caller that has only the strings"
+    assert bare["unknowns"][0].get("holder") is None, bare["unknowns"][0]
+
+    # AND THE GAP PATH SUPPLIES THE NAME END TO END, because a mapping the callee accepts
+    # and no caller builds is a signature that looks like a fact.
+    db_path = authority
+    project_id, _m, reviewed_id = _seed_project(db_path)
+    _open_task(db_path, reviewed_id, project_id, "the original finding", _DUP_CRITERION)
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        result = _attach_gap_tasks(
+            conn,
+            work_order_id=reviewed_id,
+            project_id=project_id,
+            tasks=[dict(candidate, description="reworded")],
+            now=_NOW,
+            gap_key="k",
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    noted = result["noted"]
+    assert noted, result
+    reason = " ".join(u["reason"] for n in noted for u in n["unknowns"])
+    assert (
+        "the original finding" in reason
+    ), f"the attach path did not carry the sibling's title through: {reason}"

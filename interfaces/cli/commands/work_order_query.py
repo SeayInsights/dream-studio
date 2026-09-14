@@ -641,7 +641,7 @@ def _admit_or_report(
     # THE SAME EVIDENCE THE GAP PATH GETS. A lane wired into one of its two writers holds
     # for whichever writer someone remembered, which is the shape this milestone keeps
     # paying for -- and this is the writer an OPERATOR uses by hand.
-    existing_criteria: list[str] = []
+    existing_criteria: dict[str, str] = {}
     try:
         db_path = resolve_installed_runtime_paths(
             source_root=source_root, dream_studio_home=dream_studio_home
@@ -661,15 +661,17 @@ def _admit_or_report(
             existing_titles = [r[0] or "" for r in _rows]
             # OPEN tasks only: a criterion carried by finished work is not a second claim
             # on the same check, and flagging it would report closed work as outstanding.
-            existing_criteria = [
-                r[1] or ""
+            # criterion -> the OPEN task title holding it, so the NOTED line can name the
+            # sibling instead of only quoting the shared check.
+            existing_criteria = {
+                (r[1] or "").strip(): (r[0] or "")
                 for r in _rows
                 if (r[2] or "") in ("pending", "in_progress") and (r[1] or "").strip()
-            ]
+            }
         finally:
             conn.close()
     except Exception:  # noqa: BLE001 - no context means the lanes that need it stay quiet
-        wo_description, existing_titles, existing_criteria = "", [], []
+        wo_description, existing_titles, existing_criteria = "", [], {}
 
     verdict = admit_task(
         title=title,

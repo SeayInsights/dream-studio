@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import re as _re
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 #: Minimum characters for a declared reason. Mirrors the `security-scan` exemption
 #: contract deliberately: one repo, one shape for "I cannot enforce this, and here is why",
@@ -223,7 +223,7 @@ def _herald(
     title: str,
     existing_titles: Iterable[str],
     acceptance_criteria: str | None = None,
-    existing_criteria: Iterable[str] = (),
+    existing_criteria: Iterable[str] | Mapping[str, str] = (),
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """Is this finding already filed on this work order? Returns ``(refusal, unknown)``.
 
@@ -277,8 +277,26 @@ def _herald(
 
     if has_executable_criterion(acceptance_criteria):
         mine = _normalised(acceptance_criteria or "")
-        already = {_normalised(c or "") for c in existing_criteria if has_executable_criterion(c)}
+        # THE SIBLING IS NAMED, NOT JUST ITS CRITERION (second review round on this work
+        # order). The first cut plumbed bare criterion strings, so the observation could
+        # quote the shared check and could not say WHICH open task already held it -- an
+        # operator told a duplicate exists with nowhere to look is told nothing actionable.
+        # A mapping of criterion -> task title is accepted, and a plain iterable still
+        # works: callers that have only the strings keep their current behaviour and get
+        # the observation without the name, rather than the lane going silent for them.
+        if isinstance(existing_criteria, Mapping):
+            already = {
+                _normalised(c or ""): str(t or "")
+                for c, t in existing_criteria.items()
+                if has_executable_criterion(c)
+            }
+        else:
+            already = {
+                _normalised(c or ""): "" for c in existing_criteria if has_executable_criterion(c)
+            }
         if mine in already:
+            holder = already.get(mine) or ""
+            held_by = f' It is carried by the open task "{holder[:80]}".' if holder else ""
             return None, {
                 "seat": _HERALD,
                 "lane": "a-finding-already-filed",
@@ -291,11 +309,12 @@ def _herald(
                 # instead of by matching a seat name, which would bind the surface to the
                 # roster.
                 "observed": True,
+                "holder": holder or None,
                 "reason": (
                     "an open task on this work order already carries this exact acceptance"
-                    f" criterion ({str(acceptance_criteria or '').strip()[:120]}). One check"
-                    " run will mark both done, so neither can fail independently of the"
-                    " other. That is correct when the check genuinely exercises both"
+                    f" criterion ({str(acceptance_criteria or '').strip()[:120]}).{held_by}"
+                    " One check run will mark both done, so neither can fail independently"
+                    " of the other. That is correct when the check genuinely exercises both"
                     " changes and wrong when this is the earlier finding reworded -- and"
                     " which one it is cannot be told from a title and a criterion, so it is"
                     " reported rather than decided. Confirm the check covers both, or give"
@@ -312,7 +331,7 @@ def admit_task(
     why: str | None = None,
     work_order_description: str = "",
     existing_titles: Iterable[str] = (),
-    existing_criteria: Iterable[str] = (),
+    existing_criteria: Iterable[str] | Mapping[str, str] = (),
     target_paths: Iterable[str] = (),
 ) -> dict[str, Any]:
     """Decide whether one proposed task may be filed. Never files, never deletes.
