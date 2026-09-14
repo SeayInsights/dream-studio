@@ -1960,3 +1960,174 @@ def test_the_graded_range_reports_the_commit_set_that_was_actually_graded(db, tm
             f"the withheld answer for {layer!r} is spelled under a different key than the "
             "no-range path uses, which is two vocabularies again"
         )
+
+
+def test_every_undetermined_head_distance_answers_under_one_key(db, tmp_path, monkeypatch):
+    """Two spellings of "why is there no number here" is one too many.
+
+    Five paths through `_describe_graded_range` leave `stops_short_of_head` as None: no
+    commit range, a locator that did not read the boundary, uncountable git output, and
+    the two that raise. The first three answered under `undetermined` and the two raising
+    ones under `unavailable` -- so a reader doing `described.get("undetermined")` got
+    nothing back on the exception paths and a withheld distance read as a measured zero,
+    which is the exact misreading the withholding exists to prevent.
+
+    DRIVEN ON EVERY PATH, not on the two that changed. A test covering only the corrected
+    paths would pass while a sixth path spelled a third key, and this function has already
+    grown from two paths to five.
+    """
+    import core.work_orders.verify_main as vm
+    from core.work_orders.verify_main import _describe_graded_range
+
+    repo, _first = _git_repo(tmp_path / "repo")
+    wo_id = str(uuid.uuid4())
+    _seed_work_order(db, wo_id, "closed")
+
+    described: list[tuple[str, dict]] = []
+
+    # 1. NO RANGE: the work order has no recorded boundary at all.
+    described.append(("no range", _describe_graded_range(wo_id, repo_root=repo, db_path=db)))
+
+    # 2. THE LOCATOR DID NOT READ THE BOUNDARY. Any declared layer outside the boundary
+    # set, taken from the production constant rather than typed.
+    from core.work_orders.verify_git import EVIDENCE_LAYERS
+
+    non_boundary = [n for n, _ in EVIDENCE_LAYERS if n != "recorded_delivery_boundary"]
+    assert non_boundary, "no non-boundary layer is declared, so this case cannot be driven"
+
+    # THE BOUNDARY IS PINNED BEFORE THIS CALL, and the ordering is the whole point. An
+    # independent review traced the first version: this case ran while no boundary existed,
+    # so it fell into the NO-RANGE branch and returned text byte-identical to case 1. Two
+    # calls, one branch, and `len(withheld) == 5` counted calls -- so the test reported five
+    # paths driven while the layer-naming branch was never reached here at all.
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+    from core.work_orders.delivery_boundary import record_delivery_boundary_end
+
+    record_delivery_boundary_end(wo_id, repo_root=repo, db_path=db)
+
+    described.append(
+        (
+            "non-boundary layer",
+            _describe_graded_range(
+                wo_id, repo_root=repo, db_path=db, evidence_layer=non_boundary[0]
+            ),
+        )
+    )
+
+    # 3. THE BOUNDARY READ RAISES.
+    def _boom(*a, **k):
+        raise RuntimeError("boundary unreadable")
+
+    # Patched at its SOURCE module: _describe_graded_range imports it inside the function
+    # body, so the name never exists on verify_main to be replaced.
+    import core.work_orders.delivery_boundary as db_mod
+
+    monkeypatch.setattr(db_mod, "boundary_commit_range", _boom)
+    described.append(("boundary raised", _describe_graded_range(wo_id, repo_root=repo, db_path=db)))
+    monkeypatch.undo()
+
+    # 4. GIT RAISES while being asked the distance, and 5. git answers uncountably. The
+    # range was pinned above, before case 2.
+    real_run = vm.subprocess.run
+
+    def _raise_run(*a, **k):
+        raise OSError("git missing")
+
+    monkeypatch.setattr(vm.subprocess, "run", _raise_run)
+    described.append(("git raised", _describe_graded_range(wo_id, repo_root=repo, db_path=db)))
+    monkeypatch.undo()
+
+    class _Uncountable:
+        stdout = "not-a-number\n"
+
+    def _uncountable_run(cmd, *a, **k):
+        return _Uncountable() if "rev-list" in cmd else real_run(cmd, *a, **k)
+
+    monkeypatch.setattr(vm.subprocess, "run", _uncountable_run)
+    described.append(
+        ("uncountable output", _describe_graded_range(wo_id, repo_root=repo, db_path=db))
+    )
+    monkeypatch.undo()
+
+    withheld = [(name, d) for name, d in described if d.get("stops_short_of_head") is None]
+    assert len(withheld) == 5, (
+        "not every path withheld the distance, so this test is not exercising the five it "
+        f"names: {[(n, d.get('stops_short_of_head')) for n, d in described]}"
+    )
+
+    # FIVE BRANCHES, NOT FIVE CALLS. The count alone passed while two calls collapsed onto
+    # one branch and returned identical text; distinct reasons is what makes it five paths.
+    reasons = {name: str(d.get("undetermined", "")) for name, d in withheld}
+    assert len(set(reasons.values())) == 5, (
+        "two of the five paths returned the SAME reason, so they are one branch wearing two "
+        f"names and this test counts calls rather than paths: {reasons}"
+    )
+
+    for name, d in withheld:
+        assert d.get("undetermined"), (
+            f"the {name!r} path withheld the distance and gave no reason under "
+            f"`undetermined`, so a reader checking that one key learns nothing: {d}"
+        )
+        assert str(d["undetermined"]).strip(), f"the {name!r} reason is empty: {d}"
+
+    # AND NO SECOND SPELLING SURVIVES. The point is one key, not two that happen to agree.
+    stragglers = {name: d for name, d in withheld if "unavailable" in d}
+    assert not stragglers, (
+        "a path still answers under `unavailable` beside `undetermined`, which is the two "
+        f"-keys-for-one-question shape this fixed: {stragglers}"
+    )
+
+
+def test_the_withheld_state_is_driven_with_the_canonical_evidence_layers(db, tmp_path):
+    """Every declared layer, from the production constant -- not a string someone typed.
+
+    `_describe_graded_range` withholds the distance whenever the locator did not read the
+    delivery boundary. A test naming one layer by hand proves the branch works for that
+    spelling and says nothing about a layer added tomorrow; worse, two evidence-layer
+    names were once INVENTED in this area and neither was producible, so a typed string is
+    exactly the failure mode here.
+
+    So the layers come from `verify_git.EVIDENCE_LAYERS`, and every declared layer outside
+    `_describe_graded_range`'s own boundary set must withhold both numbers and say why.
+    """
+    from core.work_orders.verify_git import EVIDENCE_LAYERS
+    from core.work_orders.verify_main import _describe_graded_range
+
+    repo, _first = _git_repo(tmp_path / "repo")
+    wo_id = str(uuid.uuid4())
+    _seed_work_order(db, wo_id, "closed")
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+
+    from core.work_orders.delivery_boundary import record_delivery_boundary_end
+
+    record_delivery_boundary_end(wo_id, repo_root=repo, db_path=db)
+
+    declared = [name for name, _ in EVIDENCE_LAYERS]
+    assert declared, "no evidence layer is declared, so this test would assert nothing"
+
+    boundary = {"recorded_delivery_boundary", None}
+    checked = 0
+    for layer in declared:
+        described = _describe_graded_range(wo_id, repo_root=repo, db_path=db, evidence_layer=layer)
+        if layer in boundary:
+            # The boundary layer is the one case that DOES measure; asserted so this test
+            # cannot pass by withholding everywhere.
+            assert described.get("range_is_what_was_graded") is True, described
+            assert described.get("commits_behind_head") is not None, described
+            continue
+        checked += 1
+        assert described["range_is_what_was_graded"] is False, described
+        assert described["commits_behind_head"] is None, (
+            f"layer {layer!r} produced a distance measured from a range the grader never "
+            f"read, which is a number that means nothing: {described}"
+        )
+        assert described["stops_short_of_head"] is None, described
+        assert layer in str(described.get("undetermined", "")), (
+            f"the reason does not name the layer that caused it, so a reader cannot tell "
+            f"which locator withheld the number: {described}"
+        )
+
+    assert checked >= 1, (
+        f"no non-boundary layer was exercised; declared layers are {declared} and all of "
+        "them are treated as boundary layers, so the withheld branch is untested"
+    )
