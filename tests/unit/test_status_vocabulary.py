@@ -1159,6 +1159,38 @@ def test_both_records_state_the_same_writer_counts():
     in_module = stated(module_doc or "", "the module docstring")
     in_tests = stated(test_src, "the test module docstring")
 
+    # AND THE GUARD DOCSTRINGS CARRY NO THIRD COPY. Task 25 asked this pin to widen past
+    # the two MODULE docstrings, and the first attempt instead DELETED the counts from the
+    # two guard-test docstrings -- which fixed the contradiction and left nothing checking
+    # that they stay deleted, so a wrong figure reintroduced into either would sit in the
+    # file through a green suite. A count restated in a third place is a third thing to
+    # keep in step; the rule is that the figures live once, in the declared line, so this
+    # asserts the guard docstrings state no writer count at all.
+    import ast as _ast
+
+    tree = _ast.parse(test_src)
+    for node in _ast.walk(tree):
+        if not isinstance(node, _ast.FunctionDef):
+            continue
+        if node.name not in (
+            "test_no_production_writer_spells_a_projected_status",
+            "test_the_guard_covers_every_writer_not_a_named_pair",
+        ):
+            continue
+        doc = _ast.get_docstring(node) or ""
+        restated = re.findall(
+            r"\b(seven|eight|nine|ten|eleven|twelve|thirteen)\b[^.]{0,60}?"
+            r"(?:production site|writer|site)",
+            doc,
+            re.I,
+        )
+        assert not restated, (
+            f"{node.name} restates a writer count in its docstring ({restated}). The "
+            "figures live once, in the WRITER-COUNTS line -- a third copy is a third "
+            "thing to keep in step, and this pin reads the declared line, so drift here "
+            "would stay green"
+        )
+
     assert in_module == in_tests, (
         f"the module declares total={in_module[0]} routed={in_module[1]} and the test file "
         f"declares total={in_tests[0]} routed={in_tests[1]}. Two files carry this decision "
