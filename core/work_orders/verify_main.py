@@ -297,14 +297,22 @@ def _describe_graded_range(
         # `undetermined` is the spelling the rest of the repo already uses
         # (core/gates/deterministic_evidence.py). The exception text is kept INSIDE the
         # reason rather than beside it in a second key, for the same reason.
-        return {
-            "range": None,
-            "stops_short_of_head": None,
-            "undetermined": (
-                "the recorded delivery boundary could not be read: "
-                f"{type(exc).__name__}: {exc}"[:200]
-            ),
-        }
+        #
+        # AND IT BUILDS ON `out` RATHER THAN RETURNING A FRESH DICT. The first cut of the
+        # accumulator fix routed the other three branches through `_undetermined` and left
+        # this one returning a literal, so it still discarded a non-boundary locator's
+        # reason -- the exact overwrite the fix was filed against, surviving in the one
+        # branch that did not go through the accumulator. A second review round caught it
+        # and named the combination no test reached: a non-boundary layer meeting an
+        # unreadable boundary. Returning `out` also keeps `describes`, `evidence_layer`
+        # and `range_is_what_was_graded`, which the literal silently dropped.
+        _undetermined(
+            "the recorded delivery boundary could not be read: "
+            f"{type(exc).__name__}: {exc}"[:200]
+        )
+        out["range"] = None
+        out["stops_short_of_head"] = None
+        return out
     out["range"] = expr
     if why:
         out["caveat"] = why
