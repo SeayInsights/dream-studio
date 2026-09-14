@@ -264,10 +264,25 @@ def _describe_graded_range(
         "evidence_layer": evidence_layer,
         "range_is_what_was_graded": evidence_layer in _BOUNDARY_LAYERS,
     }
+
+    def _undetermined(reason: str) -> None:
+        """Record why no distance is available, ACCUMULATING rather than replacing.
+
+        One key, and every reason that key has (WO 654a54d7). Plain assignment lost
+        information whenever two causes applied at once: the locator disqualifying the
+        range is set here, and the no-range branch and both exception branches each
+        overwrote it, so a reader was told the boundary was unreadable and never that the
+        graded set was not this range anyway. Found by an independent review tracing the
+        function rather than reading it -- the two messages were byte-identical at the
+        point of collapse, which is why no test noticed.
+        """
+        prior = out.get("undetermined")
+        out["undetermined"] = f"{prior}; {reason}" if prior else reason
+
     if evidence_layer not in _BOUNDARY_LAYERS:
         # The SAME key the no-range path uses. Two independently spelled answers to
         # "why is there no number here" is how a reader learns to check only one of them.
-        out["undetermined"] = (
+        _undetermined(
             f"the locator used {evidence_layer!r}, so the commit set graded is not this"
             " boundary range -- no distance is measured from a range that was not read"
         )
@@ -300,7 +315,7 @@ def _describe_graded_range(
         # as None with the reason, the same distinction `unchecked` draws against `pass`
         # at the round table.
         out["stops_short_of_head"] = None
-        out["undetermined"] = why or "no commit range available for this work order"
+        _undetermined(why or "no commit range available for this work order")
         return out
     end = expr.split("..")[-1]
     try:
@@ -324,7 +339,7 @@ def _describe_graded_range(
         ).stdout.strip()
     except Exception as exc:  # noqa: BLE001 - same rule as above
         out["stops_short_of_head"] = None
-        out["undetermined"] = (
+        _undetermined(
             f"git could not be asked how far {end} is from HEAD: "
             f"{type(exc).__name__}: {exc}"[:200]
         )
@@ -348,7 +363,7 @@ def _describe_graded_range(
         # git answered with something uncountable; say the question is unanswered rather
         # than leaving the key off and reading as "reaches HEAD".
         out["stops_short_of_head"] = None
-        out["undetermined"] = f"git rev-list returned {behind!r}"
+        _undetermined(f"git rev-list returned {behind!r}")
     if behind.isdigit():
         out["commits_behind_head"] = int(behind)
         out["stops_short_of_head"] = int(behind) > 0

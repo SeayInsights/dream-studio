@@ -1994,6 +1994,17 @@ def test_every_undetermined_head_distance_answers_under_one_key(db, tmp_path, mo
 
     non_boundary = [n for n, _ in EVIDENCE_LAYERS if n != "recorded_delivery_boundary"]
     assert non_boundary, "no non-boundary layer is declared, so this case cannot be driven"
+
+    # THE BOUNDARY IS PINNED BEFORE THIS CALL, and the ordering is the whole point. An
+    # independent review traced the first version: this case ran while no boundary existed,
+    # so it fell into the NO-RANGE branch and returned text byte-identical to case 1. Two
+    # calls, one branch, and `len(withheld) == 5` counted calls -- so the test reported five
+    # paths driven while the layer-naming branch was never reached here at all.
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+    from core.work_orders.delivery_boundary import record_delivery_boundary_end
+
+    record_delivery_boundary_end(wo_id, repo_root=repo, db_path=db)
+
     described.append(
         (
             "non-boundary layer",
@@ -2015,13 +2026,8 @@ def test_every_undetermined_head_distance_answers_under_one_key(db, tmp_path, mo
     described.append(("boundary raised", _describe_graded_range(wo_id, repo_root=repo, db_path=db)))
     monkeypatch.undo()
 
-    # 4. GIT RAISES while being asked the distance, and 5. git answers uncountably. Both
-    # need a real range first, so pin one.
-    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
-    from core.work_orders.delivery_boundary import record_delivery_boundary_end
-
-    record_delivery_boundary_end(wo_id, repo_root=repo, db_path=db)
-
+    # 4. GIT RAISES while being asked the distance, and 5. git answers uncountably. The
+    # range was pinned above, before case 2.
     real_run = vm.subprocess.run
 
     def _raise_run(*a, **k):
@@ -2047,6 +2053,14 @@ def test_every_undetermined_head_distance_answers_under_one_key(db, tmp_path, mo
     assert len(withheld) == 5, (
         "not every path withheld the distance, so this test is not exercising the five it "
         f"names: {[(n, d.get('stops_short_of_head')) for n, d in described]}"
+    )
+
+    # FIVE BRANCHES, NOT FIVE CALLS. The count alone passed while two calls collapsed onto
+    # one branch and returned identical text; distinct reasons is what makes it five paths.
+    reasons = {name: str(d.get("undetermined", "")) for name, d in withheld}
+    assert len(set(reasons.values())) == 5, (
+        "two of the five paths returned the SAME reason, so they are one branch wearing two "
+        f"names and this test counts calls rather than paths: {reasons}"
     )
 
     for name, d in withheld:
