@@ -1370,46 +1370,104 @@ def test_a_review_run_does_not_raise_the_uncheckable_count():
     )
 
 
-def test_a_gap_run_leaves_the_uncheckable_count_unmoved():
-    """Both gap paths ask admission, and a declared reason survives to the row.
+def test_a_gap_run_leaves_the_uncheckable_count_unmoved(db):
+    """A REVIEW RUN MUST NOT RAISE THE BLOCKING CEILING, measured before and after.
 
-    THE TWO HOLES THIS CLOSES, named by this work order's own independent review. The
-    `why` a reviewer supplies was handed to `admit_task` for the decision and then
-    dropped, so a task admitted on a declared reason reached the authority with no trace
-    of it -- a bare bypass with a nicer spelling, counted as a stub by the blocking
-    task-criteria-baseline ceiling, whose only notion of "declared" is DECLARED_PREFIX
-    appearing in the description. And the SPAWN path called no admission seat at all, so
-    a review could file an uncheckable claim by the other route entirely.
+    THE BODY THIS REPLACES WAS THE DEFECT IT NAMED. It called `compose_declared_reason`
+    and `admit_task` directly and never ran a gap path or measured a count -- a recorded
+    acceptance criterion that exits 0 without exercising the thing its own name claims,
+    which is false-green in the same direction this work order was opened against. Its own
+    docstring said it was "driven through the composer and the seat rather than asserted
+    about admit_task in isolation", and calling the seat in isolation is exactly what it
+    did. Found by the round table on a later round, not by the suite.
 
-    Driven through the composer and the seat rather than asserted about `admit_task` in
-    isolation: the previous test for this property called `admit_task` directly and could
-    not see either hole, which is why they survived a green suite.
+    Now both gap paths run against a real temp authority with every task shape a reviewer
+    can supply -- a criterion, a declared reason, and neither -- and
+    `task_criteria_baseline.measure()` is taken before and after. The count that must not
+    move is the one the blocking gate reads, so a review filing findings cannot refuse an
+    author's push for work the author never chose to do.
     """
-    from core.work_orders.admission import (
-        DECLARED_PREFIX,
-        admit_task,
-        compose_declared_reason,
+    from core.gates.task_criteria_baseline import measure
+    from core.work_orders.verify_gaps import _attach_gap_tasks, _insert_gap_work_orders
+
+    conn = sqlite3.connect(str(db))
+    try:
+        project_id = _project(conn)
+        reviewed = _reviewed_wo(conn, project_id, status="in_progress")
+        conn.commit()
+    finally:
+        conn.close()
+
+    before = measure(db)["uncheckable"]
+    assert before is not None, "the count could not be taken, so before/after proves nothing"
+
+    shapes = [
+        {
+            "title": "has a criterion",
+            "description": "checkable",
+            "acceptance_criteria": (
+                "TEST-CHECK: tests/unit/test_gap_fanout.py"
+                "::test_a_gap_run_leaves_the_uncheckable_count_unmoved"
+            ),
+        },
+        {
+            "title": "has a declared reason",
+            "description": "judgment",
+            "why": "no check settles an architecture decision; the deliverable is the record",
+        },
+        {"title": "has neither", "description": "a stub by any other name"},
+    ]
+
+    conn = sqlite3.connect(str(db))
+    try:
+        _insert_gap_work_orders(
+            conn,
+            gaps=[
+                {
+                    "title": "spawned gap",
+                    "description": "raised by review",
+                    "category": "durability",
+                    "type": "infrastructure",
+                    "tasks": [dict(t) for t in shapes],
+                }
+            ],
+            project_id=project_id,
+            milestone_id=None,
+            reviewed_work_order_id=reviewed,
+            reviewed_wo_title="Reviewed",
+            reviewed_wo_sequence=1,
+        )
+        _attach_gap_tasks(
+            conn,
+            work_order_id=reviewed,
+            project_id=project_id,
+            tasks=[dict(t) for t in shapes],
+            now=_NOW,
+            gap_key="k",
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    after = measure(db)["uncheckable"]
+    assert after == before, (
+        f"a review run raised the uncheckable count from {before} to {after}. That count is "
+        "a blocking ceiling, so a reviewer filing findings can refuse an author's push for "
+        "work the author never chose to do"
     )
 
-    # A declared reason reaches the description, which is the only place the ceiling reads.
-    composed = compose_declared_reason("the finding", "no check can settle a design choice")
-    assert DECLARED_PREFIX in composed, (
-        "the declared reason never reaches the description, so the ceiling counts this "
-        "task as a stub and the reviewer's reason is unauditable"
-    )
-    assert "the finding" in composed, "the original description must survive composition"
-
-    # And an empty reason composes nothing, so a blank --why cannot launder a stub.
-    assert compose_declared_reason("body", "") == "body"
-    assert compose_declared_reason("body", "   ") == "body"
-
-    # The seat still refuses a task with neither, which is what makes the rest meaningful.
-    refused = admit_task(
-        title="no check and no reason",
-        acceptance_criteria=None,
-        why=None,
-        work_order_description="Module boundary: core/work_orders.",
-        existing_titles=set(),
-        target_paths=[],
-    )
-    assert not refused["admitted"]
+    # AND THE RUN ACTUALLY FILED SOMETHING, so an unmoved count is not the trivial
+    # consequence of both paths having done nothing at all -- which is how this test
+    # passed before while exercising neither path.
+    conn = sqlite3.connect(str(db))
+    try:
+        filed = conn.execute(
+            "SELECT COUNT(*) FROM business_tasks WHERE work_order_id = ?", (reviewed,)
+        ).fetchone()[0]
+        spawned = conn.execute(
+            "SELECT COUNT(*) FROM business_tasks WHERE work_order_id != ?", (reviewed,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert filed > 0, "the attach path filed nothing, so an unmoved count proves nothing"
+    assert spawned > 0, "the spawn path filed nothing, so only one of the two paths ran"

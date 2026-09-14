@@ -2133,7 +2133,7 @@ def test_the_withheld_state_is_driven_with_the_canonical_evidence_layers(db, tmp
     )
 
 
-def test_two_reasons_both_survive_when_both_apply(db, tmp_path, monkeypatch):
+def test_a_disqualified_locator_survives_an_unreadable_boundary(db, tmp_path, monkeypatch):
     """The combination no earlier test reached, named by a second review round.
 
     The accumulator fix routed three branches through `_undetermined` and left the
@@ -2183,3 +2183,64 @@ def test_two_reasons_both_survive_when_both_apply(db, tmp_path, monkeypatch):
     assert described["evidence_layer"] == layer, described
     assert described["range_is_what_was_graded"] is False, described
     assert described["stops_short_of_head"] is None, described
+
+
+def test_every_graded_range_answer_carries_the_same_shape(db, tmp_path, monkeypatch):
+    """One shape from every exit, so a reader needs one set of keys.
+
+    `_describe_graded_range` has exits that measure, exits that withhold, and exits that
+    raise. The boundary-read exception used to return a fresh literal carrying three keys
+    while every other path returned `out` carrying six, so a consumer reading
+    `evidence_layer` or `range_is_what_was_graded` got None on the one path where knowing
+    which locator ran matters most -- and `.get()` made that indistinguishable from a
+    locator that had not been set.
+
+    Driven across ALL THREE classes rather than asserted about the corrected one: a test
+    covering only the exception path would pass while a fourth exit shipped its own shape,
+    which is how this one arrived.
+    """
+    import core.work_orders.delivery_boundary as db_mod
+    import core.work_orders.verify_main as vm
+    from core.work_orders.verify_main import _describe_graded_range
+
+    repo, _first = _git_repo(tmp_path / "repo")
+    wo_id = str(uuid.uuid4())
+    _seed_work_order(db, wo_id, "closed")
+    record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
+
+    from core.work_orders.delivery_boundary import record_delivery_boundary_end
+
+    record_delivery_boundary_end(wo_id, repo_root=repo, db_path=db)
+
+    # 1. MEASURES -- the boundary layer against a readable range.
+    measured = _describe_graded_range(wo_id, repo_root=repo, db_path=db)
+
+    # 2. WITHHOLDS -- a declared layer that did not read the boundary.
+    from core.work_orders.verify_git import EVIDENCE_LAYERS
+
+    other = [n for n, _ in EVIDENCE_LAYERS if n != "recorded_delivery_boundary"][0]
+    withheld = _describe_graded_range(wo_id, repo_root=repo, db_path=db, evidence_layer=other)
+
+    # 3. RAISES -- the boundary read itself fails.
+    def _boom(*a, **k):
+        raise RuntimeError("boundary unreadable")
+
+    monkeypatch.setattr(db_mod, "boundary_commit_range", _boom)
+    raised = _describe_graded_range(wo_id, repo_root=repo, db_path=db)
+    monkeypatch.undo()
+
+    # THE KEYS A READER NEEDS ON EVERY ANSWER. Not the full key set -- `warning` and
+    # `commits_behind_head` legitimately appear only where a distance was measured.
+    required = {"describes", "evidence_layer", "range_is_what_was_graded", "stops_short_of_head"}
+    for name, answer in (("measured", measured), ("withheld", withheld), ("raised", raised)):
+        missing = required - set(answer)
+        assert not missing, (
+            f"the {name!r} exit omits {sorted(missing)}, so a consumer reading those keys "
+            f"cannot tell an absent value from an unset one: {answer}"
+        )
+
+    # And the three are genuinely the three classes, or this asserts one shape three times.
+    assert measured.get("commits_behind_head") is not None, measured
+    assert withheld.get("commits_behind_head") is None, withheld
+    assert withheld["evidence_layer"] == other, withheld
+    assert "could not be read" in str(raised.get("undetermined", "")), raised
