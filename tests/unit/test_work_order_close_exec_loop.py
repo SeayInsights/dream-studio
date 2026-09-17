@@ -23,8 +23,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.config.sqlite_bootstrap import bootstrap_database
-from core.work_orders.artifact_envelope import wrap
+# `tests/` on the path before importing conftest -- the convention
+# tests/unit/test_on_stop_handoff.py already uses for `load_handler`.
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from conftest import reviewed_verdict  # noqa: E402
+
+from core.config.sqlite_bootstrap import bootstrap_database  # noqa: E402
+from core.work_orders.artifact_envelope import wrap  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NOW = "2026-05-20T00:00:00+00:00"
@@ -120,7 +128,7 @@ def _write_pass_verdict(planning: Path, wo_id: str) -> None:
     """
     path = planning / "work-orders" / wo_id / "review-verdict.json"
     stored = wrap(
-        json.dumps({"passed": True, "gaps": [], "summary": "ok"}),
+        json.dumps(reviewed_verdict({"passed": True, "gaps": [], "summary": "ok"})),
         generator="ds work-order verify",
         head_commit_sha=None,
     )
@@ -132,25 +140,27 @@ def _write_fail_verdict(planning: Path, wo_id: str) -> None:
     path = planning / "work-orders" / wo_id / "review-verdict.json"
     path.write_text(
         json.dumps(
-            {
-                "passed": False,
-                "summary": "T1 partial",
-                "tasks_verified": [
-                    {"task_title": "T1", "evidence": "missing", "verdict": "partial"}
-                ],
-                "gaps": [
-                    {
-                        "title": "Fix T1",
-                        "description": "T1 was partial",
-                        "work_order_type": "cleanup",
-                    }
-                ],
-                "spawned_work_orders": [
-                    {"work_order_id": GAP_WO_ID, "title": "Fix T1", "type": "cleanup"}
-                ],
-                "work_order_id": wo_id,
-                "verified_at": NOW,
-            }
+            reviewed_verdict(
+                {
+                    "passed": False,
+                    "summary": "T1 partial",
+                    "tasks_verified": [
+                        {"task_title": "T1", "evidence": "missing", "verdict": "partial"}
+                    ],
+                    "gaps": [
+                        {
+                            "title": "Fix T1",
+                            "description": "T1 was partial",
+                            "work_order_type": "cleanup",
+                        }
+                    ],
+                    "spawned_work_orders": [
+                        {"work_order_id": GAP_WO_ID, "title": "Fix T1", "type": "cleanup"}
+                    ],
+                    "work_order_id": wo_id,
+                    "verified_at": NOW,
+                }
+            )
         ),
         encoding="utf-8",
     )

@@ -1047,17 +1047,37 @@ def test_an_unrecognised_layer_is_named_rather_than_swallowed():
 def test_the_verdict_and_result_both_carry_the_layer():
     """A layer computed and recorded nowhere is the attachment_pressure defect again:
     calculated, stored nowhere, reaching no reader."""
+    import ast
+
     source = Path("core/work_orders/verify_main.py").read_text(encoding="utf-8")
 
-    # Once in the verdict dict (12-space indent) and once in the result dict (8-space).
-    verdict = [ln for ln in source.splitlines() if ln.startswith('            "evidence_layer"')]
+    # SCOPED TO verify_work_order, NOT TO AN INDENT WIDTH. The first version identified
+    # "the verdict dict" and "the result dict" by leading spaces across the WHOLE file, so
+    # any other function acquiring an 8-space `"evidence_layer":` entry broke it. That
+    # happened: `_describe_graded_range` gained one, and this test failed reporting "result
+    # occurrences: 2" while both dicts it actually names were still correct. An indent is
+    # not a scope.
+    tree = ast.parse(source)
+    fn = next(
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.FunctionDef) and n.name == "verify_work_order"
+    )
+    lines = source.splitlines()
+    inside = [
+        lines[i - 1]
+        for i in range(fn.lineno, (fn.end_lineno or fn.lineno) + 1)
+        if '"evidence_layer"' in lines[i - 1]
+    ]
+
+    verdict = [ln for ln in inside if ln.startswith('            "evidence_layer"')]
     result = [
         ln
-        for ln in source.splitlines()
+        for ln in inside
         if ln.startswith('        "evidence_layer"') and not ln.startswith("            ")
     ]
-    assert len(verdict) == 1, f"verdict occurrences: {len(verdict)}"
-    assert len(result) == 1, f"result occurrences: {len(result)}"
+    assert len(verdict) == 1, f"verdict occurrences in verify_work_order: {inside}"
+    assert len(result) == 1, f"result occurrences in verify_work_order: {inside}"
 
 
 # -- Task 8: the type selects the standards ------------------------------------

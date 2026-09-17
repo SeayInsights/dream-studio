@@ -7,11 +7,23 @@ absent (migration 144 unreleased on the live authority DB).
 
 from __future__ import annotations
 
+import json
 import sqlite3
+import sys
 from pathlib import Path
 
-from core.work_orders.artifacts import get_wo_artifact, has_wo_artifact, set_wo_artifact
-from core.work_orders.close import run_gate_check
+# `tests/` on the path before importing conftest -- the convention
+# tests/unit/test_on_stop_handoff.py already uses for `load_handler`.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from conftest import reviewed_verdict  # noqa: E402
+
+from core.work_orders.artifacts import (  # noqa: E402
+    get_wo_artifact,
+    has_wo_artifact,
+    set_wo_artifact,
+)
+from core.work_orders.close import run_gate_check  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _MIG_DIR = REPO_ROOT / "core" / "event_store" / "migrations"
@@ -131,7 +143,7 @@ def test_independent_review_gate_reads_db_verdict(tmp_path):
     set_wo_artifact(
         "wo-6",
         "review_verdict",
-        '{"passed": true}',
+        json.dumps(reviewed_verdict({"passed": True})),
         db_path=db,
         generator="ds work-order verify",
     )

@@ -77,6 +77,24 @@ def _falsification_to_gaps(scenarios: list[dict[str, Any]]) -> list[dict[str, An
             "description": (
                 f"Worst case: {s.get('scenario', '')}\n" f"Proposed test: {s.get('evidence', '')}"
             ),
+            # THE DECLARED REASON THIS TASK IS ADMITTED ON (WO 175299fc). Admission was
+            # seated on the spawn path in #713, and these tasks carried neither a criterion
+            # nor a reason -- so the Warden refused every one and the spawned work order
+            # landed with ZERO tasks: a tracker with no work, and silently, because the
+            # refusals went to `unfiled_findings` while the work order itself looked filed.
+            # Caught only by tests/integration/test_falsification_pass.py, which sits
+            # outside both the pre-push subset and the PR-smoke matrix, so it surfaced in
+            # post-merge Full CI and nowhere earlier.
+            #
+            # The reason is not a formality: the deliverable IS the adversarial test, so no
+            # executable criterion can name it before it exists. A TEST-CHECK pointing at an
+            # unwritten node is WORSE than none -- close runs it, it fails, and the failure
+            # reads as a defect in the work rather than in the criterion.
+            "why": (
+                "the deliverable is the adversarial test itself, so no executable criterion"
+                " can name it before it exists; a TEST-CHECK on an unwritten node would fail"
+                " at close and read as a defect in the work rather than in the criterion"
+            ),
         }
         for s in actionable
     ]
@@ -1283,6 +1301,9 @@ def _insert_gap_work_orders(
                     now,
                 ),
             )
+            # WO 175299fc: COUNTED, so a spawn that filed nothing cannot be silent.
+            _proposed_here = len(gap.get("tasks", []) or [])
+            _filed_here = 0
             for task in gap.get("tasks", []):
                 task_id = str(uuid.uuid4())
                 _task_title = task.get("title", "")
@@ -1379,16 +1400,31 @@ def _insert_gap_work_orders(
                         now,
                     ),
                 )
+                _filed_here += 1
             spawned.append(
                 {
                     "work_order_id": new_wo_id,
                     "title": gap_title,
                     "type": wo_type,
                     "gap_key": gap_key,
+                    "tasks_filed": _filed_here,
                     # SAID OUT LOUD when the event did not land: the row is then
                     # rebuild-fragile, and a caller reading a successful spawn should
                     # know which kind of row it got.
                     **({} if _wo_emitted else {"event_emitted": False}),
+                    # AND SAID OUT LOUD WHEN THE TRACKER HAS NO WORK IN IT. Admission can
+                    # refuse every proposed task, leaving a work order that looks
+                    # successfully spawned and contains nothing. That is what #713 did to
+                    # the falsification path, and it was found only by an integration test
+                    # sitting outside every pre-merge subset -- seven merges later. A work
+                    # order with no tasks violates the multiple-tasks rule this engine
+                    # enforces everywhere else, so the record states it rather than leaving
+                    # it to be noticed.
+                    **(
+                        {"all_tasks_refused": True, "refused_task_count": _proposed_here}
+                        if _proposed_here and not _filed_here
+                        else {}
+                    ),
                 }
             )
 

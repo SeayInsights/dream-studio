@@ -103,6 +103,37 @@ def load_handler(name: str) -> types.ModuleType:
     return module
 
 
+def reviewed_verdict(verdict: dict | None = None, **fields) -> dict:
+    """A review verdict carrying the provenance `independent_review` requires.
+
+    WO 175299fc. The close gate refuses a verdict whose `round_table.seats` is empty
+    BEFORE it looks at `passed`, `summary` or anything else -- a score with no lens is a
+    score with no provenance. Every synthetic verdict written before that gate landed is
+    therefore refused for the missing section and never reaches the behaviour its test was
+    written to pin, which is how eighteen tests went red across eight files and held main's
+    Full CI red for seven consecutive merges.
+
+    DEFINED ONCE, HERE, because the alternative is the failure this repo keeps paying for:
+    the same stub pasted into six files, drifting apart the next time the contract moves.
+    `from conftest import reviewed_verdict` is the pattern `load_handler` already
+    establishes. When the gate's requirement changes again, this is the single place.
+
+    NOT A BYPASS. It supplies the shape a real verdict carries, so a test asserting on
+    `passed` or on partial-write recovery exercises the path it names. The gate's OTHER
+    accepted shape -- an operator attestation, exempted because demanding a table would
+    block attestation or invite convening one nobody read -- is deliberately not produced
+    here: a test wanting that path should build it explicitly, since the exemption is the
+    thing under test in those cases.
+    """
+    seats = [
+        {"seat": "Claim and closure auditor", "lane": "a-finding-already-filed", "verdict": "pass"}
+    ]
+    out: dict = {"round_table": {"seats": seats}}
+    out.update(verdict or {})
+    out.update(fields)
+    return out
+
+
 def pytest_configure(config):
     """Reinstall our SIGINT handler after pytest installs its own.
 
