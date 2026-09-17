@@ -77,6 +77,26 @@ def _gate(name: str, db: Path, planning: Path, wo_id: str) -> tuple[bool, str]:
 # ── Task 1: atomic writes ──────────────────────────────────────────────────────
 
 
+#: WO 175299fc: THE PROVENANCE SECTION EVERY VERDICT NOW CARRIES.
+#
+# `independent_review` refuses a verdict whose `round_table.seats` is empty BEFORE it
+# looks at `passed` or `summary` -- a score with no provenance is not a review. These
+# fixtures predate that gate, so each was refused for the missing section and never
+# reached the behaviour it was written to pin: the unreviewable-versus-failed distinction,
+# and partial-write recovery. Six of the twelve failures that held Full CI red for seven
+# consecutive merges were this.
+#
+# A helper rather than the section pasted into each literal, so the next contract change
+# has ONE place to move -- the lesson the three drifted prose records in this repo have
+# already paid for twice.
+def _reviewed(verdict: dict) -> dict:
+    """A verdict carrying the provenance the gate requires, plus whatever the test pins."""
+    return {
+        "round_table": {"seats": [{"seat": "Claim and closure auditor", "verdict": "pass"}]},
+        **verdict,
+    }
+
+
 def test_an_interrupted_verdict_write_leaves_no_artifact(tmp_path):
     """An absent verdict is recoverable (re-run verify); a truncated one reads as a
     failed review and blocks a close on work that passed. So: all or nothing."""
@@ -108,7 +128,7 @@ def test_an_interrupted_verdict_write_leaves_no_artifact(tmp_path):
 
 def test_a_completed_write_is_fully_present(tmp_path):
     target = tmp_path / "wo" / "review-verdict.json"
-    _atomic_write(target, json.dumps({"passed": True, "summary": "ok"}))
+    _atomic_write(target, json.dumps(_reviewed({"passed": True, "summary": "ok"})))
     assert json.loads(target.read_text(encoding="utf-8"))["passed"] is True
 
 
@@ -132,7 +152,7 @@ def test_a_summaryless_failure_reads_as_unreviewable(db, tmp_path):
     set_wo_artifact(
         wo_id,
         "review_verdict",
-        json.dumps({"passed": False}),
+        json.dumps(_reviewed({"passed": False})),
         db_path=db,
         generator="ds work-order verify",
         project_root=Path("."),
@@ -156,7 +176,7 @@ def test_a_real_failure_still_reads_as_failed(db, tmp_path):
     set_wo_artifact(
         wo_id,
         "review_verdict",
-        json.dumps({"passed": False, "summary": "task 3 was never implemented"}),
+        json.dumps(_reviewed({"passed": False, "summary": "task 3 was never implemented"})),
         db_path=db,
         generator="ds work-order verify",
         project_root=Path("."),
@@ -176,7 +196,9 @@ def test_failure_reasons_alone_are_enough_to_be_a_real_verdict(db, tmp_path):
     set_wo_artifact(
         wo_id,
         "review_verdict",
-        json.dumps({"passed": False, "failure_reasons": ["composite_score 0.41 < 0.70"]}),
+        json.dumps(
+            _reviewed({"passed": False, "failure_reasons": ["composite_score 0.41 < 0.70"]})
+        ),
         db_path=db,
         generator="ds work-order verify",
         project_root=Path("."),
@@ -195,7 +217,9 @@ def test_a_new_envelopeless_verdict_is_rejected_not_believed(db, tmp_path):
     wo_id = _wo(db)
     vdir = tmp_path / "work-orders" / wo_id
     vdir.mkdir(parents=True)
-    (vdir / "review-verdict.json").write_text(json.dumps({"passed": False}), encoding="utf-8")
+    (vdir / "review-verdict.json").write_text(
+        json.dumps(_reviewed({"passed": False})), encoding="utf-8"
+    )
 
     passed, reason = _gate("independent_review", db, tmp_path, wo_id)
     assert passed is False
@@ -244,7 +268,7 @@ def test_close_reads_the_last_good_verdict_after_an_interruption(db, tmp_path):
     set_wo_artifact(
         wo_id,
         "review_verdict",
-        json.dumps({"passed": True, "summary": "run N-1 certified this work"}),
+        json.dumps(_reviewed({"passed": True, "summary": "run N-1 certified this work"})),
         db_path=db,
         generator="ds work-order verify",
         project_root=Path("."),
@@ -264,7 +288,7 @@ def test_close_reads_the_last_good_verdict_after_an_interruption(db, tmp_path):
     vp.os.fsync = lambda *_a, **_k: (_ for _ in ()).throw(Boom())
     try:
         with pytest.raises(Boom):
-            _atomic_write(disk, json.dumps({"passed": False}))
+            _atomic_write(disk, json.dumps(_reviewed({"passed": False})))
     finally:
         vp.os.fsync = real_fsync
 

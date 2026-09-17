@@ -18,6 +18,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+# `tests/` on the path before importing conftest -- the convention
+# tests/unit/test_on_stop_handoff.py already uses for `load_handler`.
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from conftest import reviewed_verdict  # noqa: E402
+
 from core.config.sqlite_bootstrap import bootstrap_database
 from core.work_orders.verify_prompts import _QUALITY_PROMPT_TEMPLATE
 
@@ -196,7 +204,9 @@ def _fake_passing_verify(tmp_path: Path, db_path: Path):
 
         _persist_review_verdict(
             kwargs["work_order_id"],
-            {"work_order_id": kwargs["work_order_id"], "passed": True, "gaps": []},
+            reviewed_verdict(
+                {"work_order_id": kwargs["work_order_id"], "passed": True, "gaps": []}
+            ),
             planning_root=kwargs.get("planning_root") or tmp_path / "planning",
             db_path=db_path,
             project_root=None,

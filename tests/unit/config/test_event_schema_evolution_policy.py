@@ -99,6 +99,18 @@ _GOOD_PAYLOADS: dict[str, dict] = {
         "work_order_id": str(uuid.uuid4()),
         "project_id": "proj-test",
     },
+    # WO 175299fc: registered by #712 without the fixture the registration obliges, which
+    # is what put Full CI red for seven consecutive merges. `work_order.reopened` was added
+    # because a rebuild reverted every reopened work order to `closed` -- the registration
+    # was right; the payload every registered type owes was not added with it.
+    "work_order.cancelled": {
+        "work_order_id": str(uuid.uuid4()),
+        "project_id": "proj-test",
+    },
+    "work_order.reopened": {
+        "work_order_id": str(uuid.uuid4()),
+        "project_id": "proj-test",
+    },
     "design_brief.deleted": {
         "brief_id": str(uuid.uuid4()),
         "project_id": "proj-test",
@@ -147,6 +159,31 @@ class TestRegistryIntegrity:
 
 
 class TestPayloadRequiredKeys:
+    def test_every_required_key_type_has_a_fixture(self):
+        """The gap reports as a named list, before any parametrised node raises KeyError.
+
+        WO 175299fc. Two of the three parametrised nodes below index _GOOD_PAYLOADS
+        directly, so a registered type with no fixture raises `KeyError: 'work_order.reopened'`
+        -- which reads as a broken test rather than as a missing fixture, and puts the
+        remedy nowhere near the failure. That is how six of the twelve failures that kept
+        Full CI red for seven consecutive merges presented.
+
+        This runs first and unparametrised, so the whole gap arrives as ONE failure naming
+        every type that owes a fixture. The per-type nodes keep their own assertion: this
+        one says WHAT is missing, they say whether each fixture is correct.
+        """
+        missing = sorted(
+            e.event_type
+            for e in _entries_with_required_keys()
+            if e.event_type not in _GOOD_PAYLOADS
+        )
+        assert not missing, (
+            "registered event type(s) declare payload_required_keys and have no fixture in "
+            f"_GOOD_PAYLOADS: {missing}. Registering a type obliges a known-good payload -- "
+            "add one per type above. Without this the parametrised nodes below fail with a "
+            "bare KeyError, which reads as a broken test rather than a missing fixture."
+        )
+
     @pytest.mark.parametrize("entry", _entries_with_required_keys(), ids=lambda e: e.event_type)
     def test_fixture_payload_contains_all_required_keys(self, entry):
         """Every registered event type with required keys has a passing fixture."""

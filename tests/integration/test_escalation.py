@@ -17,9 +17,16 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
+
+# `tests/` on the path before importing conftest -- the convention
+# tests/unit/test_on_stop_handoff.py already uses for `load_handler`.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from conftest import reviewed_verdict  # noqa: E402
 
 from unittest.mock import MagicMock, patch
 
@@ -173,7 +180,9 @@ def _write_passing_verdict(planning_root: Path, wo: str, db_path: Path) -> None:
     WO-VERIFY-PROVENANCE: the gate now requires a provenance envelope — wrap the
     content the same way ``_persist_review_verdict`` does for a genuine verify run.
     """
-    body = json.dumps({"ok": True, "passed": True, "work_order_id": wo, "summary": "ok"})
+    body = json.dumps(
+        reviewed_verdict({"ok": True, "passed": True, "work_order_id": wo, "summary": "ok"})
+    )
 
     # STORE WHERE THE GATE READS. This wrote only the .planning disk path, which the
     # zero-disk migration abandoned: verdicts live in business_work_order_artifacts and

@@ -12,6 +12,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+# `tests/` on the path before importing conftest -- the convention
+# tests/unit/test_on_stop_handoff.py already uses for `load_handler`.
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from conftest import reviewed_verdict  # noqa: E402
+
 from core.config.sqlite_bootstrap import bootstrap_database
 from core.work_orders.artifact_envelope import unwrap, wrap
 
@@ -320,16 +328,21 @@ def test_close_gate_failed_verdict_blocks(tmp_path: pytest.TempPathFactory) -> N
     wo_dir.mkdir(parents=True)
     spawned_id = str(uuid.uuid4())
     # WO-VERIFY-PROVENANCE: model a genuine (enveloped) verify-produced verdict so
+    # WO 175299fc: and a SECOND provenance layer landed later -- the round table --
+    # which broke this test again in the same way. `reviewed_verdict` is where that
+    # shape lives now, so the third layer is one edit rather than six.
     # the gate reaches the "review failed" check instead of the provenance check.
     stored = wrap(
         json.dumps(
-            {
-                "passed": False,
-                "summary": "Task T1 was missing.",
-                "spawned_work_orders": [
-                    {"work_order_id": spawned_id, "title": "Fix T1", "type": "cleanup"}
-                ],
-            }
+            reviewed_verdict(
+                {
+                    "passed": False,
+                    "summary": "Task T1 was missing.",
+                    "spawned_work_orders": [
+                        {"work_order_id": spawned_id, "title": "Fix T1", "type": "cleanup"}
+                    ],
+                }
+            )
         ),
         generator="ds work-order verify",
         head_commit_sha=None,
@@ -364,14 +377,19 @@ def test_close_gate_passed_verdict_allows(tmp_path: pytest.TempPathFactory) -> N
     wo_dir = planning_root / "work-orders" / work_order_id
     wo_dir.mkdir(parents=True)
     # WO-VERIFY-PROVENANCE: model a genuine (enveloped) verify-produced verdict so
+    # WO 175299fc: and a SECOND provenance layer landed later -- the round table --
+    # which broke this test again in the same way. `reviewed_verdict` is where that
+    # shape lives now, so the third layer is one edit rather than six.
     # the gate reaches the passed-verdict check instead of the provenance check.
     stored = wrap(
         json.dumps(
-            {
-                "passed": True,
-                "summary": "All tasks addressed.",
-                "spawned_work_orders": [],
-            }
+            reviewed_verdict(
+                {
+                    "passed": True,
+                    "summary": "All tasks addressed.",
+                    "spawned_work_orders": [],
+                }
+            )
         ),
         generator="ds work-order verify",
         head_commit_sha=None,

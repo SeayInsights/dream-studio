@@ -1471,3 +1471,115 @@ def test_a_gap_run_leaves_the_uncheckable_count_unmoved(db):
         conn.close()
     assert filed > 0, "the attach path filed nothing, so an unmoved count proves nothing"
     assert spawned > 0, "the spawn path filed nothing, so only one of the two paths ran"
+
+
+def test_a_spawn_whose_tasks_were_all_refused_says_so(db):
+    """A tracker with no work in it must not look like a successful spawn.
+
+    WO 175299fc, and this is production rather than test hygiene. #713 seated admission on
+    the spawn path; the falsification gap builder produced tasks carrying neither a
+    criterion nor a declared reason, so the Warden refused every one and the spawned work
+    order landed with ZERO tasks. It read as filed: the refusals went out on
+    `unfiled_findings` while the work-order record said nothing, and the only thing that
+    noticed was an integration test outside both the pre-push subset and the PR-smoke
+    matrix -- seven merges later, in post-merge Full CI.
+
+    A work order with no tasks violates the multiple-tasks rule this engine enforces
+    everywhere else, so the record now carries `tasks_filed` always and
+    `all_tasks_refused` when every proposed task was refused.
+    """
+    from core.work_orders.verify_gaps import _insert_gap_work_orders
+
+    conn = sqlite3.connect(str(db))
+    try:
+        project_id = _project(conn)
+        reviewed = _reviewed_wo(conn, project_id, status="closed")
+        conn.commit()
+
+        # Every task uncheckable AND undeclared -- exactly the shape the Warden refuses.
+        spawned = _insert_gap_work_orders(
+            conn,
+            gaps=[
+                {
+                    "title": "a finding whose tasks nobody can check",
+                    "description": "raised by review",
+                    "category": "durability",
+                    "type": "cleanup",
+                    "tasks": [
+                        {"title": "do the thing", "description": "no criterion, no reason"},
+                        {"title": "do the other thing", "description": "likewise"},
+                    ],
+                }
+            ],
+            project_id=project_id,
+            milestone_id=None,
+            reviewed_work_order_id=reviewed,
+            reviewed_wo_title="Reviewed",
+            reviewed_wo_sequence=1,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    new = [r for r in spawned if r.get("work_order_id") != reviewed]
+    assert new, f"nothing was spawned at all: {spawned}"
+    rec = new[0]
+
+    assert (
+        rec.get("tasks_filed") == 0
+    ), f"the record does not report that zero tasks were filed: {rec}"
+    assert rec.get("all_tasks_refused") is True, (
+        "a work order was spawned with every proposed task refused and the record does not "
+        f"say so -- a tracker with no work, reading as a successful spawn: {rec}"
+    )
+    assert rec.get("refused_task_count") == 2, rec
+
+    # And the refusals themselves still reach the caller, which is the other half: a
+    # finding refused for lacking a criterion must be visible, not merely counted.
+    assert rec.get("unfiled_findings"), f"the refusals were counted and dropped: {rec}"
+
+
+def test_a_spawn_that_files_its_tasks_reports_the_count_without_the_alarm(db):
+    """The marker must not fire on a healthy spawn, or it is noise that gets ignored."""
+    from core.work_orders.verify_gaps import _insert_gap_work_orders
+
+    conn = sqlite3.connect(str(db))
+    try:
+        project_id = _project(conn)
+        reviewed = _reviewed_wo(conn, project_id, status="closed")
+        conn.commit()
+        spawned = _insert_gap_work_orders(
+            conn,
+            gaps=[
+                {
+                    "title": "a finding whose tasks declare their reason",
+                    "description": "raised by review",
+                    "category": "durability",
+                    "type": "cleanup",
+                    "tasks": [
+                        {
+                            "title": "write the adversarial test",
+                            "description": "the deliverable is the test",
+                            "why": (
+                                "the deliverable is the test itself, so no criterion can "
+                                "name it before it exists"
+                            ),
+                        }
+                    ],
+                }
+            ],
+            project_id=project_id,
+            milestone_id=None,
+            reviewed_work_order_id=reviewed,
+            reviewed_wo_title="Reviewed",
+            reviewed_wo_sequence=1,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    rec = [r for r in spawned if r.get("work_order_id") != reviewed][0]
+    assert rec.get("tasks_filed") == 1, rec
+    assert (
+        "all_tasks_refused" not in rec
+    ), f"the alarm fired on a spawn that filed its task, so it is noise: {rec}"
