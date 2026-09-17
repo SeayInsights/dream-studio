@@ -1,6 +1,6 @@
 """Dashboard truth gate (WO-LIVE-DATA-GATE T2).
 
-Runs five live-authority invariants.  Every invariant is expressed as
+Runs six live-authority invariants.  Every invariant is expressed as
 ``SELECT 1 WHERE <clause>`` — the convention established by WO-LIVE-DATA-GATE
 T1:
 
@@ -8,15 +8,15 @@ T1:
   * Zero rows       → FAIL (condition false, or data violates the invariant)
   * Exception       → FAIL (table missing / DB error handled per-invariant)
 
-All five invariants are **vacuously passing on a fresh/empty authority DB**.
+All six invariants are **vacuously passing on a fresh/empty authority DB**.
 They fire only when production data exists and violates a structural guarantee.
 
-Two of the five (execution_events_project_resolved, active_project_has_activity)
-run against the SQLite authority DB. The other three (token_model_null_fraction,
-token_skill_attributed, priceable_cost_present) run against the DuckDB
-aggregate_metrics.db token_usage_records view (WO-DBA-DROP, migration 137
-retired the SQLite token_usage_records table — the DuckDB view over canonical
-token.consumed events is the sole source now).
+Two of the six (execution_events_project_resolved, active_project_has_activity)
+run against the SQLite authority DB. The other four (token_model_null_fraction,
+token_skill_attributed, priceable_cost_present, token_models_are_priced) run
+against the DuckDB aggregate_metrics.db token_usage_records view (WO-DBA-DROP,
+migration 137 retired the SQLite token_usage_records table — the DuckDB view
+over canonical token.consumed events is the sole source now).
 
 Invariants
 ----------
@@ -40,10 +40,20 @@ Invariants
    At least one token row carries a non-NULL model_id (required to price the
    session).  Vacuously passes when the table is empty.  Does NOT assert a
    dollar amount — reportable cost is honestly $0 for plan-tier usage.
+   NOTE: a non-NULL model_id is necessary but NOT sufficient for a row to
+   price; invariant 6 covers the rest.
+
+6. token_models_are_priced
+   Every model_id with recorded usage resolves to a rate in
+   CLAUDE_MODEL_PRICING.  Vacuously passes when the table is empty.  This is
+   the invariant that was missing when the 5-series rollover left 99.2% of
+   token events costing $0.00 for four months: every row had a model_id, so
+   invariant 5 passed, but no row had a rate.  The allow-list is generated
+   from the pricing table itself, so it cannot drift from what it guards.
 
 A missing/unavailable DuckDB analytics store (fresh install, projection runner
 never ran, duckdb import failure) is a pass-with-note for the three token
-invariants — it must never block work-order close. The analytics store is
+invariants — they must never block work-order close. The analytics store is
 NEVER-AUTHORITY and fully rebuildable; its absence is not a data violation.
 """
 
@@ -104,6 +114,37 @@ _SQLITE_INVARIANTS: list[tuple[str, str]] = [
 _TOKEN_ATTRIBUTION_EPOCH = "2026-07-01"
 _ATTRIBUTED_SCOPE = f"created_at >= '{_TOKEN_ATTRIBUTION_EPOCH}' AND total_tokens > 0"
 
+
+def _priced_models_sql() -> str:
+    """Invariant: every model with recorded usage has a rate in the pricing table.
+
+    `priceable_cost_present` below only asserts that a model_id exists, and its
+    docstring explicitly declined to assert a dollar amount. That loophole let
+    the 5-series rollover sit unnoticed: every row had a model_id, so the gate
+    passed, while 99.2% of events priced at $0.00 because the pricing table had
+    never been updated past the 4-series.
+
+    The priced set is read from CLAUDE_MODEL_PRICING at import, so this
+    invariant cannot drift from the table it guards — adding a model to the
+    table is what widens the allow-list, and nothing else.
+    """
+    from core.pricing.claude_models import CLAUDE_MODEL_PRICING
+
+    # Model ids are literals from our own table; quote defensively anyway.
+    priced = ", ".join("'" + m.replace("'", "''") + "'" for m in sorted(CLAUDE_MODEL_PRICING))
+    return (
+        "SELECT 1 WHERE"
+        f" (SELECT COUNT(*) FROM token_usage_records WHERE {_ATTRIBUTED_SCOPE}"
+        "   AND model_id IS NOT NULL) = 0"
+        " OR NOT EXISTS ("
+        "  SELECT 1 FROM token_usage_records"
+        f"  WHERE {_ATTRIBUTED_SCOPE} AND model_id IS NOT NULL"
+        "    AND lower(regexp_replace(model_id, '-[0-9]{8}$', ''))"
+        f"        NOT IN ({priced})"
+        " )"
+    )
+
+
 #: DuckDB-backed token invariants (WO-DBA-DROP) — run against the
 #: aggregate_metrics.db token_usage_records view. Same SQL shape as the
 #: retired SQLite invariants: the view carries the same column names
@@ -142,6 +183,10 @@ _DUCKDB_TOKEN_INVARIANTS: list[tuple[str, str]] = [
             f" EXISTS (SELECT 1 FROM token_usage_records WHERE {_ATTRIBUTED_SCOPE}"
             "         AND model_id IS NOT NULL)"
         ),
+    ),
+    (
+        "token_models_are_priced",
+        _priced_models_sql(),
     ),
 ]
 

@@ -34,6 +34,17 @@ from core.gates.dashboard_truth import run_dashboard_truth
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NOW = "2026-01-01T00:00:00.000000Z"
+#: Every invariant run_dashboard_truth reports. Named rather than counted so a
+#: drifted set says WHICH invariant appeared or vanished.
+EXPECTED_INVARIANTS = {
+    "token_model_null_fraction",
+    "token_skill_attributed",
+    "priceable_cost_present",
+    "token_models_are_priced",
+    "execution_events_project_resolved",
+    "active_project_has_activity",
+}
+
 # In-scope for the token attribution epoch (WO 6712c8a0: invariants measure real
 # per-inference usage on/after 2026-07-01). Violating token rows must be stamped
 # on/after the epoch to be counted — a pre-epoch violation is excluded by design.
@@ -306,7 +317,11 @@ def test_dashboard_truth_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     _isolate_analytics_store(monkeypatch, tmp_path / "empty")
     result_empty = run_dashboard_truth(db_empty)
     assert result_empty["ok"] is True, f"Empty DB should pass; got {result_empty}"
-    assert len(result_empty["results"]) == 5, "Should have exactly 5 invariant results"
+    names_empty = {r["name"] for r in result_empty["results"]}
+    assert names_empty == EXPECTED_INVARIANTS, (
+        f"invariant set drifted: missing={EXPECTED_INVARIANTS - names_empty} "
+        f"unexpected={names_empty - EXPECTED_INVARIANTS}"
+    )
     for inv in result_empty["results"]:
         assert inv["passed"], f"Invariant {inv['name']!r} should pass on empty DB"
 
@@ -349,7 +364,7 @@ def test_missing_authority_file_vacuously_passes(
     _isolate_analytics_store(monkeypatch, tmp_path / "nope-analytics")
     result = run_dashboard_truth(missing)
     assert result["ok"] is True, f"Missing DB must pass; got {result}"
-    assert len(result["results"]) == 5
+    assert {r["name"] for r in result["results"]} == EXPECTED_INVARIANTS
     for inv in result["results"]:
         assert inv["passed"], f"Invariant {inv['name']!r} must pass when DB is absent"
         assert inv["error"] is None

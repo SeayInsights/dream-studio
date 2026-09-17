@@ -98,6 +98,11 @@ def main(argv: list[str] | None = None) -> int:
 
     add_escalation_subcommand(subcommands)
 
+    # render subcommand group — findings normalised across every producer
+    from interfaces.cli.ds_render import add_render_subcommand
+
+    add_render_subcommand(subcommands)
+
     # projection subcommand group (Phase 18.1.5)
     from interfaces.cli.projection_cli import add_projection_subcommand
 
@@ -176,6 +181,11 @@ def main(argv: list[str] | None = None) -> int:
             if hasattr(args, "func"):
                 return args.func(args)
             print("Usage: ds learn review [--limit N] [--batch]", file=sys.stderr)
+            return 1
+        if args.command == "render":
+            if hasattr(args, "func"):
+                return args.func(args)
+            print("Usage: ds render findings [--open] [--json]", file=sys.stderr)
             return 1
         if args.command == "files":
             if hasattr(args, "func"):
