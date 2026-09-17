@@ -168,10 +168,19 @@ def test_eval_task_done(patched_paths, db_path: Path, tmp_path: Path) -> None:
 
     assert result["ok"] is True, f"mark_task_done failed: {result}"
     assert result["task_id"] == TASK_ID
-    assert result["status"] == "complete"
+    # Issue #718: status reports what the authority HOLDS, not what was requested.
+    # This fixture's sync_tick does not reach this DB, so the honest answer here is
+    # the durable-but-not-yet-materialized one; a wired environment reports
+    # "complete" inline (WO-TASKDONE-SYNC). Accept either rather than pinning the
+    # wiring artifact, but never accept "complete" while the row disagrees.
+    if result.get("read_model_pending"):
+        assert (
+            result["status"] != "complete"
+        ), f"a pending read model must not be reported as complete: {result}"
+    else:
+        assert result["status"] == "complete"
     assert result["tasks_remaining"] == 0
     assert result.get("all_tasks_complete") is True
-    # DB row stays pending until TaskProjection applies the task.completed event.
 
 
 # ── eval_close_wo ─────────────────────────────────────────────────────────────
