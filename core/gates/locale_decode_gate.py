@@ -45,8 +45,12 @@ _SKIP_DIRS = frozenset(
         "venv",
         "node_modules",
         "__pycache__",
-        "graphify-out",
         "dist",  # generated plugin distribution — regenerated from canonical sources
+        # Agent worktrees are full duplicate checkouts of this repo. Scanning them
+        # reports the same source twice under a second path, so the gate fails on
+        # its own exemption markers seen through the copy. tests/unit/
+        # test_schema_keep_list.py already excludes them for the same reason.
+        "worktrees",
     }
 )
 

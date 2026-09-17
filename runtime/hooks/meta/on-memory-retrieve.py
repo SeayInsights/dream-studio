@@ -34,7 +34,29 @@ from core.telemetry.debug import debug
 from control.research.memory import MemorySearch
 
 
-def main(payload: dict) -> None:
+def main() -> None:
+    """Dispatcher entry point — takes no arguments.
+
+    control/execution/dispatch_tracking.py assigns the raw payload to sys.stdin
+    and calls mod.main() with zero arguments. Declaring a required `payload`
+    parameter here makes every real dispatch raise TypeError, which the
+    dispatcher swallows and records as status="failed" — silently, forever.
+    That is exactly what happened to this handler and to on-prompt-route.
+    """
+    try:
+        raw = sys.stdin.read().lstrip("﻿")
+    except Exception:
+        return
+    try:
+        payload = json.loads(raw) if raw.strip() else {}
+    except (ValueError, TypeError):
+        return
+    if not isinstance(payload, dict):
+        return
+    _handle(payload)
+
+
+def _handle(payload: dict) -> None:
     prompt = (payload.get("prompt") or "").strip()
     if not prompt:
         return
@@ -64,7 +86,6 @@ def main(payload: dict) -> None:
 
 if __name__ == "__main__":
     try:
-        data = json.loads(raw) if (raw := sys.stdin.read()).strip() else {}
-        main(data)
+        main()
     except Exception:
         pass

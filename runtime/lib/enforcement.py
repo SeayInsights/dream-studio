@@ -46,9 +46,7 @@ DS_HOME = Path.home() / ".dream-studio"
 TEMP_ROOT = Path(tempfile.gettempdir())
 
 # Repo-internal directories whose files are never product source.
-_EXEMPT_SEGMENTS = frozenset(
-    {".git", ".claude", ".venv", "__pycache__", "node_modules", "graphify-out"}
-)
+_EXEMPT_SEGMENTS = frozenset({".git", ".claude", ".venv", "__pycache__", "node_modules"})
 
 _SESSION_FILE_MAX_AGE_SECS = 7 * 24 * 3600
 

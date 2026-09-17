@@ -37,6 +37,28 @@ from pathlib import Path
 
 import pytest
 
+
+def _drive_hook(mod, payload: dict) -> None:
+    """Invoke a hook handler the way the dispatcher actually does.
+
+    control/execution/dispatch_tracking.py assigns the payload to sys.stdin and
+    calls mod.main() with ZERO arguments. These evals used to call
+    mod.main(payload) directly — the convention production never uses — which is
+    exactly why on-context-inject could fail 8,767 of 8,767 real dispatches with
+    a TypeError while its tests stayed green.
+    """
+    import io
+    import json as _json
+    import sys as _sys
+
+    real_stdin = _sys.stdin
+    _sys.stdin = io.StringIO(_json.dumps(payload))
+    try:
+        mod.main()
+    finally:
+        _sys.stdin = real_stdin
+
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -535,7 +557,7 @@ def test_chain_7_link_4_memory_hook_query_path_exists():
             with patch(
                 "builtins.print", side_effect=lambda *a, **kw: output_lines.append(str(a[0]))
             ):
-                mod.main({"prompt": "modal dialog focus trap inert attribute"})
+                _drive_hook(mod, {"prompt": "modal dialog focus trap inert attribute"})
 
         output = "\n".join(output_lines)
         assert (
@@ -577,7 +599,7 @@ def test_chain_7_hook_fails_open_on_empty_db():
             with patch(
                 "builtins.print", side_effect=lambda *a, **kw: output_lines.append(str(a[0]))
             ):
-                mod.main({"prompt": "modal dialog focus trap"})
+                _drive_hook(mod, {"prompt": "modal dialog focus trap"})
 
         assert output_lines == [], f"Empty DB produced output: {output_lines}"
     finally:
@@ -625,7 +647,7 @@ def test_chain_7_hook_dedup_within_session():
             with patch(
                 "builtins.print", side_effect=lambda *a, **kw: output_first.append(str(a[0]))
             ):
-                mod.main({"prompt": "modal inert attribute", "session_id": session_id})
+                _drive_hook(mod, {"prompt": "modal inert attribute", "session_id": session_id})
 
         # First invocation should produce output
         assert output_first, "First invocation produced no output"
@@ -634,7 +656,7 @@ def test_chain_7_hook_dedup_within_session():
             with patch(
                 "builtins.print", side_effect=lambda *a, **kw: output_second.append(str(a[0]))
             ):
-                mod.main({"prompt": "modal inert attribute", "session_id": session_id})
+                _drive_hook(mod, {"prompt": "modal inert attribute", "session_id": session_id})
 
         # Second invocation with same session_id should not re-inject (dedup via intelligence_surfaced_at)
         # Entry was stamped in first call; second call sees it as already surfaced

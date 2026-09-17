@@ -72,7 +72,7 @@ def _source_files() -> list[Path]:
             "interfaces/cli/backfill_"
         ):
             continue
-        if "/graphify-out/" in f"/{rel}" or "/.planning/" in f"/{rel}":
+        if "/.planning/" in f"/{rel}":
             continue
         # Nested/sibling agent worktree copies under .claude/worktrees/ are duplicate
         # source trees — scanning them yields false positives. Exclude them so the

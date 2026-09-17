@@ -36,7 +36,6 @@ _EXCLUDED_PARTS = {
     ".claude",
     "node_modules",
     ".venv",
-    "graphify-out",
 }
 
 
