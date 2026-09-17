@@ -18,11 +18,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from conftest import reviewed_verdict  # noqa: E402
 
-from core.work_orders.artifacts import (
+from core.work_orders.artifacts import (  # noqa: E402
     get_wo_artifact,
     has_wo_artifact,
     set_wo_artifact,
-)  # noqa: E402
+)
 from core.work_orders.close import run_gate_check  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
