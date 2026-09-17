@@ -33,14 +33,14 @@ SEP = "\\"
 @pytest.mark.parametrize(
     "cwd,expected",
     [
-        (r"C:\Users\Dannis Seay\Fulcrum", "fulcrum"),
-        (r"C:\Users\Dannis Seay\Fulcrum\gw-govdash\examples", "fulcrum"),
-        (r"C:\Users\Dannis Seay\Hypershift\thing", "hypershift"),
-        (r"C:\Users\Dannis Seay\builds\dream-studio-clean", "seayinsights"),
-        (r"C:\Users\Dannis Seay\builds\dreamysuite", "seayinsights"),
+        (r"C:\Users\Example User\Fulcrum", "fulcrum"),
+        (r"C:\Users\Example User\Fulcrum\gw-govdash\examples", "fulcrum"),
+        (r"C:\Users\Example User\Hypershift\thing", "hypershift"),
+        (r"C:\Users\Example User\builds\dream-studio-clean", "seayinsights"),
+        (r"C:\Users\Example User\builds\dreamysuite", "seayinsights"),
         # Everything else is internal work, not a gap.
-        (r"C:\Users\Dannis Seay\round-table\rt-chair", "seayinsights"),
-        (r"C:\Users\Dannis Seay\Downloads", "seayinsights"),
+        (r"C:\Users\Example User\round-table\rt-chair", "seayinsights"),
+        (r"C:\Users\Example User\Downloads", "seayinsights"),
     ],
 )
 def test_client_rule(cwd, expected):
@@ -48,23 +48,23 @@ def test_client_rule(cwd, expected):
 
 
 def test_client_rule_is_case_insensitive():
-    assert classify_client(r"c:\users\dannis seay\FULCRUM\x") == "fulcrum"
+    assert classify_client(r"c:\users\example user\FULCRUM\x") == "fulcrum"
 
 
 def test_client_rule_matches_whole_segments_only():
     """'rebuilds' is not 'builds'; a substring match would misfile work."""
-    assert classify_client(r"C:\Users\Dannis Seay\rebuilds\thing") == "seayinsights"
+    assert classify_client(r"C:\Users\Example User\rebuilds\thing") == "seayinsights"
     # ...and proves it did NOT match via the builds rule by using a Fulcrum path.
-    assert classify_client(r"C:\Users\x\notfulcrumatall\y") == "seayinsights"
+    assert classify_client(r"C:\Users\Example\notfulcrumatall\y") == "seayinsights"
 
 
 def test_an_engagement_wins_over_builds():
     """A Fulcrum checkout living under builds is still Fulcrum work."""
-    assert classify_client(r"C:\Users\Dannis Seay\builds\Fulcrum\api") == "fulcrum"
+    assert classify_client(r"C:\Users\Example User\builds\Fulcrum\api") == "fulcrum"
 
 
 def test_forward_slashes_are_handled():
-    assert classify_client("C:/Users/Dannis Seay/Fulcrum/x") == "fulcrum"
+    assert classify_client("C:/Users/Example User/Fulcrum/x") == "fulcrum"
 
 
 # ---------------------------------------------------------------------------
@@ -75,18 +75,18 @@ def test_forward_slashes_are_handled():
 def test_encode_matches_claude_codes_own_directory_name():
     """This exact string is what Claude Code writes on disk."""
     assert (
-        encode_cwd(r"C:\Users\Dannis Seay\builds\dream-studio-clean")
-        == "c--users-dannis-seay-builds-dream-studio-clean"
+        encode_cwd(r"C:\Users\Example User\builds\dream-studio-clean")
+        == "c--users-example-user-builds-dream-studio-clean"
     )
 
 
 def test_encode_handles_spaces_and_drive_colon():
-    assert encode_cwd(r"C:\Users\Dannis Seay\Fulcrum") == "c--users-dannis-seay-fulcrum"
+    assert encode_cwd(r"C:\Users\Example User\Fulcrum") == "c--users-example-user-fulcrum"
 
 
 def test_encode_ignores_a_trailing_separator():
-    a = encode_cwd(r"C:\Users\x\builds\p")
-    b = encode_cwd("C:" + SEP + r"Users\x\builds\p" + SEP)
+    a = encode_cwd(r"C:\Users\Example\builds\p")
+    b = encode_cwd("C:" + SEP + r"Users\Example\builds\p" + SEP)
     assert a == b
 
 
@@ -108,19 +108,19 @@ def conn():
             (
                 "p-ds",
                 "Dream Studio",
-                r"C:\Users\Dannis Seay\builds\dream-studio-clean",
+                r"C:\Users\Example User\builds\dream-studio-clean",
                 "active",
                 "seayinsights",
             ),
             (
                 "p-ful",
                 "Fulcrum Skill Library",
-                r"C:\Users\Dannis Seay\Fulcrum",
+                r"C:\Users\Example User\Fulcrum",
                 "active",
                 "fulcrum",
             ),
-            ("p-sub", "Nested", r"C:\Users\Dannis Seay\Fulcrum\gateway", "active", "fulcrum"),
-            ("p-del", "Gone", r"C:\Users\Dannis Seay\builds\gone", "deleted", "seayinsights"),
+            ("p-sub", "Nested", r"C:\Users\Example User\Fulcrum\gateway", "active", "fulcrum"),
+            ("p-del", "Gone", r"C:\Users\Example User\builds\gone", "deleted", "seayinsights"),
         ],
     )
     return c
@@ -128,37 +128,37 @@ def conn():
 
 def test_exact_directory_resolves_to_its_project(conn):
     roots = _project_roots(conn)
-    assert _project_for_dir("c--users-dannis-seay-builds-dream-studio-clean", roots) == "p-ds"
+    assert _project_for_dir("c--users-example-user-builds-dream-studio-clean", roots) == "p-ds"
 
 
 def test_subdirectory_resolves_to_the_enclosing_project(conn):
     """A Fulcrum subdirectory is Fulcrum work."""
     roots = _project_roots(conn)
-    assert _project_for_dir("c--users-dannis-seay-fulcrum-demo-api", roots) == "p-ful"
+    assert _project_for_dir("c--users-example-user-fulcrum-demo-api", roots) == "p-ful"
 
 
 def test_deepest_registered_project_wins(conn):
     """p-sub is registered inside p-ful; the nested one must win."""
     roots = _project_roots(conn)
-    assert _project_for_dir("c--users-dannis-seay-fulcrum-gateway-src", roots) == "p-sub"
+    assert _project_for_dir("c--users-example-user-fulcrum-gateway-src", roots) == "p-sub"
 
 
 def test_unregistered_directory_resolves_to_nothing(conn):
     """No project is better than the wrong project."""
     roots = _project_roots(conn)
-    assert _project_for_dir("c--users-dannis-seay-round-table-rt-chair", roots) is None
+    assert _project_for_dir("c--users-example-user-round-table-rt-chair", roots) is None
 
 
 def test_deleted_projects_are_not_matched(conn):
     roots = _project_roots(conn)
-    assert _project_for_dir("c--users-dannis-seay-builds-gone", roots) is None
+    assert _project_for_dir("c--users-example-user-builds-gone", roots) is None
 
 
 def test_a_sibling_directory_is_not_a_prefix_match(conn):
     """'...-dream-studio-clean-backup' must not land on the dream-studio-clean project
     by accident — the separator after the root is required."""
     roots = _project_roots(conn)
-    assert _project_for_dir("c--users-dannis-seay-builds-dream-studio-cleanish", roots) is None
+    assert _project_for_dir("c--users-example-user-builds-dream-studio-cleanish", roots) is None
 
 
 # ---------------------------------------------------------------------------

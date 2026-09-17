@@ -28,7 +28,7 @@ Two in-database sources look usable and are not:
 
 What does work: Claude Code writes each session transcript under a directory whose
 name encodes the working directory it ran in
-(``C--Users-Dannis-Seay-builds-dream-studio-clean``), and every transcript entry
+(``C--Users-Example-User-builds-dream-studio-clean``), and every transcript entry
 carries a uuid that token.consumed events are derived from. So
 
     token event_id  ->  transcript entry uuid  ->  transcript file
@@ -83,7 +83,7 @@ def _transcript_root() -> Path:
 def decode_transcript_dir(name: str) -> str:
     """Recover an approximate cwd from a Claude Code transcript directory name.
 
-    ``C--Users-Dannis-Seay-builds-dream-studio-clean`` was produced by replacing
+    ``C--Users-Example-User-builds-dream-studio-clean`` was produced by replacing
     the path separators and the drive colon with dashes. The mapping is lossy —
     a directory whose own name contains a dash is indistinguishable from a
     separator — which is why this is used ONLY to read whole path segments for
@@ -155,11 +155,11 @@ def _index_transcripts() -> tuple[dict[str, str], dict[str, int]]:
 def encode_cwd(path: str) -> str:
     """Encode a real path the way Claude Code names its transcript directory.
 
-    ``C:\\Users\\Dannis Seay\\builds\\dream-studio-clean``
-      -> ``c--users-dannis-seay-builds-dream-studio-clean``
+    ``C:\\Users\\Example User\\builds\\dream-studio-clean``
+      -> ``c--users-example-user-builds-dream-studio-clean``
 
     Matching is done in THIS direction, never by decoding the directory name.
-    Decoding is lossy — every dash becomes a separator, so "Dannis Seay" and
+    Decoding is lossy — every dash becomes a separator, so "Example User" and
     "dream-studio-clean" both shatter — and a lossy decode matched no project at
     all. Encoding is exact because it is the same transformation Claude Code
     applied in the first place.
@@ -188,7 +188,7 @@ def _project_roots(conn: sqlite3.Connection) -> list[tuple[str, str]]:
 def _project_for_dir(dir_name: str, roots: list[tuple[str, str]]) -> str | None:
     """Match a transcript directory name against encoded project paths.
 
-    A Fulcrum subdirectory such as ``c--users-dannis-seay-fulcrum-demo`` starts
+    A Fulcrum subdirectory such as ``c--users-example-user-fulcrum-demo`` starts
     with the encoded Fulcrum root, so it lands on the Fulcrum project.
     """
     low = dir_name.strip().lower()
