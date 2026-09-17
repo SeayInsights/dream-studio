@@ -92,45 +92,48 @@ def mark_task_done(
     # context artifact is a start-time briefing and live status comes from
     # `ds work-order tasks <id>`, not a read-modify-write of context.md.
 
+    event_write_error: str | None = None
+    completed_event_id: str | None = None
     try:
         import spool.writer as _spool_writer
 
         from canonical.events.envelope import CanonicalEventEnvelope
 
-        _spool_writer.write_event(
-            CanonicalEventEnvelope(
-                event_type="task.completed",
-                session_id=None,
-                payload={
-                    "task_id": task_id,
-                    "work_order_id": work_order_id,
-                    "tasks_remaining": remaining,
-                },
-                timestamp=now,
-                severity="info",
-                trace={
-                    "domain": "sdlc",
-                    "project_id": t_project_id,
-                    "milestone_id": t_milestone_id,
-                    "work_order_id": work_order_id,
-                    "task_id": task_id,
-                    "attribution_status": "fully_attributed",
-                },
-            ).to_dict()
-        )
-    except Exception:
-        pass
+        _envelope = CanonicalEventEnvelope(
+            event_type="task.completed",
+            session_id=None,
+            payload={
+                "task_id": task_id,
+                "work_order_id": work_order_id,
+                "tasks_remaining": remaining,
+            },
+            timestamp=now,
+            severity="info",
+            trace={
+                "domain": "sdlc",
+                "project_id": t_project_id,
+                "milestone_id": t_milestone_id,
+                "work_order_id": work_order_id,
+                "task_id": task_id,
+                "attribution_status": "fully_attributed",
+            },
+        ).to_dict()
+        completed_event_id = _envelope.get("event_id")
+        _spool_writer.write_event(_envelope)
+    except Exception as _exc:
+        event_write_error = f"{type(_exc).__name__}: {_exc}"[:200]
 
     # Materialize the task.completed event into the business_tasks read model now,
     # mirroring create_task/create_work_order. Without this, status stays 'pending'
     # in the read model (and `ds work-order tasks`) until an unrelated sync_tick()
     # runs — the WO-TASKDONE-SYNC defect.
+    projection_error: str | None = None
     try:
         from core.projections.runner import sync_tick as _sync_tick
 
         _sync_tick()
-    except Exception:
-        pass
+    except Exception as _exc:
+        projection_error = f"{type(_exc).__name__}: {_exc}"[:200]
 
     try:
         from core.sdlc.active_task import clear_active_task as _clear_active_task
@@ -142,16 +145,83 @@ def mark_task_done(
     except Exception:
         pass
 
+    # REPORT THE STATUS THE AUTHORITY HOLDS, not the one we asked for (issue #718).
+    # Reporting only the two caught failures above would not have caught the defect that
+    # motivated this work: event d441e451 reached business_canonical_events -- so
+    # write_event succeeded -- and then failed a FOREIGN KEY constraint inside the
+    # projection, where framework_engine_dispatch catches the handler error, dead-letters
+    # it, and returns a ProjectionResult normally. NOTHING RAISED, and task c1698f88 has no
+    # business_tasks row to this day while its caller was told "complete".
+    #
+    # Read-model lag is NOT the same failure as a lost write, and the two are separated
+    # here deliberately. A projection that has simply not run yet (async deployment, or a
+    # daemon owning the tick) will materialize this event on its next pass or on a rebuild,
+    # because the event itself is durable -- that is pending, not failed. A projection that
+    # queued this event for retry or dead-lettered it will NOT recover without
+    # intervention. Only the second case is a false-done, so only it fails the call.
+    observed_status: str | None = None
+    read_back_error: str | None = None
+    projection_stalled = False
+    try:
+        with _connect(db_path) as conn:
+            _row = conn.execute(
+                "SELECT status FROM business_tasks WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            observed_status = _row[0] if _row is not None else None
+            if completed_event_id:
+                projection_stalled = bool(
+                    conn.execute(
+                        "SELECT 1 FROM projection_dead_letter"
+                        " WHERE event_id = ? AND status = 'active' LIMIT 1",
+                        (completed_event_id,),
+                    ).fetchone()
+                    or conn.execute(
+                        "SELECT 1 FROM projection_retry_queue WHERE event_id = ? LIMIT 1",
+                        (completed_event_id,),
+                    ).fetchone()
+                )
+    except Exception as _exc:
+        # An older authority may predate these tables; never invent a verdict from a
+        # failed read -- say the read failed and leave the judgement to the fields above.
+        read_back_error = f"{type(_exc).__name__}: {_exc}"[:200]
+
+    recorded = observed_status in TASK_DONE_STATUSES
+
     result: dict[str, Any] = {
-        "ok": True,
+        "ok": event_write_error is None and (recorded or not projection_stalled),
         "task_id": task_id,
         "work_order_id": work_order_id,
         "title": t_title,
-        "status": "complete",
+        "status": observed_status or "unknown",
         "tasks_remaining": remaining,
         "task_index": task_index,
     }
-    if remaining == 0:
+    if event_write_error is not None:
+        result["event_write_error"] = event_write_error
+    if projection_error is not None:
+        result["projection_error"] = projection_error
+    if read_back_error is not None:
+        result["read_back_error"] = read_back_error
+    if not recorded and result["ok"]:
+        result["read_model_pending"] = True
+        result["note"] = (
+            f"task.completed was recorded, but business_tasks still reports"
+            f" {observed_status or 'no row'}. The read model will catch up on the next"
+            " projection pass; `ds work-order tasks` reflects it only once it does."
+        )
+    if not result["ok"]:
+        result["error"] = (
+            f"Task {task_id} was NOT recorded as done: business_tasks reports"
+            f" {observed_status or 'no row'}."
+            + (
+                " Its task.completed event is stuck in the projection --"
+                " see `ds projection dead-letter list`."
+                if projection_stalled
+                else " The task.completed event could not be written."
+            )
+        )
+    if result["ok"] and remaining == 0:
         result["all_tasks_complete"] = True
         result["suggested_action"] = (
             f"All tasks complete. Close work order: ds work-order close {work_order_id}"
@@ -192,7 +262,7 @@ def mark_task_done(
     #
     # Still best-effort, because finishing a task must not fail on bookkeeping -- but the
     # failure is REPORTED on the result now instead of vanishing.
-    if remaining == 0:
+    if result["ok"] and remaining == 0:
         try:
             from core.work_orders.delivery_boundary import record_delivery_boundary_end
             from core.work_orders.verify_executor import resolve_project_root
