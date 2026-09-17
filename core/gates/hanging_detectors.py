@@ -113,7 +113,7 @@ def _is_non_runtime_writer(path: str) -> bool:
 
 
 _CODE_SUFFIXES = (".py", ".html", ".js", ".ts", ".sql", ".yaml", ".yml")
-_SKIP_DIRS = {".git", "node_modules", "__pycache__", ".dream-studio", "graphify-out"}
+_SKIP_DIRS = {".git", "node_modules", "__pycache__", ".dream-studio"}
 
 
 def _iter_code_files(repo_root: Path) -> Iterable[tuple[str, str]]:

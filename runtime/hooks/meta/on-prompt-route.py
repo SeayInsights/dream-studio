@@ -112,7 +112,35 @@ def _match(prompt: str, entries: list[tuple[str, str, str]]) -> tuple[str, str, 
     return None
 
 
-def main(payload: dict) -> None:
+def main() -> None:
+    """Dispatcher entry point.
+
+    takes no arguments. control/execution/dispatch_tracking.py assigns the
+    raw payload to sys.stdin and then calls `mod.main()` with zero arguments for
+    every handler it dispatches. This module previously declared
+    `main(payload: dict)`, so all 8,767 dispatches between 2026-07-19 and
+    2026-09-17 raised TypeError, were swallowed by the dispatcher's blanket
+    except, and recorded as status="failed" — a 100% failure rate that never
+    surfaced anywhere an operator would look. The routing nudge below, the only
+    mechanism that actively pushes the model toward Skill(...), therefore never
+    reached a single prompt.
+    """
+    try:
+        raw = sys.stdin.read()
+    except Exception:
+        return
+    try:
+        payload = json.loads(raw) if raw.strip() else {}
+    except (ValueError, TypeError):
+        return
+    if not isinstance(payload, dict):
+        return
+    _route(payload)
+
+
+def _route(payload: dict) -> None:
+    """Emit the routing directive for `payload`. Separated from main() so tests
+    can exercise the matching logic directly without going through stdin."""
     if os.environ.get("DS_ROUTING") == "0":
         return
     prompt = (payload.get("prompt") or "").strip()
@@ -137,8 +165,6 @@ def main(payload: dict) -> None:
 
 if __name__ == "__main__":
     try:
-        raw = sys.stdin.read()
-        data = json.loads(raw) if raw.strip() else {}
-        main(data)
+        main()
     except Exception:
         pass

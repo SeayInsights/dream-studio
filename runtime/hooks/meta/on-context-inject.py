@@ -282,7 +282,29 @@ def _format_output(results: list[dict], total_matches: int) -> str:
     return "\n".join(lines)
 
 
-def main(payload: dict) -> None:
+def main() -> None:
+    """Dispatcher entry point — takes no arguments.
+
+    control/execution/dispatch_tracking.py assigns the raw payload to sys.stdin
+    and calls mod.main() with zero arguments. Declaring a required `payload`
+    parameter here makes every real dispatch raise TypeError, which the
+    dispatcher swallows and records as status="failed" — silently, forever.
+    That is exactly what happened to this handler and to on-prompt-route.
+    """
+    try:
+        raw = sys.stdin.read().lstrip("﻿")
+    except Exception:
+        return
+    try:
+        payload = json.loads(raw) if raw.strip() else {}
+    except (ValueError, TypeError):
+        return
+    if not isinstance(payload, dict):
+        return
+    _handle(payload)
+
+
+def _handle(payload: dict) -> None:
     t_start = time.monotonic()
 
     prompt = (payload.get("prompt") or "").strip()
@@ -363,8 +385,6 @@ def main(payload: dict) -> None:
 
 if __name__ == "__main__":
     try:
-        raw = sys.stdin.read()
-        data = json.loads(raw) if raw.strip() else {}
-        main(data)
+        main()
     except Exception:
         pass

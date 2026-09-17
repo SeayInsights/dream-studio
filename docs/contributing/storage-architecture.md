@@ -32,7 +32,6 @@ Subdirectories (logical name prefixes):
 - `work-orders/<id>/` — work-order definition drafts (repo-scoped)
 - `audits/` — investigation reports specific to this repo
 - `audits/historical/` — superseded audits retained for historical reference
-- `audits/graphify-out/` — generated graph artifacts (input to audits)
 - `snapshots/` — baseline state captures
 - `personal/` — operator notes, unstructured
 
@@ -65,7 +64,6 @@ Tools that need project-local config write to their own dotfile directories. Eac
 - Disposable test/lint/format output (`pytest-*.txt`, `black-*.txt`, `lint-*.txt`, etc.) → belongs in `~/.dream-studio/diagnostics/`
 - PR body drafts → docstore: `ds files write "workstreams/<id>/pr-body.md" --category planning`
 - Working notes, inventories, audit reports → docstore: `ds files write "<subcategory>/<name>.md" --category planning`
-- Generated graphify output → docstore under name prefix `audits/graphify-out/`
 - Build artifacts, debug scripts → belong in `~/.dream-studio/diagnostics/<date>/<repo>/<purpose>/`
 
 If Claude Code writes a file outside its assigned scope, that's a discipline failure. The Output discipline section in the compiler's `_ENFORCEMENT_BLOCK` — regenerated into `.claude/CLAUDE.md` on every install — documents this; the on-edit enforcement hook denying `.planning/**` disk writes is the enforcement mechanism.
@@ -87,7 +85,7 @@ This architecture was established during Phase 0 of the architectural realignmen
 
 - `.audit/` content migrated to `.planning/audits/historical/` (historical audits), `.planning/specs/` (forward-looking plans), and `.planning/personal/` (working notes); `.audit/` directory removed
 - `.sessions/` content migrated to `~/.dream-studio/sessions/`; `.sessions/` directory removed
-- `graphify-out/` retained at repo root (operator-managed)
+- `graphify-out/` retained at repo root (operator-managed); graphify was removed entirely on 2026-09-17 and the directory no longer exists
 - Root-level disposable files cleaned and `.gitignore` strengthened to prevent reaccumulation
 
 Going forward, the contract is enforced by the `_ENFORCEMENT_BLOCK` Output discipline rule.
