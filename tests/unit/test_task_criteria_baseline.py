@@ -238,3 +238,43 @@ def test_the_default_rendering_names_the_shared_criterion_count(tmp_path, monkey
     conn.commit()
     conn.close()
     assert "NOTED" not in tcb._render(tcb.run(solo))
+
+
+def test_update_renders_instead_of_crashing_after_writing(tmp_path, monkeypatch, capsys):
+    """--update must not traceback AFTER it has already moved the baseline.
+
+    `ceiling` is set by the CHECK path, not by measure(), so update() handed _render()
+    a report with no such key and it raised KeyError: 'ceiling' — after the file had
+    been written. The operator ran the exact command the failure message told them to
+    run, got a traceback, and could not tell whether it had taken effect. That is the
+    worst shape for a remedy: it works and looks like it did not.
+    """
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text(json.dumps({"uncheckable": 0}), encoding="utf-8")
+    monkeypatch.setattr(tcb, "BASELINE_PATH", baseline)
+    db = _authority(tmp_path, [("t1", "a", "", None), ("t2", "b", "", "")])
+    monkeypatch.setattr(tcb, "_db_path", lambda: db)
+
+    exit_code = tcb.main(["--update"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "ceiling 2" in out, out
+    assert json.loads(baseline.read_text(encoding="utf-8"))["uncheckable"] == 2
+    # And the check that follows it agrees, rather than the pair disagreeing.
+    assert tcb.main([]) == 0
+
+
+def test_update_reports_the_ceiling_it_just_recorded(tmp_path, monkeypatch):
+    """The returned report must carry the NEW ceiling, not the one it replaced."""
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text(json.dumps({"uncheckable": 99}), encoding="utf-8")
+    monkeypatch.setattr(tcb, "BASELINE_PATH", baseline)
+    db = _authority(tmp_path, [("t1", "a", "", None)])
+    monkeypatch.setattr(tcb, "_db_path", lambda: db)
+
+    report = tcb.update(db)
+
+    assert report["ok"] is True
+    assert report["recorded"] == 1
+    assert report["ceiling"] == 1, "after --update the ceiling is the number just recorded"

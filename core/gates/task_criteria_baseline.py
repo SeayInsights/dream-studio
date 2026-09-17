@@ -190,7 +190,17 @@ def update(db_path: Path | None = None) -> dict[str, object]:
         + "\n",
         encoding="utf-8",
     )
-    return {"ok": True, "recorded": report["uncheckable"], **report}
+    # `ceiling` is set by the CHECK path, not by measure(), so a report handed straight
+    # back from here has no such key and _render() raised KeyError: 'ceiling' — after the
+    # baseline file had already been written. The operator saw a traceback from the very
+    # command the failure message told them to run, with no way to tell whether it had
+    # taken effect. After --update the ceiling IS the number just recorded.
+    return {
+        "ok": True,
+        "recorded": report["uncheckable"],
+        "ceiling": report["uncheckable"],
+        **report,
+    }
 
 
 def _render(report: dict[str, object]) -> str:
