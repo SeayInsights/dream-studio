@@ -96,27 +96,59 @@ class _ProjectionEngineRetryMixin:
         error_traceback: str,
         retry_count: int,
     ) -> None:
-        """Write an entry to projection_dead_letter."""
+        """Record an entry in projection_dead_letter, one row per stuck event.
+
+        UPDATE-THEN-INSERT rather than a bare INSERT (issue #719). An event that
+        exhausts its retries is re-encountered on the next pass and exhausts them
+        again, and this wrote a fresh row every time -- the table carries no unique
+        constraint on (event_id, projection_name), while ``_schedule_retry`` directly
+        above already guards its own insert with ON CONFLICT DO NOTHING. Measured on
+        the live authority: 96 active rows standing for 36 distinct events, inflating
+        the backlog 2.7x and making a stuck projection look worse than it was.
+
+        The latest failure wins on an existing row, because the newest error is the
+        one an operator acts on; retry_count and last_retry_at advance with it. A
+        row already resolved or ignored is deliberately NOT revived -- the operator
+        settled it, and a fresh failure of the same event opens a new row.
+        """
         now = datetime.now(UTC).isoformat()
         with transaction() as conn:
-            conn.execute(
+            updated = conn.execute(
                 """
-                INSERT INTO projection_dead_letter
-                    (event_id, event_source, projection_name, error_message,
-                     error_traceback, failed_at, retry_count, last_retry_at, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
+                UPDATE projection_dead_letter
+                   SET error_message = ?, error_traceback = ?, failed_at = ?,
+                       retry_count = ?, last_retry_at = ?
+                 WHERE event_id = ? AND projection_name = ? AND status = 'active'
                 """,
                 (
-                    event_id,
-                    event_source,
-                    projection_name,
                     error_message,
                     error_traceback,
                     now,
                     retry_count,
                     now,
+                    event_id,
+                    projection_name,
                 ),
-            )
+            ).rowcount
+            if not updated:
+                conn.execute(
+                    """
+                    INSERT INTO projection_dead_letter
+                        (event_id, event_source, projection_name, error_message,
+                         error_traceback, failed_at, retry_count, last_retry_at, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
+                    """,
+                    (
+                        event_id,
+                        event_source,
+                        projection_name,
+                        error_message,
+                        error_traceback,
+                        now,
+                        retry_count,
+                        now,
+                    ),
+                )
 
     def _process_retries(self, proj: Projection) -> None:
         """Process all due retry entries for this projection."""

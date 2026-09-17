@@ -80,6 +80,7 @@ class TaskProjection(Projection):
             "work_order_id"
         )
         project_id = event.get("project_id") or (event.get("trace") or {}).get("project_id")
+        project_id = self._resolve_project_id(conn, project_id, work_order_id)
 
         if event_type == "task.created":
             return self._handle_created(
@@ -122,6 +123,70 @@ class TaskProjection(Projection):
             (new_ac, event_id, now, task_id),
         )
         return 1
+
+    # ── Project-key resolution ────────────────────────────────────────────────
+
+    def _resolve_project_id(
+        self,
+        conn: sqlite3.Connection,
+        project_id: str | None,
+        work_order_id: str | None,
+    ) -> str | None:
+        """Map an event's project key onto a registered project, or leave it alone.
+
+        business_tasks declares a FOREIGN KEY to business_projects and
+        business_work_orders declares none, so the SAME unvalidated key is accepted
+        at one door and rejected at the other: measured on the live authority,
+        business_work_orders referenced 30 distinct project_ids against 8 real
+        project rows, and every one of the 36 events stuck in this projection's
+        dead-letter table failed on that constraint (issue #719).
+
+        Two thirds of them (24) carry the literal slug ``dream-studio`` rather than a
+        UUID -- the WO-ATTRIBUTION-NORMALIZE class, fixed for execution_events and
+        never applied here. The remaining keys are resolved from the event's OWN work
+        order, which already holds the correct project_id; nothing is invented.
+
+        Resolution never fabricates: a key that resolves to nothing is returned
+        UNCHANGED so the insert still fails and still dead-letters. An event whose
+        project genuinely was never registered is unattributable, and silently
+        reassigning it to some plausible project would be worse than leaving it stuck.
+        """
+        if not project_id:
+            return project_id
+        try:
+            if conn.execute(
+                "SELECT 1 FROM business_projects WHERE project_id = ? LIMIT 1",
+                (project_id,),
+            ).fetchone():
+                return project_id
+
+            from core.projects.attribution import resolve_project_uuid
+
+            resolved = resolve_project_uuid(project_id, conn)
+            if resolved:
+                logger.info("TaskProjection: resolved project key %r to %s", project_id, resolved)
+                return resolved
+
+            if work_order_id:
+                row = conn.execute(
+                    "SELECT w.project_id FROM business_work_orders w"
+                    " JOIN business_projects p ON w.project_id = p.project_id"
+                    " WHERE w.work_order_id = ? LIMIT 1",
+                    (work_order_id,),
+                ).fetchone()
+                if row and row[0]:
+                    logger.info(
+                        "TaskProjection: took project %s from work order %s for key %r",
+                        row[0],
+                        work_order_id,
+                        project_id,
+                    )
+                    return row[0]
+        except sqlite3.Error as exc:
+            # A failed lookup must not decide attribution. Fall through unchanged and
+            # let the insert fail honestly rather than guess.
+            logger.warning("TaskProjection: project-key resolution failed: %s", exc)
+        return project_id
 
     # ── Event handlers ────────────────────────────────────────────────────────
 
