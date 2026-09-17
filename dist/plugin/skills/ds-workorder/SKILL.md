@@ -1,3 +1,8 @@
+---
+name: ds-workorder
+description: 'Work order lifecycle — start, mark tasks done, close (with gate checks), block, and read-only status. Use for: start work order:, mark task done:, close work order:, block:, work order status:'
+---
+
 # ds-workorder — Work Order Lifecycle
 
 **Type:** Function-backed skill pack
