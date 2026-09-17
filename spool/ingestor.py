@@ -41,8 +41,15 @@ if sys.platform == "win32":
     _last_ctrl_time = [0.0]
 
     # CTRL_C_EVENT = 0, CTRL_BREAK_EVENT = 1
+    # untested-fallback: a ctypes function-pointer TYPE, not a code path. There is no
+    # behaviour to enter from a test; the behaviour is in _ds_console_handler below.
     _HANDLER_ROUTINE = ctypes.WINFUNCTYPE(ctypes.c_int, ctypes.c_uint)
 
+    # untested-fallback: entering this requires the Windows kernel to deliver a real
+    # console control event to this process. pytest cannot raise one without sending
+    # CTRL_C to its own console, which kills the run it is meant to assert on. The
+    # debouncing logic it implements is the reason it exists -- phantom SIGINT during
+    # ingest -- and that condition is itself only reproducible on a real console.
     def _ds_console_handler(ctrl_type):
         if ctrl_type == 0:  # CTRL_C_EVENT
             now = _time.time()
@@ -54,6 +61,9 @@ if sys.platform == "win32":
         return 0  # other event types: pass through
 
     # Store handler as module-level reference so ctypes callback isn't GC'd.
+    # untested-fallback: a GC anchor for the callback above. Its only observable
+    # property is that it stays alive, which a test can assert no more meaningfully
+    # than the assignment itself states.
     _handler_ref = _HANDLER_ROUTINE(_ds_console_handler)
     ctypes.windll.kernel32.SetConsoleCtrlHandler(_handler_ref, True)
 
@@ -582,6 +592,10 @@ def _pid_alive(pid: int) -> bool:
         PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
         STILL_ACTIVE = 259
 
+        # untested-fallback: the Win32 liveness probe. Asserting on it needs a real
+        # process handle and a known exit code on Windows; the POSIX branch below is
+        # what CI exercises, so this side is covered by neither and is declared rather
+        # than given a test that would only run where it is already the default.
         kernel32 = ctypes.windll.kernel32
         handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
         if not handle:
