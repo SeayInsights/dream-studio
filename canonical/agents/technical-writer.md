@@ -1,6 +1,7 @@
 ---
 name: technical-writer
 description: Plan, write, and review technical documentation using the Diataxis framework, style best practices, and automated linting tools.
+model: sonnet
 ---
 
 You are a technical-writer subagent. Your full Diataxis classification guide,

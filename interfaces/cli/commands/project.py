@@ -108,6 +108,21 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         dest="planning_root",
         help="Override .planning/ directory for gate file checks (default: <cwd>/.planning)",
     )
+    project_state_cmd.add_argument(
+        "--full",
+        action="store_true",
+        default=False,
+        help=(
+            "Emit every ready work order instead of the first "
+            f"{_READY_SET_PREVIEW}. The full set can exceed 100 entries / 96KB."
+        ),
+    )
+    project_state_cmd.add_argument(
+        "--human",
+        action="store_true",
+        default=False,
+        help="Render a readable briefing instead of JSON",
+    )
 
     project_fit_check = project_sub.add_parser(
         "fit-check",
@@ -201,6 +216,8 @@ def dispatch(
             source_root=source_root,
             dream_studio_home=dream_studio_home,
             planning_root=planning_root,
+            full=getattr(args, "full", False),
+            human=getattr(args, "human", False),
         )
     if args.project_command == "fit-check":
         return _project_fit_check(
@@ -493,8 +510,21 @@ def _project_state(
     source_root: Path,
     dream_studio_home: Path | None,
     planning_root: Path | None = None,
+    full: bool = False,
+    human: bool = False,
 ) -> int:
-    """Single-call project state: active project + next WO + gates + brief + tasks + gotchas."""
+    """Single-call project state: active project + next WO + gates + brief + tasks + gotchas.
+
+    `ready_set` is every unblocked work order on a project. On a mature project
+    that is the whole backlog: measured at 132 entries / 96KB for one project,
+    inside a 151,683-character response. That is the dominant term in the output
+    and it is emitted at every session start, so it costs the operator's reading
+    attention and the model's context window on every single orientation.
+
+    So the default response previews the ready set and reports its true size.
+    `--full` restores the complete list for anything that needs to enumerate it,
+    and `--human` renders a briefing instead of JSON.
+    """
     from core.projects.queries import get_project_state
 
     result = get_project_state(
@@ -526,5 +556,99 @@ def _project_state(
             conn.close()
     except Exception:
         pass
-    print(json.dumps(result, indent=2))
+
+    if not full:
+        _preview_ready_sets(result)
+    if human:
+        print(_render_state_briefing(result))
+    else:
+        print(json.dumps(result, indent=2))
     return 0 if result.get("ok") else 1
+
+
+_READY_SET_PREVIEW = 5
+
+
+def _preview_ready_sets(result: dict) -> None:
+    """Trim each project's ready_set in place, recording what was omitted.
+
+    The key stays a list so existing readers keep working; two sibling keys make
+    the truncation explicit rather than silently under-reporting the backlog.
+    """
+    for project in result.get("projects") or []:
+        ready = project.get("ready_set")
+        if not isinstance(ready, list):
+            continue
+        project["ready_set_total"] = len(ready)
+        if len(ready) > _READY_SET_PREVIEW:
+            project["ready_set"] = ready[:_READY_SET_PREVIEW]
+            project["ready_set_truncated"] = True
+            project["ready_set_hint"] = (
+                f"showing {_READY_SET_PREVIEW} of {len(ready)} ready work orders; "
+                "re-run with --full for the complete list"
+            )
+        else:
+            project["ready_set_truncated"] = False
+
+
+def _render_state_briefing(result: dict) -> str:
+    """A readable orientation: what is active, what is next, what is in the way."""
+    out: list[str] = []
+    projects = result.get("projects") or []
+
+    if not projects:
+        return "No registered projects."
+
+    for project in projects:
+        name = project.get("name") or "(unnamed)"
+        status = project.get("status") or "?"
+        out.append(f"{name}  [{status}]")
+
+        wo = project.get("next_work_order") or {}
+        if wo:
+            done = (wo.get("total_tasks") or 0) - (wo.get("pending_tasks") or 0)
+            out.append(
+                f"  next: {wo.get('title') or '(untitled)'}"
+                f"  ({wo.get('status')}, {done}/{wo.get('total_tasks') or 0} tasks)"
+            )
+            brief = wo.get("design_brief") or {}
+            if brief:
+                out.append(
+                    f"  brief: {brief.get('status')}"
+                    f" ({brief.get('fields_filled')}/{brief.get('fields_total')} fields)"
+                )
+            warn = wo.get("test_execution_warning")
+            if warn:
+                out.append(f"  warning: {warn}")
+            for g in wo.get("gotchas") or []:
+                out.append(f"  gotcha: {g}")
+        else:
+            out.append("  next: (nothing ready)")
+
+        total = project.get("ready_set_total")
+        if total is None:
+            total = len(project.get("ready_set") or [])
+        out.append(f"  ready set: {total} unblocked work order(s)")
+
+        risks = project.get("unverified_risks") or {}
+        if risks.get("total"):
+            out.append(f"  unverified risks: {risks['total']}")
+
+        action = project.get("next_action")
+        if action:
+            out.append(f"  -> {action}")
+        out.append("")
+
+    ci = result.get("main_ci") or {}
+    if ci.get("red"):
+        out.append(f"main CI: RED — {ci.get('title') or ci.get('head_sha') or 'unknown'}")
+        if ci.get("run_url"):
+            out.append(f"  {ci['run_url']}")
+    elif ci.get("status"):
+        out.append(f"main CI: {ci.get('status')}")
+
+    bypass = result.get("bypass_summary") or {}
+    if bypass.get("last_7d_total"):
+        out.append(f"bypasses (7d): {bypass['last_7d_total']}")
+
+    return "\n".join(out).rstrip()

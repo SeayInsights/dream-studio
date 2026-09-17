@@ -20,6 +20,29 @@ def clear_cache(project_id: str | None = None):
     _cached_builder.clear_cache(project_id)
 
 
+def _degree_centrality(graph: nx.DiGraph) -> dict[str, float]:
+    """Degree centrality for every node: (in + out) degree normalised by n - 1.
+
+    Returns a value in [0, 1] — 1.0 means the node touches every other node.
+
+    This field previously shipped as a hardcoded `0` marked "Placeholder - can be
+    computed separately", while the API schema advertised a real
+    `centrality_score` and the dashboard rendered it in the dependency-graph
+    tooltip. Every node therefore appeared equally central, which is a wrong
+    answer presented as a real one.
+
+    A graph with fewer than two nodes has no meaningful normaliser; every node
+    scores 0.0 there rather than raising.
+    """
+    n = graph.number_of_nodes()
+    if n < 2:
+        return {node: 0.0 for node in graph.nodes()}
+    scale = 1.0 / (n - 1)
+    return {
+        node: (graph.in_degree(node) + graph.out_degree(node)) * scale for node in graph.nodes()
+    }
+
+
 def graph_to_dict(graph: nx.DiGraph, limit: int | None = None, offset: int = 0) -> dict[str, any]:
     """Convert NetworkX graph to dictionary format for API responses with pagination support.
 
@@ -38,6 +61,15 @@ def graph_to_dict(graph: nx.DiGraph, limit: int | None = None, offset: int = 0) 
     """
     # Get all node IDs sorted for stable pagination
     all_node_ids = sorted(graph.nodes())
+
+    # Centrality is a property of a node's position in the WHOLE graph, so it is
+    # computed over every node before pagination. Computing it over the page
+    # would make a node's score depend on which page you asked for.
+    #
+    # Degree centrality specifically: O(V), safe to run on every API response.
+    # Betweenness/closeness are O(V*E) and would make this endpoint unusable at
+    # this graph's size.
+    centrality = _degree_centrality(graph)
 
     # Apply pagination to nodes
     if limit is not None:
@@ -61,7 +93,7 @@ def graph_to_dict(graph: nx.DiGraph, limit: int | None = None, offset: int = 0) 
                 "complexity_score": attrs.get("complexity_score"),
                 "incoming_edges": graph.in_degree(node_id),
                 "outgoing_edges": graph.out_degree(node_id),
-                "centrality_score": 0,  # Placeholder - can be computed separately
+                "centrality_score": centrality.get(node_id, 0.0),
             }
         )
 
