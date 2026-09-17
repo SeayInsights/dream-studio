@@ -28,10 +28,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from conftest import reviewed_verdict  # noqa: E402
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch  # noqa: E402
 
-from core.config.sqlite_bootstrap import bootstrap_database
-from core.work_orders.artifact_envelope import wrap
+from core.config.sqlite_bootstrap import bootstrap_database  # noqa: E402
+from core.work_orders.artifact_envelope import wrap  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NOW = "2026-01-01T00:00:00+00:00"

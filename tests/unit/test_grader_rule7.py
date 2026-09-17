@@ -26,8 +26,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from conftest import reviewed_verdict  # noqa: E402
 
-from core.config.sqlite_bootstrap import bootstrap_database
-from core.work_orders.verify_prompts import _QUALITY_PROMPT_TEMPLATE
+from core.config.sqlite_bootstrap import bootstrap_database  # noqa: E402
+from core.work_orders.verify_prompts import _QUALITY_PROMPT_TEMPLATE  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 # Pre-cutover created_at: keeps these WOs grandfathered past the

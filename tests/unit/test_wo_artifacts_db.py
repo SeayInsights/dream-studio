@@ -18,8 +18,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from conftest import reviewed_verdict  # noqa: E402
 
-from core.work_orders.artifacts import get_wo_artifact, has_wo_artifact, set_wo_artifact
-from core.work_orders.close import run_gate_check
+from core.work_orders.artifacts import get_wo_artifact, has_wo_artifact, set_wo_artifact  # noqa: E402
+from core.work_orders.close import run_gate_check  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _MIG_DIR = REPO_ROOT / "core" / "event_store" / "migrations"
