@@ -376,9 +376,25 @@ def _write_to_dual_canonical(envelope: dict[str, Any], db_path: Path) -> None:
                     hook_id TEXT,
                     model_id TEXT,
                     severity TEXT NOT NULL DEFAULT 'info',
-                    source TEXT NOT NULL DEFAULT 'ingestor'
+                    source TEXT NOT NULL DEFAULT 'ingestor',
+                    -- Migration 156. Declared here too because this CREATE runs
+                    -- against any DB that has not been migrated (tests, fresh
+                    -- spool targets); without it the INSERT below fails with
+                    -- "no column named project_id" and every event is dropped.
+                    project_id TEXT
                 )
             """)
+            # Self-heal the migration-156 column on a table that already exists
+            # from an earlier schema. The CREATE above is a no-op in that case,
+            # so without this the INSERT fails with "no column named project_id"
+            # and the ingestor drops every event it was handed — the loudest
+            # possible failure mode for a component whose job is not losing data.
+            # Consistent with the IF NOT EXISTS posture of the statements around it.
+            if not any(
+                r[1] == "project_id" for r in conn.execute("PRAGMA table_info(ai_canonical_events)")
+            ):
+                conn.execute("ALTER TABLE ai_canonical_events ADD COLUMN project_id TEXT")
+
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_ace_correlation_id"
                 " ON ai_canonical_events(correlation_id)"
@@ -396,8 +412,9 @@ def _write_to_dual_canonical(envelope: dict[str, Any], db_path: Path) -> None:
                 INSERT OR IGNORE INTO ai_canonical_events
                 (event_id, received_at, event_type, event_timestamp, schema_version,
                  trace, payload, correlation_id, session_id, skill_id,
-                 workflow_id, agent_id, hook_id, model_id, severity, source)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 workflow_id, agent_id, hook_id, model_id, severity, source,
+                 project_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     envelope["event_id"],
@@ -416,6 +433,12 @@ def _write_to_dual_canonical(envelope: dict[str, Any], db_path: Path) -> None:
                     ids["model_id"],
                     envelope.get("severity", "info"),
                     "ingestor",
+                    # _extract_ids already resolved this from envelope/trace/payload
+                    # for EVERY event; before migration 156 there was no column to
+                    # put it in, so it was computed and discarded — and all AI spend
+                    # aggregated across every client at once. business_canonical_events
+                    # has always persisted it (see the business insert below).
+                    ids["project_id"],
                 ),
             )
 
