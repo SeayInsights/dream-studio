@@ -22,7 +22,6 @@ from typing import Any, Iterator
 
 from canonical.events.envelope import CanonicalEventEnvelope
 from canonical.events.types import EventType
-from emitters.claude_code.project import _get_db_path, get_active_project_id
 from emitters.claude_code.session import get_or_create_session_id
 
 
@@ -51,6 +50,50 @@ def _iter_usage_entries(text: str) -> Iterator[tuple[str, dict, str]]:
         yield str(uid), usage, str(model)
 
 
+def _resolve_project_id(payload: dict[str, Any]) -> str | None:
+    """The project the work actually happened in — not the globally-active one.
+
+    This used to call get_active_project_id(), which answers a different
+    question: "which project did the operator last mark active?" A session doing
+    Fulcrum work while Dream Studio was the active project had every one of its
+    token events attributed to Dream Studio. That is not a missing label, it is a
+    wrong one, and it silently moves spend between clients.
+
+    Resolution order, evidence-first:
+      1. the .dream-studio-project marker at the process cwd — the same resolver
+         core/telemetry/token_capture.py already uses, and the work's own location
+      2. the cwd carried on the hook payload, for the case where the emitter runs
+         somewhere other than the session's directory
+      3. NULL
+
+    There is deliberately no fall-back to the active project. Coverage bought
+    with a guess is worse than an honest gap: an unattributed event is visibly
+    unattributed, whereas a mis-attributed one inflates a client's spend and
+    nothing downstream can tell.
+    """
+    try:
+        from core.sdlc.cwd_resolver import resolve_project_from_cwd
+
+        ctx = resolve_project_from_cwd()
+        if ctx is not None and ctx.project_id:
+            return str(ctx.project_id)
+    except Exception:
+        pass
+
+    raw_cwd = payload.get("cwd")
+    if raw_cwd:
+        try:
+            from core.sdlc.cwd_resolver import resolve_project_from_path
+
+            ctx = resolve_project_from_path(Path(str(raw_cwd)))
+            if ctx is not None and ctx.project_id:
+                return str(ctx.project_id)
+        except Exception:
+            pass
+
+    return None
+
+
 def normalize_stop_token_usage(
     payload: dict[str, Any], root: Path | None = None
 ) -> list[CanonicalEventEnvelope]:
@@ -67,10 +110,7 @@ def normalize_stop_token_usage(
         return []
 
     session_id = get_or_create_session_id(root)
-    try:
-        project_id = get_active_project_id(_get_db_path())
-    except Exception:
-        project_id = None
+    project_id = _resolve_project_id(payload)
 
     envelopes: list[CanonicalEventEnvelope] = []
     for uid, usage, model in _iter_usage_entries(text):
@@ -101,7 +141,14 @@ def normalize_stop_token_usage(
                     "granularity": "assistant_turn",
                 },
                 project_id=project_id,
-                trace={"domain": "telemetry", "model_id": model},
+                # project_id also goes in the trace so it survives any reader
+                # that only looks there; the ingestor accepts it from either.
+                trace={
+                    "domain": "telemetry",
+                    "model_id": model,
+                    "project_id": project_id,
+                    "attribution_status": "cwd" if project_id else "orphan",
+                },
             )
         )
     return envelopes

@@ -59,6 +59,22 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         "--description", default="", help="Proposed work description (sharpens the fit signal)"
     )
 
+    client_sub.add_parser(
+        "cost",
+        help="AI spend per client, from attributed token events (migration 156)",
+    )
+
+    c_backfill = client_sub.add_parser(
+        "backfill-events",
+        help="Attribute historical AI events to a project from transcript evidence",
+    )
+    c_backfill.add_argument(
+        "--execute",
+        action="store_true",
+        default=False,
+        help="Write the attribution. Without it this is a dry run and nothing is changed.",
+    )
+
 
 def _db_path(source_root: Path, dream_studio_home: Path | None) -> Path:
     from interfaces.cli.ds import resolve_installed_runtime_paths
@@ -120,6 +136,22 @@ def dispatch(args: argparse.Namespace, *, source_root: Path, dream_studio_home: 
                     args.client_id, args.title, args.description, db_path=db
                 ),
             }
+        )
+    if cmd == "cost":
+        from core.event_store.project_attribution import client_rollup
+
+        db = _db_path(source_root, dream_studio_home)
+        return _print(client_rollup(db_path=db))
+    if cmd == "backfill-events":
+        from core.event_store.project_attribution import backfill_ai_event_projects
+
+        db = _db_path(source_root, dream_studio_home)
+        # Dry run by default: the attribution moves spend between clients, and an
+        # operator should read what it would do before it does it. The first
+        # attempt at this backfill attributed $19,405 of one project's spend to
+        # another engagement, and a dry run is where that is caught.
+        return _print(
+            backfill_ai_event_projects(db_path=db, dry_run=not getattr(args, "execute", False))
         )
     print(f"Unknown client command: {cmd}", file=sys.stderr)
     return 1
