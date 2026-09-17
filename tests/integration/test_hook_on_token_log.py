@@ -2,16 +2,38 @@
 
 from __future__ import annotations
 
+import io
 import json
+import sys
 
 from freezegun import freeze_time
 
 FROZEN = "2026-01-01 12:00:00"
 
 
-def test_appends_row_with_explicit_tokens(isolated_home, handler, capsys):
+def _dispatch(monkeypatch, mod, payload: dict) -> None:
+    """Drive the handler the way the dispatcher does: JSON on stdin, main() with no args.
+
+    THIS TEST CALLED ``mod.main(payload)`` AND THAT IS WHY IT BROKE. The dispatcher
+    contract is zero-arg -- ``dispatch_tracking.run_handlers`` sets ``sys.stdin`` and
+    calls ``mod.main()`` -- so the argument this test passed was one production never
+    passes. The handler was fixed to match the contract and this caller was not, which
+    is the same asymmetry in the opposite direction.
+
+    DELIBERATELY NOT ``mod._handle(payload)``, which would also go green. Calling the
+    inner helper skips the seam that actually failed in production: main() had the wrong
+    signature for 2.5 months and every dispatch raised TypeError before reaching
+    _handle at all. A test that enters below that seam cannot see it break again.
+    """
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    mod.main()
+
+
+def test_appends_row_with_explicit_tokens(isolated_home, handler, capsys, monkeypatch):
     mod = handler("on-token-log")
-    mod.main(
+    _dispatch(
+        monkeypatch,
+        mod,
         {
             "session_name": "sess-1",
             "model": "claude-opus",
@@ -19,7 +41,7 @@ def test_appends_row_with_explicit_tokens(isolated_home, handler, capsys):
             "completion_tokens": 50,
             "total_tokens": 150,
             "timestamp": "2026-04-16T00:00:00+00:00",
-        }
+        },
     )
 
     log = isolated_home / ".dream-studio" / "meta" / "token-log.md"
@@ -35,7 +57,7 @@ def test_appends_row_with_explicit_tokens(isolated_home, handler, capsys):
 
 
 @freeze_time(FROZEN)
-def test_parses_transcript_when_tokens_missing(isolated_home, handler):
+def test_parses_transcript_when_tokens_missing(isolated_home, handler, monkeypatch):
     transcript = isolated_home / "transcript.jsonl"
     transcript.write_text(
         json.dumps({"model": "claude-sonnet", "usage": {"input_tokens": 10, "output_tokens": 4}})
@@ -46,7 +68,7 @@ def test_parses_transcript_when_tokens_missing(isolated_home, handler):
     )
 
     mod = handler("on-token-log")
-    mod.main({"session_name": "sess-2", "transcript_path": str(transcript)})
+    _dispatch(monkeypatch, mod, {"session_name": "sess-2", "transcript_path": str(transcript)})
 
     log = (isolated_home / ".dream-studio" / "meta" / "token-log.md").read_text(encoding="utf-8")
     assert "claude-sonnet" in log
