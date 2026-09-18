@@ -31,6 +31,7 @@ from .event_writer_hooks import (
 from .event_writer_lessons import (
     cache_research,
     draft_lesson,
+    apply_lesson,
     insert_lesson,
     promote_lesson,
     reject_lesson,
@@ -67,6 +68,7 @@ __all__ = [
     "insert_approach",
     "insert_handoff",
     "insert_hook_execution",
+    "apply_lesson",
     "insert_lesson",
     "insert_operational_snapshot",
     "insert_session",
