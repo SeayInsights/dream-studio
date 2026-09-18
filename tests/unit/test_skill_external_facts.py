@@ -125,7 +125,8 @@ def test_terraform_teaches_native_s3_locking_not_dynamodb() -> None:
     """use_lockfile went GA in 1.11, which deprecated the DynamoDB arguments."""
     body = (CANONICAL / "infra" / "terraform.yml").read_text(encoding="utf-8")
     example_start = body.index("id: remote-state-with-locking")
-    example = body[example_start : body.index("- id:", example_start + 10)]
+    example_end = body.index("- id:", example_start + 10)
+    example = body[example_start:example_end]
     assert "use_lockfile = true" in example
     assert (
         "dynamodb_table =" not in example
