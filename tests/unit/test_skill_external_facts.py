@@ -87,18 +87,18 @@ def test_mobile_states_the_current_store_submission_requirements() -> None:
         "API 34 guidance gets a submission rejected."
     )
     assert "API 36 (Android 16) since 2026-08-31" in text
-    assert "Xcode 26 / iOS 26 SDK" in text, (
-        "App Store Connect has required the iOS 26 SDK since 2026-04-28."
-    )
+    assert (
+        "Xcode 26 / iOS 26 SDK" in text
+    ), "App Store Connect has required the iOS 26 SDK since 2026-04-28."
     assert "Xcode 15+ required for iOS 17 SDK" not in text
 
 
 def test_kubernetes_states_one_correct_ga_version_per_feature() -> None:
     """Sidecars went alpha 1.28 / beta 1.29 / GA 1.33, and the file contradicted itself on HPA."""
     text = _read("modes/kubernetes/SKILL.md")
-    assert "feature stable in 1.29" not in text, (
-        "Native sidecars reached GA in 1.33, not 1.29 (1.29 was beta)."
-    )
+    assert (
+        "feature stable in 1.29" not in text
+    ), "Native sidecars reached GA in 1.33, not 1.29 (1.29 was beta)."
     assert "GA in 1.33" in text
     # The old text claimed autoscaling/v2 went GA in 1.27 on one line and 1.23 on another.
     assert "HPA v2 is GA" not in text, "The 1.27 GA claim contradicted the correct 1.23 line."
@@ -127,9 +127,9 @@ def test_terraform_teaches_native_s3_locking_not_dynamodb() -> None:
     example_start = body.index("id: remote-state-with-locking")
     example = body[example_start : body.index("- id:", example_start + 10)]
     assert "use_lockfile = true" in example
-    assert "dynamodb_table =" not in example, (
-        "The headline backend example should not add a DynamoDB lock table to a new backend."
-    )
+    assert (
+        "dynamodb_table =" not in example
+    ), "The headline backend example should not add a DynamoDB lock table to a new backend."
 
 
 def test_data_engineering_snippets_use_apis_that_still_exist() -> None:
@@ -138,13 +138,13 @@ def test_data_engineering_snippets_use_apis_that_still_exist() -> None:
     assert "schedule_interval=" not in dag, "Removed in Airflow 3.0; the DAG does not parse."
 
     skill = _read("modes/data-engineering/SKILL.md")
-    assert "daterange_start =>" not in skill, (
-        "Snowflake QUERY_HISTORY takes END_TIME_RANGE_START; daterange_start is not a parameter."
-    )
+    assert (
+        "daterange_start =>" not in skill
+    ), "Snowflake QUERY_HISTORY takes END_TIME_RANGE_START; daterange_start is not a parameter."
     assert "END_TIME_RANGE_START" in skill
-    assert "`config(version=2)`" not in skill, (
-        "dbt model versioning is YAML-only; there is no config(version=...) function."
-    )
+    assert (
+        "`config(version=2)`" not in skill
+    ), "dbt model versioning is YAML-only; there is no config(version=...) function."
 
 
 def test_devops_does_not_assert_an_artifact_size_limit_that_does_not_exist() -> None:
@@ -152,9 +152,9 @@ def test_devops_does_not_assert_an_artifact_size_limit_that_does_not_exist() -> 
     for rel in ("modes/devops/SKILL.md", "modes/devops/gotchas.yml", "infra/devops.yml"):
         body = _read(rel)
         assert "500MB public" not in body, f"{rel} states a per-run limit that does not exist"
-        assert "silently truncates" not in body, (
-            f"{rel} asserts an upload-truncation failure mode no GitHub source documents"
-        )
+        assert (
+            "silently truncates" not in body
+        ), f"{rel} asserts an upload-truncation failure mode no GitHub source documents"
 
 
 @pytest.mark.parametrize(
