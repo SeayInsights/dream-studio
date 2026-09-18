@@ -123,7 +123,7 @@ patterns:
   - id: snowflake-clustering-keys
     title: Snowflake clustering keys for large tables
     description: >
-      For Snowflake tables exceeding ~500 GB with common filter patterns, define a
+      For Snowflake tables in the multi-TB range (Snowflake's own documented baseline) with common filter patterns, define a
       cluster_by key matching the most selective filter column (often a date or tenant ID).
       Clustering reduces micro-partition pruning overhead on repeated queries. Avoid
       clustering on high-cardinality columns like UUID -- use a truncated date instead.
@@ -225,15 +225,15 @@ patterns:
       rather than hardcoding time-based schedules. This makes pipelines resilient to
       upstream delays and prevents partial data loads from silently propagating.
     example: |
-      from airflow.sensors.external_task import ExternalTaskSensor
-      from airflow.operators.bash import BashOperator
-      from airflow import DAG
+      from airflow.sdk import DAG
+      from airflow.providers.standard.operators.bash import BashOperator
+      from airflow.providers.standard.sensors.external_task import ExternalTaskSensor
       from datetime import datetime, timedelta
 
       with DAG(
           dag_id="transform_orders",
           start_date=datetime(2024, 1, 1),
-          schedule_interval="@daily",
+          schedule="@daily",
           catchup=False,
       ) as dag:
 

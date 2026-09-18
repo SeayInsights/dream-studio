@@ -1,12 +1,12 @@
 ## Patterns
 
-- **Remote state with locking**: S3 + DynamoDB (AWS) or GCS (GCP). State must be versioned (S3 versioning enabled) for rollback. `encrypt = true` in backend config.
+- **Remote state with native locking**: S3 with `use_lockfile = true` (AWS, Terraform >= 1.11) or GCS (GCP). DynamoDB locking still works but `dynamodb_table` was deprecated in 1.11 (Feb 2025) in favour of S3-native locking -- don't add one to a new backend. State must be versioned (S3 versioning enabled) for rollback. `encrypt = true` in backend config.
 - **for_each over count for mutable collections**: count indexes are positional -- removing an item shifts all higher items, triggering destroy+recreate. for_each keys are stable strings.
-- **Module versioning with pessimistic constraint (~>)**: `version = "~> 5.1"` allows 5.x patch updates but blocks 6.0. Run `terraform init -upgrade` deliberately.
+- **Module versioning with pessimistic constraint (~>)**: `version = "~> 5.1"` allows any 5.x from 5.1 up -- minor *and* patch bumps (5.2, 5.9) -- but blocks 6.0. Only the three-part form `~> 5.1.0` is patch-only. Run `terraform init -upgrade` deliberately.
 - **Import blocks (TF 1.5+)**: declare `import { to = ... id = ... }` in config; import runs as part of apply. TF 1.6+ adds `-generate-config-out=generated.tf` for auto-config generation.
 - **Workspaces for env isolation when infra is structurally identical**: use `terraform.workspace` in locals to vary instance types, counts, tags. Separate root modules for structurally different environments.
 - **Data sources and remote state outputs for cross-module references**: never hardcode ARNs. Use `data.terraform_remote_state.<name>.outputs.<key>` for resources owned by another root module.
-- **Provider version pinning in required_providers**: `~> 5.31` for AWS provider. Always read CHANGELOG before crossing a major version boundary.
+- **Provider version pinning in required_providers**: e.g. `~> 6.0` for the current AWS provider major (v6, GA June 2025). Always read CHANGELOG before crossing a major version boundary.
 - **depends_on only for hidden side-effect dependencies**: use sparingly -- it blocks Terraform's parallelism optimizer. Prefer explicit attribute references to express dependencies.
 
 ## Anti-Patterns
@@ -25,7 +25,7 @@
 - **Sensitive values are plaintext in state**: `sensitive = true` masks in CLI output but the value is still in the .tfstate JSON. Control access to state bucket via strict IAM; minimize secrets in state by using data sources to read from Secrets Manager at apply time.
 - **terraform destroy ordering with deletion-protected resources**: S3 buckets with objects, RDS with deletion_protection, ECR with images will fail mid-destroy. Set `force_destroy = true` or `deletion_protection = false` and apply before destroy.
 - **-refresh=false gives stale plan**: skipping refresh misses out-of-band changes; the plan file may not reflect real infra by apply time. Use `-refresh-only` periodically to sync state without changes.
-- **Provider major version upgrade requires config migration**: AWS v4->v5 broke aws_s3_bucket into sub-resources. Bump version constraint, run `terraform init -upgrade`, run `terraform plan` -- address every breaking change before apply.
+- **Provider major version upgrade requires config migration**: AWS provider v4.0 (Feb 2022) split `aws_s3_bucket` into sub-resources (`aws_s3_bucket_versioning`, `aws_s3_bucket_server_side_encryption_configuration`, ...); v4.9 (Apr 2022) restored the old inline arguments as deprecated fallbacks; v5.0 (May 2023) removed those fallbacks entirely. Bump version constraint, run `terraform init -upgrade`, run `terraform plan` -- address every breaking change before apply.
 
 ## Commands
 
@@ -82,7 +82,10 @@ terraform state list
 # Show specific resource state
 terraform state show aws_eks_cluster.main
 
-# Taint a resource (force replace on next apply)
+# Force replacement via a reviewable plan (preferred since TF 0.15.2)
+terraform apply -replace="aws_instance.flaky_server"
+
+# Taint a resource (DEPRECATED -- mutates state with no reviewable plan; prefer -replace above)
 terraform taint aws_instance.flaky_server
 
 # Remove taint
@@ -98,6 +101,11 @@ terraform plan -generate-config-out=generated.tf
 - **Terraform 1.6 (2023)**: `-generate-config-out` for auto-generating config from imported resources.
 - **Terraform 1.7 (2024)**: `removed` blocks for cleanly removing resources from state without a destroy.
 - **Terraform 1.8 (2024)**: provider functions available in expressions (e.g., AWS provider functions for ARN parsing).
-- **AWS provider v5 (2023)**: major breaking change -- `aws_s3_bucket` split into `aws_s3_bucket_versioning`, `aws_s3_bucket_server_side_encryption_configuration`, etc.
-- **Kubernetes provider v2.25+ (2024)**: supports server-side apply; `field_manager` attribute available.
-- **OpenTofu 1.6+ (2024)**: open-source Terraform fork; compatible with most TF 1.x configs; state file format is compatible.
+- **Terraform 1.9 (Jun 2024)**: variable `validation` can reference other objects; `templatestring` function.
+- **Terraform 1.10 (Nov 2024)**: ephemeral values/resources (secrets that never land in state); experimental S3-native locking (`use_lockfile`).
+- **Terraform 1.11 (Feb 2025)**: `use_lockfile` GA; `dynamodb_table`/`dynamodb_endpoint` deprecated on the S3 backend.
+- **Terraform 1.12 (May 2025)**: import blocks can target a provider-defined `identity`; OCI Object Storage backend.
+- **Terraform 1.13-1.16 (2025-2026)**: Stacks CLI hardening; List Resources (`terraform query`) and `action` blocks. Current stable is 1.16.x (Sep 2026).
+- **AWS provider v4.0 (Feb 2022)**: major breaking change -- `aws_s3_bucket` split into `aws_s3_bucket_versioning`, `aws_s3_bucket_server_side_encryption_configuration`, etc. **v4.9 (Apr 2022)** restored the old inline arguments as deprecated fallbacks; **v5.0 (May 2023)** removed them. Current AWS provider major is **v6** (GA June 2025).
+- **Kubernetes provider**: `kubernetes_manifest` has supported server-side apply and `field_manager` since it went GA in Oct 2021 -- don't gate on v2.25. Current major is **v3** (GA Dec 2025).
+- **OpenTofu**: open-source fork diverging at Terraform 1.6 (Jan 2024); compatible with most TF 1.x configs and state, and has since added its own features (e.g. state encryption). Current stable is 1.12.x (Aug 2026).

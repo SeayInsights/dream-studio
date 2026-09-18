@@ -18,7 +18,7 @@ patterns:
           inputs:
             node-version:
               type: string
-              default: "20"
+              default: "22"
           secrets:
             NPM_TOKEN:
               required: true
@@ -26,8 +26,8 @@ patterns:
         ci:
           runs-on: ubuntu-latest
           steps:
-            - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905139b7f7d  # v4.1.6
-            - uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8  # v4.0.2
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+            - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
               with:
                 node-version: ${{ inputs.node-version }}
                 cache: npm
@@ -56,8 +56,8 @@ patterns:
             id-token: write   # required for OIDC
             contents: read
           steps:
-            - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905139b7f7d
-            - uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502  # v4.0.2
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+            - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd  # v6.3.0
               with:
                 role-to-assume: arn:aws:iam::123456789012:role/github-actions-deploy
                 aws-region: us-east-1
@@ -84,7 +84,7 @@ patterns:
                 - "actions/*"
 
       # In workflow: pin to SHA, comment with version for readability
-      - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905139b7f7d  # v4.1.6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
   - id: artifact-caching
     title: Cache dependencies to reduce CI wall time
@@ -94,7 +94,7 @@ patterns:
       Always include the lockfile hash in the cache key so a changed lockfile
       busts the cache and triggers a fresh install.
     example: |
-      - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9  # v4.0.2
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             ~/.npm
@@ -118,10 +118,10 @@ patterns:
             fail-fast: false
             matrix:
               os: [ubuntu-latest, windows-latest, macos-latest]
-              node: ["18", "20", "22"]
+              node: ["22", "24", "26"]
           steps:
-            - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905139b7f7d
-            - uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+            - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
               with:
                 node-version: ${{ matrix.node }}
             - run: npm ci && npm test
@@ -150,11 +150,16 @@ patterns:
       to pass (CI, linting), require up-to-date branches, restrict who can push.
       Use 'Require deployments to succeed' for environment-gated merges.
       Configure via gh CLI or terraform (github_branch_protection resource).
+      Prefer repository Rulesets for new setups -- classic branch protection still
+      works, but rulesets add pattern-matched branches, org-wide enforcement and
+      audited bypass lists, and GitHub ships an automatic migration.
     example: |
-      # Configure via gh CLI
+      # Classic branch protection via gh CLI. The `contexts` string array is
+      # deprecated in favour of `checks` ({context, app_id}), which pins each
+      # required check to the app allowed to report it.
       gh api repos/{owner}/{repo}/branches/main/protection \
         --method PUT \
-        --field required_status_checks='{"strict":true,"contexts":["ci/test","ci/lint"]}' \
+        --field required_status_checks='{"strict":true,"checks":[{"context":"ci/test"},{"context":"ci/lint"}]}' \
         --field enforce_admins=true \
         --field required_pull_request_reviews='{"required_approving_review_count":1}' \
         --field restrictions=null
@@ -276,13 +281,14 @@ gotchas:
       Never restore an untrusted PR's cache entry in a privileged workflow.
 
   - id: artifact-size-limits
-    title: GitHub Actions artifacts have size limits and short retention
+    title: Artifact storage is a monthly plan quota, not a per-run size cap
     description: >
-      Default artifact retention is 90 days (configurable down to 1 day). Per-run
-      artifact size limit is 500MB for public repos and 2GB for private. Uploading
-      large build outputs or node_modules as artifacts hits these limits silently --
-      the upload step succeeds but download fails. Use actions/upload-artifact v4
-      which fails loudly on size violations.
+      Default artifact retention is 90 days (configurable down to 1 day). There is no
+      documented per-run artifact size limit: artifacts and GitHub Packages share a
+      MONTHLY storage allowance set by plan (Free 500MB, Pro 1GB, Team 2GB, Enterprise
+      Cloud 50GB), so uploading large build outputs or node_modules exhausts the
+      monthly quota rather than failing a per-run check. From v4 an artifact is an
+      immutable archive -- uploading the same artifact name twice fails the step.
     fix: >
       Compress artifacts before upload. For large binaries, push to S3 or a container
       registry instead. Set retention-days explicitly to match your policy.

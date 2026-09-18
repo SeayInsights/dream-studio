@@ -4,27 +4,31 @@ version: 1
 
 patterns:
   - id: remote-state-with-locking
-    title: Remote state with DynamoDB locking (AWS) or GCS locking (GCP)
+    title: Remote state with native S3 locking (AWS) or GCS locking (GCP)
     description: >
       Never use local state in a team environment. Remote state enables collaboration
       and state locking prevents concurrent applies from corrupting the state file.
-      S3 + DynamoDB is the canonical AWS backend. State must be versioned so
-      corrupted state can be rolled back.
+      On Terraform >= 1.11 use S3-native locking (use_lockfile = true) -- no DynamoDB
+      table required. use_lockfile was experimental in 1.10 (Nov 2024) and GA in 1.11
+      (Feb 2025), which also deprecated dynamodb_table / dynamodb_endpoint. Those
+      arguments still work and have no announced removal version, so an existing
+      DynamoDB setup is not broken -- but new backends should not add one.
+      State must be versioned so corrupted state can be rolled back.
     example: |
       # backend.tf
       terraform {
         backend "s3" {
-          bucket         = "my-terraform-state-prod"
-          key            = "services/api/terraform.tfstate"
-          region         = "us-east-1"
-          encrypt        = true
-          dynamodb_table = "terraform-state-lock"
+          bucket       = "my-terraform-state-prod"
+          key          = "services/api/terraform.tfstate"
+          region       = "us-east-1"
+          encrypt      = true
+          use_lockfile = true
         }
-        required_version = ">= 1.5.0"
+        required_version = ">= 1.11.0"
         required_providers {
           aws = {
             source  = "hashicorp/aws"
-            version = "~> 5.0"
+            version = "~> 6.0"
           }
         }
       }
@@ -56,12 +60,13 @@ patterns:
     description: >
       Unpinned modules (source = "terraform-aws-modules/vpc/aws") pull the latest
       version on every init, causing non-deterministic plans. Pin with a version
-      constraint. Use pessimistic constraint (~>) to allow patch updates but not
-      breaking major/minor bumps.
+      constraint. The pessimistic constraint (~>) allows minor AND patch updates within the
+      pinned major -- "~> 6.0" permits 6.1, 6.9 but blocks 7.0. Only the three-part form
+      ("~> 6.1.0") restricts to patch-only updates.
     example: |
       module "vpc" {
         source  = "terraform-aws-modules/vpc/aws"
-        version = "~> 5.1"
+        version = "~> 6.0"
 
         name = "production-vpc"
         cidr = "10.0.0.0/16"
@@ -152,11 +157,11 @@ patterns:
         required_providers {
           aws = {
             source  = "hashicorp/aws"
-            version = "~> 5.31"
+            version = "~> 6.0"
           }
           kubernetes = {
             source  = "hashicorp/kubernetes"
-            version = "~> 2.25"
+            version = "~> 3.0"
           }
           random = {
             source  = "hashicorp/random"

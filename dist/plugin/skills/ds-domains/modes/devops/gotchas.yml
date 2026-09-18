@@ -37,10 +37,12 @@ gotchas:
     category: security
 
   - id: devops-g5
-    title: Artifact retention and size limits are silent on older action versions
+    title: Artifact storage is a monthly plan quota, not a per-run size cap
     description: >
-      Default 90-day retention, 500MB public / 2GB private per run. Upload
-      silently truncates on older action versions; actions/upload-artifact v4
-      fails loudly. Use v4.
+      Default retention is 90 days. There is no documented per-run artifact size
+      limit -- artifacts and Packages share a MONTHLY storage allowance by plan
+      (Free 500MB, Pro 1GB, Team 2GB, Enterprise Cloud 50GB), so large uploads
+      exhaust quota rather than truncating. From v4 an artifact is an immutable
+      archive: uploading the same artifact name twice fails the step.
     severity: medium
     category: artifacts

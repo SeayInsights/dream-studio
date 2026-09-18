@@ -3,7 +3,7 @@
 - **Resource requests and limits on every container** -- requests are used by the scheduler; limits are enforced at runtime. Missing limits allow memory leaks to OOMKill neighbors.
 - **Three-probe strategy**: startupProbe (slow start budget) -> livenessProbe (deadlock detection) -> readinessProbe (traffic readiness). Never share the same endpoint for liveness and readiness.
 - **RBAC least-privilege**: one ServiceAccount per workload, scoped Role/RoleBinding, set `automountServiceAccountToken: false` on the ServiceAccount definition.
-- **Default-deny NetworkPolicy**: apply deny-all to every namespace, then explicit allow rules per service pair. CNI must support NetworkPolicy (Calico, Cilium, Weave -- not Flannel alone).
+- **Default-deny NetworkPolicy**: apply deny-all to every namespace, then explicit allow rules per service pair. CNI must support NetworkPolicy (Calico or Cilium -- not Flannel alone; avoid Weave Net, archived and unmaintained since 2024).
 - **PodDisruptionBudget on every multi-replica workload**: prevents node drain from taking all replicas simultaneously during cluster upgrades.
 - **HPA v2 (autoscaling/v2, k8s 1.23+)**: set both CPU and memory metrics, minReplicas >= 2, stabilizationWindowSeconds: 300 on scaleDown to prevent thrashing.
 - **Rolling update with maxUnavailable: 0**: zero-downtime deploys require readiness probes to be correct -- new pods only receive traffic after passing readiness.
@@ -73,10 +73,13 @@ helm diff upgrade myapp ./chart -f values-prod.yaml
 
 ## Version Notes
 
-- **k8s 1.28+**: Native sidecar containers (feature stable in 1.29) -- init containers with `restartPolicy: Always` run as sidekicks that stay alive alongside the main container.
-- **k8s 1.27+**: HPA v2 is GA; autoscaling/v2beta2 is removed in 1.26.
+> Supported minors as of 2026-09: 1.35 / 1.36 / 1.37. Most "1.2x+" notes below are long-settled
+> baseline, not recent changes -- re-anchor this line when you revisit the skill.
+
+- **Native sidecar containers**: init containers with `restartPolicy: Always` stay alive alongside the main container. Alpha in 1.28, beta (default-on) in 1.29, **GA in 1.33** (April 2025) -- do not treat it as a stable primitive before 1.33.
 - **k8s 1.25+**: PodSecurityPolicy removed; use Pod Security Admission (pod-security.kubernetes.io labels on namespaces).
-- **k8s 1.24+**: ServiceAccount tokens are time-limited (bound tokens) by default; legacy long-lived tokens require explicit Secret creation.
-- **k8s 1.23+**: autoscaling/v2 (HPA multi-metric) is GA.
-- **Helm 3.x**: no Tiller; all state is Helm release Secrets in the target namespace.
-- **External Secrets Operator 0.9+**: v1beta1 ExternalSecret API is stable.
+- **k8s 1.24+**: stops auto-creating a long-lived `kubernetes.io/service-account-token` Secret per ServiceAccount -- create one explicitly if you need a non-expiring token.
+- **k8s 1.23+**: `autoscaling/v2` (HPA multi-metric) is GA; `autoscaling/v2beta1`/`v2beta2` stopped being served in 1.26.
+- **k8s 1.22+**: a pod's mounted ServiceAccount token is bound, time-limited and auto-rotated by default (projected volume).
+- **Helm 3.x**: no Tiller; release state lives in Secrets in the target namespace. **Helm 4** (Nov 2025) is the current major -- it defaults to Server-Side Apply, which changes diff/dry-run output. Helm 3 goes security-only after Sept 2026.
+- **External Secrets Operator** (v2.x current): the stable API is `external-secrets.io/v1`; `v1beta1` is legacy and auto-converted -- author new manifests against `v1`.

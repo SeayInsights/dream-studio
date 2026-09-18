@@ -172,7 +172,7 @@ SHOW WAREHOUSES;
 -- Query history
 SELECT query_id, query_text, execution_status, total_elapsed_time
 FROM TABLE(INFORMATION_SCHEMA.QUERY_HISTORY(
-    daterange_start => dateadd('hour', -1, current_timestamp())
+    END_TIME_RANGE_START => dateadd('hour', -1, current_timestamp())
 ))
 ORDER BY start_time DESC LIMIT 20;
 
@@ -237,25 +237,33 @@ from {{ ref('int_customer_changes') }}
 
 **dbt Core 1.5+**
 - Model contracts: enforce column names and types at compile time via `config(contract={enforced: true})`
-- Model versions: `config(version=2)` with deprecation warnings for consumers
+- Model versions: declared in YAML (`latest_version:` plus a `versions:` list with `v:` per entry, one file per version) -- there is no `config(version=...)` function
 
 **dbt Core 1.6+**
 - `dbt retry` replaces manual re-runs of failed nodes
-- Unit tests for dbt models (mock input, assert output)
+
+**dbt Core 1.8+**
+- Unit tests for dbt models (`unit_tests:` YAML with `given`/`expect`); run by `dbt test` and `dbt build`
+
+**dbt Fusion / dbt Core v2**
+- dbt Core v2.0 rebuilds Core on the Rust Fusion engine; 1.x remains supported for unmigrated projects
+- Under Fusion `--models`/`-m`/`--resource-type` are hard errors (use `--select`/`--resource-types`), and `dbt_project.yml` `flags:` opt-outs for behaviour-change flags are ignored
 
 **BigQuery**
 - `INFORMATION_SCHEMA.JOBS_BY_PROJECT` requires `roles/bigquery.resourceViewer` at project level
 - `require_partition_filter=true` enforces partition pruning at query time (prevents accidental full scans)
 
 **Snowflake**
-- Dynamic tables (GA as of 2024) replace complex incremental logic for streaming-like refresh
+- Dynamic tables (GA April 2024) replace complex incremental logic for streaming-like refresh
 - Iceberg table support for open lakehouse integration
 
-**Airflow 2.x**
+**Airflow 3.x** (current)
+- `schedule=` replaces the removed `schedule_interval=`; SubDAGs are gone (use TaskGroups/Assets)
+- DAG authoring imports from `airflow.sdk` (`from airflow.sdk import DAG, task`); core operators moved to `apache-airflow-providers-standard`
 - TaskFlow API (`@task` decorator) preferred over classic operators for Python tasks
 - `mode="reschedule"` on sensors releases the worker slot between pokes (use over `mode="poke"` for long waits)
 
 **Dagster 1.x**
 - Asset-based paradigm preferred over op/job for data engineering workloads
 - `@asset(partitions_def=DailyPartitionsDefinition(...))` for date-partitioned incremental loads
-- Auto-materialize policies replace cron-triggered jobs for dependency-aware scheduling
+- `AutomationCondition` (Declarative Automation) replaces the deprecated `AutoMaterializePolicy`/`auto_materialize_policy` for dependency-aware scheduling

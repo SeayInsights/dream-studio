@@ -207,8 +207,8 @@ patterns:
       AWS Secrets Manager, HashiCorp Vault, or GCP Secret Manager. The Secret object
       in k8s becomes a write-only cache populated by ESO.
     example: |
-      # External Secrets Operator v0.9+
-      apiVersion: external-secrets.io/v1beta1
+      # External Secrets Operator -- v1 is the stable API (v1beta1 is legacy, auto-converted)
+      apiVersion: external-secrets.io/v1
       kind: ExternalSecret
       metadata:
         name: db-credentials
