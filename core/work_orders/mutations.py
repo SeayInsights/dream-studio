@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import uuid
 from datetime import datetime, UTC
 from pathlib import Path
@@ -502,14 +503,43 @@ def reopen_work_order(
     }
 
 
+#: A plain directory or file name with no separator -- ``docs``, ``schemas``, ``tests``.
+#: Kept deliberately narrow so a fragment of prose swept into the clause cannot pass as a
+#: path. Mirrored by ``runtime.lib.enforcement._is_boundary_path``; the two are held in step
+#: by tests/unit/test_boundary_keeps_bare_directories.py, because a producer that emits what
+#: the consumer discards is the exact failure this pair exists to prevent.
+_BARE_PATH_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _is_boundary_path(part: str) -> bool:
+    """Whether a comma-separated boundary entry names a path rather than prose."""
+    if not part:
+        return False
+    return "/" in part or "." in part or bool(_BARE_PATH_NAME.match(part))
+
+
 def compose_module_boundary(description: str, module_boundary: str | list[str] | None) -> str:
     """Put the boundary into the description in the exact form the parser reads.
 
     ``runtime.lib.enforcement.boundary_globs`` searches for a literal ``Module boundary:``
-    clause and keeps comma-separated parts containing ``/`` or ``.``. Composing the clause
+    clause and keeps the comma-separated parts that look like paths. Composing the clause
     here means the producer emits precisely what the consumer parses, instead of an author
     recalling a literal documented nowhere -- which is why 0 of 25 in-progress work orders
     on the live authority carried one, and why edit attribution had no choice but to guess.
+
+    A BARE TOP-LEVEL DIRECTORY IS A PATH. The filter here used to require ``/`` or ``.``,
+    so ``docs``, ``schemas``, ``config``, ``tests`` and ``dist`` were dropped on the way in,
+    silently and with nothing said to the author. A work order declaring
+    ``--module-boundary "core/gates, docs, tests"`` was stored owning only ``core/gates``;
+    its own edits under ``docs/`` then matched no boundary it declared, so the stop hook
+    attributed them to whichever OTHER in-progress work orders happened to spell a covering
+    path, and demanded an authority write against work orders the session never touched.
+    Observed on the live authority: a boundary of 15 declared paths stored as 12. That is
+    precisely the "looks declared and matches nothing" failure the guard below names.
+
+    Whitespace is not the discriminator either -- an absolute path on this operator's
+    machine contains a space (``C:/Users/Dannis Seay/.codex/config.toml``), and six such
+    entries on a live work order would be lost by a no-spaces rule.
 
     An already-present clause is left alone: a caller who wrote it by hand is not
     second-guessed, and re-composing would duplicate it.
@@ -523,7 +553,7 @@ def compose_module_boundary(description: str, module_boundary: str | list[str] |
         if isinstance(module_boundary, str)
         else [str(p).strip() for p in module_boundary]
     )
-    usable = [p for p in parts if p and ("/" in p or "." in p)]
+    usable = [p for p in parts if _is_boundary_path(p)]
     if not usable:
         # Nothing the parser would keep. Silently storing an unparseable boundary would
         # look declared and match nothing -- the failure this function exists to end.
