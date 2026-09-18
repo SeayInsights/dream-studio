@@ -106,3 +106,57 @@ def test_mode_skill_files_are_not_framed(tmp_path: Path) -> None:
     mode_op = next(op for op in ops if "modes" in Path(op.target).parts)
 
     assert mode_op.source_content == "# resume\n"
+
+
+# ── a skill that declares itself passive must stay out of the auto-invoker ───
+
+
+def _declares_itself_passive(skill_md: Path) -> bool:
+    """True when a SKILL.md says it is not reachable through the Skill tool."""
+    head = skill_md.read_text(encoding="utf-8", errors="replace")[:1200].lower()
+    return "not user-invocable" in head or "passive context only" in head
+
+
+def test_a_skill_that_declares_itself_passive_is_not_framed() -> None:
+    """Frontmatter is what enters a skill into the auto-invoker, so a passive one must
+    not receive any.
+
+    NOT A GAP, WHICH IS THE POINT OF PINNING IT. `ds-bootstrap` installs with no
+    frontmatter and that is correct: its own SKILL.md says "Invocation: Passive context
+    only — not user-invocable via Skill tool". It is a context document that tells the
+    host AI Dream Studio exists; framing it would enter prose into the auto-invoker as a
+    candidate competing with real skills, and it would win on requests it cannot serve.
+
+    Pinned because the current exclusion is INCIDENTAL, not declared (WO 54d7a2e2, "make
+    the answer visible"): `synthesize_skill_frontmatter` returns None only because
+    ds-bootstrap is absent from packs.yaml. Adding it there for any unrelated reason --
+    routing, docs, an inventory -- would start framing it, and nothing would say so. This
+    test reads the declaration out of the skill itself, so the file that states the
+    intent is the file that enforces it.
+    """
+    from integrations.compiler.claude_code import synthesize_skill_frontmatter
+
+    passive = [
+        d
+        for d in sorted((REPO_ROOT / "canonical" / "skills").iterdir())
+        if (d / "SKILL.md").is_file() and _declares_itself_passive(d / "SKILL.md")
+    ]
+    assert passive, "no skill declares itself passive — has the declaration been reworded?"
+
+    for skill_dir in passive:
+        for skill_id in (skill_dir.name, f"ds-{skill_dir.name}"):
+            assert synthesize_skill_frontmatter(skill_id) is None, (
+                f"{skill_dir.name} declares itself passive/not user-invocable but would be "
+                "installed with frontmatter, which enters it into Claude Code's "
+                "auto-invoker as a candidate competing with real skills"
+            )
+
+
+def test_a_routable_pack_is_still_framed() -> None:
+    """The positive control. Without it, a synthesizer that returned None for everything
+    would satisfy the passive-skill assertion and silently stop every skill
+    auto-invoking."""
+    from integrations.compiler.claude_code import synthesize_skill_frontmatter
+
+    fm = synthesize_skill_frontmatter("ds-project")
+    assert fm and "description:" in fm
