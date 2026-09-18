@@ -127,7 +127,15 @@ def test_the_seats_are_the_round_table():
     for seat in seats:
         assert seat == seat.strip() and len(seat) > 3, seat
         assert not seat.startswith("@"), seat
-        assert " " in seat, f"a seat names a function, not a single word: {seat}"
+    # NO WORD-COUNT CHECK. This asserted `" " in seat`, reading a multi-word name as
+    # evidence of a described role -- and it is not one. It admits "Jane Doe" and
+    # refuses "Accessibility", which is a function stated in the one word it takes;
+    # the roster carries 29 seats and that is the only single-word one, so the check
+    # was a ratchet against exactly one legitimate entry. It went red only when the
+    # Accessibility lane happened to be seated, because lanes fire on relevance to the
+    # change set -- so it read as flaky rather than wrong. What actually forbids a
+    # handle is the closed-set assertion above: a seat not in `_SEATS` fails, and
+    # adding one to `_SEATS` is a reviewable act.
 
 
 # ── a detector that cannot run is not a detector that found nothing ─────────

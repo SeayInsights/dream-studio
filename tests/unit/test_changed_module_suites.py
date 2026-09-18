@@ -10,6 +10,7 @@ exists to enforce, in the change that added it.
 from __future__ import annotations
 
 import subprocess
+import sys
 
 from core.gates import changed_module_suites as cms
 
@@ -139,8 +140,13 @@ def test_it_would_have_caught_the_miss_that_motivated_it():
 
     # And the suite it names genuinely exists and collects, or the mapping points at a file
     # pytest cannot run -- which would report the change covered by nothing.
+    # sys.executable, NOT "py". The `py` launcher is Windows-only, so on the Linux
+    # runner this raised FileNotFoundError and the test failed for a reason unrelated
+    # to what it checks -- it has been red on main since it landed. sys.executable is
+    # the interpreter already running this test, which is also the one whose pytest
+    # should collect the suite.
     proc = subprocess.run(
-        ["py", "-m", "pytest", suite, "--collect-only", "-q"],
+        [sys.executable, "-m", "pytest", suite, "--collect-only", "-q"],
         cwd=cms.REPO_ROOT,
         capture_output=True,
         text=True,
