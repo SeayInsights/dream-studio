@@ -99,7 +99,18 @@ def main() -> int:
             sys.path.insert(0, str(plugin_root))
         source_root = _get_source_root()
         if source_root and str(source_root) not in sys.path:
-            sys.path.append(str(source_root))
+            # AHEAD OF THE PLUGIN ROOT, NOT BEHIND IT. The installed tree ships a PARTIAL
+            # `control` package -- control/execution only, enough for this dispatcher --
+            # while handlers import control.skills.* and control.execution.models.*, which
+            # exist only in the repo. With the plugin root first, Python bound `control` to
+            # the partial copy, fixed its __path__, and never looked at the repo, so every
+            # such handler raised ModuleNotFoundError before running (WO becfca00). Once
+            # this process imports dispatch_tracking the binding is cached for good, so the
+            # order has to be right BEFORE that import, not after.
+            #
+            # This is also what docs/HOOK_RUNTIME.md already describes: entry hooks are
+            # copies, libraries are imported from the repo. The append made the copy win.
+            sys.path.insert(0, str(source_root))
 
         import control.execution.dispatch_tracking as _dt  # noqa: PLC0415
 

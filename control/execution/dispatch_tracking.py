@@ -112,10 +112,23 @@ def run_handlers(
         try:
             mod = load_module(name.replace("-", "_"), path)
             if mod is None or not hasattr(mod, "main"):
-                continue
-            ran = True
-            sys.stdin = io.StringIO(raw_payload)
-            mod.main()
+                # A FILE THAT IS THERE AND WILL NOT LOAD IS A BROKEN HANDLER, NOT AN
+                # ABSENT ONE. This was `continue`, which left `ran` False, so the
+                # `finally` below logged nothing: no timing line, no execution row, no
+                # error. Measured cost (WO becfca00): on-skill-complete, on-skill-metrics,
+                # on-skill-load and on-skill-telemetry raised ModuleNotFoundError on every
+                # dispatch and produced ZERO execution rows in their entire lifetime --
+                # the skill telemetry was not degraded, it was severed, and nothing could
+                # say so.
+                status = "failed"
+                exit_code = 1
+                error_message = (
+                    "handler could not be loaded" if mod is None else "handler defines no main()"
+                )
+            else:
+                ran = True
+                sys.stdin = io.StringIO(raw_payload)
+                mod.main()
         except SystemExit as exc:
             # A handler that sys.exit()s is not a dispatch failure — record its code.
             code = exc.code
@@ -127,15 +140,19 @@ def run_handlers(
             error_message = str(exc)
         finally:
             sys.stdin = sys.__stdin__
+            elapsed = (time.perf_counter() - t0) * 1000
+            # TIMING STAYS EXECUTION-ONLY -- it measures how long a handler took to run,
+            # and one that never ran has no runtime to report. The EXECUTION RECORD is
+            # emitted either way, because "it failed" and "it was never reached" are
+            # different facts and only one of them is actionable.
             if ran:
-                elapsed = (time.perf_counter() - t0) * 1000
                 write_timing(state_dir, event_name, name, elapsed)
-                _log_hook_execution(
-                    hook_name=name,
-                    hook_type=event_name,
-                    started_at=started_at,
-                    duration_ms=elapsed,
-                    exit_code=exit_code,
-                    status=status,
-                    error_message=error_message,
-                )
+            _log_hook_execution(
+                hook_name=name,
+                hook_type=event_name,
+                started_at=started_at,
+                duration_ms=elapsed,
+                exit_code=exit_code,
+                status=status,
+                error_message=error_message,
+            )
