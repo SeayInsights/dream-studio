@@ -163,7 +163,23 @@ def test_stale_verdict_blocks_close(db, repo, tmp_path):
     """A verdict graded at HEAD^ is stale once a newer WO commit lands."""
     _persist_review_verdict(
         WO_ID,
-        {"work_order_id": WO_ID, "passed": True, "graded_commits": []},
+        {
+            "work_order_id": WO_ID,
+            "passed": True,
+            "graded_commits": [],
+            "round_table": {
+                "status": "pass",
+                "seats": [
+                    {
+                        "seat": "Event-substrate custodian",
+                        "lane": "a-write-no-event-can-reconstruct",
+                        "kind": "detector",
+                        "clean": True,
+                        "abstained": False,
+                    }
+                ],
+            },
+        },
         planning_root=tmp_path / ".planning",
         db_path=db,
         project_root=repo,
@@ -183,7 +199,22 @@ def test_unrelated_commit_does_not_stale_verdict(db, repo, tmp_path):
     """Staleness is WO-scoped: commits not referencing the WO leave it fresh."""
     _persist_review_verdict(
         WO_ID,
-        {"work_order_id": WO_ID, "passed": True},
+        {
+            "work_order_id": WO_ID,
+            "passed": True,
+            "round_table": {
+                "status": "pass",
+                "seats": [
+                    {
+                        "seat": "Event-substrate custodian",
+                        "lane": "a-write-no-event-can-reconstruct",
+                        "kind": "detector",
+                        "clean": True,
+                        "abstained": False,
+                    }
+                ],
+            },
+        },
         planning_root=tmp_path / ".planning",
         db_path=db,
         project_root=repo,

@@ -201,7 +201,25 @@ def test_gate_does_not_pass_on_unreviewable_verdict(tmp_path):
     # envelope — model that here so the gate reaches the unreviewable check below
     # instead of short-circuiting on "no provenance envelope".
     stored = wrap(
-        json.dumps({"passed": False, "unreviewable": True, "unreviewable_reason": "no commits"}),
+        json.dumps(
+            {
+                "passed": False,
+                "unreviewable": True,
+                "unreviewable_reason": "no commits",
+                "round_table": {
+                    "status": "pass",
+                    "seats": [
+                        {
+                            "seat": "Event-substrate custodian",
+                            "lane": "a-write-no-event-can-reconstruct",
+                            "kind": "detector",
+                            "clean": True,
+                            "abstained": False,
+                        }
+                    ],
+                },
+            }
+        ),
         generator="ds work-order verify",
         head_commit_sha=None,
     )
@@ -276,7 +294,24 @@ def test_gate_still_fails_on_reviewable_failed_verdict(tmp_path):
     # WO-VERIFY-PROVENANCE: model a genuine (enveloped) verify-produced verdict so
     # the gate reaches the "review failed" check instead of the provenance check.
     stored = wrap(
-        json.dumps({"passed": False, "summary": "real failure"}),
+        json.dumps(
+            {
+                "passed": False,
+                "summary": "real failure",
+                "round_table": {
+                    "status": "pass",
+                    "seats": [
+                        {
+                            "seat": "Event-substrate custodian",
+                            "lane": "a-write-no-event-can-reconstruct",
+                            "kind": "detector",
+                            "clean": True,
+                            "abstained": False,
+                        }
+                    ],
+                },
+            }
+        ),
         generator="ds work-order verify",
         head_commit_sha=None,
     )

@@ -243,7 +243,16 @@ class TestTaskH4:
             dream_studio_home=db_home,
         )
         assert done["ok"] is True
-        assert done["status"] == "complete"
+        # STATUS IS READ BACK, NOT ASSERTED (#718 / WO b6ca23fa). This pinned
+        # "complete" from the era when mark_task_done returned that unconditionally,
+        # and the assertion four lines below -- "DB row must remain pending until
+        # TaskProjection runs" -- already contradicted it: status IS that row. A
+        # durable completion the projection has not applied yet is reported as
+        # ok=True with read_model_pending, which is the case this test constructs,
+        # so those are the values it should hold. The eval sibling was corrected in
+        # #718 for exactly this and this integration test was missed.
+        assert done["status"] == "pending"
+        assert done["read_model_pending"] is True
         # DB row is NOT updated directly — MilestoneProjection owns the write.
         conn = sqlite3.connect(str(db_path))
         try:
