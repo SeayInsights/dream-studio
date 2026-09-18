@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Write, Grep]
   model_preference: haiku
   estimated_duration: 10-20min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Learn — Pattern Capture and Promotion

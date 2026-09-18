@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Write, WebSearch, Skill]
   model_preference: sonnet
   estimated_duration: 30-90min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Design — Visual Design Capability

@@ -1,14 +1,16 @@
 ---
 dream_studio:
-  skill_id: ds-domains
-  pack: domains
-  mode: website/critique
+  skill_id: ds-website
+  pack: website
+  mode: critique
   mode_type: review
   inputs: [html_artifact, direction_lock]
   outputs: [critique_report, fix_instructions]
   capabilities_required: [Read, Bash]
   model_preference: opus
   estimated_duration: 5-15min
+  write_posture: read-only
+  lifecycle: published
 ---
 
 # Critique — 5-Dimension Design Review

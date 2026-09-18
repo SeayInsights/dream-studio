@@ -909,6 +909,41 @@ def save_session(session_id: str, data: dict) -> None:
         pass
 
 
+_SKILL_POSTURE_KEY = "active_skill_posture"
+
+
+def record_skill_posture(session_id: str, mode: str, posture: str) -> None:
+    """Remember the declared posture of the mode most recently loaded this session.
+
+    Written by on-skill-load, which has the SKILL.md in hand and can read the card directly,
+    so no hook has to resolve a card path at edit time.
+    """
+    if not session_id or not mode or not posture:
+        return
+    data = load_session(session_id) or {}
+    data[_SKILL_POSTURE_KEY] = {"mode": mode, "posture": posture, "at": now_iso()}
+    save_session(session_id, data)
+
+
+def active_skill_posture(session_id: str | None) -> tuple[str, str] | None:
+    """``(mode, posture)`` for the most recently loaded mode, or None.
+
+    A hint rather than proof: loading a mode's SKILL.md is how a mode is entered, but a
+    session may also read one for reference, and nothing forces the model to act under the
+    mode it last read. Callers treat it accordingly -- it is enough to record a contradiction
+    worth looking at, and not enough to refuse an edit on.
+    """
+    if not session_id:
+        return None
+    entry = (load_session(session_id) or {}).get(_SKILL_POSTURE_KEY)
+    if not isinstance(entry, dict):
+        return None
+    mode, posture = entry.get("mode"), entry.get("posture")
+    if isinstance(mode, str) and isinstance(posture, str):
+        return (mode, posture)
+    return None
+
+
 def delete_session(session_id: str) -> None:
     try:
         _session_file(session_id).unlink(missing_ok=True)

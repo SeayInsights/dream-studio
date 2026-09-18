@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Write, Bash]
   model_preference: haiku
   estimated_duration: 3-10min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # JIT Mode (Just-in-Time Prompt)
