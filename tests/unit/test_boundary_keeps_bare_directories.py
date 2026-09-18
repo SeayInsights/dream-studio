@@ -19,6 +19,8 @@ order today.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from core.work_orders.mutations import _is_boundary_path as producer_keeps
@@ -112,3 +114,45 @@ def test_a_boundary_of_pure_prose_still_declares_nothing():
 def test_producer_and_consumer_agree(entry):
     """compose_module_boundary writes what boundary_globs reads, or the boundary lies."""
     assert producer_keeps(entry) == consumer_keeps(entry)
+
+
+# --- the third copy: the amend path --------------------------------------------------
+
+
+def test_amending_a_boundary_keeps_bare_directories(tmp_path):
+    """amend_module_boundary carried its own inline copy of the drop rule.
+
+    It verified that ``docs`` exists on disk and then discarded it, so the command reported
+    success while storing less than the operator typed -- observed twice on the live
+    authority before this was found. Driven end to end against a temporary authority.
+    """
+    import sqlite3
+
+    from core.config.sqlite_bootstrap import bootstrap_database
+    from core.work_orders.amend_boundary import amend_module_boundary
+    from interfaces.cli.ds import resolve_installed_runtime_paths
+
+    repo_root = Path(__file__).resolve().parents[2]
+    resolved = resolve_installed_runtime_paths(source_root=repo_root, dream_studio_home=tmp_path)
+    resolved.sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+    bootstrap_database(resolved.sqlite_path)
+
+    conn = sqlite3.connect(str(resolved.sqlite_path))
+    conn.execute(
+        "INSERT INTO business_work_orders (work_order_id, project_id, title, description, status)"
+        " VALUES (?, ?, ?, ?, ?)",
+        ("wo-amend-test", "proj-1", "t", "Body.\n\nModule boundary: core/gates.", "in_progress"),
+    )
+    conn.commit()
+    conn.close()
+
+    result = amend_module_boundary(
+        work_order_id="wo-amend-test",
+        module_boundary="core/gates, docs, schemas, tests/unit",
+        reason="Restoring the bare directory names this command used to discard silently.",
+        source_root=repo_root,
+        dream_studio_home=tmp_path,
+    )
+
+    assert result["ok"], result.get("error")
+    assert result["module_boundary"] == ["core/gates", "docs", "schemas", "tests/unit"]

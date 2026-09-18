@@ -74,7 +74,7 @@ def amend_module_boundary(
     dream_studio_home: Path | None = None,
 ) -> dict[str, Any]:
     """Replace a work order's boundary, recording the prior clause and why it moved."""
-    from .mutations import compose_module_boundary
+    from .mutations import _is_boundary_path, compose_module_boundary
     from .start_shared import _require_db
 
     text = (reason or "").strip()
@@ -131,15 +131,19 @@ def amend_module_boundary(
             ),
         }
 
-    usable = [p for p in parts if "/" in p or "." in p]
+    # The third copy of this rule. It had its own inline `"/" in p or "." in p`, so it
+    # verified above that `docs` exists on disk and then threw it away -- an amendment that
+    # reported success while storing less than the operator typed. The predicate now comes
+    # from the one place that defines it.
+    usable = [p for p in parts if _is_boundary_path(p)]
     if not usable:
         return {
             "ok": False,
             "error": (
-                "Nothing here the boundary parser would keep — it retains only"
-                " comma-separated parts containing '/' or '.'. Storing an unparseable"
-                " boundary would look declared and match nothing, which is the failure"
-                " `compose_module_boundary` exists to end."
+                "Nothing here the boundary parser would keep — it retains comma-separated"
+                " parts that name a path: one containing '/' or '.', or a plain directory"
+                " name. Storing an unparseable boundary would look declared and match"
+                " nothing, which is the failure `compose_module_boundary` exists to end."
             ),
         }
 
