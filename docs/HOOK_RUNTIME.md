@@ -169,6 +169,34 @@ message naming the exact keys to set — it never silently spawns an unresolved 
 Inspect the resolved role→provider mapping before running verify with
 `ds grader profiles`. Spawn is provider-neutral via `core/adapters/grader_runner.py`.
 
+### Skill model tier selection
+
+The third operator override alongside `DS_ENFORCE` and the grader profiles: which model
+tier a skill mode asks for. Resolved by `config/skill_profiles.py`
+(`resolve_skill_model(specifier)`) with this precedence, highest first:
+
+1. `DS_SKILL_MODEL_STUB` — pins every mode to one tier (headless/CI, so a matrix does not
+   fan out across three tiers).
+2. an explicit `override` argument from a caller that already knows what it wants.
+3. the per-mode env override `DS_SKILL_MODEL_<PACK>_<MODE>`, punctuation normalised to
+   underscores — `quality:pr-security-scan` reads `DS_SKILL_MODEL_QUALITY_PR_SECURITY_SCAN`.
+4. a per-specifier (or `default`) entry in the JSON file at `DS_SKILL_MODEL_CONFIG`.
+5. the mode's `config.yml` `model_tier`.
+6. the mode card's `model_preference` in `SKILL.md` frontmatter.
+7. `sonnet`.
+
+Levels 5 and 6 are ordered deliberately. `config.yml` is what resolution read before this
+chain existed, and 11 of the 34 modes that declare a tier in both places disagree — promoting
+the card would have dropped `core:think` from opus to sonnet. Keeping `config.yml` first
+leaves those 34 resolving unchanged and gives the card a job on the 18 modes that declare a
+tier nowhere else.
+
+Unlike the grader chain this **resolves** rather than failing closed: a grader role with no
+provider cannot run at all, while a mode with no declared tier has a sane default. It does
+refuse a tier value it does not recognise, from any source, naming the key to fix. Every
+resolution reports its `source`, so `ds skill list` shows which of the six levels decided a
+tier rather than leaving it to guesswork.
+
 ## Dispatcher Sub-Handler Mapping
 
 ### on-prompt-dispatch (UserPromptSubmit)
