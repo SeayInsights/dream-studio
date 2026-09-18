@@ -153,3 +153,31 @@ def test_the_real_repository_is_at_its_ceiling():
         " lowercase prose -- an unmeetable ceiling gets switched off, which is worse than"
         " having none"
     )
+
+
+def test_measures_the_named_tree_even_under_an_inherited_git_dir(tmp_path, monkeypatch):
+    """`cwd=` does not decide which repository git answers about; GIT_DIR overrides it.
+
+    THE CONDITION IS NOT EXOTIC -- git SETS GIT_DIR for every hook process, so this gate
+    runs with one inherited on every `git push`. From the main checkout the exported value
+    is relative (".git"), which resolves against the temp tree to a path that does not
+    exist, git errors, and `_tracked`'s documented fallback saves the measurement. From a
+    LINKED WORKTREE git exports an ABSOLUTE path, which resolves no matter the cwd:
+    `git ls-files` then answers about the real repository, every file in the named tree is
+    absent from that answer and filtered out, and the lane count is a confident 0.
+
+    Measured: four tests in this file failed with `assert 0 == 2` when the pre-push gate
+    ran from a worktree, and passed standalone, on main, and from the main checkout -- so
+    the gate's verdict depended on where the push was issued from rather than on the tree
+    it was asked to measure. That is the same shape this ratchet exists to prevent: a
+    number that reads as a clean zero because nothing was looked at.
+    """
+    monkeypatch.setenv("GIT_DIR", str(Path(__file__).resolve().parents[2] / ".git"))
+    tree = _tree(tmp_path, {"docs/a.md": "You MUST do this. And you NEVER do that.\n"})
+
+    counts = nb.measure(tree)
+
+    assert counts["docs"] == 2, (
+        "the gate answered about the repository named by the inherited GIT_DIR instead of "
+        "the tree it was given, so every file was filtered out and the count read zero"
+    )

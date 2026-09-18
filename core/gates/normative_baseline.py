@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -125,10 +126,27 @@ def _tracked(repo_root: Path) -> set[str]:
     filesystem walk -- a measurement taken is better than none, and the mismatch it can
     cause is loud rather than silent.
     """
+    # `cwd=` DOES NOT DECIDE WHICH REPOSITORY GIT ANSWERS ABOUT. GIT_DIR in the
+    # environment overrides it, and git SETS GIT_DIR for every hook process -- so this
+    # runs with one inherited whenever the pre-push gate invokes it. From the main
+    # checkout that value is relative (".git"), which resolves against `cwd` to a path
+    # that does not exist under a temp tree, git errors, and the fallback above saves it.
+    # From a LINKED WORKTREE git exports an ABSOLUTE path, which resolves regardless of
+    # cwd: `git ls-files` then answers about the real repository while the caller believes
+    # it asked about `repo_root`. Every file in the named tree is absent from that answer,
+    # so all of them are filtered out and the lane count is a confident 0 -- measured, not
+    # theorised: four tests in tests/unit/test_normative_baseline_gate.py fail with
+    # `assert 0 == 2` under a pushed worktree and pass everywhere else.
+    #
+    # Stripped rather than overridden with `--git-dir`, because the same inheritance
+    # reaches GIT_WORK_TREE and GIT_INDEX_FILE, and a query that names its directory
+    # should be answered about that directory or not at all.
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     try:
         out = subprocess.run(
             ["git", "ls-files"],
             cwd=str(repo_root),
+            env=env,
             capture_output=True,
             text=True,
             encoding="utf-8",
