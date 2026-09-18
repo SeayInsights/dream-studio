@@ -24,7 +24,7 @@
 - **Fork PRs have no secrets**: `pull_request` from a fork gets a read-only GITHUB_TOKEN and empty secret values -- by design. Gate deployment jobs on a maintainer-added label or use Environments.
 - **Concurrent deploys race on shared infra**: two merges in quick succession both trigger deploy, last-write-wins on S3 or leaves partial state. Add `concurrency` group.
 - **Cache poisoning via untrusted PRs**: if fork PRs can write to a shared cache key, they can inject malicious node_modules into trusted workflow runs. Scope keys or restrict cache writes to main.
-- **Artifact retention and size limits**: default 90-day retention, 500MB public / 2GB private per run. Upload silently truncates on older action versions; actions/upload-artifact v4 fails loudly.
+- **Artifact retention and storage**: 90-day default retention. There is no documented per-run size cap -- artifacts and Packages share a *monthly* storage allowance by plan (Free 500MB, Pro 1GB, Team 2GB, Enterprise Cloud 50GB), so oversized uploads exhaust quota rather than truncating. From v4 an artifact is an immutable archive: uploading the same name twice fails the step instead of merging.
 
 ## Commands
 
@@ -57,10 +57,12 @@ gh secret set AWS_ROLE_ARN --body "arn:aws:iam::123456789012:role/github-actions
 # List environments
 gh api repos/{owner}/{repo}/environments
 
-# Build Docker image with BuildKit and inline cache
-DOCKER_BUILDKIT=1 docker build \
+# Registry-backed build cache. Use buildx explicitly: registry cache export needs
+# the docker-container driver (or containerd image store), not the default docker driver.
+docker buildx build \
   --cache-from type=registry,ref=ghcr.io/myorg/myapp:cache \
   --cache-to type=registry,ref=ghcr.io/myorg/myapp:cache,mode=max \
+  --push \
   -t ghcr.io/myorg/myapp:latest .
 
 # Multi-platform build and push
@@ -78,9 +80,9 @@ gh api repos/{owner}/{repo}/branches/main/protection
 
 ## Version Notes
 
-- **GitHub Actions (2024+)**: `actions/upload-artifact` v4 and `actions/download-artifact` v4 are the current major; v3 is deprecated as of November 2024.
-- **actions/checkout v4**: uses Node 20 runtime; v3 (Node 16) is deprecated.
-- **OIDC with AWS**: requires `aws-actions/configure-aws-credentials` v4+ for the latest STS session tags support.
+- **Artifact actions**: `actions/upload-artifact` is on v7 and `actions/download-artifact` on v8 (both node24). v3 was deprecated Nov 2024 and switched off 2025-01-30 -- treat any v3 pin as broken. These move fast; re-check the current major rather than trusting this line.
+- **Action runtimes**: Node 20 is removed from GitHub runners on 2026-09-23 (Node 24 has been the default since 2026-06-16). Every v4-era action (checkout, setup-node, cache, configure-aws-credentials) declares `node20` -- move to the node24 majors (checkout v5+, setup-node v7, cache v5+) before that date.
+- **OIDC with AWS**: use `aws-actions/configure-aws-credentials` v6+ (current major, node24).
 - **Docker BuildKit**: enabled by default in Docker 23.0+; no need to set `DOCKER_BUILDKIT=1` explicitly on current Docker Desktop.
-- **GitHub cache v4**: storage limit is 10GB per repo; evicts LRU when over limit. Cache entries not accessed in 7 days are evicted regardless of size.
-- **Concurrency cancel-in-progress**: added in GitHub Actions 2022; `group` can reference any expression including `github.ref`, `github.workflow`, `github.head_ref`.
+- **actions/cache** (v6 current): 10GB per repo at no cost, expandable pay-as-you-go on Pro/Team/Enterprise since Nov 2025. LRU eviction is evaluated hourly (was daily) once over the limit; entries unused for 7+ days are evicted regardless of size.
+- **Concurrency cancel-in-progress**: added April 2021; `group` can reference any expression including `github.ref`, `github.workflow`, `github.head_ref`.

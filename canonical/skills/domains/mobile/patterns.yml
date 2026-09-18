@@ -396,7 +396,9 @@ gotchas:
     description: >
       Features added in higher API levels crash on lower API devices if not guarded.
       Common traps: JobScheduler available from API 21 but constraints from API 24;
-      BiometricPrompt from API 28; exact alarms require SCHEDULE_EXACT_ALARM from API 31;
+      BiometricPrompt from API 28 (androidx.biometric back-compats to API 23);
+      exact alarms require SCHEDULE_EXACT_ALARM from API 31 -- auto-granted on 31-32, user-granted
+      via Settings from API 33, denied by default from API 34;
       POST_NOTIFICATIONS permission from API 33. minSdk targets vs actual device install
       base diverge significantly in emerging markets.
     fix: >

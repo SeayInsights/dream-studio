@@ -1,8 +1,10 @@
 # DevOps References
 
+> Star counts verified 2026-09-17. They drift -- treat as a rough popularity signal, not a current figure.
+
 ## GitHub Actions
 
-### awesome-actions (21.7k stars)
+### awesome-actions (~28k stars)
 **URL**: https://github.com/sdras/awesome-actions
 
 Curated list of GitHub Actions resources including:
@@ -15,21 +17,21 @@ Curated list of GitHub Actions resources including:
 
 ## Docker & Containers
 
-### awesome-docker (30k stars)
+### awesome-docker (~37k stars)
 **URL**: https://github.com/veggiemonk/awesome-docker
 
 Comprehensive Docker resources for containerization patterns.
 
 ## Infrastructure as Code
 
-### awesome-terraform (13k stars)
-**URL**: https://github.com/shuaibiyy/awesome-terraform
+### awesome-tf (~6.6k stars)
+**URL**: https://github.com/shuaibiyy/awesome-tf
 
 Terraform patterns for infrastructure automation.
 
 ## Monitoring & Observability
 
-### awesome-monitoring (11k stars)
+### awesome-monitoring (~750 stars)
 **URL**: https://github.com/crazy-canux/awesome-monitoring
 
 Monitoring and observability tools and patterns.

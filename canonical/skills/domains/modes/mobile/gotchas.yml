@@ -14,7 +14,9 @@ gotchas:
   - id: mobile-g2
     title: Android API level guards are required for many APIs
     description: >
-      BiometricPrompt API 28+. POST_NOTIFICATIONS API 33+. Exact alarms API 31+.
+      BiometricPrompt: native class API 28+, but use androidx.biometric (back-compat to API 23).
+      POST_NOTIFICATIONS API 33+. SCHEDULE_EXACT_ALARM exists from API 31, auto-granted on 31-32,
+      needs a Settings grant from API 33, and is denied by default from API 34.
       Use Build.VERSION.SDK_INT checks or AndroidX compat libraries. Check Play Console
       version distribution before raising minSdk.
     severity: high

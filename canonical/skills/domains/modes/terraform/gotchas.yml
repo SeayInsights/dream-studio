@@ -48,7 +48,9 @@ gotchas:
   - id: tf-g6
     title: Provider major version upgrade requires config migration
     description: >
-      AWS v4->v5 broke aws_s3_bucket into sub-resources. Bump version constraint, run
+      AWS provider v4.0 (Feb 2022) split aws_s3_bucket into sub-resources; v4.9 (Apr 2022)
+      restored the old inline arguments as deprecated fallbacks; v5.0 (May 2023) removed
+      those fallbacks entirely. Bump version constraint, run
       terraform init -upgrade, run terraform plan -- address every breaking change
       before apply. Never cross a major version boundary without reading the CHANGELOG.
     severity: high

@@ -16,7 +16,7 @@
 
 **Secure storage** -- Keychain (iOS) or EncryptedSharedPreferences + Android Keystore (Android). react-native-keychain in RN. flutter_secure_storage in Flutter. Never AsyncStorage, UserDefaults, or SharedPreferences for secrets.
 
-**Biometric auth** -- LocalAuthentication (iOS), BiometricPrompt API 28+ (Android). Always check capability, provide PIN fallback, never transmit biometric data. Store secret in Keychain/Keystore; biometrics only unlock access.
+**Biometric auth** -- LocalAuthentication (iOS), androidx.biometric (Android; back-compat to API 23, wrapping the API 28+ native BiometricPrompt). Always check capability, provide PIN fallback, never transmit biometric data. Store secret in Keychain/Keystore; biometrics only unlock access.
 
 **Offline-first** -- Write to local DB first, sync in background. Core Data / SwiftData (iOS), Room + WorkManager (Android), WatermelonDB or expo-sqlite (RN). Define conflict resolution strategy (last-write-wins vs server-authority) before building sync.
 
@@ -38,7 +38,7 @@
 
 **iOS Simulator: no real push notifications or Touch ID** -- APNs registration always fails on simulator. Use "xcrun simctl push <device-id> <bundle-id> payload.apns" for local simulation. Gate biometric and push code for simulator with "#if !targetEnvironment(simulator)". All final QA must run on physical hardware.
 
-**Android API level guards** -- BiometricPrompt: API 28+. POST_NOTIFICATIONS: API 33+. Exact alarms: API 31+. Use Build.VERSION.SDK_INT checks or AndroidX compat libraries. Check Play Console version distribution before raising minSdk.
+**Android API level guards** -- BiometricPrompt: the native class is API 28+, but androidx.biometric back-compats to API 23 and is what you should use. POST_NOTIFICATIONS: API 33+. Exact alarms: SCHEDULE_EXACT_ALARM exists from API 31 and was auto-granted on 31-32, needs a user grant via Settings from API 33, and is denied by default from API 34 -- send users to the exact-alarm settings screen and expect Play policy review for declaring it. Use Build.VERSION.SDK_INT checks or AndroidX compat libraries. Check Play Console version distribution before raising minSdk.
 
 **Metro bundler cache corruption (RN)** -- Stale cache after native module installs causes "module not found" on installed packages. Fix: "npx react-native start --reset-cache". Full clean: gradlew clean (Android) + xcodebuild clean (iOS) + watchman watch-del-all (macOS).
 
@@ -55,7 +55,8 @@
 ```bash
 # iOS -- Simulator management
 xcrun simctl list devices available
-xcrun simctl boot "iPhone 16 Pro"
+xcrun simctl list devicetypes          # pick a device the installed Xcode actually ships
+xcrun simctl boot "iPhone 17 Pro"        # hardcoded names age out -- verify against the list above
 xcrun simctl push booted com.yourapp payload.apns
 xcrun simctl openurl booted "https://yourdomain.com/products/123"
 
@@ -103,27 +104,27 @@ flutter test
 **iOS / Swift**
 - SwiftUI @Observable macro available iOS 17+ (replaces @ObservableObject boilerplate)
 - SwiftData available iOS 17+ (replaces Core Data for new projects)
-- Swift concurrency (async/await, actors) -- iOS 15+; back-deploy to iOS 13/14 with Swift 5.5 package
+- Swift concurrency (async/await, actors) back-deploys to iOS 13+ automatically via Xcode 13.2+'s embedded concurrency runtime -- no extra package. Many *system* async APIs (e.g. URLSession async overloads) are still iOS 15+ regardless
 - Privacy manifest (PrivacyInfo.xcprivacy) required for App Store submission as of Spring 2024
-- Xcode 15+ required for iOS 17 SDK; always match Xcode version to target SDK
+- App Store Connect uploads require Xcode 26 / iOS 26 SDK or later (enforced 2026-04-28). Apple raises this minimum every spring -- check developer.apple.com/news for the current cutover before trusting any fixed Xcode/SDK pairing
 
 **Android / Kotlin**
 - Jetpack Compose stable from 1.0 (2021); prefer Compose for new projects over XML Views
 - Material 3 (Material You) available in Compose via androidx.compose.material3
 - Kotlin coroutines + Flow are the standard; avoid RxJava for new code
-- Target API 34 required for new apps/updates on Google Play (as of 2024)
-- 64-bit requirement: all APKs must include ARM64 native libraries
+- Google Play: new apps and updates must target API 36 (Android 16) since 2026-08-31; extensions run to 2026-11-01. Existing apps need API 35+ to stay visible to new users on newer-OS devices. Wear OS / Automotive: API 35+. Android TV / XR: API 34+. This ratchets annually -- re-check developer.android.com/google/play/requirements/target-sdk
+- 64-bit requirement: apps shipping native (NDK) code must include 64-bit libraries (arm64-v8a / x86_64); pure Kotlin/Java apps are unaffected
+- 16 KB page-size support is required for native code targeting API 35+ (AGP 8.5.1+, NDK r28+, or link with -Wl,-z,max-page-size=16384). Enforcement for updates: 2027-02-01
 
 **React Native**
-- New Architecture (Fabric + TurboModules) is opt-in from 0.68, default from 0.73
-- Expo SDK 50+ supports New Architecture; bare workflow requires manual enablement
+- New Architecture (Fabric + TurboModules): opt-in from RN 0.68, default from RN 0.76, and no longer disableable as of RN 0.82 (newArchEnabled / RCT_NEW_ARCH_ENABLED are ignored)
+- Expo: New Architecture is the default from SDK 53/54 and mandatory from SDK 55 (the newArchEnabled option was removed; Legacy Architecture frozen since June 2025)
 - Hermes is the default JS engine from RN 0.70; JavaScriptCore no longer default
-- Metro 0.80+ supports package exports field; align with node_modules expectations
+- Metro: package.json "exports" support was opt-in from Metro 0.76.1 and on by default since Metro 0.82 (RN 0.79+)
 
 **Flutter**
 - Flutter 3.x (Dart 3): required for records, patterns, class modifiers
-- Impeller renderer is default on iOS from Flutter 3.10; opt-in on Android from 3.13
-- flutter_secure_storage v8+ requires Android Gradle Plugin 7.0+
+- Impeller is the only renderer on iOS, and the only one on Android 10+ since Flutter 3.44 (2026) -- there is no opt-out flag. Skia remains only as the Android 9-and-below fallback
 - Null safety is mandatory; all packages must be null-safe for Flutter 3.x
 
 ## Cross-Platform Decision Guide
