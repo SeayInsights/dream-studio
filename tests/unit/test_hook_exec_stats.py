@@ -91,7 +91,15 @@ def test_sys_exit_zero_is_a_success_not_a_failure(
 
 
 def test_missing_handler_is_not_logged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A handler file that does not exist (or has no main) logs no execution."""
+    """A handler file that DOES NOT EXIST logs no execution.
+
+    Narrowed deliberately (WO becfca00). This docstring used to read "does not exist
+    (or has no main)" while the test only ever exercised the missing file, and the
+    unchecked half of that claim was load-bearing: a handler present on disk that could
+    not be imported took the same silent path, so four of them ran zero times for their
+    entire lifetime and no surface could say so. An absent file is a configuration fact;
+    a present file that will not load is a fault. Only the first is silent now.
+    """
     calls: list[dict] = []
     monkeypatch.setattr(
         "core.event_store.event_writer.insert_hook_execution",
@@ -101,3 +109,68 @@ def test_missing_handler_is_not_logged(tmp_path: Path, monkeypatch: pytest.Monke
         [("ghost", tmp_path / "does_not_exist.py")], "{}", "PostToolUse", tmp_path
     )
     assert calls == []
+
+
+def test_handler_that_cannot_import_is_logged_as_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A handler that exists and raises on import is REPORTED, not skipped.
+
+    This is the shape that hid WO becfca00 for the life of the install:
+    on-skill-complete, on-skill-metrics, on-skill-load and on-skill-telemetry each
+    raised ModuleNotFoundError at import because the installed tree ships a partial
+    `control` package that shadowed the repo's. Every dispatch skipped them without a
+    timing line, an execution row, or an error.
+    """
+    calls: list[dict] = []
+    monkeypatch.setattr(
+        "core.event_store.event_writer.insert_hook_execution",
+        lambda **kw: calls.append(kw),
+    )
+    name, path = _write_handler(
+        tmp_path, "broken_import", "import a_module_that_does_not_exist  # noqa\n"
+    )
+    dispatch_tracking.run_handlers([(name, path)], "{}", "PostToolUse", tmp_path)
+
+    assert len(calls) == 1, "a handler that cannot be imported must still be reported"
+    # underscored: the execution log normalises the dashed dispatch name, which is why
+    # the live rows read `on_skill_complete` rather than `on-skill-complete`
+    assert calls[0]["hook_name"] == name.replace("-", "_")
+    assert calls[0]["status"] == "failed"
+    assert calls[0]["exit_code"] == 1
+    assert calls[0]["error_message"], "the refusal must carry why, not just that"
+
+
+def test_handler_without_main_is_logged_as_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A handler that imports cleanly but defines no main() is a broken handler too."""
+    calls: list[dict] = []
+    monkeypatch.setattr(
+        "core.event_store.event_writer.insert_hook_execution",
+        lambda **kw: calls.append(kw),
+    )
+    name, path = _write_handler(tmp_path, "no_main", "X = 1\n")
+    dispatch_tracking.run_handlers([(name, path)], "{}", "PostToolUse", tmp_path)
+
+    assert len(calls) == 1
+    assert calls[0]["status"] == "failed"
+    assert "main" in (calls[0]["error_message"] or "")
+
+
+def test_a_working_handler_is_still_logged_as_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The positive control. Without it, reporting every handler as failed would pass
+    all three assertions above."""
+    calls: list[dict] = []
+    monkeypatch.setattr(
+        "core.event_store.event_writer.insert_hook_execution",
+        lambda **kw: calls.append(kw),
+    )
+    name, path = _write_handler(tmp_path, "healthy")
+    dispatch_tracking.run_handlers([(name, path)], "{}", "PostToolUse", tmp_path)
+
+    assert len(calls) == 1
+    assert calls[0]["status"] == "success"
+    assert calls[0]["exit_code"] == 0
