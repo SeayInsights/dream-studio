@@ -398,3 +398,25 @@ WHY THIS PRECEDES A DRIVER. `ds workflow run --until-blocked` is deliberately se
 <!-- Reviewed 2026-09-13 - WO f769de79 (changed-module-suites gate): NO HOOK CHANGE. No hook entry, matcher, payload, fail-open policy or projection copy is added or altered. Recorded here because the pre-push CHAIN this document's gate inventory describes gains one additive ADVISORY entry, changed-module-suites, which derives from the diff the unit suite named after each edited module and runs it. It complements pin-tests rather than duplicating it: pin-tests runs a hardcoded list and test-list-completeness exists because that list rots, so neither can answer whether the suite covering the file you just edited ran at all. The gate is advisory pending an operator call -- by the chain's classification rule it is correctness-class and belongs at blocking, but promoting it changes what refuses a push, which is the operator's decision. Full rationale and the stem-collision false-pass it had to be corrected for are recorded in docs/WORKFLOW_RUNTIME.md. -->
 
 <!-- Last reviewed 2026-09-17 - HANDLER ENTRYPOINT CONTRACT: four UserPromptSubmit/PostToolUse sub-handlers (on-prompt-route, on-context-inject, on-memory-retrieve, on-token-log) declared `def main(payload: dict)` while `dispatch_tracking.run_handlers()` assigns the payload to sys.stdin and calls `main()` with ZERO arguments - the convention already documented in the Hook Execution Flow section above. Every dispatch therefore raised TypeError, was swallowed by the dispatcher's fail-open BaseException handler, and recorded as status=failed: measured 8,767 of 8,767 dispatches for on_prompt_route and the same for on_context_inject, from 2026-07-19 to 2026-09-17, a 100% failure rate that surfaced nowhere an operator looks. on-prompt-route is the only mechanism that pushes the model toward Skill(...) on a trigger match, and on-context-inject is what injects project memory and gotchas into a prompt, so neither auto-activation nor memory injection had ever run. Each handler now takes no arguments and reads stdin itself, with the body moved to `_handle(payload)` so tests can still drive the logic directly. No change to hook registration, dispatcher wiring, ordering, or the fail-open guarantee - `dispatch_tracking.py` is byte-identical to main. tests/unit/runtime/test_hook_handler_contract.py now asserts the zero-argument contract statically across all 34 handlers and pins the dispatcher's own call shape, so the contract cannot be 'fixed' from the other side; the evals in tests/evals/test_dependency_chain.py were driving handlers by the same wrong convention and were corrected to use stdin. Separately unresolved: on_skill_complete, on_skill_metrics and on_skill_load have zero execution rows of ANY status since 2026-07-02 while the Skill tool keeps firing - files present in repo and installed copies, PostToolUse routes through run_handlers, cause unknown, tracked as work order becfca00. -->
+<!-- Reviewed 2026-09-18 - A REGISTERED HANDLER WITH NO FILE IS NOW RECORDED, and the
+becfca00 unknown stated above is RESOLVED. `dispatch_tracking.run_handlers()` skipped a
+handler whose path did not exist with a bare `continue`: no timing line, no
+`system.hook.execution.logged` row, no error. That silence is now a row with
+status="not_found" naming the missing path; an ABSENT file used to be treated as
+configuration, which does not survive contact with `_resolve_handlers`, where the handler
+list is hardcoded and nothing is optional. Shipped once as 07b9d3f7 and reverted in
+54d95bfb because its stated cause was asserted without evidence; restored here for a
+different, evidenced reason - the installer has no delete op, so a renamed or dropped
+handler leaves its old path behind and a missing file is a state this codebase actually
+produces. `test_missing_handler_is_not_logged` asserted the opposite and is replaced by
+`test_missing_handler_is_logged_as_not_found`. Timing stays execution-only: a handler that
+never ran has no runtime to report, so hook-timing.jsonl keeps answering "how long did it
+take" while the execution log answers "what happened to it". RESOLVING THE UNKNOWN: the
+entry above records on_skill_complete / on_skill_metrics / on_skill_load as having zero
+execution rows since 2026-07-02, cause unknown. They had zero rows EVER, and the cause was
+the installed tree shipping a PARTIAL `control` package (control/execution only) that
+shadowed the repo's complete one, so every handler importing control.skills.* or
+control.execution.models.* raised ModuleNotFoundError before running - 12 handlers in all.
+Fixed in #733 by ordering the repo ahead of the plugin root and by generating the installed
+control/__init__.py as a shim that appends the repo's package to __path__. No change to
+hook registration, dispatcher wiring, ordering, or the fail-open guarantee. -->
