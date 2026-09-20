@@ -7,6 +7,7 @@ with constitutional requirement that hooks be <50 lines.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 SCHEMA_VERSION = 1
@@ -56,11 +57,18 @@ def print_workflow_status(workflow_id: str, workflow_data: dict) -> None:
     running = [nid for nid, n in nodes.items() if n.get("status") == "running"]
     pending_gates = workflow_data.get("gates_pending", [])
 
-    print(f"\n[workflow] {name} — {status} ({done}/{total} nodes done)", flush=True)
+    # All of this goes to stderr. on-stop-dispatch concatenates every handler's
+    # stdout into one shared text stream, so a JSON object printed into it makes
+    # the whole stream look like JSON to the harness and nothing parses — the
+    # Stop hook then reports an error on every turn. The banner is operator
+    # prose and the payload is status; neither is a hook directive.
+    print(
+        f"\n[workflow] {name} — {status} ({done}/{total} nodes done)", file=sys.stderr, flush=True
+    )
     if running:
-        print(f"  -> Running: {', '.join(running)}", flush=True)
+        print(f"  -> Running: {', '.join(running)}", file=sys.stderr, flush=True)
     if pending_gates:
-        print(f"  -> Gates pending: {', '.join(pending_gates)}", flush=True)
+        print(f"  -> Gates pending: {', '.join(pending_gates)}", file=sys.stderr, flush=True)
 
     print(
         json.dumps(
@@ -73,5 +81,6 @@ def print_workflow_status(workflow_id: str, workflow_data: dict) -> None:
                 "total": total,
             }
         ),
+        file=sys.stderr,
         flush=True,
     )

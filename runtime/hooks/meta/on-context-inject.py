@@ -17,6 +17,9 @@ because they are cross-project by design.
 
 Output format: <project-memory> XML block, plain text, stdout.
 No additionalContext JSON — hooks write stdout, not hookSpecificOutput.
+The dispatcher concatenates every handler's block into one text stream, so a
+handler that prints a JSON object makes the whole stream look like JSON to the
+harness and nothing parses. Keep this plain.
 
 Failure mode: fail-open. Any error produces empty output. Never blocks prompt.
 """

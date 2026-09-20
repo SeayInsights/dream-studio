@@ -84,6 +84,11 @@ def _handle(payload: dict) -> None:
         payload.get("hook_overhead_est", 0),
     )
 
+    # stderr, not stdout. on-stop-dispatch concatenates every handler's stdout
+    # into one shared text stream; a JSON object printed into it makes the whole
+    # stream look like JSON to the harness, which then fails to parse it and
+    # reports the Stop hook as an error. This is a status line, not a hook
+    # directive, and the usage it reports is already logged.
     print(
         json.dumps(
             {
@@ -93,7 +98,8 @@ def _handle(payload: dict) -> None:
                 "model": model,
                 "total_tokens": total_t,
             }
-        )
+        ),
+        file=sys.stderr,
     )
 
 

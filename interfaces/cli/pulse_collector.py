@@ -47,7 +47,7 @@ def gh_api(endpoint: str):
         with urllib.request.urlopen(req, timeout=15) as resp:
             return json.loads(resp.read())
     except Exception as e:
-        print(f"[on-pulse] GitHub API failed ({endpoint}): {e}", flush=True)
+        print(f"[on-pulse] GitHub API failed ({endpoint}): {e}", file=sys.stderr, flush=True)
         return []
 
 
@@ -295,6 +295,7 @@ def _run_memory_maintenance() -> None:
             ms.prune_memory_md(archived_paths)
             print(
                 f"[on-pulse] Archived {archived_count} stale memory file(s) → memory/archive/",
+                file=sys.stderr,
                 flush=True,
             )
         ms.enforce_limit(max_active=90)
@@ -548,10 +549,20 @@ def run_pulse_check() -> None:
                 if cached.get("degraded_skills")
                 else ""
             ),
+            file=sys.stderr,
             flush=True,
         )
 
-        print(json.dumps({"status": "ok", "hook": "on-pulse", **cached, "cached": True}))
+        # stderr, not stdout. on-prompt-dispatch concatenates every handler's
+        # stdout into ONE text stream of <xml> blocks; a JSON object printed into
+        # that stream makes the whole thing look like JSON to the harness, which
+        # then fails to parse it and reports every prompt as a hook error. This
+        # payload is status, not a hook directive, and it is already persisted to
+        # the authority, so it has no claim on the directive channel.
+        print(
+            json.dumps({"status": "ok", "hook": "on-pulse", **cached, "cached": True}),
+            file=sys.stderr,
+        )
         return
     imported = _import_and_rotate_buffer()
     report, stats = generate_pulse()
@@ -592,7 +603,10 @@ def run_pulse_check() -> None:
             if stats["degraded_skills"]
             else ""
         ),
+        file=sys.stderr,
         flush=True,
     )
 
-    print(json.dumps({"status": "ok", "hook": "on-pulse", **stats}))
+    # stderr for the same reason as the cached branch above: this is status,
+    # not a hook directive, and stdout is a shared text stream.
+    print(json.dumps({"status": "ok", "hook": "on-pulse", **stats}), file=sys.stderr)
