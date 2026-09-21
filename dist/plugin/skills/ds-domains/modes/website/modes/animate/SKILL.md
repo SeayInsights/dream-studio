@@ -1,14 +1,16 @@
 ---
 dream_studio:
-  skill_id: ds-domains
-  pack: domains
-  mode: website/animate
+  skill_id: ds-website
+  pack: website
+  mode: animate
   mode_type: build
   inputs: [direction_lock, animation_target, animation_type]
   outputs: [html_with_animations, export_instructions]
   capabilities_required: [Read, Write]
   model_preference: sonnet
   estimated_duration: 10-30min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Animate — Motion Design Engine

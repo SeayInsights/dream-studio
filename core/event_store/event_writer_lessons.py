@@ -150,6 +150,33 @@ def promote_lesson(lesson_id: str, promoted_to: str, db_path: Path | None = None
         return False
 
 
+@_with_retry
+def apply_lesson(lesson_id: str, applied_to: str, db_path: Path | None = None) -> bool:
+    """Record that a lesson reached the skill text -- the terminus the queue lacked.
+
+    ``promote_lesson`` only marks a row headed somewhere; nothing recorded arrival, so 40
+    promoted lessons sat in the queue with no way to tell an applied one from a pending one
+    and ``lesson_threshold`` kept re-escalating the same skills. ``applied_to`` is the
+    evidence: the file the edit landed in, ideally with the commit that carried it.
+
+    Reuses ``promoted_to`` for the arrival ref rather than adding a column -- "where it ended
+    up" supersedes "where it was headed", and a migration for one column would pull in the
+    migration-risk gate and a released-version bump.
+    """
+    try:
+        with _db_transaction(db_path) as c:
+            c.execute(
+                """UPDATE raw_lessons SET
+                    status='applied', promoted_to=?, reviewed_at=?
+                   WHERE lesson_id=?""",
+                (applied_to, _NOW(), lesson_id),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
 def reject_lesson(lesson_id: str, db_path: Path | None = None) -> bool:
     try:
         with _db_transaction(db_path) as c:

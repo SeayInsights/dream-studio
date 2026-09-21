@@ -1,14 +1,16 @@
 ---
 dream_studio:
-  skill_id: ds-domains
-  pack: domains
-  mode: website/brand
+  skill_id: ds-website
+  pack: website
+  mode: brand
   mode_type: build
   inputs: [brand_url, brand_guidelines, direction_lock]
   outputs: [brand_tokens_json, brand_css, brand_summary]
   capabilities_required: [Read, Write, Bash, WebSearch]
   model_preference: sonnet
   estimated_duration: 15-30min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Brand — Extract, Generate, Validate

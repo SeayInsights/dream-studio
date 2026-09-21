@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Write, Edit, Grep, Bash, Agent]
   model_preference: sonnet
   estimated_duration: 8-30hrs
+  write_posture: hitl
+  lifecycle: published
 ---
 
 # Client Work — Full Lifecycle

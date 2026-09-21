@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Write, Edit, Grep, Bash]
   model_preference: sonnet
   estimated_duration: 20-60min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Polish — UI Quality Decision Tree

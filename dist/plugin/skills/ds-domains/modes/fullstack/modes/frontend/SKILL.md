@@ -1,14 +1,16 @@
 ---
 dream_studio:
-  skill_id: ds-domains
-  pack: domains
-  mode: fullstack/frontend
+  skill_id: ds-fullstack
+  pack: fullstack
+  mode: frontend
   mode_type: build
   inputs: [feature_spec, api_contract, design_intent]
   outputs: [frontend_artifact, fetch_calls]
   capabilities_required: [Read, Write, Edit, Grep, Bash]
   model_preference: sonnet
   estimated_duration: 30-120min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Fullstack: Frontend — Website Delegate

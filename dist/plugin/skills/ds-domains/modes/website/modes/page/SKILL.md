@@ -1,14 +1,16 @@
 ---
 dream_studio:
-  skill_id: ds-domains
-  pack: domains
-  mode: website/page
+  skill_id: ds-website
+  pack: website
+  mode: page
   mode_type: build
   inputs: [direction_lock, brand_tokens, page_type, content]
   outputs: [html_page]
   capabilities_required: [Read, Write, Bash]
   model_preference: sonnet
   estimated_duration: 15-45min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Page — Full-Fidelity HTML Builder

@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Grep, Bash, Agent]
   model_preference: sonnet
   estimated_duration: 15-45min
+  write_posture: read-only
+  lifecycle: published
 ---
 
 # Review — Two-Stage Quality Check

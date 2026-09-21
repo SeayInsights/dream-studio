@@ -34,6 +34,36 @@ gates:
     command: [py, interfaces/cli/lint_baseline.py, check]
     fail_hint: "Fix new lint findings; do not bypass the baseline."
 
+  - id: skill-sync
+    tier: blocking
+    description: >
+      Source-level enforcement-block regression check (A4/A5 invariant) — the
+      `_ENFORCEMENT_BLOCK` constant must contain zero `py -m interfaces.cli.ds`
+      references.
+    command: [py, -m, core.gates.skill_sync_source]
+    fail_hint: >
+      The compiler enforcement block has regressed back to CLI references.
+      Restore the function-call form per A4/A5.
+
+  - id: skill-card
+    tier: blocking
+    description: >
+      A changed mode card validates against schemas/skill_card.schema.json, reports the
+      coordinates it actually sits at, and consumes only vocabulary some mode produces or
+      canonical/skill_vocabulary.json registers. The nine-field block was uniform across all
+      51 carded modes by convention with nothing reading it, and the first run found 12 cards
+      still describing themselves as domains modes after the website and fullstack sub-packs
+      were split out - stale in the field the routing table is generated from. Adds
+      write_posture (capabilities say what a mode can reach, not what it may do unattended)
+      and lifecycle (packs.yaml had no way to mark a mode superseded short of deleting it and
+      breaking every invocation that names it). Diff-scoped: 34 of 85 declared modes carry no
+      card yet, so whole-tree would be a wall; those drain as they are touched.
+    command: [py, -m, core.gates.skill_card]
+    fail_hint: >
+      A changed mode card is invalid, misreports its pack/mode, or consumes a token nothing
+      produces. Fix the card, or register a genuinely external input with
+      `py -m core.gates.skill_card --update`. Audit everything with --all.
+
   - id: test-suite
     tier: blocking
     description: >

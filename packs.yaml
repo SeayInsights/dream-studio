@@ -4,6 +4,9 @@ packs:
   core:
     description: Build lifecycle — think through ship, core agents, session context
     skill: core
+    invariants:
+      - a claim about the tree cites the command or file it rests on
+      - ship is the only mode here that reaches an irreversible step, and it stops for the operator first
     modes: [think, plan, build, review, verify, ship, handoff, recap, explain]
     agents: [director, engineering, chief-of-staff]
     context: [session-context, session-primer, director-preferences, director-corrections, fullstack-standards]
@@ -12,19 +15,28 @@ packs:
   quality:
     description: Code quality, learning, and structural discipline
     skill: quality
-    modes: [debug, polish, harden, pr-security-scan, structure-audit, learn, coach, audit, security, accessibility, database, code-quality, testing, types-deps, backend-api, frontend-ux, architecture, ops, database-compliance, pre-launch]
+    invariants:
+      - a finding names a file and line, or the command that produced it
+      - a discovered defect is registered in the authority rather than left in prose
+    modes: [debug, polish, harden, pr-security-scan, structure-audit, learn, groom, coach, audit, security, accessibility, database, code-quality, testing, types-deps, backend-api, frontend-ux, architecture, ops, database-compliance, pre-launch]
     hooks: [on-security-scan, on-quality-score, on-structure-check, on-agent-correction]
     rules: [structure/architecture.md, structure/fsc.md]
 
   analyze:
     description: Multi-perspective analysis engine
     skill: analyze
+    invariants:
+      - analysis leaves the working tree unchanged
+      - a conclusion carries its sources, and an unverified claim is labelled unverified
     # repo and intelligence added — Flag 1 fix; research — 18.9 Tier 1; idea-validation — 18.9 Tier 2-3
     modes: [multi, domain-re, repo, intelligence, research, idea-validation]
 
   domains:
     description: Stack-specific and domain builders
     skill: domains
+    invariants:
+      - generated code stays inside the active work order's module boundary
+      - a deliverable that leaves the machine stops for the operator first
     # fullstack and website — Flag 1 fix; devops, kubernetes — 18.9 Tier 1; technical-writing, terraform, mobile — 18.9 Tier 2-3; data-engineering — 18.9 Tier 4
     modes: [game-dev, saas-build, mcp-build, dashboard-dev, client-work, design, fullstack, website, devops, kubernetes, technical-writing, terraform, mobile, data-engineering]
     agents: [game, client]
@@ -35,6 +47,9 @@ packs:
   meta:
     description: Observability, session management, and shared hook infrastructure
     skill: workflow
+    invariants:
+      - hooks emit through the spool rather than writing authority tables directly
+      - a hook that cannot run degrades to a no-op rather than blocking the session
     skill_path: canonical/skills/workflow
     # Placeholder .gitkeep dirs under packs/meta/ are intentional — Flag 6
     hooks:
@@ -71,39 +86,57 @@ packs:
   security:
     description: Enterprise security analysis — automated scanning, compliance mapping, mitigation generation, network compatibility, and executive dashboards.
     skill: security
+    invariants:
+      - a finding states its severity and the evidence establishing it
+      - scan output lands in the diagnostics home, never the repo root
     # review added — Flag 2 fix
     modes: [scan, dast, binary-scan, mitigate, comply, netcompat, dashboard, review]
 
   ds-project:
     description: Project lifecycle — scope, brief, resume, and portfolio-level management (list/switch/archive/delete)
     skill: ds-project
+    invariants:
+      - project state is read from the authority, not inferred from the working tree
     modes: [scope, resume, brief, manage, brownfield]
 
   ds-workorder:
     description: Work order lifecycle — start, mark tasks done, close (with gate checks), block, and read-only status
     skill: ds-workorder
+    invariants:
+      - task state lives in the authority; a task is done when the authority says so
+      - close runs the gates, and a forced close carries recorded operator approval
     modes: [start, execute, close, block, status]
 
   ds-milestone:
     description: Milestone lifecycle — read-only status and close (with gate checks)
     skill: ds-milestone
+    invariants:
+      - milestone status is derived from its work orders rather than asserted
+      - close runs the milestone gates
     modes: [status, close]
 
   website:
     description: Website build pipeline — discovery through delivery, 9 sub-modes
     skill: ds-website
+    invariants:
+      - a page is built against a locked design brief
+      - delivery to a client stops for the operator first
     skill_path: canonical/skills/domains/modes/website
     modes: [discover, direction, page, prototype, animate, brand, cip, critique, deck]
 
   fullstack:
     description: Full-stack build pipeline — frontend, backend, integration, and security
     skill: ds-fullstack
+    invariants:
+      - frontend and backend agree on one written contract before integration
     skill_path: canonical/skills/domains/modes/fullstack
     modes: [frontend, backend, integrate, secure]
 
   setup:
     description: Platform setup — interactive wizard, status reporting, and JIT tool installation
     skill: ds-setup
+    invariants:
+      - setup converges on re-run rather than duplicating what it installed
     modes: [wizard, status, jit]
 
 # Cross-pack assets not owned by any single pack.

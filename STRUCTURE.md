@@ -66,3 +66,5 @@ dispatch_tracking.py` gains a recorded outcome for a handler whose file is absen
 `tests/unit/test_hook_exec_stats.py` replaces one test with its inverse. No new module,
 package, directory or hook file; no relocation; the handler packs under runtime/hooks/ and
 their installed projection are unchanged. Reviewed, no doc content change needed. -->
+<!-- Last reviewed 2026-09-18 - skill-card contract: packs.yaml gains an `invariants:` list on every one of the 12 packs (what holds across that pack's modes, under the same enforce-or-declare shape canonical/rules.yml uses). New sibling of packs.yaml: canonical/skill_vocabulary.json, the registry of root input tokens the mode dataflow consumes from outside itself. No directory-tree layout change. -->
+<!-- Last reviewed 2026-09-18 - lesson loop: packs.yaml quality pack gains a `groom` mode (canonical/skills/quality/modes/groom/), the terminus that turns promoted lessons into skill-text edits. No directory-tree layout change. -->
