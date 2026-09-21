@@ -117,7 +117,22 @@ class TestHooksJsonValid:
             assert '"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh"' not in cmd
 
     def test_user_prompt_submit_command_resolves_without_env_root(self, tmp_path):
-        """Registered prompt hook resolves from repo descendants without CLAUDE_PLUGIN_ROOT."""
+        """The INSTALLED prompt hook resolves from repo descendants without CLAUDE_PLUGIN_ROOT.
+
+        Drives the command through ``resolve_hook_command`` first, because that is the form
+        the operator actually runs: hooks.json is a template whose every entry begins with
+        bare ``python``, and ``step_settings_merge`` substitutes a real interpreter on the way
+        into settings.json.
+
+        Asserting on the raw template instead was a false negative waiting to happen, and it
+        happened: on a stock Windows box bare ``python`` is the Microsoft Store App Execution
+        Alias, a zero-byte stub that exits 9009 without running anything, so this test failed
+        on clean main while the operator's actual hooks worked fine. It was reporting the
+        template's portability, which nobody executes, and saying nothing about the installed
+        command, which everybody does.
+        """
+        from interfaces.cli.setup_hooks import resolve_hook_command
+
         home = tmp_path / "home"
         home.mkdir()
         env = os.environ.copy()
@@ -125,7 +140,9 @@ class TestHooksJsonValid:
         env["USERPROFILE"] = str(home)
         env["HOME"] = str(home)
         env["DREAM_STUDIO_DB_PATH"] = str(tmp_path / "studio.db")
-        command = self.config["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
+        command = resolve_hook_command(
+            self.config["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
+        )
 
         result = subprocess.run(
             command,
