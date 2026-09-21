@@ -1,21 +1,23 @@
 """SQLite analytics backend for dream-studio (WAL, migrations, retry, CLI)."""
 
 from __future__ import annotations
-import sys
+
 import functools
+import os
 import sqlite3
+import sys
 import time
 from contextlib import contextmanager
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from core.config import paths  # noqa: E402
-from core.config.database import get_connection, transaction  # noqa: E402
+from core.config import paths
+from core.config.database import get_connection, transaction
 
 # Import adapters for skill execution normalization (TC-007)
 try:
-    from core.adapters.normalizers import EventNormalizer, ClaudeAdapter
+    from core.adapters.normalizers import ClaudeAdapter, EventNormalizer
 
     _event_normalizer = EventNormalizer()
     _event_normalizer.register_adapter("claude", ClaudeAdapter())
@@ -165,6 +167,9 @@ def _get_event_store(
     return _legacy_bridge
 
 
+WAL_SIZE_LIMIT_BYTES = int(os.environ.get("DS_WAL_SIZE_LIMIT_BYTES", str(64 * 1024 * 1024)))
+
+
 def _connect(db_path: Path | None = None) -> sqlite3.Connection:
     if db_path is not None:
         db_path = Path(db_path)
@@ -177,6 +182,14 @@ def _connect(db_path: Path | None = None) -> sqlite3.Connection:
     else:
         conn = get_connection()
     conn.execute("PRAGMA synchronous=NORMAL")
+    # WITHOUT THIS THE WAL ONLY EVER GROWS. Every hook event spawns several
+    # short-lived processes that each open this database, so there is almost
+    # always an overlapping reader and the passive autocheckpoint gets SQLITE_BUSY.
+    # A checkpoint that does run then leaves the file at its high-water mark.
+    # Measured: 43 MB -> 204 MB inside a single session, and every read pays to
+    # scan the WAL index, which is why the platform got slower the longer it ran.
+    # journal_size_limit truncates the file back after any successful checkpoint.
+    conn.execute(f"PRAGMA journal_size_limit = {WAL_SIZE_LIMIT_BYTES}")
     # Local import breaks the connection<->migration_runner cycle (WO-SPLIT-STUDIO-DB).
     from .migration_runner import _run_migrations
 

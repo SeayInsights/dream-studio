@@ -18,6 +18,7 @@ the same function instead of carrying a second answer.
 from __future__ import annotations
 
 import json
+import shlex
 import sys
 from pathlib import Path
 
@@ -45,12 +46,20 @@ def test_the_template_really_does_ship_bare_python():
     assert any(c.startswith("python ") for c in commands)
 
 
-def test_every_template_command_resolves_to_a_real_interpreter():
+def test_every_template_command_resolves_to_an_executable_that_exists():
+    """The bug this guards: bare ``python`` is a Store alias stub that runs nothing.
+
+    Originally this asserted the resolved command contained the running
+    interpreter. That was a proxy for the real property -- "the thing named here
+    exists and will run" -- and it stopped being true when the append-only hook
+    gained a compiled enqueuer, which is an executable but not a Python one.
+    Assert the property directly so the guard survives the next language.
+    """
     for command in _template_commands():
         resolved = resolve_hook_command(command)
         assert not resolved.startswith("python "), f"still bare: {resolved[:60]}"
-        # The quoting convention differs per platform; the executable path is what matters.
-        assert Path(sys.executable).stem in resolved
+        exe = shlex.split(resolved, posix=False)[0].strip('"')
+        assert Path(exe).is_file(), f"resolved to something that does not exist: {exe}"
 
 
 def test_an_already_resolved_command_is_left_alone():

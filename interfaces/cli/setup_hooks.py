@@ -13,6 +13,7 @@ patch-sensitive consumers).
 from __future__ import annotations
 
 import json
+import re
 import shlex
 from pathlib import Path
 
@@ -59,10 +60,53 @@ def resolve_hook_command(command: str) -> str:
     """
     from integrations.installer.claude_code_shared import _python_cmd
 
+    native = _native_enqueue_command(command)
+    if native is not None:
+        return native
+
     prefix = "python "
     if not command.startswith(prefix):
         return command
     return _python_cmd() + " " + command[len(prefix) :]  # noqa: E203
+
+
+#: Built by `cargo build --release` in runtime/hooks/enqueue-native. Optional:
+#: when it is absent the Python enqueuer is installed instead and everything
+#: works, just 24 ms slower per tool call.
+NATIVE_ENQUEUE_BIN = "ds-enqueue.exe"
+
+
+def _native_enqueue_path() -> Path | None:
+    exe = (
+        REPO_ROOT
+        / "runtime"
+        / "hooks"
+        / "enqueue-native"
+        / "target"
+        / "release"
+        / NATIVE_ENQUEUE_BIN
+    )
+    return exe if exe.is_file() else None
+
+
+def _native_enqueue_command(command: str) -> str | None:
+    """Swap the Python enqueue bootstrap for the compiled binary, if it exists.
+
+    Measured per PostToolUse invocation: 267 ms for the original dispatcher,
+    51 ms for enqueue.py, 27 ms for this binary. The second step is small next
+    to the first because what remains is Windows process creation, not Python.
+    """
+    if "enqueue.py" not in command:
+        return None
+    exe = _native_enqueue_path()
+    if exe is None:
+        return None
+    event = ""
+    for candidate in ("UserPromptSubmit", "PostToolUse", "PreToolUse", "Stop", "PostCompact"):
+        if candidate in command:
+            event = candidate
+            break
+    return f'"{exe.as_posix()}" {event}'.strip()
 
 
 #: Interpreter file names this module recognizes. A hook whose first token is one of these
@@ -88,19 +132,46 @@ def _split_interpreter(command: str) -> tuple[str, str] | None:
     return tokens[0], command[len(tokens[0]) :].strip()  # noqa: E203
 
 
+#: A handler script named anywhere in a command, however it is spelled.
+_SCRIPT_RE = re.compile(r"[\w.\-]+\.py")
+#: The event the hook handles. Quoted inside a bootstrap
+#: (``sys.argv=[str(x),'PostToolUse']``), bare as a resolved argv
+#: (``"<script>" PostToolUse``) -- both spellings must read the same.
+_EVENT_RE = re.compile(
+    r"['\"]?\b(UserPromptSubmit|Stop|PostToolUse|PreToolUse|PostCompact)\b['\"]?"
+)
+
+
 def hook_identity(command: str) -> str:
-    """What a hook DOES, with the interpreter that runs it removed.
+    """What a hook DOES, independent of how the command is spelled.
 
-    The merge used to compare whole command strings, so an existing
-    ``python <script>`` and a freshly resolved ``"C:/.../python.exe" <script>`` looked like two
-    different hooks and BOTH were kept. Measured on the operator's machine: 23 hook commands
-    where 12 were intended, every duplicate pair running the same handler twice per event --
-    which is what made a turn's Stop handling feel hung.
+    hooks.json ships a self-locating bootstrap -- ``python -c "...runpy.run_path(
+    <script>)..."`` -- while what lands in settings.json is the resolved
+    ``"<abs python>" "<abs script>" <Event>``. Those two strings share no tail,
+    so comparing tails (the previous rule) called them different hooks and the
+    merge appended a second group. Verified live on 2026-09-21: re-running the
+    installer against an already-clean settings.json re-created a duplicate
+    PostToolUse group, which runs the same handlers twice on every tool call.
 
-    Comparing the tail instead makes the two forms one hook, which is what they are.
+    Identity is therefore (handler script basename, event). Basename, not a
+    longer path suffix, because the installer genuinely relocates these --
+    ``emitters/claude_code/run.py`` is installed as ``~/.claude/hooks/run.py``,
+    and those are one hook.
     """
     split = _split_interpreter(command)
     tail = split[1] if split else command
+    # The native enqueuer IS enqueue.py -- same hook, same queue, same record,
+    # 27 ms instead of 51. Without this line the installer would see the Python
+    # form and the compiled form as two different hooks and register BOTH, which
+    # is the duplicate-registration bug this function exists to prevent.
+    tail = tail.replace(NATIVE_ENQUEUE_BIN, "enqueue.py")
+    scripts = _SCRIPT_RE.findall(tail)
+    if scripts:
+        event = _EVENT_RE.search(tail)
+        # A bootstrap names its target script repeatedly (the probe and the run);
+        # the distinct set keeps that from changing the identity.
+        key = "+".join(sorted(set(scripts)))
+        return f"{key}:{event.group(1) if event else ''}"
     return " ".join(tail.split())
 
 

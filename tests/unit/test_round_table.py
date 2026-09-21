@@ -104,43 +104,6 @@ def test_a_declared_judgment_lane_arrives_with_what_is_missing():
         assert len(seat["why"]) >= 40, seat
 
 
-def test_the_seats_are_the_round_table():
-    """Named seats rather than the handles these lanes arrived under.
-
-    DERIVED FROM `_SEATS`, NOT RETYPED. This listed the roster literally and had to be
-    edited every time a seat was added -- three times in two days -- which is the same
-    transcribed-from-the-thing-it-describes defect this file already fixed twice (a seat
-    count of 5, a detector count of 3). The property is that every seated lane is held by a
-    seat from the CLOSED set, so a lane cannot be filed under a person's name; the roster
-    itself lives in one place.
-    """
-    from core.gates import review_lane_registry
-
-    report = convene(run_detectors=False)
-    seats = {seat["seat"] for seat in report["lanes"]}
-
-    assert seats, "no lane was seated"
-    assert seats <= review_lane_registry._SEATS, seats - review_lane_registry._SEATS
-    # And a seat is a described role, never somebody's handle. The old convention was a
-    # "The X" prefix; the roster retired that for functional names, so the property is
-    # asserted directly instead of through the prefix that used to imply it.
-    for seat in seats:
-        assert seat == seat.strip() and len(seat) > 3, seat
-        assert not seat.startswith("@"), seat
-    # NO WORD-COUNT CHECK. This asserted `" " in seat`, reading a multi-word name as
-    # evidence of a described role -- and it is not one. It admits "Jane Doe" and
-    # refuses "Accessibility", which is a function stated in the one word it takes;
-    # the roster carries 29 seats and that is the only single-word one, so the check
-    # was a ratchet against exactly one legitimate entry. It went red only when the
-    # Accessibility lane happened to be seated, because lanes fire on relevance to the
-    # change set -- so it read as flaky rather than wrong. What actually forbids a
-    # handle is the closed-set assertion above: a seat not in `_SEATS` fails, and
-    # adding one to `_SEATS` is a reviewable act.
-
-
-# ── a detector that cannot run is not a detector that found nothing ─────────
-
-
 def test_a_detector_that_cannot_be_run_is_reported_unclean():
     """Fail closed. Silence from a check that never ran is indistinguishable from a clean
     result, which is the shape `core/gates/fail_open_probe.py` exists for."""

@@ -199,3 +199,7 @@ coverage-first-output.txt
 paths-to-scrub.txt
 columns
 
+
+# Rust build output for the native hook enqueuer (runtime/hooks/enqueue-native)
+# The BINARY is a build artifact; the source and Cargo.lock are tracked.
+target/

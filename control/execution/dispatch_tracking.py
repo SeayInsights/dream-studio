@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -62,17 +63,33 @@ def _log_hook_execution(
         pass
 
 
+# hook-timing.jsonl is appended to once per handler per event -- roughly 15 writes
+# per turn. Unrotated it reached 50 MB / 475k lines. One generation of history is
+# enough to diagnose a regression; anything older is already in the event store.
+TIMING_LOG_MAX_BYTES = int(os.environ.get("DS_TIMING_LOG_MAX_BYTES", str(8 * 1024 * 1024)))
+
+
+def _rotate_if_oversized(path: Path) -> None:
+    try:
+        if path.is_file() and path.stat().st_size > TIMING_LOG_MAX_BYTES:
+            path.replace(path.with_suffix(path.suffix + ".1"))
+    except OSError:
+        pass
+
+
 def write_timing(state_dir: Path, event: str, handler: str, duration_ms: float) -> None:
     """Write hook timing data to JSONL log."""
     try:
         state_dir.mkdir(parents=True, exist_ok=True)
+        log_path = state_dir / "hook-timing.jsonl"
+        _rotate_if_oversized(log_path)
         record = {
             "event": event,
             "handler": handler,
             "duration_ms": round(duration_ms, 2),
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
-        with (state_dir / "hook-timing.jsonl").open("a", encoding="utf-8") as f:
+        with log_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record) + "\n")
     except Exception:
         pass

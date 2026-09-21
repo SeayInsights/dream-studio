@@ -38,10 +38,13 @@ _ACCEPTED_DEV_CVES = (
 
 _PIP_AUDIT_IGNORES = [arg for cve in _ACCEPTED_DEV_CVES for arg in ("--ignore-vuln", cve)]
 
+# ONE HOME PER CHECK. format and lint-baseline used to run here, in pr-smoke, AND
+# in the pre-push gate -- three times for the same answer, and this copy runs
+# POST-MERGE, where a formatting failure is discovered after it is already on main.
+# They now run in pre-push only, where the fix is `black .` before you push.
+# What is left here is the full test suite, which nothing else runs.
 CHECKS = [
     ("test", [_PYTHON, "-m", "pytest", "tests/", "-q"]),
-    ("format", [_PYTHON, "-m", "black", "--check", "."]),
-    ("lint-baseline", [_PYTHON, "interfaces/cli/lint_baseline.py", "check"]),
     (
         "agents-md-fresh",
         [_PYTHON, "-m", "integrations.compiler.agents_md", "--check"],

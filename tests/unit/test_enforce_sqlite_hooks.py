@@ -99,6 +99,11 @@ def env(tmp_path, monkeypatch):
     # point the exemption elsewhere so the temp project is enforceable.
     monkeypatch.setattr(enforcement, "TEMP_ROOT", tmp_path / "nonexistent-temp")
     monkeypatch.setattr(enforcement, "DS_HOME", tmp_path / "nonexistent-ds-home")
+    # STATE_DIR was left pointing at the operator's real ~/.dream-studio/state.
+    # It went unnoticed while nothing in the enforce path wrote through it; the
+    # queued hook-execution record does, so the gap is closed rather than worked
+    # around in the one test that happened to expose it.
+    monkeypatch.setattr(enforcement, "STATE_DIR", tmp_path / "state")
     monkeypatch.delenv("DS_ENFORCE", raising=False)
 
     return {"tmp": tmp_path, "project": project_dir, "authority": authority, "files": files_db}
@@ -106,20 +111,54 @@ def env(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def captured_hook_executions(monkeypatch):
-    """Capture — never really emit — enforce-hook telemetry.
+    """Read enforce-hook telemetry back off the append-only queue.
 
-    WO-HOOK-ENFORCE-EXEC-STATS wraps both enforce hooks to emit
-    system.hook.execution.logged. Patching the emitter keeps every enforce-hook
-    test hermetic (no writes to the real authority DB) and lets the telemetry test
-    assert on what was logged. Patched at the module attribute because
-    enforcement.log_hook_execution imports insert_hook_execution lazily at call time.
+    WO-HOOK-ENFORCE-EXEC-STATS wraps both enforce hooks so their executions are
+    recorded. This used to patch `insert_hook_execution` and assert on the call.
+
+    THE HOOKS NO LONGER WRITE THAT ROW INLINE. `insert_hook_execution` pulls the
+    event store, which pulls pydantic and jsonschema: 282 imports, measured at
+    259 ms of the 335 ms that on-edit-enforce spent BLOCKING every Edit and Write.
+    The enforcement decision itself is ~55 ms, so four fifths of the wait was the
+    hook recording that you had asked. It now appends a finished record to
+    hookq.jsonl and the next UserPromptSubmit or Stop writes the row.
+
+    The behaviour under test is unchanged -- each hook still records its own
+    execution, with its own name and decision -- so this reads the queue instead
+    of the call, and returns the same dict shape the assertions already expect.
     """
-    calls: list[dict] = []
-    monkeypatch.setattr(
-        "core.event_store.event_writer.insert_hook_execution",
-        lambda **kw: calls.append(kw),
-    )
-    return calls
+    import json as _json
+
+    from runtime.lib import enforcement as _enf
+
+    class _QueueView(list):
+        """Materialises on read, so a test can run the hook then inspect."""
+
+        def _load(self):
+            # Through the module attribute the env fixture patches, so this reads
+            # the tmp state dir and never the operator's real one.
+            path = _enf.STATE_DIR / "hookq.jsonl"
+            if not path.is_file():
+                return []
+            out = []
+            for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    rec = _json.loads(line)
+                    if rec.get("event") == "hook.execution":
+                        out.append(_json.loads(rec["payload"]))
+                except (ValueError, KeyError):
+                    continue
+            return out
+
+        def __iter__(self):
+            return iter(self._load())
+
+        def __len__(self):
+            return len(self._load())
+
+    return _QueueView()
 
 
 def _set_wo_in_progress(authority: Path) -> None:

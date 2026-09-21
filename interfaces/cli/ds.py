@@ -36,6 +36,7 @@ from interfaces.cli.commands import eval as eval_cmd  # noqa: E402
 from interfaces.cli.commands import integrate  # noqa: E402
 from interfaces.cli.commands import milestone  # noqa: E402
 from interfaces.cli.commands import prd  # noqa: E402
+from interfaces.cli.commands import pulse as pulse_cmd  # noqa: E402
 from interfaces.cli.commands import project  # noqa: E402
 from interfaces.cli.commands import grader  # noqa: E402
 from interfaces.cli.commands import prove as prove_cmd  # noqa: E402
@@ -116,6 +117,7 @@ def main(argv: list[str] | None = None) -> int:
     work_order.register(subcommands)
     design_brief.register(subcommands)
     milestone.register(subcommands)
+    pulse_cmd.register(subcommands)
     prd.register(subcommands)
     task.register(subcommands)
     grader.register(subcommands)
@@ -221,6 +223,8 @@ def main(argv: list[str] | None = None) -> int:
             return prd.dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "task":
             return task.dispatch(args, source_root=source_root, dream_studio_home=home)
+        if args.command == "pulse":
+            return pulse_cmd.handle(args)
         if args.command == "diagnostics":
             return diagnostics.dispatch(args)
         if args.command == "config":

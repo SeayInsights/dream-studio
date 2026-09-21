@@ -5,9 +5,11 @@ Collects system health data from GitHub and local metrics.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -16,14 +18,17 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from core.config import paths
-from core.config import state
 from control.research.memory import MemorySearch
+from core.config import paths, state
 from core.utils.time import utcnow
 
 GITHUB_TOKEN = os.environ.get("GITHUB_PERSONAL_ACCESS_TOKEN", "")
 STALE_BRANCH_DAYS = 7
-COOLDOWN_SEC = int(os.environ.get("PULSE_COOLDOWN_SEC", "60"))
+# The pulse is an advisory health check, not a correctness gate. At 60s every
+# interactive prompt landed on the cold path and paid up to five GitHub round
+# trips; measured p95 4.7s, worst 27.7s on the UserPromptSubmit critical path.
+COOLDOWN_SEC = int(os.environ.get("PULSE_COOLDOWN_SEC", "3600"))
+GH_TIMEOUT_SEC = float(os.environ.get("PULSE_GH_TIMEOUT_SEC", "4"))
 MAX_PENDING_DRAFTS = 100
 DRAFT_STALE_DAYS = 30
 
@@ -32,8 +37,42 @@ def _github_repo() -> str:
     return str(state.read_config().get("github_repo") or "").strip()
 
 
-def gh_api(endpoint: str):
+def _token_fingerprint() -> str:
+    """Short, non-reversible id for the active token, so a NEW token re-arms."""
     if not GITHUB_TOKEN:
+        return "none"
+    return hashlib.sha256(GITHUB_TOKEN.encode("utf-8")).hexdigest()[:16]
+
+
+def _auth_breaker_path() -> Path:
+    return paths.state_dir() / f".gh-auth-failed-{_token_fingerprint()}"
+
+
+def _auth_is_broken() -> bool:
+    """True once this exact token has been proven unusable.
+
+    A 401/403 is not a transient network blip -- the same credential will fail
+    forever. Before this breaker every pulse spent its full timeout budget on
+    five calls that could not succeed. The sentinel is keyed on the token
+    fingerprint, so rotating the token clears it automatically.
+    """
+    try:
+        return _auth_breaker_path().is_file()
+    except Exception:
+        return False
+
+
+def _trip_auth_breaker() -> None:
+    try:
+        path = _auth_breaker_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(utcnow().isoformat(), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def gh_api(endpoint: str):
+    if not GITHUB_TOKEN or _auth_is_broken():
         return []
     try:
         req = urllib.request.Request(
@@ -44,8 +83,19 @@ def gh_api(endpoint: str):
                 "User-Agent": "dream-studio-pulse-hook",
             },
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=GH_TIMEOUT_SEC) as resp:
             return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            _trip_auth_breaker()
+            print(
+                f"[on-pulse] GitHub auth rejected ({e.code}); skipping GitHub checks "
+                f"until GITHUB_PERSONAL_ACCESS_TOKEN changes.",
+                flush=True,
+            )
+            return []
+        print(f"[on-pulse] GitHub API failed ({endpoint}): {e}", flush=True)
+        return []
     except Exception as e:
         print(f"[on-pulse] GitHub API failed ({endpoint}): {e}", flush=True)
         return []
@@ -313,6 +363,11 @@ def _import_and_rotate_buffer() -> int:
 
         buf = paths.state_dir() / "telemetry-buffer.jsonl"
         if not buf.exists() or not buf.read_bytes().strip():
+            # DATABASE RETENTION MUST NOT DEPEND ON BUFFER TRAFFIC. The prune used to sit
+            # after this early return, so on any pulse where the buffer happened to be
+            # empty nothing was pruned at all -- a retention policy that only ran when
+            # something else had work to do. The tables grew regardless.
+            rolling_window_prune()
             return 0
         n = import_buffer(buf)
         buf.replace(buf.with_suffix(".jsonl.bak"))
@@ -523,6 +578,29 @@ def _cooldown_active() -> bool:
         return False
 
 
+def _sweep_disk_safe() -> None:
+    """Enforce the local-store retention budgets, at most once a day.
+
+    Nothing owned deletion before this call existed, and the store reached
+    10.6 GB. Failure here must never break a prompt, so it is swallowed -- but
+    unlike the rest of this file it says so, because a retention sweep that
+    silently stops working is how the problem came back.
+    """
+    try:
+        from core.config import retention
+
+        for result in retention.sweep_daily():
+            if result.error:
+                print(
+                    f"[on-pulse] retention sweep failed for {result.name}: {result.error}",
+                    flush=True,
+                )
+        for problem in retention.audit():
+            print(f"[on-pulse] retention: {problem}", flush=True)
+    except Exception as exc:  # noqa: BLE001 - advisory only, never blocks a prompt
+        print(f"[on-pulse] retention sweep unavailable: {exc}", flush=True)
+
+
 def run_pulse_check() -> None:
     """Main pulse check implementation."""
     paths.warn_version_mismatch()
@@ -533,26 +611,23 @@ def run_pulse_check() -> None:
         state.set_quiet_mode(remaining - 1)
         return
     if _cooldown_active():
-        # Return cached pulse data instead of re-running checks
+        # SILENT ON THE CACHED PATH.
+        #
+        # This printed an eight-line health summary into the model's context on
+        # EVERY prompt, cached or not -- about 500 bytes of status that is
+        # actionable on the rare turn something is genuinely overdue and pure
+        # noise on every other one. It was the single highest-frequency,
+        # lowest-value thing the platform did.
+        #
+        # Nothing is lost: the data still goes to the authority, `ds pulse`
+        # prints it in full on demand, and a non-healthy state still speaks up
+        # in one line rather than eight.
         cached = state.read_pulse()
-
-        print(
-            f"\n[dream-studio] Pulse check complete (cached) — {cached.get('health', 'UNKNOWN')}\n"
-            f"  -> Stale branches: {cached.get('stale_branches', 0)}\n"
-            f"  -> Overdue milestones: {cached.get('overdue_milestones', 0)}\n"
-            f"  -> Open PRs: {cached.get('open_prs', 0)}\n"
-            f"  -> Pending draft lessons: {cached.get('pending_drafts', 0)}\n"
-            f"  -> Stale domain agents: {cached.get('stale_agents', 0)}\n"
-            + (
-                f"  -> Degraded skills: {cached.get('degraded_skills', 0)}\n"
-                if cached.get("degraded_skills")
-                else ""
-            ),
-            flush=True,
-        )
-
-        print(json.dumps({"status": "ok", "hook": "on-pulse", **cached, "cached": True}))
+        health = cached.get("health")
+        if health not in (None, "", "HEALTHY", "OK"):
+            print(f"[dream-studio] {health} - run `ds pulse` for detail", flush=True)
         return
+    _sweep_disk_safe()
     imported = _import_and_rotate_buffer()
     report, stats = generate_pulse()
 
@@ -578,21 +653,8 @@ def run_pulse_check() -> None:
     except Exception:
         pass
 
-    print(
-        f"\n[dream-studio] Pulse check complete — {stats['health']}\n"
-        f"  -> Report: stored in the authority (raw_operational_snapshots.report_body)\n"
-        f"  -> Stale branches: {stats['stale_branches']}\n"
-        f"  -> Overdue milestones: {stats['overdue_milestones']}\n"
-        f"  -> Open PRs: {stats['open_prs']}\n"
-        f"  -> Pending draft lessons: {stats['pending_drafts']}\n"
-        f"  -> Stale domain agents: {stats['stale_agents']}\n"
-        + (f"  -> Telemetry imported: {imported} row(s)\n" if imported else "")
-        + (
-            f"  -> Degraded skills: {stats['degraded_skills']}\n"
-            if stats["degraded_skills"]
-            else ""
-        ),
-        flush=True,
-    )
-
-    print(json.dumps({"status": "ok", "hook": "on-pulse", **stats}))
+    # One line, and only when something needs a human. The full report is in the
+    # authority (raw_operational_snapshots.report_body) and `ds pulse` prints it.
+    # See the cached branch above for why this stopped narrating every turn.
+    if stats["health"] not in ("HEALTHY", "OK"):
+        print(f"[dream-studio] {stats['health']} - run `ds pulse` for detail", flush=True)

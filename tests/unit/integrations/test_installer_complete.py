@@ -489,45 +489,26 @@ def test_execute_new_canonical_file_appears_on_reinstall(config_root, canonical_
 # ── Workflow YAML install ─────────────────────────────────────────────────────
 
 
-def test_execute_creates_workflows_directory(config_root, canonical_root, ds_home):
-    """~/.claude/workflows/ must be created by the installer."""
+def test_the_installer_does_not_project_workflows(config_root, canonical_root, ds_home):
+    """canonical/workflows/ is the source AND the only reader.
+
+    control.execution.workflow.registry resolves _DEFAULT_DIR to canonical, and
+    core.gates.pre_push reads canonical/workflows/pre-push.yaml directly. Nothing
+    has ever read the installed copy -- so the install step wrote 24 YAMLs
+    (~230 KB) that were never opened, and then went stale against canonical. The
+    CHANGELOG records that drift shipping a bug: two gates present in one file
+    and missing from the other.
+
+    A second copy nobody reads cannot help and can only be wrong.
+    """
     installer = ClaudeCodeInstaller(
         config_root, "user", canonical_root=canonical_root, ds_home=ds_home
     )
     installer.install("execute")
-    assert (config_root / "workflows").is_dir()
-
-
-def test_execute_installs_workflow_yamls(config_root, canonical_root, ds_home):
-    """All workflow YAMLs from canonical/workflows/ must be installed."""
-    installer = ClaudeCodeInstaller(
-        config_root, "user", canonical_root=canonical_root, ds_home=ds_home
-    )
-    installer.install("execute")
-    installed = list((config_root / "workflows").glob("*.yaml"))
-    canonical_yamls = list((canonical_root / "workflows").glob("*.yaml"))
-    assert len(installed) == len(canonical_yamls)
-
-
-def test_execute_installs_specific_workflows(config_root, canonical_root, ds_home):
-    """idea-to-pr.yaml and studio-onboard.yaml must be present after install."""
-    installer = ClaudeCodeInstaller(
-        config_root, "user", canonical_root=canonical_root, ds_home=ds_home
-    )
-    installer.install("execute")
-    assert (config_root / "workflows" / "idea-to-pr.yaml").is_file()
-    assert (config_root / "workflows" / "studio-onboard.yaml").is_file()
-
-
-def test_execute_second_run_skips_unchanged_workflows(config_root, canonical_root, ds_home):
-    """Second install must skip workflow files whose hash matches manifest."""
-    installer = ClaudeCodeInstaller(
-        config_root, "user", canonical_root=canonical_root, ds_home=ds_home
-    )
-    installer.install("execute")
-    result2 = installer.install("execute")
-    assert result2["workflows"]["unchanged"] > 0
-    assert result2["workflows"]["copied"] == 0
+    projected = config_root / "workflows"
+    assert not projected.is_dir() or not list(
+        projected.glob("*.yaml")
+    ), "the installer is projecting workflows again; canonical is the only source"
 
 
 def test_execute_installs_workflow_contract(config_root, canonical_root, ds_home):
@@ -1047,29 +1028,47 @@ def test_compiled_claude_md_contains_ds_fullstack_row(canonical_root):
     assert "@AGENTS.md" in pack["files"]["CLAUDE.md"], "CLAUDE.md must import @AGENTS.md"
 
 
-def test_execute_installs_statusline_py(config_root, canonical_root, ds_home):
-    """statusline.py must be copied to hooks/ directory during install."""
+def test_execute_installs_no_statusline(config_root, canonical_root, ds_home):
+    """The status line is gone, and install must not bring it back.
+
+    It ran a separate Python process on every render, and each run shelled out to
+    git four times -- rev-parse, branch, status --porcelain, remote get-url.
+    Measured at 159 ms per render against roughly 30 renders a turn: ~4.8 seconds
+    per turn, the most expensive single thing in the platform, for a status bar.
+    Removed outright at the operator's instruction rather than optimised.
+    """
     installer = ClaudeCodeInstaller(
         config_root, "user", canonical_root=canonical_root, ds_home=ds_home
     )
     installer.install("execute")
-    assert (
+    assert not (
         config_root / "hooks" / "statusline.py"
-    ).is_file(), "statusline.py was not installed to hooks/"
+    ).is_file(), "install re-created statusline.py"
 
 
-def test_execute_settings_contains_statusline_command(config_root, canonical_root, ds_home):
-    """settings.json must contain a statusLine.command entry after install."""
+def test_execute_removes_a_statusline_left_by_an_earlier_install(
+    config_root, canonical_root, ds_home
+):
+    """Upgrading must clear the old entry, not leave it pointing at a deleted file.
+
+    A settings.json still naming statusline.py after the script is gone spawns a
+    process per render that can only fail, which is worse than either keeping it
+    or removing it cleanly.
+    """
+    settings_path = config_root / "settings.json"
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(
+        json.dumps({"statusLine": {"type": "command", "command": "python statusline.py"}}),
+        encoding="utf-8",
+    )
+
     installer = ClaudeCodeInstaller(
         config_root, "user", canonical_root=canonical_root, ds_home=ds_home
     )
     installer.install("execute")
-    settings = json.loads((config_root / "settings.json").read_text(encoding="utf-8"))
-    assert "statusLine" in settings, "settings.json missing statusLine key"
-    assert settings["statusLine"].get("command"), "statusLine.command is empty or missing"
-    assert (
-        settings["statusLine"].get("type") == "command"
-    ), "statusLine.type must be 'command' (required by Claude Code settings schema)"
+
+    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert "statusLine" not in settings, "a stale statusLine entry survived the install"
 
 
 def test_execute_statusline_command_has_no_placeholders(config_root, canonical_root, ds_home):
@@ -1084,14 +1083,22 @@ def test_execute_statusline_command_has_no_placeholders(config_root, canonical_r
     assert "{python_cmd}" not in cmd, "statusLine.command still contains {python_cmd} placeholder"
 
 
-def test_statusline_py_contains_get_plugin_root():
-    """canonical/adapters/claude/statusline.py must contain _get_plugin_root function."""
+def test_the_statusline_source_is_gone_and_stays_gone():
+    """The status line was deleted, not disabled. Nothing should re-add the source.
+
+    It cost ~159 ms per render and rendered roughly 30 times a turn, because every
+    single render shelled out to git four separate times (rev-parse, branch,
+    status --porcelain, remote get-url) -- about 4.8 seconds per turn, the most
+    expensive thing in the platform, for a status bar. Merely deleting the old
+    assertion would have let the file drift back in unnoticed.
+    """
     statusline_path = (
         Path(__file__).resolve().parents[3] / "canonical" / "adapters" / "claude" / "statusline.py"
     )
-    assert statusline_path.is_file(), "canonical/adapters/claude/statusline.py not found"
-    content = statusline_path.read_text(encoding="utf-8")
-    assert "_get_plugin_root" in content, "statusline.py missing _get_plugin_root function"
+    assert not statusline_path.is_file(), (
+        "canonical/adapters/claude/statusline.py is back; the status line was removed "
+        "deliberately -- see test_execute_installs_no_statusline"
+    )
 
 
 def test_readme_contains_jq_instructions():
@@ -1161,7 +1168,9 @@ def test_project_scope_install_writes_no_hook_registrations(config_root, canonic
         "Project-scope settings.json must not contain hook registrations — "
         "user-global ~/.claude/settings.json is the single dispatch surface"
     )
-    assert "statusLine" in settings, "statusLine must still be written in project scope"
+    assert (
+        "statusLine" not in settings
+    ), "project scope must not write a statusLine either -- the status line is gone"
 
 
 def test_user_scope_install_writes_hook_registrations(config_root, canonical_root, ds_home):

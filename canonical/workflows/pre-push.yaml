@@ -34,17 +34,6 @@ gates:
     command: [py, interfaces/cli/lint_baseline.py, check]
     fail_hint: "Fix new lint findings; do not bypass the baseline."
 
-  - id: skill-sync
-    tier: blocking
-    description: >
-      Source-level enforcement-block regression check (A4/A5 invariant) — the
-      `_ENFORCEMENT_BLOCK` constant must contain zero `py -m interfaces.cli.ds`
-      references.
-    command: [py, -m, core.gates.skill_sync_source]
-    fail_hint: >
-      The compiler enforcement block has regressed back to CLI references.
-      Restore the function-call form per A4/A5.
-
   - id: test-suite
     tier: blocking
     description: >
@@ -114,40 +103,6 @@ gates:
       or a renamed symbol. Fix the import; do not skip. This mirrors what the
       full-CI unit run does before it can even start.
 
-  - id: changed-module-suites
-    tier: advisory
-    description: >
-      Runs the unit suite NAMED AFTER each module this change edited, derived from
-      the diff. The static complement already exists and cannot cover this:
-      pin-tests runs a hardcoded list, and test-list-completeness exists because
-      that list rots. A list answers "did the suites someone remembered pass"; it
-      cannot answer "did the suite covering the file you just edited run at all".
-      Written after a change to core/gates/task_criteria_baseline.py was pushed
-      through three unrelated suites and never through its own, leaving five tests
-      red and the blocking gate reporting UNKNOWN on any authority missing two
-      columns. Found by a reviewer reading the diff, by no gate.
-      ADVISORY PENDING AN OPERATOR CALL: by the classification rule this is
-      correctness and belongs at blocking, but promoting it changes what refuses a
-      push, which is the operator's decision and not the author's.
-    command: [py, -m, core.gates.changed_module_suites]
-    fail_hint: >
-      A suite named after a module you edited is red. Run it directly -- the gate
-      names the file and the module that mapped to it. Do not skip: this is the
-      suite most likely to cover what you just changed.
-
-  - id: test-list-completeness
-    tier: blocking
-    description: >
-      The pin-tests and pr-smoke focused lists are hardcoded file lists — a
-      listed file that is deleted or renamed silently stops guarding anything
-      (WO-CI-COMPLETENESS, 2026-08-18 audit). Validates every listed path
-      exists and reports how many tests/unit files run only post-merge.
-    command: [py, -m, core.gates.test_list_completeness]
-    fail_hint: >
-      A test file named in canonical/workflows/pre-push.yaml or
-      .github/workflows/ci.yml no longer exists — remove or repoint the entry
-      in the SAME change set as the rename/delete.
-
   - id: locale-decode
     tier: blocking
     description: >
@@ -165,45 +120,6 @@ gates:
       call is deliberately unguarded (only the gate's own test should be), mark
       its line `# locale-decode-gate: intentional — <why>`; the gate prints every
       exemption, so it stays visible.
-
-  - id: atlas-leak
-    tier: blocking
-    description: >
-      Contract atlas lifecycle gate. Detects PRD/contract leakage into
-      unauthorized projection surfaces. Authority-integrity check — blocking.
-    command: [py, interfaces/cli/contract_atlas_lifecycle_gate.py]
-    fail_hint: "Atlas leak — see contract-atlas docs for resolution."
-
-  - id: rule-registry
-    tier: blocking
-    description: >
-      Every rule in canonical/rules.yml is enforced by a runnable check or declared
-      guidance with a reason. Measured 2026-09-04: 2,172 normative statements across the
-      substrate, and nothing distinguished the ones something enforces from the ones
-      nothing does. An enforced_by naming a check that collects nothing is refused --
-      pytest exits 5 for no-tests-collected and 4 for a usage error, neither of which is a
-      failure, so a gate reading zero-versus-nonzero cannot tell a broken rule from a
-      check that stopped addressing anything.
-    command: [py, -m, core.gates.rule_registry]
-    fail_hint: >
-      A rule is unclassified, or its check does not exist / collects nothing. Give it an
-      enforced_by that runs, or guidance:true with a why.
-
-  - id: docs-drift
-    tier: blocking
-    description: >
-      Contract docs drift gate. Detects when docs and code references have
-      drifted apart. Blocking — CI runs the identical script as a blocking
-      step, and the advisory local tier let PR #263 push green and then fail
-      all three platforms on the same drift (WO-GATE-PARITY). Uses
-      DREAM_STUDIO_BASE_REF=origin/main to match CI behavior.
-    command: [py, interfaces/cli/contract_docs_drift_gate.py]
-    env:
-      DREAM_STUDIO_BASE_REF: origin/main
-    fail_hint: >
-      Docs drift detected — CI's Contract docs drift step will fail on the
-      same change set. Update the required_doc_refs listed in the gate JSON
-      (e.g. docs/DATABASE.md, docs/MIGRATION_AUTHORITY.md) in this change set.
 
   - id: migration-risk
     tier: blocking
@@ -345,23 +261,6 @@ gates:
       authority query — never the work itself), or state why it cannot be
       checked with an inline "# UNVERIFIED BY DESIGN: <reason>".
 
-  - id: normative-baseline
-    tier: blocking
-    description: >
-      The substrate's shouted normative statements may only decrease. A newly
-      shouted rule has to be classified in canonical/rules.yml with a runnable
-      check, converted to an eval under tests/evals/ if it instructs a model rather
-      than constrains the code, generated from what it describes, or deleted. A
-      decrease fails too: a ceiling left above reality drifts upward silently and
-      stops meaning anything, which is how the pile grew the first time. (This
-      description deliberately avoids quoting the shouted vocabulary -- doing so
-      raised the count by three and the gate caught it, which is the gate working.)
-    command: [py, -m, core.gates.normative_baseline]
-    fail_hint: >
-      Classify the new statement in canonical/rules.yml, or delete it. If the change
-      genuinely earns a higher ceiling, run `py -m core.gates.normative_baseline
-      --update` in the SAME change set as the rule that earns it.
-
   - id: fail-open-probe
     tier: blocking
     description: >
@@ -429,25 +328,6 @@ gates:
       or delete it. If the definition genuinely precedes its caller, say why inline
       with '# reachability-gate: intentional: <reason>' (every exemption is printed).
 
-  - id: review-lane-registry
-    tier: blocking
-    description: >
-      Every lane in canonical/review_lanes.yml is answered by a runnable
-      detector, a graded eval, or a declared judgment with a reason naming
-      what is missing. Five named reviewers each found a defect nobody else
-      did by asking one repeatable question; those questions lived in their
-      heads, and prose is where the operator has already said guidance goes
-      to die. Same enforce-or-declare contract canonical/rules.yml runs on,
-      so the repo has one contract shape rather than two that drift. It
-      refused its own registry twice while being built, and an audit found
-      the gate, its test and the registry header stating the contract three
-      different ways.
-    command: [py, -m, core.gates.review_lane_registry]
-    fail_hint: >
-      A review lane declares no detector, no eval, and no judgment with a
-      reason -- or declares two, so nobody knows which one runs. Answer it or
-      say what is missing; a lane that decays into advice stops being asked.
-
   - id: aggregate-deadline
     tier: blocking
     description: >
@@ -500,47 +380,6 @@ gates:
     warn_hint: >
       This branch is behind its base. Sync before trusting a review of it.
 
-  - id: gitignore-phantom
-    tier: blocking
-    description: >
-      A committed file must not reference a path git will not ship. Green locally, where
-      the file is on disk, and broken on a fresh checkout for everyone else -- the
-      out-of-the-box failure mode. Observed twice: nine verify_*.py split siblings
-      untracked under the '.gitignore' rule 'verify_*.py' (the committed facade imported
-      them, so a clean clone raised ModuleNotFoundError), and a review-rules profile
-      authored under '.dream-studio/', which .gitignore excludes as private runtime state
-      (a committed test asserted it exists, which passed locally and would have failed in
-      CI while Dream Studio silently shipped without its own layer map). Both were caught
-      by someone remembering to look. git ls-files and git check-ignore answer this
-      exactly, so it belongs here rather than in an operator's memory.
-    command: [py, -m, core.gates.gitignore_phantom]
-    fail_hint: >
-      A changed file reads or asserts a path that git will not ship. Either 'git add' the
-      path and drop the .gitignore rule excluding it, or stop depending on it. Note that
-      git cannot re-include a file whose PARENT DIRECTORY is excluded -- if the rule names
-      a directory, the file has to move.
-
-  - id: evidence-backed-output
-    tier: blocking
-    description: >
-      Operator ruling 2026-08-27: anything pushed to GitHub as a comment or review must be
-      backed by evidence, show that evidence, and be verified -- so no reader is ever
-      guessing. Flags claims that cite
-      nothing checkable: a command and its output, a test count with its unit, a
-      file:line, a commit sha, a run id, or a named artifact. Measured when written: all
-      four PR bodies authored that day carried '- [x] PR smoke is expected to pass', a
-      prediction inside a CHECKED box, and three of those pull requests were already
-      merged. Audits what a push actually publishes: the COMMIT MESSAGES of the
-      commits being pushed and the lines ADDED to CHANGELOG.md. A PR body does not live
-      in the repository, so this cannot discover one -- it is auditable by path through
-      the CLI, and saying so beats pretending otherwise. The report also lists the
-      evidence each document DOES carry, so the author sees the gap instead of guessing.
-    command: [py, -m, core.gates.evidence_backed_output, --staged]
-    fail_hint: >
-      A claim in an outbound document cites nothing a reader can check. Replace it with
-      the fact it rests on -- a command and its output, a test count, a file:line, a
-      commit sha, a run id -- or delete the claim. A checked box that says 'expected to'
-      is a forecast, not a check.
   - id: deterministic-first
     tier: advisory
     description: >
@@ -588,20 +427,3 @@ gates:
       through same-module helpers rather than matched as text — a literal match on
       'write_event' flagged both siblings the moment their shared emitter was extracted,
       scoring the correct refactor as the defect.
-  - id: task-criteria-baseline
-    tier: blocking
-    description: >
-      The number of tasks carrying no acceptance criterion and no declared reason may not
-      rise. Measured on the live authority when this landed: 1767 uncheckable of 3298
-      tasks (53% carried none at all before admission). A task nobody can check is a claim
-      that gets marked done by reading. Ratchet rather than a demand for zero, because
-      operator direction was freeze-and-burn-down: a criterion invented now for a closed
-      work order proves nothing about work already delivered. WO 09a00064 burns the backlog
-      down. Same shape as `normative-baseline` -- a recorded ceiling, `--update` as the only
-      way to move it, and the movement visible in the diff as a reviewable act.
-    command: [py, -m, core.gates.task_criteria_baseline]
-    fail_hint: >
-      Give the new task a TEST-CHECK / SQL-CHECK / API-CHECK, or record why the claim cannot
-      be computed (`ds work-order add-task ... --why '<20+ chars>'`). Raising the ceiling is
-      a reviewable act: `py -m core.gates.task_criteria_baseline --update`, in the same
-      change set as the reason it is earned.

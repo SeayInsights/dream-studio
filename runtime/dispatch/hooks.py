@@ -75,6 +75,34 @@ def _resolve_handlers(event_name: str, tool_name: str, plugin_root: Path) -> lis
     return []
 
 
+def _write_hook_execution(payload: str) -> None:
+    """Write one queued hook-execution row. Called only from the drain.
+
+    The producer is `_enqueue_hook_execution` in runtime/lib/enforcement.py, which
+    cannot import the event store without paying the 259 ms this split exists to
+    remove. It therefore ships a finished record and this turns it into a row.
+    """
+    try:
+        record = json.loads(payload) if payload.strip() else {}
+        if not record:
+            return
+        from core.event_store.event_writer import insert_hook_execution  # noqa: PLC0415
+
+        insert_hook_execution(**record)
+    except Exception:
+        # One unwritable telemetry row must not stop the rest of the drain.
+        pass
+
+
+def _tool_of(raw: str) -> str:
+    """Tool name from a raw payload. Queued records are re-parsed one by one."""
+    try:
+        data = json.loads(raw) if raw.strip() else {}
+    except (json.JSONDecodeError, ValueError):
+        return ""
+    return data.get("tool_name", data.get("toolName", "")) or ""
+
+
 def main() -> int:
     if len(sys.argv) < 2:
         return 0
@@ -115,9 +143,33 @@ def main() -> int:
         import control.execution.dispatch_tracking as _dt  # noqa: PLC0415
 
         state_dir = Path.home() / ".dream-studio" / "state"
-        handlers = _resolve_handlers(event_name, tool_name, plugin_root)
-        if handlers:
-            _dt.run_handlers(handlers, raw_payload, event_name, state_dir)
+
+        def _run(name: str, payload: str) -> None:
+            # The blocking enforce hooks queue a finished telemetry row rather than
+            # writing it inline -- writing it cost them 259 ms of imports while the
+            # user waited for permission to edit a file. Here the imports are
+            # already paid for, so the row just gets written.
+            if name == "hook.execution":
+                _write_hook_execution(payload)
+                return
+            handlers = _resolve_handlers(name, _tool_of(payload), plugin_root)
+            if handlers:
+                _dt.run_handlers(handlers, payload, name, state_dir)
+
+        # DRAIN FIRST. PostToolUse no longer runs handlers inline -- it appends a
+        # line and exits in ~55 ms instead of ~283 ms. Its work happens here, on
+        # UserPromptSubmit and Stop, which are synchronous anyway (one injects
+        # context, the other blocks on enforcement) and so have already paid the
+        # import bill. The frequent event got cheap by borrowing the rare one.
+        if event_name in ("UserPromptSubmit", "Stop"):
+            try:
+                from core.config import hookq  # noqa: PLC0415
+
+                hookq.drain(_run)
+            except BaseException:
+                pass
+
+        _run(event_name, raw_payload)
     except BaseException:
         pass
 

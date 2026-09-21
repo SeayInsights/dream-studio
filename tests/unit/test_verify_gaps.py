@@ -641,7 +641,7 @@ def test_a_gap_run_leaves_the_uncheckable_count_unmoved(authority):
     paths with every task shape a reviewer can supply: a criterion, a declared reason, and
     neither.
     """
-    from core.gates.task_criteria_baseline import measure
+    from core.work_orders.task_criteria_measure import measure
     from core.work_orders.verify_gaps import _attach_gap_tasks, _insert_gap_work_orders
 
     db_path = authority
@@ -1025,7 +1025,7 @@ def test_no_open_task_shares_a_criterion_with_a_sibling(authority):
     would be skipped or green for no reason. The live number is held by this work order's
     originating symptom, which close re-runs.
     """
-    from core.gates.task_criteria_baseline import measure
+    from core.work_orders.task_criteria_measure import measure
 
     db_path = authority
     project_id, _milestone_id, reviewed_id = _seed_project(db_path)

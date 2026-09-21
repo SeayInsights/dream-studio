@@ -15,12 +15,6 @@ from integrations.installer.base import FileOp
 from .claude_code_shared import _compute_file_hash_chunked, _python_cmd
 
 
-def _interpolate_statusline_cmd(hooks_dir: Path) -> str:
-    """Return the resolved statusLine command string with {hooks_dir} and {python_cmd} substituted."""
-    template = '{python_cmd} "{hooks_dir}/statusline.py"'
-    return template.replace("{hooks_dir}", str(hooks_dir)).replace("{python_cmd}", _python_cmd())
-
-
 def _interpolate_hooks_dir(hooks: list[dict[str, Any]], hooks_dir: Path) -> list[dict[str, Any]]:
     """Replace {hooks_dir} and {python_cmd} placeholders in hook command strings."""
     import copy as _copy
@@ -254,25 +248,6 @@ def _collect_hook_file_ops(
             safety_notes="Overwritten on every install. Re-run install if repo moves.",
         )
     )
-
-    # statusline.py — cross-platform status line (replaces statusline-command.sh bash wrapper)
-    statusline_src = repo_root / "canonical" / "adapters" / "claude" / "statusline.py"
-    if statusline_src.is_file():
-        statusline_tgt = hooks_dir / "statusline.py"
-        file_hash = _compute_file_hash_chunked(statusline_src)
-        statusline_content = statusline_src.read_text(encoding="utf-8")
-        ops.append(
-            FileOp(
-                target=statusline_tgt,
-                op="create",
-                backup_required=statusline_tgt.exists(),
-                source_hash=file_hash,
-                source_content=statusline_content,
-                reason="Install cross-platform Python status line script",
-                safety_notes="Replaces statusline-command.sh bash wrapper. Existing ~/.claude/statusline-command.sh is left in place.",
-                backup_path=backup_base if statusline_tgt.exists() else None,
-            )
-        )
 
     return ops
 

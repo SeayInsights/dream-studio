@@ -51,12 +51,15 @@ _EXEMPT_SEGMENTS = frozenset({".git", ".claude", ".venv", "__pycache__", "node_m
 _SESSION_FILE_MAX_AGE_SECS = 7 * 24 * 3600
 
 
-_TIER_ENV = "DS_ENFORCE_TIER"
+_ENV = "DS_ENFORCE"
+#: Deprecated second spelling. Still honoured so an existing setup does not silently
+#: get STRICTER than its owner asked for, but it is no longer the documented knob.
+_LEGACY_TIER_ENV = "DS_ENFORCE_TIER"
 VALID_TIERS = ("off", "observe", "warn", "enforce")
 
 
 def resolve_tier() -> str:
-    """Resolve the graduated enforcement tier (WO-ENFORCE-TIERS).
+    """Resolve the enforcement tier from ONE environment variable.
 
     Ladder (least → most intrusive):
       off      — enforcement and its telemetry are entirely disabled.
@@ -64,15 +67,28 @@ def resolve_tier() -> str:
       warn     — observe, and additionally surface the message, then allow.
       enforce  — block the action (the historical behavior).
 
-    Resolution: the legacy total-off switch ``DS_ENFORCE=0`` wins and maps to ``off``
-    (so ``off`` and ``DS_ENFORCE=0`` are equivalent). Otherwise ``DS_ENFORCE_TIER`` in
-    ``VALID_TIERS``; an unset/invalid value defaults to ``enforce`` — enforcement stays on
-    by default, and only an explicit, recognized tier lowers it.
+    ``DS_ENFORCE`` takes any of those names, or ``0`` as a synonym for ``off``.
+
+    THIS USED TO BE TWO VARIABLES. ``DS_ENFORCE=0`` and ``DS_ENFORCE_TIER=off`` were
+    documented as equivalent -- two names for one control, which is one more thing to
+    know and one more place to look when enforcement is not behaving. Every deny
+    message in the system already said ``DS_ENFORCE``, so that is the name that
+    survived, and it now accepts the full ladder rather than just on/off.
+
+    ``DS_ENFORCE_TIER`` is still read as a fallback: dropping it outright would
+    silently re-enable enforcement for anyone who had lowered it, and a surprise
+    re-enable is exactly the kind of thing that sends someone to ``--no-verify``.
+
+    Unset or unrecognized resolves to ``enforce``: enforcement stays on by default,
+    and only an explicit, recognized value lowers it.
     """
-    if os.environ.get("DS_ENFORCE", "").strip() == "0":
+    value = os.environ.get(_ENV, "").strip().lower()
+    if value == "0" or value == "off":
         return "off"
-    tier = os.environ.get(_TIER_ENV, "").strip().lower()
-    return tier if tier in VALID_TIERS else "enforce"
+    if value in VALID_TIERS:
+        return value
+    legacy = os.environ.get(_LEGACY_TIER_ENV, "").strip().lower()
+    return legacy if legacy in VALID_TIERS else "enforce"
 
 
 def enforcement_disabled() -> bool:
@@ -187,25 +203,30 @@ def record_bypass(
     event ``record_observation`` uses — no new table, and the writer falls back
     to a text file on DB lock, so a broken authority DB does not also kill the
     signal. Best-effort: a broken emit path never affects the allow decision.
+
+    QUEUED for the same reason as ``log_hook_execution``: this runs inside the
+    hooks that block Edit, Write and Stop, and writing the row inline means
+    importing the event store (282 modules, 259 ms) while the user waits. Both
+    functions now append a finished record to hookq.jsonl and the next
+    UserPromptSubmit or Stop writes it. Same row, same mark, off the blocking path.
     """
     try:
-        from core.event_store.event_writer import insert_hook_execution
-
-        insert_hook_execution(
-            hook_name=hook_name,
-            hook_type=hook_type,
-            trigger_context={
-                "decision": "bypass",
-                "rule": rule,
-                "detail": detail,
-            },
-            started_at=now_iso(),
-            completed_at=now_iso(),
-            duration_ms=0,
-            exit_code=0,
-            status="success",
-            session_id=session_id,
-            db_path=db_path,
+        _enqueue_hook_execution(
+            {
+                "hook_name": hook_name,
+                "hook_type": hook_type,
+                "trigger_context": {
+                    "decision": "bypass",
+                    "rule": rule,
+                    "detail": detail,
+                },
+                "started_at": now_iso(),
+                "completed_at": now_iso(),
+                "duration_ms": 0,
+                "exit_code": 0,
+                "status": "success",
+                "session_id": session_id,
+            }
         )
     except Exception:
         pass  # telemetry is best-effort; never let a broken emit affect enforcement
@@ -238,26 +259,62 @@ def log_hook_execution(
     and never writes stdout — a blocking hook owns its stdout for the deny/allow
     decision, so telemetry must stay silent (lesson edb8525f). The decision is
     carried in trigger_context so the stats surface can distinguish allow/deny.
+
+    QUEUED, NOT WRITTEN. `insert_hook_execution` pulls the event store, which pulls
+    pydantic and jsonschema: 282 module imports measured at 259 ms, inside a hook
+    that BLOCKS every Edit and Write. The enforcement decision itself takes ~55 ms,
+    so four fifths of the time the user spent waiting for permission to edit a file
+    was spent recording that they had asked.
+
+    The record still happens. It goes to the append-only queue and is replayed by
+    the next UserPromptSubmit or Stop, which are synchronous anyway and have
+    already paid for those imports. Same row, same data, off the blocking path.
     """
     try:
-        from core.event_store.event_writer import insert_hook_execution
-
-        insert_hook_execution(
-            hook_name=hook_name,
-            hook_type=hook_type,
-            trigger_context={"decision": decision},
-            started_at=started_at,
-            completed_at=now_iso(),
-            duration_ms=duration_ms,
-            exit_code=0,
-            status=status,
-            error_message=error_message,
-            session_id=session_id,
+        _enqueue_hook_execution(
+            {
+                "hook_name": hook_name,
+                "hook_type": hook_type,
+                "trigger_context": {"decision": decision},
+                "started_at": started_at,
+                "completed_at": now_iso(),
+                "duration_ms": duration_ms,
+                "exit_code": 0,
+                "status": status,
+                "error_message": error_message,
+                "session_id": session_id,
+            }
         )
     except Exception:
         # Telemetry is best-effort: never let a broken emit path affect enforcement.
         # Narrow to Exception so KeyboardInterrupt/SystemExit still propagate.
         pass
+
+
+def _enqueue_hook_execution(record: dict) -> None:
+    """Append one hook-execution record to the queue, importing nothing heavy.
+
+    Deliberately duplicates the queue path rather than importing core.config.hookq,
+    because importing anything under `core` is the cost this exists to avoid. The
+    three copies of this path (here, runtime/hooks/enqueue.py, and the native
+    enqueuer) are held in sync by tests/unit/test_hook_queue.py.
+
+    Resolves through this module's own STATE_DIR rather than reading DS_HOME from
+    the environment directly. Tests redirect enforcement by patching the module
+    attribute, so an independent env lookup here wrote telemetry into the
+    operator's REAL ~/.dream-studio during the test run -- a hermeticity break, and
+    the same class of bug as every other "second copy of a path" in this codebase.
+    """
+    path = os.path.join(str(STATE_DIR), "hookq.jsonl")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    line = json.dumps(
+        {"event": "hook.execution", "ts": time.time(), "payload": json.dumps(record)},
+        separators=(",", ":"),
+    )
+    # newline="" so this writes \n, not \r\n -- the native enqueuer writes the
+    # same file and the two framings must match byte for byte.
+    with open(path, "a", encoding="utf-8", newline="") as fh:
+        fh.write(line + "\n")
 
 
 def parse_ts(value: str | None) -> datetime | None:

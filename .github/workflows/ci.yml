@@ -54,11 +54,9 @@ jobs:
       - name: Dashboard truth gate
         run: python -m interfaces.cli.ds doctor dashboard-truth
 
-      - name: Format check
-        run: python -m black --check .
-
-      - name: Lint baseline check
-        run: python interfaces/cli/lint_baseline.py check
+      # Format and lint run in the pre-push gate only. They used to run there AND
+      # here AND in full-ci -- three runs, one answer, and this copy burns a full
+      # 3-platform round trip to tell you to run `black .`. One home per check.
 
       - name: Dependency vulnerability scan
         continue-on-error: true

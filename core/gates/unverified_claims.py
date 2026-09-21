@@ -38,7 +38,30 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from core.gates.evidence_backed_output import _CITATION
+# What counts as having actually LOOKED. Moved here from the deleted
+# evidence_backed_output gate, which was its only other home: that gate audited
+# whether the platform's own PR text cited evidence, which is a writing-style
+# check on the bureaucracy, not a check on whether Dream Studio works. This regex
+# was the one piece of it doing real work, so it moved rather than died.
+_CITATION = re.compile(
+    r"("
+    r"\d+\s+(passed|failed|skipped|xfailed|errored)"  # a count with its unit
+    r"|::[A-Za-z_][A-Za-z0-9_]*"  # a test node id
+    r"|[\w./\\-]+\.(py|md|yaml|json|txt):\d+"  # file:line
+    r"|\b[0-9a-f]{7,40}\b"  # commit sha
+    r"|Overall:\s*(PASS|FAIL)"  # gate verdict
+    r"|\bid=\d+|\brun[s]?/\d+"  # run id
+    r"|`[^`]+`"  # a named artifact or command
+    r"|\bmeasured\b|\bverified by\b|\breproduced\b"  # an explicit provenance claim
+    # The commands people actually establish an ABSENCE with. Omitting these left the
+    # unverified-claims gate unable to recognise the most common form of looking:
+    # "grep -rn X core/ -> 0 hits" is precisely the evidence it exists to ask for, and it
+    # was being reported as an unchecked claim.
+    r"|\bgrep\b|\brg\b|\bls-files\b|\bcheck-ignore\b|\bfind \.|\bwc -l\b"
+    r"|->\s*\d+\s*(hits?|rows?|matches|files?)"
+    r")",
+    re.IGNORECASE,
+)
 
 # Asserted absence or asserted totality about the existing system. Deliberately narrow:
 # these are claims of fact, not expressions of intent. "X must not happen" is a rule;
