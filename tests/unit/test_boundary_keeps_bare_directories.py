@@ -13,7 +13,7 @@ task done that is not done, or bypassing the hook -- the pair that function's ow
 says it exists to avoid.
 
 Whitespace is not the discriminator: an absolute path on this operator's machine contains a
-space (``C:/Users/Dannis Seay/.codex/config.toml``), and six such entries sit on a live work
+space (``C:/Users/Example User/.codex/config.toml``), and six such entries sit on a live work
 order today.
 """
 
@@ -31,8 +31,8 @@ from runtime.lib.enforcement import boundary_globs
 BARE_DIRECTORIES = ["docs", "schemas", "config", "tests", "dist"]
 
 PATHS_WITH_A_SPACE = [
-    "C:/Users/Dannis Seay/.codex/config.toml",
-    "C:/Users/Dannis Seay/.agents/skills",
+    "C:/Users/Example User/.codex/config.toml",
+    "C:/Users/Example User/.agents/skills",
 ]
 
 NOT_PATHS = [
