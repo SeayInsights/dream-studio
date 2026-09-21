@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Write, Edit, Grep, Bash, LSP]
   model_preference: sonnet
   estimated_duration: 2-6hrs
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Dashboard Dev — Patterns for Hook-Driven Desktop Dashboards

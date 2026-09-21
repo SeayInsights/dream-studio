@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Write, Grep, WebSearch]
   model_preference: sonnet
   estimated_duration: 30-90min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Think — Design Before Building

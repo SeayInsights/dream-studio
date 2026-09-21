@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Bash]
   model_preference: haiku
   estimated_duration: 3-5min
+  write_posture: read-only
+  lifecycle: published
 ---
 
 # Status Mode

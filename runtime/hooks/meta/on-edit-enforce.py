@@ -249,6 +249,29 @@ def _enforce(tier: str) -> tuple[str, str | None]:
                 except Exception:
                     pass  # advisory only — never affects the decision
 
+            # write_posture advisory — a mode declaring read-only should not be the
+            # one producing source writes. Observe tier, mirroring module_boundary
+            # above: the loaded-skill signal says which mode was read most recently,
+            # not which one drove this edit, and a hypothesis is enough to record a
+            # contradiction for review but not to refuse an edit.
+            if kind == "source":
+                try:
+                    active = enforcement.active_skill_posture(session_id or None)
+                    if active is not None and active[1] == "read-only":
+                        enforcement.record_observation(
+                            hook_name="on_edit_enforce",
+                            hook_type="PreToolUse",
+                            rule="write_posture_advisory",
+                            reason=(
+                                f"mode {active[0]} declares write_posture read-only,"
+                                f" and a source write reached {cand}"
+                            ),
+                            tier="observe",
+                            session_id=session_id or None,
+                        )
+                except Exception:
+                    pass  # advisory only — never affects the decision
+
             if session_id:
                 enforcement.record_edit(
                     session_id,

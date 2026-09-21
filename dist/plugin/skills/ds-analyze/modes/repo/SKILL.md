@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Grep, Bash, Agent]
   model_preference: sonnet
   estimated_duration: 30-60min
+  write_posture: read-only
+  lifecycle: published
 name: repo
 description: Repository pattern analysis and cross-repo comparison
 triggers: ["analyze repo:", "repo patterns:", "compare repos:", "repo analysis:"]

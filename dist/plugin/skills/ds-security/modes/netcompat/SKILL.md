@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Write, Grep, Bash]
   model_preference: haiku
   estimated_duration: 15-30min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Netcompat — Network/Proxy Compatibility Analyzer
