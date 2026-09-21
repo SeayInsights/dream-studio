@@ -385,4 +385,11 @@ _CORE_ENTRIES: tuple[EventTypeMeta, ...] = (
         True,
         EventCategory.PRODUCTION_EMITTED,
     ),
+    EventTypeMeta(
+        EventType.GATE_PRE_PUSH_COMPLETED,
+        "sdlc",
+        "A pre-push gate ran and produced an outcome — passed, failed, or advisory_failed",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
 )

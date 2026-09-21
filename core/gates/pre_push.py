@@ -222,6 +222,66 @@ def emit_gate_failure_event(result: GateResult) -> None:
         )
 
 
+def emit_gate_outcome_event(result: GateResult) -> None:
+    """Emit ``gate.pre_push.completed`` for a gate that ran, whatever it decided.
+
+    WHY A SECOND EVENT. ``gate.pre_push.failed`` records blocking failures only,
+    so the authority held 649 failures, 408 bypasses and zero passes. That is a
+    numerator without a denominator: a gate with no recorded failures might be
+    perfect prevention or might be dead, and nothing could tell them apart. Nine
+    of the seventeen gates wired today have never once appeared in a failure
+    record, and no query could say which kind of nine they are.
+
+    ADVISORY FAILURES WERE RECORDED NOWHERE AT ALL. The run loop read
+    ``if result.is_advisory: pass``, so an advisory gate that failed produced no
+    event of any kind -- the one tier whose whole purpose is to surface a signal
+    without blocking was the tier that surfaced nothing.
+
+    Emitted BESIDE the failure event rather than replacing it, because 649 rows
+    and whatever reads them keep working unchanged.
+
+    Best-effort, exactly like its sibling: a spool-write failure is printed and
+    never raised. The push's exit code is governed by gate results alone.
+    """
+    try:
+        from canonical.events.envelope import CanonicalEventEnvelope
+        from canonical.events.types import EventType
+        from emitters.shared.spool_writer import write_envelopes
+    except Exception as exc:  # pragma: no cover — defensive import-time guard
+        print(f"[pre-push] outcome emission unavailable: {exc}", file=sys.stderr)
+        return
+
+    if result.passed:
+        outcome = "passed"
+    elif result.is_advisory:
+        outcome = "advisory_failed"
+    else:
+        outcome = "failed"
+
+    envelope = CanonicalEventEnvelope(
+        event_type=EventType.GATE_PRE_PUSH_COMPLETED.value,
+        session_id=None,
+        payload={
+            "gate_id": result.gate_id,
+            "outcome": outcome,
+            "passed": result.passed,
+            "advisory": result.is_advisory,
+            "exit_code": result.exit_code,
+            "duration_seconds": round(result.duration_seconds, 2),
+        },
+        severity="info" if result.passed else "warning",
+        trace={"gate_id": result.gate_id, "outcome": outcome},
+    )
+    try:
+        write_envelopes([envelope])
+    except Exception as exc:
+        print(
+            f"[pre-push] spool write failed for gate.pre_push.completed "
+            f"(gate={result.gate_id}): {exc}",
+            file=sys.stderr,
+        )
+
+
 def run_pre_push_gates(
     *,
     manifest_path: Path | None = None,
@@ -247,9 +307,17 @@ def run_pre_push_gates(
     for gate in gates:
         result = run_gate(gate, repo_root=root)
         report.gates.append(result)
+        # EVERY outcome is recorded, including the ones that change nothing.
+        # Recording only blocking failures gave the authority 649 failures and
+        # zero passes, so "has this gate ever fired" had no answer and a dead
+        # gate was indistinguishable from a gate that prevents.
+        if emit_events:
+            emit_gate_outcome_event(result)
         if not result.passed:
             if result.is_advisory:
                 # Advisory failures surface as warnings but never block push.
+                # They used to emit nothing at all -- the one tier meant to
+                # surface a signal without blocking surfaced none.
                 pass
             else:
                 report.overall_passed = False
