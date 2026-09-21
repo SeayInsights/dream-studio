@@ -12,6 +12,7 @@ from core.config.sqlite_bootstrap import (
     run_migrations,
 )
 from core.event_store.studio_db import _connect, _migrations_dir
+from core.release.repo_publication_readiness import PRIVATE_CONTENT_RULES
 from core.telemetry.read_models import global_telemetry_summary
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -365,6 +366,17 @@ def test_migration_baseline_exists_in_repo_and_runtime_state_is_gitignored() -> 
     assert ".codex/" not in gitignore
 
 
+#: The scrubbed operator home path. Source under the roots below may not carry it in any
+#: spelling -- publishing a repository that names someone's home directory is what this
+#: check exists to stop.
+FORBIDDEN_HOME_PATHS = ("C:\\Users\\Example User", "C:/Users/Example User")
+
+#: The spelling a docstring must use when it needs an absolute Windows path containing a
+#: space. See test_the_two_home_path_guards_agree_on_one_placeholder for why this exact form
+#: and not an Example-named one.
+SAFE_HOME_PATH_PLACEHOLDER = "C:/Users/<given name>/.codex/config.toml"
+
+
 def test_no_operator_home_path_is_hardcoded_in_source_files() -> None:
     source_roots = [
         REPO_ROOT / "core",
@@ -374,7 +386,7 @@ def test_no_operator_home_path_is_hardcoded_in_source_files() -> None:
         REPO_ROOT / "hooks",
         REPO_ROOT / "scripts",
     ]
-    forbidden = ("C:\\Users\\Example User", "C:/Users/Example User")
+    forbidden = FORBIDDEN_HOME_PATHS
     checked: list[Path] = []
     offenders: list[str] = []
     for root in source_roots:
@@ -390,6 +402,43 @@ def test_no_operator_home_path_is_hardcoded_in_source_files() -> None:
 
     assert checked
     assert offenders == []
+
+
+def test_the_two_home_path_guards_agree_on_one_placeholder() -> None:
+    """A placeholder that satisfies one home-path guard must satisfy the other.
+
+    THE DEFECT, measured 2026-09-21. #739 committed the operator's real home path into two
+    files. #740 replaced it with a path named after the example user, because the publication
+    rule exempts a user segment beginning with that word -- and the publication gate went
+    green. But the scan above forbids that same Example-named home path outright inside
+    core/control/interfaces/runtime/hooks/scripts, and it runs in the FULL suite, which is
+    post-merge only.
+
+    So main's Full CI stayed red across three consecutive merges while every PR smoke was
+    green: the two guards disagreed about what a safe example looks like, and no single PR
+    ever saw both. The bracketed form is the one spelling both accept, pinned here rather
+    than left for the next author to rediscover the same way.
+    """
+    operator_rule = dict(PRIVATE_CONTENT_RULES)["operator_absolute_path"]
+
+    assert not operator_rule.search(SAFE_HOME_PATH_PLACEHOLDER), (
+        "the publication rule no longer exempts the bracketed placeholder that source"
+        " docstrings use, so those files would start failing publication post-merge"
+    )
+    assert not any(
+        item in SAFE_HOME_PATH_PLACEHOLDER for item in FORBIDDEN_HOME_PATHS
+    ), "the scan above no longer accepts the placeholder that source docstrings use"
+
+    # The trap itself, kept explicit: the Example-named form passes the publication rule and
+    # fails the scan. That asymmetry is what survived a green PR and broke main.
+    example_named = FORBIDDEN_HOME_PATHS[1] + "/.codex/config.toml"
+    assert not operator_rule.search(example_named)
+    assert any(item in example_named for item in FORBIDDEN_HOME_PATHS)
+
+    assert " " in SAFE_HOME_PATH_PLACEHOLDER, (
+        "the placeholder exists to show that a no-whitespace rule would drop legitimate"
+        " absolute paths; without a space it demonstrates nothing"
+    )
 
 
 def test_tests_do_not_target_live_local_db_for_validation_writes() -> None:

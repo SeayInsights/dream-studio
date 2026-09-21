@@ -538,8 +538,16 @@ def compose_module_boundary(description: str, module_boundary: str | list[str] |
     precisely the "looks declared and matches nothing" failure the guard below names.
 
     Whitespace is not the discriminator either -- an absolute path on this operator's
-    machine contains a space (``C:/Users/Example User/.codex/config.toml``), and six such
-    entries on a live work order would be lost by a no-spaces rule.
+    machine contains a space (``C:/Users/<given name>/.codex/config.toml``), and six such
+    entries on a live work order would be lost by a no-spaces rule. The placeholder is
+    spelled with angle brackets rather than a name, because two guards disagree about what
+    a safe example looks like. The publication rule exempts a user segment beginning with
+    the word Example OR with ``<``; the scrubbed-path test in
+    test_install_bootstrap_sqlite_authority forbids that same Example-named home path
+    outright. A path named after the example user satisfies the first and fails the second
+    -- which is exactly how one got here, and how main's Full CI went red for three merges
+    while every PR smoke stayed green, the publication suite being post-merge only. The
+    bracketed form passes both guards and keeps the space the example exists to demonstrate.
 
     An already-present clause is left alone: a caller who wrote it by hand is not
     second-guessed, and re-composing would duplicate it.
