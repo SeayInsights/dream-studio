@@ -471,3 +471,92 @@ def test_an_unresolvable_base_is_reported_not_silently_passed():
     result = branch_measure(base_ref="refs/heads/no-such-base-ref-anywhere")
     assert result["measured"] is False
     assert "does not resolve" in result["reason"]
+
+
+# ── The table must be able to give one seat several lanes ────────────────────
+#
+# CONSOLIDATING THE BENCH means one agent asking several adjacent questions instead of
+# several agents asking one each. Before this the table could express only one lane per
+# seat, so a second could exist only by being carried in `RESEATED` -- frozen history, not
+# an authoring surface. These pin the capability the merges depend on, and the counting
+# defect that hid behind the old shape.
+
+
+def _fresh_table(monkeypatch):
+    """A seat table with nothing declared, so a test builds exactly what it asserts on."""
+    import scripts.seat_lanes_data as data
+
+    monkeypatch.setattr(data, "SEATS", {}, raising=True)
+    monkeypatch.setattr(data, "SEAT_LANE_IDS", {}, raising=True)
+    monkeypatch.setattr(data, "RESEATED", {}, raising=True)
+    return data
+
+
+def _lane(data, seat_name, **kw):
+    data.seat(
+        seat_name,
+        question=kw.pop("question", "Q"),
+        signature=kw.pop("signature", "S"),
+        precedent=kw.pop("precedent", "P"),
+        measurement=kw.pop("measurement", "M"),
+        why=kw.pop("why", "W"),
+        **kw,
+    )
+
+
+def test_a_seat_can_hold_two_lanes_with_distinct_ids(monkeypatch):
+    """The capability every proposed seat merge depends on."""
+    import yaml
+
+    data = _fresh_table(monkeypatch)
+    _lane(data, "Boundary semantics")
+    _lane(data, "Boundary semantics", lane_id="a-second-question")
+
+    lanes = yaml.safe_load(data.render())["lanes"]
+    ids = [lane["id"] for lane in lanes]
+    assert ids == ["boundary-semantics", "a-second-question"]
+    assert {lane["seat"] for lane in lanes} == {"Boundary semantics"}
+
+
+def test_a_second_lane_without_an_id_is_refused(monkeypatch):
+    """Both would derive the same id from the seat name, and the second would overwrite
+    the first in the rendered registry -- a lane silently disappearing rather than
+    failing."""
+    import pytest as _pytest
+
+    data = _fresh_table(monkeypatch)
+    _lane(data, "Boundary semantics")
+    with _pytest.raises(ValueError, match="already holds a lane"):
+        _lane(data, "Boundary semantics")
+
+
+def test_the_reported_lane_count_is_derived_from_the_render(monkeypatch):
+    """The count used to be `len(SEATS) + len(EXTRA_LANES)` -- a second computation of the
+    same number over a different set, where EXTRA_LANES was never rendered at all. The two
+    agreed only because one seat happened to be skipped as already-carried, so a second
+    extra entry would have reported writing 31 lanes while writing 30.
+
+    Counting what was emitted is the whole fix, and this is what would have caught it.
+    """
+    import yaml
+
+    data = _fresh_table(monkeypatch)
+    _lane(data, "Alpha")
+    _lane(data, "Alpha", lane_id="alpha-second")
+    _lane(data, "Beta")
+
+    emitted = len(yaml.safe_load(data.render())["lanes"])
+    assert emitted == 3
+    assert data.lane_count() == emitted
+    assert len(data.SEATS) == 2, "two seats, three lanes -- the counts are not the same number"
+
+
+def test_the_shipped_registry_count_matches_what_it_renders():
+    """Against the real table, not a fixture: the committed registry and the generator's
+    own reported count must agree."""
+    import yaml
+
+    import scripts.seat_lanes_data as data
+
+    committed = yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))["lanes"]
+    assert data.lane_count() == len(committed)

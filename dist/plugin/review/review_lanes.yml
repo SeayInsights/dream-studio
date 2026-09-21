@@ -844,7 +844,13 @@ lanes:
     measurement: >-
       Every one of these is mechanically checkable and Dream Studio already gates most of them --
       operator_absolute_path, docs-drift and the atlas-leak gate -- so the detector here is
-      aggregation rather than new detection.
+      aggregation rather than new detection. Built as exactly that: the private-content half CALLS
+      core.release.repo_publication_readiness, which owns PRIVATE_CONTENT_RULES, rather than
+      carrying a second regex for the same rule -- the duplicate-rule shape the code-quality lane
+      exists to refuse. Only the attribution check is new, because nothing else owned it: five
+      Co-Authored-By trailers were removed from main by hand and nothing prevented the sixth. A
+      first cut also asserted SECURITY.md section headings and failed this repo's own perfectly
+      good SECURITY.md, so that clause is deferred rather than guessed at.
     standards:
       - "Diataxis documentation framework"
       - "Keep a Changelog 1.1.0"
@@ -853,10 +859,11 @@ lanes:
       - "docs/**"
       - "*.md"
       - "**/*.md"
-    judgment: true
-    why: >-
-      The constituent checks exist as separate gates already; what is missing is one lane that
-      names them as a family so a new member is added here rather than invented somewhere else.
+    defers:
+      - "an entry-point link that 404s -- a seat is handed git, grep and pytest, so a network fetch is outside what it can answer from a worktree"
+      - "a required section missing from SECURITY.md -- required by whom? Nothing here declares a section list, and a first cut that assumed GitHub's template failed this repo's own SECURITY.md, which has Reporting a Vulnerability and Scope and is fine. Convert this clause when a list is declared somewhere"
+      - "the private-content half when convened against a project that does not vendor core.release.repo_publication_readiness -- the gate reports that it did not run rather than reporting clean"
+    detector: py -m core.gates.shipped_artifact_hygiene
   - id: code-quality-and-structure
     seat: "Code quality and structure"
     question: >-
