@@ -524,15 +524,44 @@ def extract_write_targets(command: str) -> tuple[list[str], bool]:
     return list(dict.fromkeys(targets)), has_indicators
 
 
+#: A plain directory or file name with no separator -- ``docs``, ``schemas``, ``tests``.
+#: Mirrored by ``core.work_orders.mutations._is_boundary_path``; a producer that emits what
+#: the consumer discards is the failure this pair exists to prevent, so a test holds the two
+#: in step.
+_BARE_PATH_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _is_boundary_path(part: str) -> bool:
+    """Whether a comma-separated boundary entry names a path rather than prose."""
+    if not part:
+        return False
+    return "/" in part or "." in part or bool(_BARE_PATH_NAME.match(part))
+
+
 def boundary_globs(description: str) -> list[str]:
-    """Parse a WO description's ``Module boundary: a, b, c.`` clause into path
-    prefixes. Returns [] when no boundary is declared (advisory check skips)."""
-    match = re.search(r"Module boundary:\s*([^.]+(?:\.[a-z]+[^.]*)*)", description or "")
+    """Parse a WO description's ``Module boundary: a, b, c.`` clause into path prefixes.
+
+    Returns [] when no boundary is declared (the advisory check then skips).
+
+    A BARE TOP-LEVEL DIRECTORY COUNTS. Requiring ``/`` or ``.`` dropped ``docs``,
+    ``schemas``, ``config``, ``tests`` and ``dist``, so a work order that declared them
+    owned less than it said. Its own edits under those trees matched no boundary it
+    declared, and the stop hook then attributed them to whichever OTHER in-progress work
+    orders spelled a covering path -- demanding an authority write against work orders the
+    session never touched. The honest responses to that are both bad, which is the shape
+    ``in_progress_work_order`` already documents and refuses to create by recency.
+
+    The clause STOPS AT A NEWLINE. Without that bound it ran on into the following
+    paragraph: one live work order's final entry was the string
+    ``tests/unit/test_wo_verify.py`` with two newlines and a sentence of shouted prose
+    glued to it, which matches no path at all.
+    """
+    match = re.search(r"Module boundary:\s*([^.\n]+(?:\.[a-z]+[^.\n]*)*)", description or "")
     if not match:
         return []
     clause = match.group(1)
     parts = [p.strip().rstrip(".").strip() for p in clause.split(",")]
-    return [p for p in parts if p and ("/" in p or "." in p)]
+    return [p for p in parts if _is_boundary_path(p)]
 
 
 def path_in_boundary(file_path: str, project_path: str, globs: list[str]) -> bool:
