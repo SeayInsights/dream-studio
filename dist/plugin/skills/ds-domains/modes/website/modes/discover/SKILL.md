@@ -1,14 +1,16 @@
 ---
 dream_studio:
-  skill_id: ds-domains
-  pack: domains
-  mode: website/discover
+  skill_id: ds-website
+  pack: website
+  mode: discover
   mode_type: discovery
   inputs: [user_request, project_context]
   outputs: [discovery_brief_json]
   capabilities_required: [Read, Write]
   model_preference: sonnet
   estimated_duration: 5-15min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Discover — Structured Project Discovery

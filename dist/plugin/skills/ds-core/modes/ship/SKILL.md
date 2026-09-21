@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Bash, Grep]
   model_preference: sonnet
   estimated_duration: 10-30min
+  write_posture: hitl
+  lifecycle: published
 ---
 
 # Ship — Pre-Deploy Gate

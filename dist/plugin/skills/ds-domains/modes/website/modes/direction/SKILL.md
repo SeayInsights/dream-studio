@@ -1,14 +1,16 @@
 ---
 dream_studio:
-  skill_id: ds-domains
-  pack: domains
-  mode: website/direction
+  skill_id: ds-website
+  pack: website
+  mode: direction
   mode_type: creative
   inputs: [discovery_brief]
   outputs: [direction_lock]
   capabilities_required: [Read, Write]
   model_preference: sonnet
   estimated_duration: 10-20min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Direction — Deterministic Visual Direction

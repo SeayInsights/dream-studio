@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Write, Edit, Grep, Bash, LSP, Agent]
   model_preference: sonnet
   estimated_duration: 30min-4hrs
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Build — Execute With Discipline

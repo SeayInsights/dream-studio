@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Write, Bash, WebSearch, Agent]
   model_preference: sonnet
   estimated_duration: 30-120min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Website — End-to-End Design Pipeline
