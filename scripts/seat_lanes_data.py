@@ -555,18 +555,18 @@ STANDARDS: dict[str, tuple[str, ...]] = {
     "Gate-integrity engineer": ("OpenSSF Scorecard", "SLSA v1.0 Build L2+"),
     "Test-integrity inquisitor": ("ISO/IEC/IEEE 29119-4 test techniques",),
     "AuthZ and identity": (
-        "OWASP ASVS v4.0 V4 Access Control",
-        "OWASP Top 10 A01:2021 Broken Access Control",
+        "OWASP ASVS v5.0.0 V8 Authorization",
+        "OWASP Top 10 A01:2025 Broken Access Control",
         "NIST SP 800-63B session lifecycle",
     ),
     "Untrusted input and abuse limits": (
-        "OWASP ASVS v4.0 V5 Validation, Sanitization and Encoding",
-        "OWASP Top 10 A03:2021 Injection",
+        "OWASP ASVS v5.0.0 V1 Encoding and Sanitization + V2 Validation and Business Logic",
+        "OWASP Top 10 A05:2025 Injection",
         "CWE-22 path traversal",
         "CWE-409 decompression bomb",
     ),
     "Secrets and data-at-rest": (
-        "OWASP ASVS v4.0 V6 Stored Cryptography",
+        "OWASP ASVS v5.0.0 V11 Cryptography",
         "CWE-312 cleartext storage of sensitive information",
         "NIST SP 800-57 key management",
     ),
@@ -607,8 +607,8 @@ STANDARDS: dict[str, tuple[str, ...]] = {
         "Saltzer and Schroeder fail-safe defaults",
     ),
     "Observability and audit trail": (
-        "OWASP ASVS v4.0 V7 Error Handling and Logging",
-        "OWASP Top 10 A09:2021 Security Logging and Monitoring Failures",
+        "OWASP ASVS v5.0.0 V16 Security Logging and Error Handling",
+        "OWASP Top 10 A09:2025 Security Logging and Alerting Failures",
         "NIST SP 800-92 log management",
         "OpenTelemetry semantic conventions",
     ),
@@ -1347,10 +1347,11 @@ _HEADER = """# Review lanes - the questions a Dream Studio review is obliged to 
 # "a lot of prose laid on top of each other as suggestions with no rules, evals, or really
 # any real test that doing anything they are supposed to."
 #
-# THE BENCH. 29 seats: the operator's 28-seat review bench, derived from real review
-# history with unit counts per theme, plus the Event-substrate custodian, which asks
-# whether a row survives being rebuilt from its own events -- a property of this substrate
-# with no equivalent on the bench.
+# THE BENCH. {bench_size} seats asking {lane_count} lanes, derived from real review history with
+# unit counts per theme, including the Event-substrate custodian, which asks whether a row
+# survives being rebuilt from its own events -- a property of this substrate with no
+# equivalent on the bench. These two numbers are computed at render time: the header said
+# "29 seats" for as long as it took someone to notice the table rendered 22.
 #
 # EVERY LANE OWES a question, the signature of the defect, a precedent it actually came
 # from, the measurement that decided how it is answered, and exactly ONE of a runnable
@@ -1548,9 +1549,14 @@ def render() -> str:
     intact, under their new seat and keeping their original lane id. Only the seat
     changes, because only the seat was meant to. Everything else comes from `SEATS`.
     """
-    header = _HEADER.rstrip()
-    out = [header, "", "version: 2", "lanes:"]
     carried_seats = {lane["seat"] for lane in RESEATED.values()}
+    # The header's two numbers are counted off the blocks this call actually emits,
+    # after they are built. lane_count() cannot be used here: it is DERIVED FROM THE
+    # RENDER, so asking it mid-render recurses. Counting the emitted blocks is the
+    # same single computation its docstring asks for, taken at the only point where
+    # the answer exists. The header claimed 29 seats while the table rendered 22.
+    blocks: list[str] = []
+    seats_seen: set[str] = set()
     for old_id, lane in RESEATED.items():
         spec = (
             lane["question"],
@@ -1559,7 +1565,8 @@ def render() -> str:
             lane["measurement"],
             tuple(lane["enforcement"]),
         )
-        out.append(_block(old_id, lane["seat"], spec))
+        blocks.append(_block(old_id, lane["seat"], spec))
+        seats_seen.add(_seat_name(lane["seat"]))
     for seat_name, specs in SEATS.items():
         # A seat already answered by a carried-over lane does not also get a generated
         # one -- that would file the same question twice under one name, which is how a
@@ -1567,8 +1574,12 @@ def render() -> str:
         if seat_name in carried_seats:
             continue
         for declared_id, spec in zip(SEAT_LANE_IDS[seat_name], specs, strict=True):
-            out.append(_block(declared_id or _lane_id(seat_name), seat_name, spec))
-    return "\n".join(out) + "\n"
+            blocks.append(_block(declared_id or _lane_id(seat_name), seat_name, spec))
+            # _seat_name is the merge seat_count() applies; counting raw names here
+            # would report 29 for a bench that convenes 22.
+            seats_seen.add(_seat_name(seat_name))
+    header = _HEADER.rstrip().format(bench_size=len(seats_seen), lane_count=len(blocks))
+    return "\n".join([header, "", "version: 2", "lanes:", *blocks]) + "\n"
 
 
 def main(argv: list[str] | None = None) -> int:
