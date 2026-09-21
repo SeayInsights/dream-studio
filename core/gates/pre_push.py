@@ -296,9 +296,36 @@ def format_report(report: PrePushReport) -> str:
     return "\n".join(lines)
 
 
+def _print_report(text: str) -> None:
+    """Print the report without the encoder deciding whether the gates ran.
+
+    A gate's captured output is decoded with errors="replace", so a byte the
+    child's encoding could not express arrives here as U+FFFD; the report also
+    carries em dashes from the gate descriptions. Printing either to a cp1252
+    stdout raises UnicodeEncodeError -- which is what a redirected run on Windows
+    gets, and redirecting is exactly what this repo's own instructions tell
+    people to do. The whole suite then passed and the process still exited on a
+    traceback from its own last line.
+
+    Reconfiguring is tried first so the text survives intact. If that is refused
+    the text is coerced through the live encoding, losing characters rather than
+    the result: a mangled report still says which gate failed, and a traceback
+    says nothing.
+    """
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError, ValueError):
+        pass
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "ascii"
+        print(text.encode(enc, errors="replace").decode(enc, errors="replace"))
+
+
 def main(argv: list[str] | None = None) -> int:
     report = run_pre_push_gates()
-    print(format_report(report))
+    _print_report(format_report(report))
     return 0 if report.overall_passed else 1
 
 
