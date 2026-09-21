@@ -377,7 +377,22 @@ def close_work_order(
             _has_verdict(work_order_id, "review_verdict", db_path=db_path)
             or _verdict_path.is_file()
         )
-        if not _verdict_exists and skip_verify:
+        # A FORCED CLOSE DOES NOT CONVENE A REVIEW IT WILL OVERRIDE.
+        #
+        # `force` and `skip_verify` were independent, so `--force` fell through to the
+        # inline verify below -- which spawns the LLM graders and BLOCKS on them.
+        # Found by running it and watching rather than reasoning about it: the stack
+        # under a stalled forced close is close_work_order -> verify_work_order ->
+        # _run_graders_parallel -> subprocess.communicate. Measured: one forced close
+        # exceeded 600 seconds, and the most recent verdict in the live authority is
+        # `unreviewable` because `claude --print` timed out after 360s x 6 retries.
+        #
+        # Safe because it changes only whether the review is CONVENED, not whether it
+        # is REQUIRED: `independent_review` is non-bypassable for an escalated work
+        # order, so an escalated WO with no verdict still fails the gate and still
+        # cannot be forced. What stops is paying 10 minutes to generate a verdict the
+        # force flag was always going to discard.
+        if not _verdict_exists and (skip_verify or force):
             # The escape hatch works — and leaves a mark (WO-BYPASS-TELEMETRY).
             from core.gates.bypass_event import record_gate_bypass
 
