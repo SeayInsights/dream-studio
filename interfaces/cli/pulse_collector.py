@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -23,6 +24,9 @@ from core.utils.time import utcnow
 
 GITHUB_TOKEN = os.environ.get("GITHUB_PERSONAL_ACCESS_TOKEN", "")
 STALE_BRANCH_DAYS = 7
+#: Tokens already proven unusable this process, so one dead credential is not re-tried
+#: against every endpoint the pulse reads.
+_REJECTED_TOKENS: set[str] = set()
 COOLDOWN_SEC = int(os.environ.get("PULSE_COOLDOWN_SEC", "60"))
 MAX_PENDING_DRAFTS = 100
 DRAFT_STALE_DAYS = 30
@@ -32,23 +36,79 @@ def _github_repo() -> str:
     return str(state.read_config().get("github_repo") or "").strip()
 
 
-def gh_api(endpoint: str):
-    if not GITHUB_TOKEN:
-        return []
+def _gh_cli_token() -> str:
+    """The token the `gh` CLI is authenticated with, or empty when it is not.
+
+    Second credential source because the first one expires. ``GITHUB_PERSONAL_ACCESS_TOKEN``
+    is a long-lived string in the operator's environment, and when it lapses the pulse does
+    not degrade quietly -- it prints five `HTTP Error 401` lines on every prompt and reports
+    ``open_prs: 0`` and ``ci_status: unknown`` while pull requests are open and main is red.
+    Observed for a whole session: seven open pull requests read as zero. `gh` is already a
+    hard dependency of this project's workflow and refreshes its own credential, so it is the
+    natural fallback.
+    """
+    import shutil
+    import subprocess
+
+    if shutil.which("gh") is None:
+        return ""
     try:
-        req = urllib.request.Request(
-            f"https://api.github.com/{endpoint}",
-            headers={
-                "Authorization": f"Bearer {GITHUB_TOKEN}",
-                "Accept": "application/vnd.github+json",
-                "User-Agent": "dream-studio-pulse-hook",
-            },
+        proc = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            ["gh", "auth", "token"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            return json.loads(resp.read())
-    except Exception as e:
-        print(f"[on-pulse] GitHub API failed ({endpoint}): {e}", flush=True)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return (proc.stdout or "").strip() if proc.returncode == 0 else ""
+
+
+def _github_tokens() -> list[str]:
+    """Credentials to try, best first, minus any already rejected this process."""
+    ordered = [GITHUB_TOKEN, _gh_cli_token()]
+    seen: set[str] = set()
+    usable = []
+    for token in ordered:
+        if token and token not in seen and token not in _REJECTED_TOKENS:
+            seen.add(token)
+            usable.append(token)
+    return usable
+
+
+def gh_api(endpoint: str):
+    tokens = _github_tokens()
+    if not tokens:
         return []
+    last_error: Exception | None = None
+    for token in tokens:
+        try:
+            req = urllib.request.Request(
+                f"https://api.github.com/{endpoint}",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github+json",
+                    "User-Agent": "dream-studio-pulse-hook",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            last_error = e
+            # 401/403 is the credential, not the endpoint: retire it and try the next one.
+            # Any other status is about this request, so reporting it beats re-asking with a
+            # different credential that would fail the same way.
+            if e.code in (401, 403):
+                _REJECTED_TOKENS.add(token)
+                continue
+            break
+        except Exception as e:
+            last_error = e
+            break
+    print(f"[on-pulse] GitHub API failed ({endpoint}): {last_error}", flush=True)
+    return []
 
 
 def check_stale_branches(repo: str) -> list[str]:
