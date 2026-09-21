@@ -122,16 +122,19 @@ BOUNDARY_MATCH_CASES = [
     (["core"], "core/config/paths.py", True, "a declared subtree covers its files"),
     (["core"], "interfaces/cli/ds.py", False, "and nothing outside it"),
     (["core/config/paths.py"], "core/config/paths.py", True, "an exact file matches"),
-    # THE SECOND WIDENING, and the one that surprises. enforcement.py:646 accepts a
-    # DIRNAME match for any boundary containing a "/", so declaring one file silently
-    # claims its whole directory. Together with the empty-boundary rule above, these
-    # are why a stop message names two dozen work orders for a single edited file:
-    # one set claims everything, the other claims more than it wrote down.
+    # FIXED 2026-09-21, and this row is how it stays fixed. enforcement.py used to
+    # accept a DIRNAME match for any boundary containing a "/", so declaring one file
+    # silently claimed its whole directory. Measured against one edited test file on
+    # the live authority: 24 in-progress work orders claimed it, 15 of them ONLY
+    # through that widening -- each having declared a single, different test file.
+    # Removing it took that file's claimants from 24 to 9.
+    #
+    # A work order that owns a directory declares the directory.
     (
         ["core/config/paths.py"],
         "core/config/other.py",
-        True,
-        "a file boundary claims its directory",
+        False,
+        "a declared FILE claims that file, not its neighbours",
     ),
     (["core/config/paths.py"], "interfaces/cli/ds.py", False, "but not another directory"),
 ]

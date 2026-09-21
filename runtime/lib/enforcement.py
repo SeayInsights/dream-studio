@@ -647,9 +647,21 @@ def path_in_boundary(file_path: str, project_path: str, globs: list[str]) -> boo
         g_norm = g.replace("\\", "/").strip("/").lower()
         if rel_lower == g_norm or rel_lower.startswith(g_norm.rstrip("/") + "/"):
             return True
-        # 'tests/unit/test_x.py'-style file prefixes: also accept dirname match.
-        if "/" in g_norm and rel_lower.startswith(g_norm.rsplit("/", 1)[0] + "/"):
-            return True
+        # A DECLARED FILE CLAIMS THAT FILE, NOT ITS NEIGHBOURS.
+        #
+        # This used to also accept a dirname match, so a boundary naming
+        # 'tests/unit/test_x.py' claimed every file in tests/unit/. Measured on the
+        # live authority 2026-09-21 against one edited test file: 24 in-progress work
+        # orders claimed it, and 15 of those claimed it ONLY through this widening --
+        # work orders that had each declared a single, different test file.
+        #
+        # That is the same defect `in_progress_work_order` refuses two frames up, in a
+        # different costume: a claim broader than what was written down cannot support
+        # a demand for an authority write, and a stop message naming two dozen work
+        # orders is one an operator learns to route around with DS_ENFORCE=0.
+        #
+        # A work order that owns a directory declares the directory. That is one word
+        # in the clause, and it is the difference between a boundary and a guess.
     return False
 
 
