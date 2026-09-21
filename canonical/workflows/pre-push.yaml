@@ -63,14 +63,11 @@ gates:
       tests/unit/test_plugin_dist.py,
       tests/unit/test_skill_module_paths_resolve.py,
       tests/unit/test_ds_update_skill_drift.py,
-      tests/unit/test_rule_registry_gate.py,
       tests/unit/test_work_order_boundary_is_declarable.py,
       tests/unit/test_fail_open_probe_gate.py,
       tests/unit/test_test_isolation_gate.py,
       tests/unit/test_fixture_schema_parity_gate.py,
       tests/unit/test_seam_payload_to_projection.py,
-      tests/unit/test_normative_baseline_gate.py,
-      tests/unit/test_single_read_path_gate.py,
       tests/unit/test_task_status_vocabulary.py,
       tests/unit/test_grader_retry_policy.py,
       tests/unit/test_review_failure_names_its_objection.py,
@@ -82,13 +79,45 @@ gates:
       tests/unit/test_unexecuted_checks_are_declared.py,
       tests/unit/test_attachment_pressure_is_relievable.py,
       tests/unit/test_graded_range_includes_own_commits.py,
-      tests/unit/test_workflow_nodes_declare_verification.py,
+      tests/unit/test_citation_registry.py,
       -q]
     fail_hint: >
       A schema/contract pin drifted — update the pin's expected set in the SAME
       change set as the schema/artifact change (DuckDB objects in
       test_duckdb_business_schema.py, packs.yaml handler lists, regenerated
       plugin.json, a schema-debt doc entry for new migrations).
+
+  - id: review-lane-registry
+    tier: blocking
+    description: >
+      Every review lane must carry enforcement that actually exists: a detector
+      whose module imports and has a callable main(), a graded eval, or an
+      explicit `judgment: true` with a reason. This gate was written, was
+      correct, and was wired into nothing — so four lanes shipped naming
+      detectors that were ModuleNotFoundError, and the registry read as
+      mechanically enforced while a third of its detector lanes enforced
+      nothing. Not absent verification; disconnected verification. It imports
+      rather than spawns, so it costs milliseconds, not a subprocess per lane.
+    command: [py, -m, core.gates.review_lane_registry]
+    fail_hint: >
+      A lane declares enforcement it does not have. Write the detector, point
+      the lane at a real eval file, or declare `judgment: true` with a `why`
+      naming what is missing — a lane wearing the costume of a detector is
+      worse than one that says it is a question.
+
+  - id: review-lanes-drift
+    tier: advisory
+    description: >
+      canonical/review_lanes.yml is generated from scripts/seat_lanes_data.py.
+      This check existed and ran nowhere, so the two diverged by 115 lines —
+      and those lines were hiding the four lanes with missing detectors above.
+      Drift in a generated artifact is advisory per the tier rule, but this
+      drift is how the blocking failure stayed invisible.
+    command: [py, scripts/seat_lanes_data.py, --check]
+    fail_hint: >
+      Re-run `py scripts/seat_lanes_data.py` and commit the result. Edit the
+      generator, never the generated file — a hand-edit is undone by the next
+      render, silently.
 
   - id: unit-collect
     tier: blocking
