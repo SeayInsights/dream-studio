@@ -148,7 +148,8 @@ def _scan_file(text: str, rel: str, corpus: str) -> list[dict]:
         name, start, end = owner
         if name.startswith("__") or len(name) <= 2:
             continue  # too generic for a textual mention to mean anything
-        if any(_EXEMPT_MARKER in ln for ln in lines[start - 1 : end]):
+        first = start - 1  # inline `start - 1 : end` gets spaced by black, then E203 by flake8
+        if any(_EXEMPT_MARKER in ln for ln in lines[first:end]):
             continue
         if name in corpus:
             continue

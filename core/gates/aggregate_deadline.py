@@ -147,7 +147,11 @@ def _scan_file(path: Path, rel: str) -> list[dict]:
             if fstart <= lo and hi <= fend:
                 lo, hi = fstart, fend
                 break
-        return any(_EXEMPT_MARKER in line for line in lines[lo - 1 : hi])
+        # Bound to a name rather than written inline: black spaces a slice whose
+        # bound is an expression (`lines[lo - 1 : hi]`) and flake8 then reports
+        # E203 on the space it just inserted.
+        first = lo - 1
+        return any(_EXEMPT_MARKER in line for line in lines[first:hi])
 
     findings = []
     for outer in ast.walk(tree):

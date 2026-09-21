@@ -256,7 +256,8 @@ def sweep_one(budget: Budget, *, dry_run: bool = False) -> StoreResult:
             ordered = sorted(entries, key=lambda e: e.stat().st_mtime, reverse=True)
         except OSError:
             ordered = list(entries)
-        doomed.extend(ordered[budget.keep_newest :])
+        keep = budget.keep_newest
+        doomed.extend(ordered[keep:])
 
     if budget.max_bytes is not None:
         # AGE ALONE IS NOT A BUDGET. A single day of diagnostics reached 1.86 GB

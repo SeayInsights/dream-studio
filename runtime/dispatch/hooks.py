@@ -114,12 +114,9 @@ def main() -> int:
     except Exception:
         raw_payload = "{}"
 
-    try:
-        payload = json.loads(raw_payload) if raw_payload.strip() else {}
-    except (json.JSONDecodeError, ValueError):
-        payload = {}
-
-    tool_name: str = payload.get("tool_name", payload.get("toolName", ""))
+    # No parse here. `_run` is handed the RAW string and re-parses per queued
+    # record via `_tool_of`, because a drain carries several records and one
+    # main()-level tool name would have described only the first of them.
 
     try:
         plugin_root = _get_plugin_root()

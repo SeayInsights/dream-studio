@@ -18,8 +18,6 @@ Two ways a task is uncheckable, and they need different fixes:
 
 from __future__ import annotations
 
-import argparse
-import json
 import sqlite3
 from pathlib import Path
 

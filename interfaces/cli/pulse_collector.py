@@ -628,7 +628,7 @@ def run_pulse_check() -> None:
             print(f"[dream-studio] {health} - run `ds pulse` for detail", flush=True)
         return
     _sweep_disk_safe()
-    imported = _import_and_rotate_buffer()
+    _import_and_rotate_buffer()
     report, stats = generate_pulse()
 
     state.write_pulse({"timestamp": utcnow().isoformat(), **stats})

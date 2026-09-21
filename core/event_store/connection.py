@@ -12,8 +12,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from core.config import paths
-from core.config.database import get_connection, transaction
+from core.config import paths  # noqa: E402 - must follow the sys.path bootstrap above
+from core.config.database import (  # noqa: E402 - same
+    get_connection,
+    transaction,
+)
 
 # Import adapters for skill execution normalization (TC-007)
 try:
