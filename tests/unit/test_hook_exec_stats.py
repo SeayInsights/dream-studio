@@ -90,15 +90,22 @@ def test_sys_exit_zero_is_a_success_not_a_failure(
     assert by_name["block_exit"]["exit_code"] == 2
 
 
-def test_missing_handler_is_not_logged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A handler file that DOES NOT EXIST logs no execution.
+def test_missing_handler_is_logged_as_not_found(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A REGISTERED handler whose file is absent is recorded, not skipped.
 
-    Narrowed deliberately (WO becfca00). This docstring used to read "does not exist
-    (or has no main)" while the test only ever exercised the missing file, and the
-    unchecked half of that claim was load-bearing: a handler present on disk that could
-    not be imported took the same silent path, so four of them ran zero times for their
-    entire lifetime and no surface could say so. An absent file is a configuration fact;
-    a present file that will not load is a fault. Only the first is silent now.
+    THIS ASSERTION IS THE REVERSE OF THE ONE IT REPLACES, deliberately.
+    `test_missing_handler_is_not_logged` required the silence, reading an absent file as
+    configuration. That does not survive contact with `_resolve_handlers`, which HARDCODES
+    the handler list: nothing here is optional, so a missing file cannot mean "not
+    configured", only "the install is incomplete" -- a state this codebase demonstrably
+    produces, since the installer has no delete op and leaves stale trees behind.
+
+    Shipped once in 07b9d3f7, reverted in 54d95bfb because its stated cause was asserted
+    without evidence and was wrong. The mechanism was sound and went out with the bad
+    reason; the independent review of WO 2fde7846 objected to that narrowing, and task 5
+    of that work order asks for this record by name.
     """
     calls: list[dict] = []
     monkeypatch.setattr(
@@ -108,7 +115,29 @@ def test_missing_handler_is_not_logged(tmp_path: Path, monkeypatch: pytest.Monke
     dispatch_tracking.run_handlers(
         [("ghost", tmp_path / "does_not_exist.py")], "{}", "PostToolUse", tmp_path
     )
-    assert calls == []
+
+    assert len(calls) == 1, "a registered handler with no file must still be reported"
+    assert calls[0]["status"] == "not_found"
+    assert calls[0]["exit_code"] == 1
+    assert "does_not_exist.py" in (
+        calls[0]["error_message"] or ""
+    ), "the record must name the path that is missing, or it cannot be acted on"
+
+
+def test_a_missing_handler_writes_no_timing_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Timing stays execution-only: a handler that never ran has no runtime to report.
+
+    Keeps the two stores meaning different things -- hook-timing.jsonl answers "how long
+    did it take", the execution log answers "what happened to it".
+    """
+    monkeypatch.setattr("core.event_store.event_writer.insert_hook_execution", lambda **kw: None)
+    dispatch_tracking.run_handlers(
+        [("ghost", tmp_path / "does_not_exist.py")], "{}", "PostToolUse", tmp_path
+    )
+    timing = tmp_path / "hook-timing.jsonl"
+    assert not timing.exists() or "ghost" not in timing.read_text(encoding="utf-8")
 
 
 def test_handler_that_cannot_import_is_logged_as_failed(

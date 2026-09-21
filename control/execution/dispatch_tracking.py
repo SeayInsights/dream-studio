@@ -119,6 +119,32 @@ def run_handlers(
     """
     for name, path in handlers:
         if not path.is_file():
+            # A REGISTERED HANDLER WITH NO FILE IS A BROKEN INSTALL, NOT A CHOICE.
+            #
+            # This was a bare `continue`, and I defended it as "absence is configuration"
+            # when narrowing WO becfca00. That reading does not survive contact with
+            # `_resolve_handlers`, which HARDCODES the list: nothing here is optional, so a
+            # missing file cannot mean "not configured", only "the install is incomplete".
+            # The independent review of WO 2fde7846 objected to that narrowing and was
+            # right; task 5 of that work order asks for exactly this record.
+            #
+            # 07b9d3f7 shipped this and I reverted it in 54d95bfb because its stated cause
+            # -- that this silence was how three skill handlers went dark -- was asserted
+            # without evidence, and was in fact wrong (the cause was a partial installed
+            # `control` package shadowing the repo's). The revert threw out a sound
+            # mechanism along with an unsound reason for it. The reason now is evidenced
+            # and different: the installer has NO delete op, so a renamed or dropped
+            # handler leaves a stale tree behind and a missing file is a state this
+            # codebase actually produces.
+            _log_hook_execution(
+                hook_name=name,
+                hook_type=event_name,
+                started_at=_utc_iso(),
+                duration_ms=0.0,
+                exit_code=1,
+                status="not_found",
+                error_message=f"handler file does not exist: {path}",
+            )
             continue
         ran = False
         started_at = _utc_iso()
