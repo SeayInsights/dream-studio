@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Agent]
   model_preference: sonnet
   estimated_duration: 20-40min
+  write_posture: read-only
+  lifecycle: published
 ---
 
 # Domain-RE — Real Estate Analysis Engine

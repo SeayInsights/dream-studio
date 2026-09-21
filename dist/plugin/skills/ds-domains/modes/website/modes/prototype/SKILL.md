@@ -1,14 +1,16 @@
 ---
 dream_studio:
-  skill_id: ds-domains
-  pack: domains
-  mode: website/prototype
+  skill_id: ds-website
+  pack: website
+  mode: prototype
   mode_type: build
   inputs: [direction_lock, screen_inventory, navigation_map]
   outputs: [html_prototype]
   capabilities_required: [Read, Write]
   model_preference: sonnet
   estimated_duration: 20-45min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Prototype — Interactive Device Prototypes

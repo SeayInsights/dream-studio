@@ -1,7 +1,7 @@
 ---
 dream_studio:
   skill_id: ds-project
-  pack: project
+  pack: ds-project
   mode: brief
   mode_type: wizard
   inputs: [project_id]
@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Bash]
   model_preference: sonnet
   estimated_duration: 5min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Design Brief Wizard

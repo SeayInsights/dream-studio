@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Agent]
   model_preference: sonnet
   estimated_duration: 15-30min
+  write_posture: read-only
+  lifecycle: published
 ---
 
 # Coach — Claude Code Workflow Advisor

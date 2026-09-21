@@ -70,6 +70,39 @@ jobs:
           --ignore-vuln CVE-2026-52870 --ignore-vuln CVE-2026-52869
           --ignore-vuln CVE-2026-59950 --ignore-vuln PYSEC-2026-2132
 
+      - name: Stock Windows Store-alias state
+        if: runner.os == 'Windows'
+        shell: pwsh
+        # Out of the box on Windows, bare `python` is the Microsoft Store App Execution
+        # Alias: a stub that prints "Python was not found" and exits 9009 without running
+        # anything. hooks/hooks.json is a template and ships every hook as bare `python
+        # <script>`, so on such a box every Dream Studio hook is dead -- and silently, because
+        # a hook that never runs produces no error, only an absence.
+        #
+        # setup-python hides that state on a runner, which is why no job caught it and the
+        # operator's own machine did. This step puts the alias back in front of `python` so
+        # the interpreter-resolution tests run in the environment they exist for. They must
+        # pass without bare `python` ever resolving.
+        run: |
+          $real = (Get-Command python).Source
+          $shim = Join-Path $env:RUNNER_TEMP 'store-alias'
+          New-Item -ItemType Directory -Force -Path $shim | Out-Null
+          Set-Content -Encoding ascii -Path (Join-Path $shim 'python.bat') -Value @(
+            '@echo off',
+            'echo Python was not found; run without arguments to install from the Microsoft Store.',
+            'exit /b 9009'
+          )
+          $env:PATH = "$shim;$env:PATH"
+          cmd /c 'python -c "print(1)"' 2>&1 | Out-Null
+          if ($LASTEXITCODE -ne 9009) {
+            throw "the Store-alias stub is not shadowing bare python (exit $LASTEXITCODE) -- this step would prove nothing"
+          }
+          & $real -m pytest `
+            tests/unit/test_installed_hook_interpreter_resolves.py `
+            tests/unit/test_hook_runtime_reliability.py `
+            -q --tb=short
+          if ($LASTEXITCODE -ne 0) { throw "hooks do not survive the stock Windows Store-alias state" }
+
       - name: Focused smoke tests
         run: >
           python -m pytest

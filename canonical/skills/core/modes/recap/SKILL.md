@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Bash]
   model_preference: haiku
   estimated_duration: 5-10min
+  write_posture: read-only
+  lifecycle: published
 ---
 
 # Recap — Build Memory Capture
