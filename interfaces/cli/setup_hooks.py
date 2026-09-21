@@ -40,6 +40,30 @@ def _collect_commands(hook_list: list[dict]) -> set[str]:
     return commands
 
 
+def resolve_hook_command(command: str) -> str:
+    """Replace a leading bare ``python`` with an interpreter that actually resolves.
+
+    hooks/hooks.json is a TEMPLATE and cannot carry a machine-specific path, so every hook in
+    it begins with bare ``python``. This merge used to copy that verbatim into the operator's
+    settings.json, and on a stock Windows box bare ``python`` is the Microsoft Store App
+    Execution Alias -- a zero-byte stub that prints "Python was not found" and exits 9009
+    without running anything. Every Dream Studio hook would be silently dead on a machine
+    where the alias is left enabled, which is the out-of-the-box state.
+
+    The answer already exists in this repository: ``claude_code_shared._python_cmd`` resolves
+    the absolute ``sys.executable`` for the OTHER install path, and its own docstring records
+    the same lesson ("the bare ``py`` launcher ... is not reliably resolvable in the hook exec
+    environment"). Two install doors disagreed about the interpreter; this one now asks the
+    same function rather than carrying a second answer.
+    """
+    from integrations.installer.claude_code_shared import _python_cmd
+
+    prefix = "python "
+    if not command.startswith(prefix):
+        return command
+    return _python_cmd() + " " + command[len(prefix) :]  # noqa: E203
+
+
 def step_settings_merge() -> StepResult:
     """FR-S03: Non-destructively merge hooks/hooks.json into ~/.claude/settings.json."""
     name = "settings.json hooks merge"
@@ -69,11 +93,16 @@ def step_settings_merge() -> StepResult:
             existing_commands = _collect_commands(existing_groups)
 
             for source_group in source_groups:
+                # Resolve the interpreter BEFORE the dedupe comparison, so a re-run matches what
+                # was actually written last time rather than the template form and appends a
+                # duplicate hook on every `ds setup`.
+                resolved_hooks = [
+                    {**hook, "command": resolve_hook_command(hook.get("command", ""))}
+                    for hook in source_group.get("hooks", [])
+                ]
                 # Determine which hook entries in this group are new
                 new_hooks = [
-                    hook
-                    for hook in source_group.get("hooks", [])
-                    if hook.get("command") not in existing_commands
+                    hook for hook in resolved_hooks if hook.get("command") not in existing_commands
                 ]
                 if not new_hooks:
                     continue
