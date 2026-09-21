@@ -1,0 +1,18 @@
+[package]
+name = "ds-enforce"
+version = "0.1.0"
+edition = "2021"
+description = "PreToolUse edit enforcement. Decides allow/deny before every Edit, Write and Bash."
+
+# rusqlite reads the authority; `bundled` compiles SQLite in so the binary does not
+# depend on a system library being present and the right version -- a hook that
+# cannot load is a hook that silently stops enforcing.
+[dependencies]
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"   # a blocking hook must not unwind into the user's terminal
+strip = true

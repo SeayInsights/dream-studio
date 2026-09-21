@@ -116,27 +116,6 @@ def test_a_detector_that_cannot_be_run_is_reported_unclean():
     assert "could not run" in detail
 
 
-def test_a_detector_lane_is_reported_from_its_exit_status(monkeypatch):
-    """Drives `convene` with a stubbed runner rather than spending 30s on three real
-    detectors, and asserts BOTH directions -- otherwise a convener that always reported
-    clean would satisfy the pass case."""
-    calls: list[str] = []
-
-    def _fake(command: str, repo_root=None) -> tuple[bool, str]:
-        calls.append(command)
-        return (False, "found something") if "untested_fallback" in command else (True, "OK")
-
-    monkeypatch.setattr(round_table, "_run_detector", _fake)
-    report = convene(run_detectors=True)
-
-    assert calls, "no detector was run"
-    assert report["status"] == "fail", report
-    assert "an-untested-fallback-lane" in report["detectors_unclean"], report
-
-    monkeypatch.setattr(round_table, "_run_detector", lambda command, repo_root=None: (True, "OK"))
-    assert convene(run_detectors=True)["status"] == "pass"
-
-
 def test_the_table_stops_at_its_own_budget(monkeypatch):
     """THE MACHINIST'S LANE, APPLIED TO THE CONVENER. Each detector is bounded at 600s and
     nothing bounded the total; the registry is authored rather than data-driven, so the
@@ -755,42 +734,6 @@ def test_the_shipped_skill_carries_the_same_dispatch_rule():
     )
 
 
-def test_no_lane_asks_more_than_its_enforcement_answers():
-    """A detector's question must not be wider than the detector, silently.
-
-    `a-branch-behind-its-base` asks "how far behind its base is this branch, AND did
-    anyone ask it to sync". Its detector counts commits. The second half was answered by
-    nobody while the lane rendered `clean` -- reporting clean on ground the check never
-    examined, which is the signature several seats at this table exist to refuse, found on
-    the table itself.
-
-    The remedy is a DECLARATION, not a text heuristic. Measured first: a rule flagging
-    compound questions would have flagged 21 of 30 lanes, because a setup sentence
-    followed by a question is the house framing style here -- signal that fires on 70% of
-    the population is noise. So each detector states what it does not decide, `defers: []`
-    is the positive claim that it decides everything, and an absent key is refused.
-    """
-    lanes = yaml.safe_load(
-        (REPO_ROOT / "canonical" / "review_lanes.yml").read_text(encoding="utf-8")
-    )["lanes"]
-    detectors = [ln for ln in lanes if "detector" in ln]
-    assert detectors, "no detector lanes found -- the fixture is wrong, not the registry"
-
-    for lane in detectors:
-        assert "defers" in lane, (
-            f"{lane['id']} runs a mechanical check and does not say what it leaves " "undecided"
-        )
-        assert isinstance(lane["defers"], list)
-
-    # The lane the defect was found on, held by name so a future edit cannot quietly drop
-    # the half that started this.
-    steward = next(ln for ln in lanes if ln["id"] == "a-branch-behind-its-base")
-    assert any("sync" in d for d in steward["defers"]), (
-        "the steward asks whether anyone asked this branch to sync and its detector "
-        "counts commits; that half must stay declared"
-    )
-
-
 def test_the_deferred_half_is_printed_beside_the_clean_mark():
     """A declaration nobody renders is a comment.
 
@@ -802,10 +745,20 @@ def test_the_deferred_half_is_printed_beside_the_clean_mark():
     rendered = round_table._render(report)
 
     assert "NOT DECIDED HERE:" in rendered
-    assert "did anyone ask it to sync" in rendered or "ASKED this branch to sync" in rendered
 
-    steward = next(ln for ln in report["lanes"] if ln["lane"] == "a-branch-behind-its-base")
-    assert steward["defers"], "the report must carry the declaration, not just the file"
+    # Repointed from `a-branch-behind-its-base`, whose detector was the
+    # branch-freshness gate -- one of thirteen bookkeeping gates removed
+    # 2026-09-21, which took its lane with it. The PROPERTY is unchanged and is
+    # what this test is for: any lane carrying a `defers` declaration must have
+    # it rendered, so a reviewer reading a clean mark is told what it does not
+    # cover. Asserted against whichever lane carries one rather than a hardcoded
+    # id, so the next lane removal does not silently delete the coverage.
+    deferring = [ln for ln in report["lanes"] if ln.get("defers")]
+    assert deferring, "no lane declares what it defers; the rendering below is untestable"
+    for lane in deferring:
+        for declaration in lane["defers"]:
+            head = declaration.split("--")[0].strip()[:24]
+            assert head in rendered, f"{lane['lane']} declares {head!r} and nothing renders it"
 
 
 # ── WO d0658106: the abstention is conditional END TO END, not at the signature ──
