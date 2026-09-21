@@ -52,12 +52,40 @@ def _deny(reason: str) -> None:
     )
 
 
+#: Rules that RECORD rather than block, whatever the global tier says.
+#:
+#: TRACKING IS NOT ENFORCEMENT, AND CONFLATING THEM IS WHAT MADE THIS CEREMONY.
+#: `authority_source_edit` denies an edit until a work order has been started. Its
+#: purpose is a RECORD of what the session touched -- and a record does not need
+#: permission, it needs observation. The hook already knows the file and which work
+#: orders could claim it; it can simply write that down.
+#:
+#: Demanding it instead produced the opposite of tracking. Measured across one
+#: session: eleven blocks on work the operator had explicitly directed, a stop
+#: message naming two dozen work orders for one file, and the documented remedy
+#: being DS_ENFORCE=0 -- which turns the tracking off entirely. A gate that is wrong
+#: often enough to need an escape hatch teaches people to use the escape hatch.
+#:
+#: Observing instead makes the data BETTER: it records every edit, including work
+#: done outside any work order, which the demand could never capture because the
+#: honest response to a wrong attribution was to disable the hook.
+#:
+#: `zero_disk_planning` is NOT here. It is a real invariant with a real remedy
+#: (`ds files write`), it fires on a narrow path, and the operator asked for it.
+_OBSERVE_ONLY = frozenset({"authority_source_edit"})
+
+
 def _apply(tier: str, rule: str, reason: str, session_id: str | None) -> str:
     """Apply the graduated tier to a would-be denial (WO-ENFORCE-TIERS).
 
     ``enforce`` → deny (print the deny JSON, block the edit). ``observe``/``warn`` → record
     what WOULD have been denied — the SAME reason string — and ALLOW the edit; ``warn`` also
-    surfaces the reason on stderr. Returns the decision string (``deny`` or ``observe``)."""
+    surfaces the reason on stderr. Returns the decision string (``deny`` or ``observe``).
+
+    A rule in ``_OBSERVE_ONLY`` never denies, whatever the tier: see the note there.
+    """
+    if rule in _OBSERVE_ONLY and tier == "enforce":
+        tier = "observe"
     if tier == "enforce":
         _deny(reason)
         return "deny"

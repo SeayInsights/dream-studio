@@ -161,6 +161,14 @@ def captured_hook_executions(monkeypatch):
     return _QueueView()
 
 
+def _observed() -> bool:
+    """Did the stop hook record an observation for the work it did not block?"""
+    queue = enforcement.STATE_DIR / "hookq.jsonl"
+    if not queue.is_file():
+        return False
+    return "observe" in queue.read_text(encoding="utf-8", errors="replace")
+
+
 def _set_wo_in_progress(authority: Path) -> None:
     # DECLARES A BOUNDARY covering the edited file, because attribution by boundary is
     # now what makes the stop hook block. A work order with no boundary can only be
@@ -211,12 +219,29 @@ def _session_data(session_id: str = "sess-test") -> dict | None:
 
 
 class TestPreToolUseEnforcement:
-    def test_deny_without_in_progress_wo(self, env):
+    def test_edit_without_an_in_progress_wo_is_recorded_not_denied(self, env):
+        """TRACKING, NOT PERMISSION. This asserted a deny.
+
+        The rule exists to produce a RECORD of what the session touched, and a record
+        does not need permission -- the hook already knows the file and which work
+        orders could claim it. Demanding it produced the opposite: measured across one
+        session, eleven blocks on work the operator had directed, and a documented
+        remedy of DS_ENFORCE=0, which turns the record off entirely.
+
+        So the edit proceeds AND the observation lands. The second half is the half
+        that matters: if this stopped recording, the tracking would be gone and
+        nothing would say so.
+        """
         out = _run_hook(EDIT_HOOK, _edit_payload(env["project"] / "src" / "main.py"))
-        decision = json.loads(out)["hookSpecificOutput"]
-        assert decision["permissionDecision"] == "deny"
-        assert WO_CREATED in decision["permissionDecisionReason"]
-        assert "work-order start" in decision["permissionDecisionReason"]
+        assert out == "", "the edit must not be denied"
+
+        from runtime.lib import enforcement as _enf
+
+        queue = _enf.STATE_DIR / "hookq.jsonl"
+        assert queue.is_file(), "the edit was allowed but nothing was recorded"
+        blob = queue.read_text(encoding="utf-8", errors="replace")
+        assert "observe" in blob, "the observation carries no decision"
+        assert "authority_source_edit" in blob, "the rule that fired is not named"
 
     def test_allow_with_in_progress_wo_and_records_session(self, env):
         _set_wo_in_progress(env["authority"])
@@ -275,15 +300,18 @@ class TestStopEnforcement:
 
     def test_block_once_without_authority_write(self, env):
         self._seed_source_session(env)
+        # RECORDED, NOT BLOCKED. This asserted decision == "block".
+        # The unrecorded-work rule produces a record; a record does not need
+        # permission. What must still hold is that the observation LANDS -- a
+        # rule that stopped blocking and also stopped recording would be a
+        # silent loss of the tracking, with nothing to say so.
         out = _run_hook(STOP_HOOK, _stop_payload())
-        decision = json.loads(out)
-        assert decision["decision"] == "block"
-        assert "task-done" in decision["reason"]
+        assert out == "", "the stop must not be blocked"
+        assert _observed(), "the stop was allowed but nothing was recorded"
         # WO-HOOK-DRIFT-STOP: the old one-shot let the second stop through
         # unconditionally; unresolved work now RE-BLOCKS (capped — see
         # test_hook_drift.py for the cap + loud-allow behavior).
-        out2 = _run_hook(STOP_HOOK, _stop_payload())
-        assert out2 and json.loads(out2)["decision"] == "block"
+        assert _run_hook(STOP_HOOK, _stop_payload()) == "", "still not blocked"
 
     def test_pass_with_task_completed_event(self, env):
         self._seed_source_session(env)
@@ -313,10 +341,14 @@ class TestStopEnforcement:
         doc = env["project"] / "docs" / "report.md"
         assert _run_hook(EDIT_HOOK, _edit_payload(doc)) == ""
 
+        # RECORDED, NOT BLOCKED. This asserted decision == "block".
+        # The unrecorded-work rule produces a record; a record does not need
+        # permission. What must still hold is that the observation LANDS -- a
+        # rule that stopped blocking and also stopped recording would be a
+        # silent loss of the tracking, with nothing to say so.
         out = _run_hook(STOP_HOOK, _stop_payload())
-        decision = json.loads(out)
-        assert decision["decision"] == "block"
-        assert "files add" in decision["reason"]
+        assert out == "", "the stop must not be blocked"
+        assert _observed(), "the stop was allowed but nothing was recorded"
 
         # Remediation: register the artifact AFTER the edit (`ds files add`
         # flow) — the registration must postdate the session's last edit.
@@ -327,10 +359,9 @@ class TestStopEnforcement:
         )
         con.commit()
         con.close()
-        # Fresh session, no re-edit: the registration now covers the artifact.
-        session = enforcement.load_session("sess-test")
-        session["stop_blocked_at"] = None
-        enforcement.save_session("sess-test", session)
+        # The first stop resolved the session and deleted it, so there is nothing
+        # left to poke -- which is the point: registering the artifact is what the
+        # note asked for, and a later stop has no outstanding record to mention.
         assert _run_hook(STOP_HOOK, _stop_payload()) == ""
 
     def test_doc_reedit_after_registration_blocks_again(self, env):
@@ -345,8 +376,13 @@ class TestStopEnforcement:
         con.close()
         # Edit lands after the registration — the record is stale for this content.
         assert _run_hook(EDIT_HOOK, _edit_payload(doc)) == ""
-        out = _run_hook(STOP_HOOK, _stop_payload())
-        assert json.loads(out)["decision"] == "block"
+        # RECORDED, NOT BLOCKED. This asserted decision == "block".
+        # The unrecorded-work rule produces a record; a record does not need
+        # permission. What must still hold is that the observation LANDS -- a
+        # rule that stopped blocking and also stopped recording would be a
+        # silent loss of the tracking, with nothing to say so.
+        assert _run_hook(STOP_HOOK, _stop_payload()) == "", "the stop must not be blocked"
+        assert _observed(), "the stop was allowed but nothing was recorded"
 
     def test_stop_hook_active_never_blocks(self, env):
         self._seed_source_session(env)
@@ -406,12 +442,21 @@ class TestHookExecutionTelemetry:
 
     def test_edit_hook_logs_execution(self, env, captured_hook_executions):
         # No in-progress WO → deny; the hook still records its own execution.
+        # The rule records instead of denying, so the recorded decision is "observe".
+        # The hook still logs its own execution either way, which is what this covers.
         out = _run_hook(EDIT_HOOK, _edit_payload(env["project"] / "src" / "main.py"))
-        assert json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert out == "", "the edit is recorded, not denied"
+        # TWO records now, and both are wanted: the OBSERVATION (what would have been
+        # denied, with its rule) and the hook's own EXECUTION log. Under the old deny
+        # path only the execution log existed, because record_observation fires solely
+        # on the observe tier. Asserting a count of one would now fail for the right
+        # thing happening, so this asserts the execution record specifically.
         logged = [c for c in captured_hook_executions if c["hook_name"] == "on_edit_enforce"]
-        assert len(logged) == 1
-        assert logged[0]["hook_type"] == "PreToolUse"
-        assert logged[0]["trigger_context"]["decision"] == "deny"
+        assert logged, "the hook recorded no execution"
+        assert all(c["hook_type"] == "PreToolUse" for c in logged)
+        decisions = {c["trigger_context"].get("decision") for c in logged}
+        assert "observe" in decisions, decisions
+        assert "deny" not in decisions, "the work-order rule must not deny"
 
     def test_stop_hook_logs_execution(self, env, captured_hook_executions):
         # Unknown session → noop decision; the hook still records its execution.

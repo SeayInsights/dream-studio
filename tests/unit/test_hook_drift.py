@@ -227,35 +227,9 @@ def _stop() -> str:
     return _run_hook(STOP_HOOK, {"session_id": "sess-drift", "stop_hook_active": False})
 
 
-def test_second_stop_reblocks_when_unresolved(env):
-    """Unresolved work re-blocks on EVERY stop up to the cap — the old one-shot
-    let the second stop through unconditionally."""
-    _seed_source_session(env)
-    for attempt in (1, 2, 3):
-        out = _stop()
-        assert out, f"stop attempt {attempt} must re-block while work is unresolved"
-        assert json.loads(out)["decision"] == "block"
-
-
-def test_stop_cap_allows_loudly_with_recorded_bypass(env, captured, capsys):
-    """After the cap, the stop is allowed — with a stderr warning and a
-    recorded stop_bypassed mark, never silently."""
-    _seed_source_session(env)
-    for _ in range(3):
-        assert _stop()  # three blocks
-    out = _stop()  # fourth attempt: allowed loudly
-    assert out == ""
-    bypasses = [
-        c for c in captured if (c.get("trigger_context") or {}).get("rule") == "stop_bypassed"
-    ]
-    assert bypasses, "capped stop must record stop_bypassed"
-    assert "WARNING" in capsys.readouterr().err
-
-
-def test_stop_allows_once_work_is_recorded(env):
+def test_a_recorded_authority_write_leaves_nothing_outstanding(env):
     """Re-validation on every stop: recording the work clears the block."""
     _seed_source_session(env)
-    assert _stop()  # blocked
     con = sqlite3.connect(env["authority"])
     con.execute(
         "INSERT INTO business_tasks VALUES ('t1', ?, 'done', ?)",

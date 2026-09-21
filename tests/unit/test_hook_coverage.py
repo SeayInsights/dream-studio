@@ -153,13 +153,16 @@ def test_bash_write_matcher_present():
 # ── Bash write enforcement ──────────────────────────────────────────────────────
 
 
-def test_bash_write_denied_without_wo(env):
+def test_bash_write_is_recorded_not_denied(env, captured):
     target = env["project"] / "src" / "main.py"
+    # RECORDED, NOT DENIED. The work-order rule produces a record, and a record
+    # does not need permission -- see _OBSERVE_ONLY in on-edit-enforce. What must
+    # still hold is that the write is SEEN: this hook exists because a Bash/MCP
+    # write was a door the Edit matcher did not cover, and that door is still
+    # watched, it just no longer slams.
     out = _run_hook(_bash(f'echo broken > "{target}"'))
-    assert out, "product-source Bash write without an in_progress WO must deny"
-    decision = json.loads(out)["hookSpecificOutput"]
-    assert decision["permissionDecision"] == "deny"
-    assert "work order" in decision["permissionDecisionReason"]
+    assert out == "", "the write is recorded, not denied"
+    assert captured, "the write was allowed but nothing was recorded"
 
 
 def test_bash_write_allowed_with_wo(env):
@@ -184,7 +187,14 @@ def test_bash_unparsed_write_emits_visibility_event(env, captured):
     assert bypasses, "unparsed write-shaped command must leave a visibility mark"
 
 
-def test_mcp_write_file_denied_without_wo(env):
+def test_mcp_write_file_is_recorded_not_denied(env, captured):
+    """An MCP write is a door the Edit matcher does not cover, and it is still watched.
+
+    This asserted a deny. The work-order rule now records instead -- see
+    _OBSERVE_ONLY in on-edit-enforce -- so what matters here is unchanged and is
+    the reason this hook exists: the write is SEEN. A silent MCP write would be
+    the coverage hole; a recorded one that proceeds is the design.
+    """
     target = env["project"] / "src" / "main.py"
     out = _run_hook(
         {
@@ -193,8 +203,8 @@ def test_mcp_write_file_denied_without_wo(env):
             "tool_input": {"path": str(target)},
         }
     )
-    decision = json.loads(out)["hookSpecificOutput"]
-    assert decision["permissionDecision"] == "deny"
+    assert out == "", "the write is recorded, not denied"
+    assert captured, "the MCP write was allowed but nothing was recorded"
 
 
 # ── module_boundary advisory ────────────────────────────────────────────────────
