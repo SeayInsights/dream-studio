@@ -558,9 +558,22 @@ def close_work_order(
             _criteria_report = {}
 
         _ac_stats: dict[str, Any] = {}
-        ac_failures = _run_ac_gate(
-            conn, work_order_id=work_order_id, db_path=db_path, stats=_ac_stats
-        )
+        if force:
+            # A FORCED CLOSE DOES NOT PAY FOR AN ANSWER IT HAS ALREADY OVERRIDDEN.
+            # This gate executes the work order's TEST-CHECK node ids -- real pytest
+            # runs -- and it ran BEFORE the force check, so `--force` skipped the
+            # verdict and not the work. Measured 2026-09-21: a single forced close
+            # timed out at 600 seconds, which is a force that nobody can use.
+            #
+            # Recorded as NOT EVALUATED rather than as a pass. "I did not look" and
+            # "there was nothing" have different remedies, and collapsing them is how
+            # a gate starts passing for the wrong reason.
+            ac_failures = []
+            _ac_stats["skipped"] = "forced close: acceptance criteria not evaluated"
+        else:
+            ac_failures = _run_ac_gate(
+                conn, work_order_id=work_order_id, db_path=db_path, stats=_ac_stats
+            )
         gate_failures.extend(ac_failures)
 
         # Re-run the originating symptom SQL-CHECK (if captured at registration).
