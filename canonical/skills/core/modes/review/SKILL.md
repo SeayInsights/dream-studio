@@ -130,17 +130,17 @@ on the standard rather than on seniority.
 
 8. **AuthZ and identity** — *Which principal is this, what may it do, and what happens to the sessions that already exist when that answer changes?*
    - shape: Permission derive-and-intersect that widens, a token class mistaken for another, admin scope acquired by a path nobody enumerated, or a lifecycle where revocation does not revoke.
-   - standards: OWASP ASVS v4.0 V4 Access Control, OWASP Top 10 A01:2021 Broken Access Control, NIST SP 800-63B session lifecycle
+   - standards: OWASP ASVS v5.0.0 V8 Authorization, OWASP Top 10 A01:2025 Broken Access Control, NIST SP 800-63B session lifecycle
    - answered by: declared judgment
 
 9. **Boundary semantics** — *What is the full capability surface of the thing being guarded, as opposed to what the guard's own rule list says about it?*
    - shape: A guard that enumerates the attacks it knows. The format has a mechanism the rule list never named -- a PAX header, a nested archive, a decompression ratio -- and the guard reports clean.
-   - standards: OWASP ASVS v4.0 V5 Validation, Sanitization and Encoding, OWASP Top 10 A03:2021 Injection, CWE-22 path traversal, CWE-409 decompression bomb
+   - standards: OWASP ASVS v5.0.0 V1 Encoding and Sanitization + V2 Validation and Business Logic, OWASP Top 10 A05:2025 Injection, CWE-22 path traversal, CWE-409 decompression bomb
    - answered by: graded eval
 
 10. **Secrets and data-at-rest** — *Where does this secret come to rest, who can read it there, and what rotates it?*
    - shape: A credential written somewhere durable with the wrong mode or the wrong scope -- a cluster dump in plaintext, a secret store with no condition, a PAT seeded into a script that ships.
-   - standards: OWASP ASVS v4.0 V6 Stored Cryptography, CWE-312 cleartext storage of sensitive information, NIST SP 800-57 key management
+   - standards: OWASP ASVS v5.0.0 V11 Cryptography, CWE-312 cleartext storage of sensitive information, NIST SP 800-57 key management
    - answered by: declared judgment
 
 11. **Supply chain and provenance** — *What exactly is being installed and published here, and does the identity signing it match the identity that built it?*
@@ -185,7 +185,7 @@ on the standard rather than on seniority.
 
 19. **Boundary semantics** — *A value is produced and honestly computed. Does anything actually read it, and does every path that matters leave a record?*
    - shape: A produced value with no reader, or a failure path that returns before it audits. The diagnostic a document promises and the code never emits.
-   - standards: OWASP ASVS v4.0 V7 Error Handling and Logging, OWASP Top 10 A09:2021 Security Logging and Monitoring Failures, NIST SP 800-92 log management, OpenTelemetry semantic conventions
+   - standards: OWASP ASVS v5.0.0 V16 Security Logging and Error Handling, OWASP Top 10 A09:2025 Security Logging and Alerting Failures, NIST SP 800-92 log management, OpenTelemetry semantic conventions
    - answered by: graded eval
 
 20. **Interface conformance** — *Does this component take the promotion path, and does the styling actually reach the browser?*

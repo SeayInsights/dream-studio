@@ -1,5 +1,5 @@
 # GitHub Actions Security & Best Practices
-# Source: sdras/awesome-actions (21.7k stars)
+# Source: sdras/awesome-actions
 
 security_patterns:
   pin_actions_to_sha: true  # Not branch/tag (immutable)

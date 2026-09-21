@@ -2,7 +2,7 @@
 
 ## Technical Writing
 
-### awesome-docs (824 stars)
+### awesome-docs
 **URL**: https://github.com/testthedocs/awesome-docs
 
 Documentation best practices including:

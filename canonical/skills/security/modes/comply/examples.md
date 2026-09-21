@@ -60,7 +60,7 @@ For each framework in the resolved list:
     "rule_id": "<org>-inj-001",
     "severity": "HIGH",
     "cwe": ["CWE-89"],
-    "owasp": ["A03:2021"],
+    "owasp": ["A05:2025"],
     "message": "...",
     "location": "file:line"
   },

@@ -156,8 +156,8 @@ lanes:
       -- a React view reading a Python-shaped hook -- so a detector would fire 588 times and still
       miss the instance that created the lane. Graded against a fixture instead.
     standards:
-      - "OWASP ASVS v4.0 V7 Error Handling and Logging"
-      - "OWASP Top 10 A09:2021 Security Logging and Monitoring Failures"
+      - "OWASP ASVS v5.0.0 V16 Security Logging and Error Handling"
+      - "OWASP Top 10 A09:2025 Security Logging and Alerting Failures"
       - "NIST SP 800-92 log management"
       - "OpenTelemetry semantic conventions"
     eval: tests/evals/test_review_lane_value_reaches_a_reader.py
@@ -275,8 +275,8 @@ lanes:
       surface of a library is documented in the library, and no static read of this repo can
       enumerate what `tarfile` does with bytes it never yields.
     standards:
-      - "OWASP ASVS v4.0 V5 Validation, Sanitization and Encoding"
-      - "OWASP Top 10 A03:2021 Injection"
+      - "OWASP ASVS v5.0.0 V1 Encoding and Sanitization + V2 Validation and Business Logic"
+      - "OWASP Top 10 A05:2025 Injection"
       - "CWE-22 path traversal"
       - "CWE-409 decompression bomb"
     eval: tests/evals/test_review_lane_the_surface_outside_the_rules.py
@@ -357,8 +357,8 @@ lanes:
       intersecting grants are correct or catastrophic depending on the principal, which no static
       scan of a changed file can decide.
     standards:
-      - "OWASP ASVS v4.0 V4 Access Control"
-      - "OWASP Top 10 A01:2021 Broken Access Control"
+      - "OWASP ASVS v5.0.0 V8 Authorization"
+      - "OWASP Top 10 A01:2025 Broken Access Control"
       - "NIST SP 800-63B session lifecycle"
     judgment: true
     why: >-
@@ -380,7 +380,7 @@ lanes:
       this seat adds is scope and rotation, which are properties of the deployment rather than of
       the text.
     standards:
-      - "OWASP ASVS v4.0 V6 Stored Cryptography"
+      - "OWASP ASVS v5.0.0 V11 Cryptography"
       - "CWE-312 cleartext storage of sensitive information"
       - "NIST SP 800-57 key management"
     scope:

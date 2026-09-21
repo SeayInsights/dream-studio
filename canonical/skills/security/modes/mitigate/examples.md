@@ -13,7 +13,7 @@ Each mitigation is one JSON object (stored as a row in `mitigations.csv`):
   "title": "Sensitive data logged without masking",
   "severity": "HIGH",
   "cwe": "CWE-532",
-  "owasp_category": "A09:2021",
+  "owasp_category": "A09:2025",
   "repo": "vendor-portal",
   "file": "auth.py",
   "line": 34,
