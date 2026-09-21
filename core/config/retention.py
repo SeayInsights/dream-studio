@@ -375,6 +375,7 @@ def stale_worktrees(repo_root: Path | None = None) -> list[tuple[str, int]]:
             cwd=str(root),
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=15,
         ).stdout
     except (OSError, subprocess.SubprocessError):
@@ -417,6 +418,7 @@ def _has_unmerged_work(worktree: Path, repo_root: Path) -> bool:
             cwd=str(worktree),
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=15,
         ).stdout.strip():
             return True  # uncommitted changes
@@ -426,6 +428,7 @@ def _has_unmerged_work(worktree: Path, repo_root: Path) -> bool:
             cwd=str(worktree),
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=15,
         ).stdout.strip()
         if not head:
@@ -436,6 +439,7 @@ def _has_unmerged_work(worktree: Path, repo_root: Path) -> bool:
             cwd=str(repo_root),
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=30,
         ).stdout
         return not any(

@@ -255,6 +255,14 @@ def _collect_hook_file_ops(
 _EXCLUDED_SKILL_DIRS = frozenset({"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"})
 _EXCLUDED_SKILL_SUFFIXES = frozenset({".pyc", ".pyo", ".pyd"})
 
+#: REVIEWS.md is a skill's review history, not its instructions. It exists because
+#: 104,393 bytes of "Last reviewed ..." notes were living inside ds-workorder's
+#: SKILL.md as HTML comments -- invisible in rendered markdown, and charged in full
+#: to every agent that loaded the file (86% of it, ~26K tokens). Moving them to a
+#: sidecar removed that cost here; shipping the sidecar to every install would put
+#: it straight back, one directory over. The audit trail stays in the repo.
+_EXCLUDED_SKILL_NAMES = frozenset({"REVIEWS.md"})
+
 
 def _collect_skill_dir_ops(
     skill_dir: Path,
@@ -276,7 +284,11 @@ def _collect_skill_dir_ops(
         # a compiled artifact whose interpreter tag may not match the reader's, and a
         # .pyc is rewritten on every import, so its hash never settles and any
         # content-hash drift check over the skill tree reports drift forever.
-        if _EXCLUDED_SKILL_DIRS.intersection(rel.parts) or rel.suffix in _EXCLUDED_SKILL_SUFFIXES:
+        if (
+            _EXCLUDED_SKILL_DIRS.intersection(rel.parts)
+            or rel.suffix in _EXCLUDED_SKILL_SUFFIXES
+            or rel.name in _EXCLUDED_SKILL_NAMES
+        ):
             continue
         target = target_dir / rel
         file_hash = _compute_file_hash_chunked(file_path)
