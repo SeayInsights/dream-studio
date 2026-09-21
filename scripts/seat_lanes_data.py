@@ -973,13 +973,16 @@ RESEATED: dict[str, dict] = {
         "raises instead of returning 200, and the "
         "consumer is the local UI. The change was "
         "real, the body did not name it.",
-        "measurement": "A SIBLING OF AN EXISTING GATE, not a new "
-        "one. `evidence-backed-output` already "
-        "audits what a push publishes — the "
-        "commit messages of the commits being "
-        "pushed and the lines added to "
-        'CHANGELOG.md — so the mechanism for "the '
-        'outbound document must say it" exists. '
+        "measurement": "THE HOST GATE IS GONE. This lane was written as a "
+        "sibling of `evidence-backed-output`, which "
+        "audited what a push publishes — the commit "
+        "messages being pushed and the lines added to "
+        "CHANGELOG.md. That gate was deleted in 67ba10e8 "
+        "during the gate cull, and nothing replaced it, so "
+        'the mechanism for "the outbound document must say '
+        'it" no longer exists and this lane has nothing to '
+        "extend. Registered here so the gap is visible "
+        "rather than inferred from a phantom reference. "
         "What is missing is the diff side: "
         "recognising that a 200 became a raise. "
         "That half is graded for now because "

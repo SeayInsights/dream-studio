@@ -112,16 +112,36 @@ def test_the_accompanying_message_does_not_mention_it():
         ), f"the fixture message mentions {tell!r}, so it does not exhibit the omission"
 
 
-def test_the_existing_gate_is_the_one_to_extend():
-    """Names the mechanism rather than duplicating it.
+def test_the_host_gate_is_gone_and_the_lane_says_so():
+    """This lane was a sibling of a gate that no longer exists.
 
-    `evidence_backed_output` already audits commit messages and added CHANGELOG lines. Two
-    gates auditing the same documents would drift, and the weaker one would become the
-    policy -- which is the coupling defect this session already fixed once in
-    `scan_for_patterns`.
+    `evidence_backed_output` audited what a push publishes -- the commit messages
+    being pushed and the lines added to CHANGELOG.md -- and was deleted in
+    67ba10e8 during the gate cull. Nothing replaced it.
+
+    The assertion used to be `gate.is_file()`, and it sat red on main because the
+    generated registry was stale and nobody ran the eval that would have said so.
+    Restoring the assertion would demand a gate that was removed deliberately;
+    deleting the test would erase the only record that the coverage went with it.
+    So it asserts what is true -- the gate is absent -- and requires the lane to
+    say the same, because the next person to read "a sibling of an existing gate"
+    would otherwise go looking for a gate that is not there.
     """
     gate = REPO_ROOT / "core" / "gates" / "evidence_backed_output.py"
-    assert gate.is_file(), "the gate this lane extends is missing"
+    assert not gate.is_file(), (
+        "evidence_backed_output is back. Update this lane's measurement to name it"
+        " as the host again, rather than recording its absence."
+    )
+
+    lanes = yaml.safe_load(
+        (REPO_ROOT / "canonical" / "review_lanes.yml").read_text(encoding="utf-8")
+    )["lanes"]
+    lane = next(entry for entry in lanes if entry.get("id") == LANE_ID)
+    measurement = str(lane.get("measurement"))
+    assert "deleted in 67ba10e8" in measurement, (
+        "the lane must record that its host gate was removed, or someone will build"
+        " against a mechanism that does not exist"
+    )
 
 
 def test_the_lane_is_registered_as_a_graded_one():
@@ -132,6 +152,7 @@ def test_the_lane_is_registered_as_a_graded_one():
 
     assert lane is not None, f"{LANE_ID} is not registered"
     assert lane.get("eval") == "tests/evals/test_review_lane_behaviour_change_enumerated.py"
-    assert "evidence-backed-output" in str(
-        lane.get("measurement")
-    ), "the lane must name the existing gate it extends, or someone will build a second one"
+    assert "evidence-backed-output" in str(lane.get("measurement")), (
+        "the lane must still name the gate it was written against -- now as the host"
+        " that was removed, so the history of the gap survives the gate that made it"
+    )
