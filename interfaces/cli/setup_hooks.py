@@ -85,7 +85,7 @@ def _split_interpreter(command: str) -> tuple[str, str] | None:
     head = tokens[0].strip('"')
     if Path(head).stem.lower() not in _PYTHON_NAMES:
         return None
-    return tokens[0], command[len(tokens[0]) :].strip()
+    return tokens[0], command[len(tokens[0]) :].strip()  # noqa: E203
 
 
 def hook_identity(command: str) -> str:
