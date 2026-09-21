@@ -596,7 +596,7 @@ def test_a_task_with_no_executable_criterion_is_told_so(db, tmp_path):
     assert "--why" in bare, "and the escape it will accept"
 
     code, withac = _run(
-        ["work-order", "add-task", wid, "--title", "T", "--acceptance", "TEST-CHECK: x::y"],
+        ["work-order", "add-task", wid, "--title", "T", "--acceptance", "TEST-CHECK: tests/unit/test_wo_lifecycle_surface.py::y"],
         tmp_path,
     )
     assert code == 0, withac
