@@ -69,3 +69,103 @@ def test_resolution_is_idempotent():
 def test_a_command_that_is_not_python_is_untouched():
     assert resolve_hook_command("node index.js") == "node index.js"
     assert resolve_hook_command("") == ""
+
+
+# ---------------------------------------------------------------------------------------
+# The merge must REPLACE an equivalent hook, not append a second copy.
+#
+# Measured on the operator's machine: ~/.claude/settings.json held 23 hook commands where 12
+# were intended. Every duplicate was a pair -- `python <script>` written by an older install,
+# and `"C:/.../python.exe" <script>` written after the interpreter was resolved. The merge
+# compared whole command strings, so the two looked unrelated and both were kept, and every
+# handler ran twice per event. Four Stop hooks firing per turn is what made a turn feel hung.
+# ---------------------------------------------------------------------------------------
+
+import interfaces.cli.setup_hooks as setup_hooks
+
+
+def _settings_at(tmp_path, monkeypatch):
+    settings = tmp_path / "settings.json"
+    monkeypatch.setattr(setup_hooks, "SETTINGS_JSON", settings)
+    return settings
+
+
+def _commands(settings: Path) -> list[str]:
+    data = json.loads(settings.read_text(encoding="utf-8"))
+    return [
+        hook["command"]
+        for groups in data.get("hooks", {}).values()
+        for group in groups
+        for hook in group.get("hooks", [])
+    ]
+
+
+def test_the_two_spellings_of_one_hook_have_one_identity():
+    bare = 'python -c "print(1)"'
+    resolved = resolve_hook_command(bare)
+    assert resolved != bare, "the fixture needs the two forms to differ"
+    assert setup_hooks.hook_identity(bare) == setup_hooks.hook_identity(resolved)
+
+
+def test_a_hook_that_is_not_python_is_compared_whole():
+    """`node a.js` and `node b.js` must not collapse into one hook."""
+    assert setup_hooks.hook_identity("node a.js") != setup_hooks.hook_identity("node b.js")
+    assert setup_hooks.hook_identity("node a.js") == "node a.js"
+
+
+def test_the_bare_twin_is_repaired_in_place_instead_of_duplicated(tmp_path, monkeypatch):
+    """The measured defect, reproduced: a settings.json written by an older install."""
+    settings = _settings_at(tmp_path, monkeypatch)
+    template = _template_commands()[0]
+    assert template.startswith("python "), "the template should still ship the bare form"
+    event = next(iter(json.loads(HOOKS_JSON.read_text(encoding="utf-8"))["hooks"]))
+    settings.write_text(
+        json.dumps({"hooks": {event: [{"hooks": [{"type": "command", "command": template}]}]}}),
+        encoding="utf-8",
+    )
+
+    result = setup_hooks.step_settings_merge()
+    assert result.passed, result.detail
+
+    commands = _commands(settings)
+    assert commands.count(template) == 0, "the bare command survived beside its resolved twin"
+    assert resolve_hook_command(template) in commands
+    assert len(commands) == len(set(commands)), f"duplicate hook commands: {commands}"
+
+
+def test_an_operators_own_absolute_interpreter_is_left_alone(tmp_path, monkeypatch):
+    """An absolute interpreter already runs, and choosing it may have been deliberate.
+
+    Healing it would silently undo a venv or a pinned version; appending beside it would
+    recreate the duplicate this fix exists to remove. Neither: it is the same hook.
+    """
+    settings = _settings_at(tmp_path, monkeypatch)
+    template = _template_commands()[0]
+    event = next(iter(json.loads(HOOKS_JSON.read_text(encoding="utf-8"))["hooks"]))
+    chosen = '"C:/venv/Scripts/python.exe" ' + template[len("python ") :]
+    settings.write_text(
+        json.dumps({"hooks": {event: [{"hooks": [{"type": "command", "command": chosen}]}]}}),
+        encoding="utf-8",
+    )
+
+    assert setup_hooks.step_settings_merge().passed
+    commands = _commands(settings)
+    assert chosen in commands, "the operator's interpreter was overwritten"
+    assert len(commands) == len(set(commands)), f"duplicate hook commands: {commands}"
+    assert (
+        sum(
+            1 for c in commands if setup_hooks.hook_identity(c) == setup_hooks.hook_identity(chosen)
+        )
+        == 1
+    )
+
+
+def test_running_setup_twice_adds_nothing_the_second_time(tmp_path, monkeypatch):
+    settings = _settings_at(tmp_path, monkeypatch)
+    assert setup_hooks.step_settings_merge().passed
+    after_first = _commands(settings)
+    assert after_first, "the first merge wrote nothing"
+
+    assert setup_hooks.step_settings_merge().passed
+    assert _commands(settings) == after_first
+    assert len(after_first) == len(set(after_first)), f"duplicates on first run: {after_first}"
