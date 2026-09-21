@@ -42,6 +42,34 @@ if "DREAM_STUDIO_DB_PATH" not in _os.environ:
     _os.environ["DREAM_STUDIO_DB_PATH"] = str(_session_tmp / "state" / "studio.db")
     _os.environ["DS_SPOOL_ROOT"] = str(_session_tmp / "events")
 
+# Same isolation guard, for git instead of the DB.
+#
+# git exports GIT_DIR -- pointing at the operator's real repository -- to every hook it runs.
+# The pre-push gate runs pytest, pytest's children inherit GIT_DIR, and a fixture that does
+# `subprocess.run(["git", "init"], cwd=<tmp>)` then re-initializes THAT repository instead of
+# the temporary one: bare, because the cwd is not its work tree. The commits that follow land
+# in the real repository too.
+#
+# Measured before this was added: core.bare on the operator's repository flipped to true six
+# times in one session, always after a gate run; the checked-out branch's ref moved on its own;
+# and the repository collected `commit a` / `commit b` / `commit c` from a fixture in
+# tests/unit/test_graded_range_includes_own_commits.py. Running that file by hand never
+# reproduced it, because no GIT_DIR is set outside a hook.
+#
+# Stripping these makes the under-a-hook environment identical to the ordinary `pytest` one --
+# the environment every test already passes in -- so no test loses anything it relied on. A
+# test that means to act on a specific repository passes cwd=, which is unaffected.
+for _pointer in (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_CEILING_DIRECTORIES",
+):
+    _os.environ.pop(_pointer, None)
+
 # Windows-only: install SIGINT handler before pytest does, so pytest never
 # sees the phantom signals that occur on this platform during the ingest
 # pipeline's filesystem and SQLite operations. The handler in
@@ -132,6 +160,64 @@ def reviewed_verdict(verdict: dict | None = None, **fields) -> dict:
     out.update(verdict or {})
     out.update(fields)
     return out
+
+
+def _repo_git_dir() -> Path | None:
+    """The real repository's git directory, or None when there isn't one to protect.
+
+    A worktree's ``.git`` is a FILE holding ``gitdir: <path>``, not a directory -- and a
+    worktree is exactly where this work gets done, so resolving it is not an edge case.
+    """
+    dot = _PLUGIN_ROOT / ".git"
+    if dot.is_dir():
+        return dot
+    if dot.is_file():
+        try:
+            text = dot.read_text(encoding="utf-8").strip()
+        except OSError:
+            return None
+        if text.startswith("gitdir:"):
+            resolved = Path(text.split(":", 1)[1].strip())
+            if resolved.is_dir():
+                return resolved
+    return None
+
+
+def _real_repo_fingerprint() -> tuple[bytes, ...] | None:
+    """What the escape changed: `core.bare` in the config, HEAD, and the branch tip.
+
+    File reads only, no subprocess -- this runs before and after EVERY test, and a `git`
+    invocation per test would cost minutes across the suite.
+
+    Returns None when anything is unreadable, which disables the check rather than failing
+    the run: a guard that aborts a session because it could not read a file is worse than
+    the escape it watches for.
+    """
+    git_dir = _repo_git_dir()
+    if git_dir is None:
+        return None
+    commondir = git_dir / "commondir"
+    common = git_dir
+    if commondir.is_file():
+        try:
+            common = (git_dir / commondir.read_text(encoding="utf-8").strip()).resolve()
+        except OSError:
+            return None
+    parts: list[bytes] = []
+    for candidate in (common / "config", git_dir / "HEAD"):
+        try:
+            parts.append(candidate.read_bytes())
+        except OSError:
+            return None
+    head = parts[-1].decode("utf-8", "replace").strip()
+    if head.startswith("ref:"):
+        ref = head.split(":", 1)[1].strip()
+        loose = git_dir / ref
+        try:
+            parts.append(loose.read_bytes() if loose.is_file() else b"<packed>")
+        except OSError:
+            return None
+    return tuple(parts)
 
 
 def pytest_configure(config):
@@ -322,6 +408,13 @@ def guard_real_homedir(tmp_path, monkeypatch, request):
         (real_db.stat().st_mtime if real_db.is_file() else None) if not _db_redirected else None
     )
 
+    # The same guard, for the operator's git repository. A test that reaches it does not
+    # leave an mtime to compare -- it leaves a repository that is bare, or a branch pointing
+    # somewhere nobody moved it. See the GIT_DIR note at the top of this file for the escape
+    # this watches; that strip closes the known route, and this catches a route nobody has
+    # thought of yet, by watching the damage instead of the mechanism.
+    _before_repo = _real_repo_fingerprint()
+
     yield
 
     # Teardown: reset singleton again so subsequent tests don't inherit a stale instance
@@ -363,3 +456,14 @@ def guard_real_homedir(tmp_path, monkeypatch, request):
                 "Aborting session to prevent further damage.",
                 returncode=2,
             )
+    if _before_repo is not None and _real_repo_fingerprint() != _before_repo:
+        pytest.exit(
+            # NAME THE TEST, for the reason recorded above: the previous round of this bug
+            # cost six repository repairs and a day of bisecting precisely because nothing
+            # said which test did it.
+            f"FATAL: {request.node.nodeid} modified the real git repository at {_PLUGIN_ROOT} "
+            "(its config, HEAD, or the checked-out branch's tip changed during the test). "
+            "A test must operate on a temporary repository: pass cwd=<tmp> AND an env with "
+            "GIT_DIR/GIT_WORK_TREE removed. Aborting session to prevent further damage.",
+            returncode=2,
+        )
