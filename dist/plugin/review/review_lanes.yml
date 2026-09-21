@@ -120,7 +120,7 @@ lanes:
       - "multiplication through a CALL -- a loop whose helper sleeps in its own loop is the same defect and needs a call graph to see"
     detector: py -m core.gates.aggregate_deadline
   - id: a-contract-that-names-one-of-two-mechanisms
-    seat: "Contract and protocol"
+    seat: "Claim integrity"
     question: >-
       The code says mechanisms X and Y make this claim true. Does the contract document name both,
       or only the one that was there first?
@@ -179,7 +179,7 @@ lanes:
       - "whether being behind is a problem here -- a revert off a tag or a hotfix from a release point is legitimately behind, which is why this lane is advisory"
     detector: py -m core.gates.branch_freshness
   - id: an-unenumerated-behaviour-change
-    seat: "Claim and closure auditor"
+    seat: "Claim integrity"
     question: >-
       What does a caller see differently after this change, and does the change say so?
     signature: >-
@@ -201,7 +201,7 @@ lanes:
       - "Keep a Changelog 1.1.0"
     eval: tests/evals/test_review_lane_behaviour_change_enumerated.py
   - id: a-produced-value-with-no-reader
-    seat: "Observability and audit trail"
+    seat: "Boundary semantics"
     question: >-
       A value is produced and honestly computed. Does anything actually read it, and when nothing
       does, what does the default say in its place?
@@ -238,7 +238,7 @@ lanes:
       - "OpenTelemetry semantic conventions"
     eval: tests/evals/test_review_lane_value_reaches_a_reader.py
   - id: a-status-the-far-end-does-not-handle
-    seat: "Failure semantics"
+    seat: "Boundary semantics"
     question: >-
       The producer's vocabulary has more members than the consumer has branches. What does the
       consumer render for the member it does not know?
@@ -348,7 +348,7 @@ lanes:
       - "whether replaying the emitted event actually REPRODUCES the row -- the lane proves an event is emitted beside the write, not that its payload rebuilds it"
     detector: py -m core.gates.event_backed_write
   - id: a-channel-outside-the-accounting
-    seat: "Untrusted input and abuse limits"
+    seat: "Boundary semantics"
     question: >-
       What is the full capability surface of the thing being guarded, independent of what the
       guard says about itself?
@@ -417,7 +417,7 @@ lanes:
       seats have run, so nothing can be computed from the diff alone. It becomes an eval once
       convene() returns a finding set worth grading.
   - id: evidence-referee
-    seat: "Evidence referee"
+    seat: "Finding integrity"
     question: >-
       Which SHA and which command prove this claim, and does reverting the fix actually turn the
       check red?
@@ -437,7 +437,7 @@ lanes:
       no field to check. It becomes an eval the moment a verdict records the command that proves
       each finding -- which is this seat's own first deliverable.
   - id: reviewer-s-reviewer
-    seat: "Reviewer's reviewer"
+    seat: "Finding integrity"
     question: >-
       Does every finding still hold against current HEAD, and which ones should be withdrawn?
     signature: >-
@@ -651,7 +651,7 @@ lanes:
       half. This seat exists so the semantic half -- does the row still mean what it meant -- has
       somewhere to be asked.
   - id: design-system-conformance
-    seat: "Design-system conformance"
+    seat: "Interface conformance"
     question: >-
       Does this component take the promotion path, and does the styling actually reach the
       browser?
@@ -676,7 +676,7 @@ lanes:
       Dream Studio ships no design system or frontend bundle, so a detector would examine zero
       sites. Registered for the projects the round table is called from, not for this one.
   - id: accessibility
-    seat: "Accessibility"
+    seat: "Interface conformance"
     question: >-
       Can this be operated without a mouse, and does every control have a name a screen reader
       will say?
@@ -704,7 +704,7 @@ lanes:
       No rendered markup in this repository to check. The thinness of the evidence -- one
       reviewer, one stack -- is the reason to register the seat rather than a reason to skip it.
   - id: frontend-behavior-and-payload
-    seat: "Frontend behavior and payload"
+    seat: "Interface conformance"
     question: >-
       Does this control do what it looks like it does, and what did it cost to download?
     signature: >-
@@ -807,7 +807,7 @@ lanes:
       be computed from the change. It is the one seat where a human re-weighting the others is the
       mechanism.
   - id: governance-canon-and-board
-    seat: "Governance canon and board"
+    seat: "Claim integrity"
     question: >-
       Does this contradict another document that is also in force?
     signature: >-
@@ -844,7 +844,13 @@ lanes:
     measurement: >-
       Every one of these is mechanically checkable and Dream Studio already gates most of them --
       operator_absolute_path, docs-drift and the atlas-leak gate -- so the detector here is
-      aggregation rather than new detection.
+      aggregation rather than new detection. Built as exactly that: the private-content half CALLS
+      core.release.repo_publication_readiness, which owns PRIVATE_CONTENT_RULES, rather than
+      carrying a second regex for the same rule -- the duplicate-rule shape the code-quality lane
+      exists to refuse. Only the attribution check is new, because nothing else owned it: five
+      Co-Authored-By trailers were removed from main by hand and nothing prevented the sixth. A
+      first cut also asserted SECURITY.md section headings and failed this repo's own perfectly
+      good SECURITY.md, so that clause is deferred rather than guessed at.
     standards:
       - "Diataxis documentation framework"
       - "Keep a Changelog 1.1.0"
@@ -853,10 +859,11 @@ lanes:
       - "docs/**"
       - "*.md"
       - "**/*.md"
-    judgment: true
-    why: >-
-      The constituent checks exist as separate gates already; what is missing is one lane that
-      names them as a family so a new member is added here rather than invented somewhere else.
+    defers:
+      - "an entry-point link that 404s -- a seat is handed git, grep and pytest, so a network fetch is outside what it can answer from a worktree"
+      - "a required section missing from SECURITY.md -- required by whom? Nothing here declares a section list, and a first cut that assumed GitHub's template failed this repo's own SECURITY.md, which has Reporting a Vulnerability and Scope and is fine. Convert this clause when a list is declared somewhere"
+      - "the private-content half when convened against a project that does not vendor core.release.repo_publication_readiness -- the gate reports that it did not run rather than reporting clean"
+    detector: py -m core.gates.shipped_artifact_hygiene
   - id: code-quality-and-structure
     seat: "Code quality and structure"
     question: >-

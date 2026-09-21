@@ -28,17 +28,55 @@ import re
 
 #: seat -> (question, signature, precedent, measurement, enforcement)
 #: `enforcement` is ("detector", cmd) | ("eval", path) | ("judgment", why)
-SEATS: dict[str, tuple[str, str, str, str, tuple[str, str]]] = {}
+#: seat name -> the lanes that seat holds, in declaration order.
+#:
+#: A LIST RATHER THAN ONE SPEC, because consolidating the roster means one agent asking
+#: several adjacent questions instead of several agents asking one each. Before this, the
+#: table could express only one lane per seat, so a second lane could exist only by being
+#: carried over in `RESEATED` -- which is frozen history, not an authoring surface. The
+#: merges that shrink the bench are unauthorable until a seat can simply be given two.
+SEATS: dict[str, list[tuple[str, str, str, str, tuple[str, str]]]] = {}
+
+#: seat name -> lane id per lane, parallel to SEATS. A seat's first lane keeps the id
+#: derived from its name, so every existing lane id is unchanged; a second lane must name
+#: itself, because two lanes under one seat cannot both derive the same id.
+SEAT_LANE_IDS: dict[str, list[str]] = {}
 
 
-def seat(name, *, question, signature, precedent, measurement, detector=None, eval=None, why=None):
+def seat(
+    name,
+    *,
+    question,
+    signature,
+    precedent,
+    measurement,
+    detector=None,
+    eval=None,
+    why=None,
+    lane_id=None,
+):
+    """Declare a lane. Calling this twice with the same `name` gives that seat two lanes.
+
+    `lane_id` is required for the second and later lanes on a seat: the first derives its
+    id from the seat name, and a second deriving the same id would silently overwrite the
+    first in the rendered registry -- the failure this signature exists to prevent.
+    """
     if detector:
         enforcement = ("detector", detector)
     elif eval:
         enforcement = ("eval", eval)
     else:
         enforcement = ("judgment", why)
-    SEATS[name] = (question, signature, precedent, measurement, enforcement)
+    existing = SEATS.setdefault(name, [])
+    if existing and not lane_id:
+        raise ValueError(
+            f"seat {name!r} already holds a lane; a second lane must pass lane_id= so the"
+            " two do not derive the same id"
+        )
+    existing.append((question, signature, precedent, measurement, enforcement))
+    # Stored unresolved: `_lane_id` is defined below these calls, and resolving at
+    # render time keeps the declaration order of this table free of that dependency.
+    SEAT_LANE_IDS.setdefault(name, []).append(lane_id)
 
 
 # ── Permanent bench (7) ──────────────────────────────────────────────────────
@@ -457,10 +495,15 @@ seat(
     " from main on 2026-09-10 for exactly this reason.",
     measurement="Every one of these is mechanically checkable and Dream Studio already"
     " gates most of them -- operator_absolute_path, docs-drift and the atlas-leak gate --"
-    " so the detector here is aggregation rather than new detection.",
-    why="The constituent checks exist as separate gates already; what is missing is one"
-    " lane that names them as a family so a new member is added here rather than"
-    " invented somewhere else.",
+    " so the detector here is aggregation rather than new detection. Built as exactly"
+    " that: the private-content half CALLS core.release.repo_publication_readiness, which"
+    " owns PRIVATE_CONTENT_RULES, rather than carrying a second regex for the same rule --"
+    " the duplicate-rule shape the code-quality lane exists to refuse. Only the"
+    " attribution check is new, because nothing else owned it: five Co-Authored-By"
+    " trailers were removed from main by hand and nothing prevented the sixth. A first cut"
+    " also asserted SECURITY.md section headings and failed this repo's own perfectly good"
+    " SECURITY.md, so that clause is deferred rather than guessed at.",
+    detector="py -m core.gates.shipped_artifact_hygiene",
 )
 seat(
     "Code quality and structure",
@@ -601,22 +644,12 @@ STANDARDS: dict[str, tuple[str, ...]] = {
 }
 
 
-#: Seats holding a SECOND lane. The Machinist and the Interpreter each held two before
-#: this roster existed, and folding every seat down to one lane would have silently
-#: dropped `an-untested-fallback-lane` -- a detector that runs today.
-EXTRA_LANES: dict[str, tuple[str, str, str, str, tuple[str, str]]] = {
-    "Test-integrity inquisitor": (
-        "This fallback exists because the primary path can be unavailable. Does any test"
-        " ever take it?",
-        "A fallback nothing exercises. It is written for the day the primary path fails,"
-        " and the first time it runs in anger is the first time it runs at all.",
-        "Carried from the Machinist's lane, which found untested fallback branches across"
-        " this tree and has held the count at zero since.",
-        "Fallback branches are countable in the source and the count was small enough to"
-        " drive to zero and hold, which is what made a detector the right instrument.",
-        ("detector", "py -m core.gates.untested_fallback"),
-    ),
-}
+# EXTRA_LANES used to live here: a dict of "seats holding a SECOND lane" that
+# `render()` never read. Its single entry near-duplicated the carried-over
+# `an-untested-fallback-lane`, so the lane that ships came from RESEATED and this
+# content never reached the registry. Its only consumer was the success message's
+# lane count. Retired rather than wired up, because `seat()` now takes a second lane
+# directly, which is the authoring surface it was standing in for.
 
 
 # ── Relevance scope ──────────────────────────────────────────────────────────
@@ -1339,6 +1372,60 @@ _HEADER = """# Review lanes - the questions a Dream Studio review is obliged to 
 REGISTRY = pathlib.Path(__file__).resolve().parents[1] / "canonical" / "review_lanes.yml"
 
 
+#: Seats that answer under one name. The lane is untouched -- its question, signature,
+#: precedent, measurement and enforcement all stay exactly as written; only the seat
+#: holding it changes, which is the same move `RESEATED` makes and for the same reason.
+#:
+#: WHY MERGE AT ALL. Twenty-nine seats each asking one question produced the diffuse review
+#: the bench exists to replace: three agents opening the same files to ask three neighbouring
+#: questions, and no one of them seeing the case that falls between. An agent holding the
+#: adjacent lanes sees them together. The detail is in the lanes and the roster is the seats,
+#: so this costs nothing that was being asked.
+#:
+#: WHY THESE FOUR. Each is a group whose members share a technique, not merely a topic:
+#:
+#: * Boundary semantics -- all three are "the check took its frame from the thing it was
+#:   checking". Untrusted input's own signature calls its middle variant "verifying a
+#:   producer's transitions rather than what RENDERS", which IS the failure-semantics lane.
+#: * Claim integrity -- all three are two descriptions disagreeing, differing only in which
+#:   pair of artifacts: PR body against response contract, normative line against decision
+#:   record, one canonical document against another.
+#: * Interface conformance -- the same scope globs, the same files, and the same blocker: a
+#:   static half a seat can answer and a rendered half it cannot.
+#: * Finding integrity -- two halves of one motion at verdict time. Merging removes the
+#:   bench's only hard ordering, because one agent does both in sequence.
+SEAT_MERGES: dict[str, str] = {
+    "Failure semantics": "Boundary semantics",
+    "Observability and audit trail": "Boundary semantics",
+    "Untrusted input and abuse limits": "Boundary semantics",
+    "Claim and closure auditor": "Claim integrity",
+    "Contract and protocol": "Claim integrity",
+    "Governance canon and board": "Claim integrity",
+    "Design-system conformance": "Interface conformance",
+    "Accessibility": "Interface conformance",
+    "Frontend behavior and payload": "Interface conformance",
+    "Evidence referee": "Finding integrity",
+    "Reviewer's reviewer": "Finding integrity",
+}
+
+
+def _seat_name(seat: str) -> str:
+    """The name a lane is emitted under. Unmerged seats pass through unchanged."""
+    return SEAT_MERGES.get(seat, seat)
+
+
+def seat_count() -> int:
+    """Distinct seats after merges -- not `len(SEATS)`, which counts declarations.
+
+    The two stopped being the same number the moment a seat could hold several lanes and
+    several declarations could answer under one name. Reporting `len(SEATS)` would name a
+    roster nobody convenes.
+    """
+    declared = {_seat_name(name) for name in SEATS}
+    carried = {_seat_name(lane["seat"]) for lane in RESEATED.values()}
+    return len(declared | carried)
+
+
 def _lane_id(seat: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", seat.lower()).strip("-")
 
@@ -1373,6 +1460,17 @@ def _fold(key: str, text: str, indent: str = "    ") -> str:
 #: gate docstring states what it cannot see, and this table is where those statements
 #: become visible to a reviewer reading the lane rather than the source.
 DEFERS: dict[str, list[str]] = {
+    "docs-style-and-attribution": [
+        "an entry-point link that 404s -- a seat is handed git, grep and pytest, so a"
+        " network fetch is outside what it can answer from a worktree",
+        "a required section missing from SECURITY.md -- required by whom? Nothing here"
+        " declares a section list, and a first cut that assumed GitHub's template failed"
+        " this repo's own SECURITY.md, which has Reporting a Vulnerability and Scope and is"
+        " fine. Convert this clause when a list is declared somewhere",
+        "the private-content half when convened against a project that does not vendor"
+        " core.release.repo_publication_readiness -- the gate reports that it did not run"
+        " rather than reporting clean",
+    ],
     "an-untested-fallback-lane": [
         "whether any test actually ENTERS the fallback branch -- any textual mention of"
         " the symbol anywhere under tests/, a comment included, clears it, so this proves"
@@ -1402,8 +1500,11 @@ DEFERS: dict[str, list[str]] = {
 
 
 def _block(lane_id: str, seat: str, spec) -> str:
+    """`seat` is the DECLARED seat. It is what STANDARDS and SCOPES are keyed by, so each
+    lane keeps its own even when several lanes answer under one merged name -- pooling them
+    would give a lane standards it never named and a scope it never claimed."""
     question, signature, precedent, measurement, enforcement = spec
-    lines = [f"  - id: {lane_id}", f"    seat: {json.dumps(seat)}"]
+    lines = [f"  - id: {lane_id}", f"    seat: {json.dumps(_seat_name(seat))}"]
     for key, value in (
         ("question", question),
         ("signature", signature),
@@ -1427,6 +1528,19 @@ def _block(lane_id: str, seat: str, spec) -> str:
     return "\n".join(lines)
 
 
+def lane_count() -> int:
+    """How many lanes `render()` actually emits.
+
+    DERIVED FROM THE RENDER rather than summed alongside it. The message used to read
+    `len(SEATS) + len(EXTRA_LANES)`, which was a second computation of the same number from
+    a different set -- and EXTRA_LANES was never rendered at all, so the two agreed only
+    because one seat happened to be skipped as already-carried. A second entry would have
+    made the generator report writing 31 lanes while writing 30, which is the
+    produced-value-with-no-reader shape one of these very lanes exists to catch.
+    """
+    return render().count("\n  - id: ")
+
+
 def render() -> str:
     """The registry as this table says it should be.
 
@@ -1446,13 +1560,14 @@ def render() -> str:
             tuple(lane["enforcement"]),
         )
         out.append(_block(old_id, lane["seat"], spec))
-    for seat_name, spec in SEATS.items():
+    for seat_name, specs in SEATS.items():
         # A seat already answered by a carried-over lane does not also get a generated
         # one -- that would file the same question twice under one name, which is how a
         # lane stops being falsifiable.
         if seat_name in carried_seats:
             continue
-        out.append(_block(_lane_id(seat_name), seat_name, spec))
+        for declared_id, spec in zip(SEAT_LANE_IDS[seat_name], specs, strict=True):
+            out.append(_block(declared_id or _lane_id(seat_name), seat_name, spec))
     return "\n".join(out) + "\n"
 
 
@@ -1470,7 +1585,10 @@ def main(argv: list[str] | None = None) -> int:
     current = REGISTRY.read_text(encoding="utf-8").replace("\r\n", "\n")
     if args.check:
         if current == rendered:
-            print(f"review-lanes: OK - registry matches its generator ({len(SEATS)} seats).")
+            print(
+                f"review-lanes: OK - registry matches its generator"
+                f" ({seat_count()} seats, {lane_count()} lanes)."
+            )
             return 0
         print(
             "review-lanes: STALE - canonical/review_lanes.yml does not match what"
@@ -1479,9 +1597,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
     REGISTRY.write_text(rendered, encoding="utf-8")
-    print(
-        f"review-lanes: wrote {REGISTRY} ({len(SEATS)} seats, {len(SEATS)+len(EXTRA_LANES)} lanes)"
-    )
+    print(f"review-lanes: wrote {REGISTRY} ({seat_count()} seats, {lane_count()} lanes)")
     return 0
 
 

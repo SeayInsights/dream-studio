@@ -81,7 +81,11 @@ def compose_declared_reason(description: str | None, why: str | None) -> str:
 #: already refuses a seat outside its closed set, so a typo here fails there.
 _WARDEN = "Gate-integrity engineer"
 _SURVEYOR = "Merge-order steward"
-_HERALD = "Claim and closure auditor"
+# Renamed with the bench: the Herald became the Claim and closure auditor, and that
+# seat now answers under "Claim integrity" alongside the contract and canon lanes. The
+# value is a display label on a refusal record -- never matched or queried -- so this
+# keeps admission speaking the roster's vocabulary rather than a name it retired.
+_HERALD = "Claim integrity"
 
 
 #: A path-shaped token: at least one "/" and a file extension. Deliberately narrow.
