@@ -18,6 +18,7 @@ from pathlib import Path
 
 from core.config import paths
 from core.event_store.studio_db import (
+    apply_lesson,
     get_lessons,
     promote_lesson,
     reject_lesson,
@@ -79,6 +80,9 @@ def cmd_list(args: argparse.Namespace) -> None:
     if args.promoted:
         status = "promoted"
         label = "promoted"
+    elif args.applied:
+        status = "applied"
+        label = "applied"
     elif args.rejected:
         status = "rejected"
         label = "rejected"
@@ -103,6 +107,18 @@ def cmd_promote(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_apply(args: argparse.Namespace) -> None:
+    """Record that a lesson reached the skill text."""
+    lesson_id = args.lesson_id
+    ok = apply_lesson(lesson_id, args.to, db_path=_db_path())
+    if ok:
+        print(f"Applied: {lesson_id}")
+        print(f"  Landed in: {args.to}")
+    else:
+        print(f"Error: could not apply {lesson_id!r} (not found or DB error)", file=sys.stderr)
+        sys.exit(1)
+
+
 def cmd_reject(args: argparse.Namespace) -> None:
     lesson_id = args.lesson_id
     ok = reject_lesson(lesson_id, db_path=_db_path())
@@ -118,13 +134,15 @@ def cmd_stats(args: argparse.Namespace) -> None:
     total = len(all_rows)
     pending = sum(1 for r in all_rows if r.get("status") == "draft")
     promoted = sum(1 for r in all_rows if r.get("status") == "promoted")
+    applied = sum(1 for r in all_rows if r.get("status") == "applied")
     rejected = sum(1 for r in all_rows if r.get("status") == "rejected")
-    other = total - pending - promoted - rejected
+    other = total - pending - promoted - applied - rejected
 
     print("Draft lesson stats (studio.db raw_lessons)")
     print(f"  Total    : {total}")
     print(f"  Pending  : {pending}")
-    print(f"  Promoted : {promoted}")
+    print(f"  Promoted : {promoted}  (headed for a skill, not yet landed)")
+    print(f"  Applied  : {applied}")
     print(f"  Rejected : {rejected}")
     if other:
         print(f"  Other    : {other}")
@@ -146,6 +164,7 @@ def build_parser() -> argparse.ArgumentParser:
     filter_group = p_list.add_mutually_exclusive_group()
     filter_group.add_argument("--pending", action="store_true", default=False)
     filter_group.add_argument("--promoted", action="store_true", default=False)
+    filter_group.add_argument("--applied", action="store_true", default=False)
     filter_group.add_argument("--rejected", action="store_true", default=False)
     p_list.set_defaults(func=cmd_list)
 
@@ -154,6 +173,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_promote.add_argument("lesson_id", help="Lesson ID from the DB.")
     p_promote.add_argument("--target", required=True, metavar="SKILL", help="Promotion target.")
     p_promote.set_defaults(func=cmd_promote)
+
+    # apply
+    p_apply = sub.add_parser("apply", help="Record that a lesson landed in a skill.")
+    p_apply.add_argument("lesson_id", help="Lesson ID from the DB.")
+    p_apply.add_argument(
+        "--to",
+        required=True,
+        metavar="REF",
+        help="Where it landed, e.g. canonical/skills/quality/modes/debug/gotchas.yml@<sha>.",
+    )
+    p_apply.set_defaults(func=cmd_apply)
 
     # reject
     p_reject = sub.add_parser("reject", help="Reject a draft lesson.")

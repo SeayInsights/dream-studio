@@ -41,10 +41,13 @@ def get_escalation_candidates(threshold: int = 3) -> list[dict]:
     skill_counts: dict[str, list[str]] = {}
 
     for row in rows:
-        # Infer skill from source field or lesson_id
-        source = row.get("source", "")
         lesson_id = row.get("lesson_id", "")
-        referenced_skills = _extract_skill_refs_from_db(source, lesson_id, known)
+        # raw_lessons carries a skill_id column; prefer it over guessing from prose.
+        declared = (row.get("skill_id") or "").strip()
+        if declared:
+            skill_counts.setdefault(declared, []).append(lesson_id)
+            continue
+        referenced_skills = _extract_skill_refs_from_db(row.get("source", ""), lesson_id, known)
         for skill in referenced_skills:
             skill_counts.setdefault(skill, []).append(lesson_id)
 
@@ -70,11 +73,33 @@ def _extract_skill_refs_from_db(source: str, lesson_id: str, known: set[str]) ->
 
 
 def _known_skills() -> set[str]:
-    """Return the set of known skill names from the skills directory."""
-    skills_dir = Path(__file__).resolve().parents[2] / "skills"
-    if not skills_dir.is_dir():
+    """Pack and mode names, read from the tracked canonical source.
+
+    This read used to point at ``<repo>/skills``, which .gitignore excludes as a generated
+    projection. On this machine that directory held one entry, ``__pycache__``, so the known
+    set was ``{"__pycache__"}``, no lesson could ever match a skill name, and
+    ``get_escalation_candidates`` returned an empty list on every call -- including from
+    ``on-meta-review`` and ``control/review/engine``. A committed module depending on a path
+    git does not ship is the gitignore-phantom shape; that gate is diff-scoped and this file
+    had not been touched since it was written.
+
+    Mode names are included alongside pack names because a lesson's ``source`` records the
+    mode that produced it (``build``, ``review``, ``debug``), not the pack.
+    """
+    canonical = Path(__file__).resolve().parents[2] / "canonical" / "skills"
+    if not canonical.is_dir():
         return set()
-    return {p.name for p in skills_dir.iterdir() if p.is_dir() and not p.name.startswith(".")}
+    names: set[str] = set()
+    for pack in canonical.iterdir():
+        if not pack.is_dir() or pack.name.startswith((".", "_")):
+            continue
+        names.add(pack.name)
+        modes = pack / "modes"
+        if modes.is_dir():
+            names.update(
+                m.name for m in modes.iterdir() if m.is_dir() and not m.name.startswith((".", "_"))
+            )
+    return names
 
 
 # ============================================================================
