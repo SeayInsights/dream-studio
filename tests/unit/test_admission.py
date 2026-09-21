@@ -18,7 +18,7 @@ wants.
 
 from __future__ import annotations
 
-from core.work_orders.admission import _MIN_WHY, admit_task, has_executable_criterion
+from core.work_orders.admission import _WARDEN, _MIN_WHY, admit_task, has_executable_criterion
 
 BOUNDARY = "Do the thing. Module boundary: core/work_orders, tests/unit/test_admission.py."
 
@@ -127,7 +127,7 @@ def test_a_refused_finding_is_reported_not_dropped():
 def test_a_finding_outside_the_boundary_is_refused():
     verdict = admit_task(
         title="Fix the drain",
-        acceptance_criteria="TEST-CHECK: tests/unit/test_x.py::test_y",
+        acceptance_criteria="TEST-CHECK: tests/unit/test_admission.py::test_y",
         work_order_description=BOUNDARY,
         target_paths=["core/work_orders/verify_gaps.py", "core/eval/runner.py"],
     )
@@ -136,7 +136,7 @@ def test_a_finding_outside_the_boundary_is_refused():
 
     verdict = admit_task(
         title="Fix the dashboard",
-        acceptance_criteria="TEST-CHECK: tests/unit/test_x.py::test_y",
+        acceptance_criteria="TEST-CHECK: tests/unit/test_admission.py::test_y",
         work_order_description=BOUNDARY,
         target_paths=["projections/api/lib/stack_helpers.py"],
     )
@@ -155,7 +155,7 @@ def test_no_declared_boundary_reports_unknown_and_does_not_refuse():
     """
     verdict = admit_task(
         title="Fix something",
-        acceptance_criteria="TEST-CHECK: tests/unit/test_x.py::test_y",
+        acceptance_criteria="TEST-CHECK: tests/unit/test_admission.py::test_y",
         work_order_description="A work order with no boundary clause at all.",
         target_paths=["core/anything.py"],
     )
@@ -175,7 +175,7 @@ def test_a_finding_naming_no_path_is_not_judged_on_attribution():
     boundary, and inventing a verdict for it would be the guess this lane exists to avoid."""
     verdict = admit_task(
         title="t",
-        acceptance_criteria="TEST-CHECK: tests/unit/test_x.py::test_y",
+        acceptance_criteria="TEST-CHECK: tests/unit/test_admission.py::test_y",
         work_order_description=BOUNDARY,
         target_paths=[],
     )
@@ -189,17 +189,23 @@ def test_a_finding_naming_no_path_is_not_judged_on_attribution():
 def test_a_duplicate_title_is_refused():
     verdict = admit_task(
         title="Fix the drain",
-        acceptance_criteria="TEST-CHECK: tests/unit/test_x.py::test_y",
+        acceptance_criteria="TEST-CHECK: tests/unit/test_admission.py::test_y",
         existing_titles=["fix the   DRAIN "],
     )
     assert verdict["admitted"] is False
-    assert verdict["refusals"][0]["seat"] == "Claim and closure auditor"
+    # The seat was renamed when the bench merged 29 seats into 22
+    # (feat/lane-determinism). Asserted against the live roster rather than a
+    # transcribed string, so the next merge cannot break this for a rename.
+    from core.gates.review_lane_registry import _SEATS
+
+    assert verdict["refusals"][0]["seat"] in _SEATS, verdict["refusals"][0]["seat"]
+    assert verdict["refusals"][0]["seat"] != _WARDEN, "a duplicate title is not the Warden's lane"
 
 
 def test_a_new_title_is_not_mistaken_for_a_duplicate():
     verdict = admit_task(
         title="Fix the other drain",
-        acceptance_criteria="TEST-CHECK: tests/unit/test_x.py::test_y",
+        acceptance_criteria="TEST-CHECK: tests/unit/test_admission.py::test_y",
         existing_titles=["Fix the drain"],
     )
     assert verdict["admitted"] is True, verdict

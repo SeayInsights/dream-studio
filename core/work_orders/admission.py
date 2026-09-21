@@ -144,9 +144,81 @@ def has_executable_criterion(acceptance_criteria: str | None) -> bool:
     )
 
 
+def unrunnable_target(acceptance_criteria: str | None) -> str | None:
+    """The first TEST-CHECK target that names a file which does not exist, if any.
+
+    `has_executable_criterion` above answers "does a line carry a check TOKEN". It
+    never asked whether the thing named can be run, and nothing else did either.
+
+    Measured on the live authority 2026-09-21: of 1,387 tasks carrying a
+    TEST-CHECK, 930 named a file that exists and 457 -- ONE IN THREE -- named
+    something that cannot be run at all. The corpus includes `a`, `cargo`, `cmd:`
+    and a bare `TEST-CHECK:` with nothing after it.
+
+    That is what made this ceremony rather than a check: a third of the time a
+    close either blocks or passes for a reason about the CRITERION, telling the
+    author nothing about the code. A criterion written against a file that does
+    not exist can never fail for the right reason.
+
+    Returns the offending target (for the message) or None when every TEST-CHECK
+    resolves. Deliberately only TEST-CHECK: SQL-CHECK and API-CHECK name a query
+    and an endpoint, which are not paths and cannot be checked this cheaply.
+    """
+    import re
+    from pathlib import Path as _Path
+
+    for line in str(acceptance_criteria or "").splitlines():
+        m = re.search(r"TEST-CHECK\s*:\s*(\S*)", line)
+        if not m:
+            continue
+        raw = m.group(1).strip().strip("`\"'")
+        if not raw:
+            return "(nothing after TEST-CHECK:)"
+        # `::test_name` with no path is a legitimate shape -- the executor resolves it
+        # against the whole suite.
+        if raw.startswith("::"):
+            continue
+        target = raw.split("::")[0].strip().strip("`\"'")
+        if not target:
+            return "(nothing after TEST-CHECK:)"
+        looks_like_a_path = "/" in target or "\\" in target or target.endswith(".py")
+        if not looks_like_a_path:
+            # Not a path and not a node id. The live corpus holds `a`, `cargo` and
+            # `cmd:` in this position -- words that name nothing the executor can run.
+            return target
+        if not _Path(target).is_file():
+            return target
+    return None
+
+
 def _warden(acceptance_criteria: str | None, why: str | None) -> dict[str, Any] | None:
     """Enforce-or-declare, the contract `canonical/rules.yml` already runs on."""
     if has_executable_criterion(acceptance_criteria):
+        # A TOKEN IS NOT A CHECK. The criterion carries TEST-CHECK, so the door used
+        # to open here -- without anyone asking whether the thing it names can be run.
+        # One in three could not: 457 of 1,387 on the live authority, including `a`,
+        # `cargo`, `cmd:` and a bare `TEST-CHECK:`.
+        #
+        # This is the difference between a check and ceremony. A criterion pointed at
+        # a file that does not exist can never fail for the right reason, so a close
+        # that turns on it tells the author about the paperwork, not the code.
+        #
+        # Refused at the WRITE door, which is the only place it is cheap: at close
+        # time the author has finished the work and the criterion is someone else's
+        # mistake from weeks ago.
+        bad = unrunnable_target(acceptance_criteria)
+        if bad:
+            return {
+                "seat": _WARDEN,
+                "lane": "a-criterion-nobody-can-run",
+                "reason": (
+                    f"TEST-CHECK names {bad!r}, which is not a file that exists and not"
+                    " a `::node_id`. A criterion nothing can run cannot fail for the"
+                    " right reason, so a close that turns on it reports the paperwork"
+                    " rather than the code. Point it at a test file that exists, or use"
+                    " SQL-CHECK / API-CHECK, or declare a reason with --why."
+                ),
+            }
         return None
     declared = " ".join(str(why or "").split())
     if len(declared) >= _MIN_WHY:
