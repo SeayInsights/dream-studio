@@ -1,6 +1,6 @@
 name: auth-analyst
 tested: true
-perspective: "OWASP A07:2021 — Broken Authentication. Password hashing, session management, rate limiting, credential exposure, MFA gaps."
+perspective: "OWASP A07:2025 — Authentication Failures. Password hashing, session management, rate limiting, credential exposure, MFA gaps."
 weight: 1.5
 model: haiku
 signal_scale:

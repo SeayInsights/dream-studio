@@ -189,7 +189,7 @@ All 🔴 if you have residents in scope:
 
 - 🟠 OWASP Top 10 (web)
 - 🟠 OWASP API Security Top 10
-- 🟠 OWASP ASVS 5.0 — verification standard, Levels 1–3
+- 🟠 OWASP ASVS v5.0.0 — verification standard, Levels 1–3
 - 🟠 OWASP MASVS — mobile equivalent
 - 🟠 OWASP MASTG — mobile testing guide
 - 🟢 OWASP Top 10 for LLM Applications
