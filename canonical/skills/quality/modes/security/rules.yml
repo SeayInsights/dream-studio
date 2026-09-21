@@ -93,7 +93,7 @@ rules:
         standard: "OWASP Top 10 A05:2025 Injection"
         anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
       - section: L
-        standard: "OWASP ASVS 5.0 V5 Validation"
+        standard: "OWASP ASVS v5.0.0 V1 Encoding and Sanitization"
         anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
 
     detection:
@@ -575,7 +575,7 @@ rules:
         standard: "NIST SSDF (SP 800-218)"
         anchor_ref: "ds-security/references/regulatory-anchors.md#j-software-supply-chain--secure-sdlc"
       - section: L
-        standard: "OWASP ASVS 5.0 V7 Error Handling and Logging"
+        standard: "OWASP ASVS v5.0.0 V16 Security Logging and Error Handling"
         anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
 
     detection:
@@ -722,7 +722,7 @@ rules:
         standard: "NIST SP 800-63-4 (Digital Identity)"
         anchor_ref: "ds-security/references/regulatory-anchors.md#n-identity-access--cryptography"
       - section: L
-        standard: "OWASP ASVS 5.0 V3 Session Management"
+        standard: "OWASP ASVS v5.0.0 V7 Session Management"
         anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
 
     detection:

@@ -34,7 +34,12 @@ REGISTRY_PATH = CANONICAL / "citations.yml"
 CITATION_RE = re.compile(
     r"\bSC \d+\.\d+\.\d+\b"
     r"|\bA\d{2}:20\d{2}\b"
-    r"|\bASVS v\d+\.\d+(?:\.\d+)?\b"
+    # The `v` is OPTIONAL on purpose. Three citations read "OWASP ASVS 5.0 V5
+    # Validation" -- version 5.0 with v4.0 chapter numbers, which is false rather
+    # than merely stale -- and a pattern requiring the `v` never saw them. A
+    # citation format this regex does not match is a citation this guard does not
+    # check, which is indistinguishable from one that passes.
+    r"|\bASVS v?\d+\.\d+(?:\.\d+)?\b"
     r"|\bCWE-\d+\b"
     r"|\bNIST SP \d{3}-\d+[A-Za-z]?\b"
     r"|\bRFC \d+\b"
@@ -84,12 +89,17 @@ def _violations(line: str, registry: dict[str, dict]) -> list[str]:
         forbidden = entry.get("must_not_claim") or []
         owner = entry.get("claim_owner")
         for claim in forbidden:
-            if claim not in line:
+            # A REGEX, NOT A SUBSTRING. Seeded with the literal strings "44x44" and
+            # "44 by 44", this check passed "SC 2.5.8 requires targets of at least
+            # 44 CSS pixels square" -- the same false claim, reworded. A guard that
+            # only catches the phrasing it was shown catches nothing but itself.
+            # The forbidden thing is the wrong NUMBER near the citation.
+            if not re.search(claim, line, re.IGNORECASE):
                 continue
             if owner and owner in found:
                 continue  # disambiguated on the same line
             problems.append(
-                f"{cite} ({entry.get('title', '?')}) is paired with {claim!r}, "
+                f"{cite} ({entry.get('title', '?')}) is paired with /{claim}/, "
                 f"which belongs to {owner or 'another criterion'}"
             )
     return problems
@@ -155,6 +165,27 @@ def test_no_citation_carries_a_foreign_claim():
         (
             "targets must be at least 24x24 CSS pixels (SC 2.5.5)",
             "the inverse error: the AA threshold attributed to the AAA criterion",
+        ),
+        # ── paraphrases ────────────────────────────────────────────────────────
+        # An independent check proved the first of these slipped past the guard
+        # when must_not_claim held the literal strings "44x44" and "44 by 44".
+        # The claim is identical; only the spelling differs. A guard that catches
+        # the phrasing it was seeded with catches nothing but itself.
+        (
+            "SC 2.5.8 requires targets of at least 44 CSS pixels square",
+            "the same wrong number, worded so neither seeded literal appears",
+        ),
+        (
+            "Per SC 2.5.8, make hit areas 44px on a side.",
+            "44px, with no separator between the two dimensions at all",
+        ),
+        (
+            "targets should be 44 pixels by 44 pixels (SC 2.5.8)",
+            "spelled out at full length rather than as the compact 44x44",
+        ),
+        (
+            "SC 2.4.11 wants the focus ring at a ratio of 4.5:1",
+            "a contrast ratio that is not 3:1, on a criterion with no ratio at all",
         ),
     ],
 )

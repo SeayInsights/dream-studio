@@ -53,7 +53,10 @@ citations:
     requires: >-
       A visible keyboard focus indicator. Visibility only -- no contrast ratio
       and no size threshold appear in this criterion.
-    must_not_claim: ["3:1"]
+    # Any contrast ratio. SC 2.4.7 states none. Matched as X:1 rather than the
+    # looser \d+:\d+, which would also fire on an OWASP id like A01:2025 sharing
+    # the line -- a guard with a false positive gets its findings ignored.
+    must_not_claim: ['\b\d+(?:\.\d+)?\s*:\s*1\b']
     claim_owner: "SC 1.4.11"
     source: https://www.w3.org/WAI/WCAG22/Understanding/focus-visible.html
     verified: "2026-09-21"
@@ -65,7 +68,8 @@ citations:
     requires: >-
       A focused component is not ENTIRELY hidden by author-created content.
       Contains no contrast ratio, no pixel threshold, no target-size language.
-    must_not_claim: ["3:1"]
+    # Any contrast ratio. SC 2.4.11 contains none. See SC 2.4.7 on the X:1 shape.
+    must_not_claim: ['\b\d+(?:\.\d+)?\s*:\s*1\b']
     claim_owner: "SC 1.4.11"
     source: https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured-minimum.html
     verified: "2026-09-21"
@@ -78,7 +82,10 @@ citations:
       Pointer targets at least 44 by 44 CSS pixels. Exceptions: Equivalent,
       Inline, User Agent Control, Essential. Note there is NO spacing exception
       here, unlike SC 2.5.8.
-    must_not_claim: ["24x24", "24 by 24"]
+    # The number 24 in any form -- this criterion is 44. Written as "24 not
+    # followed by a digit" rather than \b24\b, because \b finds no boundary
+    # inside "24x24" or "24px" and so matched neither.
+    must_not_claim: ['\b24(?!\d)']
     claim_owner: "SC 2.5.8"
     source: https://www.w3.org/WAI/WCAG22/Understanding/target-size-enhanced.html
     verified: "2026-09-21"
@@ -90,7 +97,11 @@ citations:
     requires: >-
       Pointer targets at least 24 by 24 CSS pixels, with a spacing exception for
       undersized targets whose 24px-diameter circles do not intersect.
-    must_not_claim: ["44x44", "44 by 44"]
+    # The number 44 in any form -- this criterion is 24. Literals "44x44" and
+    # "44 by 44" missed "44 CSS pixels square"; \b44\b then missed "44x44" and
+    # "44px", since \b finds no boundary between a digit and a letter. "44 not
+    # followed by a digit" catches all of them and still ignores 440 and 1440.
+    must_not_claim: ['\b44(?!\d)']
     claim_owner: "SC 2.5.5"
     source: https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html
     verified: "2026-09-21"
