@@ -211,3 +211,120 @@ def test_pytest_under_a_hooks_environment_leaves_the_real_repository_alone(tmp_p
         " code under test read that repository instead of its own fixture's:\n"
         f"{done.stdout[-3000:]}"
     )
+
+
+# ---------------------------------------------------------------------------------------
+# The guard: the escape route is closed, but the DAMAGE is watched too.
+#
+# The conftest strip closes the one route that was found. Watching the repository itself
+# closes the ones nobody has thought of: a test that hardcodes the repository path, a helper
+# that splats `**{"cwd": ...}` past any static scan, production code called from a test. The
+# autouse fixture in tests/conftest.py snapshots the repository's config, HEAD and branch tip
+# around every test and aborts the session naming the test that changed them -- the same shape
+# as the guards already there for ~/.dream-studio.
+# ---------------------------------------------------------------------------------------
+
+
+def _conftest():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "ds_conftest_under_test", REPO_ROOT / "tests" / "conftest.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["ds_conftest_under_test"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_fingerprint_notices_the_exact_damage_the_escape_did(tmp_path, monkeypatch):
+    """core.bare flipping and the branch tip moving are the two observed symptoms."""
+    conftest = _conftest()
+    victim = _victim(tmp_path)
+    monkeypatch.setattr(conftest, "_PLUGIN_ROOT", victim)
+
+    clean = conftest._real_repo_fingerprint()
+    assert clean is not None, "the fingerprint could not read the repository, so it guards nothing"
+    assert conftest._real_repo_fingerprint() == clean, "the fingerprint is not stable at rest"
+
+    _run(victim, "config", "core.bare", "true")
+    assert conftest._real_repo_fingerprint() != clean, "a bare flip went unnoticed"
+
+    _run(victim, "config", "core.bare", "false")
+    assert conftest._real_repo_fingerprint() == clean, "the fingerprint did not settle back"
+
+    (victim / "sneaked.txt").write_text("sneaked", encoding="utf-8")
+    _run(victim, "add", ".")
+    _run(victim, "commit", "-q", "-m", "a commit nobody asked for")
+    assert conftest._real_repo_fingerprint() != clean, "a commit on the branch went unnoticed"
+
+
+def test_the_fingerprint_resolves_a_worktree_whose_dot_git_is_a_file(tmp_path, monkeypatch):
+    """A worktree's ``.git`` is a FILE holding ``gitdir:``, and this work happens in worktrees.
+
+    Returning None there would leave the guard silently inert in exactly the place the
+    damage was done -- passing, and watching nothing.
+    """
+    conftest = _conftest()
+    victim = _victim(tmp_path)
+    linked = tmp_path / "linked"
+    assert _run(victim, "worktree", "add", "-q", str(linked), "-b", "side").returncode == 0
+    assert (linked / ".git").is_file(), "the worktree's .git should be a file"
+
+    monkeypatch.setattr(conftest, "_PLUGIN_ROOT", linked)
+    clean = conftest._real_repo_fingerprint()
+    assert clean is not None, "the worktree's .git file was not resolved"
+
+    # core.bare lives in the COMMON config, shared with the main repository -- resolving
+    # `commondir` is what makes that reachable from here.
+    _run(victim, "config", "core.bare", "true")
+    assert conftest._real_repo_fingerprint() != clean, "the shared config is not being watched"
+
+
+def test_the_guard_aborts_the_session_and_names_the_test_that_did_it(tmp_path):
+    """The wiring proof: a real pytest run, and a test that really does damage a repository.
+
+    ``_PLUGIN_ROOT`` is derived from conftest's own location, so a copy of conftest placed in
+    a victim repository watches THAT repository. The test below then commits into it -- the
+    genuine offence, with nothing stubbed -- and the run must abort naming it. Asserting that
+    the fixture contains a call would pass against a guard wired to nothing.
+    """
+    victim = _victim(tmp_path)
+    tests_dir = victim / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "conftest.py").write_bytes((REPO_ROOT / "tests" / "conftest.py").read_bytes())
+    (tests_dir / "test_offender.py").write_text(
+        "import subprocess\n"
+        "from pathlib import Path\n"
+        "VICTIM = Path(__file__).resolve().parent.parent\n"
+        "def test_a_test_that_commits_into_the_repository_it_runs_in():\n"
+        "    (VICTIM / 'oops.txt').write_text('oops', encoding='utf-8')\n"
+        "    subprocess.run(['git', 'add', '.'], cwd=str(VICTIM), check=True)\n"
+        "    subprocess.run(\n"
+        "        ['git', 'commit', '-q', '-m', 'the offence'], cwd=str(VICTIM), check=True\n"
+        "    )\n",
+        encoding="utf-8",
+    )
+
+    done = subprocess.run(
+        [sys.executable, "-m", "pytest", str(tests_dir), "-q", "-p", "no:cacheprovider"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=_clean_env(PYTHONPATH=str(REPO_ROOT)),
+        timeout=600,
+        check=False,
+    )
+
+    output = done.stdout + done.stderr
+    assert "test_a_test_that_commits_into_the_repository_it_runs_in" in output, (
+        "the guard did not name the offending test -- the previous round of this bug cost a"
+        f" day of bisecting for exactly that reason\n{output[-3000:]}"
+    )
+    assert "modified the real git repository" in output, (
+        f"the guard did not fire on a test that committed into its own repository\n"
+        f"{output[-3000:]}"
+    )
+    assert done.returncode != 0, "the run should have aborted"
