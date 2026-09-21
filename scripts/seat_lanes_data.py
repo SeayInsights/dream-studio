@@ -130,18 +130,6 @@ seat(
     " reproductions that can be replayed at HEAD.",
 )
 seat(
-    "Merge-order steward",
-    question="How far behind its base is this, is it the tree that actually ships, and"
-    " does anything still-open have to land first?",
-    signature="A branch reviewed in isolation. It is clean against its own base, stale"
-    " against main, and the merged tree behaves differently from either.",
-    precedent="dogfood-appliances#34: a clean textual merge producing an invalid"
-    " lockfile. release#140: a superseded duplicate. 1,262 units.",
-    measurement="Distance from base and merge-state are both computable from git without"
-    " judgement, which is why this one is a detector and not prose.",
-    detector="py -m core.gates.branch_freshness",
-)
-seat(
     "Claim and closure auditor",
     question="Does the PR body, the comments and the docs say what the code does, and"
     " will `Closes #N` close the right issue?",
@@ -299,21 +287,6 @@ seat(
 )
 
 # ── Correctness bench (5) ────────────────────────────────────────────────────
-seat(
-    "Distributed state and concurrency",
-    question="This wait is bounded per item. How many items can there be, and does"
-    " anything bound the total?",
-    signature="A per-item timeout with no aggregate deadline, a process-local cache in a"
-    " multi-replica deployment, or a guard evaluated outside the transaction it is meant"
-    " to protect.",
-    precedent="platform#701's process-local cache across replicas; platform#689's guard"
-    " outside the transaction; platform#696's stale-cache authorization leak; demo#68's"
-    " ledger double-spend.",
-    measurement="A per-item wait with no enclosing deadline is a shape visible in the"
-    " code, countable across the tree, and the count was small enough to hold at zero --"
-    " which is why it is a detector.",
-    detector="py -m core.gates.aggregate_deadline",
-)
 seat(
     "Data and migration",
     question="Does this migration go forward and back, and does the schema still hold"
@@ -523,20 +496,6 @@ seat(
 )
 
 # ── The twenty-ninth: no bench equivalent ────────────────────────────────────
-seat(
-    "Event-substrate custodian",
-    question="If this record were rebuilt from its events tomorrow, would it still be"
-    " here, and would it still say the same thing?",
-    signature="A row written straight into a projection. It is correct today and gone"
-    " after a rebuild, or present with a field the replay could not reproduce.",
-    precedent="Measured on this authority 2026-09-10: 493 of 956 work orders and 1706 of"
-    " 3311 tasks had no creation event, and 459 rows held a status no event type could"
-    " produce. A rebuild is the recovery tool.",
-    measurement="Projection target tables are derived from each projection's own"
-    " target_tables and the write sites are countable -- 6 of 6 examined and emitting --"
-    " which is small enough to hold at zero, so it is a detector.",
-    detector="py -m core.gates.event_backed_write",
-)
 
 
 # ── The industry standards each seat is measured against ─────────────────────
@@ -781,86 +740,6 @@ RESEATED: dict[str, dict] = {
         "re-derive it.",
         "enforcement": ("eval", "tests/evals/test_review_lane_predicate_parity.py"),
     },
-    "an-untested-fallback-lane": {
-        "seat": "Test-integrity inquisitor",
-        "question": "This fallback exists because the primary path can "
-        "be unavailable. Does any test ever enter it, or do "
-        "they all take the primary path?",
-        "signature": "A platform or exception fallback whose tests all "
-        "run the other branch — so the test that validates "
-        "the fix cannot run on the platform the fallback "
-        "exists for.",
-        "precedent": "The Machinist, gw#858. `fallback_lock` / "
-        "`_pending_queue_thread_lock` had zero test hits; "
-        "every ack test ran the flock path. The Windows "
-        "lane the docstring promised was unexercised.",
-        "measurement": "Deterministic and diff-scoped. Measured 10 "
-        "candidates across 944 product files with "
-        "name-and-handler detection alone; 14 once an "
-        "audit forced the detector to also see "
-        "PLATFORM-CONDITIONAL fallbacks, which it had "
-        "been blind to — and gw#858 was a Windows lane, "
-        "so the detector could not see the shape of its "
-        "own precedent. Diff-scoped because those 10 "
-        "stand today: whole-tree would be a wall on day "
-        "one, and the backlog drains as those files are "
-        "touched — the ratchet `normative-baseline` and "
-        "`workflow-node-verification` already use.",
-        "enforcement": ("detector", "py -m core.gates.untested_fallback"),
-    },
-    "a-per-item-wait-with-no-aggregate-deadline": {
-        "seat": "Distributed state and concurrency",
-        "question": "This wait is bounded per item. "
-        "How many items can there be, and "
-        "does anything bound the total?",
-        "signature": "A module that already solved "
-        "unbounded stall for one loop "
-        "grows a per-item retry in "
-        "another, with no aggregate "
-        "deadline — so the ceiling "
-        "multiplies by a data-dependent "
-        "count and passes the timeout the "
-        "module itself cites.",
-        "precedent": "The Machinist, gw#849 — the "
-        "strongest finding of the pass. "
-        "The module's own comment 40 "
-        "lines above the new code says a "
-        "per-slug ceiling times an "
-        "agent's skill count is loop "
-        "stall time, and set "
-        "`_LOCK_BATCH_BUDGET_S = 5.0` for "
-        "exactly that reason. The new "
-        "per-card retry was 2 sleeps x "
-        "0.5s inside `for sid in ids:` "
-        "with no aggregate deadline: ~20s "
-        "at 20 equipped skills, plus the "
-        "equip retry's own 1.0s, scaling "
-        "linearly past the 30s timeout "
-        "the operator control surface "
-        "uses.",
-        "measurement": "Deterministic ONLY once "
-        "sharpened to the "
-        "multiplication shape, and the "
-        "sharpening came from a false "
-        "positive. The first cut — a "
-        "sleep in a loop, in a module "
-        "that defines a budget constant "
-        "— found 1 candidate, "
-        "`core/work_orders/artifacts.py:216`, "
-        "and reading it showed "
-        "`_LOCK_ATTEMPTS = 4` with a "
-        "0.15s backoff: 0.90s worst "
-        "case, not inside any outer "
-        "per-item loop. Bounded, and "
-        "not the finding. Requiring "
-        "NESTING — a sleeping loop "
-        "inside another loop, neither "
-        "consulting a deadline — drops "
-        "DS's tree to 0, so this one "
-        "runs whole-tree rather than "
-        "diff-scoped.",
-        "enforcement": ("detector", "py -m " "core.gates.aggregate_deadline"),
-    },
     "a-contract-that-names-one-of-two-mechanisms": {
         "seat": "Contract and protocol",
         "question": "The code says mechanisms X and Y "
@@ -938,28 +817,6 @@ RESEATED: dict[str, dict] = {
             "lane the moment the first "
             "real ADR lands.",
         ),
-    },
-    "a-branch-behind-its-base": {
-        "seat": "Merge-order steward",
-        "question": "How far behind its base is this branch, and did " "anyone ask it to sync?",
-        "signature": "A PR that trial-merges clean while being far "
-        "enough behind that the review read a tree nobody "
-        "will ship.",
-        "precedent": "The Surveyor. In the pasted pass plat#812 and #814 "
-        "were 38 commits behind and gw#849 and #858 were 5 "
-        "behind; all four trial-merged clean, and the "
-        "Herald asked #812 to sync explicitly. Clean "
-        "trial-merge is not currency.",
-        "measurement": "Trivially deterministic — `git rev-list --count "
-        "HEAD..origin/main` — and currently PROSE: "
-        'CLAUDE.md says "Never push to stale/old branches '
-        '— check branch freshness first", enforced by '
-        "nothing. ADVISORY rather than blocking, because "
-        "a deliberately behind branch is legitimate (a "
-        "revert, a hotfix off a tag) and blocking it "
-        "would be a wall; the lane's job is that nobody "
-        "reviews a stale tree without knowing it.",
-        "enforcement": ("detector", "py -m core.gates.branch_freshness"),
     },
     "an-unenumerated-behaviour-change": {
         "seat": "Claim and closure auditor",
@@ -1166,75 +1023,6 @@ RESEATED: dict[str, dict] = {
         "watch, which is a reviewer's act rather than a "
         "gate's.",
         "enforcement": ("eval", "tests/evals/test_review_lane_a_test_that_cannot_fail.py"),
-    },
-    "a-write-no-event-can-reconstruct": {
-        "seat": "Event-substrate custodian",
-        "question": "If this record were rebuilt from its events "
-        "tomorrow, would it still be here?",
-        "signature": "A row written straight into a projection "
-        "table, with no canonical event beside it. "
-        "Nothing fails and the row reads as "
-        "durable, because the projection is a real "
-        "table and the write really happened -- but "
-        "`pre_rebuild` truncates that table before "
-        "replaying events, so a replay cannot "
-        "reconstruct what no event describes. Often "
-        "arrives by copying a sibling write site "
-        "rather than the designated writer.",
-        "precedent": "The Custodian, WO 17466550, measured "
-        "2026-09-10: 493 of 949 work orders and "
-        "1706 of 3286 tasks in the live authority "
-        "carry no creation event, so a rebuild "
-        "deletes 52% of both -- and a rebuild is "
-        "the disaster-recovery tool, so the defect "
-        "bites hardest exactly when it is reached "
-        "for. Verified by resolution rather than by "
-        "reading the comment that asserts it: "
-        "`pre_rebuild` is absent from both "
-        "projections' `__dict__` and both bind to "
-        "`framework_projection.py`, whose default "
-        "does `DELETE FROM` each declared target. "
-        "The source was one unfixed sibling -- "
-        "`_insert_gap_work_orders` writes both "
-        "tables with no event, while "
-        "`_attach_gap_tasks` was fixed and carries "
-        'a comment saying its author "copied the '
-        "shape of the sibling-spawn INSERT instead "
-        "of the task-creation path in "
-        'mutations.py", naming this exact function '
-        "as the wrong shape and never returning to "
-        "it. Related: WO a08206a9, where ownership "
-        "records SHAs that squash-merge discarded "
-        "(10 of 35 on one work order), and WO "
-        "6935afa5, where a drain writes status with "
-        "no event.",
-        "measurement": "A DETECTOR, AND THE COUNT IS WHY. The "
-        "target tables are DERIVED from each "
-        "projection's own `target_tables` "
-        "declaration -- the set `pre_rebuild` "
-        "truncates, so the actual blast radius -- "
-        "which measures 6 tables rather than the "
-        "2 this defect was found in; a hardcoded "
-        "list would have exempted the other 4, "
-        "the same subset-of-what-it-writes shape "
-        "as WO b56cca8a. Across the tree, 214 "
-        "functions INSERT into one of those "
-        "tables and 211 emit no event, but only 4 "
-        "are outside `tests/`: a fixture building "
-        "rows directly is what a fixture IS, so "
-        "tests are out of scope. Of the 4, three "
-        "are `prove`'s DISPOSABLE scratch "
-        "authority (declared at the site, since "
-        "emitting there would write the "
-        "operator's live spool -- the defect WO "
-        "8bd297f1 fixed, 4194 connections "
-        "measured) and one is the genuine "
-        "finding. So the gate reports exactly 1, "
-        "which is small enough to hold at zero. "
-        "ADVISORY until WO 17466550 fixes that "
-        "write, because a blocking gate that "
-        "ships red teaches people to bypass it.",
-        "enforcement": ("detector", "py -m core.gates.event_backed_write"),
     },
     "a-channel-outside-the-accounting": {
         "seat": "Untrusted input and abuse limits",
@@ -1474,31 +1262,6 @@ DEFERS: dict[str, list[str]] = {
         "the private-content half when convened against a project that does not vendor"
         " core.release.repo_publication_readiness -- the gate reports that it did not run"
         " rather than reporting clean",
-    ],
-    "an-untested-fallback-lane": [
-        "whether any test actually ENTERS the fallback branch -- any textual mention of"
-        " the symbol anywhere under tests/, a comment included, clears it, so this proves"
-        " a name is known to the tests rather than exercised by them",
-        "a platform dispatch written as a dict keyed on platform.system(), which has no"
-        " `if` node to find, and a platform predicate behind an abstracted name",
-        "fallbacks in files outside this change set -- the lane is diff-scoped, so the"
-        " standing backlog drains only as those files are touched",
-    ],
-    "a-per-item-wait-with-no-aggregate-deadline": [
-        "multiplication through a CALL -- a loop whose helper sleeps in its own loop is"
-        " the same defect and needs a call graph to see",
-    ],
-    "a-branch-behind-its-base": [
-        "whether anyone ASKED this branch to sync, which lives in review comments on the"
-        " pull request and not in the tree",
-        "whether being behind is a problem here -- a revert off a tag or a hotfix from a"
-        " release point is legitimately behind, which is why this lane is advisory",
-    ],
-    "a-write-no-event-can-reconstruct": [
-        "a bare UPDATE that changes a projected row's state: the scan matches"
-        " `INSERT INTO` and `INSERT OR REPLACE INTO` only, registered as WO 4fbe3282",
-        "whether replaying the emitted event actually REPRODUCES the row -- the lane"
-        " proves an event is emitted beside the write, not that its payload rebuilds it",
     ],
 }
 
