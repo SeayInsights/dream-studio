@@ -42,6 +42,34 @@ if "DREAM_STUDIO_DB_PATH" not in _os.environ:
     _os.environ["DREAM_STUDIO_DB_PATH"] = str(_session_tmp / "state" / "studio.db")
     _os.environ["DS_SPOOL_ROOT"] = str(_session_tmp / "events")
 
+# Same isolation guard, for git instead of the DB.
+#
+# git exports GIT_DIR -- pointing at the operator's real repository -- to every hook it runs.
+# The pre-push gate runs pytest, pytest's children inherit GIT_DIR, and a fixture that does
+# `subprocess.run(["git", "init"], cwd=<tmp>)` then re-initializes THAT repository instead of
+# the temporary one: bare, because the cwd is not its work tree. The commits that follow land
+# in the real repository too.
+#
+# Measured before this was added: core.bare on the operator's repository flipped to true six
+# times in one session, always after a gate run; the checked-out branch's ref moved on its own;
+# and the repository collected `commit a` / `commit b` / `commit c` from a fixture in
+# tests/unit/test_graded_range_includes_own_commits.py. Running that file by hand never
+# reproduced it, because no GIT_DIR is set outside a hook.
+#
+# Stripping these makes the under-a-hook environment identical to the ordinary `pytest` one --
+# the environment every test already passes in -- so no test loses anything it relied on. A
+# test that means to act on a specific repository passes cwd=, which is unaffected.
+for _pointer in (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_CEILING_DIRECTORIES",
+):
+    _os.environ.pop(_pointer, None)
+
 # Windows-only: install SIGINT handler before pytest does, so pytest never
 # sees the phantom signals that occur on this platform during the ingest
 # pipeline's filesystem and SQLite operations. The handler in

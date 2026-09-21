@@ -23,12 +23,43 @@ Only one of them supports a verdict about whether the work is present.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
 import pytest
 
 from core.work_orders.range_attribution import attribute_range
+
+#: Variables that point git at a repository other than `cwd`. They MUST be cleared, because
+#: git exports them to every hook it runs: when this suite runs under the pre-push hook, the
+#: children inherit GIT_DIR pointing at the operator's real repository, and `git init` below
+#: then re-initializes THAT repository instead of the temporary one -- setting core.bare=true
+#: (git init from a cwd that is not the work tree makes it bare) and sending the commits into
+#: the real repo on whatever branch is checked out.
+#:
+#: Measured while finding this: `core.bare` flipped to true six times in one session, always
+#: after a gate run and never after running this file alone, and the real repository collected
+#: `commit a` / `commit b` / `commit c` on a feature branch, moving its ref. Reproduced
+#: deliberately on a throwaway repository: with GIT_DIR set, `git init` from a temp directory
+#: turned the victim's core.bare from false to true.
+#:
+#: The file passing in isolation is the whole trap -- the escape only happens in the one
+#: context nobody runs by hand.
+_REPO_POINTERS = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_CEILING_DIRECTORIES",
+)
+
+
+def _isolated_env() -> dict[str, str]:
+    """The ambient environment with every inherited repository pointer removed."""
+    return {k: v for k, v in os.environ.items() if k not in _REPO_POINTERS}
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -43,6 +74,7 @@ def _git(repo: Path, *args: str) -> str:
         encoding="utf-8",
         errors="replace",
         check=True,
+        env=_isolated_env(),
     ).stdout.strip()
 
 
