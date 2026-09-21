@@ -81,7 +81,7 @@ def test_a_command_that_is_not_python_is_untouched():
 # handler ran twice per event. Four Stop hooks firing per turn is what made a turn feel hung.
 # ---------------------------------------------------------------------------------------
 
-import interfaces.cli.setup_hooks as setup_hooks
+import interfaces.cli.setup_hooks as setup_hooks  # noqa: E402
 
 
 def _settings_at(tmp_path, monkeypatch):
@@ -142,7 +142,7 @@ def test_an_operators_own_absolute_interpreter_is_left_alone(tmp_path, monkeypat
     settings = _settings_at(tmp_path, monkeypatch)
     template = _template_commands()[0]
     event = next(iter(json.loads(HOOKS_JSON.read_text(encoding="utf-8"))["hooks"]))
-    chosen = '"C:/venv/Scripts/python.exe" ' + template[len("python ") :]
+    chosen = '"C:/venv/Scripts/python.exe" ' + template[len("python ") :]  # noqa: E203
     settings.write_text(
         json.dumps({"hooks": {event: [{"hooks": [{"type": "command", "command": chosen}]}]}}),
         encoding="utf-8",
