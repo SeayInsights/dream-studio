@@ -1,14 +1,16 @@
 ---
 dream_studio:
-  skill_id: ds-domains
-  pack: domains
-  mode: website/deck
+  skill_id: ds-website
+  pack: website
+  mode: deck
   mode_type: build
   inputs: [direction_lock, content_brief, deck_type]
   outputs: [html_deck]
   capabilities_required: [Read, Write]
   model_preference: sonnet
   estimated_duration: 20-40min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Deck — HTML Presentation Builder

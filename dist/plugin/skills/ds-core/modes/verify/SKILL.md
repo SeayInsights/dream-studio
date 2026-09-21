@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Bash, Grep, LSP]
   model_preference: sonnet
   estimated_duration: 10-30min
+  write_posture: read-only
+  lifecycle: published
 ---
 
 # Verify — Prove It Works

@@ -1,14 +1,16 @@
 ---
 dream_studio:
-  skill_id: ds-domains
-  pack: domains
-  mode: website/cip
+  skill_id: ds-website
+  pack: website
+  mode: cip
   mode_type: build
   inputs: [brand_context, industry, audience, budget_tier]
   outputs: [cip_brief, deliverable_list]
   capabilities_required: [Read, Bash]
   model_preference: sonnet
   estimated_duration: 10-20min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # CIP — Corporate Identity Package Generator

@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dream-studio.local/schema/skill_card.schema.json",
+  "title": "Dream Studio - skill mode card",
+  "description": "The dream_studio frontmatter block of a mode's SKILL.md. Uniform across every carded mode by convention since the pack split; this file makes that convention checkable. write_posture and lifecycle are the two fields the convention lacked: capabilities_required says whether a mode CAN write, not whether it may write unattended, and nothing recorded whether a mode is current or superseded.",
+  "type": "object",
+  "required": ["dream_studio"],
+  "properties": {
+    "dream_studio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skill_id",
+        "pack",
+        "mode",
+        "mode_type",
+        "inputs",
+        "outputs",
+        "capabilities_required",
+        "model_preference",
+        "estimated_duration",
+        "write_posture",
+        "lifecycle"
+      ],
+      "properties": {
+        "skill_id": {
+          "type": "string",
+          "pattern": "^ds-[a-z][a-z0-9-]*$",
+          "description": "The invocable skill surface, e.g. ds-quality."
+        },
+        "pack": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Key under packs: in packs.yaml."
+        },
+        "mode": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Directory name under the pack's modes/, and the mode argument."
+        },
+        "mode_type": {
+          "type": "string",
+          "enum": [
+            "analysis",
+            "audit",
+            "build",
+            "creative",
+            "diagnostic",
+            "discovery",
+            "orchestration",
+            "planning",
+            "remediation",
+            "report",
+            "review",
+            "scan",
+            "setup",
+            "verification",
+            "wizard"
+          ]
+        },
+        "inputs": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "description": "Vocabulary tokens this mode consumes. Each is produced by another mode's outputs, or registered as a root input in canonical/skill_vocabulary.json."
+        },
+        "outputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "description": "Vocabulary tokens this mode produces."
+        },
+        "capabilities_required": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Harness tools the mode needs. A capability is what the mode CAN reach; write_posture is what it may do with it unattended."
+        },
+        "model_preference": {
+          "type": "string",
+          "enum": ["haiku", "sonnet", "opus"],
+          "description": "Default tier. Resolved through config/skill_profiles.py, which lets an operator override it without editing this card."
+        },
+        "estimated_duration": {"type": "string"},
+        "write_posture": {
+          "type": "string",
+          "enum": ["read-only", "independent", "hitl"],
+          "description": "read-only: observes and reports, changes nothing. independent: makes reversible changes inside the work boundary without asking. hitl: reaches a step the operator approves before it takes effect - a deploy, a merge, a delivery that leaves the machine."
+        },
+        "lifecycle": {
+          "type": "string",
+          "enum": ["draft", "approved", "published", "deprecated"],
+          "description": "published: routable and current. deprecated: still resolvable, superseded - it stays listed so an existing invocation keeps working while callers move."
+        }
+      }
+    }
+  }
+}

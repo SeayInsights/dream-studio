@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Write, Edit, Grep, Bash, LSP]
   model_preference: sonnet
   estimated_duration: 2-8hrs
+  write_posture: independent
+  lifecycle: published
 ---
 
 # SaaS Build — React + Cloudflare Stack
