@@ -538,7 +538,7 @@ def compose_module_boundary(description: str, module_boundary: str | list[str] |
     precisely the "looks declared and matches nothing" failure the guard below names.
 
     Whitespace is not the discriminator either -- an absolute path on this operator's
-    machine contains a space (``C:/Users/Dannis Seay/.codex/config.toml``), and six such
+    machine contains a space (``C:/Users/Example User/.codex/config.toml``), and six such
     entries on a live work order would be lost by a no-spaces rule.
 
     An already-present clause is left alone: a caller who wrote it by hand is not
