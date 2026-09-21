@@ -1372,6 +1372,60 @@ _HEADER = """# Review lanes - the questions a Dream Studio review is obliged to 
 REGISTRY = pathlib.Path(__file__).resolve().parents[1] / "canonical" / "review_lanes.yml"
 
 
+#: Seats that answer under one name. The lane is untouched -- its question, signature,
+#: precedent, measurement and enforcement all stay exactly as written; only the seat
+#: holding it changes, which is the same move `RESEATED` makes and for the same reason.
+#:
+#: WHY MERGE AT ALL. Twenty-nine seats each asking one question produced the diffuse review
+#: the bench exists to replace: three agents opening the same files to ask three neighbouring
+#: questions, and no one of them seeing the case that falls between. An agent holding the
+#: adjacent lanes sees them together. The detail is in the lanes and the roster is the seats,
+#: so this costs nothing that was being asked.
+#:
+#: WHY THESE FOUR. Each is a group whose members share a technique, not merely a topic:
+#:
+#: * Boundary semantics -- all three are "the check took its frame from the thing it was
+#:   checking". Untrusted input's own signature calls its middle variant "verifying a
+#:   producer's transitions rather than what RENDERS", which IS the failure-semantics lane.
+#: * Claim integrity -- all three are two descriptions disagreeing, differing only in which
+#:   pair of artifacts: PR body against response contract, normative line against decision
+#:   record, one canonical document against another.
+#: * Interface conformance -- the same scope globs, the same files, and the same blocker: a
+#:   static half a seat can answer and a rendered half it cannot.
+#: * Finding integrity -- two halves of one motion at verdict time. Merging removes the
+#:   bench's only hard ordering, because one agent does both in sequence.
+SEAT_MERGES: dict[str, str] = {
+    "Failure semantics": "Boundary semantics",
+    "Observability and audit trail": "Boundary semantics",
+    "Untrusted input and abuse limits": "Boundary semantics",
+    "Claim and closure auditor": "Claim integrity",
+    "Contract and protocol": "Claim integrity",
+    "Governance canon and board": "Claim integrity",
+    "Design-system conformance": "Interface conformance",
+    "Accessibility": "Interface conformance",
+    "Frontend behavior and payload": "Interface conformance",
+    "Evidence referee": "Finding integrity",
+    "Reviewer's reviewer": "Finding integrity",
+}
+
+
+def _seat_name(seat: str) -> str:
+    """The name a lane is emitted under. Unmerged seats pass through unchanged."""
+    return SEAT_MERGES.get(seat, seat)
+
+
+def seat_count() -> int:
+    """Distinct seats after merges -- not `len(SEATS)`, which counts declarations.
+
+    The two stopped being the same number the moment a seat could hold several lanes and
+    several declarations could answer under one name. Reporting `len(SEATS)` would name a
+    roster nobody convenes.
+    """
+    declared = {_seat_name(name) for name in SEATS}
+    carried = {_seat_name(lane["seat"]) for lane in RESEATED.values()}
+    return len(declared | carried)
+
+
 def _lane_id(seat: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", seat.lower()).strip("-")
 
@@ -1446,8 +1500,11 @@ DEFERS: dict[str, list[str]] = {
 
 
 def _block(lane_id: str, seat: str, spec) -> str:
+    """`seat` is the DECLARED seat. It is what STANDARDS and SCOPES are keyed by, so each
+    lane keeps its own even when several lanes answer under one merged name -- pooling them
+    would give a lane standards it never named and a scope it never claimed."""
     question, signature, precedent, measurement, enforcement = spec
-    lines = [f"  - id: {lane_id}", f"    seat: {json.dumps(seat)}"]
+    lines = [f"  - id: {lane_id}", f"    seat: {json.dumps(_seat_name(seat))}"]
     for key, value in (
         ("question", question),
         ("signature", signature),
@@ -1530,7 +1587,7 @@ def main(argv: list[str] | None = None) -> int:
         if current == rendered:
             print(
                 f"review-lanes: OK - registry matches its generator"
-                f" ({len(SEATS)} seats, {lane_count()} lanes)."
+                f" ({seat_count()} seats, {lane_count()} lanes)."
             )
             return 0
         print(
@@ -1540,7 +1597,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
     REGISTRY.write_text(rendered, encoding="utf-8")
-    print(f"review-lanes: wrote {REGISTRY} ({len(SEATS)} seats, {lane_count()} lanes)")
+    print(f"review-lanes: wrote {REGISTRY} ({seat_count()} seats, {lane_count()} lanes)")
     return 0
 
 
