@@ -38,24 +38,41 @@ def test_flake8_baseline_detects_new_findings() -> None:
     assert "F841" in comparison["new_findings"][0]
 
 
-def test_ci_gate_uses_format_check_and_lint_baseline_not_mutating_format_target() -> None:
-    checks = {name: command for name, command in ci_gate.CHECKS}
+def test_no_check_anywhere_uses_a_mutating_format_target() -> None:
+    """The property this test was always about: check formatting, never rewrite it.
 
-    assert checks["format"] == [ci_gate._PYTHON, "-m", "black", "--check", "."]
-    assert checks["lint-baseline"] == [
-        ci_gate._PYTHON,
-        "interfaces/cli/lint_baseline.py",
-        "check",
-    ]
-    assert checks["contract-docs-drift"] == [
-        ci_gate._PYTHON,
-        "interfaces/cli/contract_docs_drift_gate.py",
-    ]
-    assert checks["contract-atlas-lifecycle"] == [
-        ci_gate._PYTHON,
-        "interfaces/cli/contract_atlas_lifecycle_gate.py",
-    ]
+    A gate that runs `make fmt` does not report a verdict, it edits the tree and
+    then agrees with itself.
+    """
+    checks = {name: command for name, command in ci_gate.CHECKS}
     assert all(command != ["make", "fmt"] for command in checks.values())
+
+
+def test_each_check_has_exactly_one_home() -> None:
+    """format and lint-baseline live in the pre-push gate, and nowhere else.
+
+    They used to run in THREE places -- the pre-push gate, pr-smoke, and here in
+    full-ci -- three runs for one answer. This copy is the worst of the three: it
+    runs POST-MERGE, so a formatting failure is discovered after it is already on
+    main, having burned a 3-platform matrix to say "run black".
+
+    They now run once, in pre-push, where the fix is `black .` before you push.
+    What is left here is the full test suite, which nothing else runs.
+    """
+    import pathlib
+
+    checks = {name for name, _ in ci_gate.CHECKS}
+    assert "test" in checks, "full-ci must still run the suite; nothing else does"
+    assert "format" not in checks, "format runs in pre-push; this is the third copy"
+    assert "lint-baseline" not in checks, "lint runs in pre-push; this is the third copy"
+
+    repo = pathlib.Path(__file__).resolve().parents[2]
+    prepush = (repo / "canonical" / "workflows" / "pre-push.yaml").read_text(encoding="utf-8")
+    assert "id: format-check" in prepush, "format lost its one home"
+    assert "id: lint-check" in prepush, "lint lost its one home"
+
+    ci = (repo / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "black --check" not in ci, "pr-smoke is running format again"
 
 
 def test_ci_gate_env_uses_isolated_runtime_state() -> None:

@@ -116,25 +116,29 @@ def record_observation(
     deny. Best-effort, like ``log_hook_execution`` — a broken emit path never affects the
     allow decision. The record rides the existing HOOK_EXECUTION_LOGGED canonical event via
     ``trigger_context`` (no new table)."""
+    # QUEUED, like the other two. All three enforce-hook telemetry paths --
+    # log_hook_execution, record_bypass and this one -- run inside hooks that
+    # BLOCK the user's action, and writing the row inline pulls the event store
+    # (282 modules, 259 ms) while they wait. Leaving one of the three writing
+    # inline would have kept the cost and split the read path in two.
     try:
-        from core.event_store.event_writer import insert_hook_execution
-
-        insert_hook_execution(
-            hook_name=hook_name,
-            hook_type=hook_type,
-            trigger_context={
-                "decision": "observe",
-                "tier": tier,
-                "rule": rule,
-                "would_deny_reason": reason,
-            },
-            started_at=started_at or now_iso(),
-            completed_at=now_iso(),
-            duration_ms=duration_ms,
-            exit_code=0,
-            status="success",
-            session_id=session_id,
-            db_path=db_path,
+        _enqueue_hook_execution(
+            {
+                "hook_name": hook_name,
+                "hook_type": hook_type,
+                "trigger_context": {
+                    "decision": "observe",
+                    "tier": tier,
+                    "rule": rule,
+                    "would_deny_reason": reason,
+                },
+                "started_at": started_at or now_iso(),
+                "completed_at": now_iso(),
+                "duration_ms": duration_ms,
+                "exit_code": 0,
+                "status": "success",
+                "session_id": session_id,
+            }
         )
     except Exception:
         pass  # telemetry is best-effort; never let a broken emit affect enforcement

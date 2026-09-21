@@ -59,6 +59,9 @@ def env(tmp_path, monkeypatch):
 
     monkeypatch.setattr(enforcement, "AUTHORITY_DB", authority)
     monkeypatch.setattr(enforcement, "SESSION_DIR", tmp_path / "enforce")
+    # Each test gets its own queue. Without this the hook telemetry file is the
+    # operator's real one, so records leak between tests AND into live state.
+    monkeypatch.setattr(enforcement, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(enforcement, "TEMP_ROOT", tmp_path / "nonexistent-temp")
     monkeypatch.setattr(enforcement, "DS_HOME", tmp_path / "nonexistent-ds-home")
     monkeypatch.delenv("DS_ENFORCE", raising=False)
@@ -68,12 +71,42 @@ def env(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def captured(monkeypatch):
-    calls: list[dict] = []
-    monkeypatch.setattr(
-        "core.event_store.event_writer.insert_hook_execution",
-        lambda **kw: calls.append(kw),
-    )
-    return calls
+    # THE ENFORCE HOOKS NO LONGER WRITE THIS ROW INLINE. Doing so imports the event
+    # store (282 modules, 259 ms) inside a hook that BLOCKS the user's action. The
+    # record still happens -- it is appended to hookq.jsonl and written by the next
+    # UserPromptSubmit or Stop -- so this reads it from where it now lands.
+    import json as _json
+
+    class _QueueView(list):
+        def _load(self):
+            path = enforcement.STATE_DIR / "hookq.jsonl"
+            if not path.is_file():
+                return []
+            out = []
+            for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    rec = _json.loads(line)
+                    if rec.get("event") == "hook.execution":
+                        out.append(_json.loads(rec["payload"]))
+                except (ValueError, KeyError):
+                    continue
+            return out
+
+        def __iter__(self):
+            return iter(self._load())
+
+        def __len__(self):
+            return len(self._load())
+
+        def __bool__(self):
+            return bool(self._load())
+
+        def __getitem__(self, i):
+            return self._load()[i]
+
+    return _QueueView()
 
 
 def _set_wo_in_progress(authority: Path, description: str = "") -> None:

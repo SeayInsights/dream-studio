@@ -110,9 +110,16 @@ class TestHooksJsonValid:
             uses_emitter = "'emitters'/'claude_code'/'run.py'" in cmd
             uses_dispatcher = "'runtime'/'dispatch'/'hooks.py'" in cmd
             uses_enforcement = "'on-edit-enforce.py'" in cmd or "'on-stop-enforce.py'" in cmd
-            assert uses_emitter or uses_dispatcher or uses_enforcement, (
+            # The append-only enqueuer: PostToolUse fires on every tool call and
+            # nothing consumes its stdout, so it records the event and exits
+            # instead of dispatching inline -- 267 ms to 27. Its handlers still
+            # run; hookq.drain replays them on UserPromptSubmit and Stop, which
+            # are synchronous anyway. Same cross-platform `python -c` bootstrap as
+            # the others, which is what this test is actually guarding.
+            uses_enqueue = "'runtime'/'hooks'/'enqueue.py'" in cmd
+            assert uses_emitter or uses_dispatcher or uses_enforcement or uses_enqueue, (
                 f"Command must route through canonical emitter, runtime dispatcher,"
-                f" or a direct-entry enforcement hook: {cmd}"
+                f" the append-only enqueuer, or a direct-entry enforcement hook: {cmd}"
             )
             assert '"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh"' not in cmd
 

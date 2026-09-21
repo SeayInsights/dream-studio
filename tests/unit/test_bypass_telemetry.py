@@ -37,13 +37,50 @@ NOW = datetime.now(UTC).isoformat()
 
 @pytest.fixture
 def captured(monkeypatch):
-    """Capture — never really emit — the bypass/observation telemetry."""
-    calls: list[dict] = []
-    monkeypatch.setattr(
-        "core.event_store.event_writer.insert_hook_execution",
-        lambda **kw: calls.append(kw),
-    )
-    return calls
+    """Read bypass/observation telemetry back off the append-only queue.
+
+    This used to patch `insert_hook_execution` and assert on the call. The
+    enforce hooks no longer write that row inline: doing so imports the event
+    store (282 modules, 259 ms) inside hooks that BLOCK every Edit, Write and
+    Stop, so the operator waited a quarter second for permission to edit a file
+    while the hook recorded that they had asked.
+
+    The mark still happens -- every escape hatch still leaves one -- it is just
+    appended to hookq.jsonl and written by the next UserPromptSubmit or Stop.
+    Same rows, same assertions, read from where they now land.
+    """
+    import json as _json
+
+    class _QueueView(list):
+        def _load(self):
+            path = enforcement.STATE_DIR / "hookq.jsonl"
+            if not path.is_file():
+                return []
+            out = []
+            for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    rec = _json.loads(line)
+                    if rec.get("event") == "hook.execution":
+                        out.append(_json.loads(rec["payload"]))
+                except (ValueError, KeyError):
+                    continue
+            return out
+
+        def __iter__(self):
+            return iter(self._load())
+
+        def __len__(self):
+            return len(self._load())
+
+        def __bool__(self):
+            return bool(self._load())
+
+        def __getitem__(self, i):
+            return self._load()[i]
+
+    return _QueueView()
 
 
 @pytest.fixture
@@ -54,6 +91,10 @@ def hermetic(tmp_path, monkeypatch):
     monkeypatch.setattr(enforcement, "SESSION_DIR", tmp_path / "enforce")
     monkeypatch.setattr(enforcement, "TEMP_ROOT", tmp_path / "nonexistent-temp")
     monkeypatch.setattr(enforcement, "DS_HOME", tmp_path / "nonexistent-ds-home")
+    # STATE_DIR was never patched here, so it still pointed at the operator's real
+    # ~/.dream-studio/state. Harmless while nothing in this path wrote through it;
+    # the queued telemetry record does, so the hole is closed rather than stepped over.
+    monkeypatch.setattr(enforcement, "STATE_DIR", tmp_path / "state")
     monkeypatch.delenv("DS_ENFORCE", raising=False)
     monkeypatch.delenv("DS_ENFORCE_TIER", raising=False)
     return tmp_path
