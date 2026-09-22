@@ -20,7 +20,8 @@ The user named a specific work order and asked to begin it ("start work order X"
    - On `{"ok": True, ...}`, present these fields to the user:
      - `title` (the WO that was started)
      - `type` (work order type)
-     - `context_path` (where context.md was written)
+     - `context_path` (where context.md was written; `null` when the artifact is in
+       the authority — read it with `ds work-order artifact <id> context`)
      - `workflow` if present — tell the user *"This work order uses the `{workflow.template}` workflow. First node: `{workflow.first_node}`. Invoke `ds-core:think` to begin."*
      - `next_step` if present.
      - `sequence_warning` if present — earlier WOs in the milestone are still open; surface it, then proceed.
@@ -54,5 +55,7 @@ Surface every field the user can act on. Do not add fields.
 ## Side effects
 
 - Sets the WO row's status to `in_progress` and timestamps it.
-- Writes `<planning_root>/work-orders/<id>/context.md` with the module boundary, task list, design brief, and gotchas.
+- Writes the context artifact (authority-first; a `<planning_root>/work-orders/<id>/context.md` file only on the pre-migration fallback) with **the prompt chain**, the module boundary, the task list with each task's acceptance criterion, the design brief, and gotchas.
+
+**READ THE PROMPT CHAIN BEFORE ANYTHING ELSE.** The artifact opens with a `## The prompt chain` section carrying, top-down, why the project exists, what the milestone delivers, and what this work order is for. That is the whole point of the hierarchy: a project is the goal its milestones answer to, a milestone the goal its work orders answer to, a work order the goal its tasks answer to. Until 2026-09-22 the brief selected four titles from four tables and not one description, so a work order arrived as a name with a task list under it and the executor had to infer the goal. A layer that carries no prompt prints no heading, so an absent section means the record predates the floors — not that there is nothing to know.
 - Emits a `work_order.started` spool event.

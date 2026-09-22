@@ -493,7 +493,12 @@ def get_project_state(
             pid = proj["project_id"]
 
             wo_row = conn.execute(
+                # `wo.description` and `m.description` are the PROMPTS. An operator
+                # orienting with `ds project state` was shown the next work order's
+                # title and its milestone's title and neither statement of intent --
+                # the same gap the executor had at `work-order start`.
                 "SELECT wo.work_order_id, wo.title, wo.status, wo.work_order_type,"
+                " wo.description, m.description AS milestone_description,"
                 " m.milestone_id, m.title AS milestone_title, m.order_index,"
                 " wot.label, wot.pre_build_gate, wot.build_executor, wot.post_build_gate,"
                 " wot.workflow_template, wot.precondition_skill, wot.task_generator,"
@@ -612,6 +617,8 @@ def get_project_state(
                 wo_info = {
                     "work_order_id": wo_row["work_order_id"],
                     "title": wo_row["title"],
+                    "description": wo_row["description"],
+                    "milestone_description": wo_row["milestone_description"],
                     "status": wo_row["status"],
                     "type": wo_type,
                     "type_label": wo_row["label"],

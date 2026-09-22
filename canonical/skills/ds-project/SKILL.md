@@ -368,10 +368,20 @@ Parse the first project in `projects[]`. Compose a plain English briefing:
 >
 > **Milestone:** [milestone.title]
 > **Next:** [next_work_order.title] ([type_label])
+> **What it is for:** [next_work_order.description]
 > **Status:** [status]
 > [If gotchas exist]: **Watch out for:** [gotchas[0].title]
 > [If `next_work_order.test_execution_warning` exists]: **Not execution-backed:** [that line verbatim]
 > [If gate blocked]: **Blocker:** [next_action from response]"
+
+**`next_work_order.description` is the work order's PROMPT — render it, do not
+summarise it.** Until 2026-09-22 `get_project_state` selected the next work order's
+title and its milestone's title and neither description, so the one command an operator
+runs to pick up work told them the NAME of the work and never what it was for. Deciding
+whether to start a work order is exactly when its statement matters.
+`next_work_order.milestone_description` carries the goal above it; surface that too when
+the operator is choosing between milestones. Older records predate the floors and carry
+neither — omit the line rather than rendering an empty one.
 
 `test_execution_warning` says a stored review verdict certified this work order by
 READING rather than by running its tests. Surface it verbatim when present; it is
