@@ -85,6 +85,15 @@ def reviewer_for_seat(seat: str) -> str | None:
     return _slug(seat) if candidate.is_file() else None
 
 
+#: The chair is not a reviewer. Its lane asks "what is the single merge recommendation
+#: here, and is every finding's severity calibrated against it rather than stated in
+#: isolation" -- a question that can only be answered by whoever holds the other verdicts.
+#: A subagent sees its own lanes and nothing else, so an agent here would be asked to
+#: reconcile findings it was never given. The lane stays on the bench and the round table
+#: still prints it; what it does not get is a specialist, because the caller IS the chair.
+NOT_A_REVIEWER = frozenset({"Chair and verdict owner"})
+
+
 def _load_seats() -> dict[str, list[dict[str, Any]]]:
     import yaml
 
@@ -94,6 +103,8 @@ def _load_seats() -> dict[str, list[dict[str, Any]]]:
     for lane in lanes or []:
         seats.setdefault(str(lane.get("seat", "")).strip(), []).append(lane)
     seats.pop("", None)
+    for excluded in NOT_A_REVIEWER:
+        seats.pop(excluded, None)
     return seats
 
 

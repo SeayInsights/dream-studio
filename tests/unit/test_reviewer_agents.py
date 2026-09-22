@@ -28,10 +28,21 @@ LANES = REPO_ROOT / "canonical" / "review_lanes.yml"
 AGENTS_DIR = REPO_ROOT / "canonical" / "agents"
 
 
-def _seats() -> dict[str, list[dict]]:
+def _seats(include_chair: bool = False) -> dict[str, list[dict]]:
+    """Seats that get a reviewer.
+
+    The chair is excluded. Its lane asks what the single merge recommendation is and
+    whether every finding's severity is calibrated against it — answerable only by
+    whoever holds the other verdicts, which a subagent never does. The lane stays on the
+    bench; what it does not get is a specialist, because the caller IS the chair.
+    """
+    from integrations.compiler.reviewers import NOT_A_REVIEWER
+
     data = yaml.safe_load(LANES.read_text(encoding="utf-8"))
     out: dict[str, list[dict]] = {}
     for lane in data["lanes"]:
+        if not include_chair and lane["seat"] in NOT_A_REVIEWER:
+            continue
         out.setdefault(lane["seat"], []).append(lane)
     return out
 
@@ -41,8 +52,29 @@ SEATS = _seats()
 
 def test_the_bench_is_populated():
     """Guard the guard: an empty registry would make every parametrised case below
-    vacuous, which is the failure this whole bench exists to catch."""
-    assert len(SEATS) >= 15, f"only {len(SEATS)} seats — has the registry been truncated?"
+    vacuous, which is the failure this whole bench exists to catch. D13 collapsed 19 seats
+    to 10 — nine of which take a reviewer."""
+    assert len(SEATS) >= 8, f"only {len(SEATS)} seats — has the registry been truncated?"
+    assert sum(len(v) for v in SEATS.values()) >= 20, "lanes were lost in a merge"
+
+
+def test_the_chair_has_no_reviewer():
+    """A subagent sees its own lanes and nothing else, so an agent here would be asked to
+    reconcile findings it was never given."""
+    from integrations.compiler.reviewers import NOT_A_REVIEWER, reviewer_for_seat
+
+    assert "Chair and verdict owner" in NOT_A_REVIEWER
+    for seat in NOT_A_REVIEWER:
+        assert reviewer_for_seat(seat) is None, f"{seat} was given a reviewer"
+
+
+def test_no_seat_carries_only_one_lane_except_the_chair():
+    """What D13 was for. Fifteen of nineteen seats carried exactly one lane — not fifteen
+    specialists, a list of questions with a name attached to each — and six of those were
+    the same stance on different surfaces, so three agents opened the same diff to ask
+    three neighbouring questions and none saw the case between them."""
+    singles = [seat for seat, lanes in SEATS.items() if len(lanes) == 1]
+    assert not singles, f"seats still carrying one lane: {singles}"
 
 
 @pytest.mark.parametrize("seat", sorted(SEATS), ids=lambda s: s)
@@ -161,10 +193,10 @@ def test_the_round_table_names_a_reviewer_for_every_judgment_lane():
         reviewer_for_seat(seat)
         for seat, lanes in SEATS.items()
         if any(not lane.get("detector") for lane in lanes)
-    }
+    } - {None}
     missing = expected - convened
     assert not missing, f"seats convened nothing: {sorted(missing)}\n{output[-2000:]}"
-    assert len(expected) >= 15, f"only {len(expected)} seats need judgment — check the registry"
+    assert len(expected) >= 8, f"only {len(expected)} seats need judgment — check the registry"
 
 
 def test_a_seat_with_no_compiled_reviewer_names_nothing():
