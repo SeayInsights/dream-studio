@@ -64,10 +64,41 @@ class TestHooksJsonDispatcherRegistration:
             "PostCompact"
         ), "PostCompact must register runtime/dispatch/hooks.py"
 
-    def test_post_tool_use_has_dispatcher(self):
-        assert self._has_dispatcher(
+    def _has_enqueuer(self, event: str) -> bool:
+        cmds = _all_commands(self._load(), event)
+        return any(
+            "'runtime'/'hooks'/'enqueue.py'" in c or "'runtime'\\/'hooks'\\/'enqueue.py'" in c
+            for c in cmds
+        )
+
+    def test_post_tool_use_enqueues_rather_than_dispatching(self):
+        """WHY THIS ONE IS DIFFERENT FROM ITS THREE SIBLINGS.
+
+        It asserted PostToolUse registers `runtime/dispatch/hooks.py`, like
+        UserPromptSubmit, Stop and PostCompact. `db4c23f` repointed it at
+        `runtime/hooks/enqueue.py`, and the reasoning is in that file:
+
+            bare interpreter start .................  33 ms
+            this script ............................  55 ms
+            the full dispatcher ....................  283 ms
+
+        PostToolUse fires on every tool call -- 92,315 runs in one timing log -- and it
+        only RECORDS, so nothing consumes its stdout and nothing needs the answer
+        synchronously. The three siblings are different in kind: their stdout IS consumed
+        (UserPromptSubmit injects context, the enforcers return a verdict), so they must
+        stay on the dispatcher and this test still holds them there.
+
+        What must remain true is that PostToolUse is wired to SOMETHING. A hook pointed at
+        nothing is the failure this whole class guards against, and swapping one target
+        for another is exactly when that happens.
+        """
+        assert self._has_enqueuer(
             "PostToolUse"
-        ), "PostToolUse must register runtime/dispatch/hooks.py"
+        ), "PostToolUse must register runtime/hooks/enqueue.py"
+        assert not self._has_dispatcher("PostToolUse"), (
+            "PostToolUse is back on the full dispatcher -- that is a 283 ms import on every"
+            " tool call, which is what db4c23f removed"
+        )
 
     def test_dispatcher_file_exists(self):
         assert DISPATCHER.is_file(), "runtime/dispatch/hooks.py must exist"
