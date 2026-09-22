@@ -1186,7 +1186,51 @@ REGISTRY = pathlib.Path(__file__).resolve().parents[1] / "canonical" / "review_l
 #:   static half a seat can answer and a rendered half it cannot.
 #: * Finding integrity -- two halves of one motion at verdict time. Merging removes the
 #:   bench's only hard ordering, because one agent does both in sequence.
+#: WHY FIVE MORE, 2026-09-22 (D13). The bench had settled at nineteen seats and fifteen of
+#: them carried exactly one lane -- not nineteen specialists, a list of questions with a
+#: name attached to each. Six of those fifteen were the same stance on different surfaces,
+#: so three agents opened the same diff to ask three neighbouring questions and none of
+#: them saw the case that falls between. That is the exact failure the first four merges
+#: were made for.
+#:
+#: The bar is unchanged and it is the reason this stops at nine seats rather than the seven
+#: first proposed: a group must share a TECHNIQUE. Grouping by topic -- "these are all
+#: security" -- would put four different moves under one name and buy nothing.
+#:
+#: * Access and reach -- all three trace a principal to what it can touch. AuthZ asks which
+#:   principal this is and what it may do; Cloud IAM asks which external identity can assume
+#:   this role and what it reaches once it has; Secrets asks who can read this where it comes
+#:   to rest. Same motion, three surfaces, and a credential in an IaC file is all three at
+#:   once.
+#: * Publication and provenance -- both ask whether what leaves here is what it claims to be.
+#:   Supply chain checks the signing identity against the building identity; Release checks
+#:   the version string against what the consuming ecosystem reads it as.
+#: * Irreversible operations -- both ask what this destroys and whether it comes back. GitOps
+#:   is "automation whose failure mode is deletion"; Data and migration is "does this go
+#:   forward and back". One agent holding both sees a migration inside an auto-pruned sync.
+#: * Gate and test integrity -- all three attack a mechanism's claimed coverage by running
+#:   the thing it says it catches. The gate lane's signature ("a second copy of a rule that
+#:   must agree with the first") and code quality's are near-identical text.
+#: * The receiver's view -- all four read the change from the position of someone other than
+#:   its author: the operator on a clean box, whoever receives the shipped artifact, the
+#:   model consuming a truncated input, the mission the control is supposed to serve. The
+#:   shared technique is the viewpoint shift, which is why these four sit together and not
+#:   with the lanes whose topics they resemble.
 SEAT_MERGES: dict[str, str] = {
+    "Cloud IAM and IaC": "Access and reach",
+    "Secrets and data-at-rest": "Access and reach",
+    "AuthZ and identity": "Access and reach",
+    "Supply chain and provenance": "Publication and provenance",
+    "Release and version model": "Publication and provenance",
+    "GitOps and rollout safety": "Irreversible operations",
+    "Data and migration": "Irreversible operations",
+    "Gate-integrity engineer": "Gate and test integrity",
+    "Test-integrity inquisitor": "Gate and test integrity",
+    "Code quality and structure": "Gate and test integrity",
+    "CLI and operator ergonomics": "The receiver's view",
+    "Docs, style, and attribution": "The receiver's view",
+    "Agent and plugin runtime": "The receiver's view",
+    "Mission-domain consequence": "The receiver's view",
     "Failure semantics": "Boundary semantics",
     "Observability and audit trail": "Boundary semantics",
     "Untrusted input and abuse limits": "Boundary semantics",

@@ -334,13 +334,20 @@ def test_a_single_seat_can_be_convened_and_a_typo_fails():
     """
     import pytest
 
-    one = convene(run_detectors=False, seat="Test-integrity inquisitor")
+    # "Test-integrity inquisitor" was merged into "Gate and test integrity" in D13. The
+    # lane is untouched -- only the seat holding it changed -- so this convenes the seat
+    # that now answers it.
+    one = convene(run_detectors=False, seat="Gate and test integrity")
     seats = {seat["seat"] for seat in one["lanes"]}
-    assert seats == {"Test-integrity inquisitor"}, seats
+    assert seats == {"Gate and test integrity"}, seats
     assert len(one["lanes"]) < len(convene(run_detectors=False, all_seats=True)["lanes"])
 
-    with pytest.raises(KeyError, match="Gate-integrity engineer"):
-        convene(run_detectors=False, seat="Gate-integrity enginer")
+    # The refusal must NAME the valid set, so a typo is one keystroke from fixed rather
+    # than a guess. Matching on a seat that is actually on the roster, since the point is
+    # that the message lists them -- an assertion against a merged-away name would pass
+    # only while that name lingered in the error text.
+    with pytest.raises(KeyError, match="Gate and test integrity"):
+        convene(run_detectors=False, seat="Gate and test integriti")
 
     lane = convene(run_detectors=False, lane_id="a-test-that-cannot-fail")
     assert [seat["lane"] for seat in lane["lanes"]] == ["a-test-that-cannot-fail"]

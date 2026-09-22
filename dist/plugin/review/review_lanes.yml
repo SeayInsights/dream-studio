@@ -6,7 +6,7 @@
 # "a lot of prose laid on top of each other as suggestions with no rules, evals, or really
 # any real test that doing anything they are supposed to."
 #
-# THE BENCH. 19 seats asking 26 lanes, derived from real review history with
+# THE BENCH. 10 seats asking 26 lanes, derived from real review history with
 # unit counts per theme, including the Event-substrate custodian, which asks whether a row
 # survives being rebuilt from its own events -- a property of this substrate with no
 # equivalent on the bench. These two numbers are computed at render time: the header said
@@ -30,7 +30,7 @@
 version: 2
 lanes:
   - id: the-other-half-enforced-by-nothing
-    seat: "Gate-integrity engineer"
+    seat: "Gate and test integrity"
     question: >-
       Two sites decide the same question. Does the second consult every predicate the first does,
       or a subset of them?
@@ -199,7 +199,7 @@ lanes:
       - "Saltzer and Schroeder fail-safe defaults"
     eval: tests/evals/test_review_lane_status_survives_translation.py
   - id: a-test-that-cannot-fail
-    seat: "Test-integrity inquisitor"
+    seat: "Gate and test integrity"
     question: >-
       This test is green. Show me it going red — what does it look like when the thing it guards
       is broken?
@@ -345,7 +345,7 @@ lanes:
       at diff time. It becomes an eval once a verdict carries per-finding reproductions that can
       be replayed at HEAD.
   - id: authz-and-identity
-    seat: "AuthZ and identity"
+    seat: "Access and reach"
     question: >-
       Which principal is this, what may it do, and what happens to the sessions that already exist
       when that answer changes?
@@ -369,7 +369,7 @@ lanes:
       becomes a detector the day the permission derivation is expressed as data rather than as
       code paths.
   - id: secrets-and-data-at-rest
-    seat: "Secrets and data-at-rest"
+    seat: "Access and reach"
     question: >-
       Where does this secret come to rest, who can read it there, and what rotates it?
     signature: >-
@@ -397,7 +397,7 @@ lanes:
       there is nothing local to compute against. The literal-secret half is already covered by the
       security-scan gate.
   - id: supply-chain-and-provenance
-    seat: "Supply chain and provenance"
+    seat: "Publication and provenance"
     question: >-
       What exactly is being installed and published here, and does the identity signing it match
       the identity that built it?
@@ -430,7 +430,7 @@ lanes:
       Requires resolving registry and workflow identities outside this repo. The pinning half
       could become a detector over lockfiles and action refs without waiting for the rest.
   - id: cloud-iam-and-iac
-    seat: "Cloud IAM and IaC"
+    seat: "Access and reach"
     question: >-
       Which external identity can assume this role, and what can it reach once it has?
     signature: >-
@@ -459,7 +459,7 @@ lanes:
       reports clean, which is the compared-nothing-reported-clean shape this registry exists to
       refuse.
   - id: gitops-and-rollout-safety
-    seat: "GitOps and rollout safety"
+    seat: "Irreversible operations"
     question: >-
       What is the blast radius when this reconciles automatically, and what does prune remove that
       nobody listed?
@@ -486,7 +486,7 @@ lanes:
       Needs cluster state to compute what a prune would remove. Dream Studio ships no GitOps
       manifests today, so this seat is registered for projects that do rather than for this one.
   - id: release-and-version-model
-    seat: "Release and version model"
+    seat: "Publication and provenance"
     question: >-
       Does the version this produces mean what the ecosystem consuming it thinks it means?
     signature: >-
@@ -513,7 +513,7 @@ lanes:
       The format rules differ per target ecosystem and this repo publishes to none of them yet.
       The released-version sentinel is already guarded by its own migration gate.
   - id: data-and-migration
-    seat: "Data and migration"
+    seat: "Irreversible operations"
     question: >-
       Does this migration go forward and back, and does the schema still hold every invariant
       afterwards?
@@ -618,7 +618,7 @@ lanes:
       No frontend in this repository. Registered so a project convening this table from its own
       tree is asked the question, which is the reason the table was made portable.
   - id: cli-and-operator-ergonomics
-    seat: "CLI and operator ergonomics"
+    seat: "The receiver's view"
     question: >-
       Can an operator run this from a clean box using only what the docs say?
     signature: >-
@@ -643,7 +643,7 @@ lanes:
       Comparing help text against actual default values needs a parse of both, which is buildable
       here and simply is not built. This is the strongest detector candidate on the bench.
   - id: agent-and-plugin-runtime
-    seat: "Agent and plugin runtime"
+    seat: "The receiver's view"
     question: >-
       What does this cap or namespace do to the model rather than to the operator?
     signature: >-
@@ -668,7 +668,7 @@ lanes:
       is a model. Registered because Dream Studio is an agent runtime and this is its own failure
       surface.
   - id: mission-domain-consequence
-    seat: "Mission-domain consequence"
+    seat: "The receiver's view"
     question: >-
       Weighted by mission effect rather than code severity, what is the worst thing this change
       permits?
@@ -718,7 +718,7 @@ lanes:
       mechanical half -- ADR numbering and immutability -- is already covered by existing docs
       gates.
   - id: docs-style-and-attribution
-    seat: "Docs, style, and attribution"
+    seat: "The receiver's view"
     question: >-
       Does anything shipping here carry a name, a path, or a trailer that should not leave this
       machine?
@@ -753,7 +753,7 @@ lanes:
       - "the private-content half when convened against a project that does not vendor core.release.repo_publication_readiness -- the gate reports that it did not run rather than reporting clean"
     detector: py -m core.gates.shipped_artifact_hygiene
   - id: code-quality-and-structure
-    seat: "Code quality and structure"
+    seat: "Gate and test integrity"
     question: >-
       Is this reachable, is it duplicated, and does it sit on the right side of a module boundary?
     signature: >-

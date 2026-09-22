@@ -112,8 +112,22 @@ _ENFORCEMENT_KEYS = ("detector", "eval", "judgment")
 #: renders. Not the Falsifier: the ten archive tests COULD have gone red, and passed because
 #: the guard really does enforce its caps -- nothing was vacuous. Not the Interpreter: that
 #: seat covers only the middle of the three variants.
+#: D13 ADDED FIVE MERGED NAMES, 2026-09-22. A seat merge does not touch a lane -- its
+#: question, signature, precedent, measurement and enforcement stay exactly as written and
+#: only the holder changes -- but the holder is checked against this closed set, so a merge
+#: that forgets to name its result here is refused. That is the gate working: it caught
+#: this one on the first run after the collapse.
+#:
+#: The pre-merge names are kept. `RESEATED` in scripts/seat_lanes_data.py is frozen history
+#: and still carries lanes under the seats that found them, so removing a name here would
+#: refuse a record of what actually happened.
 _SEATS = frozenset(
     {
+        "Access and reach",
+        "Gate and test integrity",
+        "Irreversible operations",
+        "Publication and provenance",
+        "The receiver's view",
         "Agent and plugin runtime",
         "AuthZ and identity",
         "Boundary semantics",
