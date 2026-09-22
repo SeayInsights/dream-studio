@@ -176,3 +176,72 @@ def audit_claims(text: str) -> Report:
             )
         )
     return report
+
+
+# ---------------------------------------------------------------------------
+# CLI door
+#
+# `audit_claims` had two callers and no command. `core/skills/git.md` told an
+# author to run `py -m core.gates.evidence_backed_output <pr-body.md>` before
+# publishing an outbound document -- and that sibling gate was culled in 67ba10e,
+# so the instruction named a module that no longer exists. The check it was
+# reaching for survives here; only its door went with the sibling.
+#
+# A check with no command is a check an author cannot run, which is the same
+# defect as a command that names nothing.
+# ---------------------------------------------------------------------------
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Audit a document, or this push's own outbound text, for uncited claims.
+
+    Exit 0 when every asserted absence cites a look, 1 otherwise.
+    """
+    import argparse
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    parser = argparse.ArgumentParser(
+        prog="py -m core.gates.unverified_claims",
+        description="An asserted absence must cite the look that established it.",
+    )
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("path", nargs="?", help="A document to audit (a PR body, a report)")
+    source.add_argument(
+        "--staged",
+        action="store_true",
+        help="Audit what this push publishes: staged commit messages plus added CHANGELOG lines",
+    )
+    args = parser.parse_args(argv)
+
+    if args.staged:
+        # The two things a push actually publishes to somebody else.
+        messages = subprocess.run(
+            ["git", "log", "--format=%B", "origin/main..HEAD"],
+            capture_output=True,
+            text=True,
+        ).stdout
+        diff = subprocess.run(
+            ["git", "diff", "origin/main...HEAD", "--", "CHANGELOG.md"],
+            capture_output=True,
+            text=True,
+        ).stdout
+        added = "\n".join(
+            line[1:] for line in diff.splitlines() if line.startswith("+") and line[1:2] != "+"
+        )
+        text = messages + "\n" + added
+    else:
+        candidate = Path(args.path)
+        if not candidate.is_file():
+            print(f"error: no such file: {candidate}", file=sys.stderr)
+            return 1
+        text = candidate.read_text(encoding="utf-8", errors="replace")
+
+    report = audit_claims(text)
+    print(report.render())
+    return 0 if report.passed else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
