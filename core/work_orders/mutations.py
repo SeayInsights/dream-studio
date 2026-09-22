@@ -608,6 +608,12 @@ def _unverified_claim_note(description: str) -> str | None:
         return None  # an advisory note must never break a registration
 
 
+#: The shortest real work-order description on the live authority is 81 characters
+#: (592 of them, measured 2026-09-21). 60 refuses none of those and still stops a
+#: title pasted into the description field.
+_MIN_DESCRIPTION_CHARS = 60
+
+
 def create_work_order(
     *,
     project_id: str,
@@ -659,6 +665,35 @@ def create_work_order(
         return {
             "ok": False,
             "error": "milestone_id is required: every work order must belong to a milestone",
+        }
+
+    # THE WORK ORDER IS A PROMPT, NOT A LABEL. Each layer of project -> milestone ->
+    # work order -> task holds the prompt for the layer below it: a task is a specific
+    # instruction, and the work order is the goal those instructions add up to. A work
+    # order with only a title breaks that chain in the middle, and the task then has to
+    # re-derive an intent nobody wrote down.
+    #
+    # Measured on the authority 2026-09-21: 446 of 1,038 work orders had no description
+    # at all. On the five projects OUTSIDE this repo it ran 78% to 100% empty, against
+    # 30% here -- and one of those five is 0% empty at every layer, so the design works
+    # when it is filled. The difference between that project and the rest is not
+    # discipline; it is that nothing ever asked.
+    #
+    # The floor comes from the same measurement rather than from taste: of the 592 real
+    # descriptions the shortest is 81 characters, so 60 refuses none of them and stops
+    # a title pasted twice. It is deliberately a floor and not a rubric -- a check that
+    # judged prompt quality would be arguing with the author, and this only refuses an
+    # absence.
+    _description = (description or "").strip()
+    if len(_description) < _MIN_DESCRIPTION_CHARS:
+        return {
+            "ok": False,
+            "error": (
+                "description is required: a work order is the prompt for the tasks under"
+                f" it, so it must say what is being done and why (at least"
+                f" {_MIN_DESCRIPTION_CHARS} characters; got {len(_description)})."
+                " The module boundary is composed in separately and does not count."
+            ),
         }
 
     db_path = _require_db(source_root, dream_studio_home)

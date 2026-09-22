@@ -429,6 +429,7 @@ def test_create_work_order_materialises_on_return(sdlc_env):
         project_id=project_id,
         milestone_id=milestone_id,
         title="WO — Build auth API",
+        description="A fixture work order for this test: it exists so the lifecycle under test has a real unit of work to act on, and it carries a prompt because a work order without one is refused.",
         work_order_type="api_endpoint",
         source_root=REPO_ROOT,
     )
@@ -461,6 +462,7 @@ def test_create_task_resolves_milestone_id_from_materialised_wo(sdlc_env):
         project_id=project_id,
         milestone_id=milestone_id,
         title="WO — DB schema",
+        description="A fixture work order for this test: it exists so the lifecycle under test has a real unit of work to act on, and it carries a prompt because a work order without one is refused.",
         work_order_type="infrastructure",
         source_root=REPO_ROOT,
     )
@@ -530,6 +532,7 @@ def test_full_sdlc_chain_all_rows_queryable_on_return(sdlc_env):
         project_id=project_id,
         milestone_id=ms_id,
         title="WO — Projection tick",
+        description="A fixture work order for this test: it exists so the lifecycle under test has a real unit of work to act on, and it carries a prompt because a work order without one is refused.",
         work_order_type="infrastructure",
         source_root=REPO_ROOT,
     )
@@ -654,6 +657,7 @@ def test_consistency_clean_after_full_e2e_chain(sdlc_env):
         project_id=project_id,
         milestone_id=ms_result["milestone_id"],
         title="WO",
+        description="A fixture work order for this test: it exists so the lifecycle under test has a real unit of work to act on, and it carries a prompt because a work order without one is refused.",
         source_root=REPO_ROOT,
     )
     create_task(
