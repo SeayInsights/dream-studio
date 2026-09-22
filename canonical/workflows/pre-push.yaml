@@ -119,6 +119,17 @@ gates:
       test_duckdb_business_schema.py, packs.yaml handler lists, regenerated
       plugin.json, a schema-debt doc entry for new migrations).
 
+  - id: rule-enforcement
+    tier: blocking
+    description: |
+      Every enforced_by reference in canonical/rules.yml must resolve, or the rule must
+      declare itself unenforced with a reason. The register exists to separate the
+      statements something enforces from the ones nothing does; its previous checker
+      (core/gates/rule_registry.py) was culled in the same sweep that removed several of
+      the enforcers it would have been checking, and 21 of 102 references went stale.
+    command: [py, -m, core.gates.rule_enforcement]
+    fail_hint: "A rule names an enforcer that is not there. Point it at the one that survived, or add `unenforced: <20+ characters saying what is gone and why>` and remove its enforced_by."
+
   - id: instruction-commands
     tier: blocking
     description: |

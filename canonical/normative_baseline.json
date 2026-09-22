@@ -1,5 +1,5 @@
 {
-  "_comment": "Ceiling on SHOUTED normative statements per lane, enforced by core/gates/normative_baseline.py. It may only go DOWN. A new statement must be classified in canonical/rules.yml, converted to an eval, generated from what it describes, or deleted. Regenerate with `py -m core.gates.normative_baseline --update` in the same change set.",
+  "_comment": "The last recorded ceiling on SHOUTED normative statements per lane. NOT ENFORCED: core/gates/normative_baseline.py was removed in 3b2dc373 along with the twelve other gates that audited this repository's own bookkeeping, and the regenerate command this comment used to give went with it. canonical/rules.yml records the rule 'the-unclassified-pile-may-only-shrink' as unenforced and says why. These counts are kept as the last measurement, not as a live ratchet; re-enforcing means writing a new gate, not restoring the old one.",
   "lanes": {
     "canonical/skills": 69,
     "canonical/workflows": 24,
