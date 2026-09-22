@@ -38,6 +38,19 @@ PR_782 = [
     "tests/unit/test_token_capture_quality.py",
 ]
 
+#: Files changed by aad270c, "keep status payloads off the shared hook stdout stream
+#: (#738)". It moved on-token-log's status to stderr; its own integration test read stdout
+#: and was not selected, because the test loads the hook as handler("on-token-log").
+PR_738 = [
+    "control/execution/workflow/tracking.py",
+    "docs/HOOK_RUNTIME.md",
+    "docs/WORKFLOW_RUNTIME.md",
+    "interfaces/cli/pulse_collector.py",
+    "runtime/hooks/meta/on-context-inject.py",
+    "runtime/hooks/meta/on-token-log.py",
+    "tests/unit/test_pulse_collector_stdout_contract.py",
+]
+
 #: The data-file half of 132dc5d, "Dissolve the milestone pack ... (#784)". Editing the
 #: registry broke two tests in test_rule_enforcement_gate.py, which names that path.
 PR_784_DATA_ONLY = ["canonical/rules.yml"]
@@ -100,6 +113,15 @@ def test_a_data_file_change_reaches_the_tests_that_name_it():
     made no token. The test names `canonical/rules.yml`; the change to it must reach it."""
     selection = gate.select_tests(PR_784_DATA_ONLY, REPO_ROOT)
     assert "tests/unit/test_rule_enforcement_gate.py" in selection["dependent_tests"]
+
+
+def test_a_hook_change_reaches_the_test_that_loads_it_by_name():
+    """Replay of #738. A hook is not importable -- its stem is hyphenated -- so its module
+    token matched nothing, and the one integration test exercising the change was not
+    selected. Tests load hooks by stem; the stem is now a token. Thirty-two test files
+    load hooks that way."""
+    selection = gate.select_tests(PR_738, REPO_ROOT)
+    assert "tests/integration/test_hook_on_token_log.py" in selection["dependent_tests"]
 
 
 def test_the_union_is_never_empty():

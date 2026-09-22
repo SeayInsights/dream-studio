@@ -89,6 +89,9 @@ def compute_impact_set(
         text references its dotted module path (word-boundary match, so
         ``core.foo.bar`` does not match ``core.foo.barbaz`` but does match
         ``core.foo.bar.do_thing`` and ``from core.foo.bar import ...``);
+      - a changed hook (a ``.py`` whose stem is hyphenated, so it has no importable
+        module path) also selects every test whose text names its file stem
+        (``on-token-log``), which is how tests load hooks;
       - any other changed file selects every test whose text names its
         repo-relative path (``canonical/rules.yml``), the same way.
     """
@@ -102,6 +105,15 @@ def compute_impact_set(
             dependent.add(f)
         elif f.endswith(".py"):
             module_tokens.update(_module_tokens(f))
+            # A HOOK IS NOT IMPORTABLE, SO ITS MODULE TOKEN MATCHES NOTHING. runtime/hooks/
+            # meta/on-token-log.py yields `runtime.hooks.meta.on-token-log`, a dotted path
+            # no test can write. Tests load hooks by file stem -- handler("on-token-log"),
+            # 32 files do -- so the stem is the token that reaches them. Replayed on #738,
+            # which moved that hook's status to stderr: its own integration test read
+            # stdout, was not selected, and main went red on exactly that test.
+            stem = f.rsplit("/", 1)[-1][: -len(".py")]
+            if "-" in stem:
+                module_tokens.add(stem)
         else:
             # A DATA FILE IS A DEPENDENCY TOO. Replayed on the change that edited
             # canonical/rules.yml and broke two tests naming that path three times, this
