@@ -141,6 +141,44 @@ def _resolve_work_order_id(project_id: str | None) -> str | None:
     return str(wo) if wo else None
 
 
+def _resolve_task_id(work_order_id: str | None) -> str | None:
+    """The single in-progress task, or None when the answer is not single.
+
+    THIS BECAME ANSWERABLE, it was not before. Tasks went `created -> complete` with no
+    state between, so at every instant there was no current task and a turn could not be
+    charged to one. `start_task` adds the middle state and this reads it.
+
+    ONE, OR NOTHING. Several tasks may be in progress at once -- the model routinely
+    advances more than one in a turn, and `start_task` returns `siblings_in_progress` for
+    exactly that reason. Picking the newest would produce a task id that looks measured
+    and is a guess; two tasks in progress means the honest answer to "which task did this
+    turn cost" is "the work order, and no further".
+
+    Best-effort: an unreadable authority costs a dimension, never an event.
+    """
+    if not work_order_id:
+        return None
+    try:
+        import sqlite3
+
+        from runtime.lib.enforcement import AUTHORITY_DB
+
+        conn = sqlite3.connect(f"file:{AUTHORITY_DB}?mode=ro", uri=True)
+    except Exception:
+        return None
+    try:
+        rows = conn.execute(
+            "SELECT task_id FROM business_tasks"
+            " WHERE work_order_id = ? AND status = 'in_progress'",
+            (work_order_id,),
+        ).fetchall()
+    except Exception:
+        return None
+    finally:
+        conn.close()
+    return str(rows[0][0]) if len(rows) == 1 else None
+
+
 def normalize_stop_token_usage(
     payload: dict[str, Any], root: Path | None = None
 ) -> list[CanonicalEventEnvelope]:
@@ -159,6 +197,7 @@ def normalize_stop_token_usage(
     session_id = get_or_create_session_id(root)
     project_id = _resolve_project_id(payload)
     work_order_id = _resolve_work_order_id(project_id)
+    task_id = _resolve_task_id(work_order_id)
 
     envelopes: list[CanonicalEventEnvelope] = []
     for uid, usage, model, is_sidechain in _iter_usage_entries(text):
@@ -199,6 +238,9 @@ def normalize_stop_token_usage(
                     # work_order_id column, so the reader takes it from here --
                     # see the COALESCE in core/analytics/duckdb_store.py.
                     "work_order_id": work_order_id,
+                    # Present only when exactly one task claims to be running. None is
+                    # an honest "the work order, and no further", not a missing value.
+                    "task_id": task_id,
                     # A subagent turn, so spend splits between the main thread and
                     # the specialists. Not WHICH specialist: that is not on the
                     # entry, and inventing it would be a fabricated dimension.
