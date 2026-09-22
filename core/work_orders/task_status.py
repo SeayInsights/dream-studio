@@ -59,7 +59,7 @@ Grounds, measured rather than argued:
   - Removing it means every read waits for a drain. `ds work-order start` followed
     immediately by `ds work-order tasks` is the common path, and the drain is not
     synchronous with either.
-  - WRITER-COUNTS: total=12 routed=10
+  - WRITER-COUNTS: total=13 routed=11
     The authoritative figures, in one declared form so a check reads them instead of
     guessing at prose. `test_both_records_state_the_same_writer_counts` parses this line
     out of BOTH records and holds them against what the finder discovers, so the numbers
@@ -68,7 +68,9 @@ Grounds, measured rather than argued:
   - THE COUNT, RE-MEASURED. "Seven" was the number an independent review listed, and it
     counted UPDATE sites only. Measured across core/, interfaces/, runtime/, control/ and
     integrations/ on 2026-09-13: 12 sites write a status into a projected table -- 7 via
-    UPDATE and 5 via INSERT. Ten of those take their value from the vocabulary. The other
+    UPDATE and 5 via INSERT. Ten of those take their value from the vocabulary. The
+    thirteenth arrived with `start_task` on 2026-09-22 and is routed like the rest; it
+    first landed spelling `in_progress` inline, which these two tests caught. The other
     two are in interfaces/cli/commands/prove.py, which binds status as a parameter in a
     DISPOSABLE scratch authority it creates and tears down, and carries its own recorded
     exemption for exactly that reason.
@@ -98,8 +100,16 @@ TASK_DONE_STATUSES: tuple[str, ...] = ("complete", "done")
 #: Statuses meaning the task will never be finished and should not be counted as work.
 TASK_ABANDONED_STATUSES: tuple[str, ...] = ("cancelled", "deleted")
 
+#: Statuses meaning the task has been claimed and is not finished. One member today; a
+#: tuple because `is_open` should read a set rather than test equality against a literal,
+#: and because the work-order vocabulary above needed three events to reach its own
+#: `in_progress` before anyone thought to declare them together.
+TASK_IN_PROGRESS_STATUSES: tuple[str, ...] = ("in_progress",)
+
 #: Every status the column is known to hold, so a caller can assert it has seen them all.
-TASK_STATUSES: tuple[str, ...] = TASK_DONE_STATUSES + TASK_ABANDONED_STATUSES + ("pending",)
+TASK_STATUSES: tuple[str, ...] = (
+    TASK_DONE_STATUSES + TASK_ABANDONED_STATUSES + TASK_IN_PROGRESS_STATUSES + ("pending",)
+)
 
 #: The statuses a REPLAY can produce, and the legacy spellings it normalises away.
 #:
@@ -110,7 +120,13 @@ TASK_STATUSES: tuple[str, ...] = TASK_DONE_STATUSES + TASK_ABANDONED_STATUSES + 
 #: treats an unknown status as outstanding, which is what `pending` means. 27 tasks hold
 #: `done` and 10 hold `open` on the live authority; replaying their real lifecycle events
 #: normalises both, which is a repair rather than a loss.
-CANONICAL_TASK_STATUSES: tuple[str, ...] = ("pending", "complete", "cancelled", "deleted")
+CANONICAL_TASK_STATUSES: tuple[str, ...] = (
+    "pending",
+    "in_progress",
+    "complete",
+    "cancelled",
+    "deleted",
+)
 
 #: Legacy spelling -> the canonical status a replay produces for it.
 TASK_STATUS_SYNONYMS: dict[str, str] = {"done": "complete", "open": "pending"}
@@ -140,6 +156,7 @@ WORK_ORDER_STATUS_EVENT: dict[str, str | None] = {
 
 TASK_STATUS_EVENT: dict[str, str | None] = {
     "pending": None,
+    "in_progress": "task.started",
     "complete": "task.completed",
     "cancelled": "task.cancelled",
     "deleted": "task.deleted",
@@ -183,6 +200,11 @@ WORK_ORDER_EVENT_STATUS: dict[str, str] = {
 #: and leaves the status alone, so it produces no status and must not appear here.
 TASK_EVENT_STATUS: dict[str, str] = {
     "task.created": "pending",
+    # THE MIDDLE STATE, added when `start_task` gave tasks one. Before it, a task went
+    # `pending -> complete` with nothing between, so at any instant no task claimed to be
+    # running and "what is being worked on right now" had no answer in the authority --
+    # which is also why token spend could be attributed to a work order and no further.
+    "task.started": "in_progress",
     "task.completed": "complete",
     "task.cancelled": "cancelled",
     "task.deleted": "deleted",

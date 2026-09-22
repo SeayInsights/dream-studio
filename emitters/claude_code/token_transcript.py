@@ -154,29 +154,21 @@ def _resolve_task_id(work_order_id: str | None) -> str | None:
     and is a guess; two tasks in progress means the honest answer to "which task did this
     turn cost" is "the work order, and no further".
 
+    THE READ LIVES IN runtime.lib.enforcement, not here. `emitters/` is pure
+    normalization and may not open a database -- the sibling resolver above already asks
+    that layer for its answer, and this one briefly did not.
+
     Best-effort: an unreadable authority costs a dimension, never an event.
     """
     if not work_order_id:
         return None
     try:
-        import sqlite3
+        from runtime.lib.enforcement import in_progress_task_ids
 
-        from runtime.lib.enforcement import AUTHORITY_DB
-
-        conn = sqlite3.connect(f"file:{AUTHORITY_DB}?mode=ro", uri=True)
+        task_ids = in_progress_task_ids(work_order_id)
     except Exception:
         return None
-    try:
-        rows = conn.execute(
-            "SELECT task_id FROM business_tasks"
-            " WHERE work_order_id = ? AND status = 'in_progress'",
-            (work_order_id,),
-        ).fetchall()
-    except Exception:
-        return None
-    finally:
-        conn.close()
-    return str(rows[0][0]) if len(rows) == 1 else None
+    return task_ids[0] if len(task_ids) == 1 else None
 
 
 def normalize_stop_token_usage(

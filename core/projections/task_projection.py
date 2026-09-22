@@ -13,7 +13,12 @@ from datetime import datetime, UTC
 from typing import Any
 
 from core.projections.framework import Projection, RetryPolicy
-from core.work_orders.task_status import creation_status, status_for
+from core.work_orders.task_status import (
+    TASK_ABANDONED_STATUSES,
+    TASK_DONE_STATUSES,
+    creation_status,
+    status_for,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +31,7 @@ class TaskProjection(Projection):
 
     Handles the full task lifecycle:
       task.created   → INSERT row with status='pending'
+      task.started   → status='in_progress', set updated_at
       task.completed → status='complete', set updated_at
       task.deleted   → status='deleted', set updated_at
 
@@ -39,6 +45,7 @@ class TaskProjection(Projection):
     name = "task_projection"
     consumed_event_types = [
         "task.created",
+        "task.started",
         "task.completed",
         "task.cancelled",
         "task.deleted",
@@ -88,6 +95,8 @@ class TaskProjection(Projection):
             )
         self._ensure_skeleton(conn, task_id, work_order_id, project_id, now)
 
+        if event_type == "task.started":
+            return self._handle_started(conn, task_id, event_id, now)
         if event_type == "task.completed":
             return self._handle_completed(conn, task_id, event_id, now)
         if event_type == "task.cancelled":
@@ -244,6 +253,34 @@ class TaskProjection(Projection):
             WHERE task_id = :task_id
             """,
             {**row, "skeleton": _SKELETON_TITLE},
+        )
+        return 1
+
+    def _handle_started(
+        self,
+        conn: sqlite3.Connection,
+        task_id: str,
+        event_id: str,
+        now: str,
+    ) -> int:
+        """Claim the task, unless it has already finished.
+
+        THE ONLY BACKWARD TRANSITION IN THIS PROJECTION, which is why it is the only
+        handler that reads the current status first. Every other event here moves a task
+        toward a terminal state, so applying one twice or late is harmless. A late
+        `task.started` is not: replayed after the completion it preceded, it would return
+        a finished task to `in_progress` and the rebuild would disagree with the history
+        it was built from. The guard is on the DONE and ABANDONED sets rather than on
+        `!= 'complete'`, because cancelled and deleted are equally finished -- the same
+        distinction WO 654a54d7 found the hard way on work orders.
+        """
+        terminal = TASK_DONE_STATUSES + TASK_ABANDONED_STATUSES
+        placeholders = ",".join("?" * len(terminal))
+        conn.execute(
+            f"UPDATE {_TABLE}"
+            " SET status = ?, updated_at = ?, last_event_id = ?"
+            f" WHERE task_id = ? AND status NOT IN ({placeholders})",
+            (status_for("task.started"), now, event_id, task_id, *terminal),
         )
         return 1
 

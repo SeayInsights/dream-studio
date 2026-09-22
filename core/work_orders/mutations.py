@@ -84,8 +84,8 @@ def start_task(
             return {"ok": True, "already": True, "task_id": task_id, "title": t_title}
 
         conn.execute(
-            "UPDATE business_tasks SET status = 'in_progress', updated_at = ?" " WHERE task_id = ?",
-            (now, task_id),
+            "UPDATE business_tasks SET status = ?, updated_at = ? WHERE task_id = ?",
+            (status_for("task.started"), now, task_id),
         )
         siblings = conn.execute(
             "SELECT COUNT(*) FROM business_tasks"
