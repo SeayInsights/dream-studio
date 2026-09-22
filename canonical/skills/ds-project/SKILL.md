@@ -227,9 +227,30 @@ belongs to exactly one client; if `client_id` is omitted it defaults to the **Se
 (pass `fulcrum` / `hypershift` / a created client id for a specific engagement — create one first
 with `ds client create --name "<Client Name>"`).
 
+> **Working in an EXISTING checkout outside this repo? Use `ds project onboard <dir>` instead.**
+> Registration alone writes the authority row and the `.dream-studio-project` marker, and nothing
+> else — the checkout gets no adapter surface, so an agent working inside it is never told Dream
+> Studio exists. That is not hypothetical: Dream Command carried 14 work orders in the authority
+> and had no `.claude/` on disk. `onboard` does both halves in one step.
+>
+> - **DO** run `--plan` first on a repo you do not own. It prints every file that would be written
+>   and changes nothing — not the checkout, not the authority.
+> - **DO** re-run it on a project that is already registered. Registration is idempotent by path,
+>   so re-onboarding repairs a missing adapter surface instead of forking the project.
+> - **DON'T** pass `--git-hook` unless the operator asked. It installs the pre-push gate into
+>   `<dir>/.git/hooks/pre-push`, which then runs on every push anyone makes from that repo.
+> - `--description` is required here, because a project is the top of the same prompt chain its
+>   milestones, work orders and tasks sit in. There is no length floor on it, unlike those three.
+
 **Step 2 — Create milestones** (in dependency order, parents before children):
 For each milestone, call `create_milestone(project_id=..., title="<title>", description="<one-sentence deliverable>", order_index=<N>, source_root=..., dream_studio_home=...)`.
 Capture each `milestone_id` from the returned dict.
+
+`description` is **required** and must be at least 50 characters: it is the milestone's prompt, and
+the work orders under it derive their own goal from it. The call returns
+`{"ok": false, "error": "description is required: ..."}` below the floor — surface that error, do
+not pad the text to clear it. The same refusal waits at both layers beneath: a work order needs its
+own prompt (60 characters), and a task needs an executable acceptance criterion or a declared `why`.
 
 **Step 3 — Create work orders for milestone 1** (in dependency order):
 **Attribution fit-check first (do NOT auto-file into the active milestone).** Before binding a work order to a milestone, confirm the work actually belongs there — this matters most when the project already has milestones from earlier sessions and the operator has since pivoted. For each proposed work order, run `ds project fit-check --project-id <project_id> --title "<wo title>" --description "<wo description>"` (read-only) and read the `verdict`:

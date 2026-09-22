@@ -42,6 +42,30 @@ argument shifting. Adapter apps such as Codex may invoke `UserPromptSubmit`
 from a workspace outside the Dream Studio repo, so launcher root resolution must
 not depend on the current working directory.
 
+### Which repository the gates measure
+
+`ds workflow run pre-push --non-interactive` runs the gates declared in a
+manifest, against a tree. Both are now selectable, which they had not been:
+`run_pre_push_gates` has always accepted `manifest_path` and `repo_root`, and the
+CLI passed neither — so every run measured Dream Studio whatever repository the
+operator stood in, and no other project could be gated at all.
+
+| Invocation | Manifest | Tree measured |
+|---|---|---|
+| (no flags) — what this repo's git hook runs | `canonical/workflows/pre-push.yaml` | Dream Studio |
+| `--repo-root DIR` | `DIR/.dream-studio/pre-push.yaml` | `DIR` |
+| `--manifest FILE` | `FILE` | `--repo-root` if given, else Dream Studio |
+
+`DIR/.dream-studio/pre-push.yaml` is the convention, and a project that has no
+manifest there is **refused, not judged by Dream Studio's gates.** There is
+deliberately no fallback: these gates measure *this* repository — `skill-sync`
+compares canonical skills to their projections, `pin-tests` compares
+`dist/plugin` to its generator, `migration-risk` watches this repo's DDL sites.
+Run against somebody else's checkout they pass vacuously or fail for reasons
+about this one, and a green result that means nothing is worse than a refusal,
+because only one of the two ever gets fixed. The refusal names the path to write
+and says why it will not substitute.
+
 ## Workflow Inventory (23 templates)
 
 | Workflow | Nodes | Gates | Retry | Timeout | Dashboard Dep | Models |

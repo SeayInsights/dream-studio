@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import re
 import shlex
+import sys
 from pathlib import Path
 
 from interfaces.cli.setup_shared import HOOKS_JSON, REPO_ROOT, StepResult
@@ -73,7 +74,12 @@ def resolve_hook_command(command: str) -> str:
 #: Built by `cargo build --release` in runtime/hooks/enqueue-native. Optional:
 #: when it is absent the Python enqueuer is installed instead and everything
 #: works, just 24 ms slower per tool call.
-NATIVE_ENQUEUE_BIN = "ds-enqueue.exe"
+#:
+#: The `.exe` suffix is Windows-only, and hardcoding it meant the lookup could
+#: never find a binary on Linux or macOS, where cargo emits `ds-enqueue` with no
+#: extension. It failed safe -- those platforms silently kept the Python
+#: enqueuer -- which is why nobody noticed a speedup that could not engage.
+NATIVE_ENQUEUE_BIN = "ds-enqueue.exe" if sys.platform == "win32" else "ds-enqueue"
 
 
 def _native_enqueue_path() -> Path | None:
