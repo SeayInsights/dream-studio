@@ -217,15 +217,24 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.staged:
         # The two things a push actually publishes to somebody else.
+        # encoding= IS LOAD-BEARING HERE, and the locale-decode gate caught its absence
+        # on the first run. Without it Windows decodes child output with cp1252, and one
+        # unmapped byte raises inside subprocess's reader thread: run() then returns
+        # returncode=0 with stdout=None, so the caller is handed success and no text.
+        # This reads commit messages, which in this repository are full of em-dashes.
         messages = subprocess.run(
             ["git", "log", "--format=%B", "origin/main..HEAD"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         ).stdout
         diff = subprocess.run(
             ["git", "diff", "origin/main...HEAD", "--", "CHANGELOG.md"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         ).stdout
         added = "\n".join(
             line[1:] for line in diff.splitlines() if line.startswith("+") and line[1:2] != "+"
