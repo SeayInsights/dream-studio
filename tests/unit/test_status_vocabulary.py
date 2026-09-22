@@ -9,7 +9,7 @@ PRESENT found 459 rows the substrate could not express:
     business_tasks.done              27   no task.completed event on any of them
     business_tasks.open              10   only 1 of 10 had a task.created event
 
-WRITER-COUNTS: total=12 routed=10
+WRITER-COUNTS: total=13 routed=11
 
 The authoritative figures for the synchronous-mirror decision, in the same declared form
 `core/work_orders/task_status.py` carries. `test_both_records_state_the_same_writer_counts`

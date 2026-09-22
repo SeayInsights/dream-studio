@@ -500,6 +500,37 @@ def classify_path(file_path: str, project_path: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def in_progress_task_ids(work_order_id: str) -> list[str]:
+    """Every task a work order currently claims to be running.
+
+    THE LIST, NOT A PICK. Several tasks may be in progress at once -- the model routinely
+    advances more than one in a turn, which is why ``start_task`` returns
+    ``siblings_in_progress`` -- so choosing among them here would hand a caller a guess
+    wearing the shape of a measurement. The caller decides what an ambiguous answer means
+    for its own question; for token attribution it means "the work order, and no further".
+
+    Read-only and best effort, like the rest of this module: an unreadable authority
+    returns an empty list, because a dimension nobody could resolve is not the same thing
+    as an error worth failing an emission over.
+    """
+    if not work_order_id:
+        return []
+    conn = _connect_ro(AUTHORITY_DB)
+    if conn is None:
+        return []
+    try:
+        rows = conn.execute(
+            "SELECT task_id FROM business_tasks"
+            " WHERE work_order_id = ? AND status = 'in_progress'",
+            (work_order_id,),
+        ).fetchall()
+    except Exception:
+        return []
+    finally:
+        conn.close()
+    return [str(row[0]) for row in rows]
+
+
 def in_progress_work_order(
     project_id: str,
     *,

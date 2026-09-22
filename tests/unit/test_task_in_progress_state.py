@@ -106,3 +106,83 @@ def test_the_event_type_was_registered_all_along():
     from canonical.events.types import EventType
 
     assert EventType.TASK_STARTED.value == "task.started"
+
+
+# ── the projection reproduces the state, and does not reverse a finished one ──
+
+
+def _projected_status(tmp_path, events):
+    """Replay `events` through the real TaskProjection and return the row's status.
+
+    The real projection, not a stand-in: the defect this covers was that
+    `task.started` was emitted, written directly to the row, and consumed by nothing --
+    so the row and a rebuild of the same history disagreed. Only running the handler
+    can show that.
+    """
+    import sqlite3 as _sqlite3
+
+    from core.projections.task_projection import TaskProjection
+
+    db = tmp_path / "projected.db"
+    conn = _sqlite3.connect(db)
+    conn.executescript("""
+        CREATE TABLE business_tasks (task_id TEXT PRIMARY KEY, work_order_id TEXT,
+          project_id TEXT, title TEXT, description TEXT, status TEXT,
+          created_at TEXT, updated_at TEXT, acceptance_criteria TEXT,
+          source_event_id TEXT, last_event_id TEXT);
+        """)
+    projection = TaskProjection()
+    for index, event_type in enumerate(events):
+        projection.handle(
+            {
+                "event_id": f"e{index}",
+                "event_type": event_type,
+                "event_timestamp": "2026-09-22T00:00:00+00:00",
+                # Denormalized onto the canonical row, which is where the projection
+                # reads them from -- not out of the payload.
+                "task_id": "t-1",
+                "work_order_id": "wo-1",
+                "project_id": "p-1",
+                "payload": {"title": "A task"},
+            },
+            conn,
+        )
+    conn.commit()
+    row = conn.execute("SELECT status FROM business_tasks WHERE task_id = 't-1'").fetchone()
+    conn.close()
+    return row[0] if row else None
+
+
+def test_a_rebuild_reproduces_the_started_state(tmp_path):
+    """The row and a replay of its own history have to agree.
+
+    `start_task` wrote `in_progress` and emitted `task.started`; the projection consumed
+    no such event, so a rebuild dropped the task back to `pending` and the authority's
+    answer depended on whether anyone had rebuilt it.
+    """
+    assert _projected_status(tmp_path, ["task.created", "task.started"]) == "in_progress"
+
+
+def test_a_late_start_does_not_un_finish_a_completed_task(tmp_path):
+    """The only backward transition in this projection, so the only guarded one.
+
+    Every other event here moves a task toward a terminal state, which makes applying one
+    twice or out of order harmless. A `task.started` replayed after the completion it
+    preceded is not harmless: it would return a finished task to `in_progress`, and the
+    rebuild would contradict the history it was built from.
+    """
+    assert _projected_status(tmp_path, ["task.created", "task.completed", "task.started"]) == (
+        "complete"
+    )
+
+
+@pytest.mark.parametrize("terminal_event", ["task.cancelled", "task.deleted"])
+def test_a_late_start_does_not_revive_an_abandoned_task(tmp_path, terminal_event):
+    """Cancelled and deleted are as finished as complete.
+
+    Guarding on `!= 'complete'` would have let a late start revive an abandoned task --
+    the same distinction WO 654a54d7 found on work orders, where a cancelled one read as
+    reopened and had its delivery boundary widened to HEAD.
+    """
+    status = _projected_status(tmp_path, ["task.created", terminal_event, "task.started"])
+    assert status != "in_progress", f"a late start revived a {terminal_event} task"
