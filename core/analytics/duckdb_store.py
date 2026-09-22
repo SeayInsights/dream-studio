@@ -360,7 +360,7 @@ def derive_events_fact(conn, studio_db_path, *, full_rebuild: bool = False) -> i
 
             has_trace = "trace" in cols
 
-            def d(n, cols=cols, has_trace=has_trace):
+            def dim(n, cols=cols, has_trace=has_trace):
                 """The dimension's value: its column, else the trace it was emitted on.
 
                 THE FALLBACK IS THE POINT. The two canonical tables carry different
@@ -393,7 +393,7 @@ def derive_events_fact(conn, studio_db_path, *, full_rebuild: bool = False) -> i
 
             conn.execute(f"""
                 INSERT INTO events_fact SELECT e.event_id, '{src}', e.event_type, e.event_timestamp,
-                  {', '.join(d(c) for c in _FACT_DIMS[:13])}, {d('severity')},
+                  {', '.join(dim(c) for c in _FACT_DIMS[:13])}, {dim('severity')},
                   TRY_CAST(json_extract_string(e.payload,'$.input_tokens') AS BIGINT),
                   TRY_CAST(json_extract_string(e.payload,'$.output_tokens') AS BIGINT),
                   TRY_CAST(json_extract_string(e.payload,'$.duration_ms') AS BIGINT),

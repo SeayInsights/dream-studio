@@ -184,7 +184,28 @@ def detect_stale_removed_symbol_tests(
     if not truly_removed:
         return []
 
-    patterns = {s: re.compile(r"(?<![\w-])" + re.escape(s) + r"(?![\w-])") for s in truly_removed}
+    # A BARE WORD BOUNDARY IS NOT A REFERENCE. Two classes of false positive this
+    # detector produced on 2026-09-21, both against a generic name:
+    #
+    #   self._targets      an instance attribute, not the module-level `_targets`
+    #                      the diff removed -- a different symbol that happens to
+    #                      share a name
+    #   "tests/unit/test_a.py::test_one"
+    #                      a path inside a STRING, in a fixture of captured pytest
+    #                      output; nothing references a symbol there at all
+    #
+    # So `self.`/`cls.` and a preceding `/` are excluded -- and ONLY those. A blanket
+    # exclusion of `.` was the first attempt and it broke
+    # test_stale_symbol_flags_dotted_patch_target, because `mock.patch("mod.removed")`
+    # is a genuine reference that also sits behind a dot. The distinction is instance
+    # attribute access versus a dotted import path, not the dot itself.
+    #
+    # This matters beyond tidiness: a detector whose findings are mostly noise gets
+    # switched off, and then its true positives go with it.
+    patterns = {
+        s: re.compile(r"(?<![\w-])(?<!self\.)(?<!cls\.)(?<!/)" + re.escape(s) + r"(?![\w-])")
+        for s in truly_removed
+    }
 
     # A removed symbol is only stale-test-worthy if it is ABSENT from the current
     # NON-TEST source tree. A symbol removed from one diff line but still present
