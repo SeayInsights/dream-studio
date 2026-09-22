@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Generate the skill routing table in CLAUDE.md from skills/*/metadata.yml.
+"""Generate the skill routing table in CLAUDE.md from every skill's metadata.yml.
 
 Reads each skill's metadata.yml, extracts triggers[] and description fields,
 and regenerates the content between <!-- BEGIN AUTO-ROUTING --> and
 <!-- END AUTO-ROUTING --> sentinels in CLAUDE.md.
 
 Usage:
-  py scripts/generate_routing.py [--claude-md PATH] [--skills-dir PATH] [--dry-run]
+  py interfaces/cli/generate_routing.py [--claude-md PATH] [--skills-dir PATH] [--dry-run]
 
 Idempotent: running twice produces byte-identical output.
 Graceful: skills without metadata.yml are silently skipped.
@@ -73,17 +73,57 @@ def _parse_simple_yaml_field(text: str, field: str) -> str:
 
 
 def _parse_triggers(text: str) -> list[str]:
-    """Extract the triggers list from a metadata.yml text."""
+    """Extract the triggers list from a metadata.yml text.
+
+    BOTH OF YAML'S LIST SPELLINGS. This read only the inline flow form
+    (``triggers: [a, b]``) and returned [] for the block form::
+
+        triggers:
+          - "intake:"
+          - "sow:"
+
+    which is what 47 of the 65 modes use. A skill with no triggers is dropped from the
+    routing table by the caller, so the table that makes a skill discoverable listed 19
+    of 66 -- and the drop is a bare `continue`, so nothing said which or why.
+
+    Parsed with PyYAML rather than more line-reading. The hand-rolled reader is what
+    produced a parser that knew one spelling; the library knows the language. A document
+    that will not parse falls back to the old scan, because a malformed metadata.yml is
+    that skill's defect and should not take the whole table down with it.
+    """
+    try:
+        import yaml
+
+        loaded = yaml.safe_load(text)
+    except Exception:
+        loaded = None
+
+    if isinstance(loaded, dict):
+        raw = loaded.get("triggers")
+        if isinstance(raw, list):
+            out = []
+            for item in raw:
+                if isinstance(item, str) and item.strip():
+                    out.append(item.strip())
+                elif isinstance(item, dict) and len(item) == 1:
+                    # `- intake:` unquoted parses as {intake: None}. That is a defect in
+                    # the metadata (the colon is part of the trigger), reported by
+                    # `tests/unit/test_routing_table.py`; read it here rather than
+                    # dropping the skill, so one bad quote does not unroute a mode.
+                    key = next(iter(item))
+                    if isinstance(key, str) and key.strip():
+                        out.append(f"{key.strip()}:")
+            return out
+
     for line in text.splitlines():
         stripped = line.strip()
         if stripped.startswith("triggers:"):
-            raw = stripped[len("triggers:") :].strip()
-            if raw.startswith("[") and raw.endswith("]"):
-                inner = raw[1:-1]
+            raw_inline = stripped[len("triggers:") :].strip()
+            if raw_inline.startswith("[") and raw_inline.endswith("]"):
+                inner = raw_inline[1:-1]
                 if not inner.strip():
                     return []
-                parts = [p.strip().strip("\"'") for p in inner.split(",") if p.strip()]
-                return parts
+                return [p.strip().strip("\"'") for p in inner.split(",") if p.strip()]
     return []
 
 
@@ -120,8 +160,23 @@ def _parse_description_triggers(description: str) -> list[str]:
 def collect_skills(skills_dir: Path) -> list[dict]:
     """Return a list of skill dicts for all skills with metadata.yml."""
     skills = []
-    for metadata_path in sorted(skills_dir.glob("*/metadata.yml")):
-        skill_name = metadata_path.parent.name
+    skipped: list[tuple[str, str]] = []
+    # BOTH LAYOUTS. This globbed `*/metadata.yml` alone, which matched ONE file, while
+    # 65 modes live a level deeper at `<pack>/modes/<mode>/metadata.yml`. The skills tree
+    # moved to packs-and-modes and the glob never followed, so the routing table that
+    # makes a skill discoverable listed 1 of 66 -- and the module's own "graceful: skills
+    # without metadata.yml are silently skipped" is why nobody saw it: 65 silent skips
+    # and a success message reading "1 skills registered".
+    paths = sorted({*skills_dir.glob("*/metadata.yml"), *skills_dir.glob("*/modes/*/metadata.yml")})
+    for metadata_path in paths:
+        # `<pack>/modes/<mode>` is named `<pack>:<mode>`, which is how an operator
+        # types it and how packs.yaml refers to it. A bare mode name would collide
+        # across packs (several packs have a `security` or `review` mode).
+        parent = metadata_path.parent
+        if parent.parent.name == "modes":
+            skill_name = f"{parent.parent.parent.name}:{parent.name}"
+        else:
+            skill_name = parent.name
         try:
             text = metadata_path.read_text(encoding="utf-8")
         except OSError:
@@ -136,10 +191,25 @@ def collect_skills(skills_dir: Path) -> list[dict]:
             triggers = _parse_description_triggers(description)
 
         if not triggers:
-            continue  # nothing to emit for this skill
+            # RECORDED, NOT SWALLOWED. This was a bare `continue`, and 47 modes left the
+            # table through it while the run printed "1 skills registered" as a success.
+            # A skip nobody can see is the same as no check at all.
+            skipped.append((skill_name, "declares no triggers, so nothing can route to it"))
+            continue
 
-        section = SKILL_SECTION_OVERRIDES.get(name) or PACK_TO_SECTION.get(pack, "")
+        # A PACK NOBODY HARDCODED IS STILL A PACK. `PACK_TO_SECTION` names four, so
+        # every mode in any other pack -- the whole `domains` pack, eleven modes
+        # including website, kubernetes, terraform and mobile -- fell out of the table
+        # unless it happened to be listed by name in the overrides. Falling back to the
+        # pack's own name routes them under an honest heading instead of dropping them,
+        # and a pack added later needs no edit here to be reachable.
+        section = (
+            SKILL_SECTION_OVERRIDES.get(name)
+            or PACK_TO_SECTION.get(pack, "")
+            or (pack.replace("-", " ").title() if pack else "")
+        )
         if not section:
+            skipped.append((skill_name, "no pack declared, so no section to file it under"))
             continue
 
         intent = _extract_intent(description) or name
@@ -151,6 +221,7 @@ def collect_skills(skills_dir: Path) -> list[dict]:
                 "triggers": triggers,
             }
         )
+    collect_skills.skipped = skipped  # type: ignore[attr-defined]
     return skills
 
 
@@ -161,7 +232,14 @@ def generate_routing_block(skills: list[dict]) -> str:
         by_section.setdefault(skill["section"], []).append(skill)
 
     lines: list[str] = []
-    for section in SECTION_ORDER:
+    # SECTION_ORDER IS AN ORDERING, NOT A FILTER. It named seven sections and the loop
+    # iterated only those, so a skill collected under any other section was dropped at
+    # render time -- after being counted. The run reported "36 skills registered" and
+    # wrote 28. Known sections keep their order; anything else follows, alphabetically,
+    # so a new pack appears in the table without editing this list.
+    ordered = [sec for sec in SECTION_ORDER if sec in by_section]
+    ordered += sorted(sec for sec in by_section if sec not in SECTION_ORDER)
+    for section in ordered:
         section_skills = by_section.get(section)
         if not section_skills:
             continue
@@ -219,22 +297,36 @@ def update_claude_md(claude_md_path: Path, skills_dir: Path, dry_run: bool = Fal
         print(f"[generate_routing] Updated {claude_md_path} — {changed_skills} skills registered.")
     else:
         print("[generate_routing] Dry-run: would update routing table.")
+
+    # A COUNT OF WHAT WORKED IS NOT A REPORT. Every earlier version printed only the
+    # number registered, and each of the four ways a skill could leave the table was a
+    # bare `continue` -- so "1 skills registered" read as success while 65 modes were
+    # unreachable. A skill that cannot be routed to is invisible to the operator in the
+    # only way that matters, so the run says which, and why, whether or not it wrote.
+    dropped = getattr(collect_skills, "skipped", None) or []
+    if dropped:
+        print(f"[generate_routing] {len(dropped)} skill(s) are NOT in the routing table:")
+        for name, reason in sorted(dropped):
+            print(f"    {name}: {reason}")
     return True
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="generate_routing",
-        description="Regenerate CLAUDE.md skill routing table from skills/*/metadata.yml",
+        description="Regenerate the CLAUDE.md skill routing table from every metadata.yml",
     )
     parser.add_argument(
         "--claude-md",
-        default=str(Path(__file__).resolve().parents[1] / "CLAUDE.md"),
+        # parents[2] IS THE REPOSITORY ROOT. This read parents[1] and resolved to
+        # interfaces/CLAUDE.md -- correct while the file lived in scripts/, and wrong
+        # from the day it moved, so the tool could not run with its own defaults.
+        default=str(Path(__file__).resolve().parents[2] / "CLAUDE.md"),
         help="Path to CLAUDE.md (default: repo root)",
     )
     parser.add_argument(
         "--skills-dir",
-        default=str(Path(__file__).resolve().parents[1] / "skills"),
+        default=str(Path(__file__).resolve().parents[2] / "canonical" / "skills"),
         help="Path to skills/ directory (default: repo root/skills)",
     )
     parser.add_argument(
