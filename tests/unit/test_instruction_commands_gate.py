@@ -138,9 +138,7 @@ def test_a_third_party_module_is_not_this_repositorys_to_guarantee():
 def test_a_skill_relative_script_resolves_against_its_own_skill():
     """A skill shipping its own `scripts/` directory writes `py scripts/brand-compliance.py`
     meaning its own, which is the shorter and correct thing for it to say."""
-    website_skill = (
-        REPO_ROOT / "canonical" / "skills" / "domains" / "modes" / "website" / "SKILL.md"
-    )
+    website_skill = REPO_ROOT / "canonical" / "skills" / "website" / "SKILL.md"
     assert _resolve_script("scripts/brand-compliance.py", website_skill)
     assert _resolve_script("scripts/lint-artifact.py", website_skill)
 
