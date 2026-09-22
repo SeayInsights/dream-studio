@@ -36,19 +36,33 @@ def test_scheduled_scan_and_single_source_config():
         jobs["secret-scan"]
     ), "the secret-scan job must run the native scanner"
 
-    # (b) Single-source linter/format pin: exactly one baseline file, and BOTH the local
-    # pre-push gate and CI consume it via lint_baseline.py — no duplicate pin to drift.
+    # (b) Single-source linter/format pin: exactly one baseline file, and every surface
+    # that runs the lint check consumes it via lint_baseline.py — no duplicate pin to
+    # drift.
     assert BASELINE.is_file(), "the single lint baseline must exist"
     others = [
         p for p in REPO.glob("**/flake8-baseline*.txt") if ".git" not in p.parts and p != BASELINE
     ]
     assert not others, f"duplicate lint baseline pin(s) found: {others}"
 
+    # THE INVARIANT IS ONE PIN, NOT ONE RUN PER SURFACE. This asserted that pre-push AND
+    # CI both invoked lint_baseline.py, which stopped being true on 2026-09-21 when format
+    # and lint were consolidated into the pre-push gate alone: they had been running in
+    # pre-push, pr-smoke and full-ci, three runs of a deterministic check for one answer,
+    # and two of those learn it too late to act on (see
+    # docs/operations/lint-format-baseline-policy.md, "One home per check"). What must
+    # still hold is that no surface reads a DIFFERENT pin, which is what a duplicate
+    # baseline would allow -- so the check is now per surface that runs it, and the
+    # pre-push gate is required to be one of them.
     pre_push = PRE_PUSH.read_text(encoding="utf-8")
+    assert "lint_baseline.py" in pre_push, "the pre-push gate must read the single pin"
+
     ci = CI.read_text(encoding="utf-8")
-    assert (
-        "lint_baseline.py" in pre_push and "lint_baseline.py" in ci
-    ), "pre-push and CI must both read the single lint_baseline.py pin"
+    if "lint_baseline" in ci or "flake8" in ci:
+        assert "lint_baseline.py" in ci, (
+            "CI references linting but not through lint_baseline.py — a second path to the"
+            " baseline is exactly the drift this pin exists to prevent"
+        )
 
     # The flake8 *config* pin is single-sourced too: `.flake8` is the only flake8 config.
     # pyproject.toml must not carry a second, divergent (and — without flake8-pyproject —
