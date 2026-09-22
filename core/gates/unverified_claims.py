@@ -82,6 +82,41 @@ _ABSENCE = re.compile(
     re.IGNORECASE,
 )
 
+
+# A STATED MEASUREMENT IS A CLAIM OF FACT. `_ABSENCE` catches "nothing does X"; this
+# catches "457 of 1,387 do X", which is the same posture -- confident about a property of
+# the existing system -- and just as cheap to settle. It is not a hypothetical class:
+# every one of these was stated with confidence in this repository and shaped later work
+# before anyone re-derived it.
+#
+#   "457 of 1,387 TEST-CHECKs name something unrunnable"  counted a SUPPORTED form
+#                                                         (`cmd:`) as junk
+#   "96 files claim generation with no runnable generator" 85% of them were either
+#                                                         already checked or prose
+#   "1 skills registered"                                 the number was right and the
+#                                                         meaning was not
+#   "every agent sees ~60 modes per turn"                 wrong in the opposite direction
+#   "70% compatibility bug reduction"                     no source, ever
+#
+# Deliberately narrow, and measured before it shipped: across the 830-line CHANGELOG it
+# matches 62 lines, of which 45 already carry a citation and 6 are attributed. A pattern
+# that flags almost nothing is noise-free and useless; one that flags almost everything
+# is a wall. Eleven is a worklist.
+#
+# A bare count of what a change DID ("adds 3 tests") is not matched: the shapes here are
+# proportions and totalities -- N of M, a percentage, "all N", "every N" -- which are
+# assertions about a population somebody had to go and count.
+_QUANTITY = re.compile(
+    r"("
+    r"\b\d[\d,]*\s+of\s+\d[\d,]*\b"
+    r"|\b\d[\d,]*\s*%"
+    r"|\ball (?:of )?(?:the )?\d[\d,]*\b"
+    r"|\bevery (?:one of )?(?:the )?\d[\d,]*\b"
+    r"|\b(?:zero|none) of\b"
+    r")",
+    re.IGNORECASE,
+)
+
 # A claim that quotes or attributes is reporting, not asserting -- the same distinction
 # the evidence gate had to draw for hedges inside quotations.
 _ATTRIBUTED = re.compile(
@@ -96,6 +131,9 @@ class Claim:
     line: int
     trigger: str
     text: str
+    #: "absence" or "quantity" -- a reader fixes them differently. An absence needs the
+    #: command that established it; a measurement needs how it was counted.
+    kind: str = "absence"
 
 
 @dataclass
@@ -110,16 +148,16 @@ class Report:
     def render(self) -> str:
         if self.passed:
             return (
-                f"unverified-claims: OK - every asserted absence cites a look "
-                f"({self.citations} citation(s) present)"
+                f"unverified-claims: OK - every asserted absence and measurement cites "
+                f"a look ({self.citations} citation(s) present)"
             )
         lines = [
-            f"unverified-claims: {len(self.unverified)} asserted absence(s) with nothing "
-            "cited. Each of these is a claim about the existing system that a single "
-            "command would settle:"
+            f"unverified-claims: {len(self.unverified)} claim(s) with nothing cited. "
+            "Each is a statement about the existing system that a single command would "
+            "settle:"
         ]
         for claim in self.unverified:
-            lines.append(f"  line {claim.line} ({claim.trigger!r})")
+            lines.append(f"  line {claim.line} [{claim.kind}] ({claim.trigger!r})")
             lines.append(f"    {claim.text}")
         lines.append(
             "\n  Run the check and paste what it said. A confident claim that was never "
@@ -143,6 +181,10 @@ def audit_claims(text: str) -> Report:
         report.citations += len(_CITATION.findall(line))
 
         match = _ABSENCE.search(line)
+        kind = "absence"
+        if not match:
+            match = _QUANTITY.search(line)
+            kind = "quantity"
         if not match:
             continue
         if _ATTRIBUTED.search(line):
@@ -173,6 +215,7 @@ def audit_claims(text: str) -> Report:
                 line=index + 1,
                 trigger=match.group(0),
                 text=" ".join(line.split())[:150],
+                kind=kind,
             )
         )
     return report
