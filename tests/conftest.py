@@ -220,6 +220,106 @@ def _real_repo_fingerprint() -> tuple[bytes, ...] | None:
     return tuple(parts)
 
 
+def _repo_reflog_tail(size_before: int) -> list[str]:
+    """The reflog lines written since `size_before` bytes — what actually moved HEAD.
+
+    Git records every HEAD movement with the operation that caused it (`commit:`,
+    `checkout:`, `reset:`, `rebase (finish):`). The guard below used to detect that HEAD
+    had moved and have no idea what moved it, so it named the only actor it knew about —
+    the test that happened to be running. That is an accusation built from absence of
+    evidence, and it is wrong whenever anything outside the suite commits.
+
+    File read only, and only on the failure path, so the per-test cost stays zero.
+    """
+    git_dir = _repo_git_dir()
+    if git_dir is None:
+        return []
+    commondir = git_dir / "commondir"
+    common = git_dir
+    if commondir.is_file():
+        try:
+            common = (git_dir / commondir.read_text(encoding="utf-8").strip()).resolve()
+        except OSError:
+            return []
+    log = common / "logs" / "HEAD"
+    try:
+        with log.open("rb") as fh:
+            fh.seek(max(0, size_before))
+            new = fh.read().decode("utf-8", "replace")
+    except OSError:
+        return []
+    out = []
+    for line in new.splitlines():
+        # <old> <new> <who> <when>\t<operation>: <message>
+        message = line.partition("\t")[2]
+        if message:
+            out.append(message.strip())
+    return out
+
+
+def _repo_reflog_size() -> int:
+    """Bytes in the reflog now, so the tail above can be read back on failure."""
+    git_dir = _repo_git_dir()
+    if git_dir is None:
+        return 0
+    commondir = git_dir / "commondir"
+    common = git_dir
+    if commondir.is_file():
+        try:
+            common = (git_dir / commondir.read_text(encoding="utf-8").strip()).resolve()
+        except OSError:
+            return 0
+    try:
+        return (common / "logs" / "HEAD").stat().st_size
+    except OSError:
+        return 0
+
+
+class _GitCallRecorder:
+    """Whether THIS test ran a git command that could have moved the real repo.
+
+    The second half of the record. `subprocess.run` goes through `Popen`, so wrapping
+    the class once catches every route a test could take. It records argv only — no
+    behaviour change, no cost beyond an attribute swap per test.
+
+    A test that moved HEAD ran git to do it. A test that ran none did not, and the
+    repository was changed by something else — an operator committing while the suite
+    runs, an editor, another agent. Those are different events and deserve different
+    messages.
+    """
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+        self._original = None
+
+    def __enter__(self) -> "_GitCallRecorder":
+        import subprocess as _sp
+
+        self._original = _sp.Popen
+        recorder = self
+
+        class _Recording(_sp.Popen):  # type: ignore[misc]
+            def __init__(self, args, *a, **kw):
+                try:
+                    argv = args if isinstance(args, (list, tuple)) else [args]
+                    program = str(argv[0]) if argv else ""
+                    if "git" in _os.path.basename(program).lower():
+                        recorder.calls.append(" ".join(str(x) for x in argv)[:200])
+                except Exception:
+                    pass
+                super().__init__(args, *a, **kw)
+
+        _sp.Popen = _Recording  # type: ignore[assignment]
+        return self
+
+    def __exit__(self, *exc) -> None:
+        import subprocess as _sp
+
+        if self._original is not None:
+            _sp.Popen = self._original  # type: ignore[assignment]
+        return None
+
+
 def pytest_configure(config):
     """Reinstall our SIGINT handler after pytest installs its own.
 
@@ -414,8 +514,16 @@ def guard_real_homedir(tmp_path, monkeypatch, request):
     # this watches; that strip closes the known route, and this catches a route nobody has
     # thought of yet, by watching the damage instead of the mechanism.
     _before_repo = _real_repo_fingerprint()
+    _before_reflog = _repo_reflog_size()
 
-    yield
+    # WHAT MOVED HEAD, recorded rather than inferred. See `_GitCallRecorder`.
+    _git_calls = _GitCallRecorder()
+    _git_calls.__enter__()
+
+    try:
+        yield
+    finally:
+        _git_calls.__exit__(None, None, None)
 
     # Teardown: reset singleton again so subsequent tests don't inherit a stale instance
     # pointing at the (now-cleaned-up) tmp DB path.
@@ -456,14 +564,65 @@ def guard_real_homedir(tmp_path, monkeypatch, request):
                 "Aborting session to prevent further damage.",
                 returncode=2,
             )
-    if _before_repo is not None and _real_repo_fingerprint() != _before_repo:
-        pytest.exit(
-            # NAME THE TEST, for the reason recorded above: the previous round of this bug
-            # cost six repository repairs and a day of bisecting precisely because nothing
-            # said which test did it.
-            f"FATAL: {request.node.nodeid} modified the real git repository at {_PLUGIN_ROOT} "
-            "(its config, HEAD, or the checked-out branch's tip changed during the test). "
-            "A test must operate on a temporary repository: pass cwd=<tmp> AND an env with "
-            "GIT_DIR/GIT_WORK_TREE removed. Aborting session to prevent further damage.",
-            returncode=2,
+    _after_repo = _real_repo_fingerprint()
+    if _before_repo is not None and _after_repo != _before_repo:
+        # WAS IT DAMAGED, OR MERELY MOVED? The escape this guard was built for turned the
+        # repository BARE -- a change to `core.bare` in the config, which is the first
+        # element of the fingerprint. A branch tip moving is an ordinary commit. Those are
+        # different events and only one of them is damage.
+        _config_changed = (
+            _after_repo is None or not _after_repo or _after_repo[0] != _before_repo[0]
         )
+        _operations = _repo_reflog_tail(_before_reflog)
+        _what = "; ".join(_operations[:3]) if _operations else "no reflog entry"
+
+        # THE REFLOG IS THE THIRD PIECE OF EVIDENCE, and it closes the hole the other two
+        # leave. Git writes a reflog entry for every HEAD movement it makes; a test that
+        # hand-writes `.git/refs/heads/<branch>` or `.git/HEAD` in Python moves the tip and
+        # leaves NO entry. So "the fingerprint changed and the reflog did not grow" means
+        # something bypassed git entirely, which is never an ordinary operator commit and
+        # always worth stopping for.
+        if _config_changed or _git_calls.calls or not _operations:
+            # The test ran git against a real repository, or the repository is damaged
+            # rather than moved. NAME THE TEST -- the previous round of this bug cost six
+            # repository repairs and a day of bisecting precisely because nothing said who.
+            if _git_calls.calls:
+                _by = f" It ran: {_git_calls.calls[0]}"
+            elif _config_changed:
+                _by = " Its config changed, which is damage rather than an ordinary commit."
+            else:
+                _by = (
+                    " Nothing was written to the reflog, so the refs were changed without"
+                    " going through git at all."
+                )
+            pytest.exit(
+                f"FATAL: {request.node.nodeid} modified the real git repository at "
+                f"{_PLUGIN_ROOT} (reflog says: {_what}).{_by} "
+                "A test must operate on a temporary repository: pass cwd=<tmp> AND an env "
+                "with GIT_DIR/GIT_WORK_TREE removed. Aborting session to prevent further "
+                "damage.",
+                returncode=2,
+            )
+
+        # THE SUITE IS INNOCENT AND THE RUN CONTINUES. This test ran no git command and the
+        # repository is not damaged -- its HEAD or branch tip moved while the suite was
+        # running, which is what happens when the operator commits in another window.
+        # Killing a clean run on that evidence loses thousands of passing tests and teaches
+        # the reader that this guard cries wolf. The next test re-baselines on setup, so
+        # nothing is carried forward.
+        _notice = (
+            f"[repo-guard] The repository at {_PLUGIN_ROOT} changed during "
+            f"{request.node.nodeid}, but that test ran no git command against it and the "
+            f"repository is not damaged. Reflog says: {_what}. Treating this as an external "
+            "change (an operator commit during the run is the usual cause) and continuing."
+        )
+        # THROUGH THE TERMINAL REPORTER, not print(). pytest captures stdout and stderr per
+        # test and discards them when it passes, so a print here would be visible only on
+        # the runs where nothing was wrong -- a notice recorded where nobody reads it, which
+        # is the shape this guard exists to avoid. Found by the test below asserting that
+        # the notice actually reaches the operator.
+        _reporter = request.config.pluginmanager.get_plugin("terminalreporter")
+        if _reporter is not None:
+            _reporter.write_line(_notice)
+        else:
+            print(_notice, file=_sys.stderr)
