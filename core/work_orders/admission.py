@@ -203,7 +203,8 @@ def declared_reason(description: str | None) -> str:
     marker = text.rfind(DECLARED_PREFIX)
     if marker < 0:
         return ""
-    return " ".join(text[marker + len(DECLARED_PREFIX) :].split())
+    start = marker + len(DECLARED_PREFIX)
+    return " ".join(text[start:].split())
 
 
 def criterion_refusal(
