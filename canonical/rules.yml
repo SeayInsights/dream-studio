@@ -36,8 +36,15 @@
 #
 # THE CONTRACT. Every entry is one normative statement. It carries EITHER:
 #   enforced_by: a check that fails when the rule is broken (pytest node id or gate module)
-#   unenforced:  a reason of at least 20 characters, when the statement is judgment
-#                no static check can settle -- typically an instruction to the MODEL
+#   unenforced:  a reason of at least 20 characters, when an enforcer EXISTED and a named
+#                commit removed it. This pile is a debt and is meant to shrink.
+#   guidance:    true with a `why` of at least 20 characters, when NO static check can
+#                settle the statement at all -- an instruction to the MODEL, answerable
+#                only by an eval. This pile is a classification and will not shrink.
+#
+# THE TWO ARE NOT THE SAME and sharing one field made the regression count meaningless: a
+# rule nothing ever enforced cannot name the commit that stopped enforcing it, which is
+# what `test_every_declaration_names_the_commit_that_removed_its_enforcer` exists to catch.
 # An entry with neither is refused by the gate. So is an `enforced_by` naming a check that
 # does not exist or collects nothing -- an unrunnable check is the same as no check, and
 # that exact rot was found on eight acceptance criteria this session.
@@ -118,7 +125,8 @@ rules:
       Milestone state shown to an operator is what the command returned, with errors
       quoted rather than summarised, and no field the caller did not receive.
     source: canonical/rules.yml
-    unenforced: >
+    guidance: true
+    why: >
       No static check can settle whether a model recited state from its own context instead
       of reading it back, or softened an error on the way out. This is an eval, and saying
       so is more honest than naming a gate that would only appear to cover it. It is
@@ -129,7 +137,8 @@ rules:
       A gate is bypassed only after the operator is told which gates will be skipped and
       answers yes; the bypass is never offered as the first remedy.
     source: canonical/rules.yml
-    unenforced: >
+    guidance: true
+    why: >
       The code cannot distinguish a force the operator asked for from one the model talked
       them into, since both arrive as the same flag. What the code does guarantee is the
       record, covered by a-bypassed-gate-is-recorded-by-name. The judgment above that line
@@ -139,7 +148,8 @@ rules:
       Reporting the state of a milestone does not continue into closing it; a mutation is
       a separate instruction from the operator.
     source: canonical/rules.yml
-    unenforced: >
+    guidance: true
+    why: >
       Two commands run in sequence look identical to any static check whether the operator
       asked for the second or the model decided the answer implied it. The separation is a
       behaviour, so it is declared as one rather than dressed up with a gate that would

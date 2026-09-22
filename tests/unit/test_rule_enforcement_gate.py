@@ -201,6 +201,128 @@ def test_every_declaration_names_the_commit_that_removed_its_enforcer():
         ), f"{item['rule']} does not name the commit that removed its enforcer"
 
 
+# --------------------------------------------------------------------------
+# Guidance is a classification, not a regression
+# --------------------------------------------------------------------------
+
+
+def test_a_guidance_rule_passes_and_is_counted_apart(tmp_path):
+    """The two piles mean different things and are reported separately.
+
+    `unenforced` says an enforcer existed and a named commit removed it, so that list is
+    a debt meant to shrink. `guidance` says no static check can settle the statement at
+    all. Counting them together made the debt look larger and, worse, unfixable -- there
+    is no enforcement to restore for a statement about how the model should behave.
+    """
+    path = _registry(
+        tmp_path,
+        """\
+        rules:
+          - id: a-rule-only-an-eval-can-settle
+            statement: The model should surface what the call returned.
+            source: nowhere.py
+            guidance: true
+            why: >
+              No static check can tell a recited answer from a read one; this is an eval.
+        """,
+    )
+    report = audit(path)
+    assert report["broken"] == []
+    assert report["declared"] == [], "guidance must not inflate the unenforced pile"
+    assert [g["rule"] for g in report["guidance"]] == ["a-rule-only-an-eval-can-settle"]
+
+
+def test_guidance_needs_a_why_of_its_own(tmp_path):
+    """Same floor as the other escape. A classification that costs nothing to claim is
+    the way every hard rule eventually becomes guidance."""
+    path = _registry(
+        tmp_path,
+        """\
+        rules:
+          - id: a-rule-waving-it-through
+            statement: Something ought to be true.
+            source: nowhere.py
+            guidance: true
+            why: hard
+        """,
+    )
+    broken = audit(path)["broken"]
+    assert len(broken) == 1
+    assert str(MIN_REASON) in broken[0]["why"]
+
+
+def test_guidance_without_a_why_at_all_is_refused(tmp_path):
+    """`guidance: true` alone is the shrug in its purest form."""
+    path = _registry(
+        tmp_path,
+        """\
+        rules:
+          - id: a-rule-with-a-bare-claim
+            statement: Something ought to be true.
+            source: nowhere.py
+            guidance: true
+        """,
+    )
+    broken = audit(path)["broken"]
+    assert len(broken) == 1
+    assert str(MIN_REASON) in broken[0]["why"]
+
+
+def test_a_rule_cannot_be_guidance_and_enforced_at_once(tmp_path):
+    """Same objection as the unenforced case: a rule keeping its claim and its excuse."""
+    path = _registry(
+        tmp_path,
+        """\
+        rules:
+          - id: a-rule-having-it-both-ways
+            statement: Something ought to be true.
+            source: nowhere.py
+            guidance: true
+            why: >
+              No static check can settle this one, it is an instruction to the model.
+            enforced_by:
+              - canonical/rules.yml
+        """,
+    )
+    broken = audit(path)["broken"]
+    assert len(broken) == 1
+    assert "pick one" in broken[0]["why"]
+
+
+def test_a_rule_cannot_be_guidance_and_a_removed_enforcer_at_once(tmp_path):
+    """The two states answer different questions, and a rule that claims both tells us
+    neither: either an enforcer was removed, or none could have existed."""
+    path = _registry(
+        tmp_path,
+        """\
+        rules:
+          - id: a-rule-claiming-both-excuses
+            statement: Something ought to be true.
+            source: nowhere.py
+            guidance: true
+            why: >
+              No static check can settle this one, it is an instruction to the model.
+            unenforced: >
+              The gate that held this up was removed deliberately and nothing replaced it.
+        """,
+    )
+    broken = audit(path)["broken"]
+    assert len(broken) == 1
+    assert "pick one" in broken[0]["why"]
+
+
+def test_the_registers_guidance_entries_are_the_ones_the_dissolution_produced(tmp_path):
+    """Pinned like the unenforced set, for the same reason: the pile is only meaningful
+    while every entry is deliberate. These three came out of ds-milestone, where they
+    were numbered instructions in a skill pack, charged as context on every invocation
+    and enforced by nothing."""
+    assert {g["rule"] for g in audit()["guidance"]} == {
+        "surfaced-state-is-what-the-call-returned",
+        "a-gate-bypass-needs-an-explicit-yes",
+        "a-read-does-not-chain-into-a-mutation",
+    }
+
+
 def test_the_gate_is_registered_in_the_pre_push_manifest():
     """The register's previous checker was culled and nothing noticed for weeks. A gate
     that exists in no manifest is the defect it was built to catch."""

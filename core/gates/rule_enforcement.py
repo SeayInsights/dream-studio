@@ -76,12 +76,41 @@ def audit(registry_path: Path | None = None) -> dict[str, Any]:
 
     broken: list[dict[str, Any]] = []
     declared: list[dict[str, Any]] = []
+    guidance: list[dict[str, Any]] = []
     checked = 0
 
     for rule in rules or []:
         rule_id = rule.get("id", "<no id>")
         reason = str(rule.get("unenforced") or "").strip()
         references = list(rule.get("enforced_by") or [])
+        guidance_why = str(rule.get("why") or "").strip()
+
+        # GUIDANCE IS NOT A REGRESSION. `unenforced` records that something used to hold a
+        # rule up and a named commit removed it, so that list is a debt that should shrink.
+        # `guidance` records that no static check can settle the statement at all -- an
+        # instruction to the model, answerable only by an eval. Filing the second under the
+        # first inflates the regression count with rules nothing ever enforced, and the
+        # reason can never name a commit because none exists.
+        if rule.get("guidance") is True:
+            if reason or references:
+                broken.append(
+                    {
+                        "rule": rule_id,
+                        "reference": "(guidance declaration)",
+                        "why": "declares guidance AND unenforced/enforced_by; pick one",
+                    }
+                )
+            elif len(guidance_why) < MIN_REASON:
+                broken.append(
+                    {
+                        "rule": rule_id,
+                        "reference": "(guidance declaration)",
+                        "why": f"why is {len(guidance_why)} characters, {MIN_REASON} required",
+                    }
+                )
+            else:
+                guidance.append({"rule": rule_id, "why": guidance_why})
+            continue
 
         if reason:
             # A DECLARATION IS NOT A BYPASS. It must say something, and it must not sit
@@ -111,7 +140,7 @@ def audit(registry_path: Path | None = None) -> dict[str, Any]:
                 {
                     "rule": rule_id,
                     "reference": "(none)",
-                    "why": "no enforced_by and no unenforced declaration",
+                    "why": "no enforced_by, no unenforced declaration, no guidance",
                 }
             )
             continue
@@ -127,6 +156,7 @@ def audit(registry_path: Path | None = None) -> dict[str, Any]:
         "references_checked": checked,
         "broken": broken,
         "declared": declared,
+        "guidance": guidance,
     }
 
 
@@ -145,9 +175,13 @@ def main() -> int:
             for item in items:
                 print(f"      {item['why']:28s} {item['reference']}")
         print()
-        print("  Point the rule at the enforcer that survived, or declare it:")
-        print(f"    unenforced: <at least {MIN_REASON} characters saying what is gone and why>")
-        print("  and remove its enforced_by. A rule cannot be both held up and not.")
+        print("  Point the rule at the enforcer that survived, or declare which it is:")
+        print(f"    unenforced: <at least {MIN_REASON} chars> - an enforcer existed and a")
+        print("                named commit removed it; this pile is a debt that shrinks.")
+        print("    guidance: true")
+        print(f"    why: <at least {MIN_REASON} chars> - no static check can settle this at")
+        print("                all; it is an instruction to the model, answerable by an eval.")
+        print("  Exactly one, and remove its enforced_by. A rule cannot be both held up and not.")
         return 1
 
     print(
@@ -157,10 +191,18 @@ def main() -> int:
     # THE UNENFORCED PILE IS PRINTED EVERY RUN, PASS OR FAIL. The register exists to make
     # it visible; a declaration that only shows up in a failure is a pile nobody sees.
     if declared:
-        print(f"\n  {len(declared)} rule(s) declared UNENFORCED:")
+        print(f"\n  {len(declared)} rule(s) UNENFORCED (an enforcer was removed):")
         for item in declared:
             print(f"    {item['rule']}")
             print(f"        {item['reason'][:150]}")
+    # PRINTED APART, because the two counts mean different things. The pile above is a
+    # debt and should shrink; the one below is a classification and will not, since no
+    # static check can settle a statement about how the model should behave.
+    if report["guidance"]:
+        print(f"\n  {len(report['guidance'])} rule(s) GUIDANCE (no check can settle it):")
+        for item in report["guidance"]:
+            print(f"    {item['rule']}")
+            print(f"        {item['why'][:150]}")
     return 0
 
 
