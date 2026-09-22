@@ -4,11 +4,12 @@
 
 **Entry points:**
 - `studio-onboard` workflow (via WO-V first-run flow when existing repos detected)
-- Explicit user trigger: `ds project brownfield-onboard` or `brownfield-onboard:`
+- Explicit user trigger: `brownfield-onboard:`
 
 **Wraps:**
-- `core.projects.discovery.discover_project_candidates(search_root, github_entity, max_depth)` — enumerate candidates
-- `core.projects.bulk_intake.bulk_acquire(candidates, source_root, dream_studio_home)` — bulk register
+- `ds project discover` — enumerate candidates, registering nothing
+- `ds project bulk-onboard` — register the operator's selection
+- `ds project readiness` — report what previous audits already found
 - `core.projects.mutations.set_project_vision(project_id, vision_statement)` — capture vision on project entity
 
 ---
@@ -36,17 +37,11 @@ Also ask (one question at a time): "Do you want to enumerate a GitHub org or use
 
 ### Step 2 — Discover candidates
 
-Call:
-```python
-from core.projects.discovery import discover_project_candidates
-from pathlib import Path
-
-candidates = discover_project_candidates(
-    Path(search_root),
-    github_entity=github_entity or None,
-    max_depth=3,
-)
+Run:
 ```
+ds project discover <search_root> [--github-entity <org>] [--max-depth 3]
+```
+It prints `{"ok": true, "count": N, "candidates": [...]}` and registers nothing.
 
 Present the results as a numbered list:
 ```
@@ -61,16 +56,18 @@ Ask: "Select which to register (e.g., '1 2 3', 'all', or 'none')."
 
 ### Step 3 — Bulk register selected
 
-For each selected candidate with a local path, call:
-```python
-from core.projects.bulk_intake import bulk_acquire
-
-result = bulk_acquire(selected_candidates, source_root=source_root)
+Save the discover output and register the operator's picks by the numbers the list
+showed them:
 ```
+ds project bulk-onboard <candidates.json> --select 1,3,5
+```
+`--select` takes 1-based numbers or ranges (`2-4`) and defaults to every candidate in the
+file. The command also reads the JSON on stdin, so `ds project discover ... | ds project
+bulk-onboard --select 1,3` works.
 
 Report results:
 - Registered: N new projects
-- Skipped: M already registered (idempotent)
+- Skipped: M already registered (re-running is safe and mints no duplicate row)
 - GitHub-only: K repos without local clone (list URLs)
 - Errors: J failed (list with reasons)
 
@@ -79,11 +76,9 @@ Report results:
 For each newly-registered project, offer:
 "Do you want to add a brief vision statement for [project name]? (Stored on the project entity, not in a separate doc.)"
 
-If yes, prompt for vision (1–3 sentences). Then call:
-```python
-from core.projects.mutations import set_project_vision
-set_project_vision(project_id, vision_statement)
-```
+If yes, prompt for vision (1–3 sentences), then call
+`core.projects.mutations.set_project_vision(project_id, vision_statement)`. This one has
+no command of its own yet; everything else in this flow does.
 
 Skip this step if the user says "skip" or "no" for all projects.
 
@@ -113,7 +108,8 @@ Brownfield onboarding complete.
   Registered: N projects
   Skipped:    M already registered
   Visions captured: K
-  Audits deferred:  J (run `ds project audit <id>` when ready)
+  Audits not run:   J (nothing is queued; `ds project readiness <id>` reports what
+                       previous audits already found)
 ```
 
 ### Step 7 — Adaptive routing (recommended audits per project)
@@ -143,10 +139,8 @@ that project. Do NOT invoke any mode the operator did not pick.
 Once the approved audits have run — their findings are persisted to the
 `security_events` spine — fold the results into the per-project readiness report
 and the proposed stabilization scope:
-```python
-from core.projects.acquisition import aggregate_readiness
-
-report = aggregate_readiness(project_id, dispatches=project["recommended_dispatches"])
+```
+ds project readiness <project_id>
 ```
 Present a per-project readiness section from `report["readiness_report"]` (finding
 count, severity breakdown, the findings sourced from those audits) and the

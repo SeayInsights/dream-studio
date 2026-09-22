@@ -42,8 +42,8 @@ def bulk_acquire(
 
     Returns:
         ok           → True (always; per-candidate errors are in ``errors``)
-        registered   → list of newly-registered project dicts (ok=True, idempotent=False)
-        skipped      → list of already-registered dicts (ok=True, idempotent=True)
+        registered   → list of newly-registered project dicts (ok=True, reused=False)
+        skipped      → list of already-registered dicts (ok=True, reused=True)
         github_only  → list of GitHub-only candidates (no local path)
         errors       → list of {path, name, error} for failed acquisitions
         counts       → {registered, skipped, github_only, errors}
@@ -83,7 +83,7 @@ def bulk_acquire(
                 errors.append(
                     {"path": path_str, "name": name, "error": result.get("error", "unknown")}
                 )
-            elif result.get("idempotent"):
+            elif result.get("reused"):
                 skipped.append(result)
             else:
                 registered.append(result)
