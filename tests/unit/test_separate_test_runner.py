@@ -565,44 +565,39 @@ def test_close_does_not_claim_execution_that_never_happened(db, tmp_path):
     assert "not execution-backed" in warning
 
 
-def test_close_stays_quiet_when_the_checks_did_run_and_were_forced_past(db, tmp_path):
-    """A check that RAN and failed is execution — the force bypassed the failure, not
-    the run, and `bypassed_gates` already reports that. Saying "not execution-backed"
-    here would be the false caveat this measurement replaced."""
-    from unittest.mock import MagicMock, patch
+def test_a_forced_close_says_the_checks_did_not_run_because_they_did_not():
+    """WHAT THIS REPLACED, and why the old assertion stopped being true.
 
-    from core.work_orders.close import close_work_order
+    This was `test_close_stays_quiet_when_the_checks_did_run_and_were_forced_past`: a
+    forced close whose checks HAD run was not to carry "not execution-backed", on the
+    reasoning that the force bypassed the FAILURE rather than the run.
 
-    wo_id = _wo_with_acs(db, [_FAILING_AC])
-    _store_verdict(
-        db,
-        wo_id,
-        {
-            "passed": True,
-            "test_execution": {
-                "registered": 1,
-                "executed": 0,
-                "passed": 0,
-                "basis": "not_run_at_verify",
-            },
-        },
+    That reasoning was correct when written, and the close path changed underneath it.
+    `close_main` now short-circuits the always-on AC gate on a forced close, recorded
+    there as "A FORCED CLOSE DOES NOT PAY FOR AN ANSWER IT HAS ALREADY OVERRIDDEN" --
+    measured 2026-09-21, a single forced close timed out at 600 seconds, which is a force
+    nobody can use. It records the criteria as NOT EVALUATED rather than as a pass.
+
+    So a forced close in which the checks ran is no longer a state the system can reach,
+    and the caveat it was asserting against is now TRUE: nothing ran, and saying so is
+    accurate rather than a false caveat. A test of a state that cannot occur fails
+    forever and reads as a regression, which is worse than no test -- it spends attention
+    on a decision that was already made.
+
+    What still needs holding is the other direction, and the test above it holds that: a
+    forced close that ran nothing must SAY so. This one pins the deliberate behaviour so
+    the next reader meets the decision instead of the failure.
+    """
+    import inspect
+
+    from core.work_orders import close_main
+
+    source = inspect.getsource(close_main)
+    assert '_ac_stats["skipped"] = "forced close: acceptance criteria not evaluated"' in source, (
+        "a forced close no longer records the criteria as unevaluated -- if it now RUNS"
+        " them, restore the quiet-when-they-ran assertion this replaced"
     )
-    fake_paths = MagicMock()
-    fake_paths.sqlite_path = db
-    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
-        result = close_work_order(
-            work_order_id=wo_id,
-            force=True,
-            source_root=tmp_path,
-            dream_studio_home=tmp_path,
-            planning_root=tmp_path / "planning",
-        )
-    assert result["ok"] is True
-    assert "test_execution_warning" not in result, (
-        "the check executed at close — reporting it as unexecuted would be the false"
-        f" caveat: {result.get('test_execution_warning')}"
-    )
-    assert result["bypassed_gates"], "the FAILURE is what was bypassed, and that is reported"
+    assert "if force:" in source
 
 
 # ── Task 4: the rule ships in canonical skill text ────────────────────────────
