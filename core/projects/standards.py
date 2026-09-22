@@ -104,6 +104,48 @@ def declared_test_profile(repo_root: Path | None) -> dict[str, str]:
     return {}
 
 
+#: Where a project declares the gates its own pushes must pass. Two layouts, mirroring
+#: `round_table.registry_for`: `.dream-studio/gates.yaml` beside the standards profile,
+#: or the Dream-Studio-shaped `canonical/workflows/pre-push.yaml` that this repo itself
+#: uses -- so a project laid out like DS needs no second file to say the same thing.
+GATE_MANIFEST_PATHS = (
+    (".dream-studio", "gates.yaml"),
+    ("canonical", "workflows", "pre-push.yaml"),
+)
+
+
+def gate_manifest_for(repo_root: Path | None) -> tuple[Path | None, str | None]:
+    """The gate manifest for a tree: ``(path, refusal)``.
+
+    **DREAM STUDIO'S OWN GATES ARE NOT A DEFAULT FOR SOMEBODY ELSE'S REPOSITORY.**
+    `run_pre_push_gates` already accepted `manifest_path` and `repo_root`, and `main()`
+    passed neither -- so the only reachable behaviour was DS's manifest against DS's
+    tree. The obvious way to add `--repo` would be to keep DS's manifest and change the
+    working directory, which would gate another project on rules like
+    `rule4-ingestor-sole-event-writer` and `fixture-schema-parity`: facts about this
+    codebase's event pipeline, not about whether that project works. Every one of them
+    would fail, and the failure would say nothing true about the project.
+
+    So a tree that declares no manifest is REFUSED, not defaulted. The refusal names
+    both places it looked, because "declare your gates" without saying where is the
+    same dead end as no message at all.
+    """
+    if repo_root is None:
+        return None, None
+    root = Path(repo_root)
+    for parts in GATE_MANIFEST_PATHS:
+        candidate = root.joinpath(*parts)
+        if candidate.is_file():
+            return candidate, None
+    looked = " or ".join("/".join(p) for p in GATE_MANIFEST_PATHS)
+    return None, (
+        f"{root} declares no gate manifest, and Dream Studio's own gates are not a"
+        f" default for another repository -- they encode this codebase's rules, so"
+        f" running them there would fail for reasons about Dream Studio. Declare the"
+        f" project's gates in {looked}."
+    )
+
+
 def is_pytest(command: str) -> bool:
     """True when a declared command is the runner Dream Studio already defaults to.
 

@@ -111,6 +111,23 @@ declares nothing keeps pytest, exactly as before.
 Run `ds project standards [--repo <path>]` to see which of those three states a tree is
 in; an absent profile is an answer, not an error.
 
+### The project's gates
+
+A project also declares which gates its pushes must pass, in the same tree:
+
+```
+<project>/.dream-studio/gates.yaml          # or canonical/workflows/pre-push.yaml
+```
+
+Run them with `py -m core.gates.pre_push --repo <path>`.
+
+**Dream Studio's own gates are not a default for another repository.** `pre-push.yaml`
+here declares things like `rule4-ingestor-sole-event-writer` and `fixture-schema-parity`
+— facts about this codebase's event pipeline, not about whether another project works.
+Running them against someone else's repo would fail every gate, and none of the failures
+would say anything true about that project. So a tree declaring no manifest is **refused**,
+with both locations named; it is never silently gated on Dream Studio's rules.
+
 ---
 
 ## Phase 1 — Discovery
