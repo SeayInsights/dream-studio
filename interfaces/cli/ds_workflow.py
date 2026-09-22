@@ -77,6 +77,60 @@ def cmd_advance(args) -> int:
     return 0
 
 
+#: Where a project keeps its own gate manifest. One name, so an operator who has
+#: onboarded a project knows where to put it without reading the source.
+PROJECT_GATE_MANIFEST = Path(".dream-studio") / "pre-push.yaml"
+
+
+def _resolve_gate_manifest(
+    *,
+    repo_root: str | None,
+    manifest_path: str | None,
+) -> dict:
+    """Decide which manifest to run and against which tree.
+
+    Returns ``{"manifest_path": Path|None, "repo_root": Path|None}``, or
+    ``{"error": str}`` when the request cannot be honoured. ``None`` for either
+    means "Dream Studio's own", which is what `run_pre_push_gates` already defaults to.
+
+    THE REFUSAL IS THE POINT, and it is why a fallback is not offered. Dream Studio's
+    gates measure Dream Studio: skill-sync compares canonical skills to their projections,
+    `pin-tests` compares `dist/plugin` to the generator, `migration-risk` watches this
+    repo's DDL sites. Run against somebody else's repository they do not report on that
+    repository — they pass vacuously or fail for reasons about this one. A green result
+    that means nothing is worse than a refusal, because only one of the two gets fixed.
+    """
+    resolved_root = Path(repo_root).expanduser().resolve() if repo_root else None
+
+    if manifest_path:
+        explicit = Path(manifest_path).expanduser().resolve()
+        if not explicit.is_file():
+            return {"error": f"Error: no gate manifest at {explicit}"}
+        return {"manifest_path": explicit, "repo_root": resolved_root}
+
+    if resolved_root is None:
+        return {"manifest_path": None, "repo_root": None}
+
+    if not resolved_root.is_dir():
+        return {"error": f"Error: not a directory: {resolved_root}"}
+
+    candidate = resolved_root / PROJECT_GATE_MANIFEST
+    if not candidate.is_file():
+        return {
+            "error": (
+                f"Error: {resolved_root} has no gate manifest at"
+                f" {PROJECT_GATE_MANIFEST.as_posix()}.\n"
+                "Dream Studio's own gates are not run in its place: they measure Dream"
+                " Studio (skill projections, dist/plugin freshness, this repo's"
+                " migrations), so against another repository they would pass without"
+                " having looked.\n"
+                f"Write {PROJECT_GATE_MANIFEST.as_posix()} declaring that project's own"
+                " gates, or pass --manifest to name one."
+            )
+        }
+    return {"manifest_path": candidate, "repo_root": resolved_root}
+
+
 def cmd_run(args) -> int:
     """Run a workflow to completion (all waves).
 
@@ -89,7 +143,22 @@ def cmd_run(args) -> int:
     if non_interactive and args.wf_key == "pre-push":
         from core.gates.pre_push import format_report, run_pre_push_gates
 
-        report = run_pre_push_gates()
+        # THE CAPABILITY WAS BUILT AND THE DOOR DID NOT OPEN IT. `run_pre_push_gates`
+        # has taken `manifest_path` and `repo_root` all along, and this call passed
+        # neither — so every gate run measured Dream Studio, whatever repository the
+        # operator was standing in, and no other project could be gated at all.
+        resolved = _resolve_gate_manifest(
+            repo_root=getattr(args, "repo_root", None),
+            manifest_path=getattr(args, "manifest_path", None),
+        )
+        if resolved.get("error"):
+            print(resolved["error"], file=sys.stderr)
+            return 1
+
+        report = run_pre_push_gates(
+            manifest_path=resolved["manifest_path"],
+            repo_root=resolved["repo_root"],
+        )
         print(format_report(report))
         return 0 if report.overall_passed else 1
 
@@ -189,5 +258,24 @@ def add_workflow_subcommand(subparsers) -> None:
             "Run a deterministic gate workflow without invoking the LLM. "
             "Currently only supported for `pre-push` — used by hooks/git/pre-push."
         ),
+    )
+    p_run.add_argument(
+        "--repo-root",
+        default=None,
+        dest="repo_root",
+        metavar="DIR",
+        help=(
+            "Run the gates against THIS repository instead of Dream Studio's own."
+            " Its gate manifest is read from <DIR>/.dream-studio/pre-push.yaml; a"
+            " repository with no manifest is refused rather than judged by Dream"
+            " Studio's gates, which measure Dream Studio."
+        ),
+    )
+    p_run.add_argument(
+        "--manifest",
+        default=None,
+        dest="manifest_path",
+        metavar="FILE",
+        help="Read the gate manifest from this file, overriding the convention",
     )
     p_run.set_defaults(func=cmd_run)

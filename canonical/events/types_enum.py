@@ -81,6 +81,14 @@ class EventType(str, Enum):
     # Pre-push gate failure (B.4)
     GATE_PRE_PUSH_FAILED = "gate.pre_push.failed"
 
+    # Every pre-push gate outcome, pass or fail. GATE_PRE_PUSH_FAILED records
+    # only blocking failures, so the authority held 649 failures, 408 bypasses
+    # and zero passes -- a numerator with no denominator. Nothing could answer
+    # "has this gate ever fired", which is the question that decides whether a
+    # gate is prevention or decoration. Emitted alongside the failure event
+    # rather than replacing it, so existing queries keep working.
+    GATE_PRE_PUSH_COMPLETED = "gate.pre_push.completed"
+
     # Execution lifecycle telemetry (TA0b)
     EXECUTION_STARTED = "execution.started"
     EXECUTION_COMPLETED = "execution.completed"

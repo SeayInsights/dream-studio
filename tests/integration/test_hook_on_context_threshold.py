@@ -121,7 +121,6 @@ def test_projects_dir_slug_replaces_spaces(monkeypatch, handler):
     import sys
 
     # Add hooks lib to path and import the module where function moved
-    plugin_root = Path(__file__).resolve().parents[2]
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     from control.context import monitor as context_monitor
 

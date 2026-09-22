@@ -30,12 +30,12 @@ Maps each ds-* skill to the CLI commands, Python APIs, and event types it calls.
 
 ---
 
-## ds-milestone
+## milestone (no skill pack)
 
-| Mode | CLI / API | Events emitted | SQLite tables written |
-|------|-----------|---------------|----------------------|
-| status | `py -m interfaces.cli.ds milestone status` | — | — (read-only) |
-| close | `py -m interfaces.cli.ds milestone close` | — | business_milestones |
+Milestone operations are CLI-only: `ds milestone create|list|status|close`. The pack that
+used to wrap them is gone -- each of its modes mapped to the command on this row, so the
+pack restated the CLI and added a second place for it to drift. What a close refuses, and
+why, is stated in `canonical/rules.yml`.
 
 ---
 

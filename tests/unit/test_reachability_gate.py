@@ -478,10 +478,22 @@ def test_a_syntax_error_in_a_changed_file_is_raised_not_swallowed():
 # ── Task 3 (the other half): the gate is actually WIRED, and blocking ─────────
 
 
-def test_the_gate_is_registered_as_a_blocking_pre_push_entry():
-    """A gate that exists and never runs is the defect it was built to catch. This
-    assertion is the deterministic form of "did we remember to wire it" — the question
-    an LLM grader was asked about five other mechanisms, after they shipped."""
+def test_the_gate_was_retired_and_the_module_survives_as_a_library():
+    """THE ASSERTION INVERTED WHEN THE GATE WAS RETIRED, rather than disappearing.
+
+    This used to say "a gate that exists and never runs is the defect it was built to
+    catch" -- still true, and still why the check is here. But `3b2dc373` removed the
+    thirteen pre-push gates that audited the repo's own bookkeeping rather than whether
+    Dream Studio works, and this was one of them. The assertion shipped red into main
+    because the full unit suite runs in neither pre-push (evals only) nor pr-smoke (four
+    gate files) -- the runtime/subset gap, costing exactly what it is documented to cost.
+
+    What the retirement did NOT remove is the measurement: `deterministic_evidence`
+    imports `SourceUnreadable` from here, and `close_main` and `verify_main` import that.
+    So there are two states to tell apart -- an orphaned gate, and a module that product
+    code imports and no manifest names -- and this says which one this is. It fails if
+    somebody re-registers the gate without recording the reversal, and it fails if the
+    library half loses its callers and becomes genuinely dead."""
     import yaml
 
     from core.gates.reachability import REPO_ROOT
@@ -491,10 +503,17 @@ def test_the_gate_is_registered_as_a_blocking_pre_push_entry():
     )
     gates = manifest["gates"] if isinstance(manifest, dict) else manifest
     entry = next((g for g in gates if g.get("id") == "reachability"), None)
-    assert entry is not None, "the reachability gate is not registered in pre-push.yaml"
-    assert entry["tier"] == "blocking", f"registered but not blocking: {entry.get('tier')}"
-    assert entry["command"] == ["py", "-m", "core.gates.reachability"]
-    assert "fail_hint" in entry, "a blocking gate must tell the operator what to do"
+    assert entry is None, (
+        "reachability is registered in pre-push again -- 3b2dc373 retired it deliberately."
+        " If that is being reversed, say so here and in the manifest together."
+    )
+
+    consumer = (REPO_ROOT / "core" / "gates" / "deterministic_evidence.py").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        "from core.gates.reachability import" in consumer
+    ), "the module lost its last importer, which makes it dead rather than a library"
 
 
 def test_the_projected_manifest_matches_canonical():

@@ -21,7 +21,6 @@ from .claude_code_fileops import (
     _collect_hook_file_ops,
     _collect_skill_dir_ops,
     _interpolate_hooks_dir,
-    _interpolate_statusline_cmd,
 )
 from .claude_code_installer import (
     ClaudeCodeInstaller,
@@ -59,7 +58,6 @@ __all__ = [
     "_first_run_guide",
     "_get_ds_version",
     "_interpolate_hooks_dir",
-    "_interpolate_statusline_cmd",
     "_post_install_validate",
     "_python_cmd",
     "_skill_id_from_dir_name",

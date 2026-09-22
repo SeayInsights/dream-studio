@@ -2,6 +2,10 @@
 
 Status: active release-gate policy
 
+**2026-09-22:** the baseline was re-derived from a clean flake8 run and dropped from **335 entries to 186**. 149 of the removed entries were amnesty for findings that no longer existed — debt already paid that nobody had claimed. That slack mattered: a baseline compares by file, rule code and message, so a vacated slot can be reoccupied by a genuine regression and the gate still reports `pass`. The same change removed 33 live findings (a function with no callers anywhere in the tree and the import it stranded, 9 unused imports, 18 unused locals, a shadowing re-import, two name-bound lambdas, a bare `except:`, and a comma import), leaving 186 baselined against 186 current. **What remains is cosmetic and is tracked, not hidden:** E402 (114), F541 (32), E203 (24), E741 (16). E203 is a known black disagreement rather than a defect.
+
+Standing rule from this change: prefer shrinking the baseline over adding to it. An entry is a record that a finding was accepted, and an entry for a finding that no longer exists is a record of nothing.
+
 **2026-06-12 (WO b1961e3e):** `tests/unit/test_gate_fixture_resurrection.py` added to the focused smoke suite in `.github/workflows/ci.yml`. The dead-table resurrection guard is now verified on every PR across all three matrix platforms.
 
 **2026-06-10 (WO-CONSTITUTION-GATES):** `tests/unit/test_release_gates_dependency_rules.py` added to the focused smoke suite in `.github/workflows/ci.yml`.
@@ -28,19 +32,39 @@ Phase 18.1.14b enterprise bring-back (2026-05-25): ported code from the enterpri
 
 ## Single source (R4)
 
-The linter/format pin has **exactly one definition, read by both the local pre-push gate
-and CI** — no duplicate to drift out of sync:
+The linter/format pin has **exactly one definition** — no duplicate to drift out of sync:
 
-- **Lint pin:** `runtime/config/release-gates/flake8-baseline.txt` is the sole baseline.
-  Both the pre-push `lint-check` gate and the CI `Lint baseline check` step invoke
-  `interfaces/cli/lint_baseline.py check`, which reads that one file.
-- **Format pin:** `[tool.black]` in `pyproject.toml` is the sole Black config; both surfaces
-  run `python -m black --check .` against it.
+- **Lint pin:** `runtime/config/release-gates/flake8-baseline.txt` is the sole baseline,
+  read by `interfaces/cli/lint_baseline.py check`.
+- **Format pin:** `[tool.black]` in `pyproject.toml` is the sole Black config, read by
+  `python -m black --check .`.
 
 `tests/unit/test_security_baseline.py::test_scheduled_scan_and_single_source_config` fails
-if a second baseline pin appears or either surface stops reading the single source. (The
+if a second baseline pin appears or a surface stops reading the single source. (The
 pre-push test-subset vs CI-full-suite difference is a deliberate performance tradeoff and
 is out of scope here — see `docs/operations/lightweight-github-ci-strategy.md`.)
+
+### One home per check (2026-09-21)
+
+**Format and lint now run in the pre-push gate only.** They previously ran there *and* in
+the `pr-smoke` matrix *and* in `full-ci` — three runs of the same deterministic check for
+one answer, and two of those three learn the answer too late to be useful:
+
+| surface | when it ran | what it cost |
+|---|---|---|
+| pre-push (`format-check`, `lint-check`) | before the push | seconds, locally, where the fix is |
+| `pr-smoke` (`.github/workflows/ci.yml`) | after the push | a full 3-platform round trip to say "run `black .`" |
+| `full-ci` (`interfaces/cli/ci_gate.py`) | **post-merge** | a formatting failure discovered once it is already on `main` |
+
+A deterministic check that a machine can run locally belongs where the author is, not on
+three machines afterwards. The single-source pins above are unchanged and are what makes
+this safe: every surface that *does* run these checks reads the same two files, so moving
+where a check runs cannot change what it decides.
+
+This is the same reasoning as the pre-push/CI split in
+`docs/operations/lightweight-github-ci-strategy.md` — that document governs which *test*
+surface runs where; this section governs format and lint, which are not tests and are fully
+decidable before a push.
 
 ## Automated security baseline (R4)
 
@@ -359,3 +383,4 @@ docs, and prove docs drift without weakening unrelated release-gate checks.
 <!-- Reviewed 2026-07-05 — WO 6d978483 (PEP 585/604 modernization [2/2]): source files in this domain received mechanical type-annotation modernization only (PEP 585 builtin generics, PEP 604 unions, datetime.UTC) via ruff UP safe autofixes. No contract, behavior, schema, routing, API-shape, or CLI-surface change — reviewed, no doc content change needed. -->
 
 <!-- Reviewed 2026-09-03 — WO 789df02b / f1290b5c (fix/skill-propagation-and-paths): .github/workflows/ci.yml pr-smoke adds two files to the existing "Focused smoke tests" pytest list — tests/unit/test_skill_module_paths_resolve.py and tests/unit/test_ds_update_skill_drift.py — so a skill reference that no install can resolve, and a skill change that would never reach an install, both fail on all three platforms at PR time rather than post-merge. Purely additive test registration: no new CI step, no release-gate policy, publication-boundary, packaging, module-profile, or black/flake8 baseline change. Reviewed, no doc-content change needed. -->
+<!-- Reviewed 2026-09-21 — WO e56cb5ee (fix/hooks-store-alias-and-duplicate-hooks): .github/workflows/ci.yml pr-smoke gains one Windows-only step, "Stock Windows Store-alias state". It shadows bare `python` with a stub that exits 9009 — the Microsoft Store App Execution Alias, which is the out-of-the-box state setup-python hides on a runner — and reruns the two hook-interpreter test files against it, using the absolute interpreter captured before the shadowing. The step refuses to run if the stub is not actually in front of `python`, so it cannot pass vacuously. Test-only and Windows-only: no release-gate policy, publication-boundary, privacy classification, packaging, module-profile, or black/flake8 baseline change. Reviewed, no doc-content change needed. -->

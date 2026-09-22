@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -62,17 +63,33 @@ def _log_hook_execution(
         pass
 
 
+# hook-timing.jsonl is appended to once per handler per event -- roughly 15 writes
+# per turn. Unrotated it reached 50 MB / 475k lines. One generation of history is
+# enough to diagnose a regression; anything older is already in the event store.
+TIMING_LOG_MAX_BYTES = int(os.environ.get("DS_TIMING_LOG_MAX_BYTES", str(8 * 1024 * 1024)))
+
+
+def _rotate_if_oversized(path: Path) -> None:
+    try:
+        if path.is_file() and path.stat().st_size > TIMING_LOG_MAX_BYTES:
+            path.replace(path.with_suffix(path.suffix + ".1"))
+    except OSError:
+        pass
+
+
 def write_timing(state_dir: Path, event: str, handler: str, duration_ms: float) -> None:
     """Write hook timing data to JSONL log."""
     try:
         state_dir.mkdir(parents=True, exist_ok=True)
+        log_path = state_dir / "hook-timing.jsonl"
+        _rotate_if_oversized(log_path)
         record = {
             "event": event,
             "handler": handler,
             "duration_ms": round(duration_ms, 2),
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
-        with (state_dir / "hook-timing.jsonl").open("a", encoding="utf-8") as f:
+        with log_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record) + "\n")
     except Exception:
         pass
@@ -102,6 +119,32 @@ def run_handlers(
     """
     for name, path in handlers:
         if not path.is_file():
+            # A REGISTERED HANDLER WITH NO FILE IS A BROKEN INSTALL, NOT A CHOICE.
+            #
+            # This was a bare `continue`, and I defended it as "absence is configuration"
+            # when narrowing WO becfca00. That reading does not survive contact with
+            # `_resolve_handlers`, which HARDCODES the list: nothing here is optional, so a
+            # missing file cannot mean "not configured", only "the install is incomplete".
+            # The independent review of WO 2fde7846 objected to that narrowing and was
+            # right; task 5 of that work order asks for exactly this record.
+            #
+            # 07b9d3f7 shipped this and I reverted it in 54d95bfb because its stated cause
+            # -- that this silence was how three skill handlers went dark -- was asserted
+            # without evidence, and was in fact wrong (the cause was a partial installed
+            # `control` package shadowing the repo's). The revert threw out a sound
+            # mechanism along with an unsound reason for it. The reason now is evidenced
+            # and different: the installer has NO delete op, so a renamed or dropped
+            # handler leaves a stale tree behind and a missing file is a state this
+            # codebase actually produces.
+            _log_hook_execution(
+                hook_name=name,
+                hook_type=event_name,
+                started_at=_utc_iso(),
+                duration_ms=0.0,
+                exit_code=1,
+                status="not_found",
+                error_message=f"handler file does not exist: {path}",
+            )
             continue
         ran = False
         started_at = _utc_iso()

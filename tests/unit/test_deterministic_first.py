@@ -619,12 +619,23 @@ def test_an_unparseable_test_file_is_raised_not_skipped():
         source_reading_tests("def broken(:\n    pass\n", path="tests/unit/test_broken.py")
 
 
-def test_the_sweep_is_registered_as_an_advisory_pre_push_gate():
-    """The reachability gate BLOCKED the push that added `source_reading_tests` with no
-    call site — task 4 said "report it" and the first cut built a reporter with no
-    reporting surface. The fifth instance of mechanism-without-wiring in this milestone,
-    and the first caught by a machine before the push instead of a grader after the
-    merge. This assertion is why it cannot recur silently."""
+def test_the_sweep_was_retired_and_the_module_survives_as_a_library():
+    """THE ASSERTION INVERTED WHEN THE GATE WAS RETIRED, rather than disappearing.
+
+    It used to prove the sweep was wired, because the first cut of it was a reporter with
+    no reporting surface — mechanism-without-wiring, which this repo keeps paying for.
+    `3b2dc373` then removed the thirteen pre-push gates that audited the repo's own
+    bookkeeping rather than whether Dream Studio works, and this was one of them. The
+    assertion shipped red into main because the full unit suite runs in neither pre-push
+    (evals only) nor pr-smoke (four gate files) — the runtime/subset gap, costing exactly
+    what it is documented to cost.
+
+    The MEASUREMENT was never removed: `close_main` imports
+    `acceptance_criteria_determinism` from this module and `verify_main` imports
+    `deterministic_facts` and `facts_prompt_block`. So the two states worth telling apart
+    are an orphaned gate and a module product code imports that no manifest names, and
+    this says which one this is — failing if the gate is re-registered without the
+    reversal being recorded, and failing if the library half loses its callers."""
     import yaml
 
     manifest = yaml.safe_load(
@@ -632,12 +643,19 @@ def test_the_sweep_is_registered_as_an_advisory_pre_push_gate():
     )
     gates = manifest["gates"] if isinstance(manifest, dict) else manifest
     entry = next((g for g in gates if g.get("id") == "deterministic-first"), None)
-    assert entry is not None, "the sweep is not registered in pre-push.yaml"
-    assert entry["command"] == ["py", "-m", "core.gates.deterministic_evidence"]
-    assert (
-        entry["tier"] == "advisory"
-    ), "a contextual judgement must not block — that is how a gate gets routed around"
-    assert "warn_hint" in entry
+    assert entry is None, (
+        "deterministic-first is registered in pre-push again — 3b2dc373 retired it"
+        " deliberately. If that is being reversed, say so here and in the manifest together."
+    )
+
+    for module, symbol in (
+        ("core/work_orders/close_main.py", "acceptance_criteria_determinism"),
+        ("core/work_orders/verify_main.py", "deterministic_facts"),
+    ):
+        source = (_REPO / module).read_text(encoding="utf-8")
+        assert (
+            f"from core.gates.deterministic_evidence import {symbol}" in source
+        ), f"{module} no longer imports {symbol}, which makes this module dead not a library"
 
 
 def test_the_sweep_reports_a_suspect_and_never_blocks(tmp_path, monkeypatch, capsys):

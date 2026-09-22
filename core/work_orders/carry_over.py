@@ -222,6 +222,10 @@ def carry_over(
             title=row["title"],
             description=row["description"] or "",
             acceptance_criteria=row["acceptance_criteria"],
+            # A MOVE, NOT AN AUTHORING. This task is already in the authority; the
+            # criterion floor in `create_task` would refuse the ones filed before there
+            # was a floor, and refusing here deletes work rather than raising a standard.
+            carried_from=task_id,
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )

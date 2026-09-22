@@ -1,17 +1,29 @@
-"""AGENTS.md generator — the canonical, GENERATED universal agent target (Phase 20).
+"""AGENTS.md generators — TWO files with the same name and different readers.
 
-AGENTS.md is the tool-agnostic instruction file that any coding agent (Codex,
-Cursor, Gemini, Aider, …) reads. It is GENERATED from Dream Studio canonical
-sources so it cannot drift from the real routing table / work-order types / gates:
+``build_agents_md`` — the OPERATOR projection the installer ships beside the
+generated ``~/.claude/CLAUDE.md``, whose ``@AGENTS.md`` import resolves to it.
+Generated from canonical sources so it cannot drift from the real routing:
 
 - routing table  ← packs.yaml + canonical skill metadata (reuses the Claude-Code
   compiler's table builder, so both targets stay byte-identical in routing)
 - work-order types ← the canonical 10-type set (canonical/skills/ds-project)
 - gate definitions ← the canonical close/milestone gates (canonical/skills/ds-workorder)
 
-Tool-specific files (CLAUDE.md, etc.) reduce to a thin adapter that imports this
-file plus only their tool-specific extras. ``check_agents_md_fresh`` powers the
-drift gate that flags a stale committed AGENTS.md.
+``build_repo_agents_md`` — the CONTRIBUTOR file committed at the repository root,
+read by an agent working ON this codebase. It carries none of the above.
+
+THEY WERE ONE FUNCTION UNTIL 2026-09-21, and that conflation was the bug. The
+repo-root file is loaded automatically by any agent opening this directory, so
+its routing table reached every session here — including sessions with Dream
+Studio uninstalled, where it named 13 skills, a SQLite authority and blocking
+hooks that did not exist. Nobody installing the product ever reads it: the
+product ships from ``dist/plugin``, which contains neither AGENTS.md nor
+CLAUDE.md. So the operator content was a drifting duplicate when installed and a
+pointer at nothing when not.
+
+Trimming the repo copy while they shared one function stripped routing out of
+every fresh install, which is why they are separate now and why
+``check_agents_md_fresh`` compares the committed file against the REPO builder.
 """
 
 from __future__ import annotations
@@ -33,7 +45,9 @@ _GENERATED_NOTICE = (
     "     Source of truth: packs.yaml + canonical/skills + canonical/workflows. -->"
 )
 
-_HEADER = """\
+#: Header for the OPERATOR projection the installer ships (`build_agents_md`).
+#: Unchanged -- an installed Dream Studio genuinely is what this describes.
+_OPERATOR_HEADER = """\
 # Dream Studio — Universal Agent Instructions
 
 Dream Studio is a local-first AI orchestration and operational intelligence
@@ -50,6 +64,72 @@ Projection source:
 
 When the user's intent matches a Dream Studio skill, invoke that skill before any
 built-in behavior. Match on the routing keywords below.
+"""
+
+#: Header for the CONTRIBUTOR file at the repository root (`build_repo_agents_md`).
+_HEADER = """\
+# dream-studio — Universal Agent Instructions
+
+Instructions for any coding agent (Codex, Cursor, Gemini, Aider, Claude Code, …)
+working **on** this repository. `CLAUDE.md` carries the same guidance for Claude
+Code, which reads that file automatically.
+
+This file used to carry the Dream Studio skill-routing table, the work-order
+types and the close gates — about ninety lines describing how to OPERATE an
+installed Dream Studio. That is gone, deliberately, for the same reason it left
+CLAUDE.md:
+
+- **Nobody installing Dream Studio reads this file.** The product ships from
+  `dist/plugin`, which contains neither this nor `CLAUDE.md`.
+- **With Dream Studio installed** it duplicated the projection the installer
+  writes to the operator's home directory, and drifted from it.
+- **Without it installed** it routed every session at skills, an authority
+  database and blocking hooks that do not exist — which is what happened after an
+  uninstall on 2026-09-21. It survived that uninstall because it is checked into
+  git, and kept steering work at a runtime that had been removed.
+
+Operator instructions belong in the projection the installer writes and the
+uninstaller removes. This file is about the repository.
+"""
+
+_CONTRIBUTING = """\
+## Running tests
+
+Pytest output on Windows can be UTF-16-encoded and report a misleading exit code.
+Redirect to a file and read that back — the summary line is authoritative, the
+exit code is not:
+
+```
+py -m pytest <args> > out.txt 2>&1
+```
+
+The full unit suite takes roughly 35 minutes on Windows and does not OOM
+(6,044 passed / 25 failed, measured 2026-09-21).
+
+## Gates
+
+The repository's own quality gates are declared in
+`canonical/workflows/pre-push.yaml` and run with `py -m core.gates.pre_push`.
+They are ordinary Python and need no Dream Studio install.
+
+## Before and after a source edit
+
+- Read the git history first. Something that looks missing is often a deliberate
+  deletion: `git log --diff-filter=D -- <path>`.
+- Check whether a file is GENERATED before editing it. Several checked-in
+  artifacts are, including this one, `canonical/review_lanes.yml`,
+  `canonical/rules.yml` and everything under `dist/plugin/`. Edit the generator —
+  an edit to the artifact is discarded by the next render.
+- After the change, validate imports, public API and route contracts, read-model
+  shapes, and anything reading a SQLite boundary that moved.
+
+## Commits and pull requests
+
+- Never add AI attribution to a commit or a PR body. Never use emoji.
+- One logical change per commit; explain why, not what.
+- Keep mechanical formatting in its own commit.
+- Never push directly to `main` — branch first.
+- Write scratch output to a temp directory, never the repository root.
 """
 
 # Canonical 10 work-order types — mirrors canonical/skills/ds-project/SKILL.md.
@@ -130,7 +210,17 @@ def build_agents_md(
     canonical_root: Path | None = None,
     packs_yaml_path: Path | None = None,
 ) -> str:
-    """Assemble the full, deterministic AGENTS.md content from canonical sources."""
+    """The OPERATOR projection: routing, work-order types and close gates.
+
+    This is what the installer ships beside the generated `~/.claude/CLAUDE.md`,
+    whose `@AGENTS.md` import resolves to it. It must keep the routing table: an
+    install with the skills present and nothing routing to them is an install that
+    does nothing.
+
+    NOT what the repository root carries -- see `build_repo_agents_md`. The two
+    were one function until 2026-09-21, and collapsing them meant trimming the
+    repo copy silently stripped routing out of every fresh install.
+    """
     root = canonical_root if canonical_root is not None else _CANONICAL
     packs = packs_yaml_path if packs_yaml_path is not None else _PACKS_YAML
 
@@ -138,7 +228,7 @@ def build_agents_md(
 
     sections = [
         _GENERATED_NOTICE,
-        _HEADER.rstrip(),
+        _OPERATOR_HEADER.rstrip(),
         "## Skill Routing\n\n" + routing_table.rstrip(),
         _wo_types_section().rstrip(),
         _gates_section().rstrip(),
@@ -147,10 +237,25 @@ def build_agents_md(
     return "\n\n".join(sections).rstrip() + "\n"
 
 
+def build_repo_agents_md() -> str:
+    """The CONTRIBUTOR file committed at the repository root.
+
+    Read by an agent working ON this codebase, never by anyone installing the
+    product -- `dist/plugin` ships neither this nor CLAUDE.md. It therefore carries
+    no routing table, no work-order types and no close gates: with the product
+    installed those duplicated the operator projection and drifted from it, and
+    without it they pointed every session at skills, an authority database and
+    hooks that were not there.
+    """
+    return (
+        "\n\n".join([_GENERATED_NOTICE, _HEADER.rstrip(), _CONTRIBUTING.rstrip()]).rstrip() + "\n"
+    )
+
+
 def write_agents_md(output_path: Path | None = None) -> Path:
-    """Generate and write AGENTS.md. Returns the written path."""
+    """Write the repo-root AGENTS.md. Returns the written path."""
     out = output_path if output_path is not None else _AGENTS_MD
-    out.write_text(build_agents_md(), encoding="utf-8")
+    out.write_text(build_repo_agents_md(), encoding="utf-8")
     return out
 
 
@@ -161,7 +266,11 @@ def check_agents_md_fresh(agents_md_path: Path | None = None) -> dict:
     when the file is missing or stale — the drift gate fails on ok=False.
     """
     path = agents_md_path if agents_md_path is not None else _AGENTS_MD
-    expected = build_agents_md()
+    # The COMMITTED file is the contributor one, so that is what freshness means
+    # here. Comparing it to the operator projection would report the repo as
+    # permanently stale and tell anyone who ran the drift gate to overwrite the
+    # contributor file with a routing table.
+    expected = build_repo_agents_md()
     if not path.is_file():
         return {
             "ok": False,

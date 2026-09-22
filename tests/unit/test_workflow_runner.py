@@ -122,7 +122,7 @@ def test_dry_run_marks_nodes_completed(tmp_path):
     with patch("control.execution.workflow.runner.paths") as mock_paths:
         mock_paths.state_dir.return_value = state_dir
         runner = WorkflowRunner("test-wf-2", dry_run=True)
-        result = runner.run()
+        runner.run()
 
     state = json.loads((state_dir / "workflows.json").read_text())
     wf = state["active_workflows"]["test-wf-2"]

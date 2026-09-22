@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Glob, Grep]
   model_preference: haiku
   estimated_duration: 10-20min
+  write_posture: read-only
+  lifecycle: published
 ---
 
 # Skill: /structure-audit

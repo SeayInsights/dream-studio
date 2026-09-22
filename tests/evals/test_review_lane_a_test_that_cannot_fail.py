@@ -57,7 +57,10 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 LANE_ID = "a-test-that-cannot-fail"
-SEAT = "Test-integrity inquisitor"
+# Merged into "Gate and test integrity" by D13: all three of that seat's lanes attack a
+# mechanism's claimed coverage by running the thing it says it catches. The lane itself
+# is untouched -- only the seat holding it changed.
+SEAT = "Gate and test integrity"
 
 
 #: THE THING UNDER TEST. A guard that is supposed to refuse an unsafe path.

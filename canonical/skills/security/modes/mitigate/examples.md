@@ -13,7 +13,7 @@ Each mitigation is one JSON object (stored as a row in `mitigations.csv`):
   "title": "Sensitive data logged without masking",
   "severity": "HIGH",
   "cwe": "CWE-532",
-  "owasp_category": "A09:2021",
+  "owasp_category": "A09:2025",
   "repo": "vendor-portal",
   "file": "auth.py",
   "line": 34,
@@ -57,7 +57,7 @@ Extract from user input:
 #### Step F1: Load Client Profile
 
 1. Read `~/.dream-studio/clients/{client}.yaml`.
-2. If file does not exist: **stop** — "Client profile not found at `~/.dream-studio/clients/{client}.yaml`. Run `client-work:intake` to create it."
+2. If file does not exist: **stop** — "Client profile not found at `~/.dream-studio/clients/{client}.yaml`. Run `power-platform:intake` to create it."
 3. Extract: `client.name`, `data.classification`, `isolation.model`, `network.proxy.*`, `compliance.frameworks`.
 
 #### Step F2: Load Findings

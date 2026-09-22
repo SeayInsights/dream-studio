@@ -191,11 +191,43 @@ def _scratch_project():
     return home, project_dir, src
 
 
-def test_enforce_tier_denies_the_edit():
+def test_enforce_tier_denies_a_rule_that_still_blocks():
+    """WHAT CHANGED, and why this no longer uses a product-source edit.
+
+    This drove `authority_source_edit` — editing product source without an in_progress
+    work order — and asserted a deny. `db4c23f` moved that rule to `_OBSERVE_ONLY`: it
+    records and never blocks, whatever the tier. The note there gives the measurement:
+    eleven blocks on work the operator had explicitly directed, a stop message naming two
+    dozen work orders for one file, and a documented remedy of `DS_ENFORCE=0` — which
+    turns the tracking off entirely. A gate wrong often enough to need an escape hatch
+    teaches people to use the escape hatch.
+
+    So the tier is exercised through `zero_disk_planning`, which is deliberately NOT in
+    that set: a real invariant, a narrow path, and a real remedy (`ds files write`).
+    Keeping this test pointed at the retired rule would have asserted the product still
+    does something it decided to stop doing.
+    """
     home, project_dir, src = _scratch_project()
-    proc = _run_edit_hook("enforce", home, project_dir, src)
+    planning_file = project_dir / ".planning" / "notes.md"
+    planning_file.parent.mkdir(parents=True, exist_ok=True)
+    proc = _run_edit_hook("enforce", home, project_dir, planning_file)
     data = json.loads(proc.stdout.strip())
     assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "Zero-disk" in data["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_the_retired_rule_records_instead_of_blocking_even_at_the_enforce_tier():
+    """The other half of that decision, pinned so it cannot drift back silently.
+
+    `authority_source_edit` is observe-only whatever the tier. If it ever denies again
+    that is a decision someone should make deliberately, not discover.
+    """
+    home, project_dir, src = _scratch_project()
+    proc = _run_edit_hook("enforce", home, project_dir, src)
+    assert "deny" not in proc.stdout, (
+        "a product-source edit was blocked at the enforce tier; that rule was moved to"
+        f" observe-only in db4c23f: {proc.stdout[:200]}"
+    )
 
 
 def test_observe_tier_allows_the_edit():

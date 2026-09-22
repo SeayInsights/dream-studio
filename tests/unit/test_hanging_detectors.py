@@ -427,3 +427,60 @@ def test_a_file_that_cannot_be_parsed_still_reports_its_references(tmp_path: Pat
     assert (
         "core/broken.py" in flagged
     ), "an unparseable file was silently treated as having no references"
+
+
+def test_stale_symbol_ignores_instance_attribute_of_the_same_name(tmp_path: Path) -> None:
+    """`self._targets` is not the module-level `_targets` the diff removed.
+
+    Reported 2026-09-21 against tests/evals/test_database_grounding_evals.py, whose
+    only use of the name is an instance attribute on a test helper class. Two
+    unrelated symbols sharing a name is ordinary; treating that as a reference put
+    four such findings in front of a push that had nothing to do with any of them.
+    """
+    repo = tmp_path
+    _write(
+        repo / "tests" / "unit" / "test_helper.py",
+        "class Grounding:\n"
+        "    def __init__(self, targets):\n"
+        "        self._targets = list(targets)\n"
+        "    def run(self):\n"
+        "        return [t for t in self._targets]\n",
+    )
+    diff = (
+        "diff --git a/core/svc.py b/core/svc.py\n"
+        "--- a/core/svc.py\n"
+        "+++ b/core/svc.py\n"
+        "@@\n"
+        "-def _targets(repo_root, spec):\n"
+        "-    return []\n"
+    )
+    findings = detect_stale_removed_symbol_tests(diff, repo_root=repo)
+    assert not findings, f"an instance attribute is not a reference; got {findings}"
+
+
+def test_stale_symbol_ignores_a_path_segment_inside_a_string(tmp_path: Path) -> None:
+    """`tests/unit/test_a.py` in captured pytest output references nothing.
+
+    Reported 2026-09-21 against a fixture holding a literal pytest failure line.
+    The file's only occurrence of the name is a path component inside a string, so
+    there is no symbol there to be stale.
+    """
+    repo = tmp_path
+    _write(
+        repo / "tests" / "unit" / "test_output_fixture.py",
+        "CAPTURED = (\n"
+        '    "FAILED tests/unit/test_a.py::test_one - AssertionError\n"\n'
+        ")\n"
+        "def test_parses():\n"
+        "    assert 'FAILED' in CAPTURED\n",
+    )
+    diff = (
+        "diff --git a/core/svc.py b/core/svc.py\n"
+        "--- a/core/svc.py\n"
+        "+++ b/core/svc.py\n"
+        "@@\n"
+        "-def test_a():\n"
+        "-    pass\n"
+    )
+    findings = detect_stale_removed_symbol_tests(diff, repo_root=repo)
+    assert not findings, f"a path inside a string is not a reference; got {findings}"

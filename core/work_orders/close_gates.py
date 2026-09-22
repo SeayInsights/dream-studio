@@ -33,6 +33,39 @@ from .close_shared import _artifact_text, _artifact_with_envelope
 _PROVENANCE_CUTOVER = "2026-08-19"
 
 
+#: EVERY GATE NAME ``run_gate_check`` CAN ACTUALLY RUN. Gate names arrive as data --
+#: ``business_work_order_types.pre_build_gate`` and ``post_build_gate``, split on ``|`` --
+#: so a name is whatever a row says it is. The dispatch below was an if-chain ending in an
+#: unconditional ``return True, ""``, which meant A GATE NOBODY IMPLEMENTED WAS
+#: INDISTINGUISHABLE FROM A GATE THAT PASSED: a typo in a seed row, a gate renamed on one
+#: side only, or an external project's own type row naming something aspirational all
+#: closed the work order clean and said nothing.
+#:
+#: That is the opposite of what this module already decided one screen down, where
+#: ``_symptom_check_failure`` records that AN UNRECOGNISED CHECK KIND FAILS CLOSED,
+#: "matching ``run_executable_checks``, which already refuses an unknown ``*-CHECK:``
+#: token". Two unrecognised-token paths in one file disagreed about which way to fail.
+#:
+#: Nothing was being skipped when this was written -- all ten gate names seeded by
+#: migration 142 are handled. That is the point: the hole was reachable only by a future
+#: edit, which is exactly the kind this repo keeps finding after the fact.
+KNOWN_GATES = frozenset(
+    {
+        "all_tests_pass",
+        "anti_slop_passed",
+        "api_contract_and_security_review",
+        "api_contract_exists",
+        "design_brief_locked",
+        "design_critique",
+        "game_validate",
+        "independent_review",
+        "independent_review_passed",
+        "security_scan",
+        "spec_approved",
+    }
+)
+
+
 def _envelope_absence_is_legacy(conn: Any, work_order_id: str) -> bool:
     """True when this WO predates provenance envelopes, so a missing one is expected.
 
@@ -351,7 +384,7 @@ def run_gate_check(
         if not lint_path.is_file():
             return False, (
                 f"anti_slop_passed: lint-results.md not found. Run: python "
-                f"canonical/skills/domains/modes/website/scripts/lint-artifact.py "
+                f"canonical/skills/website/scripts/lint-artifact.py "
                 f"<artifact_path> > .planning/work-orders/{work_order_id}/lint-results.md"
             )
         _lint_content = lint_path.read_text(encoding="utf-8")
@@ -514,7 +547,12 @@ def run_gate_check(
             )
         return True, ""
 
-    return True, ""
+    return False, (
+        f"{gate_name}: unrecognised gate — close_gates.run_gate_check has no check by that "
+        f"name, so it cannot be evaluated. Known gates: {', '.join(sorted(KNOWN_GATES))}. "
+        "Correct the name on the work order type, implement the gate, or close with --force "
+        "(which is recorded as a bypass)."
+    )
 
 
 def _delivered_state_hint(

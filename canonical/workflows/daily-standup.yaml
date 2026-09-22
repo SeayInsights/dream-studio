@@ -52,7 +52,7 @@ nodes:
     command: |
       Find the most recent handoff and generate a brief resume command.
 
-      Run: py scripts/resume_from_handoff.py --brief
+      Run: py -m interfaces.cli.resume_from_handoff --brief
 
       If a handoff is found, output the resume command.
       If no handoff found, output: "No recent handoff — starting fresh."

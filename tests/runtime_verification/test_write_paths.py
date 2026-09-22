@@ -213,7 +213,7 @@ def test_activity_log():
 
 def cleanup_test_activity():
     """Clean up test activity."""
-    db_path = get_main_db_path()
+    get_main_db_path()
     conn = get_connection()
     conn.execute("DELETE FROM activity_log WHERE activity_type = 'test_verification'")
     conn.commit()

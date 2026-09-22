@@ -2,7 +2,7 @@
 
 ## End-to-End Testing
 
-### awesome-playwright (1.4k stars)
+### awesome-playwright
 **URL**: https://github.com/mxschmitt/awesome-playwright
 
 Curated Playwright resources including:
@@ -23,7 +23,7 @@ Qualities of good tests: isolated, composable, fast, deterministic.
 
 ## API Testing
 
-### awesome-api-testing (4k stars)
+### awesome-api-testing
 **URL**: https://github.com/atinfo/awesome-api-testing
 
 Tools and patterns for API contract testing, load testing, and security testing.

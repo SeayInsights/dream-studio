@@ -157,21 +157,28 @@ docs/publication/
 .claude/
 
 # Test/diagnostic output captures — write to ~/.dream-studio/diagnostics/ instead
-pytest-*
-diag-test-*
-smoke-*
-black-*
-lint-*
-!docs/operations/lint-format-baseline-policy.md
-drift-*
+#
+# ANCHORED TO THE REPO ROOT, and that leading slash is the whole point. These patterns
+# describe files a diagnostic run drops in the working directory. Unanchored, git applies
+# them at EVERY depth, so they also match source whose name happens to start the same way
+# — and the failure is silent, because an ignored file is simply never offered for commit.
+#
+# Measured: `lint-*` swallowed
+# canonical/skills/domains/modes/website/scripts/lint-artifact.py, which fourteen
+# instructions across the website skills tell an agent to run, one of them a severity:
+# critical gotcha reading "before every delivery". It was never tracked once. Only a
+# .pyc dated 2026-05-23 proved it had ever existed. `verify_*.py` did the same thing to
+# nine product modules and needed the explicit un-ignore below to undo it.
+/pytest-*
+/diag-test-*
+/smoke-*
+/black-*
+/lint-*
+/drift-*
 
-# Debug scripts (one-off investigations)
-tmp_*.py
-verify_*.py
-# ...but the WO-lifecycle engine's verify_*.py split siblings are real product source
-# (WO-GF-WO-LIFECYCLE): the broad debug-script pattern above must not swallow them, or
-# the committed verify.py facade imports phantom modules on a fresh checkout.
-!core/work_orders/verify_*.py
+# Debug scripts (one-off investigations) — anchored for the same reason.
+/tmp_*.py
+/verify_*.py
 tools/_ta*.md
 tools/_ta*.py
 
@@ -199,3 +206,7 @@ coverage-first-output.txt
 paths-to-scrub.txt
 columns
 
+
+# Rust build output for the native hook enqueuer (runtime/hooks/enqueue-native)
+# The BINARY is a build artifact; the source and Cargo.lock are tracked.
+target/

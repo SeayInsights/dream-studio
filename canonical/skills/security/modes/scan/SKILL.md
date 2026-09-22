@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Write, Bash]
   model_preference: haiku
   estimated_duration: 20-60min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Scan — Security Scanning Orchestrator

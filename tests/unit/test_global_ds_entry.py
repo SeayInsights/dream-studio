@@ -185,7 +185,7 @@ def test_doctor_checks_dispatcher_hooks_installed(tmp_path):
 
     _doctor_status = _get_doctor_status()
 
-    with patch("interfaces.cli.ds.Path") as mock_path_cls:
+    with patch("interfaces.cli.ds.Path"):
         # We only need the new check keys to exist — mock resolve_installed_runtime_paths
         pass
 

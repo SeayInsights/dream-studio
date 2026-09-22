@@ -703,10 +703,15 @@ def test_chain_8_link_2_install_writes_all_files():
     ds-workorder, and ds-project/modes/manage.
     """
     skills_dir = Path.home() / ".claude" / "skills"
-    if not skills_dir.is_dir():
-        pytest.skip("~/.claude/skills/ not present in this environment")
-    # Verify at least 3 mode-level SKILL.md files exist (regression guard)
-    mode_skills = list(skills_dir.rglob("modes/*/SKILL.md"))
+    mode_skills = list(skills_dir.rglob("modes/*/SKILL.md")) if skills_dir.is_dir() else []
+    # NOT INSTALLED AND INSTALLED WRONG ARE DIFFERENT ANSWERS, and the directory's
+    # existence does not tell them apart: ~/.claude/skills is shared, so the host's
+    # own skills recreate it even with Dream Studio fully uninstalled. Guarding on
+    # is_dir() alone therefore turned "no install here" into a regression failure.
+    # Zero mode skills means nothing to check; anything between one and two means an
+    # install that wrote a partial pack, which is the regression this exists to catch.
+    if not mode_skills:
+        pytest.skip("no Dream Studio mode skills installed in this environment")
     assert (
         len(mode_skills) >= 3
     ), f"Expected at least 3 mode-level SKILL.md files, found {len(mode_skills)}"

@@ -405,7 +405,7 @@ def test_harvest_no_consent_no_writes(tmp_path):
     _write_jsonl(projects_dir / "proj" / "session.jsonl", records)
 
     harvester = SessionHarvester()
-    result = harvester.harvest(
+    harvester.harvest(
         claude_projects_dir=projects_dir,
         db_path=db,
         consent=False,
@@ -434,7 +434,7 @@ def test_harvest_dry_run_no_writes(tmp_path):
     _write_jsonl(projects_dir / "proj" / "session.jsonl", records)
 
     harvester = SessionHarvester()
-    result = harvester.harvest(
+    harvester.harvest(
         claude_projects_dir=projects_dir,
         db_path=db,
         consent=True,

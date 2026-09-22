@@ -118,7 +118,6 @@ def test_read_today_returns_lines(isolated_home):
 
 def test_lesson_queue_list_empty(isolated_home, capsys):
     """lesson_queue handles an empty raw_lessons DB gracefully."""
-    import argparse
     import importlib.util
 
     # Load lesson_queue via the scripts/ shim (which re-exports from interfaces/cli/)
@@ -127,10 +126,20 @@ def test_lesson_queue_list_empty(isolated_home, capsys):
     lq = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(lq)
 
-    # Build minimal args for cmd_list (default: --pending)
-    # The DB is empty in the isolated_home — no rows exist yet.
-    args = argparse.Namespace(promoted=False, rejected=False, pending=True, func=lq.cmd_list)
-    lq.cmd_list(args)
+    # Build the args THROUGH THE REAL PARSER, never by hand.
+    #
+    # This used to be `argparse.Namespace(promoted=False, rejected=False, pending=True, ...)`,
+    # a hand-written stand-in for whatever `build_parser` produces. When the lesson loop grew
+    # its terminus and `cmd_list` gained an `--applied` branch, the parser gained the flag and
+    # this namespace did not, so `args.applied` raised AttributeError -- in the full suite,
+    # which is post-merge only, so main went red with every PR smoke green.
+    #
+    # A namespace assembled by hand is a second, silent copy of the parser's contract. Parsing
+    # real argv keeps one copy: a flag added here arrives automatically, and a flag REMOVED
+    # from the parser fails this test instead of passing against a field nothing reads.
+    args = lq.build_parser().parse_args(["list", "--pending"])
+    assert args.func is lq.cmd_list, "the parser no longer routes `list` to cmd_list"
+    args.func(args)
 
     captured = capsys.readouterr()
     # Should not raise and should mention 0 lessons or "no lessons found"

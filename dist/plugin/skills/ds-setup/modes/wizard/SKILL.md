@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Write, Bash]
   model_preference: haiku
   estimated_duration: 10-30min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Wizard Mode

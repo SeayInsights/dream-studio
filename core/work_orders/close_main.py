@@ -277,6 +277,7 @@ def close_work_order(
             "status": "closed",
             "forced": bool,
             "bypassed_gates": list[str],   # populated when force=True
+            "acceptance_criteria": str | absent,  # "not evaluated" on a forced close
             "verify_warning": str | absent,  # inline verify was unreviewable (no commits)
             "next_work_order": {...} | absent,
             "next_command": str | absent,
@@ -377,7 +378,22 @@ def close_work_order(
             _has_verdict(work_order_id, "review_verdict", db_path=db_path)
             or _verdict_path.is_file()
         )
-        if not _verdict_exists and skip_verify:
+        # A FORCED CLOSE DOES NOT CONVENE A REVIEW IT WILL OVERRIDE.
+        #
+        # `force` and `skip_verify` were independent, so `--force` fell through to the
+        # inline verify below -- which spawns the LLM graders and BLOCKS on them.
+        # Found by running it and watching rather than reasoning about it: the stack
+        # under a stalled forced close is close_work_order -> verify_work_order ->
+        # _run_graders_parallel -> subprocess.communicate. Measured: one forced close
+        # exceeded 600 seconds, and the most recent verdict in the live authority is
+        # `unreviewable` because `claude --print` timed out after 360s x 6 retries.
+        #
+        # Safe because it changes only whether the review is CONVENED, not whether it
+        # is REQUIRED: `independent_review` is non-bypassable for an escalated work
+        # order, so an escalated WO with no verdict still fails the gate and still
+        # cannot be forced. What stops is paying 10 minutes to generate a verdict the
+        # force flag was always going to discard.
+        if not _verdict_exists and (skip_verify or force):
             # The escape hatch works — and leaves a mark (WO-BYPASS-TELEMETRY).
             from core.gates.bypass_event import record_gate_bypass
 
@@ -558,9 +574,22 @@ def close_work_order(
             _criteria_report = {}
 
         _ac_stats: dict[str, Any] = {}
-        ac_failures = _run_ac_gate(
-            conn, work_order_id=work_order_id, db_path=db_path, stats=_ac_stats
-        )
+        if force:
+            # A FORCED CLOSE DOES NOT PAY FOR AN ANSWER IT HAS ALREADY OVERRIDDEN.
+            # This gate executes the work order's TEST-CHECK node ids -- real pytest
+            # runs -- and it ran BEFORE the force check, so `--force` skipped the
+            # verdict and not the work. Measured 2026-09-21: a single forced close
+            # timed out at 600 seconds, which is a force that nobody can use.
+            #
+            # Recorded as NOT EVALUATED rather than as a pass. "I did not look" and
+            # "there was nothing" have different remedies, and collapsing them is how
+            # a gate starts passing for the wrong reason.
+            ac_failures = []
+            _ac_stats["skipped"] = "forced close: acceptance criteria not evaluated"
+        else:
+            ac_failures = _run_ac_gate(
+                conn, work_order_id=work_order_id, db_path=db_path, stats=_ac_stats
+            )
         gate_failures.extend(ac_failures)
 
         # Re-run the originating symptom SQL-CHECK (if captured at registration).
@@ -827,6 +856,14 @@ def close_work_order(
         "forced": force,
         "bypassed_gates": gate_failures if force else [],
     }
+    # NOT EVALUATED REACHES THE OPERATOR, or it was not recorded at all. `1a212a8`
+    # stopped a forced close paying for the acceptance-criteria run it overrides and
+    # wrote "recorded as NOT EVALUATED, never as a pass" -- but the marker went into a
+    # local stats dict that only fed a boolean, so the close itself said nothing. A
+    # forced close with no AC failures then reads exactly like a forced close whose
+    # criteria all passed, which is the collapse that commit named and did not prevent.
+    if _ac_stats.get("skipped"):
+        result["acceptance_criteria"] = _ac_stats["skipped"]
     if _symptom_checks:
         result["symptom_checks"] = _symptom_checks
     # Bookkeeping that did not land is stated, not swallowed. An unrecorded boundary or

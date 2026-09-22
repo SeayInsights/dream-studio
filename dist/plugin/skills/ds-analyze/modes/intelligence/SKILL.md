@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Grep, Bash, Write]
   model_preference: sonnet
   estimated_duration: 15-45min
+  write_posture: independent
+  lifecycle: published
 name: intelligence
 description: Comprehensive project intelligence analysis with stack detection, PRD generation, and health scoring
 triggers: ["analyze project:", "project intelligence:", "scan codebase:"]

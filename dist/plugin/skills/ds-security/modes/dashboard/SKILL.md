@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Write, Bash]
   model_preference: haiku
   estimated_duration: 20-45min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Security Dashboard — ETL Orchestration + Power BI Export

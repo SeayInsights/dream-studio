@@ -42,6 +42,30 @@ argument shifting. Adapter apps such as Codex may invoke `UserPromptSubmit`
 from a workspace outside the Dream Studio repo, so launcher root resolution must
 not depend on the current working directory.
 
+### Which repository the gates measure
+
+`ds workflow run pre-push --non-interactive` runs the gates declared in a
+manifest, against a tree. Both are now selectable, which they had not been:
+`run_pre_push_gates` has always accepted `manifest_path` and `repo_root`, and the
+CLI passed neither — so every run measured Dream Studio whatever repository the
+operator stood in, and no other project could be gated at all.
+
+| Invocation | Manifest | Tree measured |
+|---|---|---|
+| (no flags) — what this repo's git hook runs | `canonical/workflows/pre-push.yaml` | Dream Studio |
+| `--repo-root DIR` | `DIR/.dream-studio/pre-push.yaml` | `DIR` |
+| `--manifest FILE` | `FILE` | `--repo-root` if given, else Dream Studio |
+
+`DIR/.dream-studio/pre-push.yaml` is the convention, and a project that has no
+manifest there is **refused, not judged by Dream Studio's gates.** There is
+deliberately no fallback: these gates measure *this* repository — `skill-sync`
+compares canonical skills to their projections, `pin-tests` compares
+`dist/plugin` to its generator, `migration-risk` watches this repo's DDL sites.
+Run against somebody else's checkout they pass vacuously or fail for reasons
+about this one, and a green result that means nothing is worse than a refusal,
+because only one of the two ever gets fixed. The refusal names the path to write
+and says why it will not substitute.
+
 ## Workflow Inventory (23 templates)
 
 | Workflow | Nodes | Gates | Retry | Timeout | Dashboard Dep | Models |
@@ -314,3 +338,19 @@ WHY THIS PRECEDES A DRIVER. `ds workflow run --until-blocked` is deliberately se
 <!-- Last reviewed 2026-09-17 - NO WORKFLOW-RUNTIME CHANGE in the handler-entrypoint change set. It is recorded here rather than skipped because the docs-drift gate treats hooks and workflows as one domain (workflow_and_hooks), so a reader arriving from the hook side needs to know the workflow runtime was examined and found unaffected, not merely unmentioned. The change set fixes four hook sub-handlers whose `main()` signature did not match the dispatcher's zero-argument call convention (see docs/HOOK_RUNTIME.md). `control/execution/workflow/` is untouched; `control/execution/dispatch_tracking.py` is byte-identical to main; no workflow YAML, node type, gate, pause/resume path, retry policy or state-persistence behaviour changed. The workflow runner's deliberate refusal to execute skill nodes - it records 'NOT EXECUTED. This node was DISPATCHED, not run' and waits for a completion check - is likewise unchanged. -->
 
 <!-- Last reviewed 2026-09-20 - NO WORKFLOW SEMANTICS CHANGE in the hook-stdout change set, recorded here rather than skipped because the docs-drift gate treats hooks and workflows as one domain (workflow_and_hooks). control/execution/workflow/tracking.py::report_workflow_status now writes its banner and its workflow-progress JSON payload to stderr instead of stdout, because on-stop-dispatch concatenates handler stdout into one shared text stream and a JSON object printed into it breaks parsing for every handler in the batch (see docs/HOOK_RUNTIME.md). The reported content is byte-identical; only the stream changed. No workflow YAML, node type, gate, pause/resume path, retry policy or state-persistence behaviour changed, and the runner's refusal to execute skill nodes is untouched. -->
+<!-- Reviewed 2026-09-18 - no workflow runtime change. The change set alters one branch of
+`control/execution/dispatch_tracking.py::run_handlers`: a handler whose file is missing is
+now recorded as status="not_found" instead of being skipped silently. Workflow nodes do not
+reach that path - the runner dispatches skill nodes and waits for a completion check rather
+than invoking hook handlers - so no workflow YAML, node type, gate, pause/resume path,
+retry policy or state-persistence behaviour changed. Noted here because the hook and
+workflow runtimes share dispatch_tracking, so a reader arriving from that file needs to
+know this side was examined and found unaffected, not merely unmentioned. -->
+
+<!-- Last reviewed 2026-09-18 - skill-card gate: ONE ADDITIVE BLOCKING GATE in canonical/workflows/pre-push.yaml (id skill-card, before test-suite so it fails cheap), no workflow engine, state machine, validator, retry-contract or registry change. It validates a CHANGED mode card against schemas/skill_card.schema.json, checks the card's skill_id/pack/mode against where the file actually sits, and resolves its input vocabulary against other modes' outputs plus canonical/skill_vocabulary.json. WHY: all 51 carded modes carried an identical nine-field block held together by convention with no reader, and the first run found 12 cards still calling themselves domains modes after the website and fullstack sub-packs were split into their own packs.yaml entries - stale in the exact field AGENTS.md routing is generated from. DIFF-SCOPED on purpose: 34 of the 85 declared modes carry no card at all and one (ds-project:resume) has no SKILL.md, so whole-tree would refuse every push until all 34 were authored; the same call workflow-node-verification and untested-fallback made. `--all` audits everything on demand. -->
+
+<!-- Last reviewed 2026-09-22 — canonical/workflows/pre-push.yaml gains one blocking gate, `instruction-commands` (py -m core.gates.instruction_commands): every script path and first-party module a canonical skill or workflow tells an agent to RUN must exist. An agent does what an instruction says, so a command that cannot run is a step silently skipped, and the steps instructions name are disproportionately checks. Found seven on its first run, including `scripts/lint-artifact.py` — 14 references, never tracked, because an unanchored `lint-*` in .gitignore swallowed it. daily-standup.yaml and studio-analytics.yaml had three steps naming `scripts/*.py` for scripts that moved to interfaces/cli/; they now invoke the modules. One additive blocking gate entry and three corrected command strings — no workflow engine, state machine, validator, cost, registry or retry-contract change. -->
+
+<!-- Last reviewed 2026-09-22 — canonical/workflows/pre-push.yaml gains one blocking gate, `rule-enforcement` (py -m core.gates.rule_enforcement): every enforced_by reference in canonical/rules.yml must resolve, or the rule must declare itself unenforced with a reason. Its predecessor core/gates/rule_registry.py was culled in 67ba10e in the same sweep that removed several of the enforcers it would have been checking, and 21 of 102 references went stale across 7 of 34 rules. Two rules are repointed at surviving enforcers; five declare `unenforced:` naming the commit that removed theirs, and the gate prints that pile on every run. One additive blocking gate entry — no workflow engine, state machine, validator, cost, registry or retry-contract change. -->
+
+<!-- Last reviewed 2026-09-22 — canonical/workflows/pre-push.yaml gains one blocking gate, `agent-coverage` (py -m core.gates.agent_coverage): every skill mode under canonical/skills/**/modes/*/SKILL.md either names the specialist subagent compiled from it or says in writing why it has none, recorded in canonical/agents/coverage.yml. Enforce-or-declare, the same contract as admission's --why and the rule registry's unenforced:. Measured when it landed: 85 modes, 9 agents, and the eleven audit modes beside quality/accessibility -- which had one -- had none, with nothing recording whether that was a decision. One additive blocking gate entry; no workflow engine, state machine, validator, cost, registry or retry-contract change. -->

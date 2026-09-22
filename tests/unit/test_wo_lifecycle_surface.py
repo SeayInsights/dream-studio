@@ -455,7 +455,17 @@ def test_a_milestone_work_order_and_task_can_be_created_from_the_cli(db, tmp_pat
     conn.close()
 
     code, out = _run(
-        ["milestone", "create", pid, "--title", "Ship the authoring door", "--order", "1"],
+        [
+            "milestone",
+            "create",
+            pid,
+            "--title",
+            "Ship the authoring door",
+            "--description",
+            "A fixture milestone for this test: it gives the work orders below it something real to belong to, and it carries a prompt because one is now required.",
+            "--order",
+            "1",
+        ],
         tmp_path,
     )
     assert code == 0, out
@@ -471,6 +481,8 @@ def test_a_milestone_work_order_and_task_can_be_created_from_the_cli(db, tmp_pat
             mid,
             "--title",
             "Wire the CLI",
+            "--description",
+            "A fixture work order for this test: it exists so the lifecycle under test has a real unit of work to act on, and it carries a prompt because one is now required.",
             "--type",
             "infrastructure",
             "--module-boundary",
@@ -535,6 +547,8 @@ def test_creating_a_work_order_says_it_needs_more_than_one_task(db, tmp_path):
             mid,
             "--title",
             "T",
+            "--description",
+            "A fixture work order for this test: it exists so the lifecycle under test has a real unit of work to act on, and it carries a prompt because one is now required.",
             "--module-boundary",
             "core/work_orders",
         ],
@@ -577,6 +591,8 @@ def test_a_task_with_no_executable_criterion_is_told_so(db, tmp_path):
             mid,
             "--title",
             "T",
+            "--description",
+            "A fixture work order for this test: it exists so the lifecycle under test has a real unit of work to act on, and it carries a prompt because one is now required.",
             "--module-boundary",
             "core/work_orders",
         ],
@@ -596,7 +612,15 @@ def test_a_task_with_no_executable_criterion_is_told_so(db, tmp_path):
     assert "--why" in bare, "and the escape it will accept"
 
     code, withac = _run(
-        ["work-order", "add-task", wid, "--title", "T", "--acceptance", "TEST-CHECK: x::y"],
+        [
+            "work-order",
+            "add-task",
+            wid,
+            "--title",
+            "T",
+            "--acceptance",
+            "TEST-CHECK: tests/unit/test_wo_lifecycle_surface.py::y",
+        ],
         tmp_path,
     )
     assert code == 0, withac

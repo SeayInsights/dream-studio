@@ -4,7 +4,7 @@
 
 pr-review:
   status: tested
-  description: "Diff-aware OWASP code scan — injection, auth, data exposure, access control, misconfig, deps"
+  description: "Diff-aware OWASP code scan — injection, auth, data exposure, access control, misconfig, supply chain, error handling"
   analysts:
     - injection
     - auth
@@ -12,6 +12,9 @@ pr-review:
     - access-control
     - misconfig
     - dependencies
+    # A10:2025 is new in the 2025 Top 10 and had no seat. Error handling is
+    # visible in a diff, so it belongs here rather than in architecture-review.
+    - exceptional-conditions
   quick_analysts:
     - injection
     - auth
@@ -34,6 +37,9 @@ architecture-review:
     - stride-disclosure
     - stride-dos
     - stride-elevation
+    # A06:2025 Insecure Design asks whether the right control exists at all --
+    # a question about the design, so it runs with the threat model, not the diff.
+    - insecure-design
   quick_analysts:
     - stride-spoofing
     - stride-elevation

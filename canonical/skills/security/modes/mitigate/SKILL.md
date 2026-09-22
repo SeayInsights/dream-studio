@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Write, Edit, Grep, Agent]
   model_preference: sonnet
   estimated_duration: 30-120min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Mitigate — Per-Finding Fix Recommendations

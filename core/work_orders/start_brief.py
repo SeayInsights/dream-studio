@@ -45,10 +45,12 @@ def read_work_order_brief(
             "precondition_skill": str | None,
             "milestone_id": str | None,
             "milestone_title": str | None,
+            "milestone_description": str | None,   # the prompt above this one
             "project_id": str,
             "project_name": str,
+            "project_description": str | None,     # the prompt above that
             "marker_project_id": str | None,
-            "pending_tasks": list[{"title": str}],
+            "pending_tasks": list[{"title": str, "acceptance_criteria": str | None}],
             "brief_locked": dict | None,   # locked brief fields if UI type
             "brief_warning": bool,          # True if UI type and no locked brief
             "gotchas": list[{"severity", "title", "fix"}],
@@ -71,14 +73,19 @@ def read_work_order_brief(
     db_path = _require_db(source_root, dream_studio_home)
     with _connect(db_path) as conn:
         wo_row = conn.execute(
-            "SELECT work_order_id, title, status, work_order_type, milestone_id, project_id"
+            "SELECT work_order_id, title, status, work_order_type, milestone_id,"
+            " project_id, description"
             " FROM business_work_orders WHERE work_order_id = ?",
             (work_order_id,),
         ).fetchone()
         if wo_row is None:
             return {"ok": False, "error": f"Work order not found: {work_order_id}"}
 
-        wo_id, title, wo_status, wo_type, milestone_id, project_id = wo_row
+        # `description` is the WORK ORDER'S PROMPT. It was selected by nothing and
+        # delivered to nobody: the brief carried four titles from four tables and not
+        # one description, so an executor was handed the name of the work and never the
+        # statement of it.
+        wo_id, title, wo_status, wo_type, milestone_id, project_id, description = wo_row
 
         if not wo_type:
             return {"ok": False, "error": "Work order has no type assigned"}
@@ -103,25 +110,28 @@ def read_work_order_brief(
         ) = type_row
 
         milestone_title = None
+        milestone_description = None
         if milestone_id:
             ms_row = conn.execute(
-                "SELECT title FROM business_milestones WHERE milestone_id = ?",
+                "SELECT title, description FROM business_milestones" " WHERE milestone_id = ?",
                 (milestone_id,),
             ).fetchone()
             milestone_title = ms_row[0] if ms_row else None
+            milestone_description = ms_row[1] if ms_row else None
 
         proj_row = conn.execute(
-            "SELECT name FROM business_projects WHERE project_id = ?",
+            "SELECT name, description FROM business_projects WHERE project_id = ?",
             (project_id,),
         ).fetchone()
         project_name = proj_row[0] if proj_row else project_id
+        project_description = proj_row[1] if proj_row else None
 
         open_tasks = conn.execute(
-            "SELECT title FROM business_tasks"
+            "SELECT title, acceptance_criteria FROM business_tasks"
             " WHERE work_order_id = ? AND status = 'pending' ORDER BY created_at ASC",
             (work_order_id,),
         ).fetchall()
-        pending_tasks = [{"title": row[0]} for row in open_tasks]
+        pending_tasks = [{"title": row[0], "acceptance_criteria": row[1]} for row in open_tasks]
 
         brief_locked: dict[str, Any] | None = None
         brief_warning = False
@@ -213,6 +223,7 @@ def read_work_order_brief(
         "ok": True,
         "work_order_id": wo_id,
         "title": title,
+        "description": description,
         "status": wo_status,
         "type_id": type_id,
         "label": label,
@@ -224,8 +235,10 @@ def read_work_order_brief(
         "precondition_skill": precondition_skill,
         "milestone_id": milestone_id,
         "milestone_title": milestone_title,
+        "milestone_description": milestone_description,
         "project_id": project_id,
         "project_name": project_name,
+        "project_description": project_description,
         "marker_project_id": marker_project_id,
         "pending_tasks": pending_tasks,
         "brief_locked": brief_locked,

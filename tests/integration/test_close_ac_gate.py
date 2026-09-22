@@ -190,7 +190,7 @@ def test_close_blocked_when_any_ac_fails(tmp_path: Path) -> None:
     assert row is not None
     assert row[0] == "in_progress", f"Expected WO to remain in_progress; got {row[0]}"
 
-    # ── 3. With force=True → must close and record bypass ─────────────────
+    # ── 3. With force=True → must close and record NOT EVALUATED ──────────
     with _patch_db(db_path):
         from core.work_orders.close import close_work_order as _close_wo
 
@@ -204,10 +204,25 @@ def test_close_blocked_when_any_ac_fails(tmp_path: Path) -> None:
 
     assert result_forced["ok"] is True, f"Expected force-close to succeed; got: {result_forced}"
     assert result_forced["forced"] is True
-    bypassed = result_forced.get("bypassed_gates", [])
-    assert any(
-        "executable_ac" in b for b in bypassed
-    ), f"Expected bypassed_gates to include AC failures; bypassed={bypassed}"
+
+    # THE CONTRACT CHANGED IN 1a212a8, AND THIS IS THE NEW HALF OF IT. The AC gate
+    # executes the work order's TEST-CHECK node ids -- real pytest runs -- and it used
+    # to run BEFORE the force check, so `--force` skipped the verdict and not the work:
+    # a single forced close timed out at 600 seconds. A force that takes ten minutes is
+    # a force nobody reaches for, which pushes the operator to the next escape hatch.
+    #
+    # So a forced close no longer computes AC failures, and `bypassed_gates` cannot name
+    # what was never computed. What it MUST do instead is say it did not look, because
+    # "I did not look" and "there was nothing" have different remedies -- and a forced
+    # close reporting neither reads exactly like one whose criteria all passed.
+    assert result_forced.get("acceptance_criteria"), (
+        "a forced close must say the criteria were not evaluated; otherwise it is"
+        f" indistinguishable from one that passed them. got: {result_forced}"
+    )
+    assert "not evaluated" in result_forced["acceptance_criteria"]
+    assert not any(
+        "executable_ac" in b for b in result_forced.get("bypassed_gates", [])
+    ), "a forced close must not claim to have bypassed a gate it never ran"
 
     # ── 4. WO must now be closed in DB ────────────────────────────────────
     conn = sqlite3.connect(str(db_path))

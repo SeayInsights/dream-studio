@@ -32,9 +32,13 @@ and holds execution to them.
 
 Four refusals, each enforced by code you can read and reproduced live by [`ds prove`](#prove-it):
 
-- **An unauthorized source edit.** Editing product source in a registered project with no
-  `in_progress` work order is **denied**, with the exact `ds work-order start <id>` remediation.
+- **Writing `.planning/` state to disk.** Working notes, specs, plans and reports live in the
+  files.db docstore, never on disk; a disk write is **denied**, with the exact
+  `ds files write` remediation.
   Enforced by [`runtime/hooks/meta/on-edit-enforce.py`](runtime/hooks/meta/on-edit-enforce.py).
+  (Editing product source without an `in_progress` work order is **recorded, not blocked** —
+  demanding permission for a thing whose purpose is a record produced eleven blocks on
+  directed work and taught the escape hatch, so it observes instead.)
 - **Ending a session with unrecorded work.** A session that edited product source but recorded
   no authority write (a completed task or closed work order) is **blocked from stopping** until
   it does. Enforced by [`runtime/hooks/meta/on-stop-enforce.py`](runtime/hooks/meta/on-stop-enforce.py).
@@ -64,11 +68,11 @@ ds prove — Dream Studio substrate enforcement demonstration
 Scratch project + authority DB: /tmp/ds-prove-XXXXXXXX (torn down)
 The operator's live ~/.dream-studio/state/studio.db is never touched.
 
-CLAIM 1 — an unauthorized source edit is denied
+CLAIM 1 — a zero-disk .planning write is denied
   {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-   "permissionDecisionReason": "[dream-studio] Authority enforcement: no work order is
-   in_progress for project 'prove-scratch'. Product-source edits require an active work
-   order in the SQLite authority.\nRun: py -m interfaces.cli.ds work-order start <id> ..."}}
+   "permissionDecisionReason": "[dream-studio] Zero-disk .planning: working notes, specs,
+   plans, and reports are authored in the files.db docstore, never on disk. Use:\n
+   py -m interfaces.cli.ds files write \"<name>\" --category planning ..."}}
   → PASS
 
 CLAIM 2 — a defect cannot close while its symptom reproduces
@@ -375,7 +379,7 @@ Each pack is a single skill with multiple modes. Invoke via `Skill(skill="ds-<pa
 | `ds-quality` | Code quality | debug, polish, harden, pr-security-scan, structure-audit, learn, coach, audit |
 | `ds-career` | Career pipeline | ops, scan, evaluate, apply, track, pdf |
 | `ds-analyze` | Analysis engine | multi, domain-re, repo, intelligence |
-| `ds-domains` | Domain builders | game-dev, saas-build, mcp-build, dashboard-dev, client-work, design |
+| `ds-domains` | Domain builders | game-dev, saas-build, mcp-build, dashboard-dev, power-platform, design |
 | `ds-security` | Security analysis | scan, dast, binary-scan, mitigate, comply, netcompat, dashboard, review |
 | `ds-project` | Project lifecycle | scope |
 | `ds-domains-website` | Website builder | discover, direction, page, prototype, animate, brand, cip, critique, deck |

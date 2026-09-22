@@ -400,6 +400,19 @@ def convene(
         else:
             entry["kind"] = "judgment"
             entry["why"] = _one_line(lane.get("why"))
+
+        # THE SEAT NAMES THE REVIEWER THAT CAN ANSWER IT. Nineteen of the twenty-six lanes
+        # have no detector and no eval, and this listing used to end at "N lane(s) need a
+        # person" -- a specialist question handed to whoever happened to be reading. Each
+        # seat now compiles to a subagent carrying its own lanes
+        # (integrations/compiler/reviewers.py), so the question has somewhere to go.
+        #
+        # NAMED, NOT DISPATCHED. This is a process; dispatching a subagent is a harness
+        # capability. The review skill convenes what this names, which is the Mode B
+        # arrangement canonical/agents/README.md already describes.
+        from integrations.compiler.reviewers import reviewer_for_seat
+
+        entry["reviewer"] = reviewer_for_seat(entry["seat"])
         seats.append(entry)
 
     detectors = [s for s in seats if s["kind"] == "detector"]
@@ -543,18 +556,21 @@ def _render(report: dict) -> str:
                 lines.append(f"  {'':<{width}} fixture: {seat['fixture']}")
             else:
                 lines.append(f"  {'':<{width}} unautomatable: {seat['why']}")
+            if seat.get("reviewer"):
+                lines.append(f"  {'':<{width}} convene: {seat['reviewer']}")
             lines.append("")
 
     if report["status"] == "unchecked":
         lines.append(
             "round-table: UNCHECKED - the detector lanes were not run, so this listing"
-            f" answers nothing. {len(report['awaiting_judgment'])} lane(s) always need a"
-            " person."
+            f" answers nothing. {len(report['awaiting_judgment'])} lane(s) always need"
+            " judgment — convene the reviewer named beside each."
         )
     elif report["status"] == "pass":
         lines.append(
             f"round-table: {report['detectors_run']} detector lane(s) clean;"
-            f" {len(report['awaiting_judgment'])} lane(s) need a person."
+            f" {len(report['awaiting_judgment'])} lane(s) need judgment — convene the"
+            " reviewer named beside each."
         )
     else:
         unrun = [s["lane"] for s in report["lanes"] if s.get("unrunnable")]

@@ -64,7 +64,23 @@ def rolling_window_prune(db_path: Path | None = None) -> int:
                 "DELETE FROM raw_skill_telemetry WHERE id NOT IN (SELECT id FROM raw_skill_telemetry t2 WHERE t2.skill_name=raw_skill_telemetry.skill_name ORDER BY id DESC LIMIT 100)"
             ).rowcount
             d4 = c.execute("DELETE FROM raw_approaches WHERE captured_at<?", (cutoff,)).rowcount
-        return d1 + d4
+            # raw_claude_code_events is the PRE-canonical landing table: it carries the
+            # source_payload a canonical event is built from. Once a row has been promoted
+            # into ai_canonical_events, the raw copy is a duplicate of data the spine
+            # already holds, and it was the largest table in the database (481,846 rows,
+            # the bulk of a 1.1 GB file) because nothing ever removed one.
+            #
+            # Deliberately narrow, because this is the only table here that shades toward
+            # authority:
+            #   - canonical rows are NEVER touched (policy: retain indefinitely)
+            #   - a raw row with no canonical twin is NEVER touched -- an unpromoted row is
+            #     the evidence that promotion failed, which is exactly what you want kept
+            d5 = c.execute(
+                "DELETE FROM raw_claude_code_events WHERE received_at<? "
+                "AND event_id IN (SELECT event_id FROM ai_canonical_events)",
+                (cutoff,),
+            ).rowcount
+        return d1 + d4 + d5
     except Exception as e:
         _reraise_if_busy(e)
         return 0

@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Grep, Bash, Glob]
   model_preference: sonnet
   estimated_duration: 10-20min
+  write_posture: read-only
+  lifecycle: published
 ---
 
 ## Before you start
@@ -43,7 +45,7 @@ Run at the end of every slice before marking `SLICE_N_COMPLETE`. Collects pass/f
 4. **Check packs.yaml integrity**:
    - Every mode in packs.yaml must have a directory in `canonical/skills/<pack>/modes/<mode>/`
    - Every directory in `canonical/skills/<pack>/modes/` must be listed in packs.yaml
-   - Run `tests/unit/canonical/test_packs_yaml.py` to confirm
+   - Run `py -m pytest tests/unit/test_packs_yaml_integrity.py` to confirm
 
 5. **Classify every failure** using this taxonomy:
 

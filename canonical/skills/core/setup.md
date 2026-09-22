@@ -274,7 +274,7 @@ tools:
       linux: "sudo apt-get install gh"
     what_it_unlocks:
       - ds-core (git workflows)
-      - ds-domains (client-work)
+      - ds-domains (power-platform)
     docs_url: "https://cli.github.com/manual"
 ```
 
@@ -328,4 +328,4 @@ const detectCommand = isWindows ? "where" : "which";
 
 ## Used by
 
-setup (wizard, status, jit modes), build, review, verify, ship, all domain skills (game-dev, saas-build, mcp-build, client-work)
+setup (wizard, status, jit modes), build, review, verify, ship, all domain skills (game-dev, saas-build, mcp-build, power-platform)

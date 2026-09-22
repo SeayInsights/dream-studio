@@ -398,7 +398,7 @@ def test_create_milestone_materialises_on_return(sdlc_env):
     result = create_milestone(
         project_id=project_id,
         title="Delivery Gate",
-        description="First milestone",
+        description="A fixture milestone for this test: it gives the work orders below it something real to belong to, and it carries a prompt because one is now required.",
         source_root=REPO_ROOT,
     )
     assert result["ok"] is True
@@ -429,6 +429,7 @@ def test_create_work_order_materialises_on_return(sdlc_env):
         project_id=project_id,
         milestone_id=milestone_id,
         title="WO — Build auth API",
+        description="A fixture work order for this test: it exists so the lifecycle under test has a real unit of work to act on, and it carries a prompt because a work order without one is refused.",
         work_order_type="api_endpoint",
         source_root=REPO_ROOT,
     )
@@ -461,6 +462,7 @@ def test_create_task_resolves_milestone_id_from_materialised_wo(sdlc_env):
         project_id=project_id,
         milestone_id=milestone_id,
         title="WO — DB schema",
+        description="A fixture work order for this test: it exists so the lifecycle under test has a real unit of work to act on, and it carries a prompt because a work order without one is refused.",
         work_order_type="infrastructure",
         source_root=REPO_ROOT,
     )
@@ -476,6 +478,7 @@ def test_create_task_resolves_milestone_id_from_materialised_wo(sdlc_env):
         work_order_id=work_order_id,
         project_id=project_id,
         title="Write migration 102",
+        acceptance_criteria="TEST-CHECK: tests/unit/test_wo_q2.py",
         source_root=REPO_ROOT,
     )
     assert task_result["ok"] is True
@@ -514,7 +517,7 @@ def test_full_sdlc_chain_all_rows_queryable_on_return(sdlc_env):
     ms_result = create_milestone(
         project_id=project_id,
         title="M1 — Core substrate",
-        description="First deliverable",
+        description="A fixture milestone for this test: it gives the work orders below it something real to belong to, and it carries a prompt because one is now required.",
         order_index=1,
         source_root=REPO_ROOT,
     )
@@ -530,6 +533,7 @@ def test_full_sdlc_chain_all_rows_queryable_on_return(sdlc_env):
         project_id=project_id,
         milestone_id=ms_id,
         title="WO — Projection tick",
+        description="A fixture work order for this test: it exists so the lifecycle under test has a real unit of work to act on, and it carries a prompt because a work order without one is refused.",
         work_order_type="infrastructure",
         source_root=REPO_ROOT,
     )
@@ -549,6 +553,7 @@ def test_full_sdlc_chain_all_rows_queryable_on_return(sdlc_env):
             work_order_id=wo_id,
             project_id=project_id,
             title=title,
+            acceptance_criteria="TEST-CHECK: tests/unit/test_wo_q2.py",
             source_root=REPO_ROOT,
         )
         assert t_result["ok"] is True, f"create_task failed: {t_result}"
@@ -649,17 +654,24 @@ def test_consistency_clean_after_full_e2e_chain(sdlc_env):
     project_id = str(uuid.uuid4())
     _direct_insert_project(db_path, project_id)
 
-    ms_result = create_milestone(project_id=project_id, title="M1", source_root=REPO_ROOT)
+    ms_result = create_milestone(
+        project_id=project_id,
+        title="M1",
+        description="A fixture milestone for this test: it gives the work orders below it something real to belong to, and it carries a prompt because one is now required.",
+        source_root=REPO_ROOT,
+    )
     wo_result = create_work_order(
         project_id=project_id,
         milestone_id=ms_result["milestone_id"],
         title="WO",
+        description="A fixture work order for this test: it exists so the lifecycle under test has a real unit of work to act on, and it carries a prompt because a work order without one is refused.",
         source_root=REPO_ROOT,
     )
     create_task(
         work_order_id=wo_result["work_order_id"],
         project_id=project_id,
         title="T1",
+        acceptance_criteria="TEST-CHECK: tests/unit/test_wo_q2.py",
         source_root=REPO_ROOT,
     )
 

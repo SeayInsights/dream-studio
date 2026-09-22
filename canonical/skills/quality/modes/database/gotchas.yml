@@ -1,15 +1,123 @@
 # Database Skill — Gotchas
-# Status: JIT-pending — populated from first real audit (Batch 7, 18.4.2)
-# Do not speculate. Real gotchas only.
+# Populated 2026-09-21 from promoted lessons in the authority (raw_lessons), not speculation.
+# Every entry below was captured from a real incident in this repository and carried
+# confidence=high. Applied via ds-quality:groom; each lesson_id is recorded so an entry can be
+# traced back to the run that produced it.
 
-gotchas: []
+gotchas:
+  - id: db-gotcha-001
+    title: Deleting migration files does not shrink an existing database
+    description: >-
+      Schema regrowth comes from the immutable-migration convention, not from a missing CI
+      gate. Removing migration files changes nothing for a database that already applied
+      them, and it breaks the interdependent chain for everyone else.
+    severity: high
+    category: migration
+    discovered: 2026-09-21
+    context: Attempting to reduce a migration-bloated SQLite schema.
+    fix: >-
+      Squash the chain into a clean baseline plus a one-time forward DROP for existing
+      databases, then delete the superseded files and the tests that pinned them — a test of a
+      removed migration is itself removable. A table ships only when its writer ships; never
+      create schema from a design document ahead of the code that writes to it.
+    lesson_id: 907499ff-3206-4d31-a709-1a24
 
-# Template for when real gotchas are added:
-# - id: db-gotcha-001
-#   title: <short title>
-#   description: <what went wrong>
-#   severity: high | medium | low
-#   category: schema | query | migration | backup | static-analysis | llm
-#   discovered: <YYYY-MM-DD>
-#   context: <which rule triggered it, what codebase>
-#   fix: <what the right behavior is>
+  - id: db-gotcha-002
+    title: Never reduce schema with an ad-hoc DROP on the live database
+    description: >-
+      Ad-hoc DROP against the operator's live database breaks the event pipeline. The
+      projection and ingest plumbing (projection_checkpoints, raw_sentinels, dead_letter,
+      retry) is infrastructure, not leftovers, and it has to stay.
+    severity: high
+    category: migration
+    discovered: 2026-09-21
+    context: Live operator database during a schema-reduction attempt.
+    fix: >-
+      Schema reduction is a CODE change — a numbered migration or a squash. Before any
+      file-level operation on a live database, stop the processes holding the WAL (the
+      dashboard uvicorn) and clear -wal/-shm, or the copy malforms. Keep a backup; one saved
+      this incident.
+    lesson_id: dad5f170-30af-44d7-98fc-57ad
+
+  - id: db-gotcha-003
+    title: A migration or table-drop PR needs the full suite, not tests/unit
+    description: >-
+      Running only tests/unit leaves integration coverage unexercised on exactly the change
+      class most likely to break it.
+    severity: high
+    category: migration
+    discovered: 2026-09-21
+    context: Verifying a schema-drop pull request.
+    fix: >-
+      Run both tests/unit and tests/integration under an isolated home
+      (DREAM_STUDIO_HOME=temp). pytest-xdist is not installed, so runs are serial at roughly
+      19 minutes. The branch full-ci run (workflow_dispatch on full-ci.yml) is the
+      authoritative equivalent and takes about the same on ubuntu.
+    lesson_id: schema-migration-verificatio
+
+  - id: db-gotcha-004
+    title: Migration PRs must stamp the schema docs in the same commit
+    description: >-
+      The docs-drift gate treats core/event_store/migrations/ and .released_version as a
+      domain requiring its documentation refreshed in the same change set.
+    severity: high
+    category: migration
+    discovered: 2026-09-21
+    context: Pull requests touching migrations or the released-version sentinel.
+    fix: >-
+      Append a `<!-- Last reviewed YYYY-MM-DD ... -->` marker to BOTH docs/DATABASE.md and
+      docs/MIGRATION_AUTHORITY.md in the same commit. Verify before pushing with
+      `py interfaces/cli/contract_docs_drift_gate.py --base-ref origin/main`.
+    lesson_id: migration-docs-drift-stamp
+
+  - id: db-gotcha-005
+    title: Audit event payload keys per event family, never by read-model column name
+    description: >-
+      A completeness audit that greps for the read-model's column name reports a gap that does
+      not exist. ai_canonical_events already carried the token model and cache data; the
+      column names simply differ from the payload keys.
+    severity: high
+    category: schema
+    discovered: 2026-09-21
+    context: Auditing token-consumption event payload completeness.
+    fix: >-
+      Treat ai_canonical_events as the token-consumption source of truth and enumerate the
+      actual payload keys per event-type family, new and legacy separately. A value derived
+      from what the authority holds — estimated_cost from model, tokens and pricing — computed
+      in a view equals the authority and is not fabrication.
+    lesson_id: f52f5c17-d5ab-4847-a350-7d1a
+
+  - id: db-gotcha-006
+    title: A migration squash cannot pre-enumerate its own test fallout
+    description: >-
+      A squash deletes files that tests read at import time, and intermediate schema versions
+      cease to exist, so assertions naming them are dead. None of this is visible from the
+      diff.
+    severity: high
+    category: migration
+    discovered: 2026-09-21
+    context: A 139-file migration squash.
+    fix: >-
+      Before merging, run the FULL unit suite locally rather than evals and pins alone, plus
+      `pytest --collect-only` over all of tests/. Grep for `target_version=<N>` and
+      `run_migrations(target_version=...)`. Expect hand-built DDL scaffolds missing
+      recently-added columns to break the real projection path, and repoint them to
+      `run_migrations(baseline)`. The atomic-same-change-set ideal is unrealistic at this
+      size; a full-suite dry run is the practical substitute.
+    lesson_id: 75e76957-f33d-4ebe-933d-8eac
+
+  - id: db-gotcha-007
+    title: A new file containing DDL-shaped prose trips the schema-coherence scan
+    description: >-
+      The staleness guard counts phantom tables when CREATE TABLE / DROP TABLE /
+      ALTER ... RENAME TO text appears in a docstring, comment, regex or string literal for
+      illustrative or detection purposes. test_schema_coherence_audit then fails — and it is
+      full-ci-only, so it slips past both pre-push and the pr-smoke matrix.
+    severity: high
+    category: static-analysis
+    discovered: 2026-09-21
+    context: Adding a source file whose text describes DDL rather than executing it.
+    fix: >-
+      Add the file's repo-relative path to
+      core/config/schema_coherence.py::_SELF_SCAN_EXCLUDE in the same change set.
+    lesson_id: f8d0fa37-1222-470b-85d0-2ded

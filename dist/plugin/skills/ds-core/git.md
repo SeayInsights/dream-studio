@@ -144,10 +144,10 @@ a total that quietly omits it.
 Check any outbound document before publishing it:
 
 ```bash
-py -m core.gates.evidence_backed_output <pr-body.md>
+py -m core.gates.unverified_claims <pr-body.md>
 
 # What this push publishes — commit messages plus added CHANGELOG lines
-py -m core.gates.evidence_backed_output --staged
+py -m core.gates.unverified_claims --staged
 ```
 
 The `evidence-backed-output` pre-push gate runs `--staged` on every push. It reports the

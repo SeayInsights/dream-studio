@@ -1,6 +1,6 @@
 ---
 name: ds-domains
-description: 'Stack-specific and domain builders. Use for: game-dev:, saas-build:, mcp-build:, dashboard-dev:, intake:, design:, fullstack:, website:, CI/CD pipeline:, k8s cluster issue:, technical documentation:, Terraform:, iOS:, dbt:'
+description: 'Stack-specific and domain builders. Use for: game-dev:, saas-build:, mcp-build:, dashboard-dev:, intake:, design:, CI/CD pipeline:, k8s cluster issue:, technical documentation:, Terraform:, iOS:, dbt:'
 ---
 
 # Domains — Stack-Specific Builders
@@ -22,7 +22,7 @@ description: 'Stack-specific and domain builders. Use for: game-dev:, saas-build
 | saas-build | modes/saas-build/SKILL.md | build feature:, build api:, build page:, build supabase: |
 | mcp-build | modes/mcp-build/SKILL.md | build mcp:, new mcp:, extend mcp: |
 | dashboard-dev | modes/dashboard-dev/SKILL.md | dashboard:, feed contract:, Tauri: |
-| client-work | modes/client-work/SKILL.md | intake:, sow:, build powerbi:, optimize dax:, build flow:, build app: |
+| power-platform | modes/power-platform/SKILL.md | intake:, sow:, build powerbi:, optimize dax:, build flow:, build app: |
 | design | modes/design/SKILL.md | design art:, design poster:, canvas:, brand:, ad creative: |
 | website | modes/website/SKILL.md | website:, build website:, landing page:, build page:, prototype app:, pitch deck:, animate:, build site: |
 | fullstack | modes/fullstack/SKILL.md | fullstack:, build fullstack:, fullstack frontend:, fullstack backend:, fullstack integrate:, fullstack secure:, full-stack:, full stack: |

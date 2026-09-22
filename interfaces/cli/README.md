@@ -17,7 +17,7 @@ All scripts are run from the repo root with `py scripts/<name>.py`.
 | `lint_skills.py` | Validate SKILL.md structure | `py scripts/lint_skills.py` |
 | `benchmark_tokens.py` | Compute per-category token overhead | `py scripts/benchmark_tokens.py --run-label <label>` |
 | `ci_gate.py` | Run all quality checks (CI) | `py scripts/ci_gate.py` |
-| `generate_routing.py` | Regenerate routing table in CLAUDE.md | `py scripts/generate_routing.py` |
+| `generate_routing.py` | Regenerate routing table in CLAUDE.md | `py -m interfaces.cli.generate_routing` |
 | `ds.py` | Global Dream Studio command surface | `python interfaces/cli/ds.py status` |
 | `build_adapters.py` | Build multi-AI adapter configs from SKILL.md | `py scripts/build_adapters.py` |
 | `validate_client_profile.py` | Validate a client profile YAML | `py scripts/validate_client_profile.py <profile.yaml>` |
@@ -257,9 +257,9 @@ Idempotent — running twice produces byte-identical output.
 
 **Examples:**
 ```
-py scripts/generate_routing.py
-py scripts/generate_routing.py --dry-run
-py scripts/generate_routing.py --claude-md ~/.claude/CLAUDE.md
+py -m interfaces.cli.generate_routing
+py -m interfaces.cli.generate_routing --dry-run
+py -m interfaces.cli.generate_routing --claude-md ~/.claude/CLAUDE.md
 ```
 
 ---

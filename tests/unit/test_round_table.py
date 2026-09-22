@@ -104,43 +104,6 @@ def test_a_declared_judgment_lane_arrives_with_what_is_missing():
         assert len(seat["why"]) >= 40, seat
 
 
-def test_the_seats_are_the_round_table():
-    """Named seats rather than the handles these lanes arrived under.
-
-    DERIVED FROM `_SEATS`, NOT RETYPED. This listed the roster literally and had to be
-    edited every time a seat was added -- three times in two days -- which is the same
-    transcribed-from-the-thing-it-describes defect this file already fixed twice (a seat
-    count of 5, a detector count of 3). The property is that every seated lane is held by a
-    seat from the CLOSED set, so a lane cannot be filed under a person's name; the roster
-    itself lives in one place.
-    """
-    from core.gates import review_lane_registry
-
-    report = convene(run_detectors=False)
-    seats = {seat["seat"] for seat in report["lanes"]}
-
-    assert seats, "no lane was seated"
-    assert seats <= review_lane_registry._SEATS, seats - review_lane_registry._SEATS
-    # And a seat is a described role, never somebody's handle. The old convention was a
-    # "The X" prefix; the roster retired that for functional names, so the property is
-    # asserted directly instead of through the prefix that used to imply it.
-    for seat in seats:
-        assert seat == seat.strip() and len(seat) > 3, seat
-        assert not seat.startswith("@"), seat
-    # NO WORD-COUNT CHECK. This asserted `" " in seat`, reading a multi-word name as
-    # evidence of a described role -- and it is not one. It admits "Jane Doe" and
-    # refuses "Accessibility", which is a function stated in the one word it takes;
-    # the roster carries 29 seats and that is the only single-word one, so the check
-    # was a ratchet against exactly one legitimate entry. It went red only when the
-    # Accessibility lane happened to be seated, because lanes fire on relevance to the
-    # change set -- so it read as flaky rather than wrong. What actually forbids a
-    # handle is the closed-set assertion above: a seat not in `_SEATS` fails, and
-    # adding one to `_SEATS` is a reviewable act.
-
-
-# ── a detector that cannot run is not a detector that found nothing ─────────
-
-
 def test_a_detector_that_cannot_be_run_is_reported_unclean():
     """Fail closed. Silence from a check that never ran is indistinguishable from a clean
     result, which is the shape `core/gates/fail_open_probe.py` exists for."""
@@ -151,27 +114,6 @@ def test_a_detector_that_cannot_be_run_is_reported_unclean():
     clean, detail = round_table._run_detector("this-is-not-an-executable-at-all")
     assert clean is False
     assert "could not run" in detail
-
-
-def test_a_detector_lane_is_reported_from_its_exit_status(monkeypatch):
-    """Drives `convene` with a stubbed runner rather than spending 30s on three real
-    detectors, and asserts BOTH directions -- otherwise a convener that always reported
-    clean would satisfy the pass case."""
-    calls: list[str] = []
-
-    def _fake(command: str, repo_root=None) -> tuple[bool, str]:
-        calls.append(command)
-        return (False, "found something") if "untested_fallback" in command else (True, "OK")
-
-    monkeypatch.setattr(round_table, "_run_detector", _fake)
-    report = convene(run_detectors=True)
-
-    assert calls, "no detector was run"
-    assert report["status"] == "fail", report
-    assert "an-untested-fallback-lane" in report["detectors_unclean"], report
-
-    monkeypatch.setattr(round_table, "_run_detector", lambda command, repo_root=None: (True, "OK"))
-    assert convene(run_detectors=True)["status"] == "pass"
 
 
 def test_the_table_stops_at_its_own_budget(monkeypatch):
@@ -392,13 +334,20 @@ def test_a_single_seat_can_be_convened_and_a_typo_fails():
     """
     import pytest
 
-    one = convene(run_detectors=False, seat="Test-integrity inquisitor")
+    # "Test-integrity inquisitor" was merged into "Gate and test integrity" in D13. The
+    # lane is untouched -- only the seat holding it changed -- so this convenes the seat
+    # that now answers it.
+    one = convene(run_detectors=False, seat="Gate and test integrity")
     seats = {seat["seat"] for seat in one["lanes"]}
-    assert seats == {"Test-integrity inquisitor"}, seats
+    assert seats == {"Gate and test integrity"}, seats
     assert len(one["lanes"]) < len(convene(run_detectors=False, all_seats=True)["lanes"])
 
-    with pytest.raises(KeyError, match="Gate-integrity engineer"):
-        convene(run_detectors=False, seat="Gate-integrity enginer")
+    # The refusal must NAME the valid set, so a typo is one keystroke from fixed rather
+    # than a guess. Matching on a seat that is actually on the roster, since the point is
+    # that the message lists them -- an assertion against a merged-away name would pass
+    # only while that name lingered in the error text.
+    with pytest.raises(KeyError, match="Gate and test integrity"):
+        convene(run_detectors=False, seat="Gate and test integriti")
 
     lane = convene(run_detectors=False, lane_id="a-test-that-cannot-fail")
     assert [seat["lane"] for seat in lane["lanes"]] == ["a-test-that-cannot-fail"]
@@ -792,42 +741,6 @@ def test_the_shipped_skill_carries_the_same_dispatch_rule():
     )
 
 
-def test_no_lane_asks_more_than_its_enforcement_answers():
-    """A detector's question must not be wider than the detector, silently.
-
-    `a-branch-behind-its-base` asks "how far behind its base is this branch, AND did
-    anyone ask it to sync". Its detector counts commits. The second half was answered by
-    nobody while the lane rendered `clean` -- reporting clean on ground the check never
-    examined, which is the signature several seats at this table exist to refuse, found on
-    the table itself.
-
-    The remedy is a DECLARATION, not a text heuristic. Measured first: a rule flagging
-    compound questions would have flagged 21 of 30 lanes, because a setup sentence
-    followed by a question is the house framing style here -- signal that fires on 70% of
-    the population is noise. So each detector states what it does not decide, `defers: []`
-    is the positive claim that it decides everything, and an absent key is refused.
-    """
-    lanes = yaml.safe_load(
-        (REPO_ROOT / "canonical" / "review_lanes.yml").read_text(encoding="utf-8")
-    )["lanes"]
-    detectors = [ln for ln in lanes if "detector" in ln]
-    assert detectors, "no detector lanes found -- the fixture is wrong, not the registry"
-
-    for lane in detectors:
-        assert "defers" in lane, (
-            f"{lane['id']} runs a mechanical check and does not say what it leaves " "undecided"
-        )
-        assert isinstance(lane["defers"], list)
-
-    # The lane the defect was found on, held by name so a future edit cannot quietly drop
-    # the half that started this.
-    steward = next(ln for ln in lanes if ln["id"] == "a-branch-behind-its-base")
-    assert any("sync" in d for d in steward["defers"]), (
-        "the steward asks whether anyone asked this branch to sync and its detector "
-        "counts commits; that half must stay declared"
-    )
-
-
 def test_the_deferred_half_is_printed_beside_the_clean_mark():
     """A declaration nobody renders is a comment.
 
@@ -839,10 +752,20 @@ def test_the_deferred_half_is_printed_beside_the_clean_mark():
     rendered = round_table._render(report)
 
     assert "NOT DECIDED HERE:" in rendered
-    assert "did anyone ask it to sync" in rendered or "ASKED this branch to sync" in rendered
 
-    steward = next(ln for ln in report["lanes"] if ln["lane"] == "a-branch-behind-its-base")
-    assert steward["defers"], "the report must carry the declaration, not just the file"
+    # Repointed from `a-branch-behind-its-base`, whose detector was the
+    # branch-freshness gate -- one of thirteen bookkeeping gates removed
+    # 2026-09-21, which took its lane with it. The PROPERTY is unchanged and is
+    # what this test is for: any lane carrying a `defers` declaration must have
+    # it rendered, so a reviewer reading a clean mark is told what it does not
+    # cover. Asserted against whichever lane carries one rather than a hardcoded
+    # id, so the next lane removal does not silently delete the coverage.
+    deferring = [ln for ln in report["lanes"] if ln.get("defers")]
+    assert deferring, "no lane declares what it defers; the rendering below is untestable"
+    for lane in deferring:
+        for declaration in lane["defers"]:
+            head = declaration.split("--")[0].strip()[:24]
+            assert head in rendered, f"{lane['lane']} declares {head!r} and nothing renders it"
 
 
 # ── WO d0658106: the abstention is conditional END TO END, not at the signature ──

@@ -110,14 +110,36 @@ class TestHooksJsonValid:
             uses_emitter = "'emitters'/'claude_code'/'run.py'" in cmd
             uses_dispatcher = "'runtime'/'dispatch'/'hooks.py'" in cmd
             uses_enforcement = "'on-edit-enforce.py'" in cmd or "'on-stop-enforce.py'" in cmd
-            assert uses_emitter or uses_dispatcher or uses_enforcement, (
+            # The append-only enqueuer: PostToolUse fires on every tool call and
+            # nothing consumes its stdout, so it records the event and exits
+            # instead of dispatching inline -- 267 ms to 27. Its handlers still
+            # run; hookq.drain replays them on UserPromptSubmit and Stop, which
+            # are synchronous anyway. Same cross-platform `python -c` bootstrap as
+            # the others, which is what this test is actually guarding.
+            uses_enqueue = "'runtime'/'hooks'/'enqueue.py'" in cmd
+            assert uses_emitter or uses_dispatcher or uses_enforcement or uses_enqueue, (
                 f"Command must route through canonical emitter, runtime dispatcher,"
-                f" or a direct-entry enforcement hook: {cmd}"
+                f" the append-only enqueuer, or a direct-entry enforcement hook: {cmd}"
             )
             assert '"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh"' not in cmd
 
     def test_user_prompt_submit_command_resolves_without_env_root(self, tmp_path):
-        """Registered prompt hook resolves from repo descendants without CLAUDE_PLUGIN_ROOT."""
+        """The INSTALLED prompt hook resolves from repo descendants without CLAUDE_PLUGIN_ROOT.
+
+        Drives the command through ``resolve_hook_command`` first, because that is the form
+        the operator actually runs: hooks.json is a template whose every entry begins with
+        bare ``python``, and ``step_settings_merge`` substitutes a real interpreter on the way
+        into settings.json.
+
+        Asserting on the raw template instead was a false negative waiting to happen, and it
+        happened: on a stock Windows box bare ``python`` is the Microsoft Store App Execution
+        Alias, a zero-byte stub that exits 9009 without running anything, so this test failed
+        on clean main while the operator's actual hooks worked fine. It was reporting the
+        template's portability, which nobody executes, and saying nothing about the installed
+        command, which everybody does.
+        """
+        from interfaces.cli.setup_hooks import resolve_hook_command
+
         home = tmp_path / "home"
         home.mkdir()
         env = os.environ.copy()
@@ -125,7 +147,9 @@ class TestHooksJsonValid:
         env["USERPROFILE"] = str(home)
         env["HOME"] = str(home)
         env["DREAM_STUDIO_DB_PATH"] = str(tmp_path / "studio.db")
-        command = self.config["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
+        command = resolve_hook_command(
+            self.config["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
+        )
 
         result = subprocess.run(
             command,

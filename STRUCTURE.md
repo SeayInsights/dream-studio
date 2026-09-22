@@ -22,7 +22,6 @@ dream-studio/
       security/                      security analysis (ds-security)
       project/                       project lifecycle (ds-project)
       workorder/                     work order lifecycle (ds-workorder)
-      milestone/                     milestone lifecycle (ds-milestone)
       website/                       website builder (ds-website)
       fullstack/                     fullstack builder (ds-fullstack)
       setup/                         setup (ds-setup)
@@ -61,3 +60,10 @@ Operator-local runtime state is never committed:
 <!-- Last reviewed 2026-07-19 — WO-AUTOACT-B: packs.yaml meta pack hook list gains on-prompt-route (the UserPromptSubmit routing handler under runtime/hooks/meta/). No directory-tree layout change. -->
 
 <!-- Reviewed 2026-07-05 — WO 6d978483 (PEP 585/604 modernization [2/2]): source files in this domain received mechanical type-annotation modernization only (PEP 585 builtin generics, PEP 604 unions, datetime.UTC) via ruff UP safe autofixes. No contract, behavior, schema, routing, API-shape, or CLI-surface change — reviewed, no doc content change needed. -->
+<!-- Reviewed 2026-09-18 - no directory-tree layout change. `control/execution/
+dispatch_tracking.py` gains a recorded outcome for a handler whose file is absent, and
+`tests/unit/test_hook_exec_stats.py` replaces one test with its inverse. No new module,
+package, directory or hook file; no relocation; the handler packs under runtime/hooks/ and
+their installed projection are unchanged. Reviewed, no doc content change needed. -->
+<!-- Last reviewed 2026-09-18 - skill-card contract: packs.yaml gains an `invariants:` list on every one of the 12 packs (what holds across that pack's modes, under the same enforce-or-declare shape canonical/rules.yml uses). New sibling of packs.yaml: canonical/skill_vocabulary.json, the registry of root input tokens the mode dataflow consumes from outside itself. No directory-tree layout change. -->
+<!-- Last reviewed 2026-09-18 - lesson loop: packs.yaml quality pack gains a `groom` mode (canonical/skills/quality/modes/groom/), the terminus that turns promoted lessons into skill-text edits. No directory-tree layout change. -->

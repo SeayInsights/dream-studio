@@ -1,0 +1,234 @@
+# Registry of external-standard citations appearing anywhere under canonical/.
+#
+# WHY THIS FILE EXISTS
+# Two audits of the skill corpus found citations that named a real standard and
+# attached a false claim to it. The worst example: three of the four WCAG
+# success criteria cited were wrong, including "minimum 44x44 CSS pixels (WCAG
+# 2.2 SC 2.5.8)" -- SC 2.5.8 is 24x24 at Level AA; 44x44 is SC 2.5.5 at AAA.
+# A reviewer acting on that line reports a conforming 30px control as an AA
+# failure, and an engineer citing it in a conformance claim states something
+# untrue. A wrong citation is worse than no citation: it borrows the authority
+# of a standard nobody re-checks.
+#
+# HOW IT IS ENFORCED
+# tests/unit/test_citation_registry.py walks canonical/ and fails when:
+#   1. a citation appears that is not registered here -- so a NEW unverified
+#      citation cannot land silently; and
+#   2. a line pairs a registered citation with a claim its `must_not_claim`
+#      list forbids, unless the criterion that actually owns that claim is
+#      named on the same line.
+#
+# `verified` is the date a human or agent read the PRIMARY source (not a blog,
+# not a summary, not model memory) and confirmed the entry. A null means the
+# citation is inventoried but unchecked -- the guard still requires it to be
+# listed, and the test reports the unverified backlog as a count.
+
+citations:
+  # ── WCAG ────────────────────────────────────────────────────────────────────
+  # Verified 2026-09-21 against the W3C Understanding pages, whose "Success
+  # Criterion" block reproduces normative wording verbatim.
+  "SC 1.4.1":
+    standard: WCAG 2.1
+    title: Use of Color
+    level: A
+    requires: Color is not the only visual means of conveying information.
+    source: https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html
+    verified: null
+
+  "SC 1.4.11":
+    standard: WCAG 2.1
+    title: Non-text Contrast
+    level: AA
+    requires: >-
+      3:1 contrast against adjacent colors for visual information identifying
+      UI components and their states. This is the criterion that carries the
+      enforceable AA 3:1 requirement for focus indicators.
+    source: https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html
+    verified: "2026-09-21"
+
+  "SC 2.4.7":
+    standard: WCAG 2.1
+    title: Focus Visible
+    level: AA
+    requires: >-
+      A visible keyboard focus indicator. Visibility only -- no contrast ratio
+      and no size threshold appear in this criterion.
+    # Any contrast ratio. SC 2.4.7 states none. Matched as X:1 rather than the
+    # looser \d+:\d+, which would also fire on an OWASP id like A01:2025 sharing
+    # the line -- a guard with a false positive gets its findings ignored.
+    must_not_claim: ['\b\d+(?:\.\d+)?\s*:\s*1\b']
+    claim_owner: "SC 1.4.11"
+    source: https://www.w3.org/WAI/WCAG22/Understanding/focus-visible.html
+    verified: "2026-09-21"
+
+  "SC 2.4.11":
+    standard: WCAG 2.2
+    title: Focus Not Obscured (Minimum)
+    level: AA
+    requires: >-
+      A focused component is not ENTIRELY hidden by author-created content.
+      Contains no contrast ratio, no pixel threshold, no target-size language.
+    # Any contrast ratio. SC 2.4.11 contains none. See SC 2.4.7 on the X:1 shape.
+    must_not_claim: ['\b\d+(?:\.\d+)?\s*:\s*1\b']
+    claim_owner: "SC 1.4.11"
+    source: https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured-minimum.html
+    verified: "2026-09-21"
+
+  "SC 2.5.5":
+    standard: WCAG 2.1
+    title: Target Size (Enhanced)
+    level: AAA
+    requires: >-
+      Pointer targets at least 44 by 44 CSS pixels. Exceptions: Equivalent,
+      Inline, User Agent Control, Essential. Note there is NO spacing exception
+      here, unlike SC 2.5.8.
+    # The number 24 in any form -- this criterion is 44. Written as "24 not
+    # followed by a digit" rather than \b24\b, because \b finds no boundary
+    # inside "24x24" or "24px" and so matched neither.
+    must_not_claim: ['\b24(?!\d)']
+    claim_owner: "SC 2.5.8"
+    source: https://www.w3.org/WAI/WCAG22/Understanding/target-size-enhanced.html
+    verified: "2026-09-21"
+
+  "SC 2.5.8":
+    standard: WCAG 2.2
+    title: Target Size (Minimum)
+    level: AA
+    requires: >-
+      Pointer targets at least 24 by 24 CSS pixels, with a spacing exception for
+      undersized targets whose 24px-diameter circles do not intersect.
+    # The number 44 in any form -- this criterion is 24. Literals "44x44" and
+    # "44 by 44" missed "44 CSS pixels square"; \b44\b then missed "44x44" and
+    # "44px", since \b finds no boundary between a digit and a letter. "44 not
+    # followed by a digit" catches all of them and still ignores 440 and 1440.
+    must_not_claim: ['\b44(?!\d)']
+    claim_owner: "SC 2.5.5"
+    source: https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html
+    verified: "2026-09-21"
+
+  # ── OWASP Top 10 ────────────────────────────────────────────────────────────
+  # The 2025 edition superseded 2021 and RENUMBERED most categories, so a 2021
+  # id read against the current list lands on a different category: A03 meant
+  # Injection in 2021 and means Software Supply Chain Failures in 2025.
+  # Verified 2026-09-21 against top10.owasp.org/2025.
+  "A01:2025":
+    standard: OWASP Top 10:2025
+    title: Broken Access Control
+    note: SSRF (A10:2021) was consolidated into this category in 2025.
+    source: https://top10.owasp.org/2025
+    verified: "2026-09-21"
+  "A02:2025":
+    standard: OWASP Top 10:2025
+    title: Security Misconfiguration
+    note: Was A05:2021.
+    source: https://top10.owasp.org/2025
+    verified: "2026-09-21"
+  "A03:2025":
+    standard: OWASP Top 10:2025
+    title: Software Supply Chain Failures
+    note: >-
+      Expansion of A06:2021 Vulnerable and Outdated Components, widened to
+      build systems and distribution infrastructure.
+    source: https://top10.owasp.org/2025
+    verified: "2026-09-21"
+  "A04:2025":
+    standard: OWASP Top 10:2025
+    title: Cryptographic Failures
+    note: Was A02:2021.
+    source: https://top10.owasp.org/2025
+    verified: "2026-09-21"
+  "A05:2025":
+    standard: OWASP Top 10:2025
+    title: Injection
+    note: Was A03:2021.
+    source: https://top10.owasp.org/2025
+    verified: "2026-09-21"
+  "A06:2025":
+    standard: OWASP Top 10:2025
+    title: Insecure Design
+    note: Was A04:2021.
+    source: https://top10.owasp.org/2025
+    verified: "2026-09-21"
+  "A07:2025":
+    standard: OWASP Top 10:2025
+    title: Authentication Failures
+    note: Renamed from Identification and Authentication Failures; kept position 7.
+    source: https://top10.owasp.org/2025
+    verified: "2026-09-21"
+  "A08:2025":
+    standard: OWASP Top 10:2025
+    title: Software or Data Integrity Failures
+    note: 2021 read "Software AND Data Integrity Failures".
+    source: https://top10.owasp.org/2025
+    verified: "2026-09-21"
+  "A09:2025":
+    standard: OWASP Top 10:2025
+    title: Security Logging and Alerting Failures
+    note: >-
+      Renamed from Security Logging and Monitoring Failures to stress alerting.
+      Official site also renders this with an ampersand.
+    source: https://top10.owasp.org/2025
+    verified: "2026-09-21"
+  "A10:2025":
+    standard: OWASP Top 10:2025
+    title: Mishandling of Exceptional Conditions
+    note: >-
+      New in 2025. Covers improper error handling, logical errors, and failing
+      open -- 24 CWEs.
+    source: https://top10.owasp.org/2025
+    verified: "2026-09-21"
+
+  # ── OWASP ASVS ──────────────────────────────────────────────────────────────
+  # v5.0.0 (May 2025) rebuilt the V-chapter numbering wholesale. Every v4.0
+  # chapter this repo cited moved to a different number AND name:
+  #   V4 Access Control            -> V8 Authorization
+  #   V5 Validation/Sanitization   -> V1 Encoding and Sanitization + V2 Validation
+  #   V6 Stored Cryptography       -> V11 Cryptography
+  #   V7 Error Handling and Logging-> V16 Security Logging and Error Handling
+  # Verified 2026-09-21 against github.com/OWASP/ASVS tag v5.0.0, dir 5.0/en.
+  "ASVS v5.0.0":
+    standard: OWASP ASVS
+    title: Application Security Verification Standard 5.0.0
+    note: >-
+      ASVS asks external documents to cite as v<version>-<chapter>.<section>.<req>
+      (e.g. v5.0.0-1.2.5) because bare identifiers shift between versions.
+    source: https://github.com/OWASP/ASVS/tree/v5.0.0/5.0/en
+    verified: "2026-09-21"
+
+  # ── Unverified inventory ────────────────────────────────────────────────────
+  # Listed so the guard's "unregistered citation" rule has a complete baseline.
+  # None of these has been read against its primary source. Verifying one means
+  # opening the actual standard, recording what it says under `requires`, and
+  # setting `verified`. Do not fill these in from memory.
+  "CWE-22": {verified: null}
+  "CWE-77": {verified: null}
+  "CWE-89": {verified: null}
+  "CWE-269": {verified: null}
+  "CWE-284": {verified: null}
+  "CWE-285": {verified: null}
+  "CWE-312": {verified: null}
+  "CWE-362": {verified: null}
+  "CWE-367": {verified: null}
+  "CWE-409": {verified: null}
+  "CWE-532": {verified: null}
+  "CWE-561": {verified: null}
+  "CWE-639": {verified: null}
+  "CWE-703": {verified: null}
+  "CWE-754": {verified: null}
+  "ISO 8601": {verified: null}
+  "ISO 9001": {verified: null}
+  "ISO 15408": {verified: null}
+  "ISO 26262": {verified: null}
+  "NIST SP 800-53": {verified: null}
+  "NIST SP 800-57": {verified: null}
+  "NIST SP 800-63": {verified: null}
+  "NIST SP 800-63B": {verified: null}
+  "NIST SP 800-92": {verified: null}
+  "NIST SP 800-171": {verified: null}
+  "NIST SP 800-190": {verified: null}
+  "NIST SP 800-207": {verified: null}
+  "NIST SP 800-218": {verified: null}
+  "PCI DSS": {verified: null}
+  "PCI DSS v4": {verified: null}
+  "PCI DSS v4.0.1": {verified: null}
+  "RFC 9457": {verified: null}

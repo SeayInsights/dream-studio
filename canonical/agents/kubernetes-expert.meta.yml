@@ -1,0 +1,11 @@
+# Source for kubernetes-expert. The .md beside this file is generated from it.
+
+description: >-
+  Production Kubernetes operations -- debug CrashLoopBackOff/OOMKill/Pending pods, design resource requests/limits/probes, author Helm charts, advise on scheduling, RBAC, NetworkPolicy, and HPA. Invoke for any k8s cluster issue or workload design question.
+model: sonnet
+skill: ds-domains/modes/kubernetes/SKILL.md
+essentials: |
+  Key diagnostic shortcuts:
+  - Exit code 137 = OOMKill (check before adjusting probes)
+  - HPA "unknown" = missing resource requests
+  - Pending pod = cluster capacity / affinity issue, not pod spec

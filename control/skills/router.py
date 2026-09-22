@@ -341,8 +341,6 @@ def is_mode_available(pack: str, mode: str, user_message: str = "") -> tuple[boo
                 return (True, unlock_msg)
 
     # Mode is still locked
-    config = _load_progressive_config()
-    welcome = config.get("welcome_message", "")
 
     unlock_msg = (
         f"\n[dream-studio] Mode '{pack}:{mode}' is not yet unlocked.\n\n"

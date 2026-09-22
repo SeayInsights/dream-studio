@@ -6,7 +6,7 @@
 - Focus management: trap focus in modals; restore to trigger on close; move focus to page heading on route change.
 - Keyboard navigation order must match the visual reading order (DOM order drives tab sequence).
 - Color contrast: 4.5:1 minimum for normal text, 3:1 for large text (18pt / 14pt bold), 3:1 for UI components.
-- Touch targets: minimum 44x44 CSS pixels (WCAG 2.2 SC 2.5.8). Use padding to expand without changing visual size.
+- Touch targets: 24x24 CSS pixels is the AA floor (WCAG 2.2 SC 2.5.8, which also grants a spacing exception). 44x44 is AAA (SC 2.5.5) and matches the iOS 44pt convention — aim there, but do not report a 24-40px target as an AA failure. Use padding to expand without changing visual size.
 - Alt text: decorative = `alt=""`, informative = describe content, functional = describe the action.
 - Form labels: explicit `<label for>` preferred; `aria-label` when no visible text needed; `aria-labelledby` to reuse existing text.
 - Skip navigation: first focusable element on page, visually hidden until focused, points to `#main-content`.
@@ -52,8 +52,9 @@
 ### Visual audit
 - [ ] Check contrast ratios with browser DevTools or https://webaim.org/resources/contrastchecker/
 - [ ] Information is not conveyed by color alone
-- [ ] Touch targets are at least 44x44px on mobile viewport
-- [ ] Focus indicator is visible and has 3:1 contrast against adjacent colors (WCAG 2.2 SC 2.4.11)
+- [ ] Touch targets clear 24x24px on mobile viewport (AA floor); 44x44px is the AAA/platform target
+- [ ] Focus indicator is visible (SC 2.4.7, AA) and has 3:1 contrast against adjacent colors (SC 1.4.11 Non-text Contrast, AA)
+- [ ] Focus is not entirely hidden by sticky headers or overlays (SC 2.4.11 Focus Not Obscured, AA — a visibility rule, not a contrast one)
 
 ### Remediation priority framework
 1. Critical (block release): missing keyboard access, missing form labels, broken focus trap in modal

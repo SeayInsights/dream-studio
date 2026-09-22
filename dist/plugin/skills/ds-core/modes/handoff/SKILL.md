@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Write]
   model_preference: haiku
   estimated_duration: 5-15min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Handoff — Session Continuity

@@ -1,0 +1,457 @@
+# Which skill modes have a specialist subagent, and which deliberately do not.
+#
+# ENFORCE OR DECLARE. Every mode under canonical/skills/**/modes/*/SKILL.md appears here
+# exactly once: it either names the agent compiled from it, or says in writing why it has
+# none. The `agent-coverage` gate refuses a mode in neither state, so a new specialist
+# mode cannot ship with nobody able to answer it and nobody having decided that was right.
+#
+# THE RULE. AN AGENT EXISTS TO BE DISPATCHED, so a mode earns one when something actually
+# dispatches it, or when it is big enough that isolating it protects the caller's context:
+#
+#   1. FAN-OUT -- several modes share a trigger word, so one operator word convenes them
+#      together and they run in parallel. Measured: `audit:` is the only such set, routing
+#      to code-quality, database, security, testing and types-deps.
+#   2. ISOLATION -- the skill is at least 5000 bytes (~1,250 tokens). Below that the
+#      wrapper (frontmatter, scope, output contract, ~1.2 KB) rivals the knowledge, and a
+#      round trip costs the caller more context than reading the skill inline.
+#
+# A mode meeting neither is read inline by the skill that owns its flow. A mode that owns
+# state, sequence, or a conversation with the operator never gets one: a subagent cannot
+# hold a lifecycle step, because the step IS the caller's process. A router has no question
+# of its own.
+#
+# THE THRESHOLD WAS NOT CHOSEN TO HIT A NUMBER. 5000 bytes is the lowest value that
+# reproduces all nine agents this repository already shipped -- the previous author's
+# judgement agreeing with the rule, arrived at independently.
+#
+# `description` comes from the mode's own metadata.yml (a purpose line plus the triggers
+# that route to it), both authored for routing. Generated names follow <pack>-<mode>; the
+# nine that predate this file keep the names they ship under, because renaming one breaks
+# every dispatch that calls it.
+
+modes:
+- mode: analyze/domain-re
+  skill: analyze/modes/domain-re/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 4200 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: analyze/idea-validation
+  skill: analyze/modes/idea-validation/SKILL.md
+  agent: idea-validator
+  installed_skill: ds-analyze/modes/idea-validation/SKILL.md
+  dispatched_because: 'isolation: the skill is 7029 bytes, enough that carrying it in a subagent protects
+    the caller''s context'
+  description: 'Stress-test ideas by hunting for fatal flaws, mapping assumptions, and demanding proof
+    before any verdict. Uses fatal-flaw-first protocol, assumption inventory, bottoms-up TAM, competitive
+    moat analysis, and Go/No-Go criteria. Inverts optimism bias — finds what kills the idea... Invoke
+    for: validate idea, stress-test, fatal flaw, product idea, feature idea, go no-go'
+- mode: analyze/intelligence
+  skill: analyze/modes/intelligence/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 3249 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: analyze/multi
+  skill: analyze/modes/multi/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 3231 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: analyze/repo
+  skill: analyze/modes/repo/SKILL.md
+  agent: analyze-repo
+  installed_skill: ds-analyze/modes/repo/SKILL.md
+  dispatched_because: 'isolation: the skill is 8964 bytes, enough that carrying it in a subagent protects
+    the caller''s context'
+  description: Analyze — Repository Pattern Analysis
+- mode: analyze/research
+  skill: analyze/modes/research/SKILL.md
+  agent: research-analyst
+  installed_skill: ds-analyze/modes/research/SKILL.md
+  dispatched_because: 'isolation: the skill is 5235 bytes, enough that carrying it in a subagent protects
+    the caller''s context'
+  description: 'Conduct structured research with source hierarchy (Tier 1/2/3), triangulation gate (3+
+    independent sources), anti-sycophancy disconfirming-evidence-first protocol, assumption inventory,
+    and bias check. For market research, competitive analysis, and evidence gathering tasks.... Invoke
+    for: market research, competitive analysis, evidence gathering, structured research, source triangulation'
+- mode: core/build
+  skill: core/modes/build/SKILL.md
+  no_agent: The execution loop itself. It dispatches work, so handing it to a subagent would nest the
+    orchestrator inside its own step.
+- mode: core/explain
+  skill: core/modes/explain/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 2832 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: core/handoff
+  skill: core/modes/handoff/SKILL.md
+  no_agent: Writes session state to the authority for the next session. It reports on a process rather
+    than answering a question.
+- mode: core/plan
+  skill: core/modes/plan/SKILL.md
+  no_agent: Owns the planning conversation and writes tasks to the authority; a subagent cannot hold the
+    operator dialogue it is made of.
+- mode: core/recap
+  skill: core/modes/recap/SKILL.md
+  no_agent: Summarises the session it is running in, and a subagent has no access to the session it was
+    dispatched from.
+- mode: core/review
+  skill: core/modes/review/SKILL.md
+  no_agent: The chair that convenes the bench. Its specialists are the review-* reviewers compiled from
+    canonical/review_lanes.yml.
+- mode: core/ship
+  skill: core/modes/ship/SKILL.md
+  no_agent: Runs the release gate sequence and decides whether to proceed. The sequencing and the decision
+    belong to the caller.
+- mode: core/think
+  skill: core/modes/think/SKILL.md
+  no_agent: An interactive design conversation with the operator, turn by turn. There is no bounded question
+    to hand over.
+- mode: core/verify
+  skill: core/modes/verify/SKILL.md
+  no_agent: Convenes graders and records a verdict on the authority. It owns the verdict, which is the
+    thing a subagent hands back rather than writes.
+- mode: domains/power-platform
+  skill: domains/modes/power-platform/SKILL.md
+  agent: domains-power-platform
+  installed_skill: ds-domains/modes/power-platform/SKILL.md
+  dispatched_because: 'isolation: the skill is 11918 bytes, enough that carrying it in a subagent protects
+    the caller''s context'
+  description: 'Power Platform client lifecycle — intake, SOW, build (Power BI, Power Apps, Power Automate),
+    review, handoff — with DAX/M-query patterns, delegation rules, .pbip/TMDL format, and flow error handling.
+    Invoke for: {''intake'': None}, {''sow'': None}, {''proposal'': None}, {''build report'': None}, {''review
+    powerbi'': None}, {''optimize dax'': None}'
+- mode: domains/dashboard-dev
+  skill: domains/modes/dashboard-dev/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 3031 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: domains/data-engineering
+  skill: domains/modes/data-engineering/SKILL.md
+  agent: data-engineer
+  installed_skill: ds-domains/modes/data-engineering/SKILL.md
+  dispatched_because: 'isolation: the skill is 9631 bytes, enough that carrying it in a subagent protects
+    the caller''s context'
+  description: 'Specialist for dbt model authoring, data warehouse query debugging, pipeline orchestration
+    (Airflow/Dagster), CDC patterns, schema migrations, and data quality contracts. Covers BigQuery, Snowflake,
+    and Redshift warehouse-specific optimizations. Scope boundary:... Invoke for: dbt, BigQuery, Snowflake,
+    Redshift, Airflow DAG, Dagster asset'
+- mode: domains/design
+  skill: domains/modes/design/SKILL.md
+  agent: domains-design
+  installed_skill: ds-domains/modes/design/SKILL.md
+  dispatched_because: 'isolation: the skill is 6558 bytes, enough that carrying it in a subagent protects
+    the caller''s context'
+  description: Visual design capability — brand tokens, anti-slop rules, visual hierarchy, generative
+    art (p5.js), theme application to projects, and ad-creative guidance. Trigger on `design art:`, `design
+    poster:`, `canvas:`, `generative art:`, `apply theme:`, `brand:`, `ad creative:`, and...
+- mode: domains/devops
+  skill: domains/modes/devops/SKILL.md
+  agent: devops-engineer
+  installed_skill: ds-domains/modes/devops/SKILL.md
+  dispatched_because: 'isolation: the skill is 6121 bytes, enough that carrying it in a subagent protects
+    the caller''s context'
+  description: 'Pre-runtime operational concerns: GitHub Actions CI/CD pipeline design, OIDC cloud auth
+    setup, release automation, Docker build optimization, branch protection, and deployment gates. Scope
+    boundary: devops covers pre-deploy pipeline concerns; ops skill covers post-deploy... Invoke for:
+    CI/CD pipeline, GitHub Actions workflow, Docker build, release automation, branch protection, deployment
+    gate'
+- mode: fullstack/backend
+  skill: fullstack/modes/backend/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 4604 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: fullstack/frontend
+  skill: fullstack/modes/frontend/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 4290 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: fullstack/integrate
+  skill: fullstack/modes/integrate/SKILL.md
+  agent: domains-fullstack-integrate
+  installed_skill: ds-fullstack/modes/integrate/SKILL.md
+  dispatched_because: 'isolation: the skill is 7672 bytes, enough that carrying it in a subagent protects
+    the caller''s context'
+  description: Integrate Mode
+- mode: fullstack/secure
+  skill: fullstack/modes/secure/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 3482 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: domains/game-dev
+  skill: domains/modes/game-dev/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 1092 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: domains/kubernetes
+  skill: domains/modes/kubernetes/SKILL.md
+  agent: kubernetes-expert
+  installed_skill: ds-domains/modes/kubernetes/SKILL.md
+  dispatched_because: 'isolation: the skill is 6033 bytes, enough that carrying it in a subagent protects
+    the caller''s context'
+  description: 'Production Kubernetes operations: debug CrashLoopBackOff/OOMKill/Pending pods, design
+    resource requests/limits/probes, author Helm charts, advise on scheduling, RBAC, NetworkPolicy, and
+    HPA. Invoked via kubernetes-expert subagent (Task tool dispatch). Invoke for: k8s cluster issue, workload
+    design, CrashLoopBackOff, OOMKill, Pending pods, resource requests'
+- mode: domains/mcp-build
+  skill: domains/modes/mcp-build/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 4406 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: domains/mobile
+  skill: domains/modes/mobile/SKILL.md
+  agent: mobile-developer
+  installed_skill: ds-domains/modes/mobile/SKILL.md
+  dispatched_because: 'isolation: the skill is 11149 bytes, enough that carrying it in a subagent protects
+    the caller''s context'
+  description: 'iOS (Swift/SwiftUI), Android (Kotlin/Compose), React Native, and Flutter — state management,
+    native integrations, push notifications, biometric auth, offline-first, store submission, and cross-platform
+    architecture decisions. Scope boundary: mobile covers native app... Invoke for: iOS, Android, Swift,
+    SwiftUI, Kotlin, Compose'
+- mode: domains/saas-build
+  skill: domains/modes/saas-build/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 4294 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: domains/technical-writing
+  skill: domains/modes/technical-writing/SKILL.md
+  agent: technical-writer
+  installed_skill: ds-domains/modes/technical-writing/SKILL.md
+  dispatched_because: 'isolation: the skill is 5551 bytes, enough that carrying it in a subagent protects
+    the caller''s context'
+  description: 'Plan, write, and review technical documentation using the Diataxis framework (tutorial/how-to/reference/explanation),
+    style best practices (active voice, second person, sentence case), and automated linting tools (markdownlint,
+    vale, lychee). Includes PR review checklist and... Invoke for: technical documentation, docs PR, Diataxis,
+    README, API reference, documentation review'
+- mode: domains/terraform
+  skill: domains/modes/terraform/SKILL.md
+  agent: terraform-architect
+  installed_skill: ds-domains/modes/terraform/SKILL.md
+  dispatched_because: 'isolation: the skill is 8175 bytes, enough that carrying it in a subagent protects
+    the caller''s context'
+  description: 'Terraform module design, remote state management, multi-environment strategy, import workflow
+    (TF 1.5+), drift detection, and provider version management. Scope boundary: terraform covers IaC
+    provisioning (writing and applying infrastructure config); devops covers CI/CD... Invoke for: Terraform,
+    infrastructure design, IaC, state problem, Terraform module, remote state'
+- mode: website/animate
+  skill: website/modes/animate/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 3400 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: website/brand
+  skill: website/modes/brand/SKILL.md
+  agent: domains-website-brand
+  installed_skill: ds-website/modes/brand/SKILL.md
+  dispatched_because: 'isolation: the skill is 5156 bytes, enough that carrying it in a subagent protects
+    the caller''s context'
+  description: Brand — Extract, Generate, Validate
+- mode: website/cip
+  skill: website/modes/cip/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 3098 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: website/critique
+  skill: website/modes/critique/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 4166 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: website/deck
+  skill: website/modes/deck/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 4494 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: website/direction
+  skill: website/modes/direction/SKILL.md
+  no_agent: Locks a design direction through operator choice; the decision is the operator's to make.
+- mode: website/discover
+  skill: website/modes/discover/SKILL.md
+  no_agent: A structured discovery conversation with the client, one question at a time.
+- mode: website/page
+  skill: website/modes/page/SKILL.md
+  agent: domains-website-page
+  installed_skill: ds-website/modes/page/SKILL.md
+  dispatched_because: 'isolation: the skill is 5811 bytes, enough that carrying it in a subagent protects
+    the caller''s context'
+  description: Page — Full-Fidelity HTML Builder
+- mode: website/prototype
+  skill: website/modes/prototype/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 4937 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: ds-project/brief
+  skill: ds-project/modes/brief/SKILL.md
+  no_agent: A wizard that fills and locks a design brief through operator dialogue.
+- mode: ds-project/brownfield
+  skill: ds-project/modes/brownfield/SKILL.md
+  no_agent: Registers existing checkouts and runs intake against them, writing authority rows.
+- mode: ds-project/manage
+  skill: ds-project/modes/manage/SKILL.md
+  no_agent: Switches, archives and deletes projects in the authority. State mutation, not knowledge.
+- mode: ds-project/scope
+  skill: ds-project/modes/scope/SKILL.md
+  no_agent: A guided intake conversation, one question at a time, writing to the authority as it goes.
+- mode: ds-workorder/block
+  skill: ds-workorder/modes/block/SKILL.md
+  no_agent: Records a blocker against a work order in the authority.
+- mode: ds-workorder/close
+  skill: ds-workorder/modes/close/SKILL.md
+  no_agent: Runs close gates and mutates state. The verdicts belong to the caller that must act on them.
+- mode: ds-workorder/execute
+  skill: ds-workorder/modes/execute/SKILL.md
+  no_agent: Marks tasks done in the authority as the caller completes them.
+- mode: ds-workorder/start
+  skill: ds-workorder/modes/start/SKILL.md
+  no_agent: Mutates work-order state and writes the context artifact. The caller must own the transition.
+- mode: ds-workorder/status
+  skill: ds-workorder/modes/status/SKILL.md
+  no_agent: Reads and prints work-order state. A CLI read, not a specialist question.
+- mode: quality/accessibility
+  skill: quality/modes/accessibility/SKILL.md
+  agent: accessibility-expert
+  installed_skill: ds-quality/modes/accessibility/SKILL.md
+  dispatched_because: 'isolation: the skill is 5174 bytes, enough that carrying it in a subagent protects
+    the caller''s context'
+  description: 'WCAG 2.2 Level AA audit and remediation for web interfaces. Covers automated tools (axe-core,
+    Lighthouse), keyboard audit, screen reader testing (NVDA, VoiceOver), visual audit, and a four-tier
+    remediation priority framework. Invoked via accessibility-expert subagent (Task... Invoke for: accessibility
+    audit, wcag check, a11y review, screen reader, keyboard navigation'
+- mode: quality/architecture
+  skill: quality/modes/architecture/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 2635 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: quality/audit
+  skill: quality/modes/audit/SKILL.md
+  no_agent: 'The router for the audit: fan-out. Its specialists are quality/code-quality, database, security,
+    testing and types-deps, each of which has its own agent.'
+- mode: quality/backend-api
+  skill: quality/modes/backend-api/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 2477 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: quality/coach
+  skill: quality/modes/coach/SKILL.md
+  no_agent: Classifies operator intent and routes it. Routing is the caller's job by definition.
+- mode: quality/code-quality
+  skill: quality/modes/code-quality/SKILL.md
+  agent: quality-code-quality
+  installed_skill: ds-quality/modes/code-quality/SKILL.md
+  dispatched_because: 'fan-out: several modes share a trigger, so one operator word convenes them together'
+  description: 'Code quality enforcement — audits Python code for maintainability, correctness, and idiomatic
+    patterns against 22 rules from LIST-4 (code-writing-best-practices.md). Three-way boundary with ds-quality:security
+    and ds-quality:database; uses shared trust_boundary_detection.py... Invoke for: audit:, code-quality
+    audit:, cq audit:, check code quality:, build:code-quality'
+- mode: quality/database
+  skill: quality/modes/database/SKILL.md
+  agent: quality-database
+  installed_skill: ds-quality/modes/database/SKILL.md
+  dispatched_because: 'fan-out: several modes share a trigger, so one operator word convenes them together'
+  description: 'Database quality enforcement — audits schema design, query patterns, migration safety,
+    and backup strategy against 22 rules from LIST-3 (database best practices). Two modes: audit (codebase
+    scan with --changed/--full-repo/--sample scope) and build (static pre-generation... Invoke for: audit:,
+    database audit:, check schema:, check migrations:, db audit:, build:database'
+- mode: quality/database-compliance
+  skill: quality/modes/database-compliance/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 2370 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: quality/debug
+  skill: quality/modes/debug/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 4834 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: quality/frontend-ux
+  skill: quality/modes/frontend-ux/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 1716 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: quality/groom
+  skill: quality/modes/groom/SKILL.md
+  no_agent: Triages the lesson queue and opens pull requests against the repository.
+- mode: quality/harden
+  skill: quality/modes/harden/SKILL.md
+  agent: quality-harden
+  installed_skill: ds-quality/modes/harden/SKILL.md
+  dispatched_because: 'isolation: the skill is 9117 bytes, enough that carrying it in a subagent protects
+    the caller''s context'
+  description: Project hardening audit and fix — checks 20 best-practice items (Makefile, pyproject.toml,
+    UTC enforcement, Pydantic validation, SECURITY.md, CONTRIBUTING.md, test tooling, audit log, pre-commit,
+    etc.) and fills gaps from templates. Trigger on `/harden`, `/harden audit`,...
+- mode: quality/learn
+  skill: quality/modes/learn/SKILL.md
+  agent: quality-learn
+  installed_skill: ds-quality/modes/learn/SKILL.md
+  dispatched_because: 'isolation: the skill is 7675 bytes, enough that carrying it in a subagent protects
+    the caller''s context'
+  description: Capture and promote lessons from builds — record to raw_lessons DB, Director review via
+    lesson_queue, promote to memory / skill / agent updates. Trigger on `learn:`, `capture lesson:`, or
+    when something notably works or breaks.
+- mode: quality/ops
+  skill: quality/modes/ops/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 2862 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: quality/polish
+  skill: quality/modes/polish/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 4136 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: quality/pr-security-scan
+  skill: quality/modes/pr-security-scan/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 4195 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: quality/pre-launch
+  skill: quality/modes/pre-launch/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 2991 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: quality/security
+  skill: quality/modes/security/SKILL.md
+  agent: quality-security
+  installed_skill: ds-quality/modes/security/SKILL.md
+  dispatched_because: 'fan-out: several modes share a trigger, so one operator word convenes them together'
+  description: 'Build-time security enforcement — audits code against 22 security rules using static analysis
+    + LLM semantic pass. Two modes: audit (retrospective codebase scan with --changed/--full-repo/--sample
+    scope) and build (pre-generation static enforcement). Degrades gracefully when... Invoke for: audit:,
+    security audit:, check security:, check codebase security:, build:security, enforce security:'
+- mode: quality/structure-audit
+  skill: quality/modes/structure-audit/SKILL.md
+  agent: quality-structure-audit
+  installed_skill: ds-quality/modes/structure-audit/SKILL.md
+  dispatched_because: 'isolation: the skill is 5794 bytes, enough that carrying it in a subagent protects
+    the caller''s context'
+  description: No description
+- mode: quality/testing
+  skill: quality/modes/testing/SKILL.md
+  agent: quality-testing
+  installed_skill: ds-quality/modes/testing/SKILL.md
+  dispatched_because: 'fan-out: several modes share a trigger, so one operator word convenes them together'
+  description: 'Test quality enforcement — audits test files against 15 rules covering coverage existence
+    (via coverage.py), determinism, isolation, structure (AAA), assertion quality, naming, mocking location,
+    and CI gate presence. Two modes: audit (static + LLM semantic pass with... Invoke for: audit:, testing
+    audit:, check tests:, test audit:, build:testing, generate tests:'
+- mode: quality/types-deps
+  skill: quality/modes/types-deps/SKILL.md
+  agent: quality-types-deps
+  installed_skill: ds-quality/modes/types-deps/SKILL.md
+  dispatched_because: 'fan-out: several modes share a trigger, so one operator word convenes them together'
+  description: 'Type safety and dependency health audit. 8 rules: 4 type rules (pyright scope gap, Any
+    leakage, type:ignore hygiene, annotation coverage) + 4 dependency rules (CVE gate non-blocking, dev
+    lock absent, no license gate, circular imports). Project-agnostic — discovers the... Invoke for: audit:,
+    types audit:, deps audit:, dependency audit:, type safety:, annotation coverage:'
+- mode: security/binary-scan
+  skill: security/modes/binary-scan/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 2627 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: security/comply
+  skill: security/modes/comply/SKILL.md
+  no_agent: Maps existing findings onto a compliance framework for reporting.
+- mode: security/dashboard
+  skill: security/modes/dashboard/SKILL.md
+  no_agent: Renders collected findings for display. It formats what the scanners produced.
+- mode: security/dast
+  skill: security/modes/dast/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 2952 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: security/mitigate
+  skill: security/modes/mitigate/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 3539 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: security/netcompat
+  skill: security/modes/netcompat/SKILL.md
+  no_agent: Nothing dispatches it and the skill is 4197 bytes -- under the 5000-byte isolation threshold,
+    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+- mode: security/review
+  skill: security/modes/review/SKILL.md
+  agent: security-review
+  installed_skill: ds-security/modes/review/SKILL.md
+  dispatched_because: 'isolation: the skill is 6368 bytes, enough that carrying it in a subagent protects
+    the caller''s context'
+  description: Security Review — Code-Level Vulnerability Analysis
+- mode: security/scan
+  skill: security/modes/scan/SKILL.md
+  no_agent: Orchestrates the other security modes and assembles their findings; its specialists are those
+    modes.
+- mode: setup/jit
+  skill: setup/modes/jit/SKILL.md
+  no_agent: Installs missing components on demand during a session.
+- mode: setup/status
+  skill: setup/modes/status/SKILL.md
+  no_agent: Reports installation health. A read of local state, not a question about a domain.
+- mode: setup/wizard
+  skill: setup/modes/wizard/SKILL.md
+  no_agent: Installs and configures Dream Studio on the operator's machine.

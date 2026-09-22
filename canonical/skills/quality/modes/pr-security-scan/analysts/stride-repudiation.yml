@@ -1,6 +1,6 @@
 name: stride-repudiation-analyst
 tested: true
-perspective: "STRIDE: Repudiation — can a user or service deny performing an action? Audit logging, non-repudiation controls, log integrity, forensic capability."
+perspective: "STRIDE: Repudiation — can a user or service deny performing an action? Audit logging, non-repudiation controls, log integrity, forensic capability. Covers OWASP A09:2025 Security Logging and Alerting Failures — note the 2025 rename stresses alerting: logging with no alerting has minimal incident-detection value."
 weight: 0.8
 model: sonnet
 signal_scale:

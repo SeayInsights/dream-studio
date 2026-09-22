@@ -1,6 +1,6 @@
 name: injection-analyst
 tested: true
-perspective: "OWASP A03:2021 — Injection. SQL, command, LDAP, XSS, template injection, and NoSQL injection vectors in changed code."
+perspective: "OWASP A05:2025 — Injection. SQL, command, LDAP, XSS, template injection, and NoSQL injection vectors in changed code."
 weight: 1.5
 model: haiku
 signal_scale:

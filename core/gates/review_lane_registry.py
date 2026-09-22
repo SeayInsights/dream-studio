@@ -112,37 +112,44 @@ _ENFORCEMENT_KEYS = ("detector", "eval", "judgment")
 #: renders. Not the Falsifier: the ten archive tests COULD have gone red, and passed because
 #: the guard really does enforce its caps -- nothing was vacuous. Not the Interpreter: that
 #: seat covers only the middle of the three variants.
+#: D13 ADDED FIVE MERGED NAMES, 2026-09-22. A seat merge does not touch a lane -- its
+#: question, signature, precedent, measurement and enforcement stay exactly as written and
+#: only the holder changes -- but the holder is checked against this closed set, so a merge
+#: that forgets to name its result here is refused. That is the gate working: it caught
+#: this one on the first run after the collapse.
+#:
+#: The pre-merge names are kept. `RESEATED` in scripts/seat_lanes_data.py is frozen history
+#: and still carries lanes under the seats that found them, so removing a name here would
+#: refuse a record of what actually happened.
 _SEATS = frozenset(
     {
-        "Chair and verdict owner",
-        "Evidence referee",
-        "Reviewer's reviewer",
-        "Merge-order steward",
-        "Claim and closure auditor",
-        "Gate-integrity engineer",
-        "Test-integrity inquisitor",
+        "Access and reach",
+        "Gate and test integrity",
+        "Irreversible operations",
+        "Publication and provenance",
+        "The receiver's view",
+        "Agent and plugin runtime",
         "AuthZ and identity",
-        "Untrusted input and abuse limits",
+        "Boundary semantics",
+        "CLI and operator ergonomics",
+        "Chair and verdict owner",
+        "Claim integrity",
+        "Cloud IAM and IaC",
+        "Code quality and structure",
+        "Data and migration",
+        "Distributed state and concurrency",
+        "Docs, style, and attribution",
+        "Event-substrate custodian",
+        "Finding integrity",
+        "Gate-integrity engineer",
+        "GitOps and rollout safety",
+        "Interface conformance",
+        "Merge-order steward",
+        "Mission-domain consequence",
+        "Release and version model",
         "Secrets and data-at-rest",
         "Supply chain and provenance",
-        "Cloud IAM and IaC",
-        "GitOps and rollout safety",
-        "Release and version model",
-        "Distributed state and concurrency",
-        "Data and migration",
-        "Contract and protocol",
-        "Failure semantics",
-        "Observability and audit trail",
-        "Design-system conformance",
-        "Accessibility",
-        "Frontend behavior and payload",
-        "CLI and operator ergonomics",
-        "Agent and plugin runtime",
-        "Mission-domain consequence",
-        "Governance canon and board",
-        "Docs, style, and attribution",
-        "Code quality and structure",
-        "Event-substrate custodian",
+        "Test-integrity inquisitor",
     }
 )
 

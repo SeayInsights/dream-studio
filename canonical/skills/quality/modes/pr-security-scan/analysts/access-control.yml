@@ -1,6 +1,6 @@
 name: access-control-analyst
 tested: true
-perspective: "OWASP A01:2021 — Broken Access Control (ranked #1). Server-side authorization, IDOR, CORS, privilege escalation, directory traversal."
+perspective: "OWASP A01:2025 — Broken Access Control (ranked #1). Server-side authorization, IDOR, CORS, privilege escalation, directory traversal."
 weight: 1.5
 model: haiku
 signal_scale:

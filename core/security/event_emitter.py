@@ -6,7 +6,6 @@ ensuring consistent validation, persistence, and criticality handling.
 Note: emission flows through the spool pipeline, not direct to SQLite.
 """
 
-from uuid import uuid4
 import logging
 from typing import Any
 
@@ -96,43 +95,3 @@ def emit_scan_failed(scan_id: str, error: str, conn=None):
     emit_security_event(
         "scan.failed", {"scan_id": scan_id, "error": error}, severity="high", conn=conn
     )
-
-
-def emit_finding_detected(finding: "SecurityFinding", scan_context: dict, conn=None):
-    """Emit finding detected event with full payload.
-
-    Args:
-        finding: Full SecurityFinding object with all details
-        scan_context: Scanner metadata (scanner_name, scanner_version, duration_ms, scan_id)
-        conn: Ignored — retained for call-site compatibility
-    """
-    payload = {
-        "finding_id": getattr(finding, "finding_id", str(uuid4())),
-        "scan_id": scan_context.get("scan_id"),
-        "finding_type": finding.finding_type,
-        "severity": finding.severity,
-        "confidence": finding.confidence,
-        "title": finding.title,
-        "description": finding.description,
-        "file_path": redact_file_path(finding.file_path),
-        "line_start": finding.line_start,
-        "line_end": finding.line_end,
-        "column_start": getattr(finding, "column_start", None),
-        "column_end": getattr(finding, "column_end", None),
-        "code_retained": False,  # code_snippet dropped for ODP-9 compliance
-        "rule_id": finding.rule_id,
-        "rule_name": getattr(finding, "rule_name", finding.rule_id),
-        "cwe_id": finding.cwe_id,
-        "cve_id": finding.cve_id,
-        "cvss_score": getattr(finding, "cvss_score", None),
-        "remediation": finding.remediation,
-        "references": finding.reference_urls,
-        "finding_hash": finding.generate_hash(),
-        "fingerprint": finding.generate_hash(),
-        "scanner": scan_context.get("scanner_name"),
-        "scanner_version": scan_context.get("scanner_version"),
-        "scan_duration_ms": scan_context.get("duration_ms"),
-    }
-
-    event_severity = "high" if finding.severity.upper() in ["CRITICAL", "HIGH"] else "info"
-    emit_security_event("finding.detected", payload, severity=event_severity, conn=conn)

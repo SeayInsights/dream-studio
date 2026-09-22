@@ -36,6 +36,36 @@ staleness detection, export, and future sync/install flows. They do not become
 active adapter config merely by existing; active-surface refresh requires an
 explicit approved projection repair or install boundary.
 
+### The repo-root surfaces address a contributor, not an operator
+
+**They are not operator projections and must not carry operator instructions.**
+The distinction is who reads them:
+
+| surface | written by | read by | carries |
+|---|---|---|---|
+| `~/.claude/CLAUDE.md` + its `@AGENTS.md` | the installer, spliced between `AUTO-ROUTING` markers | anyone running Dream Studio | routing, work-order types, close gates |
+| repo-root `CLAUDE.md`, `AGENTS.md` | committed by hand / `agents_md.py` | an agent working **on** this repository | how to test, gate, and commit here |
+
+Nobody installing Dream Studio reads the repo-root files: the product ships from
+`dist/plugin`, which contains neither. So operator content placed there is a
+duplicate of the installer's projection when the product is installed, and a
+pointer at skills, an authority database and hooks that do not exist when it is
+not — while still being loaded automatically by every agent that opens the
+directory.
+
+That is not hypothetical. Both files carried the full routing table until
+2026-09-21; after an uninstall they survived because they are checked into git,
+and directed work at the removed runtime for hours. Neither carries the
+`AUTO-ROUTING` markers, so the installer cannot maintain them and `merge_claude_md`
+refuses them outright — a refusal its own docstring records as having been
+accidental before it was made a rule.
+
+`integrations/compiler/agents_md.py` therefore builds two files, not one:
+`build_agents_md` for the operator projection the installer ships, which keeps
+the routing table, and `build_repo_agents_md` for the committed contributor file,
+which does not. Collapsing them is what made trimming the repo copy strip routing
+out of every fresh install.
+
 Adapter scratch folders, app-created worktrees, local session histories, and
 runtime caches are not adapter projections. They must stay under user-local
 Dream Studio state or a checkout-local excluded path, and they must not pollute
@@ -295,3 +325,8 @@ Platform-hardening reinforces the shared-authority rule: adapters may produce ev
 <!-- Last reviewed 2026-07-15 — WO-SCHEMALEAN (migration 147): capability_route_records dropped — dead persist=False writer (record_capability_route removed; recommend_capability_route is now preview-only, persist path gone). Removed from REQUIRED_SHARED_INTELLIGENCE_TABLES. Adapter-projection boundary otherwise unchanged — adapter_authority_profiles remains the live authority; the recommendation preview is retained. -->
 
 <!-- Reviewed 2026-07-23 -- WO-FILESDB-P3 S4b (feat/planning-zero-disk-policy): the AGENTS.md / CLAUDE.md Output-Discipline Type-1 (repo-internal working state) flipped from the on-disk `<repo>/.planning/` location to the files.db docstore (`ds files write --category planning`), matching the S4a enforcement hook that now denies .planning disk writes. Generated from the compiler _ENFORCEMENT_BLOCK (claude_code.py) + agents_md.py. No adapter-projection boundary, topology, authority, or routing change -- adapter surfaces still project the same authority; only the working-state destination in the shared output-discipline changed. -->
+
+<!-- Last reviewed 2026-09-18 - skill-card contract: two fields added to the mode cards the adapter projections carry. write_posture (read-only | independent | hitl) records what a mode may do unattended rather than what it can reach, which capabilities_required cannot express -- a mode listing Bash is either running the test suite or deploying. lifecycle lets a mode be marked superseded without deleting it and breaking invocations that name it. Both project to adapters as card CONTENT; neither changes routing or authority, and the adapter-projection boundary is unchanged. The first gate run found 12 cards still describing themselves as domains modes after the website and fullstack sub-packs became their own packs.yaml entries -- stale in the field the generated routing table is built from. -->
+
+<!-- Last reviewed 2026-09-18 - lesson loop: AGENTS.md regenerated from packs.yaml (py -m integrations.compiler.agents_md --write) after the quality pack gained a `groom` mode, so the ds-quality routing row now carries its keywords. Adapter-projection boundary unchanged -- AGENTS.md stays a generated projection of packs.yaml plus canonical/skills, and no adapter gains authority. -->
+<!-- Last reviewed 2026-09-21 - feat/backlog-tier-0: the repo-root CLAUDE.md and AGENTS.md are now contributor surfaces and carry no operator content (routing table, ds CLI, SQLite authority, blocking hooks, merge-authorization rule all removed; 205->107 and 96->64 lines). No authority or projection-boundary change: the OPERATOR projection is untouched and still derives routing from packs.yaml + canonical, the installer still writes it between AUTO-ROUTING markers, and dist/plugin is byte-identical after the split. What changed is that agents_md.py now builds TWO files -- build_agents_md for the shipped projection, build_repo_agents_md for the committed one -- because they were one function, and trimming the committed copy silently stripped routing from every fresh install until the tests caught it. check_agents_md_fresh compares the committed file against the repo builder; comparing it to the operator projection would report a correct file stale. -->

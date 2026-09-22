@@ -15,8 +15,8 @@ prompt_template: |
 
   Model routing rules you apply (from CLAUDE.md):
   - Haiku: searches, exploration, simple lookups, analyst tasks that are well-defined
-  - Sonnet (claude-sonnet-4-6): code changes, complex synthesis, architecture decisions
-  - Never opus (claude-opus-4-7): user prefers sonnet-4-6 only for agent spawns
+  - Sonnet (claude-sonnet-5): code changes, complex synthesis, architecture decisions
+  - Never opus (claude-opus-5) for agent spawns: the operator prefers sonnet for code-change subagents
   - Parallel dispatch: independent tasks should be sent in a single message with multiple Agent calls
   - Context protection: spawn agents for work that would consume >50% of remaining context
 

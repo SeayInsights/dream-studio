@@ -6,10 +6,11 @@
 # "a lot of prose laid on top of each other as suggestions with no rules, evals, or really
 # any real test that doing anything they are supposed to."
 #
-# THE BENCH. 29 seats: the operator's 28-seat review bench, derived from real review
-# history with unit counts per theme, plus the Event-substrate custodian, which asks
-# whether a row survives being rebuilt from its own events -- a property of this substrate
-# with no equivalent on the bench.
+# THE BENCH. 10 seats asking 26 lanes, derived from real review history with
+# unit counts per theme, including the Event-substrate custodian, which asks whether a row
+# survives being rebuilt from its own events -- a property of this substrate with no
+# equivalent on the bench. These two numbers are computed at render time: the header said
+# "29 seats" for as long as it took someone to notice the table rendered 22.
 #
 # EVERY LANE OWES a question, the signature of the defect, a precedent it actually came
 # from, the measurement that decided how it is answered, and exactly ONE of a runnable
@@ -29,7 +30,7 @@
 version: 2
 lanes:
   - id: the-other-half-enforced-by-nothing
-    seat: "Gate-integrity engineer"
+    seat: "Gate and test integrity"
     question: >-
       Two sites decide the same question. Does the second consult every predicate the first does,
       or a subset of them?
@@ -64,63 +65,8 @@ lanes:
       - "hooks/**"
       - "runtime/hooks/**"
     eval: tests/evals/test_review_lane_predicate_parity.py
-  - id: an-untested-fallback-lane
-    seat: "Test-integrity inquisitor"
-    question: >-
-      This fallback exists because the primary path can be unavailable. Does any test ever enter
-      it, or do they all take the primary path?
-    signature: >-
-      A platform or exception fallback whose tests all run the other branch — so the test that
-      validates the fix cannot run on the platform the fallback exists for.
-    precedent: >-
-      The Machinist, gw#858. `fallback_lock` / `_pending_queue_thread_lock` had zero test hits;
-      every ack test ran the flock path. The Windows lane the docstring promised was unexercised.
-    measurement: >-
-      Deterministic and diff-scoped. Measured 10 candidates across 944 product files with
-      name-and-handler detection alone; 14 once an audit forced the detector to also see
-      PLATFORM-CONDITIONAL fallbacks, which it had been blind to — and gw#858 was a Windows lane,
-      so the detector could not see the shape of its own precedent. Diff-scoped because those 10
-      stand today: whole-tree would be a wall on day one, and the backlog drains as those files
-      are touched — the ratchet `normative-baseline` and `workflow-node-verification` already use.
-    standards:
-      - "ISO/IEC/IEEE 29119-4 test techniques"
-    defers:
-      - "whether any test actually ENTERS the fallback branch -- any textual mention of the symbol anywhere under tests/, a comment included, clears it, so this proves a name is known to the tests rather than exercised by them"
-      - "a platform dispatch written as a dict keyed on platform.system(), which has no `if` node to find, and a platform predicate behind an abstracted name"
-      - "fallbacks in files outside this change set -- the lane is diff-scoped, so the standing backlog drains only as those files are touched"
-    detector: py -m core.gates.untested_fallback
-  - id: a-per-item-wait-with-no-aggregate-deadline
-    seat: "Distributed state and concurrency"
-    question: >-
-      This wait is bounded per item. How many items can there be, and does anything bound the
-      total?
-    signature: >-
-      A module that already solved unbounded stall for one loop grows a per-item retry in another,
-      with no aggregate deadline — so the ceiling multiplies by a data-dependent count and passes
-      the timeout the module itself cites.
-    precedent: >-
-      The Machinist, gw#849 — the strongest finding of the pass. The module's own comment 40 lines
-      above the new code says a per-slug ceiling times an agent's skill count is loop stall time,
-      and set `_LOCK_BATCH_BUDGET_S = 5.0` for exactly that reason. The new per-card retry was 2
-      sleeps x 0.5s inside `for sid in ids:` with no aggregate deadline: ~20s at 20 equipped
-      skills, plus the equip retry's own 1.0s, scaling linearly past the 30s timeout the operator
-      control surface uses.
-    measurement: >-
-      Deterministic ONLY once sharpened to the multiplication shape, and the sharpening came from
-      a false positive. The first cut — a sleep in a loop, in a module that defines a budget
-      constant — found 1 candidate, `core/work_orders/artifacts.py:216`, and reading it showed
-      `_LOCK_ATTEMPTS = 4` with a 0.15s backoff: 0.90s worst case, not inside any outer per-item
-      loop. Bounded, and not the finding. Requiring NESTING — a sleeping loop inside another loop,
-      neither consulting a deadline — drops DS's tree to 0, so this one runs whole-tree rather
-      than diff-scoped.
-    standards:
-      - "CWE-362 race condition"
-      - "CWE-367 time-of-check time-of-use"
-    defers:
-      - "multiplication through a CALL -- a loop whose helper sleeps in its own loop is the same defect and needs a call graph to see"
-    detector: py -m core.gates.aggregate_deadline
   - id: a-contract-that-names-one-of-two-mechanisms
-    seat: "Contract and protocol"
+    seat: "Claim integrity"
     question: >-
       The code says mechanisms X and Y make this claim true. Does the contract document name both,
       or only the one that was there first?
@@ -157,29 +103,8 @@ lanes:
       mechanisms citing each one, and assert the ADR names them; with zero ADRs it would pass
       vacuously, which is worse than an honest declaration. Convert this lane the moment the first
       real ADR lands.
-  - id: a-branch-behind-its-base
-    seat: "Merge-order steward"
-    question: >-
-      How far behind its base is this branch, and did anyone ask it to sync?
-    signature: >-
-      A PR that trial-merges clean while being far enough behind that the review read a tree
-      nobody will ship.
-    precedent: >-
-      The Surveyor. In the pasted pass plat#812 and #814 were 38 commits behind and gw#849 and
-      #858 were 5 behind; all four trial-merged clean, and the Herald asked #812 to sync
-      explicitly. Clean trial-merge is not currency.
-    measurement: >-
-      Trivially deterministic — `git rev-list --count HEAD..origin/main` — and currently PROSE:
-      CLAUDE.md says "Never push to stale/old branches — check branch freshness first", enforced
-      by nothing. ADVISORY rather than blocking, because a deliberately behind branch is
-      legitimate (a revert, a hotfix off a tag) and blocking it would be a wall; the lane's job is
-      that nobody reviews a stale tree without knowing it.
-    defers:
-      - "whether anyone ASKED this branch to sync, which lives in review comments on the pull request and not in the tree"
-      - "whether being behind is a problem here -- a revert off a tag or a hotfix from a release point is legitimately behind, which is why this lane is advisory"
-    detector: py -m core.gates.branch_freshness
   - id: an-unenumerated-behaviour-change
-    seat: "Claim and closure auditor"
+    seat: "Claim integrity"
     question: >-
       What does a caller see differently after this change, and does the change say so?
     signature: >-
@@ -189,19 +114,21 @@ lanes:
       The Herald, gw#858. A second ack now raises instead of returning 200, and the consumer is
       the local UI. The change was real, the body did not name it.
     measurement: >-
-      A SIBLING OF AN EXISTING GATE, not a new one. `evidence-backed-output` already audits what a
-      push publishes — the commit messages of the commits being pushed and the lines added to
-      CHANGELOG.md — so the mechanism for "the outbound document must say it" exists. What is
-      missing is the diff side: recognising that a 200 became a raise. That half is graded for now
-      because "what a caller sees differently" is not decidable from a textual diff in general,
-      and the honest move is to extend the existing gate rather than stand up a second one that
-      audits the same documents.
+      THE HOST GATE IS GONE. This lane was written as a sibling of `evidence-backed-output`, which
+      audited what a push publishes — the commit messages being pushed and the lines added to
+      CHANGELOG.md. That gate was deleted in 67ba10e8 during the gate cull, and nothing replaced
+      it, so the mechanism for "the outbound document must say it" no longer exists and this lane
+      has nothing to extend. Registered here so the gap is visible rather than inferred from a
+      phantom reference. What is missing is the diff side: recognising that a 200 became a raise.
+      That half is graded for now because "what a caller sees differently" is not decidable from a
+      textual diff in general, and the honest move is to extend the existing gate rather than
+      stand up a second one that audits the same documents.
     standards:
       - "Conventional Commits 1.0.0"
       - "Keep a Changelog 1.1.0"
     eval: tests/evals/test_review_lane_behaviour_change_enumerated.py
   - id: a-produced-value-with-no-reader
-    seat: "Observability and audit trail"
+    seat: "Boundary semantics"
     question: >-
       A value is produced and honestly computed. Does anything actually read it, and when nothing
       does, what does the default say in its place?
@@ -232,13 +159,13 @@ lanes:
       -- a React view reading a Python-shaped hook -- so a detector would fire 588 times and still
       miss the instance that created the lane. Graded against a fixture instead.
     standards:
-      - "OWASP ASVS v4.0 V7 Error Handling and Logging"
-      - "OWASP Top 10 A09:2021 Security Logging and Monitoring Failures"
+      - "OWASP ASVS v5.0.0 V16 Security Logging and Error Handling"
+      - "OWASP Top 10 A09:2025 Security Logging and Alerting Failures"
       - "NIST SP 800-92 log management"
       - "OpenTelemetry semantic conventions"
     eval: tests/evals/test_review_lane_value_reaches_a_reader.py
   - id: a-status-the-far-end-does-not-handle
-    seat: "Failure semantics"
+    seat: "Boundary semantics"
     question: >-
       The producer's vocabulary has more members than the consumer has branches. What does the
       consumer render for the member it does not know?
@@ -272,7 +199,7 @@ lanes:
       - "Saltzer and Schroeder fail-safe defaults"
     eval: tests/evals/test_review_lane_status_survives_translation.py
   - id: a-test-that-cannot-fail
-    seat: "Test-integrity inquisitor"
+    seat: "Gate and test integrity"
     question: >-
       This test is green. Show me it going red — what does it look like when the thing it guards
       is broken?
@@ -308,47 +235,8 @@ lanes:
     standards:
       - "ISO/IEC/IEEE 29119-4 test techniques"
     eval: tests/evals/test_review_lane_a_test_that_cannot_fail.py
-  - id: a-write-no-event-can-reconstruct
-    seat: "Event-substrate custodian"
-    question: >-
-      If this record were rebuilt from its events tomorrow, would it still be here?
-    signature: >-
-      A row written straight into a projection table, with no canonical event beside it. Nothing
-      fails and the row reads as durable, because the projection is a real table and the write
-      really happened -- but `pre_rebuild` truncates that table before replaying events, so a
-      replay cannot reconstruct what no event describes. Often arrives by copying a sibling write
-      site rather than the designated writer.
-    precedent: >-
-      The Custodian, WO 17466550, measured 2026-09-10: 493 of 949 work orders and 1706 of 3286
-      tasks in the live authority carry no creation event, so a rebuild deletes 52% of both -- and
-      a rebuild is the disaster-recovery tool, so the defect bites hardest exactly when it is
-      reached for. Verified by resolution rather than by reading the comment that asserts it:
-      `pre_rebuild` is absent from both projections' `__dict__` and both bind to
-      `framework_projection.py`, whose default does `DELETE FROM` each declared target. The source
-      was one unfixed sibling -- `_insert_gap_work_orders` writes both tables with no event, while
-      `_attach_gap_tasks` was fixed and carries a comment saying its author "copied the shape of
-      the sibling-spawn INSERT instead of the task-creation path in mutations.py", naming this
-      exact function as the wrong shape and never returning to it. Related: WO a08206a9, where
-      ownership records SHAs that squash-merge discarded (10 of 35 on one work order), and WO
-      6935afa5, where a drain writes status with no event.
-    measurement: >-
-      A DETECTOR, AND THE COUNT IS WHY. The target tables are DERIVED from each projection's own
-      `target_tables` declaration -- the set `pre_rebuild` truncates, so the actual blast radius
-      -- which measures 6 tables rather than the 2 this defect was found in; a hardcoded list
-      would have exempted the other 4, the same subset-of-what-it-writes shape as WO b56cca8a.
-      Across the tree, 214 functions INSERT into one of those tables and 211 emit no event, but
-      only 4 are outside `tests/`: a fixture building rows directly is what a fixture IS, so tests
-      are out of scope. Of the 4, three are `prove`'s DISPOSABLE scratch authority (declared at
-      the site, since emitting there would write the operator's live spool -- the defect WO
-      8bd297f1 fixed, 4194 connections measured) and one is the genuine finding. So the gate
-      reports exactly 1, which is small enough to hold at zero. ADVISORY until WO 17466550 fixes
-      that write, because a blocking gate that ships red teaches people to bypass it.
-    defers:
-      - "a bare UPDATE that changes a projected row's state: the scan matches `INSERT INTO` and `INSERT OR REPLACE INTO` only, registered as WO 4fbe3282"
-      - "whether replaying the emitted event actually REPRODUCES the row -- the lane proves an event is emitted beside the write, not that its payload rebuilds it"
-    detector: py -m core.gates.event_backed_write
   - id: a-channel-outside-the-accounting
-    seat: "Untrusted input and abuse limits"
+    seat: "Boundary semantics"
     question: >-
       What is the full capability surface of the thing being guarded, independent of what the
       guard says about itself?
@@ -390,8 +278,8 @@ lanes:
       surface of a library is documented in the library, and no static read of this repo can
       enumerate what `tarfile` does with bytes it never yields.
     standards:
-      - "OWASP ASVS v4.0 V5 Validation, Sanitization and Encoding"
-      - "OWASP Top 10 A03:2021 Injection"
+      - "OWASP ASVS v5.0.0 V1 Encoding and Sanitization + V2 Validation and Business Logic"
+      - "OWASP Top 10 A05:2025 Injection"
       - "CWE-22 path traversal"
       - "CWE-409 decompression bomb"
     eval: tests/evals/test_review_lane_the_surface_outside_the_rules.py
@@ -417,7 +305,7 @@ lanes:
       seats have run, so nothing can be computed from the diff alone. It becomes an eval once
       convene() returns a finding set worth grading.
   - id: evidence-referee
-    seat: "Evidence referee"
+    seat: "Finding integrity"
     question: >-
       Which SHA and which command prove this claim, and does reverting the fix actually turn the
       check red?
@@ -437,7 +325,7 @@ lanes:
       no field to check. It becomes an eval the moment a verdict records the command that proves
       each finding -- which is this seat's own first deliverable.
   - id: reviewer-s-reviewer
-    seat: "Reviewer's reviewer"
+    seat: "Finding integrity"
     question: >-
       Does every finding still hold against current HEAD, and which ones should be withdrawn?
     signature: >-
@@ -457,7 +345,7 @@ lanes:
       at diff time. It becomes an eval once a verdict carries per-finding reproductions that can
       be replayed at HEAD.
   - id: authz-and-identity
-    seat: "AuthZ and identity"
+    seat: "Access and reach"
     question: >-
       Which principal is this, what may it do, and what happens to the sessions that already exist
       when that answer changes?
@@ -472,8 +360,8 @@ lanes:
       intersecting grants are correct or catastrophic depending on the principal, which no static
       scan of a changed file can decide.
     standards:
-      - "OWASP ASVS v4.0 V4 Access Control"
-      - "OWASP Top 10 A01:2021 Broken Access Control"
+      - "OWASP ASVS v5.0.0 V8 Authorization"
+      - "OWASP Top 10 A01:2025 Broken Access Control"
       - "NIST SP 800-63B session lifecycle"
     judgment: true
     why: >-
@@ -481,7 +369,7 @@ lanes:
       becomes a detector the day the permission derivation is expressed as data rather than as
       code paths.
   - id: secrets-and-data-at-rest
-    seat: "Secrets and data-at-rest"
+    seat: "Access and reach"
     question: >-
       Where does this secret come to rest, who can read it there, and what rotates it?
     signature: >-
@@ -495,7 +383,7 @@ lanes:
       this seat adds is scope and rotation, which are properties of the deployment rather than of
       the text.
     standards:
-      - "OWASP ASVS v4.0 V6 Stored Cryptography"
+      - "OWASP ASVS v5.0.0 V11 Cryptography"
       - "CWE-312 cleartext storage of sensitive information"
       - "NIST SP 800-57 key management"
     scope:
@@ -509,7 +397,7 @@ lanes:
       there is nothing local to compute against. The literal-secret half is already covered by the
       security-scan gate.
   - id: supply-chain-and-provenance
-    seat: "Supply chain and provenance"
+    seat: "Publication and provenance"
     question: >-
       What exactly is being installed and published here, and does the identity signing it match
       the identity that built it?
@@ -542,7 +430,7 @@ lanes:
       Requires resolving registry and workflow identities outside this repo. The pinning half
       could become a detector over lockfiles and action refs without waiting for the rest.
   - id: cloud-iam-and-iac
-    seat: "Cloud IAM and IaC"
+    seat: "Access and reach"
     question: >-
       Which external identity can assume this role, and what can it reach once it has?
     signature: >-
@@ -571,7 +459,7 @@ lanes:
       reports clean, which is the compared-nothing-reported-clean shape this registry exists to
       refuse.
   - id: gitops-and-rollout-safety
-    seat: "GitOps and rollout safety"
+    seat: "Irreversible operations"
     question: >-
       What is the blast radius when this reconciles automatically, and what does prune remove that
       nobody listed?
@@ -598,7 +486,7 @@ lanes:
       Needs cluster state to compute what a prune would remove. Dream Studio ships no GitOps
       manifests today, so this seat is registered for projects that do rather than for this one.
   - id: release-and-version-model
-    seat: "Release and version model"
+    seat: "Publication and provenance"
     question: >-
       Does the version this produces mean what the ecosystem consuming it thinks it means?
     signature: >-
@@ -625,7 +513,7 @@ lanes:
       The format rules differ per target ecosystem and this repo publishes to none of them yet.
       The released-version sentinel is already guarded by its own migration gate.
   - id: data-and-migration
-    seat: "Data and migration"
+    seat: "Irreversible operations"
     question: >-
       Does this migration go forward and back, and does the schema still hold every invariant
       afterwards?
@@ -651,7 +539,7 @@ lanes:
       half. This seat exists so the semantic half -- does the row still mean what it meant -- has
       somewhere to be asked.
   - id: design-system-conformance
-    seat: "Design-system conformance"
+    seat: "Interface conformance"
     question: >-
       Does this component take the promotion path, and does the styling actually reach the
       browser?
@@ -676,7 +564,7 @@ lanes:
       Dream Studio ships no design system or frontend bundle, so a detector would examine zero
       sites. Registered for the projects the round table is called from, not for this one.
   - id: accessibility
-    seat: "Accessibility"
+    seat: "Interface conformance"
     question: >-
       Can this be operated without a mouse, and does every control have a name a screen reader
       will say?
@@ -704,7 +592,7 @@ lanes:
       No rendered markup in this repository to check. The thinness of the evidence -- one
       reviewer, one stack -- is the reason to register the seat rather than a reason to skip it.
   - id: frontend-behavior-and-payload
-    seat: "Frontend behavior and payload"
+    seat: "Interface conformance"
     question: >-
       Does this control do what it looks like it does, and what did it cost to download?
     signature: >-
@@ -730,7 +618,7 @@ lanes:
       No frontend in this repository. Registered so a project convening this table from its own
       tree is asked the question, which is the reason the table was made portable.
   - id: cli-and-operator-ergonomics
-    seat: "CLI and operator ergonomics"
+    seat: "The receiver's view"
     question: >-
       Can an operator run this from a clean box using only what the docs say?
     signature: >-
@@ -755,7 +643,7 @@ lanes:
       Comparing help text against actual default values needs a parse of both, which is buildable
       here and simply is not built. This is the strongest detector candidate on the bench.
   - id: agent-and-plugin-runtime
-    seat: "Agent and plugin runtime"
+    seat: "The receiver's view"
     question: >-
       What does this cap or namespace do to the model rather than to the operator?
     signature: >-
@@ -780,7 +668,7 @@ lanes:
       is a model. Registered because Dream Studio is an agent runtime and this is its own failure
       surface.
   - id: mission-domain-consequence
-    seat: "Mission-domain consequence"
+    seat: "The receiver's view"
     question: >-
       Weighted by mission effect rather than code severity, what is the worst thing this change
       permits?
@@ -807,7 +695,7 @@ lanes:
       be computed from the change. It is the one seat where a human re-weighting the others is the
       mechanism.
   - id: governance-canon-and-board
-    seat: "Governance canon and board"
+    seat: "Claim integrity"
     question: >-
       Does this contradict another document that is also in force?
     signature: >-
@@ -830,7 +718,7 @@ lanes:
       mechanical half -- ADR numbering and immutability -- is already covered by existing docs
       gates.
   - id: docs-style-and-attribution
-    seat: "Docs, style, and attribution"
+    seat: "The receiver's view"
     question: >-
       Does anything shipping here carry a name, a path, or a trailer that should not leave this
       machine?
@@ -844,7 +732,13 @@ lanes:
     measurement: >-
       Every one of these is mechanically checkable and Dream Studio already gates most of them --
       operator_absolute_path, docs-drift and the atlas-leak gate -- so the detector here is
-      aggregation rather than new detection.
+      aggregation rather than new detection. Built as exactly that: the private-content half CALLS
+      core.release.repo_publication_readiness, which owns PRIVATE_CONTENT_RULES, rather than
+      carrying a second regex for the same rule -- the duplicate-rule shape the code-quality lane
+      exists to refuse. Only the attribution check is new, because nothing else owned it: five
+      Co-Authored-By trailers were removed from main by hand and nothing prevented the sixth. A
+      first cut also asserted SECURITY.md section headings and failed this repo's own perfectly
+      good SECURITY.md, so that clause is deferred rather than guessed at.
     standards:
       - "Diataxis documentation framework"
       - "Keep a Changelog 1.1.0"
@@ -853,12 +747,13 @@ lanes:
       - "docs/**"
       - "*.md"
       - "**/*.md"
-    judgment: true
-    why: >-
-      The constituent checks exist as separate gates already; what is missing is one lane that
-      names them as a family so a new member is added here rather than invented somewhere else.
+    defers:
+      - "an entry-point link that 404s -- a seat is handed git, grep and pytest, so a network fetch is outside what it can answer from a worktree"
+      - "a required section missing from SECURITY.md -- required by whom? Nothing here declares a section list, and a first cut that assumed GitHub's template failed this repo's own SECURITY.md, which has Reporting a Vulnerability and Scope and is fine. Convert this clause when a list is declared somewhere"
+      - "the private-content half when convened against a project that does not vendor core.release.repo_publication_readiness -- the gate reports that it did not run rather than reporting clean"
+    detector: py -m core.gates.shipped_artifact_hygiene
   - id: code-quality-and-structure
-    seat: "Code quality and structure"
+    seat: "Gate and test integrity"
     question: >-
       Is this reachable, is it duplicated, and does it sit on the right side of a module boundary?
     signature: >-

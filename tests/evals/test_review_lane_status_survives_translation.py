@@ -48,7 +48,27 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 LANE_ID = "a-status-the-far-end-does-not-handle"
-SEAT = "Failure semantics"
+
+
+def _merged(seat: str) -> str:
+    """The name the registry emits for a declared seat, after SEAT_MERGES."""
+    import sys
+    from pathlib import Path as _P
+
+    scripts = str(_P(__file__).resolve().parents[2] / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    from seat_lanes_data import SEAT_MERGES
+
+    return SEAT_MERGES.get(seat, seat)
+
+
+# The DECLARED seat. The registry emits the MERGED name, because SEAT_MERGES
+# collapsed eleven declared seats into the bench of 22 -- so pinning the raw
+# string here broke the moment the merge landed, and this eval sat red on main
+# because the generated registry was stale and hid it. Resolving the merge keeps
+# the eval saying which seat owns the question while tolerating the collapse.
+DECLARED_SEAT = "Failure semantics"
 
 #: THE PRODUCER's full vocabulary. `not_applicable` is emitted today, not hypothetically.
 PRODUCER = """
@@ -160,7 +180,7 @@ def test_the_fallback_means_something_else_rather_than_failing():
 
 def test_the_lane_is_registered_and_is_not_the_sibling_lane():
     lane = _lane()
-    assert lane["seat"] == SEAT, lane["seat"]
+    assert lane["seat"] == _merged(DECLARED_SEAT), lane["seat"]
     assert lane["eval"] == "tests/evals/" + Path(__file__).name
     # `.strip()` because a YAML `>` folded scalar keeps a trailing newline. The
     # question still has to END in one, which is the actual contract -- a lane whose

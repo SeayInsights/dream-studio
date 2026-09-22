@@ -70,6 +70,27 @@ def main() -> None:
     except Exception:
         pass
 
+    # Carry the mode's declared write_posture into session state. This hook already has
+    # the SKILL.md in hand, so it reads the card here and no later hook has to resolve a
+    # card path at edit time. Best-effort: a card without a posture records nothing.
+    try:
+        import yaml as _yaml
+        from runtime.lib import enforcement as _enforcement
+
+        _fm = re.match(
+            r"^---\s*\n(.*?)\n---\s*\n", Path(file_path).read_text(encoding="utf-8-sig"), re.S
+        )
+        if _fm:
+            _card = (_yaml.safe_load(_fm.group(1)) or {}).get("dream_studio")
+            if isinstance(_card, dict) and _card.get("write_posture"):
+                _enforcement.record_skill_posture(
+                    os.environ.get("CLAUDE_SESSION_ID", ""),
+                    f"{_card.get('pack')}:{_card.get('mode')}",
+                    str(_card["write_posture"]),
+                )
+    except Exception:
+        pass
+
     try:
         director = config_state.read_config().get("director_name")
     except Exception:

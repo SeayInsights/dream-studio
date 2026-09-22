@@ -68,12 +68,14 @@ patterns:
       .muted { color: #767676; background: #ffffff; }
 
   - id: touch-target-size
-    title: Touch target minimum 44x44px
+    title: Touch target minimum 24x24px (AA), 44x44px (AAA)
     description: >
-      Interactive elements on touch devices must have a minimum tap target of 44x44 CSS
-      pixels per WCAG 2.2 SC 2.5.8. Use padding to enlarge small icons without changing
-      their visual size. Spacing between adjacent targets can substitute for larger
-      individual targets (WCAG 2.2 allows 24x24 with at least 24px offset).
+      WCAG 2.2 SC 2.5.8 Target Size (Minimum), Level AA, requires 24x24 CSS pixels, and
+      exempts undersized targets whose 24px-diameter circles do not intersect another
+      target's. 44x44 is SC 2.5.5 Target Size (Enhanced), Level AAA, and is also the iOS
+      44pt convention — a good design target, but reporting a 30px control as an AA
+      failure is wrong. Use padding to enlarge small icons without changing their
+      visual size.
     example: |
       /* Icon button: visually 24px, touch target 44px via padding */
       .icon-btn {

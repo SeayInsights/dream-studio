@@ -33,6 +33,47 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         help="Attach the new project to this client id (default: the SeayInsights client)",
     )
 
+    project_onboard = project_sub.add_parser(
+        "onboard",
+        help="Register an external project AND give it an adapter surface, in one step",
+    )
+    project_onboard.add_argument(
+        "path", metavar="DIR", help="Path to the project directory (an existing checkout)"
+    )
+    project_onboard.add_argument(
+        "--name", default=None, help="Project name (default: the directory's own name)"
+    )
+    project_onboard.add_argument(
+        "--description",
+        required=True,
+        help=(
+            "What this project is for. Required at this door because a project is the top"
+            " of the same prompt chain its milestones, work orders and tasks sit in. No"
+            " length floor, unlike those three: nine projects is too thin a corpus to"
+            " derive one from, and one legitimate caller (brownfield intake) generates a"
+            " short description on purpose."
+        ),
+    )
+    project_onboard.add_argument(
+        "--client", default=None, dest="client_id", help="Attach to this client id"
+    )
+    project_onboard.add_argument(
+        "--plan",
+        action="store_true",
+        default=False,
+        help="Show what would be written and change nothing -- not the repo, not the authority",
+    )
+    project_onboard.add_argument(
+        "--git-hook",
+        action="store_true",
+        default=False,
+        help=(
+            "Also install the pre-push gate into <DIR>/.git/hooks/pre-push. OFF by default:"
+            " a hook in somebody else's repository runs on every push they make, which is a"
+            " thing to opt into rather than to discover."
+        ),
+    )
+
     project_list = project_sub.add_parser("list", help="List registered projects")
     project_list.add_argument(
         "--status", default="active", help="Filter by status (default: active)"
@@ -67,6 +108,15 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         "next", help="Return the first open work order for a project"
     )
     project_next_cmd.add_argument("project_id", help="Project UUID")
+
+    project_standards_cmd = project_sub.add_parser(
+        "standards", help="Show the verification standards a project declares for itself"
+    )
+    project_standards_cmd.add_argument(
+        "--repo",
+        default=None,
+        help="The project tree to read (default: the current directory).",
+    )
 
     project_set_active = project_sub.add_parser(
         "set-active", help="Set the active project in the database"
@@ -162,6 +212,17 @@ def dispatch(
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )
+    if args.project_command == "onboard":
+        return _project_onboard(
+            path=Path(args.path),
+            name=args.name,
+            description=args.description,
+            client_id=getattr(args, "client_id", None),
+            plan_only=args.plan,
+            git_hook=args.git_hook,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
     if args.project_command == "list":
         return _project_list(
             status_filter=args.status,
@@ -210,6 +271,9 @@ def dispatch(
             dream_studio_home=dream_studio_home,
             planning_root=planning_root,
         )
+    if args.project_command == "standards":
+        return _project_standards(getattr(args, "repo", None))
+
     if args.project_command == "state":
         planning_root = Path(args.planning_root).resolve() if args.planning_root else None
         return _project_state(
@@ -282,6 +346,147 @@ def _project_fit_check(
     )
     print(json.dumps(result, indent=2))
     return 0 if result.get("ok") else 1
+
+
+def _project_onboard(
+    *,
+    path: Path,
+    name: str | None,
+    description: str,
+    client_id: str | None,
+    plan_only: bool,
+    git_hook: bool,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """Register an external project and give it an adapter surface, in one step.
+
+    BOTH HALVES WERE ALREADY BUILT AND NEVER JOINED. `ds project register` writes the
+    authority row and the `.dream-studio-project` marker. `ds integrate install` writes
+    the adapter surface -- but only into the directory it is run from or the operator's
+    home, because `detect_claude_code` derives the config root from the working directory
+    and nothing let a caller name a different one.
+
+    So a project could be registered, carry work orders, and have nothing on disk telling
+    an agent working inside it that Dream Studio exists. Measured: Dream Command had 14
+    work orders in the authority and no adapter surface in its checkout.
+
+    Neither half is reimplemented here. This resolves the target, calls both, and reports
+    what each did -- including when the second fails after the first succeeded, because a
+    half-onboarded project that reports success is worse than one that reports the truth.
+    """
+    from integrations.detector import detect_claude_code
+    from integrations.installer.claude_code import ClaudeCodeInstaller
+    from integrations.manifest import get_ds_home
+
+    from core.projects.mutations import register_project
+
+    target = Path(path).expanduser().resolve()
+    if not target.is_dir():
+        # REFUSED BEFORE ANYTHING IS WRITTEN. A typo here would otherwise register a
+        # project whose path points at nothing, and the CWD resolver would then attribute
+        # none of its work -- a failure that surfaces much later as missing telemetry.
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": f"Not a directory: {target}",
+                    "remedy": "onboard an existing checkout",
+                },
+                indent=2,
+            )
+        )
+        return 1
+
+    detected = detect_claude_code(working_dir=target, scope_override="project")
+    installer = ClaudeCodeInstaller(
+        detected.config_root,
+        "project",
+        canonical_root=source_root / "canonical",
+        ds_home=dream_studio_home or get_ds_home(),
+        git_repo_root=(target if git_hook else None),
+    )
+
+    if plan_only:
+        # A PLAN CHANGES NOTHING, AND THAT INCLUDES THE AUTHORITY. Registering the project
+        # and only pretending about the files would be the worse half of a dry run: the
+        # part that is hard to undo done, the part you can see not done.
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "mode": "plan",
+                    "project_path": str(target),
+                    "config_root": str(detected.config_root),
+                    "would_register": {"name": name or target.name, "description": description},
+                    "git_hook": git_hook,
+                    "plan": installer.plan().summary(),
+                },
+                indent=2,
+                default=str,
+            )
+        )
+        return 0
+
+    # Registration first, and it is idempotent by path -- re-onboarding a project already
+    # in the authority returns the existing row rather than a duplicate, which is what
+    # makes this usable on the projects that have the row and not the surface.
+    registered = register_project(
+        name=name or target.name,
+        description=description,
+        project_path=target,
+        client_id=client_id,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    if not registered.get("ok"):
+        print(json.dumps({"ok": False, "stage": "register", **registered}, indent=2))
+        return 1
+
+    try:
+        installed = installer.install("execute")
+    except Exception as exc:  # noqa: BLE001 - the partial state is the thing to report
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "stage": "install",
+                    "error": str(exc),
+                    "project_id": registered["project_id"],
+                    "registered": True,
+                    "config_root": str(detected.config_root),
+                    "remedy": (
+                        "the project IS registered; re-run `ds project onboard` to retry the"
+                        " adapter surface, or `ds integrate install claude_code --scope"
+                        f" project` from {target}"
+                    ),
+                },
+                indent=2,
+            )
+        )
+        return 1
+
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "project_id": registered["project_id"],
+                "name": registered["name"],
+                "project_path": str(target),
+                "marker_written": registered.get("marker_written"),
+                "config_root": str(detected.config_root),
+                "git_hook": git_hook,
+                "install": installed,
+                "hint": (
+                    "To make this the active project, run:"
+                    f" ds project set-active {registered['project_id']}"
+                ),
+            },
+            indent=2,
+            default=str,
+        )
+    )
+    return 0
 
 
 def _project_list(
@@ -652,3 +857,45 @@ def _render_state_briefing(result: dict) -> str:
         out.append(f"bypasses (7d): {bypass['last_7d_total']}")
 
     return "\n".join(out).rstrip()
+
+
+def _project_standards(repo: str | None) -> int:
+    """Print the resolved standards profile for a tree.
+
+    An absent profile is an ANSWER, not an error: it means pytest, which is what every
+    project got before profiles existed. Printing it that way is the point -- an operator
+    debugging a refused check needs to see which of the three states they are in without
+    reading the module.
+    """
+    from pathlib import Path as _Path
+
+    from core.projects.standards import declared_test_profile, is_pytest, standards_path
+
+    root = _Path(repo).resolve() if repo else _Path.cwd()
+    path = standards_path(root)
+    profile = declared_test_profile(root)
+
+    print(f"project: {root}")
+    print(f"profile: {path}{'' if path and path.is_file() else '  (absent)'}")
+
+    command = profile.get("command")
+    if not command:
+        print("tests:   pytest (declared nothing, so the default applies)")
+        return 0
+
+    print(f"tests:   {command}")
+    if is_pytest(command):
+        print("         recognised as pytest, so a bare TEST-CHECK node id runs as usual")
+        return 0
+
+    with_target = profile.get("with_target")
+    if with_target:
+        print(f"one test: {with_target}")
+        return 0
+
+    print(
+        "one test: NOT DECLARED -- a bare TEST-CHECK node id is refused here, because"
+        " Dream Studio cannot guess how this runner takes one test. Write the check as"
+        " `TEST-CHECK: cmd: <command>`, or add a `with_target` line."
+    )
+    return 0

@@ -580,20 +580,17 @@ def _work_order_add_task(
     # THE DECLARATION IS PERSISTED, not printed and discarded. Found by the
     # task-criteria-baseline ratchet reporting `0 declared` while a task admitted on a
     # declared reason sat in the authority: the reason reached stdout and nothing else, so
-    # `--why` was a bare bypass with a nicer spelling. Composed into the description with a
-    # stable marker, as `compose_module_boundary` already does for the boundary clause --
-    # the marker the ratchet reads is the marker written here, in one place.
-    from core.work_orders.admission import compose_declared_reason
-
-    if not acceptance_criteria:
-        description = compose_declared_reason(description, why)
-
+    # `--why` was a bare bypass with a nicer spelling. The composing now happens inside
+    # `create_task`, which is where EVERY author arrives -- this door used to compose it
+    # and the mutation did not, so a skill importing the mutation got neither the floor
+    # nor the marker. Passed down rather than applied here, one composer, one caller.
     result = create_task(
         work_order_id=work_order_id,
         project_id=project_id,
         title=title,
         description=description,
         acceptance_criteria=acceptance_criteria,
+        why=why,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )

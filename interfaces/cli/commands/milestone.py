@@ -30,7 +30,16 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
     )
     ms_create.add_argument("project_id", help="Project UUID")
     ms_create.add_argument("--title", required=True, help="Milestone title")
-    ms_create.add_argument("--description", default="", help="What this milestone delivers")
+    ms_create.add_argument(
+        "--description",
+        required=True,
+        help=(
+            "The PROMPT the work orders under this milestone answer to: what it is"
+            " for and what it delivers. Required, because a milestone with only a"
+            " title gives every work order beneath it nothing to derive its own goal"
+            " from."
+        ),
+    )
     ms_create.add_argument(
         "--order", type=int, default=0, dest="order_index", help="Sequence hint (advisory)"
     )

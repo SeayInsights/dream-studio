@@ -71,12 +71,22 @@ def test_a_comma_separated_string_works_too() -> None:
 def test_a_boundary_the_parser_would_discard_is_not_stored() -> None:
     """Refuse to store something that would look declared and match nothing.
 
-    ``boundary_globs`` keeps only parts containing ``/`` or ``.``. Storing a clause it
-    discards is worse than storing none: the work order then appears to declare a boundary
-    while matching no path, which is the silent-wrong-answer shape this repo keeps finding.
+    Storing a clause the parser discards is worse than storing none: the work order then
+    appears to declare a boundary while matching no path, which is the silent-wrong-answer
+    shape this repo keeps finding.
+
+    THE EXAMPLE CHANGED, THE CONTRACT DID NOT. This case used to pass ``nonsense`` and
+    ``alsobad``, on the rule that an entry needs ``/`` or ``.``. That rule also discarded
+    ``docs``, ``schemas``, ``config``, ``tests`` and ``dist`` -- a live work order declared
+    15 paths and was stored owning 12 -- so a bare directory name is now kept, and a
+    one-word entry is no longer distinguishable from a real directory by text alone.
+    Checking a bare name against the filesystem was considered and rejected: a work order
+    routinely declares a path it is about to CREATE, and dropping those would reintroduce
+    the same silent narrowing from the other side. What remains genuinely unparseable is
+    prose, which is what this now passes.
     """
     parser = _real_parser()
-    described = compose_module_boundary("x", ["nonsense", "alsobad"])
+    described = compose_module_boundary("x", ["the runner must be sole writer", "CI IS RED"])
 
     assert described == "x", "an unparseable boundary must not be written into the description"
     assert parser.boundary_globs(described) == []

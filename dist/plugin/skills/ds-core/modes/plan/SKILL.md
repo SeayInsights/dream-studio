@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Write, Bash]
   model_preference: sonnet
   estimated_duration: 15-45min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # Plan — Break Spec Into Steps

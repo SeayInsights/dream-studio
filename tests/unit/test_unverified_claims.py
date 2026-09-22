@@ -185,7 +185,10 @@ def test_registration_is_never_blocked_by_an_unchecked_claim(db, tmp_path):
         project_id=pid,
         milestone_id=mid,
         title="T",
-        description="Nothing checks this. No gate covers it. It has no caller.",
+        description=(
+            "Nothing checks this. No gate covers it. It has no caller."
+            " Registered anyway, which is what this test is about."
+        ),
         work_order_type="infrastructure",
         source_root=tmp_path,
         dream_studio_home=tmp_path,
@@ -204,7 +207,10 @@ def test_a_task_description_is_audited_too(db, tmp_path):
         project_id=pid,
         milestone_id=mid,
         title="T",
-        description="See the measurement in the linked report.",
+        description=(
+            "See the measurement in the linked report, which is the unchecked"
+            " claim this fixture exists to carry."
+        ),
         work_order_type="infrastructure",
         source_root=tmp_path,
         dream_studio_home=tmp_path,
@@ -215,6 +221,7 @@ def test_a_task_description_is_audited_too(db, tmp_path):
         project_id=pid,
         title="T1",
         description="There is no reader for this value anywhere in the codebase.",
+        acceptance_criteria="TEST-CHECK: tests/unit/test_unverified_claims.py",
         source_root=tmp_path,
         dream_studio_home=tmp_path,
     )
@@ -245,3 +252,63 @@ def test_an_unquoted_claim_on_the_same_line_is_still_caught():
     assertion made in the author's own voice."""
     mixed = 'He said "hello" and nothing checks this today.'
     assert not audit_claims(mixed).passed
+
+
+# ---------------------------------------------------------------------------
+# A stated measurement is a claim of fact (E20)
+# ---------------------------------------------------------------------------
+
+
+def test_an_uncited_proportion_is_flagged():
+    """`_ABSENCE` catches "nothing does X"; this catches "457 of 1,387 do X" — the same
+    posture, confident about a property of the existing system, and just as cheap to
+    settle. Every example in the module's note was stated with confidence in this
+    repository and shaped later work before anyone re-derived it."""
+    report = audit_claims("457 of 1,387 TEST-CHECKs name something unrunnable.")
+    assert not report.passed
+    assert [c.kind for c in report.unverified] == ["quantity"]
+
+
+def test_a_cited_proportion_passes():
+    """The gate asks for the look, not for silence about numbers."""
+    text = "457 of 1,387 TEST-CHECKs are unrunnable (measured: `grep -c` -> 457 hits)."
+    assert audit_claims(text).passed
+
+
+def test_an_unsourced_percentage_is_flagged():
+    """Found in this repository's own CHANGELOG: "70% compatibility bug reduction", with
+    no source then or since."""
+    report = audit_claims("Version guards deliver 70% compatibility bug reduction")
+    assert not report.passed
+    assert report.unverified[0].kind == "quantity"
+
+
+def test_a_totality_is_a_claim_about_a_population():
+    report = audit_claims("Structured frontmatter added to all 41 mode SKILL.md files")
+    assert not report.passed
+
+
+def test_a_bare_count_of_what_the_change_did_is_not_a_claim():
+    """ "Adds 3 tests" is a description of the diff, not an assertion about a population
+    somebody had to go and count. A pattern that flagged it would be a wall."""
+    for text in ("Adds 3 tests and one gate.", "Two commits, one revert.", "Closes 4 tasks."):
+        assert audit_claims(text).passed, text
+
+
+def test_an_attributed_measurement_is_reporting_not_asserting():
+    """The same exemption absences already get: a correction table quoting a false number
+    must not be read as making the claim."""
+    assert audit_claims("I claimed 96 of 100 were broken; that was wrong.").passed
+
+
+def test_absence_and_quantity_are_distinguished():
+    """A reader fixes them differently: an absence needs the command that established it,
+    a measurement needs how it was counted."""
+    report = audit_claims("Nothing reads it.\n\n\n53% of tasks have no criterion.\n")
+    kinds = sorted(c.kind for c in report.unverified)
+    assert kinds == ["absence", "quantity"], kinds
+
+
+def test_the_report_names_the_kind():
+    report = audit_claims("9 of 17 gates have never fired.")
+    assert "[quantity]" in report.render()

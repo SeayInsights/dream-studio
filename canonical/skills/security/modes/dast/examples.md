@@ -41,7 +41,7 @@ Extract from user input:
 ### Step S1: Load Client Profile
 
 1. Read `~/.dream-studio/clients/{client}.yaml`.
-2. If file does not exist: **stop** with — "Client profile not found at `~/.dream-studio/clients/{client}.yaml`. Run `client-work:intake` to create it."
+2. If file does not exist: **stop** with — "Client profile not found at `~/.dream-studio/clients/{client}.yaml`. Run `power-platform:intake` to create it."
 3. Validate `targets.web_apps` is present and non-empty.
 4. If `targets.web_apps` is missing or empty: **stop** with — "No web app targets defined in profile. Add `targets.web_apps` entries to enable DAST scanning."
 

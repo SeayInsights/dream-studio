@@ -7,7 +7,7 @@ description: 'Website build pipeline — discovery through delivery, 9 sub-modes
 
 ## Before You Start
 
-Read `skills/domains/modes/website/gotchas.yml` before every invocation. It contains known failure modes, scope traps, and pipeline sequencing errors to avoid.
+Read `skills/website/gotchas.yml` before every invocation. It contains known failure modes, scope traps, and pipeline sequencing errors to avoid.
 
 ---
 

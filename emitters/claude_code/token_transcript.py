@@ -25,8 +25,20 @@ from canonical.events.types import EventType
 from emitters.claude_code.session import get_or_create_session_id
 
 
-def _iter_usage_entries(text: str) -> Iterator[tuple[str, dict, str]]:
-    """Yield (entry_uuid, usage, model) for transcript lines carrying token usage."""
+def _iter_usage_entries(text: str) -> Iterator[tuple[str, dict, str, bool]]:
+    """Yield (entry_uuid, usage, model, is_sidechain) for lines carrying token usage.
+
+    ``isSidechain`` is on every usage-bearing entry and marks a SUBAGENT turn. Reading it
+    is the difference between "this session cost 9.2M tokens" and "the main thread cost X
+    and the specialists cost Y" -- the second is a question about how the platform
+    dispatches work, and it was unanswerable while the flag sat unread in the file.
+
+    WHAT IS DELIBERATELY NOT TAKEN FROM HERE. Which agent a sidechain turn belongs to is
+    not on the entry; recovering it means walking `parentUuid` back to the dispatching
+    Task call. `slug` looks like a candidate and is not -- it is a session nickname, one
+    distinct value across 4,347 entries. Stamping it as an agent id would be a fabricated
+    dimension that reads as measured, which is worse than the gap.
+    """
     for line in text.splitlines():
         line = line.strip()
         if not line:
@@ -47,7 +59,7 @@ def _iter_usage_entries(text: str) -> Iterator[tuple[str, dict, str]]:
         if not uid:
             continue
         model = entry.get("model") or msg.get("model") or ""
-        yield str(uid), usage, str(model)
+        yield str(uid), usage, str(model), bool(entry.get("isSidechain"))
 
 
 def _resolve_project_id(payload: dict[str, Any]) -> str | None:
@@ -94,6 +106,79 @@ def _resolve_project_id(payload: dict[str, Any]) -> str | None:
     return None
 
 
+def _resolve_work_order_id(project_id: str | None) -> str | None:
+    """The in-progress work order this session's spend belongs to, or None.
+
+    WHY THIS IS HERE AT ALL. `work_order_id`, `task_id` and `agent_id` all read **0%**
+    across 86,241 token.consumed rows -- recorded in `core/analytics/duckdb_store.py`,
+    which notes they were 0 "not because nothing resolved them, but because nothing
+    carried them across", and that "what did this work order cost" was unanswerable for
+    that reason alone. The reader was taught to pick these out of `trace`; nothing ever
+    put them there. This is the writing half.
+
+    Resolved ONCE per emission, not per turn: a Stop hook pays for this, and a transcript
+    carries thousands of usage entries. The query is read-only and indexed.
+
+    A WORK ORDER, NOT A TASK. A turn does not belong to one task -- a single assistant
+    turn routinely advances several, and picking one would be a guess presented as a
+    measurement. The work order is the smallest unit this evidence actually supports, and
+    tasks roll up to it.
+
+    Best-effort, like everything else on this path: an unreadable authority costs a
+    dimension, never an event.
+    """
+    if not project_id:
+        return None
+    try:
+        from runtime.lib.enforcement import in_progress_work_order
+
+        row = in_progress_work_order(project_id)
+    except Exception:
+        return None
+    if not isinstance(row, dict):
+        return None
+    wo = row.get("work_order_id")
+    return str(wo) if wo else None
+
+
+def _resolve_task_id(work_order_id: str | None) -> str | None:
+    """The single in-progress task, or None when the answer is not single.
+
+    THIS BECAME ANSWERABLE, it was not before. Tasks went `created -> complete` with no
+    state between, so at every instant there was no current task and a turn could not be
+    charged to one. `start_task` adds the middle state and this reads it.
+
+    ONE, OR NOTHING. Several tasks may be in progress at once -- the model routinely
+    advances more than one in a turn, and `start_task` returns `siblings_in_progress` for
+    exactly that reason. Picking the newest would produce a task id that looks measured
+    and is a guess; two tasks in progress means the honest answer to "which task did this
+    turn cost" is "the work order, and no further".
+
+    Best-effort: an unreadable authority costs a dimension, never an event.
+    """
+    if not work_order_id:
+        return None
+    try:
+        import sqlite3
+
+        from runtime.lib.enforcement import AUTHORITY_DB
+
+        conn = sqlite3.connect(f"file:{AUTHORITY_DB}?mode=ro", uri=True)
+    except Exception:
+        return None
+    try:
+        rows = conn.execute(
+            "SELECT task_id FROM business_tasks"
+            " WHERE work_order_id = ? AND status = 'in_progress'",
+            (work_order_id,),
+        ).fetchall()
+    except Exception:
+        return None
+    finally:
+        conn.close()
+    return str(rows[0][0]) if len(rows) == 1 else None
+
+
 def normalize_stop_token_usage(
     payload: dict[str, Any], root: Path | None = None
 ) -> list[CanonicalEventEnvelope]:
@@ -111,9 +196,11 @@ def normalize_stop_token_usage(
 
     session_id = get_or_create_session_id(root)
     project_id = _resolve_project_id(payload)
+    work_order_id = _resolve_work_order_id(project_id)
+    task_id = _resolve_task_id(work_order_id)
 
     envelopes: list[CanonicalEventEnvelope] = []
-    for uid, usage, model in _iter_usage_entries(text):
+    for uid, usage, model, is_sidechain in _iter_usage_entries(text):
 
         def _int(key: str) -> int:
             try:
@@ -147,6 +234,17 @@ def normalize_stop_token_usage(
                     "domain": "telemetry",
                     "model_id": model,
                     "project_id": project_id,
+                    # THE DIMENSIONS THAT READ 0%. `ai_canonical_events` has no
+                    # work_order_id column, so the reader takes it from here --
+                    # see the COALESCE in core/analytics/duckdb_store.py.
+                    "work_order_id": work_order_id,
+                    # Present only when exactly one task claims to be running. None is
+                    # an honest "the work order, and no further", not a missing value.
+                    "task_id": task_id,
+                    # A subagent turn, so spend splits between the main thread and
+                    # the specialists. Not WHICH specialist: that is not on the
+                    # entry, and inventing it would be a fabricated dimension.
+                    "is_sidechain": is_sidechain,
                     "attribution_status": "cwd" if project_id else "orphan",
                 },
             )

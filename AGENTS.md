@@ -2,95 +2,63 @@
      Regenerate with: py -m integrations.compiler.agents_md --write
      Source of truth: packs.yaml + canonical/skills + canonical/workflows. -->
 
-# Dream Studio — Universal Agent Instructions
+# dream-studio — Universal Agent Instructions
 
-Dream Studio is a local-first AI orchestration and operational intelligence
-platform. This file is a generated projection of Dream Studio authority; any
-coding agent (Codex, Cursor, Gemini, Aider, Claude Code, …) is an *adapter
-surface* — it does not own Dream Studio authority. Canonical state lives in the
-repo source, the operator-local SQLite authority database, and evidence records.
-Dashboard output is derived; private model memory is not authority.
+Instructions for any coding agent (Codex, Cursor, Gemini, Aider, Claude Code, …)
+working **on** this repository. `CLAUDE.md` carries the same guidance for Claude
+Code, which reads that file automatically.
 
-Projection source:
-- `sqlite:adapter_authority_profiles`, `sqlite:shared_context_packets`
-- `repo:canonical/skills/`, `repo:canonical/workflows/`, `repo:packs.yaml`
-- file-backed evidence under the operator-local Dream Studio meta store
+This file used to carry the Dream Studio skill-routing table, the work-order
+types and the close gates — about ninety lines describing how to OPERATE an
+installed Dream Studio. That is gone, deliberately, for the same reason it left
+CLAUDE.md:
 
-When the user's intent matches a Dream Studio skill, invoke that skill before any
-built-in behavior. Match on the routing keywords below.
+- **Nobody installing Dream Studio reads this file.** The product ships from
+  `dist/plugin`, which contains neither this nor `CLAUDE.md`.
+- **With Dream Studio installed** it duplicated the projection the installer
+  writes to the operator's home directory, and drifted from it.
+- **Without it installed** it routed every session at skills, an authority
+  database and blocking hooks that do not exist — which is what happened after an
+  uninstall on 2026-09-21. It survived that uninstall because it is checked into
+  git, and kept steering work at a runtime that had been removed.
 
-## Skill Routing
+Operator instructions belong in the projection the installer writes and the
+uninstaller removes. This file is about the repository.
 
-### Pack-Based Routing
+## Running tests
 
-Each pack is one skill with modes. Invoke via `Skill(skill="ds-<pack>", args="<mode>")`. If the user's message matches a keyword, invoke the pack and let the router infer the mode.
+Pytest output on Windows can be UTF-16-encoded and report a misleading exit code.
+Redirect to a file and read that back — the summary line is authoritative, the
+exit code is not:
 
-| Pack | Skill | Mode keywords |
-|------|-------|---------------|
-| Build lifecycle | `ds-core` | **think:** think:, spec:, shape ux:, design brief:, research: · **plan:** plan:, /plan: · **build:** build:, execute plan: · **review:** review:, review code:, review PR: · **verify:** verify:, prove it: · **ship:** ship:, pre-deploy:, deploy: · **handoff:** handoff: · **recap:** recap:, session recap: · **explain:** explain:, how does:, walk me through:, what is this doing:, why does: |
-| Code quality | `ds-quality` | **debug:** debug:, diagnose: · **polish:** polish: · **harden:** harden: · **pr-security-scan:** pr-security-scan: · **structure-audit:** structure-audit: · **learn:** learn: · **coach:** coach: · **audit:** audit: · **security:** audit:, security audit:, check security:, check codebase security:, build:security:, enforce security: · **accessibility:** accessibility audit:, wcag check:, a11y review:, screen reader:, keyboard navigation: · **database:** audit:, database audit:, check schema:, check migrations:, db audit:, build:database:, generate migration:, design schema: · **code-quality:** audit:, code-quality audit:, cq audit:, check code quality:, build:code-quality: · **testing:** audit:, testing audit:, check tests:, test audit:, build:testing:, generate tests:, write tests: · **types-deps:** audit:, types audit:, deps audit:, dependency audit:, type safety:, annotation coverage:, build:types-deps: · **backend-api:** backend-api: · **frontend-ux:** frontend-ux: · **architecture:** architecture: · **ops:** ops: · **database-compliance:** database-compliance: · **pre-launch:** pre-launch: |
-| Analysis engine | `ds-analyze` | **multi:** multi: · **domain-re:** domain-re: · **repo:** repo: · **intelligence:** analyze project:, project intelligence:, scan codebase: · **research:** market research:, competitive analysis:, evidence gathering:, structured research:, source triangulation: · **idea-validation:** validate idea:, stress-test:, fatal flaw:, product idea:, feature idea:, go no-go:, before committing resources: |
-| Domain builders | `ds-domains` | **game-dev:** game-dev: · **saas-build:** saas-build: · **mcp-build:** mcp-build: · **dashboard-dev:** dashboard-dev: · **client-work:** intake:, sow:, proposal:, build report:, review powerbi:, optimize dax:, build flow:, build app:, client handoff:, document: · **design:** design: · **fullstack:** fullstack:, build fullstack:, fullstack frontend:, fullstack backend:, fullstack integrate:, fullstack secure:, full-stack:, full stack: · **website:** website:, build website:, landing page:, build page:, prototype app:, pitch deck:, animate:, build site: · **devops:** CI/CD pipeline:, GitHub Actions workflow:, Docker build:, release automation:, branch protection:, deployment gate: · **kubernetes:** k8s cluster issue:, workload design:, CrashLoopBackOff:, OOMKill:, Pending pods:, resource requests:, Helm chart:, RBAC:, NetworkPolicy:, HPA: · **technical-writing:** technical documentation:, docs PR:, Diataxis:, README:, API reference:, documentation review:, changelog: · **terraform:** Terraform:, infrastructure design:, IaC:, state problem:, Terraform module:, remote state:, drift detection: · **mobile:** iOS:, Android:, Swift:, SwiftUI:, Kotlin:, Compose:, React Native:, Flutter:, mobile app:, store submission:, cross-platform: · **data-engineering:** dbt:, BigQuery:, Snowflake:, Redshift:, Airflow DAG:, Dagster asset:, Debezium:, CDC:, data pipeline:, warehouse SQL:, data engineering: |
-| Workflow orchestration | `ds-workflow` | workflow:, run workflow:, idea-to-pr:, studio-onboard:, feature-research:, start workflow: |
-| Security analysis | `ds-security` | **scan:** scan: · **dast:** dast: · **binary-scan:** binary-scan: · **mitigate:** mitigate: · **comply:** comply: · **netcompat:** netcompat: · **dashboard:** dashboard: · **review:** review: |
-| Project lifecycle | `ds-project` | **scope:** scope project:, ds project scope:, create prd: · **resume:** resume:, pick up:, get back to:, what's next:, what's active:, start project:, start building:, continue:, where was I:, what am I working on:, what should I do: · **brief:** design brief:, fill brief:, brief:, lock brief: · **manage:** list projects:, switch project:, archive project:, delete project: · **brownfield:** brownfield: |
-| Work order lifecycle | `ds-workorder` | **start:** start work order:, begin work order: · **execute:** mark task done:, task done:, complete task: · **close:** close work order:, finish work order: · **block:** block:, blocked by: · **status:** work order status:, show tasks: |
-| Milestone lifecycle | `ds-milestone` | **status:** milestone status:, milestone progress: · **close:** close milestone:, milestone done: |
-| Website builder | `ds-website` | **discover:** discover: · **direction:** direction: · **page:** page: · **prototype:** prototype: · **animate:** animate: · **brand:** brand: · **cip:** cip: · **critique:** critique: · **deck:** deck: |
-| Fullstack builder | `ds-fullstack` | **frontend:** frontend: · **backend:** backend: · **integrate:** integrate: · **secure:** secure: |
-| Setup | `ds-setup` | **wizard:** wizard: · **status:** status: · **jit:** jit: |
+```
+py -m pytest <args> > out.txt 2>&1
+```
 
-## Work Order Types
+The full unit suite takes roughly 35 minutes on Windows and does not OOM
+(6,044 passed / 25 failed, measured 2026-09-21).
 
-| Type | Use when |
-|------|----------|
-| `ui_component` | Building a reusable UI element (button, card, modal, chart) |
-| `ui_page` | Building a complete screen/view with navigation and layout |
-| `api_endpoint` | Adding or modifying a backend route, including request/response contract |
-| `authentication` | Implementing login, session management, OAuth, or token handling |
-| `saas_feature` | A user-facing product capability that spans UI + API (e.g., billing) |
-| `data_pipeline` | ETL, ingestion, transformation, or batch processing work |
-| `game_mechanic` | A gameplay rule, interaction system, or physics behavior |
-| `deployment` | CI/CD pipeline, containerization, infrastructure-as-code, release automation |
-| `infrastructure` | Database schema, cloud resource provisioning, network configuration |
-| `documentation` | Technical specs, API references, architecture decision records |
+## Gates
 
-## Gate Definitions
+The repository's own quality gates are declared in
+`canonical/workflows/pre-push.yaml` and run with `py -m core.gates.pre_push`.
+They are ordinary Python and need no Dream Studio install.
 
-Close is blocked until these pass (preview with `check_close_gates`):
+## Before and after a source edit
 
-| Gate | Requirement |
-|------|-------------|
-| `tasks_done` | Every task on the work order must be marked done — no 0/N closes. |
-| `design_brief_locked` | UI work orders require a locked design brief (ds-project:brief). |
-| `api_contract_exists` | API work orders require a written request/response contract artifact. |
-| `all_tests_pass` | The work order's TEST-CHECK acceptance criteria must pass. |
-| `independent_review` | A passing review-verdict.json (ds work-order verify) — mandatory for escalated WOs. |
-| `design_critique` | Milestone close: website:critique design audit (score ≥ 3). |
-| `security_scan` | Milestone close: security audit with no BLOCKED findings. |
-| `hardening` | Milestone close: quality:harden results containing PASSED. |
+- Read the git history first. Something that looks missing is often a deliberate
+  deletion: `git log --diff-filter=D -- <path>`.
+- Check whether a file is GENERATED before editing it. Several checked-in
+  artifacts are, including this one, `canonical/review_lanes.yml`,
+  `canonical/rules.yml` and everything under `dist/plugin/`. Edit the generator —
+  an edit to the artifact is discarded by the next render.
+- After the change, validate imports, public API and route contracts, read-model
+  shapes, and anything reading a SQLite boundary that moved.
 
-## Authority & Operating Rules
+## Commits and pull requests
 
-- **Before any work:** invoke `ds-project:resume` (calls `get_project_state()`),
-  then `start_work_order(work_order_id=…)`. Working without it is working blind.
-- **Tasks live in SQLite, not docs.** Read the work order's task list and
-  acceptance criteria from the authority (`ds work-order tasks <id>`). The
-  `.planning` docstore entries are reference only — never the execution source of truth.
-- **During work:** stay within the work order's `module_boundary`; complete tasks
-  in order via `mark_task_done(...)`.
-- **Before finishing:** `close_work_order(...)`. Gates must pass; never
-  `force=True` without explicit operator approval.
-- **No fabricated data, no false-done.** Every discovered defect is registered as
-  a work order in the authority (not a GitHub-issue-only or PR-note).
-
-## Output Discipline
-
-Write output to exactly one of three homes — diagnostic output at the repo root is
-forbidden, and `.planning` on disk is forbidden (denied by the on-edit enforcement hook):
-- **Type 1 — repo-internal working state:** the files.db docstore, NOT disk. Author with
-  `ds files write "<name>" --category planning` (read `ds files read "<name>"`; list
-  `ds files list --category planning`). Use the former `.planning/<subdir>/` path as the
-  logical name prefix, e.g. `workstreams/<id>/pr-body.md`, `audits/<name>.md`.
-- **Type 2 — project workspace:** `~/.dream-studio/projects/<project-id>/`
-- **Type 3 — session diagnostics:** `~/.dream-studio/diagnostics/<YYYY-MM-DD>/<repo>/<purpose>/`
+- Never add AI attribution to a commit or a PR body. Never use emoji.
+- One logical change per commit; explain why, not what.
+- Keep mechanical formatting in its own commit.
+- Never push directly to `main` — branch first.
+- Write scratch output to a temp directory, never the repository root.

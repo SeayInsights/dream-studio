@@ -6,6 +6,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from config.skill_profiles import resolve_skill_model
+
 _SKILL_FM_RE = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
 
 
@@ -53,7 +55,8 @@ def list_skills(
                 )
             config_yml = skill_md.parent / "config.yml"
 
-            model_preference: str | None = None
+            config_tier: str | None = None
+            card_preference: str | None = None
             estimated_duration = None
 
             if config_yml.is_file():
@@ -62,7 +65,7 @@ def list_skills(
 
                     config_data = _yaml.safe_load(config_yml.read_text(encoding="utf-8"))
                     if isinstance(config_data, dict):
-                        model_preference = config_data.get("model_tier")
+                        config_tier = config_data.get("model_tier")
                 except Exception:
                     pass
 
@@ -78,13 +81,24 @@ def list_skills(
                             ds_section = fm_data.get("dream_studio", {})
                             if isinstance(ds_section, dict):
                                 estimated_duration = ds_section.get("estimated_duration")
+                                card_preference = ds_section.get("model_preference")
                 except Exception:
                     pass
 
+            # One documented chain instead of "config.yml or the literal sonnet", which left
+            # every card's declared tier inert. See config/skill_profiles.py for precedence.
+            specifier = f"{pack_name}:{mode_name}"
+            resolved = resolve_skill_model(
+                specifier,
+                card_preference=card_preference,
+                config_tier=config_tier,
+            )
+
             skills.append(
                 {
-                    "specifier": f"{pack_name}:{mode_name}",
-                    "model_preference": model_preference or "sonnet",
+                    "specifier": specifier,
+                    "model_preference": resolved["tier"],
+                    "model_source": resolved["source"],
                     "estimated_duration": estimated_duration,
                 }
             )

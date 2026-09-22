@@ -190,9 +190,9 @@ def _installed_modes_dir(
     """Resolve where a pack's modes are installed, honoring packs.yaml ``skill_path``.
 
     Most packs install at ``<skills>/ds-<pack>/modes``. Packs that declare a
-    ``skill_path`` (e.g. website/fullstack → ``canonical/skills/domains/modes/website``)
+    ``skill_path`` (e.g. website/fullstack → ``canonical/skills/website``)
     are NOT installed as their own top-level skill; their modes live nested under the
-    owning pack's install tree (``<skills>/ds-domains/modes/website/modes``). Resolving
+    owning pack's install tree (``<skills>/ds-website/modes``). Resolving
     that from the skill_path is what keeps website:*/fullstack:* from reading as missing.
     """
     if skill_path:

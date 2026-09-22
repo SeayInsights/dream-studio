@@ -164,7 +164,6 @@ def test_version_check_fail_open_on_io_error(tmp_path):
     import builtins
 
     _version_check = _get_version_check()
-    original_open = builtins.open
 
     def broken_open(*args, **kwargs):
         raise OSError("disk error")
@@ -192,7 +191,7 @@ def test_version_notice_comes_before_enforcement_in_combined_output(tmp_path, ca
                 mock_stdin.read.return_value = '{"prompt": "hello"}'
                 with patch("sys.argv", ["run.py", "UserPromptSubmit"]):
                     # Import and call main directly
-                    result = _run.main()
+                    _run.main()
 
     captured = capsys.readouterr()
     output = json.loads(captured.out.strip())
@@ -300,7 +299,7 @@ def test_update_dry_run_shows_what_would_change(tmp_path, capsys):
         mock_paths.return_value = mock_rt
 
         with patch("subprocess.run") as mock_sub:
-            result = _update_command(source_root=tmp_path, dream_studio_home=ds_home, dry_run=True)
+            _update_command(source_root=tmp_path, dream_studio_home=ds_home, dry_run=True)
             mock_sub.assert_not_called()
 
     captured = capsys.readouterr()

@@ -287,7 +287,7 @@ class TestAutoPushIntegration:
         mock_popen.assert_not_called()
 
     def test_backup_db_triggers_auto_push(self, tmp_path, monkeypatch):
-        db_path = _seed_db(tmp_path / "studio.db")
+        _seed_db(tmp_path / "studio.db")
         monkeypatch.setattr("core.config.state.paths.state_dir", lambda: tmp_path)
 
         push_called = []
@@ -296,6 +296,36 @@ class TestAutoPushIntegration:
         result = backup_db()
         assert result is not None
         assert len(push_called) == 1
+
+    def test_a_rate_limited_backup_does_not_push_again(self, tmp_path, monkeypatch):
+        """A skipped copy must not re-upload the copy it skipped.
+
+        backup_db returns before the cloud push when the existing backup is still
+        fresh, so a rate-limited call uploads nothing. That is the intent -- the
+        bytes on disk did not change, and re-pushing them would spend an upload per
+        call on a path the operator waits behind -- but it was unasserted, and the
+        rate limit was added without any test of what it skips.
+
+        The existing test above passes only because its tmp_path is empty, so the
+        first call always copies. This one takes the second call.
+        """
+        _seed_db(tmp_path / "studio.db")
+        monkeypatch.setattr("core.config.state.paths.state_dir", lambda: tmp_path)
+
+        push_called = []
+        monkeypatch.setattr("core.config.state._maybe_cloud_push", lambda: push_called.append(True))
+
+        first = backup_db()
+        assert first is not None
+        assert len(push_called) == 1, "the first backup pushes"
+
+        second = backup_db()
+        assert second == first, "a rate-limited call still returns the existing backup"
+        assert len(push_called) == 1, "a skipped copy must not trigger a second push"
+
+        forced = backup_db(force=True)
+        assert forced == first
+        assert len(push_called) == 2, "an explicit force=True backup pushes its new copy"
 
 
 # ── CLI argument parsing ──────────────────────────────────────────────

@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Write, Bash]
   model_preference: haiku
   estimated_duration: 30-90min
+  write_posture: independent
+  lifecycle: published
 ---
 
 # DAST — Web Application Dynamic Testing

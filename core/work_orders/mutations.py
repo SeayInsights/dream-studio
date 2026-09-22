@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import uuid
 from datetime import datetime, UTC
 from pathlib import Path
@@ -29,6 +30,108 @@ def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
     if not paths.sqlite_path.exists():
         raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
     return paths.sqlite_path
+
+
+def start_task(
+    *,
+    work_order_id: str,
+    task_id: str,
+    source_root: Path,
+    dream_studio_home: Path | None = None,
+) -> dict[str, Any]:
+    """Move a task from ``created`` to ``in_progress``.
+
+    WHY THE MIDDLE STATE HAD TO EXIST. Tasks went ``created -> complete`` with nothing
+    between, so at any instant there was no current task -- and "what is being worked on
+    right now" had no answer in the authority. That is also why token spend could be
+    attributed to a work order and no further: a turn cannot be charged to a task when no
+    task claims to be running.
+
+    IT IS A CLAIM, NOT A LOCK. Several tasks may be in progress at once; the model
+    routinely advances more than one in a turn, and refusing the second start would push
+    callers into not recording the first. What the caller gets back is
+    ``siblings_in_progress`` so an ambiguous attribution is visible rather than guessed at
+    downstream.
+
+    Starting an already-started task is not an error -- it returns ``already: True`` and
+    changes nothing. A mutation that raised there would make a retry after a lost response
+    worse than the lost response.
+    """
+    db_path = _require_db(source_root, dream_studio_home)
+    now = datetime.now(UTC).isoformat()
+
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT t.task_id, t.work_order_id, t.title, t.status, t.project_id,"
+            " wo.milestone_id"
+            " FROM business_tasks t"
+            " LEFT JOIN business_work_orders wo ON t.work_order_id = wo.work_order_id"
+            " WHERE t.task_id = ?",
+            (task_id,),
+        ).fetchone()
+        if row is None:
+            return {"ok": False, "error": f"Task not found: {task_id}"}
+
+        _tid, t_wo, t_title, t_status, t_project_id, t_milestone_id = row
+        if t_wo != work_order_id:
+            return {
+                "ok": False,
+                "error": (f"Task {task_id} belongs to work order {t_wo}, not {work_order_id}."),
+            }
+        if t_status == "complete":
+            return {"ok": False, "error": f"Task {task_id} is already complete."}
+        if t_status == "in_progress":
+            return {"ok": True, "already": True, "task_id": task_id, "title": t_title}
+
+        conn.execute(
+            "UPDATE business_tasks SET status = 'in_progress', updated_at = ?" " WHERE task_id = ?",
+            (now, task_id),
+        )
+        siblings = conn.execute(
+            "SELECT COUNT(*) FROM business_tasks"
+            " WHERE work_order_id = ? AND status = 'in_progress' AND task_id != ?",
+            (work_order_id, task_id),
+        ).fetchone()[0]
+        conn.commit()
+
+    event_write_error: str | None = None
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+        from canonical.events.types import EventType
+
+        _envelope = CanonicalEventEnvelope(
+            event_type=EventType.TASK_STARTED.value,
+            session_id=None,
+            payload={"task_id": task_id, "work_order_id": work_order_id},
+            timestamp=now,
+            severity="info",
+            trace={
+                "domain": "sdlc",
+                "project_id": t_project_id,
+                "milestone_id": t_milestone_id,
+                "work_order_id": work_order_id,
+                "task_id": task_id,
+                "attribution_status": "fully_attributed",
+            },
+        ).to_dict()
+        _spool_writer.write_event(_envelope)
+    except Exception as _exc:
+        event_write_error = f"{type(_exc).__name__}: {_exc}"[:200]
+
+    return {
+        "ok": True,
+        "task_id": task_id,
+        "title": t_title,
+        "status": "in_progress",
+        "work_order_id": work_order_id,
+        # VISIBLE, NOT GUESSED. More than one task in progress is a real state, and a
+        # reader attributing spend needs to know the answer is ambiguous rather than
+        # receive a confident wrong one.
+        "siblings_in_progress": siblings,
+        **({"event_write_error": event_write_error} if event_write_error else {}),
+    }
 
 
 def mark_task_done(
@@ -502,14 +605,51 @@ def reopen_work_order(
     }
 
 
+#: A plain directory or file name with no separator -- ``docs``, ``schemas``, ``tests``.
+#: Kept deliberately narrow so a fragment of prose swept into the clause cannot pass as a
+#: path. Mirrored by ``runtime.lib.enforcement._is_boundary_path``; the two are held in step
+#: by tests/unit/test_boundary_keeps_bare_directories.py, because a producer that emits what
+#: the consumer discards is the exact failure this pair exists to prevent.
+_BARE_PATH_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _is_boundary_path(part: str) -> bool:
+    """Whether a comma-separated boundary entry names a path rather than prose."""
+    if not part:
+        return False
+    return "/" in part or "." in part or bool(_BARE_PATH_NAME.match(part))
+
+
 def compose_module_boundary(description: str, module_boundary: str | list[str] | None) -> str:
     """Put the boundary into the description in the exact form the parser reads.
 
     ``runtime.lib.enforcement.boundary_globs`` searches for a literal ``Module boundary:``
-    clause and keeps comma-separated parts containing ``/`` or ``.``. Composing the clause
+    clause and keeps the comma-separated parts that look like paths. Composing the clause
     here means the producer emits precisely what the consumer parses, instead of an author
     recalling a literal documented nowhere -- which is why 0 of 25 in-progress work orders
     on the live authority carried one, and why edit attribution had no choice but to guess.
+
+    A BARE TOP-LEVEL DIRECTORY IS A PATH. The filter here used to require ``/`` or ``.``,
+    so ``docs``, ``schemas``, ``config``, ``tests`` and ``dist`` were dropped on the way in,
+    silently and with nothing said to the author. A work order declaring
+    ``--module-boundary "core/gates, docs, tests"`` was stored owning only ``core/gates``;
+    its own edits under ``docs/`` then matched no boundary it declared, so the stop hook
+    attributed them to whichever OTHER in-progress work orders happened to spell a covering
+    path, and demanded an authority write against work orders the session never touched.
+    Observed on the live authority: a boundary of 15 declared paths stored as 12. That is
+    precisely the "looks declared and matches nothing" failure the guard below names.
+
+    Whitespace is not the discriminator either -- an absolute path on this operator's
+    machine contains a space (``C:/Users/<given name>/.codex/config.toml``), and six such
+    entries on a live work order would be lost by a no-spaces rule. The placeholder is
+    spelled with angle brackets rather than a name, because two guards disagree about what
+    a safe example looks like. The publication rule exempts a user segment beginning with
+    the word Example OR with ``<``; the scrubbed-path test in
+    test_install_bootstrap_sqlite_authority forbids that same Example-named home path
+    outright. A path named after the example user satisfies the first and fails the second
+    -- which is exactly how one got here, and how main's Full CI went red for three merges
+    while every PR smoke stayed green, the publication suite being post-merge only. The
+    bracketed form passes both guards and keeps the space the example exists to demonstrate.
 
     An already-present clause is left alone: a caller who wrote it by hand is not
     second-guessed, and re-composing would duplicate it.
@@ -523,7 +663,7 @@ def compose_module_boundary(description: str, module_boundary: str | list[str] |
         if isinstance(module_boundary, str)
         else [str(p).strip() for p in module_boundary]
     )
-    usable = [p for p in parts if p and ("/" in p or "." in p)]
+    usable = [p for p in parts if _is_boundary_path(p)]
     if not usable:
         # Nothing the parser would keep. Silently storing an unparseable boundary would
         # look declared and match nothing -- the failure this function exists to end.
@@ -568,6 +708,12 @@ def _unverified_claim_note(description: str) -> str | None:
         )
     except Exception:
         return None  # an advisory note must never break a registration
+
+
+#: The shortest real work-order description on the live authority is 81 characters
+#: (592 of them, measured 2026-09-21). 60 refuses none of those and still stops a
+#: title pasted into the description field.
+_MIN_DESCRIPTION_CHARS = 60
 
 
 def create_work_order(
@@ -621,6 +767,35 @@ def create_work_order(
         return {
             "ok": False,
             "error": "milestone_id is required: every work order must belong to a milestone",
+        }
+
+    # THE WORK ORDER IS A PROMPT, NOT A LABEL. Each layer of project -> milestone ->
+    # work order -> task holds the prompt for the layer below it: a task is a specific
+    # instruction, and the work order is the goal those instructions add up to. A work
+    # order with only a title breaks that chain in the middle, and the task then has to
+    # re-derive an intent nobody wrote down.
+    #
+    # Measured on the authority 2026-09-21: 446 of 1,038 work orders had no description
+    # at all. On the five projects OUTSIDE this repo it ran 78% to 100% empty, against
+    # 30% here -- and one of those five is 0% empty at every layer, so the design works
+    # when it is filled. The difference between that project and the rest is not
+    # discipline; it is that nothing ever asked.
+    #
+    # The floor comes from the same measurement rather than from taste: of the 592 real
+    # descriptions the shortest is 81 characters, so 60 refuses none of them and stops
+    # a title pasted twice. It is deliberately a floor and not a rubric -- a check that
+    # judged prompt quality would be arguing with the author, and this only refuses an
+    # absence.
+    _description = (description or "").strip()
+    if len(_description) < _MIN_DESCRIPTION_CHARS:
+        return {
+            "ok": False,
+            "error": (
+                "description is required: a work order is the prompt for the tasks under"
+                f" it, so it must say what is being done and why (at least"
+                f" {_MIN_DESCRIPTION_CHARS} characters; got {len(_description)})."
+                " The module boundary is composed in separately and does not count."
+            ),
         }
 
     db_path = _require_db(source_root, dream_studio_home)
@@ -702,6 +877,8 @@ def create_task(
     title: str,
     description: str = "",
     acceptance_criteria: str | None = None,
+    why: str | None = None,
+    carried_from: str | None = None,
     source_root: Path,
     dream_studio_home: Path | None = None,
 ) -> dict[str, Any]:
@@ -715,7 +892,55 @@ def create_task(
     or on missing work order::
 
         {"ok": False, "error": "Work order not found: <id>"}
+
+    or when the task carries nothing anyone can check::
+
+        {"ok": False, "error": ..., "refusals": [...], "remedy": ...}
+
+    `why` declares, in at least 20 characters, why this claim cannot be computed; it is
+    COMPOSED INTO the description here so the declaration is auditable on the row rather
+    than spent at the door. `carried_from` names the task this one is a move of, which is
+    the one case the floor cannot apply to -- see below.
     """
+
+    # A TASK IS A PROMPT, and its acceptance criterion is how the prompt says it is done.
+    # The round table has refused a criterion-less task at the CLI door since #706, and
+    # 43% of the tasks created in the month after still arrived with none -- because this
+    # is the OTHER door, the one this module's own docstring tells skills, workflows and
+    # hooks to import directly. A check wired to one of two writers holds for whichever
+    # writer the author happened to use.
+    #
+    # Only the Warden's lane runs here, not the whole round table: whether a criterion
+    # exists and can be run is a property of the text and needs no database, no sibling
+    # titles and no repo. The richer verdict stays at the CLI, where that context exists.
+    # The PREDICATE is imported rather than restated -- one definition, and the door that
+    # admits agrees with the door that files by construction.
+    #
+    # `carried_from` is the single exemption, and it is a move rather than an authoring:
+    # `carry_over` re-files an EXISTING task under a new work order, so refusing it would
+    # not raise the floor -- it would delete a task already in the authority because
+    # somebody else failed to write it a criterion. Named, so the exemption is visible.
+    if carried_from is None:
+        from core.work_orders.admission import compose_declared_reason, criterion_refusal
+
+        _refusal = criterion_refusal(acceptance_criteria, why=why, description=description)
+        if _refusal is not None:
+            return {
+                "ok": False,
+                "error": "a task nobody can check cannot be filed",
+                "refusals": [_refusal],
+                "remedy": (
+                    "pass acceptance_criteria with a TEST-CHECK / SQL-CHECK / API-CHECK"
+                    " naming something that exists, or why='<20+ characters saying why"
+                    " this claim cannot be computed>'"
+                ),
+            }
+        if not acceptance_criteria and why:
+            # THE DECLARATION IS PERSISTED, NOT SPENT. A reason that admits a task and
+            # then reaches only stdout is a bare bypass with a nicer spelling (#706), and
+            # the criteria ratchet counts a task as declared only when the marker is on
+            # the row. One composer, called from the door every author reaches.
+            description = compose_declared_reason(description, why)
 
     db_path = _require_db(source_root, dream_studio_home)
     task_id = str(uuid.uuid4())

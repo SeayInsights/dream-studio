@@ -169,6 +169,34 @@ message naming the exact keys to set — it never silently spawns an unresolved 
 Inspect the resolved role→provider mapping before running verify with
 `ds grader profiles`. Spawn is provider-neutral via `core/adapters/grader_runner.py`.
 
+### Skill model tier selection
+
+The third operator override alongside `DS_ENFORCE` and the grader profiles: which model
+tier a skill mode asks for. Resolved by `config/skill_profiles.py`
+(`resolve_skill_model(specifier)`) with this precedence, highest first:
+
+1. `DS_SKILL_MODEL_STUB` — pins every mode to one tier (headless/CI, so a matrix does not
+   fan out across three tiers).
+2. an explicit `override` argument from a caller that already knows what it wants.
+3. the per-mode env override `DS_SKILL_MODEL_<PACK>_<MODE>`, punctuation normalised to
+   underscores — `quality:pr-security-scan` reads `DS_SKILL_MODEL_QUALITY_PR_SECURITY_SCAN`.
+4. a per-specifier (or `default`) entry in the JSON file at `DS_SKILL_MODEL_CONFIG`.
+5. the mode's `config.yml` `model_tier`.
+6. the mode card's `model_preference` in `SKILL.md` frontmatter.
+7. `sonnet`.
+
+Levels 5 and 6 are ordered deliberately. `config.yml` is what resolution read before this
+chain existed, and 11 of the 34 modes that declare a tier in both places disagree — promoting
+the card would have dropped `core:think` from opus to sonnet. Keeping `config.yml` first
+leaves those 34 resolving unchanged and gives the card a job on the 18 modes that declare a
+tier nowhere else.
+
+Unlike the grader chain this **resolves** rather than failing closed: a grader role with no
+provider cannot run at all, while a mode with no declared tier has a sane default. It does
+refuse a tier value it does not recognise, from any source, naming the key to fix. Every
+resolution reports its `source`, so `ds skill list` shows which of the six levels decided a
+tier rather than leaving it to guesswork.
+
 ## Dispatcher Sub-Handler Mapping
 
 ### on-prompt-dispatch (UserPromptSubmit)
@@ -400,3 +428,33 @@ WHY THIS PRECEDES A DRIVER. `ds workflow run --until-blocked` is deliberately se
 <!-- Last reviewed 2026-09-17 - HANDLER ENTRYPOINT CONTRACT: four UserPromptSubmit/PostToolUse sub-handlers (on-prompt-route, on-context-inject, on-memory-retrieve, on-token-log) declared `def main(payload: dict)` while `dispatch_tracking.run_handlers()` assigns the payload to sys.stdin and calls `main()` with ZERO arguments - the convention already documented in the Hook Execution Flow section above. Every dispatch therefore raised TypeError, was swallowed by the dispatcher's fail-open BaseException handler, and recorded as status=failed: measured 8,767 of 8,767 dispatches for on_prompt_route and the same for on_context_inject, from 2026-07-19 to 2026-09-17, a 100% failure rate that surfaced nowhere an operator looks. on-prompt-route is the only mechanism that pushes the model toward Skill(...) on a trigger match, and on-context-inject is what injects project memory and gotchas into a prompt, so neither auto-activation nor memory injection had ever run. Each handler now takes no arguments and reads stdin itself, with the body moved to `_handle(payload)` so tests can still drive the logic directly. No change to hook registration, dispatcher wiring, ordering, or the fail-open guarantee - `dispatch_tracking.py` is byte-identical to main. tests/unit/runtime/test_hook_handler_contract.py now asserts the zero-argument contract statically across all 34 handlers and pins the dispatcher's own call shape, so the contract cannot be 'fixed' from the other side; the evals in tests/evals/test_dependency_chain.py were driving handlers by the same wrong convention and were corrected to use stdin. Separately unresolved: on_skill_complete, on_skill_metrics and on_skill_load have zero execution rows of ANY status since 2026-07-02 while the Skill tool keeps firing - files present in repo and installed copies, PostToolUse routes through run_handlers, cause unknown, tracked as work order becfca00. -->
 
 <!-- Last reviewed 2026-09-20 - HOOK STDOUT IS A SHARED STREAM: on-prompt-dispatch and on-stop-dispatch concatenate every handler's stdout into ONE text stream of xml blocks, which Claude Code reads as plain context. A single JSON object printed into that stream makes the whole concatenation look like JSON to the harness, which then fails to parse it and reports a hook error on every prompt and every stop - observed as "Unrecognized token '<'" when a project-memory block shared the batch, and as a backslash escape error when a Windows path sat in the prose. Three handlers were printing status payloads into it: interfaces/cli/pulse_collector.py (on-pulse), runtime/hooks/meta/on-token-log.py, and control/execution/workflow/tracking.py (on-workflow-progress). All three are status, already persisted elsewhere, and none is a hook directive, so all three now write to stderr along with their operator banners. The rule this establishes: a handler's stdout belongs to the shared directive stream, and anything a human reads or a dashboard records goes to stderr. on-context-inject deliberately keeps writing plain text - an attempt to wrap it in a hookSpecificOutput envelope was reverted because it contradicted the block format and added a SECOND json object to the same stream. No change to hook registration, dispatcher wiring, ordering, or the fail-open guarantee. Verified against the real dispatcher for UserPromptSubmit, Stop, PostCompact and PostToolUse (Skill, Edit, Read). -->
+<!-- Reviewed 2026-09-18 - A REGISTERED HANDLER WITH NO FILE IS NOW RECORDED, and the
+becfca00 unknown stated above is RESOLVED. `dispatch_tracking.run_handlers()` skipped a
+handler whose path did not exist with a bare `continue`: no timing line, no
+`system.hook.execution.logged` row, no error. That silence is now a row with
+status="not_found" naming the missing path; an ABSENT file used to be treated as
+configuration, which does not survive contact with `_resolve_handlers`, where the handler
+list is hardcoded and nothing is optional. Shipped once as 07b9d3f7 and reverted in
+54d95bfb because its stated cause was asserted without evidence; restored here for a
+different, evidenced reason - the installer has no delete op, so a renamed or dropped
+handler leaves its old path behind and a missing file is a state this codebase actually
+produces. `test_missing_handler_is_not_logged` asserted the opposite and is replaced by
+`test_missing_handler_is_logged_as_not_found`. Timing stays execution-only: a handler that
+never ran has no runtime to report, so hook-timing.jsonl keeps answering "how long did it
+take" while the execution log answers "what happened to it". RESOLVING THE UNKNOWN: the
+entry above records on_skill_complete / on_skill_metrics / on_skill_load as having zero
+execution rows since 2026-07-02, cause unknown. They had zero rows EVER, and the cause was
+the installed tree shipping a PARTIAL `control` package (control/execution only) that
+shadowed the repo's complete one, so every handler importing control.skills.* or
+control.execution.models.* raised ModuleNotFoundError before running - 12 handlers in all.
+Fixed in #733 by ordering the repo ahead of the plugin root and by generating the installed
+control/__init__.py as a shim that appends the repo's package to __path__. No change to
+hook registration, dispatcher wiring, ordering, or the fail-open guarantee. -->
+
+<!-- Last reviewed 2026-09-18 - write_posture advisory: NO dispatch, registration, tier, PROTECTED_PATHS, handler-chain or fail-open policy change, and no new deny. Mode cards gained write_posture (read-only | independent | hitl), which records what a mode may do UNATTENDED -- capabilities_required cannot express that, since a mode listing Bash is either running the test suite or deploying. Declaring it was inert until a hook could tell which mode was active. on-skill-load already holds the SKILL.md when a mode is entered, so it parses the card there and writes (mode, posture) to session state via the new runtime/lib/enforcement.py::record_skill_posture; on-edit-enforce reads it back through active_skill_posture and, when a read-only mode produces a source write, calls record_observation with rule write_posture_advisory. ADVISORY BY CONSTRUCTION, and the reason is the signal's quality: loading a SKILL.md is how a mode is entered, but a session may also read one for reference, and nothing forces the model to act under the mode it last read. That hypothesis is enough to record a contradiction for review and not enough to refuse an edit on -- the same call module_boundary made when it was added (observe tier, never a deny, escalation a separate operator decision). The block sits beside the module_boundary advisory with the same try/except/pass, and record_observation was already best-effort by contract, so neither can affect an allow/deny outcome. Note the projection: .claude/hooks/ is an untracked local copy, so the capture reaches a live session only after the hooks are re-projected. -->
+
+<!-- Last reviewed 2026-09-22 — no hook dispatch, registration, handler-chain or fail-open policy change. canonical/workflows/pre-push.yaml gains the blocking `instruction-commands` gate, so the git pre-push hook that dispatches the gate runner also runs it; see WORKFLOW_RUNTIME.md for what it checks and why its negative cases are half its design. -->
+
+<!-- Last reviewed 2026-09-22 — no hook dispatch, registration, handler-chain or fail-open policy change. canonical/workflows/pre-push.yaml gains the blocking `rule-enforcement` gate, so the git pre-push hook that dispatches the gate runner also runs it; see WORKFLOW_RUNTIME.md. -->
+
+<!-- Last reviewed 2026-09-22 — no hook dispatch, registration, handler-chain or fail-open policy change. canonical/workflows/pre-push.yaml gains the blocking `agent-coverage` gate, so the git pre-push hook that dispatches the gate runner also runs it; see WORKFLOW_RUNTIME.md. -->

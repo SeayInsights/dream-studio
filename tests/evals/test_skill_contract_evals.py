@@ -100,6 +100,10 @@ def test_eval_scope_contract(patched_paths, db_path: Path, tmp_path: Path) -> No
     ms_result = create_milestone(
         project_id=proj_result["project_id"],
         title="Milestone 1",
+        description=(
+            "A fixture milestone for this eval: it carries a prompt because a milestone"
+            " without one is refused, so the shape assertions below are what is tested."
+        ),
         order_index=0,
         source_root=REPO_ROOT,
         dream_studio_home=tmp_path,
@@ -130,6 +134,7 @@ def test_eval_plan_contract(patched_paths, db_path: Path, tmp_path: Path) -> Non
         project_id=PROJECT_ID,
         milestone_id=MILESTONE_ID,
         title="Plan work order",
+        description="A fixture work order for this eval: it carries a prompt because a work order without one is refused, so the assertion below is about what it names.",
         work_order_type="documentation",
         source_root=REPO_ROOT,
         dream_studio_home=tmp_path,
@@ -142,6 +147,7 @@ def test_eval_plan_contract(patched_paths, db_path: Path, tmp_path: Path) -> Non
         work_order_id=wo_result["work_order_id"],
         project_id=PROJECT_ID,
         title="Write plan section",
+        acceptance_criteria="TEST-CHECK: tests/evals/test_skill_contract_evals.py",
         source_root=REPO_ROOT,
         dream_studio_home=tmp_path,
     )
@@ -355,6 +361,7 @@ def test_eval_create_wo_rejects_null_milestone(patched_paths, tmp_path: Path) ->
         project_id=PROJECT_ID,
         milestone_id=None,
         title="Should fail",
+        description="A fixture work order for this eval: it carries a prompt because a work order without one is refused, so the assertion below is about what it names.",
         work_order_type="documentation",
         source_root=REPO_ROOT,
         dream_studio_home=tmp_path,
@@ -371,6 +378,7 @@ def test_eval_create_wo_rejects_dangling_milestone(patched_paths, tmp_path: Path
         project_id=PROJECT_ID,
         milestone_id="00000000-0000-0000-0000-000000000000",
         title="Should fail",
+        description="A fixture work order for this eval: it carries a prompt because a work order without one is refused, so the assertion below is about what it names.",
         work_order_type="documentation",
         source_root=REPO_ROOT,
         dream_studio_home=tmp_path,

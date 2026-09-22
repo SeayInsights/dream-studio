@@ -9,6 +9,8 @@ dream_studio:
   capabilities_required: [Read, Grep, Agent]
   model_preference: sonnet
   estimated_duration: 20-60min
+  write_posture: read-only
+  lifecycle: published
 ---
 
 # Secure — Parallel Security Review

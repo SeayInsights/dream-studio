@@ -81,7 +81,11 @@ def compose_declared_reason(description: str | None, why: str | None) -> str:
 #: already refuses a seat outside its closed set, so a typo here fails there.
 _WARDEN = "Gate-integrity engineer"
 _SURVEYOR = "Merge-order steward"
-_HERALD = "Claim and closure auditor"
+# Renamed with the bench: the Herald became the Claim and closure auditor, and that
+# seat now answers under "Claim integrity" alongside the contract and canon lanes. The
+# value is a display label on a refusal record -- never matched or queried -- so this
+# keeps admission speaking the roster's vocabulary rather than a name it retired.
+_HERALD = "Claim integrity"
 
 
 #: A path-shaped token: at least one "/" and a file extension. Deliberately narrow.
@@ -140,9 +144,137 @@ def has_executable_criterion(acceptance_criteria: str | None) -> bool:
     )
 
 
+def unrunnable_target(acceptance_criteria: str | None) -> str | None:
+    """The first TEST-CHECK target that names a file which does not exist, if any.
+
+    `has_executable_criterion` above answers "does a line carry a check TOKEN". It
+    never asked whether the thing named can be run, and nothing else did either.
+
+    Measured on the live authority 2026-09-21: of 1,387 tasks carrying a
+    TEST-CHECK, 930 named a file that exists and 457 -- ONE IN THREE -- named
+    something that cannot be run at all. The corpus includes `a`, `cargo` and a bare
+    `TEST-CHECK:` with nothing after it. It ALSO included `cmd:`, which this first
+    counted as junk and which is in fact the executor's stack-agnostic form -- so
+    part of that 457 was a supported form being refused by its own doorman.
+
+    That is what made this ceremony rather than a check: a third of the time a
+    close either blocks or passes for a reason about the CRITERION, telling the
+    author nothing about the code. A criterion written against a file that does
+    not exist can never fail for the right reason.
+
+    Returns the offending target (for the message) or None when every TEST-CHECK
+    resolves. Deliberately only TEST-CHECK: SQL-CHECK and API-CHECK name a query
+    and an endpoint, which are not paths and cannot be checked this cheaply.
+    """
+    import re
+    from pathlib import Path as _Path
+
+    from core.work_orders.verify_executor import cmd_argv
+
+    for line in str(acceptance_criteria or "").splitlines():
+        m = re.search(r"TEST-CHECK\s*:\s*(.*)$", line)
+        if not m:
+            continue
+        expr = m.group(1).strip()
+        # THE cmd: FORM IS NOT A PATH. It is how a repo that does not run pytest says how
+        # it IS verified, and reading its first token as a filename refused every one of
+        # them -- which made the executor's only stack-agnostic branch unreachable from
+        # the guarded door. Parsed by the executor's own function so the two cannot drift.
+        is_cmd, _argv, problem, _detail = cmd_argv(expr)
+        if is_cmd:
+            # Still a real check: a cmd: form naming nothing runnable is refused, the
+            # same as a node id naming a file that does not exist.
+            if problem == "empty":
+                return "(nothing after TEST-CHECK: cmd:)"
+            if problem == "unparseable":
+                return f"cmd: {expr[4:].strip()}"
+            continue
+        raw = expr.split()[0].strip().strip("`\"'") if expr.split() else ""
+        if not raw:
+            return "(nothing after TEST-CHECK:)"
+        # `::test_name` with no path is a legitimate shape -- the executor resolves it
+        # against the whole suite.
+        if raw.startswith("::"):
+            continue
+        target = raw.split("::")[0].strip().strip("`\"'")
+        if not target:
+            return "(nothing after TEST-CHECK:)"
+        looks_like_a_path = "/" in target or "\\" in target or target.endswith(".py")
+        if not looks_like_a_path:
+            # Not a path and not a node id. The live corpus holds `a`, `cargo` and
+            # `cmd:` in this position -- words that name nothing the executor can run.
+            return target
+        if not _Path(target).is_file():
+            return target
+    return None
+
+
+def declared_reason(description: str | None) -> str:
+    """The reason `compose_declared_reason` folded into a description, or "".
+
+    The composer had no reader outside the ratchet, so a task filed on a declared reason
+    could not be re-admitted from its own row -- only from the `--why` that was passed
+    once, at the CLI, and nowhere else. Paired with the composer here so the marker keeps
+    one definition and two users.
+    """
+    text = str(description or "")
+    marker = text.rfind(DECLARED_PREFIX)
+    if marker < 0:
+        return ""
+    start = marker + len(DECLARED_PREFIX)
+    return " ".join(text[start:].split())
+
+
+def criterion_refusal(
+    acceptance_criteria: str | None,
+    *,
+    why: str | None = None,
+    description: str | None = None,
+) -> dict[str, Any] | None:
+    """The Warden's lane, asked of ANY door rather than only the one the CLI opens.
+
+    `admit_task` runs the whole round table and needs a work order's description, its
+    sibling titles and the repo to do it. That is the right check for an operator filing
+    by hand and the wrong dependency for `create_task`, which is the door
+    `core/work_orders/mutations.py` tells skills, workflows and hooks to import directly.
+    So the one lane that needs no context at all -- whether a criterion exists and can be
+    run, which is a property of the text -- is available on its own.
+
+    `why` is the reason an author passes now; `description` is where a reason passed
+    EARLIER was folded by `compose_declared_reason`, which is how a task already admitted
+    on a declared reason stays admitted when its row is re-read.
+    """
+    return _warden(acceptance_criteria, why or declared_reason(description))
+
+
 def _warden(acceptance_criteria: str | None, why: str | None) -> dict[str, Any] | None:
     """Enforce-or-declare, the contract `canonical/rules.yml` already runs on."""
     if has_executable_criterion(acceptance_criteria):
+        # A TOKEN IS NOT A CHECK. The criterion carries TEST-CHECK, so the door used
+        # to open here -- without anyone asking whether the thing it names can be run.
+        # One in three could not: 457 of 1,387 on the live authority, including `a`,
+        # `cargo`, `cmd:` and a bare `TEST-CHECK:`.
+        #
+        # This is the difference between a check and ceremony. A criterion pointed at
+        # a file that does not exist can never fail for the right reason, so a close
+        # that turns on it tells the author about the paperwork, not the code.
+        #
+        # Refused at the WRITE door, which is the only place it is cheap: at close
+        # time the author has finished the work and the criterion is someone else's
+        # mistake from weeks ago.
+        bad = unrunnable_target(acceptance_criteria)
+        if bad:
+            return {
+                "seat": _WARDEN,
+                "lane": "a-criterion-nobody-can-run",
+                "reason": (
+                    f"TEST-CHECK names {bad!r}, which is not a file that exists and not"
+                    " a `::node_id`. A criterion nothing can run cannot fail for the"
+                    " right reason, so a close that turns on it reports the paperwork"
+                    " rather than the code. Point it at a test file that exists, or use"
+                    " SQL-CHECK / API-CHECK, or declare a reason with --why."
+                ),
+            }
         return None
     declared = " ".join(str(why or "").split())
     if len(declared) >= _MIN_WHY:

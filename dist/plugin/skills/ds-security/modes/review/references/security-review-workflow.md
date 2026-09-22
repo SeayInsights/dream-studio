@@ -10,7 +10,7 @@ purpose: Comprehensive security review methodology for ds-security review mode
 
 This methodology implements checks aligned with the following sections of [`regulatory-anchors.md`](../../../references/regulatory-anchors.md):
 
-- 🟠 [L. Application security standards](../../../references/regulatory-anchors.md#l-application-security-standards): OWASP Top 10 and OWASP API Security Top 10 define the vulnerability categories in Phase 3; OWASP ASVS 5.0 Levels 1–3 underpin the severity thresholds.
+- 🟠 [L. Application security standards](../../../references/regulatory-anchors.md#l-application-security-standards): OWASP Top 10 and OWASP API Security Top 10 define the vulnerability categories in Phase 3; OWASP ASVS v5.0.0 Levels 1–3 underpin the severity thresholds.
 - 🟠 [M. Vulnerability management & disclosure](../../../references/regulatory-anchors.md#m-vulnerability-management--disclosure): CVE/CVSS scoring provides the universal severity baseline; the ≥0.8 confidence threshold aligns with coordinated vulnerability disclosure standards.
 
 See the full anchor list for tier definitions and the complete catalog of applicable regimes.

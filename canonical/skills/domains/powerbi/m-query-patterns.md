@@ -1,7 +1,7 @@
 # BI Domain — M Query Patterns
 
 Domain knowledge for Power Query / M-Query authoring and troubleshooting.
-Referenced by: client-work
+Referenced by: power-platform
 
 ---
 
