@@ -23,9 +23,28 @@ from interfaces.cli import pulse_collector
 
 
 @pytest.fixture(autouse=True)
-def _clean_rejections(monkeypatch):
-    """Rejections are process-scoped; no test inherits another's."""
+def _clean_rejections(monkeypatch, tmp_path):
+    """No test inherits another's rejections — in EITHER place they are kept.
+
+    This reset only the in-process set, and called rejections "process-scoped". They are
+    the opposite: `_auth_is_broken` reads a file under `state_dir()`, deliberately, so a
+    dead credential costs one request per MACHINE rather than one per prompt. The module
+    docstring says so.
+
+    So an earlier test in this file retired `expired` to disk, and every later one found
+    it already broken, filtered it out of `_github_tokens()` before any request, and
+    never added it to the set the assertion reads. Both tests passed alone and failed
+    together — a fixture that isolates half of a two-place breaker is worse than one that
+    isolates neither, because the leak only shows up in combination.
+    """
     monkeypatch.setattr(pulse_collector, "_REJECTED_TOKENS", set())
+    rejections = tmp_path / "rejections"
+    rejections.mkdir()
+    monkeypatch.setattr(
+        pulse_collector,
+        "_rejection_path",
+        lambda token: rejections / f".gh-auth-failed-{pulse_collector._token_fingerprint(token)}",
+    )
 
 
 def _no_gh_cli() -> str:
