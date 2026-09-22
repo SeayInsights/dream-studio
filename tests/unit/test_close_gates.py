@@ -14,6 +14,7 @@ makes it enforcement, and that refusal is what these tests hold.
 from __future__ import annotations
 
 import json
+import pathlib
 
 import pytest
 
@@ -405,3 +406,104 @@ def test_an_unreadable_carry_record_exempts_nothing(monkeypatch, tmp_path) -> No
     assert ran.get("titles") == [
         "a task"
     ], "an unreadable carry record exempted a task, granting an exemption by error"
+
+
+# ---------------------------------------------------------------------------
+# An unrecognised gate name fails closed (D14)
+# ---------------------------------------------------------------------------
+
+
+def _gate_names_in_the_dispatch() -> set[str]:
+    """Every literal the if-chain compares ``gate_name`` against, read from the source.
+
+    Read rather than imported because the point is to catch a branch added WITHOUT
+    registering its name -- which an import of the registry cannot see.
+    """
+    import re
+
+    source = pathlib.Path(close_gates.__file__).read_text(encoding="utf-8")
+    return set(re.findall(r'gate_name == "([a-z_]+)"', source))
+
+
+def test_an_unrecognised_gate_name_fails_closed():
+    """A gate nobody implemented must not be indistinguishable from a gate that passed.
+
+    Gate names arrive as data -- ``business_work_order_types.pre_build_gate``, split on
+    ``|`` -- so a typo in a seed row, a rename applied on one side only, or an external
+    project's aspirational type row all reach this function as an ordinary string. The
+    dispatch used to end in an unconditional ``return True, ""``.
+    """
+    passed, reason = close_gates.run_gate_check(
+        "gate_that_was_never_written",
+        planning_root=pathlib.Path("."),
+        work_order_id="wo-1",
+        project_id="p-1",
+        conn=None,
+    )
+    assert passed is False
+    assert "unrecognised gate" in reason
+    assert "gate_that_was_never_written" in reason
+    # The message has to be actionable: an operator hitting this needs to know what IS
+    # valid, not merely that their name is not.
+    assert "design_brief_locked" in reason
+
+
+def test_no_gate_at_all_still_passes():
+    """Absence is not a failure. A work order type with no gate declares none, and
+    refusing to close it would make the fail-closed change a blockade rather than a check."""
+    for empty in (None, ""):
+        passed, reason = close_gates.run_gate_check(
+            empty,
+            planning_root=pathlib.Path("."),
+            work_order_id="wo-1",
+            project_id="p-1",
+            conn=None,
+        )
+        assert passed is True, f"{empty!r} was refused"
+        assert reason == ""
+
+
+def test_every_implemented_gate_is_registered():
+    """The registry must not drift behind the dispatch.
+
+    A branch added without registering its name would make a REAL gate report
+    "unrecognised" -- the fail-closed change turning into a false refusal.
+    """
+    implemented = _gate_names_in_the_dispatch()
+    assert implemented, "no gate names parsed -- has the dispatch been restructured?"
+    unregistered = implemented - close_gates.KNOWN_GATES
+    assert not unregistered, f"implemented but not in KNOWN_GATES: {sorted(unregistered)}"
+
+
+def test_the_registry_names_nothing_imaginary():
+    """The other direction: a registered name with no branch would be advertised in the
+    failure message as valid and then fail closed when used."""
+    implemented = _gate_names_in_the_dispatch()
+    phantom = close_gates.KNOWN_GATES - implemented
+    assert not phantom, f"registered but never implemented: {sorted(phantom)}"
+
+
+def test_every_seeded_work_order_type_names_a_real_gate():
+    """What the hole would actually have let through.
+
+    Migration 142 seeds ten work order types, each naming its pre- and post-build gates as
+    ``|``-separated text. Nothing joins that column to the dispatch, so this reads the seed
+    and checks it -- the one place the two sides are compared.
+    """
+    import re
+
+    sql = pathlib.Path("core/event_store/migrations/142_lean_baseline.sql").read_text(
+        encoding="utf-8"
+    )
+    block = sql.split("pre_build_gate, build_executor, post_build_gate", 1)[1]
+    block = block.split("PRAGMA foreign_keys=ON", 1)[0]
+
+    seeded: set[str] = set()
+    for cell in re.findall(r"'([a-z_]+(?:\|[a-z_]+)*)'", block):
+        parts = [p for p in cell.split("|") if p]
+        if len(parts) > 1 or cell in close_gates.KNOWN_GATES:
+            seeded.update(parts)
+
+    assert seeded, "no gate names parsed out of the seed -- has the migration moved?"
+    unknown = seeded - close_gates.KNOWN_GATES
+    assert not unknown, f"seeded work order types name gates that cannot run: {sorted(unknown)}"
