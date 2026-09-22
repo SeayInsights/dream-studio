@@ -18,7 +18,7 @@ Extract from user input:
 #### Step R1: Load Client Profile
 
 1. Read `~/.dream-studio/clients/{client}.yaml`.
-2. If file does not exist: **stop** with — "Client profile not found at `~/.dream-studio/clients/{client}.yaml`. Run `client-work:intake` to create it."
+2. If file does not exist: **stop** with — "Client profile not found at `~/.dream-studio/clients/{client}.yaml`. Run `power-platform:intake` to create it."
 3. Validate required fields: `client.name`, `network.proxy.type`.
 4. If `network.proxy` is absent: warn — "No network.proxy section in profile. Generating baseline rules only (non-standard-port, websocket-no-tls)."
 

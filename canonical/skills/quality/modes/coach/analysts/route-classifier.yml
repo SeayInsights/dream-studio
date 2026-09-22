@@ -87,7 +87,7 @@ known_skills:
     triggers: ["recap:", "session recap:", "summarize what we did", "what did we do"]
     description: Session summary
 
-  - skill: client-work
+  - skill: power-platform
     triggers: ["intake:", "sow:", "build report:", "review powerbi:", "optimize dax:", "build flow:", "build app:", "client handoff:"]
     description: Power Platform client lifecycle
 

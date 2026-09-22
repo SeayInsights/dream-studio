@@ -105,10 +105,10 @@ modes:
   skill: core/modes/verify/SKILL.md
   no_agent: Convenes graders and records a verdict on the authority. It owns the verdict, which is the
     thing a subagent hands back rather than writes.
-- mode: domains/client-work
-  skill: domains/modes/client-work/SKILL.md
-  agent: domains-client-work
-  installed_skill: ds-domains/modes/client-work/SKILL.md
+- mode: domains/power-platform
+  skill: domains/modes/power-platform/SKILL.md
+  agent: domains-power-platform
+  installed_skill: ds-domains/modes/power-platform/SKILL.md
   dispatched_because: 'isolation: the skill is 11918 bytes, enough that carrying it in a subagent protects
     the caller''s context'
   description: 'Power Platform client lifecycle — intake, SOW, build (Power BI, Power Apps, Power Automate),

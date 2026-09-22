@@ -38,7 +38,7 @@ packs:
       - generated code stays inside the active work order's module boundary
       - a deliverable that leaves the machine stops for the operator first
     # fullstack and website — Flag 1 fix; devops, kubernetes — 18.9 Tier 1; technical-writing, terraform, mobile — 18.9 Tier 2-3; data-engineering — 18.9 Tier 4
-    modes: [game-dev, saas-build, mcp-build, dashboard-dev, client-work, design, fullstack, website, devops, kubernetes, technical-writing, terraform, mobile, data-engineering]
+    modes: [game-dev, saas-build, mcp-build, dashboard-dev, power-platform, design, fullstack, website, devops, kubernetes, technical-writing, terraform, mobile, data-engineering]
     agents: [game, client]
     hooks: [on-game-validate]
     rules: [game/ai-code.md, game/data-files.md, game/gameplay-code.md, game/networking-code.md, game/shader-code.md, game/ui-code.md]

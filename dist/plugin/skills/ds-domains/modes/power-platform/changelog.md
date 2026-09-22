@@ -1,4 +1,4 @@
-# client-work — Changelog
+# power-platform — Changelog
 
 ## [1.0.0] - 2026-04-28
 

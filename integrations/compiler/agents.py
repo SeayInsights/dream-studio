@@ -135,6 +135,36 @@ def meta_files() -> list[str]:
     return [row["agent"] for row in _coverage()]
 
 
+def _imported_references(skill_path: Path) -> list[tuple[str, str]]:
+    """The sibling documents a skill's own `## Imports` list names, resolved and read.
+
+    A skill's relative import is correct where the skill lives and meaningless from
+    `canonical/agents/`, so naming it in a compiled agent is the same pointer-not-content
+    problem this compiler was written to remove -- one level down. Resolved against the
+    SKILL.md's directory, which is where the author wrote them from.
+
+    Unreadable or missing targets are skipped rather than raised on: a dangling import is
+    a defect in that skill, and `instruction-commands` is the gate that reports it. This
+    is the compiler, and refusing to build an agent because its skill names one bad path
+    would take the whole specialist out over a broken line.
+    """
+    import re as _re
+
+    body = skill_path.read_text(encoding="utf-8", errors="replace")
+    out: list[tuple[str, str]] = []
+    seen: set[Path] = set()
+    for rel in _re.findall(r"^[-*]\s+(\.\.?/[^\s`]+\.md)", body, _re.MULTILINE):
+        target = (skill_path.parent / rel).resolve()
+        if target in seen or not target.is_file():
+            continue
+        seen.add(target)
+        try:
+            out.append((rel, target.read_text(encoding="utf-8").strip()))
+        except OSError:
+            continue
+    return out
+
+
 def build_agent(row: dict[str, Any]) -> str:
     """The full text of the agent file this declaration compiles to."""
     meta = _load_meta(row)
@@ -182,6 +212,20 @@ def build_agent(row: dict[str, Any]) -> str:
         knowledge,
         "",
     ]
+
+    # AND WHAT THE SKILL ITSELF IMPORTS. A skill's `## Imports` list is relative to the
+    # skill, so from canonical/agents/ those paths resolve to nothing -- the agent was
+    # told to read files it could not reach, which is the pointer-not-content problem
+    # this compiler exists to remove, one level down.
+    for rel, body in _imported_references(skill_path):
+        parts += [
+            "---",
+            "",
+            f"# Imported by that skill — {rel}",
+            "",
+            body,
+            "",
+        ]
     return "\n".join(parts)
 
 

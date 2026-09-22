@@ -46,7 +46,7 @@ SKILL_SECTION_OVERRIDES: dict[str, str] = {
     "game-dev": "Domain Builders",
     "mcp-build": "Domain Builders",
     "dashboard-dev": "Domain Builders",
-    "client-work": "Domain Builders",
+    "power-platform": "Domain Builders",
     "domain-re": "Domain Builders",
 }
 

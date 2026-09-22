@@ -625,7 +625,7 @@ def main() -> None:
     if not profile_path.exists():
         print(
             f"ERROR: Client profile not found at {profile_path}\n"
-            "Run `client-work:intake` to create it.",
+            "Run `power-platform:intake` to create it.",
             file=sys.stderr,
         )
         sys.exit(1)

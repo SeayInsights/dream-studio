@@ -88,7 +88,7 @@ Before changing a core module, check this registry to see which skills will be a
 ---
 
 ### web.md
-**Used by:** career-scan, career-ops, analyze, security-dast, domains-client-work (research phase)
+**Used by:** career-scan, career-ops, analyze, security-dast, domains-power-platform (research phase)
 
 **Patterns:**
 - Web access fallback chain (Firecrawl → scraper-mcp → WebSearch/WebFetch)
@@ -106,9 +106,9 @@ Skills that dispatch non-standard subagent types (outside the Haiku/Sonnet/Opus 
 
 | Skill | Subagent type | Dispatch trigger |
 |-------|--------------|-----------------|
-| client-work | `bi-developer` | Any `.pbip`/`.tmdl` work, DAX debugging, M-query errors, Dataverse schema changes, RLS implementation |
+| power-platform | none | The `domains-power-platform` subagent carries the powerbi/ references inline; there is no external agent to depend on |
 
-**Impact:** If the `bi-developer` agent type is unavailable or slow, client-work will fail silently on Power BI deep work. Always verify agent availability before dispatching client-work on complex Power BI tasks.
+**Impact:** none remaining. This row recorded a dependency on `bi-developer`, an agent that never shipped with Dream Studio — it lived in a `~/.claude/agents/` directory on the author's machine. The consequence was written down and enforced by nothing, so on every other installation the dispatch named nothing and the step was silently skipped.
 
 ---
 
@@ -146,7 +146,7 @@ When modifying a core module:
 ## Version History
 
 - **2026-04-29**: Enforcement + gap closure
-  - Added "External Subagent Dependencies" section (client-work → bi-developer)
+  - Added "External Subagent Dependencies" section (power-platform → bi-developer)
   - All 37 SKILL.md files received "Before you start" preload block
   - debug/build got project GOTCHAS.md/CONSTITUTION.md step-0 check
   - think got CONSTITUTION.md check in Step 1 (Clarify)

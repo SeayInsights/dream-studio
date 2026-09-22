@@ -1,4 +1,4 @@
-name: client-work
+name: power-platform
 model_tier: sonnet
 description: Power Platform client lifecycle — intake, SOW, build (Power BI, Power
   Apps, Power Automate), review, handoff — with DAX/M-query patterns, delegation rules,

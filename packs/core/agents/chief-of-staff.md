@@ -110,11 +110,11 @@ All commands route to `packs/domains/agents/client.md`.
 
 | Command | Skills to inject |
 |---|---|
-| `intake:`, `sow:`, `proposal:` | `skills/domain/client-work` |
-| `build report:`, `review powerbi:`, `optimize dax:` | `skills/domain/client-work` |
-| `build flow:`, `review flow:` | `skills/domain/client-work` |
-| `build app:`, `review app:` | `skills/domain/client-work` |
-| `client handoff:`, `document:` | `skills/domain/client-work` |
+| `intake:`, `sow:`, `proposal:` | `skills/domain/power-platform` |
+| `build report:`, `review powerbi:`, `optimize dax:` | `skills/domain/power-platform` |
+| `build flow:`, `review flow:` | `skills/domain/power-platform` |
+| `build app:`, `review app:` | `skills/domain/power-platform` |
+| `client handoff:`, `document:` | `skills/domain/power-platform` |
 
 ### Main Session
 Skills invoked directly in main session — no agent spawn.

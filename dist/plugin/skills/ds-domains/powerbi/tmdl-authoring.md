@@ -2,7 +2,7 @@
 
 Companion to `pbip-format.md`. Covers patterns and gotchas for writing correct TMDL content — the semantic model layer of a .pbip project.
 
-Referenced by: client-work
+Referenced by: power-platform
 
 ---
 

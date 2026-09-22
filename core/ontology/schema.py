@@ -244,7 +244,7 @@ SKILL_TAXONOMY: list[SkillSpec] = [
                 "saas-build",
                 "mcp-build",
                 "dashboard-dev",
-                "client-work",
+                "power-platform",
                 "design",
                 "website",
                 "fullstack",
