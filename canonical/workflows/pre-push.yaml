@@ -130,6 +130,16 @@ gates:
     command: [py, -m, core.gates.rule_enforcement]
     fail_hint: "A rule names an enforcer that is not there. Point it at the one that survived, or add `unenforced: <20+ characters saying what is gone and why>` and remove its enforced_by."
 
+  - id: agent-coverage
+    tier: blocking
+    description: |
+      Every skill mode either names the specialist compiled from it or says in writing why
+      it has none. Enforce-or-declare: a gap nobody wrote down is indistinguishable from a
+      choice nobody made. Measured when this landed: 85 modes, 9 agents, and the eleven
+      audit modes beside quality/accessibility -- which had one -- had none.
+    command: [py, -m, core.gates.agent_coverage]
+    fail_hint: "A mode is neither answered by a specialist nor accounted for. Add an `agent:` row to canonical/agents/coverage.yml and recompile, or add `no_agent: <20+ characters saying why>`."
+
   - id: instruction-commands
     tier: blocking
     description: |

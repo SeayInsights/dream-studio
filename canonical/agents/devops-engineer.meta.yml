@@ -1,0 +1,8 @@
+# Source for devops-engineer. The .md beside this file is generated from it.
+
+description: >-
+  GitHub Actions CI/CD pipeline design, OIDC cloud auth setup, release automation, Docker build optimization, branch protection, and deployment gates. Invoke for any CI/CD pipeline, GitHub Actions workflow, or Docker build question.
+model: sonnet
+skill: ds-domains/modes/devops/SKILL.md
+scope: >-
+  devops covers pre-deploy pipeline concerns (CI/CD, OIDC, release automation, Docker builds, branch protection, deployment gates). For post-deploy runtime concerns (health checks, logging, signal handling), use the ops skill instead.

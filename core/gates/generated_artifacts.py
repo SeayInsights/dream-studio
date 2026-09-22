@@ -92,10 +92,55 @@ def _check_plugin_dist() -> tuple[bool, str]:
     return True, f"{len(shipped)} skill packs shipped"
 
 
+def _check_agents() -> tuple[bool, str]:
+    """The nine bundled subagents, each compiled from its declaration plus its skill.
+
+    An agent's body IS its knowledge now rather than a pointer to it, so a skill edited
+    without recompiling leaves a subagent answering from text that has moved on -- the same
+    silent staleness the pointer form had, relocated. This is the check that stops it.
+    """
+    from integrations.compiler.agents import check as _agents_check
+    from integrations.compiler.agents import meta_files
+
+    total = len(meta_files())
+    if total == 0:
+        return False, "no agent declarations found"
+    stale = _agents_check()
+    if stale:
+        return False, f"{len(stale)} of {total} stale: {', '.join(stale)}"
+    return True, f"{total} agents match their declarations"
+
+
+def _check_reviewers() -> tuple[bool, str]:
+    """One reviewer subagent per review seat, compiled from that seat's lanes.
+
+    Nineteen of the twenty-six lanes have no detector and no eval, so the bench's questions
+    are answered by whoever reads the listing. Each seat now compiles to an agent carrying
+    its own lanes; a lane edited without recompiling leaves a reviewer asking the previous
+    version of the question, which is worse than asking none.
+    """
+    from integrations.compiler.reviewers import check as _rev_check
+    from integrations.compiler.reviewers import seat_names
+
+    total = len(seat_names())
+    if total == 0:
+        return False, "no review seats found"
+    stale = _rev_check()
+    if stale:
+        return False, f"{len(stale)} of {total} stale: {', '.join(stale)}"
+    return True, f"{total} reviewers match the seat registry"
+
+
 #: (artifact, generator command a human should run, freshness check)
 ARTIFACTS: tuple[tuple[str, str, Callable[[], tuple[bool, str]]], ...] = (
     ("AGENTS.md", "py -m integrations.compiler.agents_md --write", _check_agents_md),
     ("canonical/review_lanes.yml", "py scripts/seat_lanes_data.py", _check_review_lanes),
+    ("canonical/agents", "py -m integrations.compiler.agents --write", _check_agents),
+    (
+        "canonical/agents (reviewers)",
+        "py -m integrations.compiler.reviewers --write",
+        _check_reviewers,
+    ),
     (
         "dist/plugin",
         'py -c "from pathlib import Path; from integrations.marketplace.plugin_dist import'

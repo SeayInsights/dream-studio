@@ -1,0 +1,9 @@
+# Source for research-analyst. The .md beside this file is generated from it.
+
+description: >-
+  Conduct structured research with source hierarchy, triangulation, and explicit bias identification. Use for market research, competitive analysis, and evidence gathering tasks.
+model: sonnet
+skill: ds-analyze/modes/research/SKILL.md
+essentials: |
+  Always search for disconfirming
+  evidence before supporting evidence.
