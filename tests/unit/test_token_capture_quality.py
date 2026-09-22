@@ -111,3 +111,31 @@ def test_an_unreadable_authority_costs_a_dimension_not_an_event(tmp_path):
     assert envelopes, "a broken authority took the token events with it"
     assert all(e.trace.get("work_order_id") is None for e in envelopes)
     assert all(e.payload["input_tokens"] for e in envelopes), "the spend itself survived"
+
+
+def test_a_token_row_names_a_task_only_when_one_claims_to_be_running(tmp_path):
+    """`task_id` read 0% because there was nothing to read: tasks went created ->
+    complete with no state between, so at every instant no task claimed to be running.
+    `start_task` adds the middle state.
+
+    ONE, OR NOTHING. Several tasks can be in progress at once — the model advances more
+    than one in a turn, which is why `start_task` returns `siblings_in_progress`. Picking
+    the newest would yield an id that looks measured and is a guess.
+    """
+    from unittest import mock
+
+    from emitters.claude_code import token_transcript as tt
+
+    for expected in ("task-abc", None):
+        with (
+            mock.patch.object(tt, "_resolve_project_id", return_value="p"),
+            mock.patch.object(tt, "_resolve_work_order_id", return_value="wo-1"),
+            mock.patch.object(tt, "_resolve_task_id", return_value=expected),
+        ):
+            envelopes = tt.normalize_stop_token_usage(
+                {"transcript_path": str(_transcript(tmp_path))}
+            )
+        assert all(e.trace["task_id"] == expected for e in envelopes)
+        assert all(
+            e.trace["work_order_id"] == "wo-1" for e in envelopes
+        ), "the work order must survive an unresolvable task"
