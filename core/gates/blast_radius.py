@@ -88,7 +88,9 @@ def compute_impact_set(
       - a changed ``.py`` source file selects every ``tests/**/test_*.py`` whose
         text references its dotted module path (word-boundary match, so
         ``core.foo.bar`` does not match ``core.foo.barbaz`` but does match
-        ``core.foo.bar.do_thing`` and ``from core.foo.bar import ...``).
+        ``core.foo.bar.do_thing`` and ``from core.foo.bar import ...``);
+      - any other changed file selects every test whose text names its
+        repo-relative path (``canonical/rules.yml``), the same way.
     """
     root = Path(repo_root)
     changed = sorted({_normalize(f) for f in changed_files if f})
@@ -100,6 +102,15 @@ def compute_impact_set(
             dependent.add(f)
         elif f.endswith(".py"):
             module_tokens.update(_module_tokens(f))
+        else:
+            # A DATA FILE IS A DEPENDENCY TOO. Replayed on the change that edited
+            # canonical/rules.yml and broke two tests naming that path three times, this
+            # set held neither of them: only .py changes produced tokens, so a test that
+            # reads a registry, a manifest or a pack file was unreachable through the file
+            # it reads. The token is the repo-relative path, matched exactly as a module
+            # name is. (A test that builds the path from parts is not reached this way;
+            # that limit is real and is the reason the sweep tests also always run.)
+            module_tokens.add(f)
 
     if module_tokens:
         patterns = [re.compile(re.escape(tok) + r"\b") for tok in module_tokens]
