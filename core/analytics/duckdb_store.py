@@ -358,8 +358,38 @@ def derive_events_fact(conn, studio_db_path, *, full_rebuild: bool = False) -> i
                 r[1] for r in sqlite3.connect(studio_db_path).execute(f"PRAGMA table_info({table})")
             }
 
-            def d(n, cols=cols):
-                return f"e.{n}" if n in cols else "NULL"
+            has_trace = "trace" in cols
+
+            def d(n, cols=cols, has_trace=has_trace):
+                """The dimension's value: its column, else the trace it was emitted on.
+
+                THE FALLBACK IS THE POINT. The two canonical tables carry different
+                columns -- `ai_canonical_events` has no `work_order_id`, `task_id`,
+                `milestone_id`, `tool_id` or `adapter_id`, and `business_canonical_events`
+                has no `session_id`, `skill_id`, `agent_id` or `model_id`. Emitting NULL
+                for whichever side lacks the column silently discarded attribution the
+                emitter had already resolved and written.
+
+                Measured on 86,241 token.consumed rows: `project_id` arrived at 93%
+                because it IS a column on ai_canonical_events, while `work_order_id`,
+                `task_id` and `agent_id` all read 0% -- not because nothing resolved them,
+                but because nothing carried them across. "What did this work order cost"
+                was unanswerable for that reason alone.
+
+                COALESCE rather than replace, so a real column still wins over the trace
+                copy and this can never override a value the table itself asserts.
+                """
+                if not has_trace:
+                    return f"e.{n}" if n in cols else "NULL"
+                # json_valid guard: json_extract_string RAISES on malformed input and
+                # takes the whole derive with it, so one unparsable trace would stop
+                # the dashboard refreshing at all. A row nobody can read is a row with
+                # no dimensions, not a reason to drop the other 400,000.
+                from_trace = (
+                    f"CASE WHEN json_valid(e.trace) "
+                    f"THEN json_extract_string(e.trace,'$.{n}') END"
+                )
+                return f"COALESCE(e.{n}, {from_trace})" if n in cols else from_trace
 
             conn.execute(f"""
                 INSERT INTO events_fact SELECT e.event_id, '{src}', e.event_type, e.event_timestamp,
