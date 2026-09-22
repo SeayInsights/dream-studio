@@ -102,10 +102,17 @@ def test_installer_projection_vs_routable_surface_contract():
     assert dir_scan - routable == {
         "ds-bootstrap"
     }, f"unexpected installed-but-unroutable skill dirs: {dir_scan - routable - {'ds-bootstrap'}}"
-    assert routable - dir_scan == {
-        "ds-website",
-        "ds-fullstack",
-    }, f"unexpected routable skills without a top-level dir: {routable - dir_scan}"
+    # EVERY ROUTABLE PACK HAS ITS OWN DIRECTORY. This used to except `ds-website` and
+    # `ds-fullstack`, which were routable packs whose source lived at
+    # `canonical/skills/domains/modes/<pack>/` via a `skill_path` indirection -- inside
+    # another pack's tree, and double-counted, because `domains` also listed each of them
+    # as one of its own modes. Their sub-modes then sat three levels deep and did not
+    # match the `*/modes/*` glob at all, so eleven modes were invisible to every tool that
+    # walks the tree. The pin recorded the oddity; moving them to their own homes removes
+    # the thing it was recording.
+    assert (
+        routable - dir_scan == set()
+    ), f"routable skills with no top-level dir: {routable - dir_scan}"
 
 
 def test_build_excludes_bytecode_and_cruft(tmp_path: Path):

@@ -21,16 +21,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-LINTER = (
-    REPO_ROOT
-    / "canonical"
-    / "skills"
-    / "domains"
-    / "modes"
-    / "website"
-    / "scripts"
-    / "lint-artifact.py"
-)
+LINTER = REPO_ROOT / "canonical" / "skills" / "website" / "scripts" / "lint-artifact.py"
 
 
 def _load():
@@ -272,9 +263,9 @@ def test_a_missing_file_is_an_error_not_a_clean_bill(tmp_path, capsys):
 def test_every_rule_in_the_catalog_is_implemented_with_its_documented_severity():
     """The reference doc is the authority. A rule documented and not implemented is the
     defect this whole file exists for, one level up."""
-    catalog = (
-        REPO_ROOT / "canonical/skills/domains/modes/website/references/anti-slop-linter.md"
-    ).read_text(encoding="utf-8")
+    catalog = (REPO_ROOT / "canonical/skills/website/references/anti-slop-linter.md").read_text(
+        encoding="utf-8"
+    )
 
     import re
 

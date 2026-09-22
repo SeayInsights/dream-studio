@@ -29,31 +29,31 @@ def _skill_md(pack: str, mode: str) -> Path:
 
 
 def test_website_discover_resolves_to_correct_skill_md():
-    expected = REPO_ROOT / "canonical/skills/domains/modes/website/modes/discover/SKILL.md"
+    expected = REPO_ROOT / "canonical/skills/website/modes/discover/SKILL.md"
     assert _skill_md("website", "discover") == expected
     assert expected.is_file(), f"SKILL.md not found at {expected}"
 
 
 def test_website_critique_resolves_to_correct_skill_md():
-    expected = REPO_ROOT / "canonical/skills/domains/modes/website/modes/critique/SKILL.md"
+    expected = REPO_ROOT / "canonical/skills/website/modes/critique/SKILL.md"
     assert _skill_md("website", "critique") == expected
     assert expected.is_file()
 
 
 def test_fullstack_frontend_resolves_to_correct_skill_md():
-    expected = REPO_ROOT / "canonical/skills/domains/modes/fullstack/modes/frontend/SKILL.md"
+    expected = REPO_ROOT / "canonical/skills/fullstack/modes/frontend/SKILL.md"
     assert _skill_md("fullstack", "frontend") == expected
     assert expected.is_file()
 
 
 def test_fullstack_backend_resolves_to_correct_skill_md():
-    expected = REPO_ROOT / "canonical/skills/domains/modes/fullstack/modes/backend/SKILL.md"
+    expected = REPO_ROOT / "canonical/skills/fullstack/modes/backend/SKILL.md"
     assert _skill_md("fullstack", "backend") == expected
     assert expected.is_file()
 
 
 def test_fullstack_integrate_resolves_to_correct_skill_md():
-    expected = REPO_ROOT / "canonical/skills/domains/modes/fullstack/modes/integrate/SKILL.md"
+    expected = REPO_ROOT / "canonical/skills/fullstack/modes/integrate/SKILL.md"
     assert _skill_md("fullstack", "integrate") == expected
     assert expected.is_file()
 
@@ -145,13 +145,13 @@ def test_quality_secure_directory_removed():
 
 
 def test_fullstack_integrate_skill_md_at_least_120_lines():
-    path = REPO_ROOT / "canonical/skills/domains/modes/fullstack/modes/integrate/SKILL.md"
+    path = REPO_ROOT / "canonical/skills/fullstack/modes/integrate/SKILL.md"
     lines = path.read_text(encoding="utf-8").splitlines()
     assert len(lines) >= 120, f"integrate SKILL.md has {len(lines)} lines; expected ≥120"
 
 
 def test_fullstack_integrate_contains_partial_failure_section():
-    path = REPO_ROOT / "canonical/skills/domains/modes/fullstack/modes/integrate/SKILL.md"
+    path = REPO_ROOT / "canonical/skills/fullstack/modes/integrate/SKILL.md"
     content = path.read_text(encoding="utf-8")
     assert (
         "Partial Integration Failure" in content or "partial integration failure" in content.lower()
@@ -159,7 +159,7 @@ def test_fullstack_integrate_contains_partial_failure_section():
 
 
 def test_fullstack_integrate_contains_schema_migration_section():
-    path = REPO_ROOT / "canonical/skills/domains/modes/fullstack/modes/integrate/SKILL.md"
+    path = REPO_ROOT / "canonical/skills/fullstack/modes/integrate/SKILL.md"
     content = path.read_text(encoding="utf-8")
     assert "Schema Migration" in content or "schema migration" in content.lower()
 

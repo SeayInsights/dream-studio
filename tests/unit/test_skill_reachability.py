@@ -24,16 +24,13 @@ from core.skills.reachability import SKILLS_DIR, routes, unreachable
 #: while a name says which mode, and fixing one is deleting a line. A new unreachable
 #: mode fails this test carrying its own id.
 KNOWN_UNREACHABLE = {
-    "domains/game-dev",
     "quality/architecture",
     "quality/audit",
     "quality/backend-api",
     "quality/database-compliance",
     "quality/frontend-ux",
-    "quality/groom",
     "quality/ops",
     "quality/pre-launch",
-    "security/dashboard",
 }
 
 
@@ -121,3 +118,31 @@ def test_pinned_modes_still_exist_on_disk():
     for mode in KNOWN_UNREACHABLE:
         pack, name = mode.split("/")
         assert (SKILLS_DIR / pack / "modes" / name / "SKILL.md").is_file(), mode
+
+
+def test_a_pack_that_routes_to_its_own_sub_mode_is_a_route_in():
+    """THE FOURTH ROUTE, and the detector was wrong without it.
+
+    `ds-website` carries a Mode Routing Table naming all nine sub-modes with their own
+    trigger words, so `website/animate` is reachable: the operator says `animate:` and the
+    pack dispatches. Counting only triggers, agents and CLI groups reported ten such modes
+    as having no way in, which reads as "these are dead" when it is the ordinary way a
+    pack with sub-modes works.
+    """
+    by_mode = {r["mode"]: r for r in routes()}
+    for mode in ("website/animate", "website/discover", "fullstack/backend"):
+        assert mode in by_mode, f"{mode} was not classified"
+        assert (
+            "pack" in by_mode[mode]["routes"]
+        ), f"{mode} is dispatched by its own pack's routing table and was called unreachable"
+
+
+def test_un_nesting_made_previously_uncounted_modes_visible():
+    """`website` and `fullstack` used to live at `domains/modes/<pack>/`, so their own
+    sub-modes sat three levels deep and did not match the `*/modes/*` glob at all. Eleven
+    modes were not merely unreachable — they were never counted."""
+    modes = {r["mode"] for r in routes()}
+    assert "website/animate" in modes and "fullstack/backend" in modes
+    assert not any(
+        m.startswith("domains/website") or m.startswith("domains/fullstack") for m in modes
+    )

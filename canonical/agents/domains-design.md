@@ -18,10 +18,7 @@ The other `domains` specialists, so you can hand work back BY NAME rather than a
 
 - `data-engineer`
 - `devops-engineer`
-- `domains-fullstack-integrate`
 - `domains-power-platform`
-- `domains-website-brand`
-- `domains-website-page`
 - `kubernetes-expert`
 - `mobile-developer`
 - `technical-writer`

@@ -85,7 +85,7 @@ def test_ds_website_present_as_top_level_pack(tmp_path):
     packs_yaml.write_text(
         "schema_version: 2\npacks:\n"
         "  website:\n    description: Website builder\n    skill: ds-domains-website\n"
-        "    skill_path: canonical/skills/domains/modes/website\n"
+        "    skill_path: canonical/skills/website\n"
         "    modes: [discover, page, prototype]\n"
     )
     build_routing_table = _get_build_routing_table()
@@ -98,7 +98,7 @@ def test_ds_fullstack_present_as_top_level_pack(tmp_path):
     packs_yaml.write_text(
         "schema_version: 2\npacks:\n"
         "  fullstack:\n    description: Fullstack builder\n    skill: ds-domains-fullstack\n"
-        "    skill_path: canonical/skills/domains/modes/fullstack\n"
+        "    skill_path: canonical/skills/fullstack\n"
         "    modes: [frontend, backend, integrate, secure]\n"
     )
     build_routing_table = _get_build_routing_table()
