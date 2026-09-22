@@ -57,12 +57,16 @@ def test_scheduled_scan_and_single_source_config():
     pre_push = PRE_PUSH.read_text(encoding="utf-8")
     assert "lint_baseline.py" in pre_push, "the pre-push gate must read the single pin"
 
+    # Matched on the INVOCATION, not the substring: ci.yml names a test file called
+    # test_release_gate_lint_baseline_policy.py, which contains "lint_baseline" while
+    # invoking nothing. A check that a filename can satisfy is not a check.
     ci = CI.read_text(encoding="utf-8")
-    if "lint_baseline" in ci or "flake8" in ci:
-        assert "lint_baseline.py" in ci, (
-            "CI references linting but not through lint_baseline.py — a second path to the"
-            " baseline is exactly the drift this pin exists to prevent"
-        )
+    runs_flake8 = "flake8 " in ci or "-m flake8" in ci
+    runs_baseline = "interfaces/cli/lint_baseline.py" in ci
+    assert not (runs_flake8 and not runs_baseline), (
+        "CI runs flake8 directly instead of through interfaces/cli/lint_baseline.py — a"
+        " second path to the baseline is exactly the drift this pin exists to prevent"
+    )
 
     # The flake8 *config* pin is single-sourced too: `.flake8` is the only flake8 config.
     # pyproject.toml must not carry a second, divergent (and — without flake8-pyproject —
