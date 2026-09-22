@@ -30,7 +30,7 @@ BOOTSTRAP = (
     "(runpy.run_path(str(dispatcher),run_name='__main__') if dispatcher else None); "
     'sys.exit(0)"'
 )
-RESOLVED = '"C:/Python312/python.exe" "C:/Users/x/.claude/hooks/dispatch/hooks.py" PostToolUse'
+RESOLVED = '"C:/Python312/python.exe" "C:/ds-home/.claude/hooks/dispatch/hooks.py" PostToolUse'
 
 
 def test_bootstrap_and_resolved_forms_are_one_hook():
@@ -40,15 +40,15 @@ def test_bootstrap_and_resolved_forms_are_one_hook():
 
 def test_bare_and_absolute_interpreters_are_one_hook():
     """The earlier regression, still pinned."""
-    bare = 'python "C:/Users/x/.claude/hooks/run.py" Stop'
-    absolute = '"C:/Python312/python.exe" "C:/Users/x/.claude/hooks/run.py" Stop'
+    bare = 'python "C:/ds-home/.claude/hooks/run.py" Stop'
+    absolute = '"C:/Python312/python.exe" "C:/ds-home/.claude/hooks/run.py" Stop'
     assert hook_identity(bare) == hook_identity(absolute)
 
 
 def test_the_installer_relocates_a_script_and_it_stays_one_hook():
     """emitters/claude_code/run.py is installed as ~/.claude/hooks/run.py."""
     source = 'python "emitters/claude_code/run.py" UserPromptSubmit'
-    installed = '"C:/Python312/python.exe" "C:/Users/x/.claude/hooks/run.py" UserPromptSubmit'
+    installed = '"C:/Python312/python.exe" "C:/ds-home/.claude/hooks/run.py" UserPromptSubmit'
     assert hook_identity(source) == hook_identity(installed)
 
 

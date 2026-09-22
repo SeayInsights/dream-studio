@@ -14,15 +14,19 @@ fail, and none of the failures would say anything true about that project.
 from __future__ import annotations
 
 import pathlib
+import sys
 
 from core.gates.pre_push import main as pre_push_main
 from core.projects.standards import GATE_MANIFEST_PATHS, gate_manifest_for
 
-MANIFEST = """name: demo-gates
+# sys.executable, NOT `py`: that is the Windows launcher, and ubuntu and macos do not
+# have it, so this manifest ran nowhere but the machine that wrote it. pr-smoke runs
+# four gate files and never saw it; full-ci on main runs the suite and failed.
+MANIFEST = f"""name: demo-gates
 gates:
   - id: says-hello
     description: proves the project's OWN manifest ran
-    command: [py, -c, "print('hello from the project')"]
+    command: ["{sys.executable.replace(chr(92), "/")}", "-c", "print('hello')"]
     fail_hint: n/a
 """
 
@@ -112,3 +116,18 @@ def test_main_still_takes_no_arguments_for_this_repo():
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", default=None)
     assert parser.parse_args([]).repo is None
+
+
+def test_the_manifest_name_is_the_one_that_already_existed():
+    """NOT A NEW CONVENTION. `interfaces/cli/ds_workflow.PROJECT_GATE_MANIFEST` had
+    already established `.dream-studio/pre-push.yaml` for
+    `ds workflow run pre-push --repo-root`, and this module first shipped inventing a
+    second name. Two names for one fact means a project writing either is gated by one
+    door and refused by the other, with nothing saying why."""
+    from interfaces.cli.ds_workflow import PROJECT_GATE_MANIFEST
+
+    from core.projects.standards import GATE_MANIFEST_PATHS
+
+    assert (
+        pathlib.Path(*GATE_MANIFEST_PATHS[0]) == PROJECT_GATE_MANIFEST
+    ), "the two doors onto a project's gate manifest disagree about its name"

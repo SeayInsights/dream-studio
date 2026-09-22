@@ -174,6 +174,42 @@ ARTIFACTS: tuple[tuple[str, str, Callable[[], tuple[bool, str]]], ...] = (
 )
 
 
+def _tracked_files(base: Path) -> set[str] | None:
+    """Every path git tracks, or None when git cannot say.
+
+    WHY THE REPORT IS RESTRICTED TO THEM. It scanned the working tree, so it reported
+    whatever happened to be lying in the checkout -- and 7 of the 14 files it named on
+    the machine that wrote this list were UNTRACKED local scratch: half-finished audit
+    notes, publication rehearsal reports, two `tools/_ta*_inventory.md` files. None of
+    them exist on a clean checkout, so the same command gave two different answers on two
+    machines and the committed list was right on exactly one of them.
+
+    A gate about the repository's own artifacts has no business reporting a file the
+    repository does not have. Restricting to tracked files also makes the result
+    identical everywhere, which is what let this be pinned by name at all.
+
+    None (git unavailable) falls back to scanning everything: a report is better than no
+    report, and the caller is a listing rather than a verdict.
+    """
+    import subprocess
+
+    try:
+        proc = subprocess.run(
+            ["git", "ls-files"],
+            cwd=str(base),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return {line.strip() for line in (proc.stdout or "").splitlines() if line.strip()}
+
+
 def unverifiable_generated_claims(root: Path | None = None) -> list[str]:
     """Files asserting they are generated while naming no runnable generator.
 
@@ -188,6 +224,7 @@ def unverifiable_generated_claims(root: Path | None = None) -> list[str]:
     # files were ones the gate already verifies, which is most of why a list left
     # "for whoever does that" was never worked: it cried wolf about the covered ones.
     known = tuple(a.rstrip("/") for a, _, _ in ARTIFACTS)
+    tracked = _tracked_files(base)
     out = []
     for path in base.rglob("*"):
         if not path.is_file() or path.suffix not in {".md", ".yml", ".yaml", ".json"}:
@@ -196,6 +233,8 @@ def unverifiable_generated_claims(root: Path | None = None) -> list[str]:
         if any(part in _SKIP_PARTS for part in rel.parts):
             continue
         posix = rel.as_posix()
+        if tracked is not None and posix not in tracked:
+            continue  # local scratch: not the repository's artifact to answer for
         if any(posix == k or posix.startswith(k + "/") for k in known):
             continue
         try:

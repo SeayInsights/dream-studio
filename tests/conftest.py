@@ -280,7 +280,7 @@ def _targets_guarded_repo(argv: list, cwd: object) -> bool:
 
     THE FIRST VERSION COUNTED EVERY GIT CALL, and the improved failure message caught it
     within one run: a test was blamed for a commit the reflog attributed to the operator,
-    on the evidence that it had run `git -C C:/Users/danni/builds/dreamysuite tag
+    on the evidence that it had run `git -C <another-checkout> tag
     --sort=-version:refname` -- a read, against a different repository entirely. Two facts
     that contradict each other are worse than one fact, so the record has to be about the
     right repository.

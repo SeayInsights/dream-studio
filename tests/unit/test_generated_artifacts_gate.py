@@ -95,7 +95,11 @@ def test_unverifiable_claims_are_reported_but_never_fail():
     worth no more than no claim — but blocking a push on all of them would be a
     wall, so they are a count, not a verdict."""
     claims = gate.unverifiable_generated_claims()
-    assert len(claims) > 10, "expected the known backlog of unverifiable banners"
+    # WAS `> 10`, WRITTEN WHEN THIS REPORTED 96. Of those, 42 were files this gate
+    # already verifies, 40 were the word "generated" in prose about a different
+    # file, and 7 were untracked local scratch. Seven are real. The old floor
+    # asserted the noise.
+    assert len(claims) >= 5, "expected the known backlog of unverifiable banners"
     assert gate.run()["status"] == "pass", "unverifiable claims must not fail the gate"
     # And the registered artifacts are not double-counted as unverifiable.
     registered = {a for a, _, _ in gate.ARTIFACTS}
@@ -121,16 +125,9 @@ KNOWN_UNVERIFIABLE = {
     "canonical/skills/analyze/modes/intelligence/reference/output-format.md",
     "canonical/skills/core/modes/review/templates/output-formats/findings-report.md",
     "canonical/skills/quality/modes/accessibility/gotchas.yml",
-    "docs/audits/2026-05-22-full-stock/00c-mechanical-inventory-final.md",
     "docs/contracts/security-review-scan-catalog.yaml",
-    "docs/publication/docs_publication_readiness_report.md",
-    "docs/publication/final_history_rewrite_branch_classification_report.md",
-    "docs/publication/history_rewrite_force_push_plan.md",
-    "docs/publication/history_rewrite_rehearsal_report.md",
     "docs/reference/adapters.md",
     "docs/reference/layer-map.md",
-    "tools/_ta0c_activity_log_inventory.md",
-    "tools/_ta4_hardcoded_project_id_inventory.md",
 }
 
 

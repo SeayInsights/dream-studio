@@ -16,6 +16,7 @@ something false about the work.
 from __future__ import annotations
 
 import pathlib
+import sys
 
 import pytest
 
@@ -97,12 +98,26 @@ def test_a_declared_non_pytest_runner_refuses_rather_than_running_pytest(tmp_pat
 
 def test_with_target_is_used_verbatim_and_the_target_substituted(tmp_path):
     """Declaring `with_target` is the project saying "here is how"; it is not guessed at."""
-    root = _project(
-        tmp_path,
+    # sys.executable, NOT `py`: that is the Windows launcher, and two of the three CI
+    # platforms do not have it. pr-smoke runs four gate files and never saw this; full-ci
+    # on main runs the suite and failed on ubuntu and macos.
+    #
+    # The probe is a FILE rather than a `-c` one-liner. Inlining the code put quotes
+    # inside a YAML scalar, which made the document unparseable -- and an unparseable
+    # profile reads as NO profile, so the test silently fell back to pytest and failed
+    # for a reason that had nothing to do with what it was checking.
+    root = _project(tmp_path, None)
+    (root / "probe.py").write_text(
+        "import sys\nsys.exit(0 if sys.argv[1] == 'src/foo.test.js' else 9)\n",
+        encoding="utf-8",
+    )
+    interpreter = sys.executable.replace("\\", "/")
+    (root / STANDARDS_PATH[0]).mkdir(parents=True, exist_ok=True)
+    (root / pathlib.Path(*STANDARDS_PATH)).write_text(
         "test:\n"
         "  command: fake-runner\n"
-        "  with_target: py -c \"import sys; sys.exit(0 if sys.argv[1] == 'src/foo.test.js'"
-        ' else 9)" {target}\n',
+        f"  with_target: '\"{interpreter}\" probe.py {{target}}'\n",
+        encoding="utf-8",
     )
     check = _run_one_test_check("src/foo.test.js", root)
     assert check["executed"] is True
@@ -126,7 +141,9 @@ def test_a_project_declaring_pytest_still_runs_pytest(tmp_path):
 def test_the_cmd_form_bypasses_the_profile_entirely(tmp_path):
     """`cmd:` is the author saying exactly what to run, which is more specific than the
     project's default and must not be second-guessed by it."""
-    check = _run_one_test_check("cmd: py -c pass", _project(tmp_path, "test: npm test\n"))
+    check = _run_one_test_check(
+        f'cmd: "{sys.executable}" -c pass', _project(tmp_path, "test: npm test\n")
+    )
     assert check["executed"] is True
     assert check["passed"] is True, check.get("error")
 
