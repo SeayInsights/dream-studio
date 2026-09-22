@@ -18,6 +18,7 @@ the same function instead of carrying a second answer.
 from __future__ import annotations
 
 import json
+import shlex
 import sys
 from pathlib import Path
 
@@ -45,12 +46,53 @@ def test_the_template_really_does_ship_bare_python():
     assert any(c.startswith("python ") for c in commands)
 
 
-def test_every_template_command_resolves_to_a_real_interpreter():
+def test_every_template_command_resolves_to_an_executable_that_exists():
+    """THE ASSERTION WAS TIGHTER THAN THE RULE, and it was green only where the feature
+    was missing.
+
+    It used to require that every resolved command name the Python interpreter. That was
+    true until the native enqueuer landed, after which the PostToolUse hook correctly
+    resolves to `ds-enqueue.exe` instead. The binary is a local `cargo build --release`
+    artifact and gitignored, so CI never has one -- the assertion passed in CI and failed
+    on the operator's machine. Red exactly where the feature works is worse than no test:
+    it teaches people that local red is noise.
+
+    The rule it was reaching for is that the command names an executable that EXISTS. On a
+    stock Windows box bare `python` is the Microsoft Store App Execution Alias, a zero-byte
+    stub that prints "Python was not found" and exits 9009 without running anything -- and
+    a hook that never runs produces no error, just an absence. That rule holds whichever
+    interpreter a given hook resolves to, so it is what is asserted.
+    """
     for command in _template_commands():
         resolved = resolve_hook_command(command)
         assert not resolved.startswith("python "), f"still bare: {resolved[:60]}"
         # The quoting convention differs per platform; the executable path is what matters.
-        assert Path(sys.executable).stem in resolved
+        executable = shlex.split(resolved, posix=False)[0].strip('"')
+        assert Path(
+            executable
+        ).is_file(), f"{command[:48]!r} resolves to {executable!r}, which is not a file"
+
+
+def test_the_enqueue_hook_prefers_the_native_binary_when_one_is_built():
+    """Both states are correct, so neither is assumed.
+
+    The binary is gitignored, so a fresh checkout and every CI runner has only the Python
+    enqueuer -- the fallback is the common case, not the edge one, and it must keep
+    working. Measured per PostToolUse invocation: 267 ms for the original dispatcher,
+    51 ms for enqueue.py, 27 ms for the binary.
+    """
+    from interfaces.cli.setup_hooks import _native_enqueue_path
+
+    enqueue_commands = [c for c in _template_commands() if "enqueue.py" in c]
+    assert enqueue_commands, "no enqueue hook in the template — this guards nothing"
+
+    native = _native_enqueue_path()
+    for command in enqueue_commands:
+        resolved = resolve_hook_command(command)
+        if native is None:
+            assert "enqueue.py" in resolved, "with no binary it must fall back to Python"
+        else:
+            assert native.name in resolved, "a built binary must be preferred"
 
 
 def test_an_already_resolved_command_is_left_alone():
