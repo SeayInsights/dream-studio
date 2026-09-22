@@ -94,19 +94,14 @@ The following extracted pattern files are available in `skills/domains/modes/des
 
 ### Search Utilities
 
-Two Python utilities provide quick pattern lookups:
+Both lookups are reference documents you read directly — there is no search utility, and there never was one.
 
-**Font Pairing Search:**
-```bash
-py skills/domains/modes/design/references/search-font-pairings.py "modern professional"
-# Returns matching font pairings from 75 curated pairs
-```
+| Looking for | Read |
+|---|---|
+| A font pairing | `references/font-pairings.md` (75 curated pairs) |
+| An anti-pattern and its severity | `references/anti-patterns.md` |
 
-**Anti-Pattern Search:**
-```bash
-py skills/domains/modes/design/references/search-anti-patterns.py "color accessibility"
-# Returns relevant anti-patterns with severity levels
-```
+Grep them for the term you want. This page previously gave two `py ...` commands over `search-font-pairings.py` and `search-anti-patterns.py`; neither file has ever existed, so the instruction could only ever fail.
 
 ## Mode Routing
 

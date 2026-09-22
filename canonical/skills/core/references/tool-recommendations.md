@@ -1,5 +1,18 @@
 # Tool Recommendations System - Technical Reference
 
+> **STATUS: NOT IMPLEMENTED. This is a design, not a description.**
+>
+> Nothing in this document exists in the codebase. Verified 2026-09-22: there is no
+> `control.research.tools` module, no `--recommend-tools` implementation anywhere in the
+> source, and `tool_registry` is not among the tables a fresh `bootstrap_database` creates
+> (its sibling `research_cache` is). This document used to give two invocations of that
+> module as runnable commands; an agent following them would get `ModuleNotFoundError`.
+>
+> It is kept because it is a coherent design and the work may still be wanted, not because
+> any of it is available. `ds-core:think` already handles the absence correctly —
+> "If no maintained interface exists, state that tool discovery is unavailable" — and that
+> is the behaviour to follow. **Do not instruct anyone to run anything on this page.**
+
 ## Overview
 
 The `--recommend-tools` flag enables automatic discovery and recommendation of external tools (Python packages, MCPs, APIs, SaaS) based on problem keywords. This system helps think mode surface relevant tools early in design.
@@ -101,10 +114,9 @@ conn.execute("""
 conn.commit()
 ```
 
-Or use the CLI:
-```bash
-py -m control.research.tools "celery" --add-tool
-```
+Or, in the design, a CLI (not built — see the status banner):
+
+    control.research.tools "celery" --add-tool
 
 ### Removing a Tool
 
@@ -152,7 +164,7 @@ rebuild_index()  # Clear cache and rebuild
 - **Fix**: Update tags or confidence_score via UPDATE statement and rebuild index.
 
 ### Cache hit/miss ratio too low
-- **Debug**: Run `py -m control.research.tools "your-query" --cache-stats`
+- **Debug**: the design's cache-stats entry point, `control.research.tools "your-query" --cache-stats` (not built)
 - **Fix**: If misses are high, your queries may vary in phrasing. Normalize queries to consistent keywords.
 
 ### Index out of sync after manual edits
