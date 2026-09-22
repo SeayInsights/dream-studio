@@ -152,8 +152,10 @@ def unrunnable_target(acceptance_criteria: str | None) -> str | None:
 
     Measured on the live authority 2026-09-21: of 1,387 tasks carrying a
     TEST-CHECK, 930 named a file that exists and 457 -- ONE IN THREE -- named
-    something that cannot be run at all. The corpus includes `a`, `cargo`, `cmd:`
-    and a bare `TEST-CHECK:` with nothing after it.
+    something that cannot be run at all. The corpus includes `a`, `cargo` and a bare
+    `TEST-CHECK:` with nothing after it. It ALSO included `cmd:`, which this first
+    counted as junk and which is in fact the executor's stack-agnostic form -- so
+    part of that 457 was a supported form being refused by its own doorman.
 
     That is what made this ceremony rather than a check: a third of the time a
     close either blocks or passes for a reason about the CRITERION, telling the
@@ -167,11 +169,27 @@ def unrunnable_target(acceptance_criteria: str | None) -> str | None:
     import re
     from pathlib import Path as _Path
 
+    from core.work_orders.verify_executor import cmd_argv
+
     for line in str(acceptance_criteria or "").splitlines():
-        m = re.search(r"TEST-CHECK\s*:\s*(\S*)", line)
+        m = re.search(r"TEST-CHECK\s*:\s*(.*)$", line)
         if not m:
             continue
-        raw = m.group(1).strip().strip("`\"'")
+        expr = m.group(1).strip()
+        # THE cmd: FORM IS NOT A PATH. It is how a repo that does not run pytest says how
+        # it IS verified, and reading its first token as a filename refused every one of
+        # them -- which made the executor's only stack-agnostic branch unreachable from
+        # the guarded door. Parsed by the executor's own function so the two cannot drift.
+        is_cmd, _argv, problem, _detail = cmd_argv(expr)
+        if is_cmd:
+            # Still a real check: a cmd: form naming nothing runnable is refused, the
+            # same as a node id naming a file that does not exist.
+            if problem == "empty":
+                return "(nothing after TEST-CHECK: cmd:)"
+            if problem == "unparseable":
+                return f"cmd: {expr[4:].strip()}"
+            continue
+        raw = expr.split()[0].strip().strip("`\"'") if expr.split() else ""
         if not raw:
             return "(nothing after TEST-CHECK:)"
         # `::test_name` with no path is a legitimate shape -- the executor resolves it
