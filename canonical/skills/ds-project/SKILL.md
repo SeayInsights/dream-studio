@@ -116,10 +116,17 @@ in; an absent profile is an answer, not an error.
 A project also declares which gates its pushes must pass, in the same tree:
 
 ```
-<project>/.dream-studio/gates.yaml          # or canonical/workflows/pre-push.yaml
+<project>/.dream-studio/pre-push.yaml       # or canonical/workflows/pre-push.yaml
 ```
 
-Run them with `py -m core.gates.pre_push --repo <path>`.
+Run them with `py -m core.gates.pre_push --repo <path>`, or with
+`ds workflow run pre-push --repo-root <path> --manifest <file>`, which is the older
+door on the same capability and takes an explicit manifest.
+
+**The filename is not new.** `PROJECT_GATE_MANIFEST` established
+`.dream-studio/pre-push.yaml` for the workflow door; a second name was briefly
+introduced here and corrected, because a project writing either one would have been
+gated by one door and refused by the other with nothing saying why.
 
 **Dream Studio's own gates are not a default for another repository.** `pre-push.yaml`
 here declares things like `rule4-ingestor-sole-event-writer` and `fixture-schema-parity`

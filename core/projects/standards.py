@@ -104,12 +104,20 @@ def declared_test_profile(repo_root: Path | None) -> dict[str, str]:
     return {}
 
 
-#: Where a project declares the gates its own pushes must pass. Two layouts, mirroring
-#: `round_table.registry_for`: `.dream-studio/gates.yaml` beside the standards profile,
-#: or the Dream-Studio-shaped `canonical/workflows/pre-push.yaml` that this repo itself
-#: uses -- so a project laid out like DS needs no second file to say the same thing.
+#: Where a project declares the gates its own pushes must pass.
+#:
+#: `.dream-studio/pre-push.yaml` IS NOT A NEW NAME. It is the convention
+#: `interfaces/cli/ds_workflow.PROJECT_GATE_MANIFEST` already established for
+#: `ds workflow run pre-push --repo-root`, and this file first shipped inventing a second
+#: one (`gates.yaml`) without finding it. Two names for one fact is the defect this
+#: repository keeps finding in other forms: a project writing one of them would have been
+#: gated by one door and refused by the other, with nothing saying why.
+#:
+#: The second entry is the Dream-Studio-shaped layout this repo itself uses, so a project
+#: laid out like DS needs no extra file to say the same thing -- the two-layout idea
+#: mirrors `round_table.registry_for`, which states the reason.
 GATE_MANIFEST_PATHS = (
-    (".dream-studio", "gates.yaml"),
+    (".dream-studio", "pre-push.yaml"),
     ("canonical", "workflows", "pre-push.yaml"),
 )
 
@@ -138,11 +146,15 @@ def gate_manifest_for(repo_root: Path | None) -> tuple[Path | None, str | None]:
         if candidate.is_file():
             return candidate, None
     looked = " or ".join("/".join(p) for p in GATE_MANIFEST_PATHS)
+    # `ds workflow run pre-push --repo-root <dir> --manifest <file>` is the older door on
+    # the same capability and takes an explicit manifest; naming it here means an operator
+    # who hits this refusal is not left thinking the only option is to create a file.
     return None, (
         f"{root} declares no gate manifest, and Dream Studio's own gates are not a"
         f" default for another repository -- they encode this codebase's rules, so"
         f" running them there would fail for reasons about Dream Studio. Declare the"
-        f" project's gates in {looked}."
+        f" project's gates in {looked}, or name one with"
+        " `ds workflow run pre-push --repo-root <dir> --manifest <file>`."
     )
 
 

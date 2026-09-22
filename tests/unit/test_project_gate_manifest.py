@@ -22,7 +22,10 @@ import pytest
 
 from interfaces.cli.ds_workflow import PROJECT_GATE_MANIFEST, _resolve_gate_manifest
 
-MANIFEST = "gates:\n  - id: noop\n    tier: advisory\n    command: [py, -c, pass]\n"
+# Not `py`: that is the Windows launcher, absent on two of the three CI platforms. These
+# tests only RESOLVE this manifest's path and never execute it, so it was a latent hazard
+# rather than a failure — which is the kind that survives longest.
+MANIFEST = "gates:\n  - id: noop\n    tier: advisory\n    command: [python, -c, pass]\n"
 
 
 @pytest.fixture
