@@ -111,12 +111,32 @@ gates:
       tests/unit/test_graded_range_includes_own_commits.py,
       tests/unit/test_citation_registry.py,
       tests/unit/test_gate_manifests_name_real_files.py,
+      tests/unit/test_generated_artifacts_gate.py,
       -q]
     fail_hint: >
       A schema/contract pin drifted — update the pin's expected set in the SAME
       change set as the schema/artifact change (DuckDB objects in
       test_duckdb_business_schema.py, packs.yaml handler lists, regenerated
       plugin.json, a schema-debt doc entry for new migrations).
+
+  - id: generated-artifacts
+    tier: blocking
+    description: >
+      Every checked-in artifact that has a generator must match what the
+      generator emits. An edit to a generated file is not a change -- it is one
+      the next render silently discards, and until then the artifact and its
+      generator disagree about what is true. Commit 3b2dc373 removed four lanes
+      from the GENERATED canonical/review_lanes.yml without touching
+      scripts/seat_lanes_data.py; a render three weeks later restored exactly
+      those 115 lines, and 1,665 lines of detectors were rewritten against them
+      before the history showed the deletion was deliberate. AGENTS.md had a
+      working freshness check the whole time that was wired into nothing.
+    command: [py, -m, core.gates.generated_artifacts]
+    fail_hint: >
+      Re-run the named generator and commit its output -- then make your change
+      in the GENERATOR, not the artifact. `--list-unverifiable` shows the files
+      that claim generation while naming no runnable command; those do not fail
+      this gate and are worth fixing one at a time.
 
   - id: review-lane-registry
     tier: blocking
