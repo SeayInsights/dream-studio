@@ -140,3 +140,35 @@ def test_an_explicit_spool_root_always_records(monkeypatch, tmp_path, captured):
 
     pre_push.emit_gate_outcome_event(_result())
     assert len(captured) == 1
+
+
+# ---------------------------------------------------------------------------
+# Which repository the outcome is about
+# ---------------------------------------------------------------------------
+
+
+def test_an_outcome_names_the_repository_it_judged(captured):
+    """`pre-push --repo <path>` runs another project's own gates, and these events land
+    in Dream Studio's spool. Without attribution a foreign project's outcome is
+    byte-indistinguishable from this repository's, so any later "how often does this gate
+    fail" silently mixes two populations."""
+    pre_push.emit_gate_outcome_event(_result())
+    payload = captured[0].payload
+    assert payload["repo"] == str(pre_push.REPO_ROOT)
+    assert payload["repo_is_self"] is True
+
+
+def test_a_foreign_repository_is_recorded_as_such(captured, tmp_path):
+    """Found by reading the live spool: a gate named `says-hello`, which exists only in a
+    throwaway test project, sat among the 23 real ones with nothing to tell them apart."""
+    pre_push.emit_gate_outcome_event(_result(gate_id="says-hello"), repo_root=tmp_path)
+    payload = captured[0].payload
+    assert payload["repo_is_self"] is False
+    assert payload["repo"] == str(tmp_path.resolve())
+
+
+def test_a_failure_row_is_attributed_too(captured, tmp_path):
+    """The failure rows are the ones anyone actually queries. Attributing only the
+    outcome event would leave the interesting half unattributed."""
+    pre_push.emit_gate_failure_event(_result(passed=False, exit_code=1), repo_root=tmp_path)
+    assert captured[0].payload["repo_is_self"] is False
