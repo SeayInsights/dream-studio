@@ -149,29 +149,25 @@ modes:
     boundary: devops covers pre-deploy pipeline concerns; ops skill covers post-deploy... Invoke for:
     CI/CD pipeline, GitHub Actions workflow, Docker build, release automation, branch protection, deployment
     gate'
-- mode: domains/fullstack/backend
-  skill: domains/modes/fullstack/modes/backend/SKILL.md
+- mode: fullstack/backend
+  skill: fullstack/modes/backend/SKILL.md
   no_agent: Nothing dispatches it and the skill is 4604 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: domains/fullstack/frontend
-  skill: domains/modes/fullstack/modes/frontend/SKILL.md
+- mode: fullstack/frontend
+  skill: fullstack/modes/frontend/SKILL.md
   no_agent: Nothing dispatches it and the skill is 4290 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: domains/fullstack/integrate
-  skill: domains/modes/fullstack/modes/integrate/SKILL.md
+- mode: fullstack/integrate
+  skill: fullstack/modes/integrate/SKILL.md
   agent: domains-fullstack-integrate
-  installed_skill: ds-domains/modes/fullstack/modes/integrate/SKILL.md
+  installed_skill: ds-fullstack/modes/integrate/SKILL.md
   dispatched_because: 'isolation: the skill is 7672 bytes, enough that carrying it in a subagent protects
     the caller''s context'
   description: Integrate Mode
-- mode: domains/fullstack/secure
-  skill: domains/modes/fullstack/modes/secure/SKILL.md
+- mode: fullstack/secure
+  skill: fullstack/modes/secure/SKILL.md
   no_agent: Nothing dispatches it and the skill is 3482 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: domains/fullstack
-  skill: domains/modes/fullstack/SKILL.md
-  no_agent: 'A router: its submodes are the specialists and each has its own agent. An agent here would
-    duplicate them and have no question of its own to answer.'
 - mode: domains/game-dev
   skill: domains/modes/game-dev/SKILL.md
   no_agent: Nothing dispatches it and the skill is 1092 bytes -- under the 5000-byte isolation threshold,
@@ -224,50 +220,46 @@ modes:
     (TF 1.5+), drift detection, and provider version management. Scope boundary: terraform covers IaC
     provisioning (writing and applying infrastructure config); devops covers CI/CD... Invoke for: Terraform,
     infrastructure design, IaC, state problem, Terraform module, remote state'
-- mode: domains/website/animate
-  skill: domains/modes/website/modes/animate/SKILL.md
+- mode: website/animate
+  skill: website/modes/animate/SKILL.md
   no_agent: Nothing dispatches it and the skill is 3400 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: domains/website/brand
-  skill: domains/modes/website/modes/brand/SKILL.md
+- mode: website/brand
+  skill: website/modes/brand/SKILL.md
   agent: domains-website-brand
-  installed_skill: ds-domains/modes/website/modes/brand/SKILL.md
+  installed_skill: ds-website/modes/brand/SKILL.md
   dispatched_because: 'isolation: the skill is 5156 bytes, enough that carrying it in a subagent protects
     the caller''s context'
   description: Brand — Extract, Generate, Validate
-- mode: domains/website/cip
-  skill: domains/modes/website/modes/cip/SKILL.md
+- mode: website/cip
+  skill: website/modes/cip/SKILL.md
   no_agent: Nothing dispatches it and the skill is 3098 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: domains/website/critique
-  skill: domains/modes/website/modes/critique/SKILL.md
+- mode: website/critique
+  skill: website/modes/critique/SKILL.md
   no_agent: Nothing dispatches it and the skill is 4166 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: domains/website/deck
-  skill: domains/modes/website/modes/deck/SKILL.md
+- mode: website/deck
+  skill: website/modes/deck/SKILL.md
   no_agent: Nothing dispatches it and the skill is 4494 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: domains/website/direction
-  skill: domains/modes/website/modes/direction/SKILL.md
+- mode: website/direction
+  skill: website/modes/direction/SKILL.md
   no_agent: Locks a design direction through operator choice; the decision is the operator's to make.
-- mode: domains/website/discover
-  skill: domains/modes/website/modes/discover/SKILL.md
+- mode: website/discover
+  skill: website/modes/discover/SKILL.md
   no_agent: A structured discovery conversation with the client, one question at a time.
-- mode: domains/website/page
-  skill: domains/modes/website/modes/page/SKILL.md
+- mode: website/page
+  skill: website/modes/page/SKILL.md
   agent: domains-website-page
-  installed_skill: ds-domains/modes/website/modes/page/SKILL.md
+  installed_skill: ds-website/modes/page/SKILL.md
   dispatched_because: 'isolation: the skill is 5811 bytes, enough that carrying it in a subagent protects
     the caller''s context'
   description: Page — Full-Fidelity HTML Builder
-- mode: domains/website/prototype
-  skill: domains/modes/website/modes/prototype/SKILL.md
+- mode: website/prototype
+  skill: website/modes/prototype/SKILL.md
   no_agent: Nothing dispatches it and the skill is 4937 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: domains/website
-  skill: domains/modes/website/SKILL.md
-  no_agent: 'A router: its submodes are the specialists and each has its own agent. An agent here would
-    duplicate them and have no question of its own to answer.'
 - mode: ds-milestone/close
   skill: ds-milestone/modes/close/SKILL.md
   no_agent: Runs the milestone verification sequence and mutates state.

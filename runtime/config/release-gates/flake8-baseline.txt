@@ -41,10 +41,10 @@ canonical/skills/analyze/test_remaining_domains.py:63:7: F541 f-string is missin
 canonical/skills/analyze/test_remaining_domains.py:78:7: F541 f-string is missing placeholders
 canonical/skills/analyze/test_remaining_domains.py:84:7: F541 f-string is missing placeholders
 canonical/skills/analyze/test_remaining_domains.py:87:7: F541 f-string is missing placeholders
-canonical/skills/domains/modes/website/scripts/brand-compliance.py:57:5: E741 ambiguous variable name 'l'
-canonical/skills/domains/modes/website/scripts/generate-tokens.py:108:11: E741 ambiguous variable name 'l'
-canonical/skills/domains/modes/website/scripts/generate-tokens.py:27:31: E203 whitespace before ':'
-canonical/skills/domains/modes/website/scripts/generate-tokens.py:33:38: E741 ambiguous variable name 'l'
+canonical/skills/website/scripts/brand-compliance.py:57:5: E741 ambiguous variable name 'l'
+canonical/skills/website/scripts/generate-tokens.py:108:11: E741 ambiguous variable name 'l'
+canonical/skills/website/scripts/generate-tokens.py:27:31: E203 whitespace before ':'
+canonical/skills/website/scripts/generate-tokens.py:33:38: E741 ambiguous variable name 'l'
 control/analysis/audit.py:17:1: E402 module level import not at top of file
 control/analysis/audit.py:18:1: E402 module level import not at top of file
 control/analysis/audit.py:19:1: E402 module level import not at top of file
@@ -87,8 +87,8 @@ interfaces/cli/ds_memory_ingest.py:168:45: E741 ambiguous variable name 'l'
 interfaces/cli/ds_memory_ingest.py:168:65: E203 whitespace before ':'
 interfaces/cli/efficiency_analytics.py:30:1: E402 module level import not at top of file
 interfaces/cli/efficiency_analytics.py:31:1: E402 module level import not at top of file
+interfaces/cli/generate_routing.py:121:51: E203 whitespace before ':'
 interfaces/cli/generate_routing.py:70:46: E203 whitespace before ':'
-interfaces/cli/generate_routing.py:80:44: E203 whitespace before ':'
 interfaces/cli/migrate_docstore_to_files_db.py:24:1: E402 module level import not at top of file
 interfaces/cli/migrate_docstore_to_files_db.py:25:1: E402 module level import not at top of file
 interfaces/cli/migrate_docstore_to_files_db.py:26:1: E402 module level import not at top of file

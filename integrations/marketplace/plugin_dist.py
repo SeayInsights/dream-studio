@@ -37,7 +37,7 @@ def skill_source_dirs(
     """Map each routable skill id to its canonical source directory.
 
     A pack's source is its ``skill_path`` (e.g. ``ds-website`` →
-    ``canonical/skills/domains/modes/website``) when declared, else
+    ``canonical/skills/website``) when declared, else
     ``canonical/skills/<pack-key>``. Only routable packs (the ``skill_ids()`` set) are mapped.
     """
     import yaml

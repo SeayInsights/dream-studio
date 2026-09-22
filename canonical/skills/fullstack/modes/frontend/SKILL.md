@@ -57,7 +57,7 @@ dream_studio:
    - Every fetch needs loading, success, and error UI states
 
 4. **Post-build**
-   - Run the anti-slop linter on every HTML artifact (inherited from `domains:website`): `py modes/website/scripts/lint-artifact.py <artifact.html>` from the domains skill root. Exit 2 means a critical violation and blocks delivery.
+   - Run the anti-slop linter on every HTML artifact (inherited from `website:`): `py canonical/skills/website/scripts/lint-artifact.py <artifact.html>` from the repository root. Exit 2 means a critical violation and blocks delivery.
    - If integration is the next step, confirm fetch call paths match backend routes exactly
 
 ---

@@ -384,7 +384,7 @@ def run_gate_check(
         if not lint_path.is_file():
             return False, (
                 f"anti_slop_passed: lint-results.md not found. Run: python "
-                f"canonical/skills/domains/modes/website/scripts/lint-artifact.py "
+                f"canonical/skills/website/scripts/lint-artifact.py "
                 f"<artifact_path> > .planning/work-orders/{work_order_id}/lint-results.md"
             )
         _lint_content = lint_path.read_text(encoding="utf-8")

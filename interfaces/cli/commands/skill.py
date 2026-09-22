@@ -212,7 +212,8 @@ def _skill_reachability(unreachable_only: bool) -> int:
     if dead:
         print()
         print(
-            "  Each of these needs a trigger, an agent, or a ds command -- or it is"
+            "  Each of these needs a trigger, an agent, a ds command, or a line in its"
+            " own pack's routing table -- or it is"
             " reachable only by someone who already knows it exists."
         )
     return 0
