@@ -13,7 +13,7 @@ and passed as ``dream_studio_home`` to the in-process engine calls). ``tests/int
 test_prove.py`` asserts the live authority DB is byte-for-byte unchanged across a run.
 
 The four claims:
-  1. an unauthorized source edit is denied     (runtime enforcement hook, real deny payload)
+  1. a zero-disk .planning write is denied     (runtime enforcement hook, real deny payload)
   2. a defect cannot close while its symptom reproduces  (originating-symptom close gate)
   3. graders are blind to the claimed task list (anti-self-certification prompt asymmetry)
   4. adapter configs regenerate from authority and drift is detected
@@ -145,15 +145,26 @@ class _Scratch:
 
 
 def _claim_unauthorized_edit_denied(s: _Scratch) -> tuple[bool, str]:
-    """Run the REAL PreToolUse enforcement hook as a subprocess against the scratch project
-    (registered, no in_progress work order) and capture the actual deny payload it emits —
-    not a paraphrase. The hook reads its authority DB from Path.home(), so USERPROFILE/HOME
-    point it at the scratch home; TMP/TEMP are pointed away from the project dir so the
-    project is not treated as a temp path."""
-    # A created (not in_progress) WO so the deny names the exact `ds work-order start` command.
-    start_wo = s.add_work_order(status="created", title="Do the thing")
-    src = s.project_dir / "src" / "app.py"
-    src.write_text("# product source\nprint('hello')\n", encoding="utf-8")
+    """Run the REAL PreToolUse enforcement hook as a subprocess and capture the actual deny
+    payload it emits — not a paraphrase. The hook reads its authority DB from Path.home(),
+    so USERPROFILE/HOME point it at the scratch home; TMP/TEMP are pointed away from the
+    project dir so the project is not treated as a temp path.
+
+    WHAT THIS PROVED BEFORE, AND WHY IT CHANGED. It drove `authority_source_edit` — editing
+    product source with no in_progress work order — and proved the deny. `db4c23f` moved
+    that rule to observe-only: it records and never blocks, whatever the tier, because it
+    produced eleven blocks on work the operator had explicitly directed and a documented
+    remedy of `DS_ENFORCE=0`, which turns the tracking off entirely.
+
+    A proof of a thing the product deliberately stopped doing is worse than no proof — it
+    is this command asserting something false about its own subject, on the surface whose
+    entire job is accountability. So the claim is now driven through `zero_disk_planning`,
+    which still denies: a narrow path, a real invariant, and a real remedy.
+    """
+    # A `.planning/` disk write: the rule that is deliberately NOT observe-only.
+    planning_file = s.project_dir / ".planning" / "notes.md"
+    planning_file.parent.mkdir(parents=True, exist_ok=True)
+    src = planning_file
 
     payload = json.dumps(
         {"session_id": "prove-claim1", "tool_name": "Edit", "tool_input": {"file_path": str(src)}}
@@ -190,8 +201,10 @@ def _claim_unauthorized_edit_denied(s: _Scratch) -> tuple[bool, str]:
     passed = (
         decision == "deny"
         and bool(reason)
-        and start_wo[:8] in (reason or "")
-        and ("work-order start" in (reason or ""))
+        and "Zero-disk" in (reason or "")
+        # The remedy has to be IN the refusal. A deny that does not say what to do
+        # instead is the shape that teaches people to reach for DS_ENFORCE=0.
+        and ("ds files write" in (reason or ""))
     )
     evidence = (
         out if out else f"(no deny payload; exit={proc.returncode} stderr={proc.stderr[:300]})"
@@ -415,7 +428,7 @@ def _claim_adapter_drift_detected(s: _Scratch) -> tuple[bool, str]:
 # ── orchestration ───────────────────────────────────────────────────────────────────
 
 _CLAIMS = [
-    ("an unauthorized source edit is denied", _claim_unauthorized_edit_denied),
+    ("a zero-disk .planning write is denied", _claim_unauthorized_edit_denied),
     ("a defect cannot close while its symptom reproduces", _claim_defect_symptom_gate),
     ("graders are blind to the claimed task list", _claim_graders_blind_to_tasks),
     (

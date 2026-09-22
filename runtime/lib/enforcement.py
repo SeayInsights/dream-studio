@@ -121,6 +121,45 @@ def record_observation(
     # BLOCK the user's action, and writing the row inline pulls the event store
     # (282 modules, 259 ms) while they wait. Leaving one of the three writing
     # inline would have kept the cost and split the read path in two.
+    #
+    # EXCEPT WHEN THE CALLER NAMED AN AUTHORITY. The queue has no idea which
+    # database a record belongs to: `drain()` hands every record to one handler,
+    # which writes to the default. So enqueuing a record that carries `db_path`
+    # silently sends it somewhere else -- which is the defect
+    # `test_an_artifact_disk_fallback_reaches_the_observations_report` was written
+    # to catch the FIRST time, when `record_artifact_fallback` did not thread
+    # `db_path` at all. Its docstring says so: "the count went to the DEFAULT
+    # authority regardless of which database lost the write."
+    #
+    # An explicit db_path is a caller saying THIS authority must receive it, and
+    # those callers are not in the hot path -- the hot path passes None and still
+    # queues. So honour it synchronously rather than dropping the only fact that
+    # says where it goes.
+    if db_path is not None:
+        try:
+            from core.event_store.event_writer import insert_hook_execution
+
+            insert_hook_execution(
+                hook_name=hook_name,
+                hook_type=hook_type,
+                trigger_context={
+                    "decision": "observe",
+                    "tier": tier,
+                    "rule": rule,
+                    "would_deny_reason": reason,
+                },
+                started_at=started_at or now_iso(),
+                completed_at=now_iso(),
+                duration_ms=duration_ms,
+                exit_code=0,
+                status="success",
+                session_id=session_id,
+                db_path=db_path,
+            )
+        except Exception:
+            pass  # telemetry is best-effort; never let a broken emit affect enforcement
+        return
+
     try:
         _enqueue_hook_execution(
             {
