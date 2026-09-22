@@ -38,7 +38,15 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 #: Where instructions live. Both are read by agents as things to do.
-SEARCH_GLOBS = ("canonical/**/*.md", "canonical/**/*.yaml", "canonical/**/*.yml")
+#: JSON is in the list because a data file's own comment is an instruction too:
+#: canonical/normative_baseline.json told a reader to regenerate it with a module
+#: culled in 3b2dc373, and this gate did not see it while it read only prose.
+SEARCH_GLOBS = (
+    "canonical/**/*.md",
+    "canonical/**/*.yaml",
+    "canonical/**/*.yml",
+    "canonical/**/*.json",
+)
 
 #: Top-level packages this repository owns. A `py -m` naming anything else is a
 #: third-party tool whose presence is an environment concern, not an instruction defect.
