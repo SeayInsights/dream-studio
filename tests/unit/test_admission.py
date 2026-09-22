@@ -432,3 +432,82 @@ def test_a_grader_task_carrying_a_criterion_is_admitted_and_one_without_is_not()
     neither = admit_task(title="Fix the thing")
     assert neither["admitted"] is False
     assert neither["refusals"][0]["seat"] == "Gate-integrity engineer"
+
+
+# ---------------------------------------------------------------------------
+# The stack-agnostic TEST-CHECK form is admissible (G28)
+# ---------------------------------------------------------------------------
+
+
+def _refusal(ac: str):
+    from core.work_orders.admission import criterion_refusal
+
+    return criterion_refusal(ac)
+
+
+def test_a_non_python_repo_can_say_how_it_is_verified():
+    """THE DEFECT. `_run_one_test_check` supports `TEST-CHECK: cmd: <command>` precisely so
+    a repo that does not run pytest can declare its own verification. `unrunnable_target`
+    read the token after `TEST-CHECK:` as a PATH, captured the literal `cmd:`, and refused
+    the task for naming a file that does not exist -- so the executor's only
+    stack-agnostic branch could not be reached by anything filed through the guarded door.
+    """
+    for ac in (
+        "TEST-CHECK: cmd: npm test",
+        "TEST-CHECK: cmd: go test ./...",
+        "TEST-CHECK: cmd: cargo test",
+        "TEST-CHECK: cmd: pytest platform/tests",
+        "TEST-CHECK: cmd: dotnet test",
+    ):
+        assert _refusal(ac) is None, f"refused a supported form: {ac}"
+
+
+def test_a_cmd_form_naming_nothing_is_still_refused():
+    """Admitting the form is not admitting anything that starts with it. A `cmd:` with no
+    command is exactly as unrunnable as a node id naming a file that does not exist, and
+    the executor reports it as "empty command" -- so the door refuses it rather than
+    filing a task whose check can only ever fail for a reason about itself."""
+    assert _refusal("TEST-CHECK: cmd:") is not None
+    assert _refusal("TEST-CHECK: cmd:    ") is not None
+
+
+def test_an_unparseable_cmd_form_is_refused():
+    """An unbalanced quote cannot be split into argv, so the executor would refuse to run
+    it. Catching that at the door means the author hears about it while they are writing
+    it rather than at close."""
+    assert _refusal('TEST-CHECK: cmd: npm test --name "unclosed') is not None
+
+
+def test_the_node_id_path_check_is_unchanged():
+    """The 457-in-1387 finding this guard exists for still holds."""
+    assert (
+        _refusal(
+            "TEST-CHECK: tests/unit/test_admission.py::test_a_cmd_form_naming_nothing_is_still_refused"
+        )
+        is None
+    )
+    assert _refusal("TEST-CHECK: tests/unit/test_does_not_exist.py::test_x") is not None
+    assert _refusal("TEST-CHECK: cargo") is not None
+    assert _refusal("TEST-CHECK:") is not None
+    # `::name` with no path is legitimate -- the executor resolves it against the suite.
+    assert _refusal("TEST-CHECK: ::test_something") is None
+
+
+def test_admission_and_the_executor_use_ONE_parse():
+    """A predicate restated in two places is one that will disagree with itself, and this
+    pair already did. Admission imports the executor's function rather than re-deriving
+    "what counts as the cmd form", so a change to the form cannot admit what the runner
+    will not run."""
+    import inspect
+
+    from core.work_orders import admission
+    from core.work_orders.verify_executor import cmd_argv
+
+    source = inspect.getsource(admission.unrunnable_target)
+    assert "cmd_argv" in source, "admission re-derives the cmd form instead of importing it"
+    assert "stripped[:4]" not in source, "admission restates the cmd: prefix rule"
+
+    # And the imported predicate answers as the executor needs it to.
+    assert cmd_argv("cmd: npm test")[:2] == (True, ["npm", "test"])
+    assert cmd_argv("CMD: npm test")[0] is True, "the executor lowercases; admission must too"
+    assert cmd_argv("tests/unit/x.py::y")[0] is False

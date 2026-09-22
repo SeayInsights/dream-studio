@@ -152,6 +152,39 @@ def _test_check_failure_reason(code: int, *, is_pytest: bool) -> str:
     return f"TEST-CHECK failed: {meaning} (exit {code})"
 
 
+def cmd_argv(expr: str) -> tuple[bool, list[str], str | None, str]:
+    """Parse the ``cmd:`` form of a TEST-CHECK. One definition, two users.
+
+    Returns ``(is_cmd, argv, problem, detail)``. ``is_cmd`` is False for an ordinary
+    pytest node id, and then ``argv`` is empty and the caller builds its own. ``problem``
+    is ``"unparseable"`` or ``"empty"`` when the expression IS the cmd form but names
+    nothing runnable.
+
+    ADMISSION AND THE EXECUTOR MUST AGREE ABOUT WHAT THIS FORM IS, and they did not.
+    `unrunnable_target` read the token after ``TEST-CHECK:`` as a path, captured the
+    literal ``cmd:``, and refused the task for naming a file that does not exist -- so
+    the one branch here that lets a non-Python repo say how it is verified could not be
+    reached by anything filed through the guarded door. A predicate restated in two
+    places is a predicate that will disagree with itself; this is imported by both.
+
+    POSIX splitting on every platform: realistic test commands (`pytest platform/tests`,
+    `npm test`, `go test ./...`) carry no backslash paths or spaced args, so they parse
+    identically everywhere and quotes are stripped correctly -- unlike non-POSIX mode,
+    which keeps the quote characters.
+    """
+    stripped = expr.strip()
+    if stripped[:4].lower() != "cmd:":
+        return False, [], None, ""
+    raw = stripped[4:].strip()
+    try:
+        argv = shlex.split(raw)
+    except ValueError as exc:
+        return True, [], "unparseable", str(exc)
+    if not argv:
+        return True, [], "empty", ""
+    return True, argv, None, ""
+
+
 def _run_one_test_check(expr: str, project_root: Path | None = None) -> dict[str, Any]:
     """Run a TEST-CHECK in the work order's TARGET repo and gate on its exit code.
 
@@ -200,20 +233,14 @@ def _run_one_test_check(expr: str, project_root: Path | None = None) -> dict[str
     cwd = str(project_root) if project_root else None
 
     stripped = expr.strip()
-    is_cmd = stripped[:4].lower() == "cmd:"
+    is_cmd, argv, problem, problem_detail = cmd_argv(stripped)
     if is_cmd:
-        raw = stripped[4:].strip()
-        # Split into argv (no shell). Use POSIX rules on every platform: realistic test
-        # commands (`pytest platform/tests`, `npm test`, `go test ./...`) have no
-        # backslash paths or spaced args, so this parses identically everywhere and
-        # strips quotes correctly — unlike non-POSIX mode, which keeps quote chars.
-        try:
-            argv = shlex.split(raw)
-        except ValueError as exc:
-            check["error"] = f"TEST-CHECK cmd: unparseable command {raw!r} — {exc}"
+        if problem == "unparseable":
+            raw = stripped[4:].strip()
+            check["error"] = f"TEST-CHECK cmd: unparseable command {raw!r} — {problem_detail}"
             check["not_executed_reason"] = "the command could not be parsed into argv"
             return check
-        if not argv:
+        if problem == "empty":
             check["error"] = "TEST-CHECK cmd: empty command"
             check["not_executed_reason"] = "the command was empty"
             return check
