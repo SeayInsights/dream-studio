@@ -111,30 +111,33 @@ def _check_version_current(source_root: Path, dream_studio_home: Path) -> dict[s
         return {"repo": None, "installed": None, "current": False}
 
 
-def _check_stale_dbs(dream_studio_home: Path) -> dict[str, Any]:
-    """Scan ~/.dream-studio/ for .db files outside ~/.dream-studio/state/.
+#: Directories under the Dream Studio home whose ``*.db`` files are expected
+#: state rather than ghosts. ``backups/`` is here because
+#: ``core/installed_productization_backup.py`` writes productization snapshots
+#: to ``dream_studio_home / "backups"`` — flagging those made ``ds doctor``
+#: report fail forever against a backup the product authored itself, and a
+#: check that cries wolf on correct state teaches the reader to ignore it.
+_EXPECTED_DB_DIRNAMES = ("state", "diagnostics", "backups")
 
-    These are unexpected and likely stale ghost files (e.g. empty authority.db
-    created at the home root by a misconfigured resolver). Flags them with a
-    clear delete recommendation so they don't cause false-negative task-done
-    reads or other silent authority mismatches.
+
+def _check_stale_dbs(dream_studio_home: Path) -> dict[str, Any]:
+    """Scan ~/.dream-studio/ for .db files outside the expected directories.
+
+    Anything else is unexpected and likely a stale ghost file (e.g. an empty
+    authority.db created at the home root by a misconfigured resolver). Flags
+    them with a clear delete recommendation so they don't cause false-negative
+    task-done reads or other silent authority mismatches.
+
+    Expected directories are listed in ``_EXPECTED_DB_DIRNAMES``; a database
+    anywhere else — including at the home root — is still reported.
     """
     try:
-        state_dir = dream_studio_home / "state"
-        diagnostics_dir = dream_studio_home / "diagnostics"
-        stale: list[str] = []
-        for db_file in dream_studio_home.rglob("*.db"):
-            try:
-                db_file.relative_to(state_dir)
-                continue
-            except ValueError:
-                pass
-            try:
-                db_file.relative_to(diagnostics_dir)
-                continue
-            except ValueError:
-                pass
-            stale.append(str(db_file))
+        expected = tuple(dream_studio_home / name for name in _EXPECTED_DB_DIRNAMES)
+        stale = [
+            str(db_file)
+            for db_file in dream_studio_home.rglob("*.db")
+            if not any(db_file.is_relative_to(d) for d in expected)
+        ]
         return {"stale_dbs": stale, "ok": len(stale) == 0}
     except Exception:
         return {"stale_dbs": [], "ok": True}
