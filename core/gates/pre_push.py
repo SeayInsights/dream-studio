@@ -420,7 +420,41 @@ def _print_report(text: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    report = run_pre_push_gates()
+    """Run this repository's gates, or another project's own.
+
+    ``argv`` was accepted and never read: the body called `run_pre_push_gates()` with
+    no arguments, so `manifest_path` and `repo_root` -- both long-standing parameters --
+    had no caller that set them. The capability was built and had no door.
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Run the pre-push gates for this repository, or for another project."
+    )
+    parser.add_argument(
+        "--repo",
+        default=None,
+        help=(
+            "Run THAT project's own gates, declared in its tree"
+            " (.dream-studio/gates.yaml, or canonical/workflows/pre-push.yaml)."
+            " A project declaring none is refused rather than gated on Dream Studio's"
+            " rules, which would fail for reasons about Dream Studio."
+        ),
+    )
+    args = parser.parse_args(argv)
+
+    manifest_path = None
+    repo_root = None
+    if args.repo:
+        from core.projects.standards import gate_manifest_for
+
+        repo_root = Path(args.repo).resolve()
+        manifest_path, refusal = gate_manifest_for(repo_root)
+        if refusal:
+            print(f"pre-push: {refusal}", file=sys.stderr)
+            return 2
+
+    report = run_pre_push_gates(manifest_path=manifest_path, repo_root=repo_root)
     _print_report(format_report(report))
     return 0 if report.overall_passed else 1
 
