@@ -1,18 +1,3 @@
----
-dream_studio:
-  skill_id: ds-domains
-  pack: domains
-  mode: fullstack
-  mode_type: build
-  inputs: [feature_spec, api_contract, stack_context]
-  outputs: [frontend_artifact, backend_artifact, api_contract, integration_report, security_report]
-  capabilities_required: [Read, Write, Edit, Grep, Bash, LSP]
-  model_preference: sonnet
-  estimated_duration: 1-8hrs
-  write_posture: independent
-  lifecycle: published
----
-
 # Fullstack — Orchestrator
 
 ## Mode Routing Table

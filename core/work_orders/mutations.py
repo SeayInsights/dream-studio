@@ -32,6 +32,108 @@ def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
     return paths.sqlite_path
 
 
+def start_task(
+    *,
+    work_order_id: str,
+    task_id: str,
+    source_root: Path,
+    dream_studio_home: Path | None = None,
+) -> dict[str, Any]:
+    """Move a task from ``created`` to ``in_progress``.
+
+    WHY THE MIDDLE STATE HAD TO EXIST. Tasks went ``created -> complete`` with nothing
+    between, so at any instant there was no current task -- and "what is being worked on
+    right now" had no answer in the authority. That is also why token spend could be
+    attributed to a work order and no further: a turn cannot be charged to a task when no
+    task claims to be running.
+
+    IT IS A CLAIM, NOT A LOCK. Several tasks may be in progress at once; the model
+    routinely advances more than one in a turn, and refusing the second start would push
+    callers into not recording the first. What the caller gets back is
+    ``siblings_in_progress`` so an ambiguous attribution is visible rather than guessed at
+    downstream.
+
+    Starting an already-started task is not an error -- it returns ``already: True`` and
+    changes nothing. A mutation that raised there would make a retry after a lost response
+    worse than the lost response.
+    """
+    db_path = _require_db(source_root, dream_studio_home)
+    now = datetime.now(UTC).isoformat()
+
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT t.task_id, t.work_order_id, t.title, t.status, t.project_id,"
+            " wo.milestone_id"
+            " FROM business_tasks t"
+            " LEFT JOIN business_work_orders wo ON t.work_order_id = wo.work_order_id"
+            " WHERE t.task_id = ?",
+            (task_id,),
+        ).fetchone()
+        if row is None:
+            return {"ok": False, "error": f"Task not found: {task_id}"}
+
+        _tid, t_wo, t_title, t_status, t_project_id, t_milestone_id = row
+        if t_wo != work_order_id:
+            return {
+                "ok": False,
+                "error": (f"Task {task_id} belongs to work order {t_wo}, not {work_order_id}."),
+            }
+        if t_status == "complete":
+            return {"ok": False, "error": f"Task {task_id} is already complete."}
+        if t_status == "in_progress":
+            return {"ok": True, "already": True, "task_id": task_id, "title": t_title}
+
+        conn.execute(
+            "UPDATE business_tasks SET status = 'in_progress', updated_at = ?" " WHERE task_id = ?",
+            (now, task_id),
+        )
+        siblings = conn.execute(
+            "SELECT COUNT(*) FROM business_tasks"
+            " WHERE work_order_id = ? AND status = 'in_progress' AND task_id != ?",
+            (work_order_id, task_id),
+        ).fetchone()[0]
+        conn.commit()
+
+    event_write_error: str | None = None
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+        from canonical.events.types import EventType
+
+        _envelope = CanonicalEventEnvelope(
+            event_type=EventType.TASK_STARTED.value,
+            session_id=None,
+            payload={"task_id": task_id, "work_order_id": work_order_id},
+            timestamp=now,
+            severity="info",
+            trace={
+                "domain": "sdlc",
+                "project_id": t_project_id,
+                "milestone_id": t_milestone_id,
+                "work_order_id": work_order_id,
+                "task_id": task_id,
+                "attribution_status": "fully_attributed",
+            },
+        ).to_dict()
+        _spool_writer.write_event(_envelope)
+    except Exception as _exc:
+        event_write_error = f"{type(_exc).__name__}: {_exc}"[:200]
+
+    return {
+        "ok": True,
+        "task_id": task_id,
+        "title": t_title,
+        "status": "in_progress",
+        "work_order_id": work_order_id,
+        # VISIBLE, NOT GUESSED. More than one task in progress is a real state, and a
+        # reader attributing spend needs to know the answer is ambiguous rather than
+        # receive a confident wrong one.
+        "siblings_in_progress": siblings,
+        **({"event_write_error": event_write_error} if event_write_error else {}),
+    }
+
+
 def mark_task_done(
     *,
     work_order_id: str,

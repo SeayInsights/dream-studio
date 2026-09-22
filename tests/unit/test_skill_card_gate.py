@@ -133,7 +133,10 @@ def test_the_real_tree_is_clean():
     """Regression pin: every carded mode in this repo validates and resolves."""
     result = skill_card.run(scope_all=True)
     assert result["status"] == "pass", result["offenders"]
-    assert len(result["cards_checked"]) >= 51
+    # 52 BEFORE `website` and `fullstack` moved out of the domains tree. They were
+    # modes then and are packs now, and a pack carries no card -- its metadata lives
+    # in packs.yaml. Two fewer cards is the move landing, not coverage lost.
+    assert len(result["cards_checked"]) >= 50
 
 
 def test_every_real_card_declares_a_known_posture():

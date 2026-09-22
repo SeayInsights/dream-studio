@@ -18,14 +18,22 @@ DOMAINS = REPO / "canonical" / "skills" / "domains" / "modes"
 # writes are denied" — so we assert only the specific artifact-path prefixes are gone.
 FORBIDDEN_PATHS = (".planning/api-contract", ".planning/direction-lock", ".planning/brand")
 
+# `fullstack` and `website` were routable packs living inside the domains tree; they now
+# sit at canonical/skills/<pack>/ like every other pack. The rule these files carry is
+# unchanged — only where they live.
+# DOMAINS already ends in /modes, so the skills root is two levels up.
+SKILLS = DOMAINS.parent.parent
+FULLSTACK = SKILLS / "fullstack"
+WEBSITE = SKILLS / "website"
+
 DOMAIN_SKILL_FILES = [
-    DOMAINS / "fullstack" / "SKILL.md",
-    DOMAINS / "fullstack" / "templates" / "api-contract.md",
-    DOMAINS / "fullstack" / "modes" / "frontend" / "SKILL.md",
-    DOMAINS / "fullstack" / "modes" / "backend" / "SKILL.md",
-    DOMAINS / "fullstack" / "modes" / "integrate" / "SKILL.md",
-    DOMAINS / "website" / "modes" / "direction" / "SKILL.md",
-    DOMAINS / "website" / "modes" / "brand" / "SKILL.md",
+    FULLSTACK / "SKILL.md",
+    FULLSTACK / "templates" / "api-contract.md",
+    FULLSTACK / "modes" / "frontend" / "SKILL.md",
+    FULLSTACK / "modes" / "backend" / "SKILL.md",
+    FULLSTACK / "modes" / "integrate" / "SKILL.md",
+    WEBSITE / "modes" / "direction" / "SKILL.md",
+    WEBSITE / "modes" / "brand" / "SKILL.md",
 ]
 
 
@@ -43,11 +51,9 @@ def test_domain_skills_have_no_planning_artifact_paths():
 
 
 def test_flipped_directives_use_the_docstore():
-    fullstack = (DOMAINS / "fullstack" / "SKILL.md").read_text(encoding="utf-8")
+    fullstack = (FULLSTACK / "SKILL.md").read_text(encoding="utf-8")
     assert 'ds files write "api-contract.json" --category planning' in fullstack
     assert 'ds files read "api-contract.json"' in fullstack
 
-    direction = (DOMAINS / "website" / "modes" / "direction" / "SKILL.md").read_text(
-        encoding="utf-8"
-    )
+    direction = (WEBSITE / "modes" / "direction" / "SKILL.md").read_text(encoding="utf-8")
     assert 'ds files write "direction-lock.json" --category planning' in direction

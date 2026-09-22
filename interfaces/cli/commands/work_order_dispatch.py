@@ -290,6 +290,13 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
     )
     wo_task_done.add_argument("work_order_id", help="Work order UUID")
     wo_task_done.add_argument("task_id", help="Task UUID")
+
+    wo_task_start = work_order_sub.add_parser(
+        "task-start",
+        help="Mark a task in_progress — the state between created and complete",
+    )
+    wo_task_start.add_argument("work_order_id", help="Work order UUID")
+    wo_task_start.add_argument("task_id", help="Task UUID")
     wo_task_done.add_argument(
         "--planning-root",
         default=None,
@@ -557,6 +564,20 @@ def dispatch(
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )
+    if args.work_order_command == "task-start":
+        import json as _json
+
+        from core.work_orders.mutations import start_task
+
+        _result = start_task(
+            work_order_id=args.work_order_id,
+            task_id=args.task_id,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+        print(_json.dumps(_result, indent=2))
+        return 0 if _result.get("ok") else 1
+
     if args.work_order_command == "task-done":
         planning_root = Path(args.planning_root).resolve() if args.planning_root else None
         return _work_order_task_done(
