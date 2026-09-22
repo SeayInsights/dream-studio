@@ -271,6 +271,76 @@ def check_corrections_growth() -> tuple[int, str]:
     return len(lines), (last[0][:10] if last else "")
 
 
+#: When a number stops being housekeeping and becomes a problem. Set from the incident
+#: that motivated the check rather than from taste: the runtime reached 10.6 GB on disk
+#: with a 444 MB write-ahead log, and neither was noticed for months.
+STORAGE_LIMITS = {
+    "total_bytes": 1_000_000_000,  # 1 GB
+    "wal_bytes": 100_000_000,  # 100 MB
+    "spool_files": 500,
+}
+
+
+def check_storage() -> list[str]:
+    """How much disk the runtime is using, and what is unusual about it.
+
+    WHY THIS EXISTS. `ds pulse` ran nine checks -- branches, milestones, pull requests,
+    CI, drafts, corrections, escalations, agents, skill health -- and **not one of them
+    looked at storage**. So when the runtime reached 10.6 GB with a 444 MB write-ahead
+    log, the pulse reported healthy for months. `--refresh` would not have helped: there
+    was nothing to refresh, because nothing measured it.
+
+    That is the difference between reading a snapshot and measuring. A snapshot can only
+    be stale about something it records; this one was silent about something it never
+    recorded at all, which looks identical to "fine" from the outside.
+
+    THE SPOOL BACKLOG IS THE LEADING INDICATOR. Events are written to
+    `events/spool/*.json` and removed by the ingestor. When ingestion stops, the files
+    accumulate first, the database and its log grow second, and the disk fills third --
+    so a spool that is not draining is the earliest of the three to say something is
+    wrong. Measured while writing this: 1,025 unprocessed events were sitting there.
+
+    Returns human-readable lines, empty when nothing is unusual -- the shape every other
+    check here uses.
+    """
+    home = paths.user_data_dir()
+    issues: list[str] = []
+
+    total = 0
+    try:
+        for entry in home.rglob("*"):
+            if entry.is_file():
+                try:
+                    total += entry.stat().st_size
+                except OSError:
+                    continue
+    except OSError:
+        return []  # an unreadable home is the doctor's finding, not the pulse's
+
+    if total > STORAGE_LIMITS["total_bytes"]:
+        issues.append(f"runtime is using {total / 1e9:.1f} GB on disk ({home})")
+
+    wal = home / "state" / "studio.db-wal"
+    try:
+        wal_size = wal.stat().st_size if wal.exists() else 0
+    except OSError:
+        wal_size = 0
+    if wal_size > STORAGE_LIMITS["wal_bytes"]:
+        issues.append(
+            f"write-ahead log is {wal_size / 1e6:.0f} MB -- a checkpoint is not happening"
+        )
+
+    spool = home / "events" / "spool"
+    try:
+        backlog = sum(1 for _ in spool.glob("*.json")) if spool.is_dir() else 0
+    except OSError:
+        backlog = 0
+    if backlog > STORAGE_LIMITS["spool_files"]:
+        issues.append(f"{backlog} events unprocessed in the spool -- ingestion is not keeping up")
+
+    return issues
+
+
 def check_open_escalations() -> list[str]:
     """Open operator escalations, read from the authority store (WO-FILESDB-C4B S3).
 
@@ -524,6 +594,7 @@ def generate_pulse() -> tuple[str, dict]:
     _run_outcome_eval_safe()
     open_escalations = check_open_escalations()
     stale_agents = check_stale_agents(Path(__file__).resolve().parents[2])
+    storage_issues = check_storage()
     mem_stats = collect_memory_stats()
     drafts_overflow = len(pending_drafts) > MAX_PENDING_DRAFTS
     skill_summaries, health_section = _get_skill_health()
@@ -539,6 +610,7 @@ def generate_pulse() -> tuple[str, dict]:
         + len(overdue_ms)
         + len(open_escalations)
         + len(stale_agents)
+        + len(storage_issues)
         + degraded_count
     )
     if drafts_overflow:
@@ -592,6 +664,8 @@ def generate_pulse() -> tuple[str, dict]:
         f"- Last correction: {last_correction or 'none'}\n\n"
         f"### Open Escalations\n\n"
         f"{bullets(open_escalations, 'None open')}\n"
+        f"### Storage\n\n"
+        f"{bullets(storage_issues, 'Within limits')}\n"
         f"### Stale Domain Knowledge\n\n"
         f"{bullets(stale_agents, 'All agents current')}\n"
         f"{('Run `workflow: domain-refresh` to re-synthesize stale agents.' + chr(10)) if stale_agents else ''}"
@@ -620,6 +694,7 @@ def generate_pulse() -> tuple[str, dict]:
         "corrections": corrections_count,
         "escalations": len(open_escalations),
         "stale_agents": len(stale_agents),
+        "storage_issues": len(storage_issues),
         "degraded_skills": degraded_count,
         **mem_stats,
     }
@@ -660,6 +735,7 @@ def run_pulse_check() -> None:
             f"  -> Open PRs: {cached.get('open_prs', 0)}\n"
             f"  -> Pending draft lessons: {cached.get('pending_drafts', 0)}\n"
             f"  -> Stale domain agents: {cached.get('stale_agents', 0)}\n"
+            f"  -> Storage warnings: {cached.get('storage_issues', 0)}\n"
             + (
                 f"  -> Degraded skills: {cached.get('degraded_skills', 0)}\n"
                 if cached.get("degraded_skills")
@@ -703,6 +779,7 @@ def run_pulse_check() -> None:
         f"  -> Open PRs: {stats['open_prs']}\n"
         f"  -> Pending draft lessons: {stats['pending_drafts']}\n"
         f"  -> Stale domain agents: {stats['stale_agents']}\n"
+        f"  -> Storage warnings: {stats['storage_issues']}\n"
         + (f"  -> Telemetry imported: {imported} row(s)\n" if imported else "")
         + (
             f"  -> Degraded skills: {stats['degraded_skills']}\n"
