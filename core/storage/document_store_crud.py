@@ -29,7 +29,8 @@ except ImportError:
         return {"safe": True, "vulnerabilities": [], "risk_score": 0.0}
 
 
-_NOW = lambda: datetime.now(UTC).isoformat()
+def _NOW():
+    return datetime.now(UTC).isoformat()
 
 
 class DocumentStore:

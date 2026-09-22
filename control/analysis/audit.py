@@ -324,7 +324,7 @@ def _store_violations(violations: list[dict]) -> None:
                         datetime.now(UTC).isoformat(),
                     ),
                 )
-    except Exception as e:
+    except Exception:
         import traceback
 
         traceback.print_exc()  # Debug: show errors during development
@@ -425,7 +425,7 @@ def _store_improvements(improvements: list[dict]) -> None:
                         datetime.now(UTC).isoformat(),
                     ),
                 )
-    except Exception as e:
+    except Exception:
         import traceback
 
         traceback.print_exc()  # Debug: show errors during development

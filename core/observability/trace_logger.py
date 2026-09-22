@@ -269,7 +269,7 @@ def traced_write(table: str, operation: str):
 
     def decorator(func):
         def wrapper(*args, **kwargs):
-            with TracedOperation(func.__name__, table, operation) as op:
+            with TracedOperation(func.__name__, table, operation):
                 result = func(*args, **kwargs)
                 return result
 

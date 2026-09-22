@@ -2,6 +2,10 @@
 
 Status: active release-gate policy
 
+**2026-09-22:** the baseline was re-derived from a clean flake8 run and dropped from **335 entries to 186**. 149 of the removed entries were amnesty for findings that no longer existed — debt already paid that nobody had claimed. That slack mattered: a baseline compares by file, rule code and message, so a vacated slot can be reoccupied by a genuine regression and the gate still reports `pass`. The same change removed 33 live findings (a function with no callers anywhere in the tree and the import it stranded, 9 unused imports, 18 unused locals, a shadowing re-import, two name-bound lambdas, a bare `except:`, and a comma import), leaving 186 baselined against 186 current. **What remains is cosmetic and is tracked, not hidden:** E402 (114), F541 (32), E203 (24), E741 (16). E203 is a known black disagreement rather than a defect.
+
+Standing rule from this change: prefer shrinking the baseline over adding to it. An entry is a record that a finding was accepted, and an entry for a finding that no longer exists is a record of nothing.
+
 **2026-06-12 (WO b1961e3e):** `tests/unit/test_gate_fixture_resurrection.py` added to the focused smoke suite in `.github/workflows/ci.yml`. The dead-table resurrection guard is now verified on every PR across all three matrix platforms.
 
 **2026-06-10 (WO-CONSTITUTION-GATES):** `tests/unit/test_release_gates_dependency_rules.py` added to the focused smoke suite in `.github/workflows/ci.yml`.

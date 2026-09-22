@@ -145,7 +145,6 @@ def build_external_project_validation_pipeline(
     requires_operator_approval = (
         policy["recommended_route"] == ROUTE_KEEP_PAUSED or not approval_refs
     )
-    commit_allowed = False
     commit_policy = _commit_policy(dirty_state=dirty_state, approval_refs=approval_refs)
     work_orders = _work_order_sequence(
         target_id=str(policy["target_id"]),
