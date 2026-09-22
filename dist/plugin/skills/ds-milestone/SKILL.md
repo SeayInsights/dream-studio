@@ -22,6 +22,31 @@ A milestone is a verifiable delivery boundary that bundles several work orders. 
 
 ---
 
+## Creating a milestone
+
+`ds milestone create <project_id> --title ... --description ...`, or
+`core.milestones.mutations.create_milestone`. There is no mode for it: creation is a
+single call, and the contract below is the whole of what an agent needs.
+
+**`--description` is REQUIRED and is the milestone's PROMPT.** The hierarchy is a prompt
+chain — a task is a specific instruction, a work order is the goal those instructions add
+up to, a milestone is the goal those work orders add up to. A milestone carrying only a
+title gives every work order beneath it nothing to derive its own goal from.
+
+- **DO** say what the milestone is for and what it delivers, in at least 50 characters.
+- **DON'T** restate the title. `create_milestone` refuses anything shorter than the floor
+  and returns `{"ok": false, "error": "description is required: ..."}` — surface that
+  error verbatim, as rule 4 requires, rather than retrying with padding.
+- **DO** expect the same refusal one layer down: a work order needs its own prompt
+  (60 characters), and a task needs an executable acceptance criterion or a declared
+  `--why`.
+
+The floor is measured, not chosen: of the milestones on the authority that carry a
+description, the shortest real one is 54 characters, and everything below that was a test
+fixture. It refuses an absence, never a style.
+
+---
+
 ## Rules that apply to every mode
 
 1. **Read functions before you write.** Every state-surfacing instruction names the specific query function being called. Never describe milestone progress from session context.
