@@ -110,6 +110,7 @@ gates:
       tests/unit/test_attachment_pressure_is_relievable.py,
       tests/unit/test_graded_range_includes_own_commits.py,
       tests/unit/test_citation_registry.py,
+      tests/unit/test_gate_manifests_name_real_files.py,
       -q]
     fail_hint: >
       A schema/contract pin drifted — update the pin's expected set in the SAME
