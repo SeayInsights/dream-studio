@@ -69,31 +69,77 @@ decide that the work is finished.
   not attempted."""
 
 
-def _load_meta(path: Path) -> dict[str, Any]:
+COVERAGE = AGENTS_DIR / "coverage.yml"
+
+#: A mode with no override runs on this. Judgement about a domain, not search.
+DEFAULT_MODEL = "sonnet"
+
+
+def _coverage() -> list[dict[str, Any]]:
+    """Every mode that declares an agent, from canonical/agents/coverage.yml.
+
+    COVERAGE IS THE SOURCE, not a per-agent file. Fifty-four modes want an agent and
+    nine of them have anything agent-specific to say; writing forty-five near-empty
+    declarations would be ceremony, and a file that exists only to be empty is one people
+    learn to skip reading. The declaration is the coverage row; `<name>.meta.yml` is an
+    OPTIONAL overlay for the agents that do have a scope, working rules, or a model of
+    their own.
+    """
     import yaml
 
+    data = yaml.safe_load(COVERAGE.read_text(encoding="utf-8")) or {}
+    rows = []
+    for row in data.get("modes") or []:
+        if not row.get("agent"):
+            continue
+        for required in ("description", "installed_skill"):
+            if not str(row.get(required) or "").strip():
+                raise ValueError(
+                    f"coverage.yml: {row.get('mode')} declares an agent but no {required}"
+                )
+        rows.append(row)
+    return sorted(rows, key=lambda r: r["agent"])
+
+
+def _overlay(name: str) -> dict[str, Any]:
+    """Whatever `<name>.meta.yml` adds, or {}. Never required."""
+    import yaml
+
+    path = AGENTS_DIR / f"{name}.meta.yml"
+    if not path.is_file():
+        return {}
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(data, dict):
         raise ValueError(f"{path.name}: expected a mapping")
-    for required in ("description", "model", "skill"):
-        if not str(data.get(required) or "").strip():
-            raise ValueError(f"{path.name}: `{required}` is required")
     return data
 
 
-def meta_files() -> list[Path]:
-    return sorted(AGENTS_DIR.glob("*.meta.yml"))
+def _load_meta(row: dict[str, Any]) -> dict[str, Any]:
+    """The declaration for one agent: its coverage row, plus any overlay."""
+    merged = {
+        "description": row["description"],
+        "skill": row["installed_skill"],
+        "model": DEFAULT_MODEL,
+        "mode": row["mode"],
+    }
+    merged.update({k: v for k, v in _overlay(row["agent"]).items() if v})
+    return merged
 
 
-def build_agent(meta_path: Path) -> str:
+def meta_files() -> list[str]:
+    """Agent names, kept under the old name so callers need not change."""
+    return [row["agent"] for row in _coverage()]
+
+
+def build_agent(row: dict[str, Any]) -> str:
     """The full text of the agent file this declaration compiles to."""
-    meta = _load_meta(meta_path)
-    name = meta_path.name[: -len(".meta.yml")]
+    meta = _load_meta(row)
+    name = row["agent"]
 
     skill_path = SHIPPED_SKILLS / str(meta["skill"]).strip()
     if not skill_path.is_file():
         raise FileNotFoundError(
-            f"{meta_path.name}: skill {meta['skill']} is not in the shipped plugin. "
+            f"{name}: skill {meta['skill']} is not in the shipped plugin. "
             "Regenerate dist/plugin, or correct the path."
         )
     knowledge = skill_path.read_text(encoding="utf-8").strip()
@@ -106,7 +152,7 @@ def build_agent(meta_path: Path) -> str:
         f"model: {str(meta['model']).strip()}",
         "---",
         "",
-        BANNER.format(meta=meta_path.name),
+        BANNER.format(meta=f"the {row['mode']} row of coverage.yml"),
         "",
         f"You are the {name.replace('-', ' ')} subagent.",
         "",
@@ -137,40 +183,47 @@ def build_agent(meta_path: Path) -> str:
 def check() -> list[str]:
     """Agent files whose content differs from what their declaration compiles to."""
     stale: list[str] = []
-    for meta_path in meta_files():
-        name = meta_path.name[: -len(".meta.yml")]
-        target = AGENTS_DIR / f"{name}.md"
-        expected = build_agent(meta_path)
-        if not target.is_file() or target.read_text(encoding="utf-8") != expected:
-            stale.append(f"{name}.md")
+    for row in _coverage():
+        target = AGENTS_DIR / f"{row['agent']}.md"
+        if not target.is_file() or target.read_text(encoding="utf-8") != build_agent(row):
+            stale.append(f"{row['agent']}.md")
     return stale
 
 
 def write() -> list[str]:
     written: list[str] = []
-    for meta_path in meta_files():
-        name = meta_path.name[: -len(".meta.yml")]
-        target = AGENTS_DIR / f"{name}.md"
-        expected = build_agent(meta_path)
+    rows = _coverage()
+    for row in rows:
+        target = AGENTS_DIR / f"{row['agent']}.md"
+        expected = build_agent(row)
         if not target.is_file() or target.read_text(encoding="utf-8") != expected:
             target.write_text(expected, encoding="utf-8")
-            written.append(f"{name}.md")
-    return written
+            written.append(f"{row['agent']}.md")
+
+    # A mode that stops declaring an agent must lose it, or the bench keeps a specialist
+    # for a skill nobody routes to any more -- the same drift running backwards.
+    live = {f"{row['agent']}.md" for row in rows}
+    from integrations.compiler.reviewers import PREFIX as _REVIEW_PREFIX
+
+    for orphan in AGENTS_DIR.glob("*.md"):
+        if orphan.name in live or orphan.name.startswith(_REVIEW_PREFIX) or orphan.stem == "README":
+            continue
+        orphan.unlink()
+        written.append(f"{orphan.name} (removed)")
+    return sorted(written)
 
 
 def report_unscoped() -> list[str]:
     """Agents that declare no scope.
 
-    NOT AN ERROR, AND NOT DEFAULTED. Eight of nine have never had one, and writing
-    boundaries for domains nobody has scoped would be inventing authority. Counting them
-    makes the gap visible, which is the most this compiler can honestly do about it.
+    NOT AN ERROR, AND NOT DEFAULTED. Writing boundaries for domains nobody has scoped
+    would be inventing authority, so the count is reported instead. The review bench is
+    the contrast: every reviewer HAS a scope, because canonical/review_lanes.yml already
+    records the questions each seat owns, and scope you can read is not scope you invent.
     """
-    out = []
-    for meta_path in meta_files():
-        meta = _load_meta(meta_path)
-        if not str(meta.get("scope") or "").strip():
-            out.append(meta_path.name[: -len(".meta.yml")])
-    return out
+    return [
+        row["agent"] for row in _coverage() if not str(_load_meta(row).get("scope") or "").strip()
+    ]
 
 
 def main(argv: list[str] | None = None) -> int:

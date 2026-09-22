@@ -37,6 +37,22 @@ _FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n", re.S)
 
 
 def _agent_files() -> list[Path]:
+    """The DOMAIN specialists, compiled from a skill.
+
+    `review-*` agents are compiled from `canonical/review_lanes.yml` instead — their
+    knowledge is a seat's lanes, not a skill file — so the checks below about inlined
+    skills do not apply to them. `test_reviewer_agents.py` covers those, and the
+    model/frontmatter rules that apply to BOTH are asserted over the whole directory in
+    `test_every_agent_declares_a_model_whatever_it_was_compiled_from`.
+    """
+    return [
+        p
+        for p in sorted(AGENTS_DIR.glob("*.md"))
+        if p.stem != "README" and not p.stem.startswith("review-")
+    ]
+
+
+def _all_agent_files() -> list[Path]:
     return [p for p in sorted(AGENTS_DIR.glob("*.md")) if p.stem != "README"]
 
 
@@ -115,25 +131,32 @@ SHIPPED_SKILLS = REPO_ROOT / "dist" / "plugin" / "skills"
 _POINTER_RE = re.compile(r"~/\.claude/skills/[A-Za-z0-9_./-]+\.md")
 
 
-def _meta_files() -> list[Path]:
-    return sorted(AGENTS_DIR.glob("*.meta.yml"))
+def _declarations() -> dict[str, dict]:
+    """Agent name -> its coverage row.
+
+    `canonical/agents/coverage.yml` is the declaration. A per-agent `.meta.yml` is an
+    OPTIONAL overlay, carried only by the agents that have a scope, working rules or a
+    model of their own -- nine of fifty-four. Writing forty-five near-empty files would be
+    ceremony, and a file that exists only to be empty is one people learn to skip.
+    """
+    from integrations.compiler.agents import _coverage
+
+    return {row["agent"]: row for row in _coverage()}
 
 
 def test_every_agent_has_a_declaration_to_compile_from():
-    """Guard the guard: the checks below iterate declarations, and an empty glob would
+    """Guard the guard: the checks below iterate declarations, and an empty set would
     make all of them vacuous."""
-    metas = {p.name[: -len(".meta.yml")] for p in _meta_files()}
+    declared = set(_declarations())
     agents = {p.stem for p in _agent_files()}
-    assert metas, f"no .meta.yml declarations under {AGENTS_DIR}"
-    assert metas == agents, f"declarations and agents disagree: {metas ^ agents}"
+    assert declared, "coverage.yml declares no agents"
+    assert declared == agents, f"declarations and agents disagree: {declared ^ agents}"
 
 
 @pytest.mark.parametrize("path", _agent_files(), ids=lambda p: p.stem)
 def test_the_agent_carries_its_knowledge_rather_than_a_pointer_to_it(path: Path):
     """The whole point. A subagent that has to fetch its own knowledge is one that can
     answer without it, and nothing downstream can tell the difference."""
-    import yaml
-
     body = path.read_text(encoding="utf-8")
     assert not _POINTER_RE.search(body), (
         f"{path.name} names a skill file instead of carrying it. The pointer form is what "
@@ -141,13 +164,13 @@ def test_the_agent_carries_its_knowledge_rather_than_a_pointer_to_it(path: Path)
         "`py -m integrations.compiler.agents --write`."
     )
 
-    meta = yaml.safe_load((AGENTS_DIR / f"{path.stem}.meta.yml").read_text(encoding="utf-8"))
-    skill = SHIPPED_SKILLS / meta["skill"]
-    assert skill.is_file(), f"{path.stem}: declared skill {meta['skill']} is not shipped"
+    row = _declarations()[path.stem]
+    skill = SHIPPED_SKILLS / row["installed_skill"]
+    assert skill.is_file(), f"{path.stem}: declared skill {row['installed_skill']} is not shipped"
 
     knowledge = skill.read_text(encoding="utf-8").strip()
     assert knowledge in body, (
-        f"{path.name} does not contain the text of {meta['skill']}. It is stale -- "
+        f"{path.name} does not contain the text of {row['installed_skill']}. It is stale -- "
         "regenerate with `py -m integrations.compiler.agents --write`."
     )
 
@@ -179,3 +202,37 @@ def test_the_shipped_skills_tree_is_there_at_all():
         f"{SHIPPED_SKILLS} does not exist -- regenerate the plugin before reading this "
         "file's failures as an agent problem."
     )
+
+
+# ---------------------------------------------------------------------------------------
+# Rules that hold for EVERY agent, whichever compiler produced it.
+#
+# The checks above are scoped to domain specialists because they assert an inlined skill,
+# and a reviewer's knowledge is a seat's lanes instead. But a model declaration and a
+# name that matches the file are true of anything the installer copies into
+# ~/.claude/agents/ — and scoping those to one compiler would leave the other half of the
+# directory unchecked, which is the shape this whole file was written about.
+# ---------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("path", _all_agent_files(), ids=lambda p: p.stem)
+def test_every_agent_declares_a_model_whatever_it_was_compiled_from(path: Path):
+    fm = _frontmatter(path)
+    assert fm, f"{path.name} has no parseable frontmatter"
+    assert fm.get("name") == path.stem, f"{path.name}: name {fm.get('name')!r} != filename"
+    assert fm.get("description"), f"{path.name}: description is required for routing"
+    model = fm.get("model")
+    assert model, f"{path.name} declares no `model:` and would inherit the caller's"
+    assert model in ALLOWED_ALIASES or model.startswith("claude-")
+
+
+def test_the_directory_holds_both_benches_and_nothing_else():
+    """Guard against a third kind of file appearing uncompiled. Everything the installer
+    copies is generated by one of the two compilers, and a hand-written agent beside them
+    would drift the moment its source moved."""
+    names = {p.stem for p in _all_agent_files()}
+    domain = {p.stem for p in _agent_files()}
+    reviewers = {n for n in names if n.startswith("review-")}
+    assert names == domain | reviewers, f"unaccounted agents: {names - domain - reviewers}"
+    assert reviewers, "no reviewers compiled"
+    assert domain, "no domain specialists compiled"
