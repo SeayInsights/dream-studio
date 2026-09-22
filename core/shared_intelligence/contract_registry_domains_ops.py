@@ -255,6 +255,10 @@ _CONTRACT_DOMAINS_OPS: tuple[dict[str, Any], ...] = (
         "domain_name": "Work Orders Engine → DS-Workorder Skill Surface",
         "source_patterns": [
             "core/work_orders/**",
+            # A glob, because the work-order CLI is five sibling modules and naming two
+            # of them is how a pattern goes stale the next time one is split off. Same
+            # precedent as `shared_intelligence_adapters`, which uses `adapter_*.py`.
+            "interfaces/cli/commands/work_order*.py",
         ],
         "contract_refs": [
             "canonical/skills/ds-workorder/SKILL.md",
@@ -279,6 +283,15 @@ _CONTRACT_DOMAINS_OPS: tuple[dict[str, Any], ...] = (
         "domain_name": "Projects Engine → DS-Project Skill Surface",
         "source_patterns": [
             "core/projects/**",
+            # THE CLI IS PART OF THE SURFACE, and watching only the engine missed it.
+            # These three domains coupled `core/<x>/**` to the skill that documents it,
+            # but an agent calls the CLI, so a new command could ship with the skill
+            # never mentioning it and this gate saying nothing -- which is exactly what
+            # happened to `ds project onboard`. Measured over 200 commits before
+            # widening: these three CLI modules changed 23 times and 7 of those did not
+            # touch the matching skill, so this fires on roughly 3.5% of commits, and
+            # the `Docs-Reviewed-No-Change: <domain>` trailer covers the cosmetic ones.
+            "interfaces/cli/commands/project.py",
         ],
         "contract_refs": [
             "canonical/skills/ds-project/SKILL.md",
@@ -298,6 +311,7 @@ _CONTRACT_DOMAINS_OPS: tuple[dict[str, Any], ...] = (
         "domain_name": "Milestones Engine → DS-Milestone Skill Surface",
         "source_patterns": [
             "core/milestones/**",
+            "interfaces/cli/commands/milestone.py",
         ],
         "contract_refs": [
             "canonical/skills/ds-milestone/SKILL.md",
