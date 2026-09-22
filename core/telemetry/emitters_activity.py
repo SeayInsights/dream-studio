@@ -75,6 +75,37 @@ def emit_hook_tool_activity(
     )
 
 
+def canonical_skill_id(name: str | None) -> str:
+    """Map a captured skill name onto the canonical ``ds-<pack>`` skill id.
+
+    The telemetry hook records the SPECIFIER the caller used (``project:scope``),
+    but the id the rest of the system joins on is the pack (``ds-project``) — the
+    form ``core/skills/invocation.py`` emits and ``spool/ingestor.py`` validates.
+    Passing the specifier through meant every event this emitter produced was
+    rejected as ``malformed_skill_id``, and the ``execution_events.skill_id``
+    column could not be joined against the CLI emitter's rows.
+
+    A ``pack:mode`` specifier is read as a ds pack, because that is the shape the
+    router defines for them. Deriving it from the separator rather than matching a
+    list of pack names means a pack added tomorrow normalises with no edit here —
+    a list would only be correct on the day it was written.
+
+    A name with no mode separator is returned unchanged: ``artifact-design`` is a
+    real skill that is not a ds pack, and minting ``ds-artifact-design`` would
+    fabricate a pack that does not exist. Those names still will not satisfy the
+    ingestor; what they should carry is an open decision on WO 726fe42a.
+    """
+    text = (name or "").strip()
+    if not text:
+        return "unknown"
+    if ":" not in text:
+        return text
+    pack = text.split(":", 1)[0].strip()
+    if not pack:
+        return text
+    return pack if pack.startswith("ds-") else f"ds-{pack}"
+
+
 def emit_skill_invocations(
     skills: Sequence[Mapping[str, Any]],
     *,
@@ -90,8 +121,8 @@ def emit_skill_invocations(
     def _write(conn: sqlite3.Connection) -> TelemetryEmitResult:
         last_event_id: str | None = None
         for skill in skills:
-            skill_id = (
-                _text(skill.get("name"), skill.get("skill"), skill.get("skill_name")) or "unknown"
+            skill_id = canonical_skill_id(
+                _text(skill.get("name"), skill.get("skill"), skill.get("skill_name"))
             )
             event_id = _id("skill-event")
             metadata = {"skill": dict(skill), "success": success}
