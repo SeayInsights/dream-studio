@@ -12,4 +12,4 @@ except ImportError:  # Python 3.10
 try:  # Python 3.11+
     import tomllib as tomllib
 except ModuleNotFoundError:  # Python 3.10 fallback, provided by requirements-dev.
-    import tomli as tomllib
+    import tomli as tomllib  # noqa: F401 - providing the name IS this shim's purpose

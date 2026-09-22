@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import sys
-from pathlib import Path
 
 from core.config import paths  # noqa: E402
 from core.validation import structure as structure_rules  # noqa: E402

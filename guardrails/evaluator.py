@@ -417,7 +417,6 @@ def log_decision(decision: GuardrailDecision, conn) -> None:
             f"Event emission failed for GUARDRAIL_DECISION (decision_id={decision.decision_id}). "
             f"Aborting guardrail logging to prevent compliance audit gap."
         )
-    event_id = envelope.event_id
 
     conn.execute(
         """

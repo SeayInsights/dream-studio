@@ -88,7 +88,7 @@ class RepoAnalyzer:
         try:
             fm = yaml.safe_load(parts[1])
             return True, fm or {}
-        except:
+        except Exception:
             return False, {}
 
     def count_decision_tables(self, content: str) -> tuple[bool, int]:

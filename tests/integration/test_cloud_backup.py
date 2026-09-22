@@ -287,7 +287,7 @@ class TestAutoPushIntegration:
         mock_popen.assert_not_called()
 
     def test_backup_db_triggers_auto_push(self, tmp_path, monkeypatch):
-        db_path = _seed_db(tmp_path / "studio.db")
+        _seed_db(tmp_path / "studio.db")
         monkeypatch.setattr("core.config.state.paths.state_dir", lambda: tmp_path)
 
         push_called = []

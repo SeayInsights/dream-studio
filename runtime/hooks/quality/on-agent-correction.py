@@ -9,7 +9,6 @@ append to corrections.log, and draft lessons when patterns repeat 3+ times.
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 
 from core.config import paths  # noqa: E402

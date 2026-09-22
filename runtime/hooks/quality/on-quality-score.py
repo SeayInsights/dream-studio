@@ -12,8 +12,6 @@ decides.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
 from core.config import paths  # noqa: E402
 from control.analysis import quality_scoring  # noqa: E402

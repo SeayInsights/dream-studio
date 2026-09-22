@@ -144,7 +144,6 @@ def extract_skill_id_from_path(path: Path) -> str | None:
 
 def migrate_skill_docs(dry_run=False) -> tuple[int, list[str]]:
     """Migrate skills/**/SKILL.md files."""
-    pattern = BASE_DIR / "skills" / "**" / "SKILL.md"
     files = list(BASE_DIR.glob("skills/**/SKILL.md"))
     errors = []
     count = 0

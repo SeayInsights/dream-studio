@@ -9,7 +9,6 @@ from datetime import datetime
 from pathlib import Path
 
 from core.config import paths
-from core.learning.lesson_threshold import get_escalation_candidates
 from core.utils.time import utcnow
 
 # Add project root to path for canonical imports
