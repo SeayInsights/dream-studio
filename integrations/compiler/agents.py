@@ -23,9 +23,13 @@ stays the single source of truth for it. Neither duplicates the other, and this 
 what keeps them from separating: the generated-artifacts gate fails a push where a skill
 changed and its agents were not recompiled.
 
-`scope` is optional and deliberately not defaulted. Eight of the nine agents have never
-declared one, and inventing boundaries for domains nobody has scoped would be fabricating
-authority. `report_unscoped()` counts them instead, so the gap is visible rather than
+`scope` is optional. A hand-written one wins; otherwise the DERIVED dispatch scope is
+rendered -- which mode dispatches this agent, and the named siblings it hands work to,
+both read from coverage.yml rather than invented. That floor exists because every agent
+body says "work that belongs to another domain is handed back by name" while no agent was
+ever shown the names, so the instruction could not be followed. Subject-matter boundaries
+are still nobody's to fabricate; `report_unscoped()` counts the agents carrying only the
+derived floor, so the gap is visible rather than
 papered over.
 """
 
@@ -158,9 +162,10 @@ def build_agent(row: dict[str, Any]) -> str:
         "",
     ]
 
-    scope = str(meta.get("scope") or "").strip()
-    if scope:
-        parts += ["## Scope", "", scope, ""]
+    # A hand-written scope wins; otherwise the registry's own answer, which is better
+    # than the nothing that 23 of 24 agents shipped with.
+    scope = str(meta.get("scope") or "").strip() or derived_scope(row)
+    parts += ["## Scope", "", scope, ""]
 
     essentials = str(meta.get("essentials") or "").strip()
     if essentials:
@@ -213,13 +218,67 @@ def write() -> list[str]:
     return sorted(written)
 
 
-def report_unscoped() -> list[str]:
-    """Agents that declare no scope.
+def _pack_of(mode: str) -> str:
+    return mode.split("/", 1)[0]
 
-    NOT AN ERROR, AND NOT DEFAULTED. Writing boundaries for domains nobody has scoped
-    would be inventing authority, so the count is reported instead. The review bench is
-    the contrast: every reviewer HAS a scope, because canonical/review_lanes.yml already
-    records the questions each seat owns, and scope you can read is not scope you invent.
+
+def derived_scope(row: dict, rows: list[dict] | None = None) -> str:
+    """The dispatch boundary this agent already has, read rather than invented.
+
+    WHAT THIS IS NOT. It is not a statement of subject-matter expertise. Writing that
+    for a domain nobody has scoped would be fabricating authority, which is why `scope`
+    was left undefaulted and merely counted. This says the two things the registry
+    already knows: WHICH MODE this agent is dispatched for, and WHICH NAMED SIBLINGS
+    exist to hand work to.
+
+    WHY IT IS WORTH SAYING. Every agent body carries "Stay inside your scope. Work that
+    belongs to another domain is handed back by name" -- an instruction that cannot be
+    followed, because a subagent sees one skill and has no way to learn the names. It
+    was told to name a neighbour it had never been shown. 23 of 24 agents shipped that
+    way. Naming the siblings turns the sentence into something obeyable.
+
+    A hand-written `scope:` in `.meta.yml` WINS. An author who has thought about the
+    boundary knows more than the registry does; this is the floor, not a ceiling.
+    """
+    rows = rows if rows is not None else _coverage()
+    pack = _pack_of(row["mode"])
+    siblings = sorted(
+        {r["agent"] for r in rows if _pack_of(r["mode"]) == pack and r["agent"] != row["agent"]}
+    )
+    lines = [
+        f"You are dispatched for **`{row['mode']}`**, and your domain knowledge below is"
+        f" that mode's skill. Work outside it is not yours to do.",
+    ]
+    if siblings:
+        lines += [
+            "",
+            f"The other `{pack}` specialists, so you can hand work back BY NAME rather than"
+            " attempting it or returning a vague refusal:",
+            "",
+        ] + [f"- `{name}`" for name in siblings]
+    else:
+        lines += [
+            "",
+            f"You are the only `{pack}` specialist. Work belonging to another pack goes back"
+            " to the caller, named as outside this pack rather than attempted.",
+        ]
+    return "\n".join(lines)
+
+
+def report_unscoped() -> list[str]:
+    """Agents carrying only the DERIVED dispatch scope, with none written for them.
+
+    Still not an error. Writing subject-matter boundaries for a domain nobody has scoped
+    would be inventing authority, and that remains undone -- what changed is that every
+    agent now carries the scope the registry CAN answer: which mode dispatches it and
+    which named siblings it hands work to. The review bench was always the contrast, and
+    the reason is the same one that makes the derivation legitimate: `review_lanes.yml`
+    already records the questions each seat owns, and scope you can read is not scope you
+    invent. `coverage.yml` records which mode each agent answers for; that is equally
+    readable.
+
+    So this counts the agents whose boundary is only the readable floor, for whoever
+    writes the richer one.
     """
     return [
         row["agent"] for row in _coverage() if not str(_load_meta(row).get("scope") or "").strip()
@@ -245,9 +304,14 @@ def main(argv: list[str] | None = None) -> int:
     unscoped = report_unscoped()
     if unscoped:
         print(
-            f"\n{len(unscoped)} of {len(meta_files())} declare no scope: " f"{', '.join(unscoped)}"
+            f"\n{len(unscoped)} of {len(meta_files())} carry only the derived"
+            f" dispatch scope: {', '.join(unscoped)}"
         )
-        print("  A subagent with no boundary is one that cannot hand work back by name.")
+        print(
+            "  Each knows which mode dispatches it and which siblings to hand work"
+            " to. None has a subject-matter boundary written for it, which is still"
+            " nobody's to invent from here."
+        )
     return 0
 
 
