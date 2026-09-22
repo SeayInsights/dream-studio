@@ -79,6 +79,21 @@ If the developer mentions an existing codebase at any point during Phase 1:
 
 4. **If no — skip:** Accept and proceed. Do not raise this again.
 
+### Several existing codebases at once
+
+Registering a set of repos is three commands, not a scoping interview:
+
+```
+ds project discover <dir> [--github-entity <org>]   # finds candidates, registers nothing
+ds project bulk-onboard <candidates.json> --select 1,3,5
+ds project readiness <project_id>                   # what previous audits already found
+```
+
+`--select` takes the 1-based numbers `discover` printed. Re-running `bulk-onboard` is
+safe: an already-registered path is reported under `skipped` and mints no second row.
+`readiness` only reads findings previous audits persisted — it never triggers a run, so a
+project nobody audited reports zero findings, which is not the same claim as clean.
+
 ---
 
 ## Standards Profile — how this project is verified

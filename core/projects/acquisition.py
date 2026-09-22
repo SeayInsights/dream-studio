@@ -61,6 +61,8 @@ def acquire_project(
 
     Returns a dict:
         ok           → True on success
+        reused       → True when an existing registration for this path was matched
+                       rather than a new one created
         project_id   → UUID of the registered project
         project_name → Name stored in business_projects
         detected_stack  → Stack adapter string (e.g. "python", "node")
@@ -101,6 +103,18 @@ def acquire_project(
         "detected_stack": stack_result.get("detected_stack"),
         "stack_confidence": stack_result.get("confidence"),
         "recommended_dispatches": recommend_dispatches(stack_result),
+        # PASSED THROUGH, NOT RECOMPUTED. Intake is the only layer that knows whether it
+        # matched an existing row, and dropping the flag here is what left bulk_acquire
+        # branching on a key nobody writes.
+        #
+        # BOTH SPELLINGS, because two functions answer this one question under two names:
+        # `register_project_for_intake` returns `reused` when its own path lookup hits,
+        # and falls through to `register_project`, which returns `idempotent` when ITS
+        # lookup hits. Reading one of them would report the other path's reuse as a fresh
+        # registration -- which is the same defect one layer down. (The two also disagree
+        # on which statuses count as an existing row: intake excludes `deleted`, register
+        # excludes `archived`. That divergence is real and is not settled here.)
+        "reused": bool(intake_result.get("reused") or intake_result.get("idempotent")),
     }
 
     if not run_scan:

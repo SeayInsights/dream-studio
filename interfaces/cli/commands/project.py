@@ -118,6 +118,62 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         help="The project tree to read (default: the current directory).",
     )
 
+    project_discover = project_sub.add_parser(
+        "discover",
+        help="Find candidate projects under a directory (and optionally a GitHub entity)",
+    )
+    project_discover.add_argument(
+        "search_root",
+        nargs="?",
+        default=None,
+        help="Directory to scan (default: the parent of the current directory).",
+    )
+    project_discover.add_argument(
+        "--github-entity",
+        default=None,
+        help="A GitHub org or user whose repos to enumerate as well. Needs `gh` auth.",
+    )
+    project_discover.add_argument(
+        "--max-depth",
+        type=int,
+        default=3,
+        help="How deep to walk the tree (default: 3).",
+    )
+    project_discover.add_argument(
+        "--no-github",
+        action="store_true",
+        default=False,
+        help="Walk the filesystem only.",
+    )
+
+    project_bulk_onboard = project_sub.add_parser(
+        "bulk-onboard",
+        help="Register several discovered projects at once, reading candidates as JSON",
+    )
+    project_bulk_onboard.add_argument(
+        "candidates",
+        nargs="?",
+        default=None,
+        help=(
+            "A JSON file of candidates from `ds project discover`."
+            " Omit it to read the JSON on stdin."
+        ),
+    )
+    project_bulk_onboard.add_argument(
+        "--select",
+        default=None,
+        help=(
+            "Which candidates to register, by 1-based index as `discover` printed them"
+            " (e.g. `1,3,5` or `2-4`). Default: every candidate given."
+        ),
+    )
+
+    project_readiness = project_sub.add_parser(
+        "readiness",
+        help="Aggregate a project's already-recorded audit findings into a readiness report",
+    )
+    project_readiness.add_argument("project_id", help="Project UUID")
+
     project_set_active = project_sub.add_parser(
         "set-active", help="Set the active project in the database"
     )
@@ -244,6 +300,25 @@ def dispatch(
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )
+    if args.project_command == "discover":
+        return _project_discover(
+            search_root=args.search_root,
+            github_entity=args.github_entity,
+            max_depth=args.max_depth,
+            include_github=not args.no_github,
+        )
+
+    if args.project_command == "bulk-onboard":
+        return _project_bulk_onboard(
+            candidates_path=args.candidates,
+            select=args.select,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+
+    if args.project_command == "readiness":
+        return _project_readiness(project_id=args.project_id)
+
     if args.project_command == "set-active":
         return _project_set_active(
             project_id=args.project_id,
@@ -325,6 +400,138 @@ def _project_register(
         )
     print(json.dumps(result, indent=2))
     return 0 if result.get("ok") else 1
+
+
+def _parse_selection(select: str | None, count: int) -> list[int] | None:
+    """`1,3,5` or `2-4` or both, as 0-based indices. None means every candidate.
+
+    The indices are the ones `ds project discover` printed, so they are 1-based: an
+    operator reading a numbered list and typing those numbers is the whole point, and
+    silently treating their `1` as the second row would register the wrong project.
+    """
+    if select is None:
+        return None
+    picked: set[int] = set()
+    for part in select.replace(" ", ",").split(","):
+        if not part:
+            continue
+        if "-" in part[1:]:
+            lo, _, hi = part.partition("-")
+            start, end = int(lo), int(hi)
+        else:
+            start = end = int(part)
+        for n in range(start, end + 1):
+            if not 1 <= n <= count:
+                raise ValueError(f"{n} is outside 1..{count}")
+            picked.add(n - 1)
+    return sorted(picked)
+
+
+def _project_discover(
+    *,
+    search_root: str | None,
+    github_entity: str | None,
+    max_depth: int,
+    include_github: bool,
+) -> int:
+    """List candidate projects, without registering any of them.
+
+    READ-ONLY ON PURPOSE. Discovery and registration are separate commands because the
+    operator picks between them, and a command that found twelve repos and enrolled all
+    twelve would be unusable on a machine that holds more than one person's work.
+    """
+    from core.projects.discovery import discover_project_candidates
+
+    root = Path(search_root).resolve() if search_root else Path.cwd().parent
+    candidates = discover_project_candidates(
+        root,
+        github_entity=github_entity,
+        max_depth=max_depth,
+        include_github=include_github,
+    )
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "search_root": str(root),
+                "count": len(candidates),
+                "candidates": candidates,
+            },
+            indent=2,
+            default=str,
+        )
+    )
+    return 0
+
+
+def _project_bulk_onboard(
+    *,
+    candidates_path: str | None,
+    select: str | None,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """Register candidates produced by `ds project discover`.
+
+    IT TAKES DISCOVER'S OUTPUT, whole, from a file or stdin, so the two commands compose
+    without the operator hand-editing a structure. `--select` narrows it by the same
+    numbers discover printed.
+    """
+    from core.projects.bulk_intake import bulk_acquire
+
+    raw = Path(candidates_path).read_text(encoding="utf-8") if candidates_path else sys.stdin.read()
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        print(json.dumps({"ok": False, "error": f"candidates are not JSON: {exc}"}, indent=2))
+        return 1
+
+    # Accept discover's whole envelope or a bare list, because both are things an operator
+    # will reasonably pipe in and refusing one of them teaches nothing.
+    candidates = parsed.get("candidates") if isinstance(parsed, dict) else parsed
+    if not isinstance(candidates, list):
+        print(
+            json.dumps(
+                {"ok": False, "error": "expected a list of candidates, or {'candidates': [...]}"},
+                indent=2,
+            )
+        )
+        return 1
+
+    try:
+        indices = _parse_selection(select, len(candidates))
+    except ValueError as exc:
+        print(json.dumps({"ok": False, "error": f"--select: {exc}"}, indent=2))
+        return 1
+    if indices is not None:
+        candidates = [candidates[i] for i in indices]
+
+    if not candidates:
+        print(json.dumps({"ok": True, "registered": [], "note": "nothing selected"}, indent=2))
+        return 0
+
+    result = bulk_acquire(
+        candidates,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    print(json.dumps(result, indent=2, default=str))
+    return 0 if result.get("ok", True) else 1
+
+
+def _project_readiness(*, project_id: str) -> int:
+    """Report what the project's recorded audits already found.
+
+    IT READS, IT DOES NOT RUN. `aggregate_readiness` consumes findings previous audits
+    persisted, so a project whose audits nobody ran reports zero findings and an empty
+    stabilization scope. That is the honest answer, and it is a different statement from
+    "this project is clean" -- which is why the count is printed rather than a verdict.
+    """
+    from core.projects.acquisition import aggregate_readiness
+
+    result = aggregate_readiness(project_id)
+    print(json.dumps(result, indent=2, default=str))
+    return 0 if result.get("ok", True) else 1
 
 
 def _project_fit_check(
