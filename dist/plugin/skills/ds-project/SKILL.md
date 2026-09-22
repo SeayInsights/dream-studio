@@ -81,6 +81,43 @@ If the developer mentions an existing codebase at any point during Phase 1:
 
 ---
 
+## Standards Profile — how this project is verified
+
+A project that does not run pytest must say so, in its own tree:
+
+```yaml
+# <project>/.dream-studio/standards.yml
+test: npm test                          # the suite
+# or, when one test can be targeted:
+test:
+  command: npm test
+  with_target: npm test -- {target}
+```
+
+**Why it lives in the project rather than the authority.** `round_table.registry_for`
+already answered this question for review lanes and said why: "another project reviewing
+itself should be asked ITS questions, not this repo's, so the registry travels with the
+tree rather than with the convener." A standards profile is the same kind of fact — it
+belongs to the project, changes when its tooling changes, and should be reviewable in the
+pull request that changes it, which a row in Dream Studio's database would not be.
+
+**What it fixes.** A TEST-CHECK naming a node id ran as `python -m pytest <target>` in the
+work order's target repo, whatever that repo was. Measured on a JS project carrying a real
+`src/foo.test.js`, the check reported `the node id is wrong or the file does not exist
+here` — about a file that exists. The verdict blamed the criterion for Dream Studio having
+run the wrong tool, so a reviewer reading it learned something false about the work.
+
+**Targeting is declared, never guessed.** `npm test` needs `--` before a path, `go test`
+takes a package, `cargo test` takes a filter. So a project that declares a runner and no
+`with_target` gets a REFUSAL for a bare node id, naming `TEST-CHECK: cmd: <command>` as
+the remedy — never a guess, and never a silent fall back to pytest. A project that
+declares nothing keeps pytest, exactly as before.
+
+Run `ds project standards [--repo <path>]` to see which of those three states a tree is
+in; an absent profile is an answer, not an error.
+
+---
+
 ## Phase 1 — Discovery
 
 **Goal:** Understand what is being built, for whom, and what done looks like. Maximum 5 questions. Do not ask all 5 upfront — work through them one at a time, adapting each question based on the previous answer.
