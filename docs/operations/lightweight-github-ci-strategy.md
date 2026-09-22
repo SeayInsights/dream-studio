@@ -38,7 +38,19 @@ pre-push hook (canonical/workflows/pre-push.yaml):
   - migration-risk  (schema-authority file change escalation)
 ```
 
-The full test suite (`tests/`) OOMs on Windows locally (exit 137). It runs only in CI.
+The full test suite (`tests/unit`) runs locally on Windows in **~35 minutes**:
+6,044 passed, 25 failed, 35m33s, measured 2026-09-21. It does not OOM.
+
+This line previously read "OOMs on Windows locally (exit 137). It runs only in
+CI." `CLAUDE.md` simultaneously said it takes ~79 minutes and explicitly does
+*not* OOM. Both cannot be true, both were load-bearing, and the docs-drift gate
+does not compare two documents to each other.
+
+The cost of the wrong number was not the number. A suite believed impossible to
+run locally is a suite nobody runs: the repo's own history records a commit
+titled "the five things the first full suite run in months found". At 35 minutes
+it can run before a push, which is the whole argument the runtime/subset gap
+below is making.
 `py interfaces/cli/ci_gate.py` is the single local entry point for comprehensive parity
 evidence (runs `tests/` + format + lint + docs drift + atlas lifecycle + security), but
 it is not safe to run locally on Windows for the same reason. Ubuntu is the practical

@@ -190,6 +190,9 @@ def emit_gate_failure_event(result: GateResult) -> None:
     Best-effort: a spool-write failure is logged to stderr but never raised.
     The pre-push hook's exit code is governed by gate results alone.
     """
+    if not _telemetry_home_exists():
+        return
+
     try:
         from canonical.events.envelope import CanonicalEventEnvelope
         from canonical.events.types import EventType
@@ -222,6 +225,91 @@ def emit_gate_failure_event(result: GateResult) -> None:
         )
 
 
+def _telemetry_home_exists() -> bool:
+    """Is there a Dream Studio runtime for this telemetry to land in?
+
+    TELEMETRY MUST NOT CREATE THE RUNTIME IT REPORTS INTO. The spool root defaults
+    to `~/.dream-studio/events`, and `write_event` makes its directories, so every
+    gate run wrote one event per gate and rebuilt a home the operator had
+    deliberately uninstalled -- 20 files per push, from a feature added to record
+    gate outcomes. The operator removed the install; the checks kept putting it
+    back.
+
+    So emission is conditional on the home already being there. A repository
+    checkout is not an install: these gates are ordinary Python and run fine with
+    no Dream Studio present, and in that state there is nothing to report to.
+    DS_SPOOL_ROOT still wins, which is how CI keeps recording.
+    """
+    import os
+
+    if os.environ.get("DS_SPOOL_ROOT"):
+        return True
+    return (Path.home() / ".dream-studio").is_dir()
+
+
+def emit_gate_outcome_event(result: GateResult) -> None:
+    """Emit ``gate.pre_push.completed`` for a gate that ran, whatever it decided.
+
+    WHY A SECOND EVENT. ``gate.pre_push.failed`` records blocking failures only,
+    so the authority held 649 failures, 408 bypasses and zero passes. That is a
+    numerator without a denominator: a gate with no recorded failures might be
+    perfect prevention or might be dead, and nothing could tell them apart. Nine
+    of the seventeen gates wired today have never once appeared in a failure
+    record, and no query could say which kind of nine they are.
+
+    ADVISORY FAILURES WERE RECORDED NOWHERE AT ALL. The run loop read
+    ``if result.is_advisory: pass``, so an advisory gate that failed produced no
+    event of any kind -- the one tier whose whole purpose is to surface a signal
+    without blocking was the tier that surfaced nothing.
+
+    Emitted BESIDE the failure event rather than replacing it, because 649 rows
+    and whatever reads them keep working unchanged.
+
+    Best-effort, exactly like its sibling: a spool-write failure is printed and
+    never raised. The push's exit code is governed by gate results alone.
+    """
+    if not _telemetry_home_exists():
+        return
+
+    try:
+        from canonical.events.envelope import CanonicalEventEnvelope
+        from canonical.events.types import EventType
+        from emitters.shared.spool_writer import write_envelopes
+    except Exception as exc:  # pragma: no cover — defensive import-time guard
+        print(f"[pre-push] outcome emission unavailable: {exc}", file=sys.stderr)
+        return
+
+    if result.passed:
+        outcome = "passed"
+    elif result.is_advisory:
+        outcome = "advisory_failed"
+    else:
+        outcome = "failed"
+
+    envelope = CanonicalEventEnvelope(
+        event_type=EventType.GATE_PRE_PUSH_COMPLETED.value,
+        session_id=None,
+        payload={
+            "gate_id": result.gate_id,
+            "outcome": outcome,
+            "passed": result.passed,
+            "advisory": result.is_advisory,
+            "exit_code": result.exit_code,
+            "duration_seconds": round(result.duration_seconds, 2),
+        },
+        severity="info" if result.passed else "warning",
+        trace={"gate_id": result.gate_id, "outcome": outcome},
+    )
+    try:
+        write_envelopes([envelope])
+    except Exception as exc:
+        print(
+            f"[pre-push] spool write failed for gate.pre_push.completed "
+            f"(gate={result.gate_id}): {exc}",
+            file=sys.stderr,
+        )
+
+
 def run_pre_push_gates(
     *,
     manifest_path: Path | None = None,
@@ -247,9 +335,17 @@ def run_pre_push_gates(
     for gate in gates:
         result = run_gate(gate, repo_root=root)
         report.gates.append(result)
+        # EVERY outcome is recorded, including the ones that change nothing.
+        # Recording only blocking failures gave the authority 649 failures and
+        # zero passes, so "has this gate ever fired" had no answer and a dead
+        # gate was indistinguishable from a gate that prevents.
+        if emit_events:
+            emit_gate_outcome_event(result)
         if not result.passed:
             if result.is_advisory:
                 # Advisory failures surface as warnings but never block push.
+                # They used to emit nothing at all -- the one tier meant to
+                # surface a signal without blocking surfaced none.
                 pass
             else:
                 report.overall_passed = False
@@ -296,9 +392,36 @@ def format_report(report: PrePushReport) -> str:
     return "\n".join(lines)
 
 
+def _print_report(text: str) -> None:
+    """Print the report without the encoder deciding whether the gates ran.
+
+    A gate's captured output is decoded with errors="replace", so a byte the
+    child's encoding could not express arrives here as U+FFFD; the report also
+    carries em dashes from the gate descriptions. Printing either to a cp1252
+    stdout raises UnicodeEncodeError -- which is what a redirected run on Windows
+    gets, and redirecting is exactly what this repo's own instructions tell
+    people to do. The whole suite then passed and the process still exited on a
+    traceback from its own last line.
+
+    Reconfiguring is tried first so the text survives intact. If that is refused
+    the text is coerced through the live encoding, losing characters rather than
+    the result: a mangled report still says which gate failed, and a traceback
+    says nothing.
+    """
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError, ValueError):
+        pass
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "ascii"
+        print(text.encode(enc, errors="replace").decode(enc, errors="replace"))
+
+
 def main(argv: list[str] | None = None) -> int:
     report = run_pre_push_gates()
-    print(format_report(report))
+    _print_report(format_report(report))
     return 0 if report.overall_passed else 1
 
 

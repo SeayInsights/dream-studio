@@ -25,9 +25,21 @@ from core.utils.time import utcnow
 GITHUB_TOKEN = os.environ.get("GITHUB_PERSONAL_ACCESS_TOKEN", "")
 STALE_BRANCH_DAYS = 7
 #: Tokens already proven unusable this process, so one dead credential is not re-tried
-#: against every endpoint the pulse reads.
+#: against every endpoint the pulse reads. IN-PROCESS IS NOT ENOUGH ON ITS OWN --
+#: the pulse runs in a fresh process on every prompt, so this set is empty each
+#: time and a dead token still costs one failed request per prompt forever. The
+#: rejection is therefore also written to disk, keyed by a fingerprint of the
+#: token so a NEW credential re-arms automatically. See `_auth_is_broken`.
 _REJECTED_TOKENS: set[str] = set()
-COOLDOWN_SEC = int(os.environ.get("PULSE_COOLDOWN_SEC", "60"))
+
+# The pulse is an advisory health check, not a correctness gate. At 60s every
+# interactive prompt landed on the cold path and paid up to five GitHub round
+# trips; measured p95 4.7s, worst 27.7s, on the UserPromptSubmit critical path.
+COOLDOWN_SEC = int(os.environ.get("PULSE_COOLDOWN_SEC", "3600"))
+
+#: A health check may not hold the prompt open. 15s per call against five
+#: endpoints is 75s of worst case in front of the operator.
+GH_TIMEOUT_SEC = float(os.environ.get("PULSE_GH_TIMEOUT_SEC", "4"))
 MAX_PENDING_DRAFTS = 100
 DRAFT_STALE_DAYS = 30
 
@@ -66,15 +78,59 @@ def _gh_cli_token() -> str:
     return (proc.stdout or "").strip() if proc.returncode == 0 else ""
 
 
+def _token_fingerprint(token: str) -> str:
+    """Short, non-reversible id for a token, so a NEW credential re-arms by itself."""
+    import hashlib
+
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
+
+
+def _rejection_path(token: str) -> Path:
+    return paths.state_dir() / f".gh-auth-failed-{_token_fingerprint(token)}"
+
+
+def _auth_is_broken(token: str) -> bool:
+    """True once this exact credential has been proven unusable, in any process.
+
+    A 401 is not a transient blip -- the same string will fail forever. The
+    in-process set alone cannot help here because the pulse runs in a fresh
+    process on every prompt, so without this the operator pays one doomed
+    request per prompt indefinitely. Keyed on a fingerprint rather than the
+    token, so rotating the credential clears the breaker without a command.
+    """
+    try:
+        return _rejection_path(token).is_file()
+    except Exception:
+        return False
+
+
+def _persist_rejection(token: str) -> None:
+    try:
+        path = _rejection_path(token)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(utcnow().isoformat(), encoding="utf-8")
+    except Exception:
+        # Losing the breaker costs a wasted request, never a wrong answer.
+        pass
+
+
 def _github_tokens() -> list[str]:
-    """Credentials to try, best first, minus any already rejected this process."""
+    """Credentials to try, best first, minus any already proven dead.
+
+    Rejections are checked in-process AND on disk: the first stops one dead token
+    costing a request per endpoint within a run, the second stops it costing one
+    per prompt across runs.
+    """
     ordered = [GITHUB_TOKEN, _gh_cli_token()]
     seen: set[str] = set()
     usable = []
     for token in ordered:
-        if token and token not in seen and token not in _REJECTED_TOKENS:
-            seen.add(token)
-            usable.append(token)
+        if not token or token in seen or token in _REJECTED_TOKENS:
+            continue
+        seen.add(token)
+        if _auth_is_broken(token):
+            continue
+        usable.append(token)
     return usable
 
 
@@ -93,7 +149,7 @@ def gh_api(endpoint: str):
                     "User-Agent": "dream-studio-pulse-hook",
                 },
             )
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            with urllib.request.urlopen(req, timeout=GH_TIMEOUT_SEC) as resp:
                 return json.loads(resp.read())
         except urllib.error.HTTPError as e:
             last_error = e
@@ -102,6 +158,7 @@ def gh_api(endpoint: str):
             # different credential that would fail the same way.
             if e.code in (401, 403):
                 _REJECTED_TOKENS.add(token)
+                _persist_rejection(token)
                 continue
             break
         except Exception as e:

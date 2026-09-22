@@ -103,7 +103,7 @@
           },
           {
             "type": "command",
-            "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); dispatcher=next((p/'runtime'/'dispatch'/'hooks.py' for p in (root,*root.parents) if (p/'runtime'/'dispatch'/'hooks.py').is_file()),None); sys.argv=[str(dispatcher),'PostToolUse']; (runpy.run_path(str(dispatcher),run_name='__main__') if dispatcher else None); sys.exit(0)\""
+            "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); script=next((p/'runtime'/'hooks'/'enqueue.py' for p in (root,*root.parents) if (p/'runtime'/'hooks'/'enqueue.py').is_file()),None); sys.argv=[str(script),'PostToolUse']; (runpy.run_path(str(script),run_name='__main__') if script else None); sys.exit(0)\""
           }
         ]
       }

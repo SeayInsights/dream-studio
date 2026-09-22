@@ -142,12 +142,21 @@ def test_run_pre_push_gates_emits_one_event_per_failed_gate(tmp_path: Path):
             stop_on_first_failure=False,
             emit_events=True,
         )
-    assert mock_write.call_count == 2
-    emitted_gate_ids = [call.args[0][0].payload["gate_id"] for call in mock_write.call_args_list]
-    assert sorted(emitted_gate_ids) == ["g1-fail", "g2-fail"]
+    # Each failed gate now emits TWO events: the failure, and the outcome that
+    # every gate emits regardless of what it decided.
+    envelopes = [call.args[0][0] for call in mock_write.call_args_list]
+    failed = [e for e in envelopes if e.event_type.endswith(".failed")]
+    assert sorted(e.payload["gate_id"] for e in failed) == ["g1-fail", "g2-fail"]
 
 
-def test_run_pre_push_gates_does_not_emit_for_passing_gates(tmp_path: Path):
+def test_run_pre_push_gates_records_an_outcome_for_passing_gates(tmp_path: Path):
+    """This asserted `call_count == 0`, and that assertion WAS the defect.
+
+    Recording only blocking failures left the authority with 649 failures, 408
+    bypasses and zero passes -- a numerator with no denominator. Nine of the
+    seventeen wired gates have never appeared in a failure record, and nothing
+    could say whether those nine prevent something or are simply dead.
+    """
     manifest = tmp_path / "m.yaml"
     _write_manifest(
         manifest,
@@ -162,7 +171,11 @@ def test_run_pre_push_gates_does_not_emit_for_passing_gates(tmp_path: Path):
             repo_root=tmp_path,
             emit_events=True,
         )
-    assert mock_write.call_count == 0
+    envelopes = [call.args[0][0] for call in mock_write.call_args_list]
+    assert [e.payload["gate_id"] for e in envelopes] == ["g1-pass", "g2-pass"]
+    assert all(e.payload["outcome"] == "passed" for e in envelopes)
+    # and still no failure event, because nothing failed
+    assert not [e for e in envelopes if e.event_type.endswith(".failed")]
 
 
 def test_emit_events_false_suppresses_emission(tmp_path: Path):

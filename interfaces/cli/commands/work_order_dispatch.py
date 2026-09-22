@@ -92,7 +92,17 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
     wo_create.add_argument("project_id", help="Project UUID")
     wo_create.add_argument("--milestone", required=True, dest="milestone_id", help="Milestone UUID")
     wo_create.add_argument("--title", required=True, help="Work order title")
-    wo_create.add_argument("--description", default="", help="Scope, boundary and reasoning")
+    wo_create.add_argument(
+        "--description",
+        required=True,
+        help=(
+            "The PROMPT for the tasks under this work order: what is being done and why."
+            " Required, because a work order without one breaks the prompt chain in the"
+            " middle and the tasks have to re-derive an intent nobody wrote down."
+            " Measured 2026-09-21: 446 of 1,038 work orders had none, 78-100% on projects"
+            " outside this repo."
+        ),
+    )
     wo_create.add_argument(
         "--type",
         dest="work_order_type",

@@ -1,6 +1,6 @@
 name: dependencies-analyst
 tested: true
-perspective: "OWASP A06:2021 — Vulnerable and Outdated Components. CVE detection, version pinning, unused packages, supply chain risks."
+perspective: "OWASP A03:2025 — Software Supply Chain Failures. CVE detection, version pinning, unused packages, supply chain risks."
 weight: 1.0
 model: haiku
 signal_scale:

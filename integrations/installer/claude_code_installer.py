@@ -40,7 +40,6 @@ from .claude_code_fileops import (
     _collect_hook_file_ops,
     _collect_skill_dir_ops,
     _interpolate_hooks_dir,
-    _interpolate_statusline_cmd,
 )
 from .claude_code_launcher import _first_run_guide, _get_ds_version, _write_global_launcher
 from .claude_code_shared import _REPO_ROOT
@@ -223,11 +222,13 @@ class ClaudeCodeInstaller(InstallerBase):
             # ~/.claude/settings.json is the single dispatch surface.  Registering hooks
             # in both settings files causes every event to fire twice.
             merged = purge_all_hook_registrations(merged)
-        # Always write the Python statusLine command to migrate from old bash wrapper
-        merged["statusLine"] = {
-            "type": "command",
-            "command": _interpolate_statusline_cmd(hooks_dir),
-        }
+        # NO STATUS LINE. It ran a separate Python process on every render and
+        # shelled out to git four times per run (rev-parse, branch, status
+        # --porcelain, remote get-url) -- measured at 159 ms x ~30 renders, about
+        # 4.8 seconds per turn, the single most expensive thing in the platform.
+        # Removed at the operator's instruction rather than optimised: a status
+        # bar is not worth a per-render subprocess budget.
+        merged.pop("statusLine", None)
         merged_content = settings_to_json(merged)
         reason = (
             "Remove hook registrations from project-scope settings (single dispatch surface: user-global)"
@@ -286,24 +287,18 @@ class ClaudeCodeInstaller(InstallerBase):
                     )
                 )
 
-        # 6a. Workflow YAMLs — install canonical/workflows/*.yaml to config_root/workflows/
-        workflows_src_dir = canonical_root / "workflows"
-        if workflows_src_dir.is_dir():
-            for wf_file in sorted(workflows_src_dir.glob("*.yaml")):
-                content = wf_file.read_text(encoding="utf-8")
-                target = self.config_root / "workflows" / wf_file.name
-                ops.append(
-                    FileOp(
-                        target=target,
-                        op="create",
-                        backup_required=target.exists(),
-                        source_hash=compute_hash(content),
-                        source_content=content,
-                        reason=f"Install {wf_file.name} workflow YAML",
-                        safety_notes="Additive only — never deletes existing workflows.",
-                        backup_path=backup_base if target.exists() else None,
-                    )
-                )
+        # 6a. NO WORKFLOW PROJECTION. canonical/workflows/ is the source AND the only
+        # reader: control.execution.workflow.registry resolves _DEFAULT_DIR to it, and
+        # core.gates.pre_push reads canonical/workflows/pre-push.yaml directly. Nothing
+        # in the codebase has ever read the installed copy.
+        #
+        # So this step wrote 24 YAMLs (~230 KB) that were never opened -- and then the
+        # copy went stale against canonical, which is the drift the CHANGELOG records as
+        # having shipped a bug: two gates present in one file, missing from the other.
+        # A second copy that nobody reads cannot be useful and can only be wrong.
+        #
+        # Removed rather than guarded: a drift check on a file with no reader is just a
+        # more expensive way to keep a redundant copy.
 
         # 6b. Workflow contract — copy docs/contracts/workflow-contract.md into ds-workflow skill
         source_root = self._get_source_root()

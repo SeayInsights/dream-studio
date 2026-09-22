@@ -28,19 +28,39 @@ Phase 18.1.14b enterprise bring-back (2026-05-25): ported code from the enterpri
 
 ## Single source (R4)
 
-The linter/format pin has **exactly one definition, read by both the local pre-push gate
-and CI** — no duplicate to drift out of sync:
+The linter/format pin has **exactly one definition** — no duplicate to drift out of sync:
 
-- **Lint pin:** `runtime/config/release-gates/flake8-baseline.txt` is the sole baseline.
-  Both the pre-push `lint-check` gate and the CI `Lint baseline check` step invoke
-  `interfaces/cli/lint_baseline.py check`, which reads that one file.
-- **Format pin:** `[tool.black]` in `pyproject.toml` is the sole Black config; both surfaces
-  run `python -m black --check .` against it.
+- **Lint pin:** `runtime/config/release-gates/flake8-baseline.txt` is the sole baseline,
+  read by `interfaces/cli/lint_baseline.py check`.
+- **Format pin:** `[tool.black]` in `pyproject.toml` is the sole Black config, read by
+  `python -m black --check .`.
 
 `tests/unit/test_security_baseline.py::test_scheduled_scan_and_single_source_config` fails
-if a second baseline pin appears or either surface stops reading the single source. (The
+if a second baseline pin appears or a surface stops reading the single source. (The
 pre-push test-subset vs CI-full-suite difference is a deliberate performance tradeoff and
 is out of scope here — see `docs/operations/lightweight-github-ci-strategy.md`.)
+
+### One home per check (2026-09-21)
+
+**Format and lint now run in the pre-push gate only.** They previously ran there *and* in
+the `pr-smoke` matrix *and* in `full-ci` — three runs of the same deterministic check for
+one answer, and two of those three learn the answer too late to be useful:
+
+| surface | when it ran | what it cost |
+|---|---|---|
+| pre-push (`format-check`, `lint-check`) | before the push | seconds, locally, where the fix is |
+| `pr-smoke` (`.github/workflows/ci.yml`) | after the push | a full 3-platform round trip to say "run `black .`" |
+| `full-ci` (`interfaces/cli/ci_gate.py`) | **post-merge** | a formatting failure discovered once it is already on `main` |
+
+A deterministic check that a machine can run locally belongs where the author is, not on
+three machines afterwards. The single-source pins above are unchanged and are what makes
+this safe: every surface that *does* run these checks reads the same two files, so moving
+where a check runs cannot change what it decides.
+
+This is the same reasoning as the pre-push/CI split in
+`docs/operations/lightweight-github-ci-strategy.md` — that document governs which *test*
+surface runs where; this section governs format and lint, which are not tests and are fully
+decidable before a push.
 
 ## Automated security baseline (R4)
 

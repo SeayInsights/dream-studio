@@ -150,3 +150,54 @@ class TestDailyBackup:
     def test_backup_returns_none_when_no_db(self, tmp_path, monkeypatch):
         monkeypatch.setattr("core.config.paths.state_dir", lambda: tmp_path)
         assert backup_db() is None
+
+    def test_a_second_backup_inside_the_interval_does_not_rewrite(self, tmp_path, monkeypatch):
+        """Rate-limited, and the evidence is the mtime, not the return value.
+
+        `backup_db` used to copy the whole database on EVERY call. Measured
+        2026-09-21 on a 1.1 GB authority: 7,593 ms per invocation, on a path the
+        operator waits behind. It is now capped at BACKUP_MIN_INTERVAL_SEC.
+
+        A fresh call returns the EXISTING backup path rather than None -- the
+        caller still gets somewhere valid to read -- so asserting on the return
+        value alone cannot tell a skipped copy from a repeated one. The mtime can.
+        """
+        import time
+
+        db_path = tmp_path / "studio.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("CREATE TABLE t (id INTEGER)")
+        conn.commit()
+        conn.close()
+        monkeypatch.setattr("core.config.paths.state_dir", lambda: tmp_path)
+
+        first = backup_db()
+        assert first is not None and first.exists()
+        stamp = first.stat().st_mtime_ns
+
+        time.sleep(0.01)
+        second = backup_db()
+        assert second == first, "a rate-limited call returns the existing backup"
+        assert second.stat().st_mtime_ns == stamp, "the file was rewritten despite the rate limit"
+
+    def test_force_overrides_the_rate_limit(self, tmp_path, monkeypatch):
+        """The operator asking for a backup is not the platform taking one on a
+        timer, so `force=True` must copy even inside the interval -- otherwise an
+        explicit `ds backup` would silently hand back a stale file."""
+        import time
+
+        db_path = tmp_path / "studio.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("CREATE TABLE t (id INTEGER)")
+        conn.commit()
+        conn.close()
+        monkeypatch.setattr("core.config.paths.state_dir", lambda: tmp_path)
+
+        first = backup_db()
+        assert first is not None
+        stamp = first.stat().st_mtime_ns
+
+        time.sleep(0.01)
+        forced = backup_db(force=True)
+        assert forced == first
+        assert forced.stat().st_mtime_ns != stamp, "force=True must actually re-copy"

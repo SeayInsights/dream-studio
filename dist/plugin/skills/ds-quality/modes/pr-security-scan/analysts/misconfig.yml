@@ -1,6 +1,6 @@
 name: misconfig-analyst
 tested: true
-perspective: "OWASP A05:2021 — Security Misconfiguration. Debug modes, default credentials, security headers, unnecessary features, error handling in production."
+perspective: "OWASP A02:2025 — Security Misconfiguration. Debug modes, default credentials, security headers, unnecessary features, error handling in production."
 weight: 1.0
 model: haiku
 signal_scale:

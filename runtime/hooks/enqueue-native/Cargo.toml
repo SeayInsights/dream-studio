@@ -1,0 +1,18 @@
+[package]
+name = "ds-enqueue"
+version = "0.1.0"
+edition = "2021"
+description = "Append-only Dream Studio hook entry point. Records an event and exits."
+
+# No dependencies, on purpose. This binary runs on every tool call, so its
+# startup cost IS its cost -- and a dependency tree is also a supply-chain
+# surface on the most frequently executed code in the platform. The JSON it
+# writes is one flat object with three fields; std is enough.
+[dependencies]
+
+[profile.release]
+opt-level = "z"   # size: this is I/O bound, not compute bound
+lto = true
+codegen-units = 1
+panic = "abort"   # a hook must never unwind and print to the user's terminal
+strip = true

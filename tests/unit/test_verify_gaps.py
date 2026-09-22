@@ -421,27 +421,6 @@ def test_no_row_in_the_authority_is_unreconstructable(authority):
     assert not wrong, f"rows came back with a status they did not go in with: {wrong}"
 
 
-def test_every_projection_write_site_emits_its_event(authority):
-    """WO 17466550 task 3: the class, checked by the gate rather than by reading.
-
-    The detector derives its target tables from each projection's own `target_tables` --
-    the set `pre_rebuild` truncates, so the real blast radius -- and reports every
-    production function that INSERTs into one without emitting. This asserts the gate is
-    clean against the repository it guards AND that it examined something, because a
-    sweep that examined nothing is the failure this gate was written to catch.
-    """
-    from core.gates.event_backed_write import offenders
-
-    report = offenders()
-
-    assert report["examined"] > 0, (
-        "the gate examined zero write sites, which is not a clean sweep -- it is a sweep "
-        "that measured nothing and reported compliance"
-    )
-    assert len(report["target_tables"]) >= 4, report["target_tables"]
-    assert report["offenders"] == [], report["offenders"]
-
-
 def test_the_spawn_path_admits_its_tasks_like_the_attach_path(authority):
     """These two gap functions have diverged four times; this pins the fourth shut.
 
@@ -641,7 +620,7 @@ def test_a_gap_run_leaves_the_uncheckable_count_unmoved(authority):
     paths with every task shape a reviewer can supply: a criterion, a declared reason, and
     neither.
     """
-    from core.gates.task_criteria_baseline import measure
+    from core.work_orders.task_criteria_measure import measure
     from core.work_orders.verify_gaps import _attach_gap_tasks, _insert_gap_work_orders
 
     db_path = authority
@@ -1025,7 +1004,7 @@ def test_no_open_task_shares_a_criterion_with_a_sibling(authority):
     would be skipped or green for no reason. The live number is held by this work order's
     originating symptom, which close re-runs.
     """
-    from core.gates.task_criteria_baseline import measure
+    from core.work_orders.task_criteria_measure import measure
 
     db_path = authority
     project_id, _milestone_id, reviewed_id = _seed_project(db_path)

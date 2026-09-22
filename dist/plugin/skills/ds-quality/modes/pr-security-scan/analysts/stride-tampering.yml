@@ -1,6 +1,6 @@
 name: stride-tampering-analyst
 tested: true
-perspective: "STRIDE: Tampering — can an attacker modify data in transit, at rest, or in process? Integrity controls, checksums, signing, input validation at trust boundaries."
+perspective: "STRIDE: Tampering — can an attacker modify data in transit, at rest, or in process? Integrity controls, checksums, signing, input validation at trust boundaries. Covers OWASP A08:2025 Software or Data Integrity Failures."
 weight: 1.0
 model: sonnet
 signal_scale:

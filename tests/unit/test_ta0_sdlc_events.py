@@ -256,6 +256,7 @@ class TestForwardEmissionIntegration:
                 project_id=pid,
                 milestone_id=mid,
                 title="WO Integration Test",
+                description="A fixture work order for this test: it exists so the lifecycle under test has a real unit of work to act on, and it carries a prompt because a work order without one is refused.",
                 work_order_type="feature",
                 source_root=tmp_path,
             )

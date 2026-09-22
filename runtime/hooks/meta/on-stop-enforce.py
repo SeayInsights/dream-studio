@@ -303,42 +303,32 @@ def _enforce(tier: str) -> tuple[str, str | None]:
         shown = violations[:_MAX_LISTED_VIOLATIONS]
         if len(violations) > len(shown):
             shown.append(f"...and {len(violations) - len(shown)} more.")
+        # A NOTE, NOT A DEMAND. The old text ended "Resolve the items above (or set
+        # DS_ENFORCE=0, or lower DS_ENFORCE_TIER), then stop again" -- a wall, plus
+        # an instruction for getting past it that turns the tracking off entirely.
+        # That is what an operator reaches for after the third block, which is how a
+        # tracking system ends up recording nothing.
         reason = (
-            "[dream-studio] SQLite enforcement: this session has unrecorded work.\n"
+            "[dream-studio] recorded: this session edited source with no authority write.\n"
             + "\n".join(f"- {v}" for v in shown)
-            + "\nResolve the items above (or set DS_ENFORCE=0, or lower DS_ENFORCE_TIER),"
-            " then stop again."
+            + "\nRecorded either way; mark tasks done when it suits you."
         )
-        block_count = int(session.get("stop_block_count") or 0)
-        if tier == "enforce" and block_count >= _MAX_STOP_BLOCKS:
-            try:
-                enforcement.record_bypass(
-                    hook_name="on_stop_enforce",
-                    hook_type="Stop",
-                    rule="stop_bypassed",
-                    detail=(
-                        f"{len(violations)} violation(s) still unresolved after"
-                        f" {block_count} consecutive blocks — stop allowed loudly"
-                    ),
-                    session_id=session_id,
-                )
-            except Exception:
-                pass
-            print(
-                f"[dream-studio] WARNING: stop allowed after {block_count} blocks with"
-                f" unresolved work (recorded as stop_bypassed).\n{reason}",
-                file=sys.stderr,
-                flush=True,
-            )
-            enforcement.delete_session(session_id)
-            enforcement.gc_session_files()
-            return ("observe", session_id)
-        if tier == "enforce":
-            session["stop_blocked_at"] = enforcement.now_iso()
-            session["stop_block_count"] = block_count + 1
-            enforcement.save_session(session_id, session)
-            print(json.dumps({"decision": "block", "reason": reason}), flush=True)
-            return ("block", session_id)
+        # THE UNRECORDED-WORK RULE RECORDS; IT DOES NOT BLOCK.
+        #
+        # Same reasoning as `_OBSERVE_ONLY` in on-edit-enforce: this exists to produce a
+        # RECORD of what a session touched, and a record does not need permission.
+        # Blocking for it produced the opposite -- measured across one session, eleven
+        # blocked stops on work the operator had directed, a message naming two dozen
+        # work orders for a single file, and a documented remedy of DS_ENFORCE=0 which
+        # turns the record off entirely.
+        #
+        # The three-strike auto-bypass below was the system admitting this: an escape
+        # hatch it grants ITSELF because the false-positive rate demanded one. It also
+        # could not fire in practice -- a clean turn deletes the session and resets the
+        # count, so a session that alternates editing and reading never reaches three.
+        #
+        # Observing keeps every bit of the tracking and costs nothing. What is lost is
+        # the demand, which was never the point.
         # observe/warn (WO-ENFORCE-TIERS): record what WOULD have blocked the stop — the same
         # reason string — and ALLOW the session to end; warn also surfaces it on stderr.
         enforcement.record_observation(

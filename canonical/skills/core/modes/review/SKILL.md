@@ -103,11 +103,11 @@ on the standard rather than on seniority.
    - shape: Many opinions and no verdict. Findings arrive at assorted severities with nothing reconciling them, so the author receives twenty-seven views instead of one decision and picks whichever is cheapest.
    - answered by: declared judgment
 
-2. **Evidence referee** — *Which SHA and which command prove this claim, and does reverting the fix actually turn the check red?*
+2. **Finding integrity** — *Which SHA and which command prove this claim, and does reverting the fix actually turn the check red?*
    - shape: A claim with no reproduction. The author's summary is taken as the finding, the fix is read rather than run, and nobody checks that the guard fails when the guarded thing is broken.
    - answered by: declared judgment
 
-3. **Reviewer's reviewer** — *Does every finding still hold against current HEAD, and which ones should be withdrawn?*
+3. **Finding integrity** — *Does every finding still hold against current HEAD, and which ones should be withdrawn?*
    - shape: A finding that was true at review time and is false now, or was never true. Nobody re-checks, so the author argues with a stale objection and the reviewer's overreach costs more than the defect.
    - answered by: declared judgment
 
@@ -115,7 +115,7 @@ on the standard rather than on seniority.
    - shape: A branch reviewed in isolation. It is clean against its own base, stale against main, and the merged tree behaves differently from either.
    - answered by: detector
 
-5. **Claim and closure auditor** — *Does the PR body, the comments and the docs say what the code does, and will `Closes #N` close the right issue?*
+5. **Claim integrity** — *Does the PR body, the comments and the docs say what the code does, and will `Closes #N` close the right issue?*
    - shape: A description that describes an intention. Acceptance criteria partly met and reported as met, or a closing keyword pointed at an issue this head cannot satisfy.
    - standards: Conventional Commits 1.0.0, Keep a Changelog 1.1.0
    - answered by: graded eval
@@ -132,17 +132,17 @@ on the standard rather than on seniority.
 
 8. **AuthZ and identity** — *Which principal is this, what may it do, and what happens to the sessions that already exist when that answer changes?*
    - shape: Permission derive-and-intersect that widens, a token class mistaken for another, admin scope acquired by a path nobody enumerated, or a lifecycle where revocation does not revoke.
-   - standards: OWASP ASVS v4.0 V4 Access Control, OWASP Top 10 A01:2021 Broken Access Control, NIST SP 800-63B session lifecycle
+   - standards: OWASP ASVS v5.0.0 V8 Authorization, OWASP Top 10 A01:2025 Broken Access Control, NIST SP 800-63B session lifecycle
    - answered by: declared judgment
 
-9. **Untrusted input and abuse limits** — *What is the full capability surface of the thing being guarded, as opposed to what the guard's own rule list says about it?*
+9. **Boundary semantics** — *What is the full capability surface of the thing being guarded, as opposed to what the guard's own rule list says about it?*
    - shape: A guard that enumerates the attacks it knows. The format has a mechanism the rule list never named -- a PAX header, a nested archive, a decompression ratio -- and the guard reports clean.
-   - standards: OWASP ASVS v4.0 V5 Validation, Sanitization and Encoding, OWASP Top 10 A03:2021 Injection, CWE-22 path traversal, CWE-409 decompression bomb
+   - standards: OWASP ASVS v5.0.0 V1 Encoding and Sanitization + V2 Validation and Business Logic, OWASP Top 10 A05:2025 Injection, CWE-22 path traversal, CWE-409 decompression bomb
    - answered by: graded eval
 
 10. **Secrets and data-at-rest** — *Where does this secret come to rest, who can read it there, and what rotates it?*
    - shape: A credential written somewhere durable with the wrong mode or the wrong scope -- a cluster dump in plaintext, a secret store with no condition, a PAT seeded into a script that ships.
-   - standards: OWASP ASVS v4.0 V6 Stored Cryptography, CWE-312 cleartext storage of sensitive information, NIST SP 800-57 key management
+   - standards: OWASP ASVS v5.0.0 V11 Cryptography, CWE-312 cleartext storage of sensitive information, NIST SP 800-57 key management
    - answered by: declared judgment
 
 11. **Supply chain and provenance** — *What exactly is being installed and published here, and does the identity signing it match the identity that built it?*
@@ -175,32 +175,32 @@ on the standard rather than on seniority.
    - standards: ACID transaction properties, ISO/IEC 9075 SQL constraints
    - answered by: declared judgment
 
-17. **Contract and protocol** — *The code says mechanisms X and Y make this claim true. Does the contract document name both?*
+17. **Claim integrity** — *The code says mechanisms X and Y make this claim true. Does the contract document name both?*
    - shape: A decision record that names one of two mechanisms. The contract is accurate about what it mentions and silent about the half that is also load bearing, so the next author removes it.
    - standards: OpenAPI 3.1, JSON Schema 2020-12, RFC 9457 problem details, Semantic Versioning 2.0.0 for API surface
    - answered by: declared judgment
 
-18. **Failure semantics** — *The producer's vocabulary has more members than the consumer has branches. What does the far end do with the ones it does not handle?*
+18. **Boundary semantics** — *The producer's vocabulary has more members than the consumer has branches. What does the far end do with the ones it does not handle?*
    - shape: A confident silent default. An unknown status becomes a plausible known one, a truncation is not reported, an exception is swallowed and the caller is told everything succeeded.
    - standards: CWE-703 improper check or handling of exceptional conditions, CWE-754 improper check for unusual conditions, Saltzer and Schroeder fail-safe defaults
    - answered by: graded eval
 
-19. **Observability and audit trail** — *A value is produced and honestly computed. Does anything actually read it, and does every path that matters leave a record?*
+19. **Boundary semantics** — *A value is produced and honestly computed. Does anything actually read it, and does every path that matters leave a record?*
    - shape: A produced value with no reader, or a failure path that returns before it audits. The diagnostic a document promises and the code never emits.
-   - standards: OWASP ASVS v4.0 V7 Error Handling and Logging, OWASP Top 10 A09:2021 Security Logging and Monitoring Failures, NIST SP 800-92 log management, OpenTelemetry semantic conventions
+   - standards: OWASP ASVS v5.0.0 V16 Security Logging and Error Handling, OWASP Top 10 A09:2025 Security Logging and Alerting Failures, NIST SP 800-92 log management, OpenTelemetry semantic conventions
    - answered by: graded eval
 
-20. **Design-system conformance** — *Does this component take the promotion path, and does the styling actually reach the browser?*
+20. **Interface conformance** — *Does this component take the promotion path, and does the styling actually reach the browser?*
    - shape: A token bypassed for a raw value, a component that never enters the barrel, or a stylesheet that is written, reviewed, merged, and never served.
    - standards: W3C Design Tokens Community Group format
    - answered by: declared judgment
 
-21. **Accessibility** — *Can this be operated without a mouse, and does every control have a name a screen reader will say?*
+21. **Interface conformance** — *Can this be operated without a mouse, and does every control have a name a screen reader will say?*
    - shape: An ARIA ownership tree that does not match the visual one, a collapsed nav whose controls lose their accessible names, a tooltip with no association and no Escape.
    - standards: WCAG 2.2 Level AA, WAI-ARIA 1.2, EN 301 549, Section 508
    - answered by: declared judgment
 
-22. **Frontend behavior and payload** — *Does this control do what it looks like it does, and what did it cost to download?*
+22. **Interface conformance** — *Does this control do what it looks like it does, and what did it cost to download?*
    - shape: A control that looks live and is dead, a hooks-rules violation that only shows under a specific render order, or a payload nobody measured.
    - standards: WCAG 2.2 Level AA, Core Web Vitals
    - answered by: declared judgment
@@ -219,7 +219,7 @@ on the standard rather than on seniority.
    - standards: 32 CFR Part 2002 CUI, DoDI 5200.48 CUI marking, NIST SP 800-171, EO 13526 classification
    - answered by: declared judgment
 
-26. **Governance canon and board** — *Does this contradict another document that is also in force?*
+26. **Claim integrity** — *Does this contradict another document that is also in force?*
    - shape: Two canonical documents authorizing and forbidding the same act, an ADR edited rather than superseded, or canon propagated to one repo and not its siblings.
    - standards: ISO/IEC/IEEE 42010 architecture description
    - answered by: declared judgment

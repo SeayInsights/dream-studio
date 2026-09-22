@@ -1387,7 +1387,7 @@ def test_a_gap_run_leaves_the_uncheckable_count_unmoved(db):
     move is the one the blocking gate reads, so a review filing findings cannot refuse an
     author's push for work the author never chose to do.
     """
-    from core.gates.task_criteria_baseline import measure
+    from core.work_orders.task_criteria_measure import measure
     from core.work_orders.verify_gaps import _attach_gap_tasks, _insert_gap_work_orders
 
     conn = sqlite3.connect(str(db))

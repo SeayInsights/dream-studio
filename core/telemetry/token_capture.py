@@ -115,6 +115,41 @@ def _has_nonzero_tokens(usage: dict[str, Any]) -> bool:
     )
 
 
+def _infer_work_order(project_id: str | None) -> str | None:
+    """The in-progress work order for this project, when exactly one is open.
+
+    Deliberately narrow. With ONE work order in progress the attribution is not
+    really a guess -- there is only one thing being worked on. With several it IS
+    a guess, and this returns None rather than picking: stamping cost onto the
+    wrong work order is worse than leaving it unattributed, because a wrong number
+    gets spent against, and a missing one gets asked about.
+
+    Read-only, short timeout, never raises: this runs on the tool-call path.
+    """
+    if not project_id:
+        return None
+    try:
+        import sqlite3
+
+        from core.config import paths
+
+        db = paths.state_dir() / "studio.db"
+        if not db.is_file():
+            return None
+        conn = sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True, timeout=2)
+        try:
+            rows = conn.execute(
+                "SELECT work_order_id FROM business_work_orders"
+                " WHERE project_id = ? AND status = 'in_progress' LIMIT 2",
+                (project_id,),
+            ).fetchall()
+        finally:
+            conn.close()
+        return rows[0][0] if len(rows) == 1 else None
+    except Exception:
+        return None
+
+
 def _resolve_attribution(
     session_id: str | None,
     machine_id: str,
@@ -198,11 +233,30 @@ def _resolve_attribution(
         )
 
     if cwd_ctx is not None:
+        # INFER THE WORK ORDER RATHER THAN REQUIRE IT TO BE DECLARED.
+        #
+        # This returned work_order_id=None, so cost landed on a project and never on
+        # a unit of work. Measured on the live authority 2026-09-21: of 85,428
+        # token.consumed events, ONE was fully_attributed and 69,018 carried no
+        # attribution at all. "What did this feature cost" -- the question the
+        # platform exists to answer -- could not be answered for any work order.
+        #
+        # The reason is that full attribution needed `get_active_task()`, which is
+        # only populated when someone ran `ds work-order start` and kept that context.
+        # That is the ceremony, and the ceremony is now optional, so depending on it
+        # would make this worse over time rather than better.
+        #
+        # The enforcement hook already answers this question per edit, from the
+        # project and the declared module boundaries, without anyone declaring
+        # anything. Same inference, same source of truth, reused here. An inferred
+        # attribution is marked `inferred`, never `fully_attributed`: a guess and a
+        # declaration are different evidence and the reader needs to tell them apart.
+        _inferred_wo = _infer_work_order(cwd_ctx.project_id)
         return {
             "domain": "telemetry",
-            "attribution_status": "partial",
+            "attribution_status": "inferred" if _inferred_wo else "partial",
             "task_id": None,
-            "work_order_id": None,
+            "work_order_id": _inferred_wo,
             "milestone_id": None,
             "project_id": cwd_ctx.project_id,
             "skill_id": active_skill_id,

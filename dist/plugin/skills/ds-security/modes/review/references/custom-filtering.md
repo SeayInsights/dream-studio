@@ -10,7 +10,7 @@ purpose: Custom false positive filtering templates for security reviews
 
 This reference supports filtering decisions aligned with the following sections of [`regulatory-anchors.md`](../../../references/regulatory-anchors.md):
 
-- 🟠 [L. Application security standards](../../../references/regulatory-anchors.md#l-application-security-standards): OWASP Top 10 and OWASP ASVS 5.0 define the vulnerability categories these filters exclude or qualify; precedents align with framework-specific security guarantees.
+- 🟠 [L. Application security standards](../../../references/regulatory-anchors.md#l-application-security-standards): OWASP Top 10 and OWASP ASVS v5.0.0 define the vulnerability categories these filters exclude or qualify; precedents align with framework-specific security guarantees.
 - 🟠 [M. Vulnerability management & disclosure](../../../references/regulatory-anchors.md#m-vulnerability-management--disclosure): CVE/CVSS and the ≥0.8 confidence threshold underpin the signal quality criteria in custom filtering instructions.
 
 See the full anchor list for tier definitions and the complete catalog of applicable regimes.

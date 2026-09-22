@@ -121,6 +121,37 @@ def _version_check() -> str | None:
         return None
 
 
+def _should_nag_this_session(payload: dict) -> bool:
+    """True once per session, then False.
+
+    "DREAM STUDIO UPDATE AVAILABLE -- run `ds update`" was printed into the
+    model's context on EVERY prompt until the operator updated. A notice you
+    have already read is not information, it is a tax, and it was charged per
+    turn for as long as an update went untaken.
+
+    Telling someone once per session is the whole job. The marker is a file
+    named for the session, so a new session says it again and a resumed one
+    stays quiet. Fails open to True: if the marker cannot be written, a
+    repeated notice is a far better failure than a silently skipped one.
+    """
+    session_id = str(payload.get("session_id") or "").strip()
+    if not session_id:
+        return True
+    try:
+        safe = "".join(c for c in session_id if c.isalnum() or c in "-_")[:64]
+        home = os.environ.get("USERPROFILE") or os.environ.get("HOME") or ""
+        if not home:
+            return True
+        marker = Path(home) / ".dream-studio" / "state" / f".nagged-{safe}"
+        if marker.exists():
+            return False
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+        return True
+    except OSError:
+        return True
+
+
 def _cleanup_session_file() -> None:
     """Delete the current process's session file if it exists."""
     spool_root_env = os.environ.get("DS_SPOOL_ROOT")
@@ -177,7 +208,7 @@ def main() -> int:
     except Exception:
         pass
 
-    if hook_event == "UserPromptSubmit":
+    if hook_event == "UserPromptSubmit" and _should_nag_this_session(payload):
         try:
             version_msg = _version_check()
             enforcement_msg = _enforcement_check()

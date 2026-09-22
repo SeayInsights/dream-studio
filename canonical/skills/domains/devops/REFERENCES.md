@@ -4,7 +4,7 @@
 
 ## GitHub Actions
 
-### awesome-actions (~28k stars)
+### awesome-actions
 **URL**: https://github.com/sdras/awesome-actions
 
 Curated list of GitHub Actions resources including:
@@ -17,21 +17,21 @@ Curated list of GitHub Actions resources including:
 
 ## Docker & Containers
 
-### awesome-docker (~37k stars)
+### awesome-docker
 **URL**: https://github.com/veggiemonk/awesome-docker
 
 Comprehensive Docker resources for containerization patterns.
 
 ## Infrastructure as Code
 
-### awesome-tf (~6.6k stars)
+### awesome-tf
 **URL**: https://github.com/shuaibiyy/awesome-tf
 
 Terraform patterns for infrastructure automation.
 
 ## Monitoring & Observability
 
-### awesome-monitoring (~750 stars)
+### awesome-monitoring
 **URL**: https://github.com/crazy-canux/awesome-monitoring
 
 Monitoring and observability tools and patterns.

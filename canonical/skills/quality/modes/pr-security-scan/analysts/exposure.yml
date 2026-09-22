@@ -1,6 +1,6 @@
 name: exposure-analyst
 tested: true
-perspective: "OWASP A02:2021 — Cryptographic Failures / Sensitive Data Exposure. Secrets in code, PII handling, encryption at rest/in transit, verbose error messages."
+perspective: "OWASP A04:2025 — Cryptographic Failures / Sensitive Data Exposure. Secrets in code, PII handling, encryption at rest/in transit, verbose error messages."
 weight: 1.0
 model: haiku
 signal_scale:

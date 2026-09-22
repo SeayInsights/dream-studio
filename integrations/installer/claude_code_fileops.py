@@ -15,12 +15,6 @@ from integrations.installer.base import FileOp
 from .claude_code_shared import _compute_file_hash_chunked, _python_cmd
 
 
-def _interpolate_statusline_cmd(hooks_dir: Path) -> str:
-    """Return the resolved statusLine command string with {hooks_dir} and {python_cmd} substituted."""
-    template = '{python_cmd} "{hooks_dir}/statusline.py"'
-    return template.replace("{hooks_dir}", str(hooks_dir)).replace("{python_cmd}", _python_cmd())
-
-
 def _interpolate_hooks_dir(hooks: list[dict[str, Any]], hooks_dir: Path) -> list[dict[str, Any]]:
     """Replace {hooks_dir} and {python_cmd} placeholders in hook command strings."""
     import copy as _copy
@@ -255,30 +249,19 @@ def _collect_hook_file_ops(
         )
     )
 
-    # statusline.py — cross-platform status line (replaces statusline-command.sh bash wrapper)
-    statusline_src = repo_root / "canonical" / "adapters" / "claude" / "statusline.py"
-    if statusline_src.is_file():
-        statusline_tgt = hooks_dir / "statusline.py"
-        file_hash = _compute_file_hash_chunked(statusline_src)
-        statusline_content = statusline_src.read_text(encoding="utf-8")
-        ops.append(
-            FileOp(
-                target=statusline_tgt,
-                op="create",
-                backup_required=statusline_tgt.exists(),
-                source_hash=file_hash,
-                source_content=statusline_content,
-                reason="Install cross-platform Python status line script",
-                safety_notes="Replaces statusline-command.sh bash wrapper. Existing ~/.claude/statusline-command.sh is left in place.",
-                backup_path=backup_base if statusline_tgt.exists() else None,
-            )
-        )
-
     return ops
 
 
 _EXCLUDED_SKILL_DIRS = frozenset({"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"})
 _EXCLUDED_SKILL_SUFFIXES = frozenset({".pyc", ".pyo", ".pyd"})
+
+#: REVIEWS.md is a skill's review history, not its instructions. It exists because
+#: 104,393 bytes of "Last reviewed ..." notes were living inside ds-workorder's
+#: SKILL.md as HTML comments -- invisible in rendered markdown, and charged in full
+#: to every agent that loaded the file (86% of it, ~26K tokens). Moving them to a
+#: sidecar removed that cost here; shipping the sidecar to every install would put
+#: it straight back, one directory over. The audit trail stays in the repo.
+_EXCLUDED_SKILL_NAMES = frozenset({"REVIEWS.md"})
 
 
 def _collect_skill_dir_ops(
@@ -301,7 +284,11 @@ def _collect_skill_dir_ops(
         # a compiled artifact whose interpreter tag may not match the reader's, and a
         # .pyc is rewritten on every import, so its hash never settles and any
         # content-hash drift check over the skill tree reports drift forever.
-        if _EXCLUDED_SKILL_DIRS.intersection(rel.parts) or rel.suffix in _EXCLUDED_SKILL_SUFFIXES:
+        if (
+            _EXCLUDED_SKILL_DIRS.intersection(rel.parts)
+            or rel.suffix in _EXCLUDED_SKILL_SUFFIXES
+            or rel.name in _EXCLUDED_SKILL_NAMES
+        ):
             continue
         target = target_dir / rel
         file_hash = _compute_file_hash_chunked(file_path)

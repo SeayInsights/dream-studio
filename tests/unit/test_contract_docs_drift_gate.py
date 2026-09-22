@@ -189,17 +189,32 @@ def test_changed_files_covers_full_branch_not_just_last_commit(tmp_path, monkeyp
     assert "other.txt" in files
 
 
-def test_pre_push_manifest_docs_drift_is_blocking() -> None:
-    """WO-GATE-PARITY: CI runs the docs-drift script as a blocking step, so the
-    local pre-push tier must be blocking too — an advisory tier let PR #263
-    push green and then fail all three matrix platforms on the same drift."""
+def test_docs_drift_has_exactly_one_home_and_it_blocks_there() -> None:
+    """docs-drift runs in CI only, and blocks there.
+
+    WO-GATE-PARITY originally required it to be blocking in BOTH pre-push and CI,
+    because an advisory local tier let PR #263 push green and then fail all three
+    matrix platforms on the same drift. Two blocking copies fixed that by running
+    the same check twice.
+
+    It now runs once. The #263 failure mode is still closed -- the remaining copy
+    is blocking, so drift cannot merge -- but the cost moved: you learn about it
+    from CI rather than from your own push. That is the accepted trade of one
+    home per check, and it is asserted here rather than left to be rediscovered.
+    """
     import yaml
 
     manifest = yaml.safe_load(
         (REPO_ROOT / "canonical" / "workflows" / "pre-push.yaml").read_text(encoding="utf-8")
     )
-    docs_drift = next(g for g in manifest["gates"] if g["id"] == "docs-drift")
-    assert docs_drift["tier"] == "blocking"
+    local = [g for g in manifest["gates"] if g["id"] == "docs-drift"]
+    assert not local, "docs-drift is back in pre-push; it belongs in CI only"
+
+    ci = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "contract_docs_drift_gate" in ci, "docs-drift lost its one home"
+    assert (
+        "continue-on-error" not in ci.split("Contract docs drift")[1][:200]
+    ), "the surviving copy must block, or #263 can happen again"
 
 
 def test_engine_skill_coupling_domains_exist() -> None:

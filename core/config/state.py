@@ -17,7 +17,8 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, UTC
+import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -29,8 +30,8 @@ from core.config import paths
 
 # Event store for dual-write migration (Phase 2)
 try:
-    from core.event_store.legacy_bridge import LegacyBridge
     from core.event_store.event_store import EventStore
+    from core.event_store.legacy_bridge import LegacyBridge
     from core.validation.event_validator import EventValidator
 
     _BRIDGE_AVAILABLE = True
@@ -206,22 +207,78 @@ def write_pulse(data: dict[str, Any]) -> Path:
     return path
 
 
-def backup_db() -> Path | None:
-    """Back up studio.db using the SQLite online backup API. Monthly VACUUM on day 1."""
+# A full-file copy of studio.db is O(database size), and the database only grows.
+# This ran on every write_pulse() -- i.e. on the UserPromptSubmit critical path --
+# and at 1.1 GB it measured 5.4 s per prompt, silently getting worse as the DB grew.
+# A local dev backup does not need to be minute-fresh; once a day is the right
+# trade. Override with DS_BACKUP_MIN_INTERVAL_SEC (0 forces a backup every call).
+BACKUP_MIN_INTERVAL_SEC = int(os.environ.get("DS_BACKUP_MIN_INTERVAL_SEC", str(24 * 3600)))
+
+
+def _backup_is_fresh(bak_path: Path) -> bool:
+    if BACKUP_MIN_INTERVAL_SEC <= 0:
+        return False
+    try:
+        if not bak_path.is_file():
+            return False
+        return (time.time() - bak_path.stat().st_mtime) < BACKUP_MIN_INTERVAL_SEC
+    except OSError:
+        return False
+
+
+def _maybe_vacuum(db_path: Path) -> None:
+    """VACUUM at most once a month.
+
+    The day-1 check alone re-VACUUMed a 1.1 GB database on every single pulse
+    for the whole of the first -- the worst latency spikes in the timing log.
+    """
+    if datetime.now(UTC).day != 1:
+        return
+    stamp = db_path.parent / ".vacuumed"
+    this_month = datetime.now(UTC).strftime("%Y-%m")
+    try:
+        if stamp.is_file() and stamp.read_text(encoding="utf-8").strip() == this_month:
+            return
+    except OSError:
+        pass
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute("VACUUM")
+    finally:
+        conn.close()
+    try:
+        stamp.write_text(this_month, encoding="utf-8")
+    except OSError:
+        pass
+
+
+def backup_db(force: bool = False) -> Path | None:
+    """Back up studio.db using the SQLite online backup API. Monthly VACUUM on day 1.
+
+    Rate-limited to BACKUP_MIN_INTERVAL_SEC; pass force=True for an explicit
+    operator-requested backup.
+    """
     db_path = paths.state_dir() / "studio.db"
     if not db_path.is_file():
         return None
     bak_path = db_path.with_suffix(".db.bak")
+    if not force and _backup_is_fresh(bak_path):
+        return bak_path
     try:
         src = sqlite3.connect(str(db_path))
+        # The passive autocheckpoint loses to the hook processes that hold this
+        # database open, so the WAL only grows. This daily, rate-limited path is
+        # the one place with a good chance of a quiet moment; TRUNCATE resets the
+        # file rather than just flushing it. Best-effort -- a BUSY here is normal.
+        try:
+            src.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except sqlite3.Error:
+            pass
         dst = sqlite3.connect(str(bak_path))
         src.backup(dst)
         dst.close()
         src.close()
-        if datetime.now(UTC).day == 1:
-            conn = sqlite3.connect(str(db_path))
-            conn.execute("VACUUM")
-            conn.close()
+        _maybe_vacuum(db_path)
         _maybe_cloud_push()
         return bak_path
     except Exception:

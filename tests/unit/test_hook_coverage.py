@@ -59,6 +59,9 @@ def env(tmp_path, monkeypatch):
 
     monkeypatch.setattr(enforcement, "AUTHORITY_DB", authority)
     monkeypatch.setattr(enforcement, "SESSION_DIR", tmp_path / "enforce")
+    # Each test gets its own queue. Without this the hook telemetry file is the
+    # operator's real one, so records leak between tests AND into live state.
+    monkeypatch.setattr(enforcement, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(enforcement, "TEMP_ROOT", tmp_path / "nonexistent-temp")
     monkeypatch.setattr(enforcement, "DS_HOME", tmp_path / "nonexistent-ds-home")
     monkeypatch.delenv("DS_ENFORCE", raising=False)
@@ -68,12 +71,42 @@ def env(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def captured(monkeypatch):
-    calls: list[dict] = []
-    monkeypatch.setattr(
-        "core.event_store.event_writer.insert_hook_execution",
-        lambda **kw: calls.append(kw),
-    )
-    return calls
+    # THE ENFORCE HOOKS NO LONGER WRITE THIS ROW INLINE. Doing so imports the event
+    # store (282 modules, 259 ms) inside a hook that BLOCKS the user's action. The
+    # record still happens -- it is appended to hookq.jsonl and written by the next
+    # UserPromptSubmit or Stop -- so this reads it from where it now lands.
+    import json as _json
+
+    class _QueueView(list):
+        def _load(self):
+            path = enforcement.STATE_DIR / "hookq.jsonl"
+            if not path.is_file():
+                return []
+            out = []
+            for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    rec = _json.loads(line)
+                    if rec.get("event") == "hook.execution":
+                        out.append(_json.loads(rec["payload"]))
+                except (ValueError, KeyError):
+                    continue
+            return out
+
+        def __iter__(self):
+            return iter(self._load())
+
+        def __len__(self):
+            return len(self._load())
+
+        def __bool__(self):
+            return bool(self._load())
+
+        def __getitem__(self, i):
+            return self._load()[i]
+
+    return _QueueView()
 
 
 def _set_wo_in_progress(authority: Path, description: str = "") -> None:
@@ -120,13 +153,16 @@ def test_bash_write_matcher_present():
 # ── Bash write enforcement ──────────────────────────────────────────────────────
 
 
-def test_bash_write_denied_without_wo(env):
+def test_bash_write_is_recorded_not_denied(env, captured):
     target = env["project"] / "src" / "main.py"
+    # RECORDED, NOT DENIED. The work-order rule produces a record, and a record
+    # does not need permission -- see _OBSERVE_ONLY in on-edit-enforce. What must
+    # still hold is that the write is SEEN: this hook exists because a Bash/MCP
+    # write was a door the Edit matcher did not cover, and that door is still
+    # watched, it just no longer slams.
     out = _run_hook(_bash(f'echo broken > "{target}"'))
-    assert out, "product-source Bash write without an in_progress WO must deny"
-    decision = json.loads(out)["hookSpecificOutput"]
-    assert decision["permissionDecision"] == "deny"
-    assert "work order" in decision["permissionDecisionReason"]
+    assert out == "", "the write is recorded, not denied"
+    assert captured, "the write was allowed but nothing was recorded"
 
 
 def test_bash_write_allowed_with_wo(env):
@@ -151,7 +187,14 @@ def test_bash_unparsed_write_emits_visibility_event(env, captured):
     assert bypasses, "unparsed write-shaped command must leave a visibility mark"
 
 
-def test_mcp_write_file_denied_without_wo(env):
+def test_mcp_write_file_is_recorded_not_denied(env, captured):
+    """An MCP write is a door the Edit matcher does not cover, and it is still watched.
+
+    This asserted a deny. The work-order rule now records instead -- see
+    _OBSERVE_ONLY in on-edit-enforce -- so what matters here is unchanged and is
+    the reason this hook exists: the write is SEEN. A silent MCP write would be
+    the coverage hole; a recorded one that proceeds is the design.
+    """
     target = env["project"] / "src" / "main.py"
     out = _run_hook(
         {
@@ -160,8 +203,8 @@ def test_mcp_write_file_denied_without_wo(env):
             "tool_input": {"path": str(target)},
         }
     )
-    decision = json.loads(out)["hookSpecificOutput"]
-    assert decision["permissionDecision"] == "deny"
+    assert out == "", "the write is recorded, not denied"
+    assert captured, "the MCP write was allowed but nothing was recorded"
 
 
 # ── module_boundary advisory ────────────────────────────────────────────────────
