@@ -27,6 +27,13 @@ def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
     return paths.sqlite_path
 
 
+#: The shortest REAL milestone description on the live authority is 54 characters
+#: (89 of them, measured 2026-09-21). The only two below that are the literal
+#: string "probe" from test fixtures. 50 refuses those and admits every genuine
+#: description, including the terse ones.
+_MIN_DESCRIPTION_CHARS = 50
+
+
 def create_milestone(
     *,
     project_id: str,
@@ -47,6 +54,31 @@ def create_milestone(
 
         {"ok": False, "error": "Project not found: <id>"}
     """
+
+    # A MILESTONE IS A PROMPT, like the work orders and tasks beneath it. The
+    # hierarchy is a prompt chain: a task is a specific instruction, a work order
+    # is the goal those instructions add up to, a milestone is the goal those work
+    # orders add up to. A milestone with only a title gives every work order under
+    # it nothing to derive its own goal from.
+    #
+    # Measured on the authority 2026-09-21: 8 of 97 milestones had no description,
+    # and the floor comes from the same measurement rather than from taste. Of the
+    # 89 that did, the two shortest are both the literal string "probe" from test
+    # fixtures; the shortest real one is 54 characters. 50 refuses the probes and
+    # admits every genuine description, including the terse ones.
+    #
+    # Deliberately a floor and not a rubric -- a check that graded prompt quality
+    # would be arguing with the author. This only refuses an absence.
+    _description = (description or "").strip()
+    if len(_description) < _MIN_DESCRIPTION_CHARS:
+        return {
+            "ok": False,
+            "error": (
+                "description is required: a milestone is the prompt the work orders"
+                " under it answer to, so it must say what it is for (at least"
+                f" {_MIN_DESCRIPTION_CHARS} characters; got {len(_description)})."
+            ),
+        }
 
     db_path = _require_db(source_root, dream_studio_home)
     milestone_id = str(uuid.uuid4())

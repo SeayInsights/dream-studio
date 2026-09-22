@@ -398,7 +398,7 @@ def test_create_milestone_materialises_on_return(sdlc_env):
     result = create_milestone(
         project_id=project_id,
         title="Delivery Gate",
-        description="First milestone",
+        description="A fixture milestone for this test: it gives the work orders below it something real to belong to, and it carries a prompt because one is now required.",
         source_root=REPO_ROOT,
     )
     assert result["ok"] is True
@@ -516,7 +516,7 @@ def test_full_sdlc_chain_all_rows_queryable_on_return(sdlc_env):
     ms_result = create_milestone(
         project_id=project_id,
         title="M1 — Core substrate",
-        description="First deliverable",
+        description="A fixture milestone for this test: it gives the work orders below it something real to belong to, and it carries a prompt because one is now required.",
         order_index=1,
         source_root=REPO_ROOT,
     )
@@ -652,7 +652,12 @@ def test_consistency_clean_after_full_e2e_chain(sdlc_env):
     project_id = str(uuid.uuid4())
     _direct_insert_project(db_path, project_id)
 
-    ms_result = create_milestone(project_id=project_id, title="M1", source_root=REPO_ROOT)
+    ms_result = create_milestone(
+        project_id=project_id,
+        title="M1",
+        description="A fixture milestone for this test: it gives the work orders below it something real to belong to, and it carries a prompt because one is now required.",
+        source_root=REPO_ROOT,
+    )
     wo_result = create_work_order(
         project_id=project_id,
         milestone_id=ms_result["milestone_id"],
