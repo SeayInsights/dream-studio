@@ -260,12 +260,6 @@ modes:
   skill: website/modes/prototype/SKILL.md
   no_agent: Nothing dispatches it and the skill is 4937 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: ds-milestone/close
-  skill: ds-milestone/modes/close/SKILL.md
-  no_agent: Runs the milestone verification sequence and mutates state.
-- mode: ds-milestone/status
-  skill: ds-milestone/modes/status/SKILL.md
-  no_agent: Reads and prints milestone state and open gate checks.
 - mode: ds-project/brief
   skill: ds-project/modes/brief/SKILL.md
   no_agent: A wizard that fills and locks a design brief through operator dialogue.

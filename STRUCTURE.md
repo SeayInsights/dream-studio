@@ -22,7 +22,6 @@ dream-studio/
       security/                      security analysis (ds-security)
       project/                       project lifecycle (ds-project)
       workorder/                     work order lifecycle (ds-workorder)
-      milestone/                     milestone lifecycle (ds-milestone)
       website/                       website builder (ds-website)
       fullstack/                     fullstack builder (ds-fullstack)
       setup/                         setup (ds-setup)

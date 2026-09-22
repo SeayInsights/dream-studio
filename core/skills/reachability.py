@@ -43,7 +43,6 @@ COVERAGE = REPO_ROOT / "canonical" / "agents" / "coverage.yml"
 PACK_TO_CLI_GROUP = {
     "ds-project": "project",
     "ds-workorder": "work-order",
-    "ds-milestone": "milestone",
     "analyze": "analyze",
     "setup": "install",
 }
