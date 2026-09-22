@@ -275,6 +275,49 @@ def _repo_reflog_size() -> int:
         return 0
 
 
+def _targets_guarded_repo(argv: list, cwd: object) -> bool:
+    """Could this git invocation have acted on the repository the guard watches?
+
+    THE FIRST VERSION COUNTED EVERY GIT CALL, and the improved failure message caught it
+    within one run: a test was blamed for a commit the reflog attributed to the operator,
+    on the evidence that it had run `git -C C:/Users/danni/builds/dreamysuite tag
+    --sort=-version:refname` -- a read, against a different repository entirely. Two facts
+    that contradict each other are worse than one fact, so the record has to be about the
+    right repository.
+
+    Targeting is the discriminator rather than the verb. Sorting git subcommands into
+    readers and writers would be a list that rots the first time git grows a flag, while
+    "which repository is this pointed at" is answerable from the invocation itself.
+
+    Fails SAFE: an invocation whose target cannot be resolved counts, because an
+    unattributable git call is exactly the kind the original escape produced.
+    """
+    tokens = [str(x) for x in argv]
+    explicit: list[str] = []
+    for i, token in enumerate(tokens):
+        if token == "-C" and i + 1 < len(tokens):
+            explicit.append(tokens[i + 1])
+        elif token.startswith("--git-dir="):
+            explicit.append(token.split("=", 1)[1])
+        elif token.startswith("--work-tree="):
+            explicit.append(token.split("=", 1)[1])
+
+    candidates = explicit or ([str(cwd)] if cwd is not None else [])
+    if not candidates:
+        # No explicit target and no cwd: git acts on the process's working directory,
+        # which under pytest is the guarded repository.
+        return True
+
+    for candidate in candidates:
+        try:
+            resolved = Path(candidate).resolve()
+        except (OSError, ValueError):
+            return True  # unresolvable: fail safe
+        if resolved == _PLUGIN_ROOT or _PLUGIN_ROOT in resolved.parents:
+            return True
+    return False
+
+
 class _GitCallRecorder:
     """Whether THIS test ran a git command that could have moved the real repo.
 
@@ -304,7 +347,8 @@ class _GitCallRecorder:
                     argv = args if isinstance(args, (list, tuple)) else [args]
                     program = str(argv[0]) if argv else ""
                     if "git" in _os.path.basename(program).lower():
-                        recorder.calls.append(" ".join(str(x) for x in argv)[:200])
+                        if _targets_guarded_repo(argv, kw.get("cwd")):
+                            recorder.calls.append(" ".join(str(x) for x in argv)[:200])
                 except Exception:
                     pass
                 super().__init__(args, *a, **kw)

@@ -32,6 +32,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 #: The variables git exports to hooks that point a git invocation away from its cwd.
@@ -460,3 +462,113 @@ def test_a_ref_written_without_git_still_aborts(tmp_path):
     assert (
         "without going through git" in output
     ), f"the message did not say what made this different from a commit\n{output[-3000:]}"
+
+
+# ---------------------------------------------------------------------------------------
+# Which repository a git call was pointed at, which is not the same as whether one happened.
+#
+# The first version of the record counted EVERY git call, and the improved failure message
+# caught it within one run: a test was blamed for a commit the reflog attributed to the
+# operator, on the evidence that it had run `git -C <another repo> tag --sort=...` -- a
+# read, against a different repository entirely. Two facts that contradict each other are
+# worse than one fact.
+#
+# Targeting is the discriminator rather than the verb. Sorting subcommands into readers and
+# writers is a list that rots the first time git grows a flag; "which repository is this
+# pointed at" is answerable from the invocation itself.
+# ---------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "argv,cwd,counts,why",
+    [
+        (["git", "-C", "/somewhere/else", "tag"], None, False, "another repo named by -C"),
+        (
+            ["git", "--git-dir=/somewhere/else/.git", "log"],
+            None,
+            False,
+            "another repo by --git-dir",
+        ),
+        (["git", "status"], None, True, "no target: git acts on the process cwd"),
+        (["git", "-C", "."], None, True, "the guarded repo named by -C"),
+        (["git", "init"], "/tmp/nowhere-near-the-repo", False, "a cwd outside the repo"),
+    ],
+)
+def test_only_a_git_call_aimed_at_the_guarded_repo_counts(argv, cwd, counts, why):
+    conftest = _conftest()
+    assert conftest._targets_guarded_repo(argv, cwd) is counts, why
+
+
+def test_a_git_call_whose_target_cannot_be_resolved_counts():
+    """Fails SAFE. An unattributable git call is exactly the kind the original escape
+    produced -- GIT_DIR pointing somewhere the invocation never mentions."""
+    conftest = _conftest()
+    assert conftest._targets_guarded_repo(["git", "-C", "\0bad\0path", "status"], None) is True
+
+
+def test_a_test_reading_another_repository_is_not_blamed_for_an_external_commit(tmp_path):
+    """The exact failure observed on a real run, reproduced.
+
+    A test ran `git -C <another repo> tag --sort=-version:refname` -- a READ, against a
+    repository that is not the guarded one -- while the operator committed. The guard
+    recorded the git call, decided the test was the culprit, and killed a 2,770-test run,
+    printing two facts that contradicted each other: the reflog named the operator's commit
+    and the evidence named the test's git call.
+
+    This is the end-to-end half of the targeting check. The unit cases above prove
+    `_targets_guarded_repo` answers correctly; a mutant that counted every git call
+    regardless of target passed all of them, because nothing proved the recorder consults
+    it. This does.
+    """
+    import threading
+    import time
+
+    victim = _victim(tmp_path)
+    (tmp_path / "other").mkdir()
+    elsewhere = _victim(tmp_path / "other")
+
+    tests_dir = victim / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "conftest.py").write_bytes((REPO_ROOT / "tests" / "conftest.py").read_bytes())
+    (tests_dir / "test_reads_elsewhere.py").write_text(
+        "import subprocess, time\n"
+        "from pathlib import Path\n"
+        "VICTIM = Path(__file__).resolve().parent.parent\n"
+        f"ELSEWHERE = {str(elsewhere)!r}\n"
+        "def test_a_test_that_reads_a_different_repository():\n"
+        "    subprocess.run(['git', '-C', ELSEWHERE, 'tag', '--sort=-version:refname'],\n"
+        "                   capture_output=True, check=False)\n"
+        "    (VICTIM / 'tests' / 'running').write_text('yes', encoding='utf-8')\n"
+        "    time.sleep(6)\n",
+        encoding="utf-8",
+    )
+
+    done: dict[str, subprocess.CompletedProcess] = {}
+
+    def _go():
+        done["result"] = _run_pytest_in(tests_dir)
+
+    worker = threading.Thread(target=_go)
+    worker.start()
+
+    marker = tests_dir / "running"
+    for _ in range(200):
+        if marker.exists():
+            break
+        time.sleep(0.1)
+    assert marker.exists(), "the inner test never started"
+    (victim / "outside.txt").write_text("an operator commit", encoding="utf-8")
+    assert _run(victim, "add", "outside.txt").returncode == 0
+    assert _run(victim, "commit", "-q", "-m", "a commit made outside the suite").returncode == 0
+
+    worker.join(timeout=600)
+    output = done["result"].stdout + done["result"].stderr
+
+    assert done["result"].returncode == 0, (
+        "a test that merely READ another repository was blamed for the operator's commit"
+        f"\n{output[-3000:]}"
+    )
+    assert "[repo-guard]" in output, f"the external change went unreported\n{output[-2000:]}"
+    assert (
+        "modified the real git repository" not in output
+    ), f"the guard still accused the test\n{output[-2000:]}"
