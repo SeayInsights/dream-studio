@@ -92,3 +92,57 @@ def test_not_every_agent_is_opus():
         "every agent is pinned to opus, which reproduces the exact spend profile "
         f"this guard exists to change: {models}"
     )
+
+
+# ---------------------------------------------------------------------------------------
+# An agent IS its skill pointer. If that breaks, the agent still dispatches -- it just has
+# no knowledge, and says so to the user instead of to anyone who could fix it.
+# ---------------------------------------------------------------------------------------
+
+#: What an installed agent actually reads. The installer copies these files verbatim into
+#: the Claude Code config root, so the path in the body is resolved against the SHIPPED
+#: plugin, not against canonical -- checking canonical would pass on a projection that
+#: never got regenerated.
+SHIPPED_SKILLS = REPO_ROOT / "dist" / "plugin" / "skills"
+
+_SKILL_POINTER_RE = re.compile(r"~/\.claude/skills/([A-Za-z0-9_./-]+\.md)")
+
+
+@pytest.mark.parametrize("path", _agent_files(), ids=lambda p: p.stem)
+def test_agent_points_at_a_skill_file_that_exists(path: Path):
+    """The agent bodies are all the same shape: a persona, then "your full set of patterns,
+    anti-patterns, gotchas, commands and version notes is in <file>. Read it completely
+    before responding."
+
+    So the pointer is not a reference, it is the entire payload. A rename on the skill side
+    leaves the agent dispatchable and empty, and the failure surfaces as a vaguer answer
+    rather than as an error -- which is the same shape as the fourteen instructions that
+    named a linter nobody had committed.
+    """
+    body = path.read_text(encoding="utf-8")
+    refs = _SKILL_POINTER_RE.findall(body)
+    assert refs, (
+        f"{path.name} names no skill file. These agents carry no domain knowledge of their "
+        "own -- the pointer is the payload, so an agent without one is a persona and "
+        "nothing else."
+    )
+    for ref in refs:
+        target = SHIPPED_SKILLS / ref
+        assert target.is_file(), (
+            f"{path.name} tells the agent to read ~/.claude/skills/{ref}, which is not in "
+            f"the shipped plugin. The agent would dispatch and have nothing to read. "
+            f"Either the skill moved, or dist/plugin needs regenerating."
+        )
+        assert target.stat().st_size > 200, (
+            f"{path.name} points at {ref}, which exists but is {target.stat().st_size} "
+            "bytes -- too small to be the knowledge the agent is told to read completely."
+        )
+
+
+def test_the_shipped_skills_tree_is_there_at_all():
+    """Guard the guard: if dist/plugin/skills were missing, every check above would fail
+    for the wrong reason and the message would send someone after the agents."""
+    assert SHIPPED_SKILLS.is_dir(), (
+        f"{SHIPPED_SKILLS} does not exist -- regenerate the plugin before reading this "
+        "file's failures as an agent problem."
+    )
