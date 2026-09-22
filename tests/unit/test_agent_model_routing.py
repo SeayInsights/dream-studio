@@ -95,48 +95,81 @@ def test_not_every_agent_is_opus():
 
 
 # ---------------------------------------------------------------------------------------
-# An agent IS its skill pointer. If that breaks, the agent still dispatches -- it just has
-# no knowledge, and says so to the user instead of to anyone who could fix it.
+# An agent's domain knowledge must BE in the agent, not be named by it.
+#
+# These files used to end with "your full set of patterns, anti-patterns, gotchas, commands
+# and version notes is in ~/.claude/skills/<file>. Read it completely before responding."
+# That is an instruction, not a mechanism: nothing makes a subagent read the file, and when
+# it does not the answer comes from general knowledge -- fluent, confident, and
+# indistinguishable from a good one. Every agent also carried a paragraph beginning "If the
+# skill file is unavailable", which is the authors recording that they knew it was
+# unreliable.
+#
+# The skill is now inlined at build time by integrations/compiler/agents.py. These tests
+# hold that: the knowledge is present, it matches the skill it came from, and the old
+# pointer form has not crept back.
 # ---------------------------------------------------------------------------------------
 
-#: What an installed agent actually reads. The installer copies these files verbatim into
-#: the Claude Code config root, so the path in the body is resolved against the SHIPPED
-#: plugin, not against canonical -- checking canonical would pass on a projection that
-#: never got regenerated.
 SHIPPED_SKILLS = REPO_ROOT / "dist" / "plugin" / "skills"
 
-_SKILL_POINTER_RE = re.compile(r"~/\.claude/skills/([A-Za-z0-9_./-]+\.md)")
+_POINTER_RE = re.compile(r"~/\.claude/skills/[A-Za-z0-9_./-]+\.md")
+
+
+def _meta_files() -> list[Path]:
+    return sorted(AGENTS_DIR.glob("*.meta.yml"))
+
+
+def test_every_agent_has_a_declaration_to_compile_from():
+    """Guard the guard: the checks below iterate declarations, and an empty glob would
+    make all of them vacuous."""
+    metas = {p.name[: -len(".meta.yml")] for p in _meta_files()}
+    agents = {p.stem for p in _agent_files()}
+    assert metas, f"no .meta.yml declarations under {AGENTS_DIR}"
+    assert metas == agents, f"declarations and agents disagree: {metas ^ agents}"
 
 
 @pytest.mark.parametrize("path", _agent_files(), ids=lambda p: p.stem)
-def test_agent_points_at_a_skill_file_that_exists(path: Path):
-    """The agent bodies are all the same shape: a persona, then "your full set of patterns,
-    anti-patterns, gotchas, commands and version notes is in <file>. Read it completely
-    before responding."
+def test_the_agent_carries_its_knowledge_rather_than_a_pointer_to_it(path: Path):
+    """The whole point. A subagent that has to fetch its own knowledge is one that can
+    answer without it, and nothing downstream can tell the difference."""
+    import yaml
 
-    So the pointer is not a reference, it is the entire payload. A rename on the skill side
-    leaves the agent dispatchable and empty, and the failure surfaces as a vaguer answer
-    rather than as an error -- which is the same shape as the fourteen instructions that
-    named a linter nobody had committed.
-    """
     body = path.read_text(encoding="utf-8")
-    refs = _SKILL_POINTER_RE.findall(body)
-    assert refs, (
-        f"{path.name} names no skill file. These agents carry no domain knowledge of their "
-        "own -- the pointer is the payload, so an agent without one is a persona and "
-        "nothing else."
+    assert not _POINTER_RE.search(body), (
+        f"{path.name} names a skill file instead of carrying it. The pointer form is what "
+        "this compiler replaced -- regenerate with "
+        "`py -m integrations.compiler.agents --write`."
     )
-    for ref in refs:
-        target = SHIPPED_SKILLS / ref
-        assert target.is_file(), (
-            f"{path.name} tells the agent to read ~/.claude/skills/{ref}, which is not in "
-            f"the shipped plugin. The agent would dispatch and have nothing to read. "
-            f"Either the skill moved, or dist/plugin needs regenerating."
-        )
-        assert target.stat().st_size > 200, (
-            f"{path.name} points at {ref}, which exists but is {target.stat().st_size} "
-            "bytes -- too small to be the knowledge the agent is told to read completely."
-        )
+
+    meta = yaml.safe_load((AGENTS_DIR / f"{path.stem}.meta.yml").read_text(encoding="utf-8"))
+    skill = SHIPPED_SKILLS / meta["skill"]
+    assert skill.is_file(), f"{path.stem}: declared skill {meta['skill']} is not shipped"
+
+    knowledge = skill.read_text(encoding="utf-8").strip()
+    assert knowledge in body, (
+        f"{path.name} does not contain the text of {meta['skill']}. It is stale -- "
+        "regenerate with `py -m integrations.compiler.agents --write`."
+    )
+
+
+@pytest.mark.parametrize("path", _agent_files(), ids=lambda p: p.stem)
+def test_the_agent_states_what_it_returns(path: Path):
+    """A subagent's report is the only thing that survives it. If the shape is not fixed,
+    the skill that dispatched it cannot rely on what comes back."""
+    body = path.read_text(encoding="utf-8")
+    assert "## What you return" in body, f"{path.name} declares no output contract"
+
+
+def test_the_agents_match_their_declarations():
+    """The drift half. A skill edit that is not recompiled leaves agents carrying old
+    knowledge, silently -- which is the failure the pointer form had, relocated."""
+    from integrations.compiler.agents import check
+
+    stale = check()
+    assert not stale, (
+        f"{len(stale)} agent(s) no longer match what their declaration compiles to: "
+        f"{', '.join(stale)}. Run `py -m integrations.compiler.agents --write`."
+    )
 
 
 def test_the_shipped_skills_tree_is_there_at_all():

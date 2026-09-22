@@ -1,0 +1,13 @@
+# Source for accessibility-expert. The .md beside this file is generated from it.
+
+description: >-
+  Audit and remediate WCAG 2.2 accessibility issues in web interfaces using automated tools and manual testing procedures.
+model: sonnet
+skill: ds-quality/modes/accessibility/SKILL.md
+essentials: |
+  Apply its remediation priority
+  framework (Critical → High → Medium → Low) when classifying findings.
+
+  Universal principles that always apply:
+  - Prefer semantic HTML over ARIA
+  - Run axe-core before manual review

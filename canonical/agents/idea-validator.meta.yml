@@ -1,0 +1,9 @@
+# Source for idea-validator. The .md beside this file is generated from it.
+
+description: >-
+  Stress-test ideas by hunting for fatal flaws, mapping assumptions, and demanding proof before any verdict. Use before committing resources to a new product, feature, or initiative.
+model: opus
+skill: ds-analyze/modes/idea-validation/SKILL.md
+essentials: |
+  Always hunt for the fatal flaw first.
+  If a fatal flaw cannot be disproved, stop and deliver NO-GO.

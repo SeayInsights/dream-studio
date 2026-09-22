@@ -92,10 +92,30 @@ def _check_plugin_dist() -> tuple[bool, str]:
     return True, f"{len(shipped)} skill packs shipped"
 
 
+def _check_agents() -> tuple[bool, str]:
+    """The nine bundled subagents, each compiled from its declaration plus its skill.
+
+    An agent's body IS its knowledge now rather than a pointer to it, so a skill edited
+    without recompiling leaves a subagent answering from text that has moved on -- the same
+    silent staleness the pointer form had, relocated. This is the check that stops it.
+    """
+    from integrations.compiler.agents import check as _agents_check
+    from integrations.compiler.agents import meta_files
+
+    total = len(meta_files())
+    if total == 0:
+        return False, "no agent declarations found"
+    stale = _agents_check()
+    if stale:
+        return False, f"{len(stale)} of {total} stale: {', '.join(stale)}"
+    return True, f"{total} agents match their declarations"
+
+
 #: (artifact, generator command a human should run, freshness check)
 ARTIFACTS: tuple[tuple[str, str, Callable[[], tuple[bool, str]]], ...] = (
     ("AGENTS.md", "py -m integrations.compiler.agents_md --write", _check_agents_md),
     ("canonical/review_lanes.yml", "py scripts/seat_lanes_data.py", _check_review_lanes),
+    ("canonical/agents", "py -m integrations.compiler.agents --write", _check_agents),
     (
         "dist/plugin",
         'py -c "from pathlib import Path; from integrations.marketplace.plugin_dist import'
