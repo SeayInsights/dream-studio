@@ -127,6 +127,37 @@ def _parse_triggers(text: str) -> list[str]:
     return []
 
 
+def _parse_skill_trigger_section(skill_md: Path) -> list[str]:
+    """The triggers a skill documents in its own `## Trigger` section.
+
+    WHY THIS IS A SOURCE AND NOT A FALLBACK OF LAST RESORT. 18 of 72 modes declare no
+    `triggers:` in metadata.yml and document them here instead -- including
+    `security/scan`, the front door of the whole security pack, whose section reads
+    ``scan:``, ``scan org:``, ``run security scan``, ``/scan``. The router read only
+    metadata.yml, so those eighteen were documented for a human and invisible to the
+    thing that routes: written down, and unreachable.
+
+    The section is prose, so only backticked tokens ending in a colon are taken --
+    ``scan:`` is a trigger, "run security scan" is a description of one. A slash command
+    (``/scan``) is the host's surface, not this table's.
+    """
+    import re as _re
+
+    try:
+        body = skill_md.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    match = _re.search(r"^##+\s*Trigger[^\n]*\n(.+?)(?=\n#|\Z)", body, _re.S | _re.M)
+    if not match:
+        return []
+    out: list[str] = []
+    for token in _re.findall(r"`([^`\n]+?:)`", match.group(1)):
+        token = token.strip()
+        if token and token not in out:
+            out.append(token)
+    return out
+
+
 def _extract_intent(description: str) -> str:
     """Get the first sentence of a description (before 'Trigger on')."""
     for sep in (" Trigger on ", " — Trigger", ". Trigger"):
@@ -186,6 +217,12 @@ def collect_skills(skills_dir: Path) -> list[dict]:
         description = _parse_simple_yaml_field(text, "description")
         pack = _parse_simple_yaml_field(text, "pack")
         triggers = _parse_triggers(text)
+
+        if not triggers:
+            # THE SKILL'S OWN `## Trigger` SECTION. 18 modes document their triggers
+            # there and declare none in metadata.yml, so the router -- which read only
+            # metadata -- could not reach any of them.
+            triggers = _parse_skill_trigger_section(metadata_path.parent / "SKILL.md")
 
         if not triggers:
             triggers = _parse_description_triggers(description)
