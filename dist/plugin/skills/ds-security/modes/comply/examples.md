@@ -19,7 +19,7 @@ Extract from user input:
 ### Step 1: Load Client Profile
 
 1. Read `~/.dream-studio/clients/{client}.yaml`.
-2. If file does not exist: **stop** — "Client profile not found at `~/.dream-studio/clients/{client}.yaml`. Run `client-work:intake` to create it."
+2. If file does not exist: **stop** — "Client profile not found at `~/.dream-studio/clients/{client}.yaml`. Run `power-platform:intake` to create it."
 3. Extract `compliance.frameworks` — list of enabled frameworks (e.g., `["soc2", "nist-csf", "owasp-asvs", "cwe-top25"]`).
 4. If `compliance.frameworks` is empty or missing: warn — "No compliance frameworks declared in client profile. Defaulting to all four frameworks (soc2, nist-csf, owasp-asvs, cwe-top25)." Set frameworks to all four.
 

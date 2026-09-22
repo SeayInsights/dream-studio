@@ -57,7 +57,7 @@ Extract from user input:
 #### Step F1: Load Client Profile
 
 1. Read `~/.dream-studio/clients/{client}.yaml`.
-2. If file does not exist: **stop** — "Client profile not found at `~/.dream-studio/clients/{client}.yaml`. Run `client-work:intake` to create it."
+2. If file does not exist: **stop** — "Client profile not found at `~/.dream-studio/clients/{client}.yaml`. Run `power-platform:intake` to create it."
 3. Extract: `client.name`, `data.classification`, `isolation.model`, `network.proxy.*`, `compliance.frameworks`.
 
 #### Step F2: Load Findings

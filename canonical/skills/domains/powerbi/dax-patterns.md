@@ -1,7 +1,7 @@
 # BI Domain — DAX Patterns
 
 Domain knowledge for Power BI semantic modeling and DAX authoring.
-Referenced by: client-work
+Referenced by: power-platform
 
 ---
 

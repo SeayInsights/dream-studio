@@ -15,7 +15,7 @@ Complete reference for all packs, modes, and routing triggers.
 | **core** | `ds-core` | think, plan, build, review, verify, ship, handoff, recap, explain | 9 |
 | **quality** | `ds-quality` | debug, polish, harden, pr-security-scan, structure-audit, learn, coach, audit, security, accessibility, database, code-quality, testing, types-deps, backend-api, frontend-ux, architecture, ops, database-compliance, pre-launch | 20 |
 | **analyze** | `ds-analyze` | multi, domain-re, repo, intelligence, research, idea-validation | 6 |
-| **domains** | `ds-domains` | game-dev, saas-build, mcp-build, dashboard-dev, client-work, design, fullstack, website, devops, kubernetes, technical-writing, terraform, mobile, data-engineering | 14 |
+| **domains** | `ds-domains` | game-dev, saas-build, mcp-build, dashboard-dev, power-platform, design, fullstack, website, devops, kubernetes, technical-writing, terraform, mobile, data-engineering | 14 |
 | **workflow** | `ds-workflow` | _(orchestration infrastructure — no discrete modes)_ | — |
 | **security** | `ds-security` | scan, dast, binary-scan, mitigate, comply, netcompat, dashboard, review | 8 |
 | **ds-project** | `ds-project` | scope, resume, brief, manage | 4 |
@@ -91,7 +91,7 @@ Triggers appear in user messages to auto-route to the correct pack and mode.
 | `saas-build:` | saas-build |
 | `mcp-build:` | mcp-build |
 | `dashboard-dev:` | dashboard-dev |
-| `intake:`, `sow:`, `proposal:`, `build report:`, `review powerbi:`, `optimize dax:`, `build flow:`, `build app:`, `client handoff:`, `document:` | client-work |
+| `intake:`, `sow:`, `proposal:`, `build report:`, `review powerbi:`, `optimize dax:`, `build flow:`, `build app:`, `client handoff:`, `document:` | power-platform |
 | `design:` | design |
 | `fullstack:`, `build fullstack:`, `fullstack frontend:`, `fullstack backend:`, `full-stack:`, `full stack:` | fullstack |
 | `website:`, `build website:`, `landing page:`, `build page:`, `prototype app:`, `pitch deck:`, `animate:`, `build site:` | website |

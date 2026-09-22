@@ -103,6 +103,31 @@ FUNCTION_REF = re.compile(
 )
 
 
+#: A SUBAGENT AN INSTRUCTION TELLS AN AGENT TO DISPATCH. `domains/power-platform` (then
+#: `client-work`) said "For any Power BI work involving `.pbip` files ... dispatch a
+#: `bi-developer` subagent. Do not handle inline." No such agent ever shipped:
+#: `bi-developer` was one of six agents in a `~/.claude/agents/` directory on the author's
+#: own machine, so on every other installation the instruction named nothing and the step
+#: it guarded was silently skipped. `core/REGISTRY.md` had even written the consequence
+#: down -- "if the `bi-developer` agent type is unavailable, this mode will fail silently
+#: on Power BI deep work" -- and enforced it with nothing.
+#:
+#: ONLY A DISPATCH COUNTS, not every backtick near the word agent. The verb has to be
+#: there, the same way a script reference needs an interpreter in front of it: prose ABOUT
+#: an agent is not an instruction to dispatch one, and a gate that flagged every mention
+#: would be arguing with documents that are correct.
+AGENT_REF = re.compile(
+    r"(?:[Dd]ispatch(?:es|ed|ing)?|[Ii]nvoked? via|[Cc]onvene)\s+"
+    r"(?:a |an |the )?`([a-z][a-z0-9-]+)`"
+)
+
+
+def _known_agents() -> set[str]:
+    """Every agent this repository ships, by the name a dispatch would use."""
+    agents_dir = REPO_ROOT / "canonical" / "agents"
+    return {p.stem for p in agents_dir.glob("*.md")} if agents_dir.is_dir() else set()
+
+
 def _resolve_function(dotted: str, name: str) -> str | None:
     """None when it resolves; otherwise why not.
 
@@ -153,6 +178,8 @@ def _resolve_module(dotted: str) -> bool:
 def unresolved_commands() -> list[dict[str, object]]:
     """Every command a canonical instruction names that cannot be run."""
     findings: list[dict[str, object]] = []
+    # Read once: a per-line glob over canonical/agents would dominate the run.
+    _agents = _known_agents()
     for glob in SEARCH_GLOBS:
         for source in sorted(REPO_ROOT.glob(glob)):
             try:
@@ -188,6 +215,16 @@ def unresolved_commands() -> list[dict[str, object]]:
                                 "line": number,
                                 "names": dotted,
                                 "kind": "module",
+                            }
+                        )
+                for agent in AGENT_REF.findall(line):
+                    if agent not in _agents and "-" in agent:
+                        findings.append(
+                            {
+                                "file": rel,
+                                "line": number,
+                                "names": agent,
+                                "kind": "subagent (no such agent ships)",
                             }
                         )
                 for dotted, name in FUNCTION_REF.findall(line):

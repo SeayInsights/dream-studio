@@ -48,9 +48,9 @@ unlock_triggers:
       Game development mode unlocked!
       • game-dev — game build, review, QA workflows
 
-  # Domains pack (client-work) — unlocks when user mentions Power BI, client work
+  # Domains pack (power-platform) — unlocks when user mentions Power BI, client work
   - pack: domains
-    mode: client-work
+    mode: power-platform
     patterns:
       - "power bi"
       - "powerbi"
@@ -62,10 +62,10 @@ unlock_triggers:
       - "dax"
       - "power automate"
     modes_unlocked:
-      - client-work
+      - power-platform
     unlock_message: |
       Client work mode unlocked!
-      • client-work — Power BI, Power Apps, intake, SOW, DAX optimization
+      • power-platform — Power BI, Power Apps, intake, SOW, DAX optimization
 
   # Domains pack (saas-build) — unlocks when user mentions API, SaaS features
   - pack: domains

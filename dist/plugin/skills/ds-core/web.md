@@ -358,4 +358,4 @@ ToolSearch({
 
 ## Used by
 
-career-scan, career-ops, analyze, security-dast, domains-client-work (research phase)
+career-scan, career-ops, analyze, security-dast, domains-power-platform (research phase)

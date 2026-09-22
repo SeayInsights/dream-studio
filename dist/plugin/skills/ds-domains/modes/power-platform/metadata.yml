@@ -1,5 +1,5 @@
 # Required fields
-name: client-work
+name: power-platform
 version: 1.1.0
 pack: domains
 created_at: 2026-04-28
@@ -14,7 +14,7 @@ created_by: human
 # Quality & Health
 status: tested
 health: active
-tested_with_models: [sonnet, bi-developer]
+tested_with_models: [sonnet]
 tested_with_hosts: [claude-code]
 
 # Performance metrics
@@ -28,7 +28,7 @@ quality_metrics:
 
 # Failure patterns
 common_failures:
-  - "Handling .pbip / TMDL inline instead of dispatching bi-developer"
+  - "Editing .pbip / TMDL without first reading the powerbi/ reference files"
   - "Missing powerbi/ reference files — stuffing format content into SKILL.md"
   - "Not reading gotchas.yml before Power BI work"
 
@@ -43,7 +43,7 @@ dependencies:
     - powerbi/accessibility-checklist.yml
     - powerbi/design-hacks.yml
   calls_skills: []
-  calls_subagents: [bi-developer]
+  calls_subagents: []
 
 # Compatibility
 compatibility:
@@ -53,17 +53,17 @@ compatibility:
   platforms: [windows, macos, linux]
 
 # Discovery
-tags: [power-bi, power-apps, power-automate, pbip, tmdl, dax, m-query, client-work, bi]
+tags: [power-bi, power-apps, power-automate, pbip, tmdl, dax, m-query, power-platform, bi]
 category: domain
 triggers:
-  - intake:
-  - sow:
-  - proposal:
-  - build report:
-  - review powerbi:
-  - optimize dax:
-  - build flow:
-  - build app:
-  - client handoff:
-  - document:
+  - "intake:"
+  - "sow:"
+  - "proposal:"
+  - "build report:"
+  - "review powerbi:"
+  - "optimize dax:"
+  - "build flow:"
+  - "build app:"
+  - "client handoff:"
+  - "document:"
 description: "Power Platform client lifecycle — intake, SOW, build (Power BI, Power Apps, Power Automate), review, handoff — with DAX/M-query patterns, delegation rules, .pbip/TMDL format, and flow error handling."

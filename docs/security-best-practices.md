@@ -97,7 +97,7 @@ Common anti-patterns and best practices for all security skills.
 
 **Pattern:**
 ```
-✅ "Client profile not found at ~/.dream-studio/clients/acme-corp.yaml. Fix: Run `client-work:intake --name acme-corp`"
+✅ "Client profile not found at ~/.dream-studio/clients/acme-corp.yaml. Fix: Run `power-platform:intake --name acme-corp`"
 ❌ "Error: file not found"
 ```
 

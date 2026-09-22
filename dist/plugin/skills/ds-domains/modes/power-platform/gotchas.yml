@@ -12,8 +12,8 @@ avoid:
     severity: critical
     discovered: 2026-04-28
     title: "Never handle Power BI .pbip, TMDL, or semantic model work inline"
-    context: "bi-developer subagent has Power BI, DAX, M-query, Dataverse expertise. Inline handling produces errors."
-    fix: "Dispatch bi-developer subagent for any .pbip editing, TMDL syntax, DAX diagnosis, or semantic model validation."
+    context: "The powerbi/ reference files carry the .pbip, TMDL, DAX and M-query rules. Working from memory produces errors."
+    fix: "Read ../../powerbi/pbip-format.md and ../../powerbi/tmdl-authoring.md before any .pbip editing, TMDL syntax, DAX diagnosis, or semantic model validation."
 
   - id: report-json-edit
     severity: critical

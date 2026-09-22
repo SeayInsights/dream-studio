@@ -44,7 +44,7 @@ Parsed: mode="setup", client="acme-corp", repo="vendor-portal"
    ```
 
 2. **Validate file exists:**
-   - If missing → **STOP** with error: `"Client profile not found at ~/.dream-studio/clients/{client}.yaml. Run client-work:intake to create it."`
+   - If missing → **STOP** with error: `"Client profile not found at ~/.dream-studio/clients/{client}.yaml. Run power-platform:intake to create it."`
 
 3. **Extract required fields:**
    - Every skill reads `client.name` and `client.github_org` (identity)
@@ -151,7 +151,7 @@ Each skill implements 2-5 modes (e.g., `setup`, `ingest`, `status`). Mode logic 
 ```
 ❌ ERROR: Client profile not found
 Path: ~/.dream-studio/clients/acme-corp.yaml
-Fix: Run `client-work:intake --name acme-corp` to create profile
+Fix: Run `power-platform:intake --name acme-corp` to create profile
 ```
 
 ### Soft Warnings (Continue with Defaults)

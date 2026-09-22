@@ -323,3 +323,71 @@ def test_the_scan_actually_reports_a_missing_function(tmp_path):
     ), f"the scan did not report a missing function: {findings}"
     kinds = {f["kind"] for f in findings}
     assert any(k.startswith("function") for k in kinds), f"kind not recorded: {kinds}"
+
+
+# ---------------------------------------------------------------------------
+# A dispatch must name a subagent that exists
+# ---------------------------------------------------------------------------
+
+
+def _tree_with(tmp_path, skill_text: str, agents=("domains-power-platform",)):
+    (tmp_path / "canonical" / "skills").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "canonical" / "agents").mkdir(parents=True, exist_ok=True)
+    for a in agents:
+        (tmp_path / "canonical" / "agents" / f"{a}.md").write_text("x", encoding="utf-8")
+    (tmp_path / "canonical" / "skills" / "SKILL.md").write_text(skill_text, encoding="utf-8")
+    return tmp_path
+
+
+def _scan(tmp_path):
+    from unittest import mock
+
+    import core.gates.instruction_commands as gate
+
+    with mock.patch.object(gate, "REPO_ROOT", tmp_path):
+        return gate.unresolved_commands()
+
+
+def test_a_dispatch_to_an_agent_that_does_not_ship_is_reported(tmp_path):
+    """THE DEFECT. `domains/power-platform` said "For any Power BI work involving `.pbip`
+    files ... dispatch a `bi-developer` subagent. Do not handle inline." No such agent
+    ever shipped -- it was one of six in a `~/.claude/agents/` directory on the author's
+    machine -- so on every other installation the instruction named nothing and the step
+    it guarded was silently skipped. `core/REGISTRY.md` had written the consequence down
+    and enforced it with nothing.
+    """
+    root = _tree_with(tmp_path, "For .pbip work, dispatch a `bi-developer` subagent.\n")
+    names = {f["names"] for f in _scan(root)}
+    assert "bi-developer" in names
+
+
+def test_a_dispatch_to_a_real_agent_is_not_reported(tmp_path):
+    root = _tree_with(tmp_path, "Dispatch the `domains-power-platform` subagent.\n")
+    names = {f["names"] for f in _scan(root)}
+    assert "domains-power-platform" not in names
+
+
+def test_prose_about_an_agent_is_not_a_dispatch(tmp_path):
+    """Only a dispatch counts, the same way a script reference needs an interpreter in
+    front of it. A gate that flagged every mention would argue with documents that are
+    correct -- including the ones that explain a phantom agent was REMOVED."""
+    root = _tree_with(
+        tmp_path,
+        "The `bi-developer` agent was retired.\n"
+        "This section used to name a `bi-developer` subagent and forbid inline work.\n",
+    )
+    assert not [f for f in _scan(root) if f["names"] == "bi-developer"]
+
+
+def test_the_scan_reports_the_kind_so_a_reader_knows_what_broke(tmp_path):
+    root = _tree_with(tmp_path, "dispatch a `no-such-agent` subagent\n")
+    kinds = {f["kind"] for f in _scan(root) if f["names"] == "no-such-agent"}
+    assert any("subagent" in k for k in kinds), kinds
+
+
+def test_the_repository_dispatches_only_agents_it_ships():
+    """The live assertion. This is what would have caught `bi-developer` in April."""
+    import core.gates.instruction_commands as gate
+
+    phantom = [f for f in gate.unresolved_commands() if "subagent" in str(f["kind"])]
+    assert not phantom, f"canonical/ dispatches agents that do not ship: {phantom}"
