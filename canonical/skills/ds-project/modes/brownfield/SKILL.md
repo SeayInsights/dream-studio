@@ -10,7 +10,6 @@
 - `core.projects.discovery.discover_project_candidates(search_root, github_entity, max_depth)` — enumerate candidates
 - `core.projects.bulk_intake.bulk_acquire(candidates, source_root, dream_studio_home)` — bulk register
 - `core.projects.mutations.set_project_vision(project_id, vision_statement)` — capture vision on project entity
-- `core.projects.mutations.defer_project_audit(project_id, audit_type)` — defer readiness audit
 
 ---
 
@@ -88,20 +87,23 @@ set_project_vision(project_id, vision_statement)
 
 Skip this step if the user says "skip" or "no" for all projects.
 
-### Step 5 — Deferred audits
+### Step 5 — Readiness audit
 
 For each newly-registered project, offer:
-"Run a readiness audit for [project name] now, or defer to later?"
+"Run a readiness audit for [project name] now?"
 - Options: (1) Run now — invoke `ds-quality:security` for this project
-           (2) Defer — schedule for later; will surface when the project is opened
+           (2) Not now — the operator runs it themselves later
 
-If deferred, call:
-```python
-from core.projects.mutations import defer_project_audit
-defer_project_audit(project_id, audit_type="security")
-```
+**There is no deferral mechanism, and this step used to claim one.** It instructed
+`from core.projects.mutations import defer_project_audit` and promised "a notice will
+appear the next time the project is activated". Commit `2963b58` retired the
+`pending_audits` table, removed that function, and removed
+`_get_pending_audits_for_project` from the start path — so the import raised, and the
+notice it promised had no reader left. An agent following the old text scheduled nothing
+and told the operator it had.
 
-Default is deferred. A notice will appear the next time the project is activated or a work order is started.
+So "not now" means exactly that: nothing is recorded and nothing will remind anyone.
+Say so when you offer it, rather than implying a queue that does not exist.
 
 ### Step 6 — Summary
 
