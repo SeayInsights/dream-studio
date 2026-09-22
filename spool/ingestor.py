@@ -109,6 +109,20 @@ def ingest(root: Path | None = None, db_path: Path | None = None) -> IngestResul
             else:
                 _move_to_failed(event_file, failed_dir, f"sqlite_error: {e}")
                 result.failed += 1
+        except FileNotFoundError:
+            # Another ingest run claimed this file between the glob above and the
+            # os.replace in _process_one. Overlapping runs are routine — the pulse
+            # hooks and `ds doctor --fix` both ingest — and losing that race is not
+            # a failure: the winner is processing the event and nothing is lost.
+            #
+            # Recording it as one manufactured phantom failures that could never
+            # drain, because _move_to_failed cannot move a file that is already
+            # gone. They accumulated until `failed_events` crossed the threshold
+            # doctor treats as critical, so a healthy install reported fail.
+            #
+            # A lost claim is the same shape as losing the write lock below it:
+            # someone else has the work, so skip it.
+            result.skipped += 1
         except Exception as e:
             _move_to_failed(event_file, failed_dir, str(e))
             result.failed += 1
