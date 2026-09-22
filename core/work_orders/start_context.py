@@ -44,6 +44,14 @@ def write_work_order_context(
     project_id = brief_data["project_id"]
     project_name = brief_data["project_name"]
     milestone_title = brief_data.get("milestone_title")
+    # THE PROMPT CHAIN. A project is the goal its milestones answer to, a milestone the
+    # goal its work orders answer to, a work order the goal its tasks answer to. All three
+    # are stored, all three are now mandatory at creation -- and until this, none of them
+    # reached the executor. The brief selected four titles from four tables and not one
+    # description, so a work order arrived as a name with a task list under it.
+    project_description = brief_data.get("project_description")
+    milestone_description = brief_data.get("milestone_description")
+    work_order_description = brief_data.get("description")
     marker_project_id = brief_data.get("marker_project_id")
     pre_gate = brief_data.get("pre_gate")
     build_exec = brief_data.get("build_exec")
@@ -66,6 +74,22 @@ def write_work_order_context(
         lines.append(f"**Milestone:** {milestone_title}")
     if marker_project_id:
         lines.append(f"**Active project (marker):** `{marker_project_id}`")
+    # Rendered BEFORE the gates and the task list, and in chain order, because the
+    # question an executor needs answered first is what this work is for -- not which
+    # gates will judge it. Each layer is shown only when it carries something, so a
+    # project with no description does not print an empty heading and teach the reader
+    # that the section is noise.
+    _chain = [
+        ("Why this project exists", project_description),
+        ("What this milestone delivers", milestone_description),
+        ("What this work order is for", work_order_description),
+    ]
+    if any(text and str(text).strip() for _label, text in _chain):
+        lines += ["", "## The prompt chain", ""]
+        for _label, text in _chain:
+            if text and str(text).strip():
+                lines += [f"**{_label}**", "", str(text).strip(), ""]
+
     lines += [
         "",
         "## Gates",
@@ -84,6 +108,14 @@ def write_work_order_context(
     if pending_tasks:
         for task in pending_tasks:
             lines.append(f"- [ ] {task['title']}")
+            # The criterion is the half that decides whether the task is done. Listing
+            # the title alone hands the executor the name of the work and leaves the
+            # definition of finished in a table it has to go and ask for.
+            _criterion = (task.get("acceptance_criteria") or "").strip()
+            if _criterion:
+                for _line in _criterion.splitlines():
+                    if _line.strip():
+                        lines.append(f"      {_line.strip()}")
     else:
         lines.append("_No pending tasks._")
 
