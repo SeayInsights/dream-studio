@@ -775,6 +775,8 @@ def create_task(
     title: str,
     description: str = "",
     acceptance_criteria: str | None = None,
+    why: str | None = None,
+    carried_from: str | None = None,
     source_root: Path,
     dream_studio_home: Path | None = None,
 ) -> dict[str, Any]:
@@ -788,7 +790,55 @@ def create_task(
     or on missing work order::
 
         {"ok": False, "error": "Work order not found: <id>"}
+
+    or when the task carries nothing anyone can check::
+
+        {"ok": False, "error": ..., "refusals": [...], "remedy": ...}
+
+    `why` declares, in at least 20 characters, why this claim cannot be computed; it is
+    COMPOSED INTO the description here so the declaration is auditable on the row rather
+    than spent at the door. `carried_from` names the task this one is a move of, which is
+    the one case the floor cannot apply to -- see below.
     """
+
+    # A TASK IS A PROMPT, and its acceptance criterion is how the prompt says it is done.
+    # The round table has refused a criterion-less task at the CLI door since #706, and
+    # 43% of the tasks created in the month after still arrived with none -- because this
+    # is the OTHER door, the one this module's own docstring tells skills, workflows and
+    # hooks to import directly. A check wired to one of two writers holds for whichever
+    # writer the author happened to use.
+    #
+    # Only the Warden's lane runs here, not the whole round table: whether a criterion
+    # exists and can be run is a property of the text and needs no database, no sibling
+    # titles and no repo. The richer verdict stays at the CLI, where that context exists.
+    # The PREDICATE is imported rather than restated -- one definition, and the door that
+    # admits agrees with the door that files by construction.
+    #
+    # `carried_from` is the single exemption, and it is a move rather than an authoring:
+    # `carry_over` re-files an EXISTING task under a new work order, so refusing it would
+    # not raise the floor -- it would delete a task already in the authority because
+    # somebody else failed to write it a criterion. Named, so the exemption is visible.
+    if carried_from is None:
+        from core.work_orders.admission import compose_declared_reason, criterion_refusal
+
+        _refusal = criterion_refusal(acceptance_criteria, why=why, description=description)
+        if _refusal is not None:
+            return {
+                "ok": False,
+                "error": "a task nobody can check cannot be filed",
+                "refusals": [_refusal],
+                "remedy": (
+                    "pass acceptance_criteria with a TEST-CHECK / SQL-CHECK / API-CHECK"
+                    " naming something that exists, or why='<20+ characters saying why"
+                    " this claim cannot be computed>'"
+                ),
+            }
+        if not acceptance_criteria and why:
+            # THE DECLARATION IS PERSISTED, NOT SPENT. A reason that admits a task and
+            # then reaches only stdout is a bare bypass with a nicer spelling (#706), and
+            # the criteria ratchet counts a task as declared only when the marker is on
+            # the row. One composer, called from the door every author reaches.
+            description = compose_declared_reason(description, why)
 
     db_path = _require_db(source_root, dream_studio_home)
     task_id = str(uuid.uuid4())

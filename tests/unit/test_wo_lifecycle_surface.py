@@ -455,7 +455,17 @@ def test_a_milestone_work_order_and_task_can_be_created_from_the_cli(db, tmp_pat
     conn.close()
 
     code, out = _run(
-        ["milestone", "create", pid, "--title", "Ship the authoring door", "--order", "1"],
+        [
+            "milestone",
+            "create",
+            pid,
+            "--title",
+            "Ship the authoring door",
+            "--description",
+            "A fixture milestone for this test: it gives the work orders below it something real to belong to, and it carries a prompt because one is now required.",
+            "--order",
+            "1",
+        ],
         tmp_path,
     )
     assert code == 0, out

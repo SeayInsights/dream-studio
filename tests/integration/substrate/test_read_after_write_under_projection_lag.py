@@ -177,6 +177,10 @@ class TestTaskH4:
             work_order_id=_WO_CLOSED,
             project_id=_PROJECT_ID,
             title="Read-after-write test task",
+            acceptance_criteria=(
+                "TEST-CHECK:"
+                " tests/integration/substrate/test_read_after_write_under_projection_lag.py"
+            ),
             source_root=REPO_ROOT,
             dream_studio_home=db_home,
         )
@@ -202,6 +206,10 @@ class TestTaskH4:
             work_order_id=_WO_CLOSED,
             project_id=_PROJECT_ID,
             title="Lag test task",
+            acceptance_criteria=(
+                "TEST-CHECK:"
+                " tests/integration/substrate/test_read_after_write_under_projection_lag.py"
+            ),
             source_root=REPO_ROOT,
             dream_studio_home=db_home,
         )

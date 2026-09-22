@@ -277,6 +277,7 @@ def close_work_order(
             "status": "closed",
             "forced": bool,
             "bypassed_gates": list[str],   # populated when force=True
+            "acceptance_criteria": str | absent,  # "not evaluated" on a forced close
             "verify_warning": str | absent,  # inline verify was unreviewable (no commits)
             "next_work_order": {...} | absent,
             "next_command": str | absent,
@@ -855,6 +856,14 @@ def close_work_order(
         "forced": force,
         "bypassed_gates": gate_failures if force else [],
     }
+    # NOT EVALUATED REACHES THE OPERATOR, or it was not recorded at all. `1a212a8`
+    # stopped a forced close paying for the acceptance-criteria run it overrides and
+    # wrote "recorded as NOT EVALUATED, never as a pass" -- but the marker went into a
+    # local stats dict that only fed a boolean, so the close itself said nothing. A
+    # forced close with no AC failures then reads exactly like a forced close whose
+    # criteria all passed, which is the collapse that commit named and did not prevent.
+    if _ac_stats.get("skipped"):
+        result["acceptance_criteria"] = _ac_stats["skipped"]
     if _symptom_checks:
         result["symptom_checks"] = _symptom_checks
     # Bookkeeping that did not land is stated, not swallowed. An unrecorded boundary or
