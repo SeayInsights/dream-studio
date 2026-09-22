@@ -41,6 +41,7 @@ from interfaces.cli.commands import project  # noqa: E402
 from interfaces.cli.commands import grader  # noqa: E402
 from interfaces.cli.commands import prove as prove_cmd  # noqa: E402
 from interfaces.cli.commands import enforce as enforce_cmd  # noqa: E402
+from interfaces.cli.commands import review as review_cmd  # noqa: E402
 from interfaces.cli.commands import skill  # noqa: E402
 from interfaces.cli.commands import system  # noqa: E402
 from interfaces.cli.commands import task  # noqa: E402
@@ -123,6 +124,7 @@ def main(argv: list[str] | None = None) -> int:
     grader.register(subcommands)
     prove_cmd.register(subcommands)
     enforce_cmd.register(subcommands)
+    review_cmd.register(subcommands)
     analyze.register(subcommands)
     eval_cmd.register(subcommands)
     config.register(subcommands)
@@ -235,6 +237,8 @@ def main(argv: list[str] | None = None) -> int:
             return prove_cmd.dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "enforce":
             return enforce_cmd.dispatch(args, source_root=source_root, dream_studio_home=home)
+        if args.command == "review":
+            return review_cmd.dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "analyze":
             return analyze.dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "eval":
