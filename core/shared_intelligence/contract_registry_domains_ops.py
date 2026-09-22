@@ -305,23 +305,28 @@ _CONTRACT_DOMAINS_OPS: tuple[dict[str, Any], ...] = (
         "public_export_boundary": "skill_surface_docs_are_agent_contracts_not_public_api",
     },
     {
-        # Milestones engine → ds-milestone skill surface coupling.
-        # Same pattern as work_orders_engine_skill_surface.
+        # Milestones engine -> the rules that state what a close refuses.
+        # This used to point at canonical/skills/ds-milestone/SKILL.md. That pack was
+        # narration: all four of its operations were already `ds milestone ...` commands,
+        # and its own text said "Not a CLI command" while describing failure keys close.py
+        # has never emitted. The normative half moved to canonical/rules.yml, so that is
+        # what an engine change now has to be reviewed against -- the contract survives the
+        # pack because the coupling it guards is real.
         "domain_id": "milestones_engine_skill_surface",
-        "domain_name": "Milestones Engine → DS-Milestone Skill Surface",
+        "domain_name": "Milestones Engine -> Milestone Rules",
         "source_patterns": [
             "core/milestones/**",
             "interfaces/cli/commands/milestone.py",
         ],
         "contract_refs": [
-            "canonical/skills/ds-milestone/SKILL.md",
+            "canonical/rules.yml",
         ],
         "docs_refs": [],
         "required_doc_refs": [
-            "canonical/skills/ds-milestone/SKILL.md",
+            "canonical/rules.yml",
         ],
         "release_blocking": True,
-        "freshness_policy": "milestones_engine_changes_require_ds_milestone_skill_surface_review",
+        "freshness_policy": "milestones_engine_changes_require_milestone_rule_review",
         "public_export_boundary": "skill_surface_docs_are_agent_contracts_not_public_api",
     },
     {

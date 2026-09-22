@@ -107,14 +107,6 @@ packs:
       - close runs the gates, and a forced close carries recorded operator approval
     modes: [start, execute, close, block, status]
 
-  ds-milestone:
-    description: Milestone lifecycle — read-only status and close (with gate checks)
-    skill: ds-milestone
-    invariants:
-      - milestone status is derived from its work orders rather than asserted
-      - close runs the milestone gates
-    modes: [status, close]
-
   website:
     description: Website build pipeline — discovery through delivery, 9 sub-modes
     skill: ds-website

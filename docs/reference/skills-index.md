@@ -20,12 +20,11 @@ Complete reference for all packs, modes, and routing triggers.
 | **security** | `ds-security` | scan, dast, binary-scan, mitigate, comply, netcompat, dashboard, review | 8 |
 | **ds-project** | `ds-project` | scope, resume, brief, manage | 4 |
 | **ds-workorder** | `ds-workorder` | start, execute, close, block, status | 5 |
-| **ds-milestone** | `ds-milestone` | status, close | 2 |
 | **ds-website** | `ds-website` | discover, direction, page, prototype, animate, brand, cip, critique, deck | 9 |
 | **ds-fullstack** | `ds-fullstack` | frontend, backend, integrate, secure | 4 |
 | **ds-setup** | `ds-setup` | wizard, status, jit | 3 |
 
-**Total: 12 packs, 84 modes**
+**Total: 11 packs, 82 modes**
 
 ---
 
@@ -139,13 +138,6 @@ Triggers appear in user messages to auto-route to the correct pack and mode.
 | `close work order:`, `finish work order:` | close |
 | `block:`, `blocked by:` | block |
 | `work order status:`, `show tasks:` | status |
-
-### Milestone Lifecycle — `ds-milestone`
-
-| Trigger keywords | Mode |
-|-----------------|------|
-| `milestone status:`, `milestone progress:` | status |
-| `close milestone:`, `milestone done:` | close |
 
 ### Website Builder — `ds-website`
 

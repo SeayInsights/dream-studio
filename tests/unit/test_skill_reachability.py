@@ -79,7 +79,7 @@ def test_a_cli_backed_mode_is_not_called_unreachable():
     """`ds-workorder/start` is reached by `ds work-order start`. Calling it unreachable
     would be the detector not knowing how the product works."""
     by_mode = {r["mode"]: r for r in routes()}
-    for mode in ("ds-workorder/start", "ds-project/scope", "ds-milestone/status"):
+    for mode in ("ds-workorder/start", "ds-project/scope"):
         assert mode in by_mode, mode
         assert by_mode[mode]["routes"], f"{mode} reported unreachable but the CLI enters it"
 

@@ -36,7 +36,8 @@
 #
 # THE CONTRACT. Every entry is one normative statement. It carries EITHER:
 #   enforced_by: a check that fails when the rule is broken (pytest node id or gate module)
-#   guidance:    true, with `why`, when the statement is judgment no check can settle
+#   unenforced:  a reason of at least 20 characters, when the statement is judgment
+#                no static check can settle -- typically an instruction to the MODEL
 # An entry with neither is refused by the gate. So is an `enforced_by` naming a check that
 # does not exist or collects nothing -- an unrunnable check is the same as no check, and
 # that exact rot was found on eight acceptance criteria this session.
@@ -51,6 +52,98 @@
 version: 1
 
 rules:
+  - id: a-milestone-closes-only-over-finished-work
+    statement: >
+      An open work order refuses a milestone close, and the force flag does not reach that
+      refusal.
+    source: core/milestones/close.py
+    enforced_by:
+      - tests/unit/test_milestone_close.py::test_close_fails_when_work_orders_not_all_completed
+      - tests/unit/test_milestone_close.py::test_force_does_not_bypass_open_work_orders
+    note: >
+      close.py has called this "a hard, non-force-bypassable precondition" in a comment
+      since it was written, and until 2026-09-22 no test passed force to it -- the only
+      coverage ran the default path, where force is False and proves nothing. A comment is
+      not an enforcement: moving the check behind `and not force` kept all sixteen other
+      tests in that file green while closing a milestone over work still in progress. The
+      terminal set is shared with the work-order checks (TERMINAL_WO_STATUSES) because the
+      two diverged once, deleted being terminal on one side only, and stranded a milestone
+      nobody could close.
+  - id: a-bypassed-gate-is-recorded-by-name
+    statement: >
+      A forced close emits one record per gate it went around, and that record names the
+      gate it skipped.
+    source: core/milestones/close.py
+    enforced_by:
+      - tests/unit/test_milestone_close.py::test_close_force_bypasses_and_records_the_bypass
+    note: >
+      The audit trail is the whole reason force is permitted rather than refused, and the
+      test guarding it asserted `"gate.bypassed" in err or "WARNING" in err` against
+      stderr -- an `or` that passes on the warning alone, so suppressing every event while
+      still printing left the suite green. The record now has to reach the spool and carry
+      the failure sentence, because a bypass that only warns is a bypass nobody can find
+      afterwards.
+  - id: a-planning-artifact-is-written-to-the-docstore
+    statement: >
+      Milestone gate artifacts are written through the docstore; a direct write to
+      .planning/ on disk is denied.
+    source: runtime/hooks
+    enforced_by:
+      - tests/unit/test_enforce_sqlite_hooks.py::TestPreToolUseEnforcement::test_planning_disk_writes_denied_zero_disk
+    note: >
+      The close gate reads its four artifacts from files.db with a disk fallback left over
+      from the transition. The fallback is what makes the rule necessary rather than
+      automatic: an artifact authored to disk is readable today and invisible to every
+      cloud-portable reader, so the refusal lives at the write, not at the read.
+  - id: every-node-in-the-prompt-chain-carries-its-own-prompt
+    statement: >
+      A milestone and a work order are each refused at their authoring door unless they
+      carry a description of their own.
+    source: core/milestones/mutations.py
+    enforced_by:
+      - tests/unit/test_milestone_prompt_required.py::test_a_milestone_without_a_prompt_is_refused
+      - tests/unit/test_milestone_prompt_required.py::test_the_cli_requires_it_too
+      - tests/unit/test_work_order_prompt_required.py::test_a_work_order_without_a_prompt_is_refused
+    note: >
+      The hierarchy is a prompt chain -- a task is an instruction, a work order is the goal
+      those instructions add up to, a milestone is the goal those work orders add up to. A
+      node carrying only a title gives everything beneath it nothing to derive its own goal
+      from. Both floors are measured rather than chosen: the shortest real milestone
+      description on the authority is 54 characters and everything shorter was a fixture,
+      so the refusal names an absence and never a style. Distinct from
+      work-order-description-is-persisted, which is about a description that was supplied
+      surviving the write; this one is about requiring it at all.
+  - id: surfaced-state-is-what-the-call-returned
+    statement: >
+      Milestone state shown to an operator is what the command returned, with errors
+      quoted rather than summarised, and no field the caller did not receive.
+    source: canonical/rules.yml
+    unenforced: >
+      No static check can settle whether a model recited state from its own context instead
+      of reading it back, or softened an error on the way out. This is an eval, and saying
+      so is more honest than naming a gate that would only appear to cover it. It is
+      recorded here because it used to live in a skill pack as a numbered instruction,
+      where it was loaded as context on every invocation and enforced by nothing.
+  - id: a-gate-bypass-needs-an-explicit-yes
+    statement: >
+      A gate is bypassed only after the operator is told which gates will be skipped and
+      answers yes; the bypass is never offered as the first remedy.
+    source: canonical/rules.yml
+    unenforced: >
+      The code cannot distinguish a force the operator asked for from one the model talked
+      them into, since both arrive as the same flag. What the code does guarantee is the
+      record, covered by a-bypassed-gate-is-recorded-by-name. The judgment above that line
+      is an eval.
+  - id: a-read-does-not-chain-into-a-mutation
+    statement: >
+      Reporting the state of a milestone does not continue into closing it; a mutation is
+      a separate instruction from the operator.
+    source: canonical/rules.yml
+    unenforced: >
+      Two commands run in sequence look identical to any static check whether the operator
+      asked for the second or the model decided the answer implied it. The separation is a
+      behaviour, so it is declared as one rather than dressed up with a gate that would
+      pass either way.
   - id: carried-work-is-exempt-by-record-never-by-status
     statement: >
       A close gate that exempts a task because its work moved to another work order must

@@ -117,6 +117,48 @@ def test_close_fails_when_work_orders_not_all_completed(db_home, tmp_path, monke
     assert any(w["work_order_id"] == WO_UI for w in out["open_work_orders"])
 
 
+def test_force_does_not_bypass_open_work_orders(db_home, tmp_path, monkeypatch, capsys):
+    """--force buys past gate failures. It does not buy past an open work order.
+
+    close.py calls this "a hard, non-force-bypassable precondition" and, until this test,
+    nothing checked. The claim and the code could drift apart silently, and the one way
+    anybody would find out is a milestone closing over work that was still open.
+
+    Everything else here passes: gate artifacts written, both audits present. The only
+    defect is a work order in progress, and --force is set. A pass means the refusal is
+    structural -- it happens before force is ever consulted.
+    """
+    _write_all_passing(tmp_path)
+    conn = sqlite3.connect(str(_db_path(db_home)))
+    try:
+        conn.execute(
+            "UPDATE business_work_orders SET status = 'in_progress'" " WHERE work_order_id = ?",
+            (WO_UI,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    rc = _close(db_home, tmp_path, monkeypatch, extra=["--force"])
+
+    assert rc == 1
+    out = json.loads(capsys.readouterr().out)
+    assert out["ok"] is False
+    assert any(w["work_order_id"] == WO_UI for w in out["open_work_orders"])
+
+    # And the milestone is untouched -- a refusal that still wrote would be worse than no
+    # refusal at all, because the JSON would say it had refused.
+    conn = sqlite3.connect(str(_db_path(db_home)))
+    try:
+        status = conn.execute(
+            "SELECT status FROM business_milestones WHERE milestone_id = ?",
+            (MILESTONE_ID,),
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert status == "active"
+
+
 # ── 2. close fails when design-audit.md is missing ───────────────────────────
 
 
@@ -287,15 +329,34 @@ def test_close_passes_when_all_artifacts_pass(db_home, tmp_path, monkeypatch, ca
 # ── 8. close --force bypasses and emits gate.bypassed ────────────────────────
 
 
-def test_close_force_bypasses_and_warns(db_home, tmp_path, monkeypatch, capsys):
-    # Only design-audit is present — rest are missing → would normally fail
+def test_close_force_bypasses_and_records_the_bypass(db_home, tmp_path, monkeypatch):
+    """A forced close leaves a record naming each gate it went around.
+
+    This used to assert `"gate.bypassed" in err or "WARNING" in err` against stderr. The
+    `or` made it pass on the warning alone, so the audit trail -- the entire reason force
+    is allowed at all -- was the half of the claim nothing checked. A bypass that only
+    warns is a bypass nobody can find afterwards.
+    """
+    # Only design-audit is present; the rest are missing, so this would normally fail.
     d = _ms_dir(tmp_path)
     d.mkdir(parents=True, exist_ok=True)
     (d / "design-audit.md").write_text("Score: 3/4\n", encoding="utf-8")
+    spool_root = tmp_path / "spool-root"
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
+
     rc = _close(db_home, tmp_path, monkeypatch, extra=["--force"])
     assert rc == 0
-    err = capsys.readouterr().err
-    assert "gate.bypassed" in err or "WARNING" in err
+
+    written = [p.read_text(encoding="utf-8") for p in spool_root.rglob("*.json")]
+    bypassed = [c for c in written if "gate.bypassed" in c]
+    assert bypassed, "a forced close emitted no gate.bypassed event"
+
+    # The record has to name what was skipped; one saying only "a gate" is unauditable.
+    # close.py states each failure as a sentence, so that sentence is what must survive
+    # into the event -- an event carrying a bare count would not be an audit trail.
+    named = " ".join(bypassed)
+    assert "Security audit required." in named
+    assert "Hardening check required." in named
 
 
 # ── 9. close emits milestone.completed spool event ───────────────────────────
