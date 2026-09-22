@@ -89,6 +89,40 @@ SCRIPT_REF = re.compile(
 )
 MODULE_REF = re.compile(_INTERPRETER + r"\s+-m\s+([A-Za-z0-9_.]+)")
 
+#: A FUNCTION A SKILL TELLS AN AGENT TO CALL. `ds-project:brownfield` instructed
+#: `from core.projects.mutations import defer_project_audit` -- a function removed in
+#: 2963b58 with the `pending_audits` table it wrote to. The skill went on promising "a
+#: notice will appear the next time the project is activated", which the same commit had
+#: deleted the reader for. An agent following it gets an ImportError, and the user gets a
+#: promise nothing can keep.
+#:
+#: Same rule as a script path or a `py -m` module, one level finer: an instruction that
+#: names a thing must name one that exists.
+FUNCTION_REF = re.compile(
+    r"\b((?:" + "|".join(FIRST_PARTY) + r")(?:\.[a-z_][a-z0-9_]*)*)\.([a-z_][a-z0-9_]*)\("
+)
+
+
+def _resolve_function(dotted: str, name: str) -> str | None:
+    """None when it resolves; otherwise why not.
+
+    Imports the module rather than reading the source, because a function re-exported
+    through a package `__init__` is as callable as one defined there -- and telling an
+    author their working call is broken is how a gate gets argued with.
+    """
+    import importlib
+
+    try:
+        module = importlib.import_module(dotted)
+    except ModuleNotFoundError:
+        return "no such module"
+    # An import that fails for its own reasons -- a missing optional dependency, a
+    # side effect that needs a database -- is not this gate's finding to make. The
+    # question here is only whether the instruction named something real.
+    except Exception:  # noqa: BLE001 - any import failure is out of scope, not just one
+        return None
+    return None if hasattr(module, name) else "module has no such function"
+
 
 def _resolve_script(ref: str, source: Path) -> bool:
     """A `scripts/x.py` reference resolves from the repo root OR the naming skill.
@@ -139,12 +173,33 @@ def unresolved_commands() -> list[dict[str, object]]:
                 for ref in SCRIPT_REF.findall(line):
                     if not _resolve_script(ref, source):
                         findings.append(
-                            {"file": rel, "line": number, "names": ref, "kind": "script"}
+                            {
+                                "file": rel,
+                                "line": number,
+                                "names": ref,
+                                "kind": "script",
+                            }
                         )
                 for dotted in MODULE_REF.findall(line):
                     if not _resolve_module(dotted):
                         findings.append(
-                            {"file": rel, "line": number, "names": dotted, "kind": "module"}
+                            {
+                                "file": rel,
+                                "line": number,
+                                "names": dotted,
+                                "kind": "module",
+                            }
+                        )
+                for dotted, name in FUNCTION_REF.findall(line):
+                    why = _resolve_function(dotted, name)
+                    if why:
+                        findings.append(
+                            {
+                                "file": rel,
+                                "line": number,
+                                "names": f"{dotted}.{name}",
+                                "kind": f"function ({why})",
+                            }
                         )
     return findings
 
