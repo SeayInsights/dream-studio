@@ -328,3 +328,135 @@ def test_the_guard_aborts_the_session_and_names_the_test_that_did_it(tmp_path):
         f"{output[-3000:]}"
     )
     assert done.returncode != 0, "the run should have aborted"
+
+
+# ---------------------------------------------------------------------------------------
+# The guard used to blame the test because it had no record of what moved HEAD.
+#
+# Measured 2026-09-22: four consecutive full-suite runs were killed at ~40%, each naming a
+# different innocent test in tests/unit/test_launch_orchestration.py. The real cause was an
+# operator committing in another window while the suite ran. The guard saw the repository
+# change, knew only which test was executing, and named it -- an accusation built from the
+# absence of evidence rather than from evidence.
+#
+# Three things now form the record: whether THIS test ran a git command (the suite's own
+# subprocess calls are recorded), whether the config changed (bare is damage, a moved tip is
+# not), and whether git wrote a reflog entry (it always does; a hand-written ref never does).
+# ---------------------------------------------------------------------------------------
+
+
+def _run_pytest_in(tests_dir: Path) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, "-m", "pytest", str(tests_dir), "-q", "-p", "no:cacheprovider"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=_clean_env(PYTHONPATH=str(REPO_ROOT)),
+        timeout=600,
+        check=False,
+    )
+
+
+def test_an_external_commit_during_the_run_does_not_abort_or_blame_the_test(tmp_path):
+    """The measured false positive, reproduced and fixed.
+
+    The inner test runs no git and simply waits. While it waits, THIS process commits into
+    the victim repository -- which is exactly what an operator committing in another window
+    looks like to the guard. The run must finish, the innocent test must pass, and the
+    notice must say the repository changed without accusing it.
+    """
+    import threading
+    import time
+
+    victim = _victim(tmp_path)
+    tests_dir = victim / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "conftest.py").write_bytes((REPO_ROOT / "tests" / "conftest.py").read_bytes())
+    (tests_dir / "test_innocent.py").write_text(
+        "import time\n"
+        "from pathlib import Path\n"
+        "VICTIM = Path(__file__).resolve().parent.parent\n"
+        "def test_a_test_that_touches_no_repository_at_all():\n"
+        "    (VICTIM / 'tests' / 'running').write_text('yes', encoding='utf-8')\n"
+        "    time.sleep(6)\n"
+        "    assert True\n",
+        encoding="utf-8",
+    )
+
+    done: dict[str, subprocess.CompletedProcess] = {}
+
+    def _go():
+        done["result"] = _run_pytest_in(tests_dir)
+
+    worker = threading.Thread(target=_go)
+    worker.start()
+
+    # Commit into the victim WHILE the innocent test is mid-flight.
+    marker = tests_dir / "running"
+    for _ in range(200):
+        if marker.exists():
+            break
+        time.sleep(0.1)
+    assert marker.exists(), "the inner test never started"
+    (victim / "outside.txt").write_text("an operator commit", encoding="utf-8")
+    assert _run(victim, "add", "outside.txt").returncode == 0
+    assert _run(victim, "commit", "-q", "-m", "a commit made outside the suite").returncode == 0
+
+    worker.join(timeout=600)
+    result = done["result"]
+    output = result.stdout + result.stderr
+
+    assert result.returncode == 0, (
+        "an external commit killed a clean run -- the innocent case must not abort\n"
+        f"{output[-3000:]}"
+    )
+    assert "1 passed" in output, f"the innocent test did not run to completion\n{output[-2000:]}"
+    assert (
+        "[repo-guard]" in output
+    ), f"the change went unreported -- it should be noticed, just not blamed\n{output[-2000:]}"
+    assert (
+        "modified the real git repository" not in output
+    ), f"the guard still accused the test that happened to be running\n{output[-2000:]}"
+    assert "a commit made outside the suite" in output, (
+        "the notice did not say what moved HEAD, which is the whole point of the reflog"
+        f"\n{output[-2000:]}"
+    )
+
+
+def test_a_ref_written_without_git_still_aborts(tmp_path):
+    """The hole the subprocess record alone would leave, closed by the reflog.
+
+    A test that hand-writes `.git/refs/heads/<branch>` moves the tip with no git command
+    and no reflog entry. That is never an ordinary operator commit, so it must still stop
+    the run even though the suite recorded no git call.
+    """
+    victim = _victim(tmp_path)
+    head = (victim / ".git" / "HEAD").read_text(encoding="utf-8").strip()
+    ref = head.split(":", 1)[1].strip()
+
+    tests_dir = victim / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "conftest.py").write_bytes((REPO_ROOT / "tests" / "conftest.py").read_bytes())
+    (tests_dir / "test_sneaky.py").write_text(
+        "from pathlib import Path\n"
+        "VICTIM = Path(__file__).resolve().parent.parent\n"
+        f"REF = {ref!r}\n"
+        "def test_a_test_that_writes_a_ref_by_hand():\n"
+        "    p = VICTIM / '.git' / REF\n"
+        "    p.write_text('0' * 40 + chr(10), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+
+    result = _run_pytest_in(tests_dir)
+    output = result.stdout + result.stderr
+    assert (
+        result.returncode != 0
+    ), f"a ref written behind git's back did not abort\n{output[-3000:]}"
+    assert (
+        "test_a_test_that_writes_a_ref_by_hand" in output
+    ), f"the guard did not name the test that bypassed git\n{output[-3000:]}"
+    assert (
+        "without going through git" in output
+    ), f"the message did not say what made this different from a commit\n{output[-3000:]}"
