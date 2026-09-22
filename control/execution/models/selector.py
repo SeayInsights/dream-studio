@@ -8,7 +8,10 @@ Outputs exactly one of: haiku | sonnet | opus
 """
 
 from __future__ import annotations
-import argparse, re, sqlite3, sys
+import argparse
+import re
+import sqlite3
+import sys
 from pathlib import Path
 from core.config.database import get_connection
 

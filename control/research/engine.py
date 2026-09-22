@@ -20,7 +20,10 @@ from core.decisions import emit_decision
 # Transaction pattern for database writes
 from core.config.database import transaction
 
-_NOW = lambda: datetime.now(UTC).isoformat()
+
+def _NOW():
+    return datetime.now(UTC).isoformat()
+
 
 ENGINE_STATUS = "legacy_opt_in"
 ENGINE_AUTHORITY_CLASSIFICATION = "raw_research_advisory_lineage"

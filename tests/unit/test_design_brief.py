@@ -355,7 +355,7 @@ def test_design_brief_set_system_exits_1_on_locked_brief(db_home, capsys):
 def test_gate_check_design_brief_locked_passes_when_locked(db_home, tmp_path, monkeypatch, capsys):
     _insert_brief(db_home, status="locked")
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
-    rc = main(
+    main(
         [
             "--home",
             str(db_home),

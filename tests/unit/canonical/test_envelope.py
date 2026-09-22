@@ -33,7 +33,6 @@ def test_required_fields_present():
 
 def test_uuid_generation():
     from canonical.events.envelope import CanonicalEventEnvelope
-    import re
 
     env1 = CanonicalEventEnvelope(event_type="x", session_id=None, payload={})
     env2 = CanonicalEventEnvelope(event_type="x", session_id=None, payload={})
