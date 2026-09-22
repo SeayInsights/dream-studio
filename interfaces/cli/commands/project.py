@@ -109,6 +109,15 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
     )
     project_next_cmd.add_argument("project_id", help="Project UUID")
 
+    project_standards_cmd = project_sub.add_parser(
+        "standards", help="Show the verification standards a project declares for itself"
+    )
+    project_standards_cmd.add_argument(
+        "--repo",
+        default=None,
+        help="The project tree to read (default: the current directory).",
+    )
+
     project_set_active = project_sub.add_parser(
         "set-active", help="Set the active project in the database"
     )
@@ -262,6 +271,9 @@ def dispatch(
             dream_studio_home=dream_studio_home,
             planning_root=planning_root,
         )
+    if args.project_command == "standards":
+        return _project_standards(getattr(args, "repo", None))
+
     if args.project_command == "state":
         planning_root = Path(args.planning_root).resolve() if args.planning_root else None
         return _project_state(
@@ -845,3 +857,45 @@ def _render_state_briefing(result: dict) -> str:
         out.append(f"bypasses (7d): {bypass['last_7d_total']}")
 
     return "\n".join(out).rstrip()
+
+
+def _project_standards(repo: str | None) -> int:
+    """Print the resolved standards profile for a tree.
+
+    An absent profile is an ANSWER, not an error: it means pytest, which is what every
+    project got before profiles existed. Printing it that way is the point -- an operator
+    debugging a refused check needs to see which of the three states they are in without
+    reading the module.
+    """
+    from pathlib import Path as _Path
+
+    from core.projects.standards import declared_test_profile, is_pytest, standards_path
+
+    root = _Path(repo).resolve() if repo else _Path.cwd()
+    path = standards_path(root)
+    profile = declared_test_profile(root)
+
+    print(f"project: {root}")
+    print(f"profile: {path}{'' if path and path.is_file() else '  (absent)'}")
+
+    command = profile.get("command")
+    if not command:
+        print("tests:   pytest (declared nothing, so the default applies)")
+        return 0
+
+    print(f"tests:   {command}")
+    if is_pytest(command):
+        print("         recognised as pytest, so a bare TEST-CHECK node id runs as usual")
+        return 0
+
+    with_target = profile.get("with_target")
+    if with_target:
+        print(f"one test: {with_target}")
+        return 0
+
+    print(
+        "one test: NOT DECLARED -- a bare TEST-CHECK node id is refused here, because"
+        " Dream Studio cannot guess how this runner takes one test. Write the check as"
+        " `TEST-CHECK: cmd: <command>`, or add a `with_target` line."
+    )
+    return 0

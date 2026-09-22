@@ -15,6 +15,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from core.projects.standards import targeted_command
+
 #: THE PREDICATE THAT DECIDES WHETHER A CRITERION IS ADJUDICATED BY MACHINE.
 #
 # Named here, at the executor, because the executor is the authority on what the
@@ -216,7 +218,27 @@ def _run_one_test_check(expr: str, project_root: Path | None = None) -> dict[str
             check["not_executed_reason"] = "the command was empty"
             return check
     else:
-        argv = [sys.executable, "-m", "pytest", stripped, "-q", "--tb=short", "--no-header"]
+        # THE PROJECT'S OWN RUNNER, WHEN IT DECLARED ONE. Defaulting to pytest in a repo
+        # that does not use it produced a check that failed and blamed the CRITERION:
+        # measured on a JS project carrying a real src/foo.test.js, the result read
+        # "the node id is wrong or the file does not exist here" about a file that does
+        # exist. A reviewer reading that learns something false about the work.
+        _targeted, _refusal = targeted_command(project_root, stripped)
+        if _refusal:
+            check["error"] = f"TEST-CHECK could not run: {_refusal}"
+            check["not_executed_reason"] = _refusal
+            return check
+        if _targeted:
+            try:
+                argv = shlex.split(_targeted)
+            except ValueError as exc:
+                check["error"] = (
+                    f"TEST-CHECK with_target is unparseable: {_targeted!r} \u2014 {exc}"
+                )
+                check["not_executed_reason"] = "the project's with_target could not be parsed"
+                return check
+        else:
+            argv = [sys.executable, "-m", "pytest", stripped, "-q", "--tb=short", "--no-header"]
 
     try:
         result = subprocess.run(
