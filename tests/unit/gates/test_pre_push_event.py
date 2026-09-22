@@ -191,3 +191,23 @@ def test_emit_events_false_suppresses_emission(tmp_path: Path):
             emit_events=False,
         )
     assert mock_write.call_count == 0
+
+
+def test_emit_payload_names_the_repository_it_judged(tmp_path: Path):
+    """`pre-push --repo <path>` runs another project's gates and the events land in
+    Dream Studio's spool. A failure row carrying only `gate_id` is indistinguishable
+    from one of this repository's own, so "how often does this gate fail" would mix two
+    populations and be wrong in a direction nobody notices.
+    """
+    from core.gates.pre_push import REPO_ROOT
+
+    result = GateResult(gate_id="g", passed=False, exit_code=1, duration_seconds=0.0)
+
+    with patch("emitters.shared.spool_writer.write_envelopes") as mock_write:
+        emit_gate_failure_event(result)
+    assert mock_write.call_args[0][0][0].payload["repo"] == str(REPO_ROOT)
+    assert mock_write.call_args[0][0][0].payload["repo_is_self"] is True
+
+    with patch("emitters.shared.spool_writer.write_envelopes") as mock_write:
+        emit_gate_failure_event(result, repo_root=tmp_path)
+    assert mock_write.call_args[0][0][0].payload["repo_is_self"] is False

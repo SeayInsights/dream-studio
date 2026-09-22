@@ -180,7 +180,7 @@ def run_gate(
     )
 
 
-def emit_gate_failure_event(result: GateResult) -> None:
+def emit_gate_failure_event(result: GateResult, repo_root: Path | None = None) -> None:
     """Emit a ``gate.pre_push.failed`` event for a failed gate.
 
     Constructed via ``CanonicalEventEnvelope`` (NOT a hand-built dict) so
@@ -211,6 +211,7 @@ def emit_gate_failure_event(result: GateResult) -> None:
             "fail_hint": result.fail_hint,
             "stderr_tail": result.stderr_tail,
             "stdout_tail": result.stdout_tail,
+            **_judged_repo(repo_root),
         },
         severity="warning",
         trace={"gate_id": result.gate_id},
@@ -247,7 +248,24 @@ def _telemetry_home_exists() -> bool:
     return (Path.home() / ".dream-studio").is_dir()
 
 
-def emit_gate_outcome_event(result: GateResult) -> None:
+def _judged_repo(repo_root: Path | None) -> dict[str, object]:
+    """Which repository this outcome is about.
+
+    WHY THIS IS NOT OPTIONAL. `--repo <path>` runs another project's own gates, and the
+    events landed in Dream Studio's spool carrying `gate_id` and nothing else -- so a
+    foreign project's gate outcome was byte-indistinguishable from one of this
+    repository's own. Found by reading the live spool after the `--repo` flag shipped:
+    a gate named `says-hello`, which exists only in a throwaway test project, sat beside
+    23 real ones with no way to tell them apart.
+
+    Any later question of the form "how often does this gate fail" silently mixes two
+    populations, and the answer is wrong in a direction nobody would notice.
+    """
+    root = Path(repo_root).resolve() if repo_root else REPO_ROOT
+    return {"repo": str(root), "repo_is_self": root == REPO_ROOT}
+
+
+def emit_gate_outcome_event(result: GateResult, repo_root: Path | None = None) -> None:
     """Emit ``gate.pre_push.completed`` for a gate that ran, whatever it decided.
 
     WHY A SECOND EVENT. ``gate.pre_push.failed`` records blocking failures only,
@@ -296,6 +314,7 @@ def emit_gate_outcome_event(result: GateResult) -> None:
             "advisory": result.is_advisory,
             "exit_code": result.exit_code,
             "duration_seconds": round(result.duration_seconds, 2),
+            **_judged_repo(repo_root),
         },
         severity="info" if result.passed else "warning",
         trace={"gate_id": result.gate_id, "outcome": outcome},
@@ -340,7 +359,7 @@ def run_pre_push_gates(
         # zero passes, so "has this gate ever fired" had no answer and a dead
         # gate was indistinguishable from a gate that prevents.
         if emit_events:
-            emit_gate_outcome_event(result)
+            emit_gate_outcome_event(result, repo_root=root)
         if not result.passed:
             if result.is_advisory:
                 # Advisory failures surface as warnings but never block push.
@@ -350,7 +369,7 @@ def run_pre_push_gates(
             else:
                 report.overall_passed = False
                 if emit_events:
-                    emit_gate_failure_event(result)
+                    emit_gate_failure_event(result, repo_root=root)
                 if stop_on_first_failure:
                     break
     return report
