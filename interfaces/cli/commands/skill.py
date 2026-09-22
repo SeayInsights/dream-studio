@@ -42,6 +42,15 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         dest="planning_root",
         help="Override .planning/ directory for gate artifact writes",
     )
+    reach_cmd = skill_sub.add_parser(
+        "reachability",
+        help="Show how each skill mode can be entered, and which cannot",
+    )
+    reach_cmd.add_argument(
+        "--unreachable-only",
+        action="store_true",
+        help="Print only the modes nothing can lead an operator to.",
+    )
 
     skill_list_cmd = skill_sub.add_parser("list", help="List available skills")
     skill_list_cmd.add_argument("--pack", default=None, help="Filter by pack name")
@@ -69,6 +78,9 @@ def dispatch(
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )
+    if args.skill_command == "reachability":
+        return _skill_reachability(getattr(args, "unreachable_only", False))
+
     if args.skill_command == "list":
         return _skill_list(
             pack_filter=args.pack,
@@ -172,3 +184,35 @@ def _skill_list(
     )
     print(json.dumps(result, indent=2))
     return 0 if result.get("ok") else 1
+
+
+def _skill_reachability(unreachable_only: bool) -> int:
+    """Print the routes into every mode.
+
+    A mode with no route can only be run by a human typing its exact name, so nothing in
+    the product can lead them to it. That is the closest thing to "dead" this repository
+    can answer from itself -- skill-usage telemetry is written by a hook that only fires
+    on an installed runtime, and a detector built on absent data would call every skill
+    dead.
+    """
+    from core.skills.reachability import routes
+
+    rows = routes()
+    dead = [r for r in rows if not r["routes"]]
+
+    if not unreachable_only:
+        for row in sorted(rows, key=lambda r: r["mode"]):
+            ways = ", ".join(row["routes"]) or "NONE"
+            print(f"{row['mode']:<34} {ways}")
+        print()
+
+    print(f"{len(rows)} modes; {len(dead)} with no route in.")
+    for row in dead:
+        print(f"  {row['mode']}")
+    if dead:
+        print()
+        print(
+            "  Each of these needs a trigger, an agent, or a ds command -- or it is"
+            " reachable only by someone who already knows it exists."
+        )
+    return 0
