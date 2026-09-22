@@ -454,3 +454,5 @@ hook registration, dispatcher wiring, ordering, or the fail-open guarantee. -->
 <!-- Last reviewed 2026-09-22 — no hook dispatch, registration, handler-chain or fail-open policy change. canonical/workflows/pre-push.yaml gains the blocking `instruction-commands` gate, so the git pre-push hook that dispatches the gate runner also runs it; see WORKFLOW_RUNTIME.md for what it checks and why its negative cases are half its design. -->
 
 <!-- Last reviewed 2026-09-22 — no hook dispatch, registration, handler-chain or fail-open policy change. canonical/workflows/pre-push.yaml gains the blocking `rule-enforcement` gate, so the git pre-push hook that dispatches the gate runner also runs it; see WORKFLOW_RUNTIME.md. -->
+
+<!-- Last reviewed 2026-09-22 — no hook dispatch, registration, handler-chain or fail-open policy change. canonical/workflows/pre-push.yaml gains the blocking `agent-coverage` gate, so the git pre-push hook that dispatches the gate runner also runs it; see WORKFLOW_RUNTIME.md. -->
