@@ -111,11 +111,36 @@ def _check_agents() -> tuple[bool, str]:
     return True, f"{total} agents match their declarations"
 
 
+def _check_reviewers() -> tuple[bool, str]:
+    """One reviewer subagent per review seat, compiled from that seat's lanes.
+
+    Nineteen of the twenty-six lanes have no detector and no eval, so the bench's questions
+    are answered by whoever reads the listing. Each seat now compiles to an agent carrying
+    its own lanes; a lane edited without recompiling leaves a reviewer asking the previous
+    version of the question, which is worse than asking none.
+    """
+    from integrations.compiler.reviewers import check as _rev_check
+    from integrations.compiler.reviewers import seat_names
+
+    total = len(seat_names())
+    if total == 0:
+        return False, "no review seats found"
+    stale = _rev_check()
+    if stale:
+        return False, f"{len(stale)} of {total} stale: {', '.join(stale)}"
+    return True, f"{total} reviewers match the seat registry"
+
+
 #: (artifact, generator command a human should run, freshness check)
 ARTIFACTS: tuple[tuple[str, str, Callable[[], tuple[bool, str]]], ...] = (
     ("AGENTS.md", "py -m integrations.compiler.agents_md --write", _check_agents_md),
     ("canonical/review_lanes.yml", "py scripts/seat_lanes_data.py", _check_review_lanes),
     ("canonical/agents", "py -m integrations.compiler.agents --write", _check_agents),
+    (
+        "canonical/agents (reviewers)",
+        "py -m integrations.compiler.reviewers --write",
+        _check_reviewers,
+    ),
     (
         "dist/plugin",
         'py -c "from pathlib import Path; from integrations.marketplace.plugin_dist import'

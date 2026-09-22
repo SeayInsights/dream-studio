@@ -267,6 +267,22 @@ enforced by the tests named there. The dispatch prompt instructs the subagent to
    either a concrete defect with `file:line` and how it fails, or "no finding" with one
    sentence naming what was checked. A lane the reviewer did not examine is reported as
    **not examined** — never silently omitted, and never folded into "no findings".
+
+   **Convene the reviewer each lane names.** Every seat prints `convene: review-<seat>`
+   beside its question, and that agent exists: it is compiled from that seat's own lanes
+   by `integrations/compiler/reviewers.py` and carries the question, the defect signature,
+   the precedent it came from and the governing standard. Dispatch it with the diff and
+   the lane ids it owns, and it returns one verdict per lane — `pass`, `finding` or
+   `cannot-tell`, each with evidence.
+
+   **DO** convene seats in parallel; they are independent by construction, which is what
+   having one seat per question buys.
+   **DO** treat `cannot-tell` as an answer and carry it to the report. It is what keeps a
+   lane honest when the evidence is absent, and folding it into "no finding" is how a lane
+   stops being asked while still appearing to be answered.
+   **DON'T** answer nineteen specialist questions yourself in one pass. Until 2026-09-22
+   the table ended at "N lane(s) need a person" and that is exactly what happened — the
+   seats were specialists and nothing specialist answered them.
 4. Respect the lanes the table declares it is not deciding. A lane prints
    `NOT DECIDED HERE: …` for the half of its question its check does not answer; that half
    is the reviewer's to answer, which is the whole reason it is printed.
