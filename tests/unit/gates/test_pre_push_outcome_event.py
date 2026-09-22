@@ -13,6 +13,8 @@ signal without blocking emitted nothing at all.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from canonical.events.types import EventType
@@ -93,3 +95,48 @@ def test_the_failure_event_still_fires_unchanged(captured):
     the outcome event is emitted beside it, not in place of it."""
     pre_push.emit_gate_failure_event(_result(passed=False, exit_code=1))
     assert captured[0].event_type == EventType.GATE_PRE_PUSH_FAILED.value
+
+
+def test_telemetry_does_not_create_the_runtime_it_reports_into(monkeypatch, tmp_path, captured):
+    """A gate run must not rebuild a Dream Studio home the operator removed.
+
+    The spool root defaults to ~/.dream-studio/events and write_event makes its
+    directories, so every gate run wrote one event per gate and recreated an
+    install that had been deliberately uninstalled -- 20 files per push, from the
+    feature added above to record gate outcomes. The operator deleted the runtime;
+    the checks kept putting it back.
+
+    A repository checkout is not an install. These gates are ordinary Python and
+    run fine with no Dream Studio present, and in that state there is nothing to
+    report to.
+    """
+    monkeypatch.delenv("DS_SPOOL_ROOT", raising=False)
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))  # no .dream-studio in it
+
+    pre_push.emit_gate_outcome_event(_result())
+    pre_push.emit_gate_failure_event(_result(passed=False, exit_code=1))
+
+    assert captured == [], "telemetry must be skipped when there is no runtime home"
+    assert not (tmp_path / ".dream-studio").exists(), "and it must not create one"
+
+
+def test_telemetry_still_records_when_a_home_exists(monkeypatch, tmp_path, captured):
+    """The guard is about not CREATING the home, not about refusing to report to
+    one. An operator with Dream Studio installed still gets every outcome."""
+    monkeypatch.delenv("DS_SPOOL_ROOT", raising=False)
+    (tmp_path / ".dream-studio").mkdir()
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+
+    pre_push.emit_gate_outcome_event(_result(gate_id="rule1", passed=True))
+    assert len(captured) == 1
+    assert captured[0].payload["gate_id"] == "rule1"
+
+
+def test_an_explicit_spool_root_always_records(monkeypatch, tmp_path, captured):
+    """DS_SPOOL_ROOT wins, which is how CI keeps recording outcomes on a runner
+    that has no home directory install."""
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool"))
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path / "empty"))
+
+    pre_push.emit_gate_outcome_event(_result())
+    assert len(captured) == 1

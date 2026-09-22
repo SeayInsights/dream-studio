@@ -190,6 +190,9 @@ def emit_gate_failure_event(result: GateResult) -> None:
     Best-effort: a spool-write failure is logged to stderr but never raised.
     The pre-push hook's exit code is governed by gate results alone.
     """
+    if not _telemetry_home_exists():
+        return
+
     try:
         from canonical.events.envelope import CanonicalEventEnvelope
         from canonical.events.types import EventType
@@ -222,6 +225,28 @@ def emit_gate_failure_event(result: GateResult) -> None:
         )
 
 
+def _telemetry_home_exists() -> bool:
+    """Is there a Dream Studio runtime for this telemetry to land in?
+
+    TELEMETRY MUST NOT CREATE THE RUNTIME IT REPORTS INTO. The spool root defaults
+    to `~/.dream-studio/events`, and `write_event` makes its directories, so every
+    gate run wrote one event per gate and rebuilt a home the operator had
+    deliberately uninstalled -- 20 files per push, from a feature added to record
+    gate outcomes. The operator removed the install; the checks kept putting it
+    back.
+
+    So emission is conditional on the home already being there. A repository
+    checkout is not an install: these gates are ordinary Python and run fine with
+    no Dream Studio present, and in that state there is nothing to report to.
+    DS_SPOOL_ROOT still wins, which is how CI keeps recording.
+    """
+    import os
+
+    if os.environ.get("DS_SPOOL_ROOT"):
+        return True
+    return (Path.home() / ".dream-studio").is_dir()
+
+
 def emit_gate_outcome_event(result: GateResult) -> None:
     """Emit ``gate.pre_push.completed`` for a gate that ran, whatever it decided.
 
@@ -243,6 +268,9 @@ def emit_gate_outcome_event(result: GateResult) -> None:
     Best-effort, exactly like its sibling: a spool-write failure is printed and
     never raised. The push's exit code is governed by gate results alone.
     """
+    if not _telemetry_home_exists():
+        return
+
     try:
         from canonical.events.envelope import CanonicalEventEnvelope
         from canonical.events.types import EventType
