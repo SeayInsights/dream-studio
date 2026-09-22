@@ -191,6 +191,43 @@ def unrunnable_target(acceptance_criteria: str | None) -> str | None:
     return None
 
 
+def declared_reason(description: str | None) -> str:
+    """The reason `compose_declared_reason` folded into a description, or "".
+
+    The composer had no reader outside the ratchet, so a task filed on a declared reason
+    could not be re-admitted from its own row -- only from the `--why` that was passed
+    once, at the CLI, and nowhere else. Paired with the composer here so the marker keeps
+    one definition and two users.
+    """
+    text = str(description or "")
+    marker = text.rfind(DECLARED_PREFIX)
+    if marker < 0:
+        return ""
+    return " ".join(text[marker + len(DECLARED_PREFIX) :].split())
+
+
+def criterion_refusal(
+    acceptance_criteria: str | None,
+    *,
+    why: str | None = None,
+    description: str | None = None,
+) -> dict[str, Any] | None:
+    """The Warden's lane, asked of ANY door rather than only the one the CLI opens.
+
+    `admit_task` runs the whole round table and needs a work order's description, its
+    sibling titles and the repo to do it. That is the right check for an operator filing
+    by hand and the wrong dependency for `create_task`, which is the door
+    `core/work_orders/mutations.py` tells skills, workflows and hooks to import directly.
+    So the one lane that needs no context at all -- whether a criterion exists and can be
+    run, which is a property of the text -- is available on its own.
+
+    `why` is the reason an author passes now; `description` is where a reason passed
+    EARLIER was folded by `compose_declared_reason`, which is how a task already admitted
+    on a declared reason stays admitted when its row is re-read.
+    """
+    return _warden(acceptance_criteria, why or declared_reason(description))
+
+
 def _warden(acceptance_criteria: str | None, why: str | None) -> dict[str, Any] | None:
     """Enforce-or-declare, the contract `canonical/rules.yml` already runs on."""
     if has_executable_criterion(acceptance_criteria):

@@ -106,6 +106,7 @@ def test_create_task_emits_task_created_event(db_home, tmp_path, monkeypatch):
         work_order_id=WO_ID,
         project_id=PROJECT_ID,
         title="New Task",
+        acceptance_criteria="TEST-CHECK: tests/unit/test_ta1_task_lifecycle.py",
         description="some work",
         source_root=tmp_path,
         dream_studio_home=db_home,
@@ -135,6 +136,7 @@ def test_create_task_event_uses_canonical_envelope_schema(db_home, tmp_path, mon
         work_order_id=WO_ID,
         project_id=PROJECT_ID,
         title="Envelope Test",
+        acceptance_criteria="TEST-CHECK: tests/unit/test_ta1_task_lifecycle.py",
         source_root=tmp_path,
         dream_studio_home=db_home,
     )
@@ -235,6 +237,7 @@ def test_create_task_integration_emits_event(db_home, tmp_path, monkeypatch):
         work_order_id=WO_ID,
         project_id=PROJECT_ID,
         title="Integration Task",
+        acceptance_criteria="TEST-CHECK: tests/unit/test_ta1_task_lifecycle.py",
         source_root=tmp_path,
         dream_studio_home=db_home,
     )

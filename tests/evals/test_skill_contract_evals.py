@@ -147,6 +147,7 @@ def test_eval_plan_contract(patched_paths, db_path: Path, tmp_path: Path) -> Non
         work_order_id=wo_result["work_order_id"],
         project_id=PROJECT_ID,
         title="Write plan section",
+        acceptance_criteria="TEST-CHECK: tests/evals/test_skill_contract_evals.py",
         source_root=REPO_ROOT,
         dream_studio_home=tmp_path,
     )

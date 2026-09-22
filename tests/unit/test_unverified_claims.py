@@ -185,7 +185,10 @@ def test_registration_is_never_blocked_by_an_unchecked_claim(db, tmp_path):
         project_id=pid,
         milestone_id=mid,
         title="T",
-        description="Nothing checks this. No gate covers it. It has no caller.",
+        description=(
+            "Nothing checks this. No gate covers it. It has no caller."
+            " Registered anyway, which is what this test is about."
+        ),
         work_order_type="infrastructure",
         source_root=tmp_path,
         dream_studio_home=tmp_path,
@@ -204,7 +207,10 @@ def test_a_task_description_is_audited_too(db, tmp_path):
         project_id=pid,
         milestone_id=mid,
         title="T",
-        description="See the measurement in the linked report.",
+        description=(
+            "See the measurement in the linked report, which is the unchecked"
+            " claim this fixture exists to carry."
+        ),
         work_order_type="infrastructure",
         source_root=tmp_path,
         dream_studio_home=tmp_path,
@@ -215,6 +221,7 @@ def test_a_task_description_is_audited_too(db, tmp_path):
         project_id=pid,
         title="T1",
         description="There is no reader for this value anywhere in the codebase.",
+        acceptance_criteria="TEST-CHECK: tests/unit/test_unverified_claims.py",
         source_root=tmp_path,
         dream_studio_home=tmp_path,
     )

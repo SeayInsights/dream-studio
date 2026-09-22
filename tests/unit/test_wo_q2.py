@@ -478,6 +478,7 @@ def test_create_task_resolves_milestone_id_from_materialised_wo(sdlc_env):
         work_order_id=work_order_id,
         project_id=project_id,
         title="Write migration 102",
+        acceptance_criteria="TEST-CHECK: tests/unit/test_wo_q2.py",
         source_root=REPO_ROOT,
     )
     assert task_result["ok"] is True
@@ -552,6 +553,7 @@ def test_full_sdlc_chain_all_rows_queryable_on_return(sdlc_env):
             work_order_id=wo_id,
             project_id=project_id,
             title=title,
+            acceptance_criteria="TEST-CHECK: tests/unit/test_wo_q2.py",
             source_root=REPO_ROOT,
         )
         assert t_result["ok"] is True, f"create_task failed: {t_result}"
@@ -669,6 +671,7 @@ def test_consistency_clean_after_full_e2e_chain(sdlc_env):
         work_order_id=wo_result["work_order_id"],
         project_id=project_id,
         title="T1",
+        acceptance_criteria="TEST-CHECK: tests/unit/test_wo_q2.py",
         source_root=REPO_ROOT,
     )
 
