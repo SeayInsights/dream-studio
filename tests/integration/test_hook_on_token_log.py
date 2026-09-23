@@ -50,8 +50,17 @@ def test_appends_row_with_explicit_tokens(isolated_home, handler, capsys, monkey
     assert "claude-opus" in text
     assert "150" in text
 
-    out = capsys.readouterr().out
-    result = json.loads(out.strip())
+    captured = capsys.readouterr()
+    # STDOUT IS THE SHARED DIRECTIVE STREAM. on-stop-dispatch concatenates every handler's
+    # stdout into one text of xml blocks; a JSON object printed there made the whole batch
+    # unparseable and reported a hook error on every stop (#738). The status payload now
+    # goes to stderr, so this asserts both halves of that contract: stdout carries nothing,
+    # and the payload is on stderr. Reading stdout here is what let #738 merge green and
+    # turn main red.
+    assert captured.out.strip() == "", f"status leaked onto the directive stream: {captured.out!r}"
+    payload_lines = [ln for ln in captured.err.splitlines() if ln.strip().startswith("{")]
+    assert payload_lines, f"no JSON status on stderr: {captured.err!r}"
+    result = json.loads(payload_lines[-1])
     assert result["status"] == "ok"
     assert result["total_tokens"] == 150
 
