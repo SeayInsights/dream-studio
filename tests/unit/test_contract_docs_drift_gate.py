@@ -189,18 +189,24 @@ def test_changed_files_covers_full_branch_not_just_last_commit(tmp_path, monkeyp
     assert "other.txt" in files
 
 
-def test_docs_drift_has_exactly_one_home_and_it_blocks_there() -> None:
-    """docs-drift runs in CI only, and blocks there.
+def test_docs_drift_runs_in_both_pre_push_and_ci_and_blocks_in_both() -> None:
+    """docs-drift runs in pre-push AND CI, and blocks in both.
 
-    WO-GATE-PARITY originally required it to be blocking in BOTH pre-push and CI,
-    because an advisory local tier let PR #263 push green and then fail all three
-    matrix platforms on the same drift. Two blocking copies fixed that by running
-    the same check twice.
+    WO-GATE-PARITY (#269) originally made it blocking in both lanes, because an
+    advisory local tier let PR #263 push green and then fail all three matrix
+    platforms on the same drift. #752 (db4c23f) later gave it CI as its one
+    home, reasoning the two blocking copies were redundant since CI always
+    catches it -- accepting, as the cost of that trade, that drift would then
+    surface from a 3-platform CI round trip instead of your own push.
 
-    It now runs once. The #263 failure mode is still closed -- the remaining copy
-    is blocking, so drift cannot merge -- but the cost moved: you learn about it
-    from CI rather than from your own push. That is the accepted trade of one
-    home per check, and it is asserted here rather than left to be rediscovered.
+    That cost was too high: a push passed every local gate and went red on all
+    three CI platforms on this exact drift the same week -- the #263 failure
+    mode recurring for the same reason (a local gate that cannot see what CI
+    will see), just with the redundant copy removed instead of demoted. Both
+    copies are restored, asserted here rather than left to be rediscovered a
+    third time: the two lanes must invoke the identical script (so the trailer
+    escape in interfaces/cli/_gate_review_context.py behaves identically in
+    both) and both must block, not warn.
     """
     import yaml
 
@@ -208,13 +214,59 @@ def test_docs_drift_has_exactly_one_home_and_it_blocks_there() -> None:
         (REPO_ROOT / "canonical" / "workflows" / "pre-push.yaml").read_text(encoding="utf-8")
     )
     local = [g for g in manifest["gates"] if g["id"] == "docs-drift"]
-    assert not local, "docs-drift is back in pre-push; it belongs in CI only"
+    assert local, "docs-drift is missing from pre-push -- a push can go green locally and red on CI"
+    (local_gate,) = local
+    assert local_gate["tier"] == "blocking", "an advisory local docs-drift is PR #263 again"
+    assert local_gate["command"] == [
+        "py",
+        "interfaces/cli/contract_docs_drift_gate.py",
+    ], "pre-push must invoke the identical script CI does"
+    assert (
+        local_gate.get("env", {}).get("DREAM_STUDIO_BASE_REF") == "origin/main"
+    ), "pre-push must diff the same branch point CI resolves (origin/<base>, default main)"
 
     ci = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    assert "contract_docs_drift_gate" in ci, "docs-drift lost its one home"
+    assert "contract_docs_drift_gate" in ci, "docs-drift lost its CI home"
     assert (
         "continue-on-error" not in ci.split("Contract docs drift")[1][:200]
-    ), "the surviving copy must block, or #263 can happen again"
+    ), "the CI copy must block, or #263 can happen again"
+
+
+def test_pre_push_docs_drift_gate_blocks_a_real_missing_doc_case() -> None:
+    """Runs the pre-push manifest's actual docs-drift entry through
+    core.gates.pre_push.run_gate -- the same subprocess-plus-env-merge path
+    `git push` takes -- against a real missing-doc case: a change to
+    core/shared_intelligence/contract_atlas.py, which the contract_atlas domain
+    requires docs/architecture/contract-atlas.md beside (see
+    test_contract_docs_drift_blocks_source_change_without_required_docs above),
+    with no doc refresh and no Docs-Reviewed-No-Change trailer supplied.
+
+    Proves the wired gate actually blocks a real case when pre-push runs it,
+    not only that the manifest happens to name the right id and tier.
+    """
+    from core.gates import pre_push as pre_push_mod
+
+    manifest = pre_push_mod.load_manifest()
+    gate = next(g for g in manifest["gates"] if g["id"] == "docs-drift")
+    assert gate["tier"] == "blocking"
+
+    # DREAM_STUDIO_CHANGED_FILES stands in for "what git diff would report for
+    # this push" -- the gate reads it before touching git (see
+    # contract_docs_drift_gate.py::_changed_files), so this exercises the real
+    # script's real domain-matching logic without needing a second git repo.
+    gate = dict(gate)
+    gate["env"] = {
+        **(gate.get("env") or {}),
+        "DREAM_STUDIO_CHANGED_FILES": "core/shared_intelligence/contract_atlas.py",
+    }
+
+    result = pre_push_mod.run_gate(gate, repo_root=REPO_ROOT)
+
+    assert result.passed is False, (
+        "docs-drift did not block a real contract_atlas change with no doc refresh and no "
+        f"reviewed-no-change trailer:\n{result.stdout_tail}\n{result.stderr_tail}"
+    )
+    assert result.exit_code != 0
 
 
 def test_engine_skill_coupling_domains_exist() -> None:

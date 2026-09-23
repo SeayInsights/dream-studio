@@ -27,7 +27,7 @@ Defined in `canonical/workflows/pre-push.yaml`. Each gate declares its `tier`.
 | `skill-sync` | blocking | A4/A5 enforcement block has no CLI subprocess regression |
 | `test-suite` | blocking | `tests/evals/` must pass |
 | `atlas-leak` | blocking | Contract atlas lifecycle — no PRD/contract leakage |
-| `docs-drift` | advisory | Doc/code reference drift — hygiene signal only (Item 28) |
+| `docs-drift` | blocking | Doc/code reference drift — a changed contract domain's required docs must be refreshed in the same change set, or carry a `Docs-Reviewed-No-Change` trailer |
 | `migration-risk` | blocking | SQL/migration changes require explicit matrix-watch confirmation |
 
 ---

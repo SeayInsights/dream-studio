@@ -29,7 +29,7 @@ Local invocation: `py -m core.gates.pre_push`.
 | `skill-sync` | blocking | `_ENFORCEMENT_BLOCK` constant has zero `py -m interfaces.cli.ds` refs | `py -m core.gates.skill_sync_source` |
 | `test-suite` | blocking | `tests/evals/` eval suite passes | `py -m pytest tests/evals -q` |
 | `atlas-leak` | blocking | Contract Atlas lifecycle — no unauthorized projection leakage | `py interfaces/cli/contract_atlas_lifecycle_gate.py` |
-| `docs-drift` | advisory | WORKFLOW_RUNTIME.md + HOOK_RUNTIME.md review markers current | `py interfaces/cli/contract_docs_drift_gate.py` |
+| `docs-drift` | blocking | Changed contract domain's required docs refreshed in the same change set | `py interfaces/cli/contract_docs_drift_gate.py` |
 | `migration-risk` | blocking (escalation) | SQL/migration/schema-authority files changed — prints matrix-watch reminder | `py -m core.gates.migration_risk` |
 
 **Stop-on-first-failure:** First blocking gate failure stops the run. Advisory gates never stop the run.
