@@ -540,9 +540,10 @@ def compute_impact_set(
         if known_changed:
             for ancestor, hops in _ancestor_hops(known_changed, import_graph).items():
                 rel = module_index[ancestor]
+                is_conftest = _is_conftest_file(rel)
                 if _is_test_file(rel):
                     target = dependent
-                elif _is_conftest_file(rel):
+                elif is_conftest:
                     target = conftest_hits
                 else:
                     continue
@@ -553,6 +554,14 @@ def compute_impact_set(
                 # selection and the count while the test-file branch counted them.
                 if IMPORT_GRAPH_MAX_DEPTH is None or hops <= IMPORT_GRAPH_MAX_DEPTH:
                     target.add(rel)
+                elif is_conftest:
+                    # A truncated conftest ancestor can gate its entire directory
+                    # scope (_conftest_scope_tests), not just itself -- counting a
+                    # flat 1 here undercounts by however many test files that
+                    # directory holds, exactly as badly as not counting at all.
+                    # This walk is filesystem-only, not import-graph depth, so it
+                    # is safe to run even though the conftest itself was excluded.
+                    truncated_test_count += max(1, len(_conftest_scope_tests(root, rel)))
                 else:
                     truncated_test_count += 1
     for rel in conftest_hits:

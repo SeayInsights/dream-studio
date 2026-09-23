@@ -287,6 +287,39 @@ def test_a_conftest_past_the_bound_is_truncated_and_counted_not_silently_dropped
     ), "the excluded conftest's scope must be COUNTED, not silently dropped"
 
 
+def test_a_truncated_conftest_counts_its_whole_directory_scope_not_a_flat_one(
+    tmp_path: Path,
+) -> None:
+    """A truncated conftest.py ancestor can gate an entire directory's worth of
+    tests through _conftest_scope_tests, not just itself. Counting a flat 1 per
+    truncated ancestor -- correct for a single test-file ancestor -- silently
+    undercounts a conftest ancestor by however many test files sit in its
+    directory: the operator-facing message ("N real dependent test file(s) sit
+    beyond the bound") would print 1 while 3 real test files were actually
+    dropped from selection.
+    """
+    repo = tmp_path
+    _write(repo / "pkgd" / "__init__.py", "")
+    _write(repo / "pkgd" / "a0.py", "x = 1\n")
+    _write(repo / "pkgd" / "a1.py", "from .a0 import x\n\ny = x\n")
+    _write(repo / "pkgd" / "a2.py", "from .a1 import y\n\nz = y\n")
+    _write(repo / "pkgd" / "a3.py", "from .a2 import z\n\nw = z\n")
+    _write(
+        repo / "tests" / "deep" / "conftest.py",
+        "from pkgd.a3 import w\n\n\ndef fixture_value():\n    return w\n",
+    )
+    for name in ("test_one", "test_two", "test_three"):
+        _write(repo / "tests" / "deep" / f"{name}.py", "def test_it():\n    assert True\n")
+
+    result = compute_impact_set(["pkgd/a0.py"], repo_root=repo)
+    assert result["import_graph_truncated_test_count"] >= 3, (
+        "the truncated conftest gates 3 real test files in its directory scope, but "
+        f"only {result['import_graph_truncated_test_count']} were counted -- a flat "
+        "1-per-ancestor count undercounts a conftest ancestor by however many tests "
+        "its directory holds"
+    )
+
+
 def test_a_changed_source_file_selects_tests_that_name_it_by_path(tmp_path):
     """A test that reads source as TEXT names the file, not the module.
 
