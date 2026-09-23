@@ -45,12 +45,19 @@ class SessionCollector:
                 whatever store happens to sit in the ambient DREAM_STUDIO_HOME
                 (see _analytics_db_path below).
         """
+        from core.analytics.duckdb_store import analytics_db_path_for
+
+        # Computed from the RAW argument, before the None -> default rewrite
+        # below: analytics_db_path_for(None) is already "no explicit
+        # authority -> ambient default", so this one call is the whole
+        # explicit-vs-default decision. No per-class wrapper method needed
+        # (that wrapper used to be copy-pasted identically across
+        # SessionCollector/TokenCollector/ModelCollector).
+        self._analytics_db_path: Path | None = analytics_db_path_for(db_path)
         if db_path is None:
             self.db_path = str(Path.home() / ".dream-studio" / "state" / "studio.db")
-            self._db_path_explicit = False
         else:
             self.db_path = db_path
-            self._db_path_explicit = True
 
     def collect(self, days: int = 90) -> dict[str, Any]:
         """
@@ -79,26 +86,11 @@ class SessionCollector:
 
         return self._collect_sqlite(cutoff_date)
 
-    def _analytics_db_path(self):
-        """Analytics store to read: colocated with an explicit db_path, else ambient.
-
-        A SessionCollector constructed with an explicit db_path (a test
-        fixture, or any authority other than the default) must never fall
-        through to whatever aggregate_metrics.db happens to sit in the
-        ambient DREAM_STUDIO_HOME — an earlier test's rows would otherwise
-        leak into this one's results. Returns None for the default (no
-        db_path given), which keeps connect_analytics() resolving its own
-        ambient default unchanged.
-        """
-        from core.analytics.duckdb_store import analytics_db_path_for
-
-        return analytics_db_path_for(self.db_path) if self._db_path_explicit else None
-
     def _collect_duckdb(self, cutoff_date: str) -> dict[str, Any] | None:
         """Aggregate session metrics from the DuckDB raw_sessions compat view."""
         from core.analytics.duckdb_store import connect_analytics
 
-        conn = connect_analytics(self._analytics_db_path(), read_only=True)
+        conn = connect_analytics(self._analytics_db_path, read_only=True)
         try:
             total_sessions = conn.execute(
                 "SELECT COUNT(*) FROM raw_sessions WHERE started_at >= ?",
@@ -373,7 +365,7 @@ class SessionCollector:
     def _recent_duckdb(self, limit: int) -> list[dict[str, Any]]:
         from core.analytics.duckdb_store import connect_analytics
 
-        conn = connect_analytics(self._analytics_db_path(), read_only=True)
+        conn = connect_analytics(self._analytics_db_path, read_only=True)
         try:
             rows = conn.execute(
                 "SELECT session_id, project_id, started_at, ended_at, outcome"

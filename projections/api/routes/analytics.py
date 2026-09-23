@@ -6,7 +6,11 @@ from fastapi import APIRouter, Query
 from typing import Any
 
 from core.config.database import get_connection
-from core.analytics.duckdb_store import AnalyticsStoreMissingError, connect_analytics
+from core.analytics.duckdb_store import (
+    AnalyticsStoreMissingError,
+    analytics_db_path_for_connection,
+    connect_analytics,
+)
 from projections.core.collectors.authority_sources import token_usage_sql
 
 router = APIRouter()
@@ -99,7 +103,9 @@ async def get_anomalies(days: int = Query(default=30, ge=1, le=365)) -> dict[str
         token_by_session: dict[str, int] = {}
         sql_conn = _connect()
         try:
-            token_sql = token_usage_sql(sql_conn)
+            token_sql = token_usage_sql(
+                sql_conn, analytics_db_path=analytics_db_path_for_connection(sql_conn)
+            )
             if token_sql is not None:
                 tok_rows = sql_conn.execute(f"""
                     SELECT session_id, SUM(input_tokens + output_tokens) as total_tokens

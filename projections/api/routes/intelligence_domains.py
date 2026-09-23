@@ -11,7 +11,7 @@ from typing import Any
 from datetime import datetime, UTC
 
 from core.config.database import get_connection
-from core.analytics.duckdb_store import connect_analytics
+from core.analytics.duckdb_store import analytics_db_path_for_connection, connect_analytics
 from projections.core.collectors.authority_sources import skill_usage_sql, token_usage_sql
 
 from .intelligence_router import router
@@ -29,7 +29,7 @@ async def get_token_intelligence() -> dict[str, Any]:
     try:
         cursor = conn.cursor()
         attention_needed = []
-        token_sql = token_usage_sql(conn)
+        token_sql = token_usage_sql(conn, analytics_db_path=analytics_db_path_for_connection(conn))
         if token_sql is None:
             return {
                 "attention_needed": [],
@@ -375,7 +375,7 @@ async def get_architecture_intelligence() -> dict[str, Any]:
         attention_needed = []
 
         # Check for project-related activity (using session data as proxy)
-        token_sql = token_usage_sql(conn)
+        token_sql = token_usage_sql(conn, analytics_db_path=analytics_db_path_for_connection(conn))
         row = cursor.execute(f"""
                 SELECT COUNT(DISTINCT session_id) as active_projects
                 FROM ({token_sql}) token_usage

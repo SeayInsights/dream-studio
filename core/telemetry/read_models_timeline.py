@@ -10,6 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from core.analytics.duckdb_store import analytics_db_path_for_connection
+
 from .read_models_security import _security_rollup
 from .read_models_shared import (
     COMPONENT_TABLES,
@@ -96,7 +98,9 @@ def process_run_timeline(process_run_id: str, db_path: Path | str | None = None)
                         conn, "token_usage_records", scope, order_by="created_at, token_usage_id"
                     )
                     if _token_has_sqlite_table(conn)
-                    else _token_rows_from_duckdb(scope)
+                    else _token_rows_from_duckdb(
+                        scope, analytics_db_path=analytics_db_path_for_connection(conn)
+                    )
                 ),
                 "validations": _scoped_rows(
                     conn, "validation_results", scope, order_by="created_at, validation_id"
@@ -256,7 +260,10 @@ def workflow_execution_graph(workflow_id: str, db_path: Path | str | None = None
                         (workflow_id,),
                     )
                     if _token_has_sqlite_table(conn)
-                    else _token_rows_from_duckdb(workflow_id=workflow_id)
+                    else _token_rows_from_duckdb(
+                        workflow_id=workflow_id,
+                        analytics_db_path=analytics_db_path_for_connection(conn),
+                    )
                 ),
                 "node_metadata_gap": {
                     "workflow_node_table_available": False,

@@ -16,7 +16,7 @@ import sqlite3
 from datetime import datetime, UTC
 
 from core.config.database import get_connection
-from core.analytics.duckdb_store import connect_analytics
+from core.analytics.duckdb_store import analytics_db_path_for_connection, connect_analytics
 from projections.api.safety import activity_log_filter_clause
 from projections.core.collectors.authority_sources import skill_usage_sql, token_usage_sql
 
@@ -31,7 +31,7 @@ def get_cost_alerts(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     Alert triggered when: repo uses > 50M tokens in 30 days
     """
     cursor = conn.cursor()
-    token_sql = token_usage_sql(conn)
+    token_sql = token_usage_sql(conn, analytics_db_path=analytics_db_path_for_connection(conn))
     if token_sql is None:
         return []
 
@@ -248,7 +248,7 @@ def get_health_snapshot() -> dict[str, Any]:
         )
 
         # 2. Cost Status (token usage in past 30 days)
-        token_sql = token_usage_sql(conn)
+        token_sql = token_usage_sql(conn, analytics_db_path=analytics_db_path_for_connection(conn))
         row = cursor.execute(f"""
                 SELECT SUM(input_tokens + output_tokens) as total
                 FROM ({token_sql}) token_usage

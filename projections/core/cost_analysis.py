@@ -62,9 +62,13 @@ def api_equivalent_cost(conn: sqlite3.Connection) -> dict[str, Any]:
             FROM token_usage_records
             """).fetchall()
     else:
+        from core.analytics.duckdb_store import analytics_db_path_for_connection
         from projections.core.collectors.authority_sources import fetch_token_usage_records
 
-        duckdb_rows = fetch_token_usage_records() or []
+        duckdb_rows = (
+            fetch_token_usage_records(analytics_db_path=analytics_db_path_for_connection(conn))
+            or []
+        )
         rows = [
             {
                 "model_id": row.get("model_id"),
