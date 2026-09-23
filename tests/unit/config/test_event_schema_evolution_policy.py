@@ -38,6 +38,24 @@ _GOOD_PAYLOADS: dict[str, dict] = {
         "type": "api_endpoint",
         "project_id": "proj-test",
     },
+    # The three lifecycle transitions #797 registered -- in_review, pushed, ci_issues. They
+    # carry required keys, so they owe a known-good payload here; #797 merged without one
+    # and main's Full CI went red on exactly this.
+    "work_order.review_requested": {
+        "work_order_id": str(uuid.uuid4()),
+        "title": "Write auth middleware",
+        "project_id": "proj-test",
+    },
+    "work_order.pushed": {
+        "work_order_id": str(uuid.uuid4()),
+        "title": "Write auth middleware",
+        "project_id": "proj-test",
+    },
+    "work_order.ci_failed": {
+        "work_order_id": str(uuid.uuid4()),
+        "title": "Write auth middleware",
+        "project_id": "proj-test",
+    },
     "work_order.blocked": {
         "work_order_id": str(uuid.uuid4()),
         "title": "Write auth middleware",
