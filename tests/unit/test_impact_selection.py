@@ -75,6 +75,79 @@ def test_a_data_file_no_test_names_selects_nothing(tmp_path: Path) -> None:
     assert result["dependent_tests"] == []
 
 
+def test_the_pre_push_regression_is_selected() -> None:
+    """The measured miss: a change to core/gates/pre_push.py must select
+    tests/unit/gates/test_pre_push_outcome_event.py, which imports it with
+    `from core.gates import pre_push` -- a shape text matching cannot see (see
+    test_a_from_pkg_import_mod_change_selects_its_importer below for the synthetic
+    version). Run against the real repository because the miss was real: pr-smoke
+    stayed green on all three platforms with this test broken.
+    """
+    from core.gates.blast_radius import REPO_ROOT
+
+    result = compute_impact_set(["core/gates/pre_push.py"], repo_root=REPO_ROOT)
+    assert "tests/unit/gates/test_pre_push_outcome_event.py" in result["dependent_tests"]
+
+
+def test_a_from_pkg_import_mod_change_selects_its_importer(tmp_path: Path) -> None:
+    """`from pkg import mod` splits the changed module's dotted path across two
+    tokens -- `pkg` then `mod`, joined by the word `import` -- so the contiguous
+    substring `pkg.mod` the text rule needs never appears in the importing test's
+    source. Synthetic version of the real pre_push.py regression above.
+    """
+    repo = tmp_path
+    _write(repo / "mypkg" / "__init__.py", "")
+    _write(repo / "mypkg" / "sub.py", "def f():\n    return 1\n")
+    _write(
+        repo / "tests" / "unit" / "test_importer.py",
+        "from mypkg import sub\n\n\ndef test_it():\n    assert sub.f() == 1\n",
+    )
+    result = compute_impact_set(["mypkg/sub.py"], repo_root=repo)
+    assert "tests/unit/test_importer.py" in result["dependent_tests"]
+
+
+def test_a_facade_reexport_selects_the_test_that_imports_the_package(tmp_path: Path) -> None:
+    """A package `__init__.py` that does `from .impl import helper` re-exports a
+    name without ever writing the wrapped module's dotted path: a test importing the
+    package (`from pkgx import helper`) names neither `pkgx.impl` nor
+    `pkgx.impl.helper`, so text matching finds nothing to select. This shape put
+    main red twice before the import graph closed it -- the facade's own module
+    imports the changed submodule (one hop) and the test imports the facade (a
+    second hop), a transitive closure rather than a direct reference.
+    """
+    repo = tmp_path
+    _write(repo / "pkgx" / "__init__.py", "from .impl import helper\n\n__all__ = ['helper']\n")
+    _write(repo / "pkgx" / "impl.py", "def helper():\n    return 1\n")
+    _write(
+        repo / "tests" / "unit" / "test_facade_user.py",
+        "from pkgx import helper\n\n\ndef test_it():\n    assert helper() == 1\n",
+    )
+    result = compute_impact_set(["pkgx/impl.py"], repo_root=repo)
+    assert "tests/unit/test_facade_user.py" in result["dependent_tests"]
+
+
+def test_a_relative_import_chain_is_followed_transitively(tmp_path: Path) -> None:
+    """A sibling module reached only through a RELATIVE import (`from .leaf import
+    value`), two hops from the test that exercises it: leaf <- wrapper (relative
+    import) <- test (imports wrapper directly). The test's source never mentions
+    `leaf` at all, so text matching selects nothing; the closure must cross the
+    relative-import edge and then the ordinary one to reach it.
+    """
+    repo = tmp_path
+    _write(repo / "core" / "pkgz" / "__init__.py", "")
+    _write(repo / "core" / "pkgz" / "leaf.py", "def value():\n    return 1\n")
+    _write(
+        repo / "core" / "pkgz" / "wrapper.py",
+        "from .leaf import value\n\n\ndef call():\n    return value()\n",
+    )
+    _write(
+        repo / "tests" / "unit" / "test_wrapper.py",
+        "from core.pkgz.wrapper import call\n\n\ndef test_it():\n    assert call() == 1\n",
+    )
+    result = compute_impact_set(["core/pkgz/leaf.py"], repo_root=repo)
+    assert "tests/unit/test_wrapper.py" in result["dependent_tests"]
+
+
 def test_a_changed_source_file_selects_tests_that_name_it_by_path(tmp_path):
     """A test that reads source as TEXT names the file, not the module.
 

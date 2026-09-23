@@ -17,10 +17,30 @@ This module closes the gap at merge time. From the diff it:
 
 `compute_impact_set` is pure and deterministic (no DB, no network) so the gate
 can run identically in pre-push and in the pr-smoke matrix.
+
+TEXT MATCHING IS BLIND TO TWO IMPORT SHAPES, so a third selector walks an AST-built
+import graph and adds their transitive dependents (see ``_build_import_graph`` /
+``_transitive_dependents``):
+
+  - ``from pkg import mod`` splits a changed module's dotted path across two tokens
+    -- ``pkg`` then ``mod``, joined by the word ``import`` -- and the literal
+    substring ``pkg.mod`` the regex rule needs never appears. A change to
+    ``core/gates/pre_push.py`` did not select ``tests/unit/gates/
+    test_pre_push_outcome_event.py``, which does exactly
+    ``from core.gates import pre_push``; pr-smoke stayed green on all three
+    platforms with that test broken.
+  - a FACADE -- a package ``__init__.py`` that does ``from .impl import helper`` --
+    re-exports a name without its wrapped module's dotted path ever appearing in a
+    test that imports the package instead of the module. Measured to put main red
+    twice before this.
+
+Both are relationships an AST sees and a regex cannot, so they are resolved by
+walking the graph rather than by adding more patterns.
 """
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -29,6 +49,8 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
+
+import networkx as nx
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -67,6 +89,193 @@ def _iter_test_files(repo_root: Path) -> Iterable[Path]:
     yield from tests_dir.rglob("test_*.py")
 
 
+#: Directories that can never hold an importable module: VCS/build internals, not
+#: application or test code. Skipped so none of them can become a spurious graph node.
+_IMPORT_GRAPH_SKIP_DIRS = frozenset(
+    {".git", "__pycache__", ".pytest_cache", "node_modules", ".venv", "venv"}
+)
+
+#: Hops the import-graph closure follows before it stops.
+#:
+#: MEASURED UNBOUNDED, on this repository, 695 test files total: a change to
+#: core/gates/pre_push.py selected 9 test files by text matching alone and 332
+#: (48%) with an unbounded closure; core/work_orders/task_status.py, one of the
+#: most-imported modules in the tree, went from 4 to 425 (61%). Past a few hops a
+#: monolith's import graph is nearly fully connected, so "transitively imports the
+#: changed module" stops meaning "plausibly affected by it" and starts meaning
+#: "somewhere in the same program" -- exactly the ceremony-without-signal shape
+#: this file's own docstring already names for the pr-smoke gap. It would also risk
+#: the CI budget directly: 127 files measured at 12m05s against a 25-minute job
+#: budget, and 332-425 files scales past it.
+#:
+#: BOUNDED AT 3: the regression this feature exists to fix
+#: (test_pre_push_outcome_event.py, `from core.gates import pre_push`) is one hop;
+#: the facade shape (a package __init__ re-exporting a changed submodule, read by a
+#: test that imports the package) is two. Depth 3 keeps a full hop of margin past
+#: both measured failure modes while holding the worst case measured here to 37
+#: (pre_push.py) and 107 (task_status.py) test files -- large, but an order of
+#: magnitude short of "everything", and the number a future measurement should be
+#: checked against before this is loosened.
+IMPORT_GRAPH_MAX_DEPTH: int | None = 3
+
+_IMPORT_GRAPH_CACHE: dict[str, tuple[dict[str, str], nx.DiGraph]] = {}
+
+
+def _file_to_module(rel_path: str) -> str:
+    """The single dotted name a file answers to as an import target.
+
+    ``core/foo/bar.py`` -> ``core.foo.bar``. ``core/foo/__init__.py`` -> ``core.foo``:
+    the package's own file is what ``import core.foo`` and ``from core.foo import x``
+    both name, so it is indexed under the bare package name, not ``core.foo.__init__``
+    (nothing ever imports that).
+    """
+    mod = rel_path[:-3].replace("/", ".")
+    if mod.endswith(".__init__"):
+        mod = mod[: -len(".__init__")]
+    return mod
+
+
+def _relative_base(module: str, rel_path: str, level: int) -> str | None:
+    """The package a relative import's leading dots resolve against, or None if the
+    dots climb past the repository root.
+
+    Level 1 is the importing module's OWN package: itself, for a package's
+    ``__init__.py`` (the file that answers for the package), or its parent, for an
+    ordinary module -- Python resolves a relative import against the *package*, and
+    only ``__init__.py`` is one. Each further dot climbs one more parent.
+    """
+    is_pkg = rel_path == "__init__.py" or rel_path.endswith("/__init__.py")
+    base = module if is_pkg else (module.rsplit(".", 1)[0] if "." in module else "")
+    for _ in range(level - 1):
+        if not base:
+            return None
+        base = base.rsplit(".", 1)[0] if "." in base else ""
+    return base
+
+
+def _imported_targets(node: ast.AST, *, module: str, rel_path: str, known: set[str]) -> set[str]:
+    """Repo modules a single import statement depends on, resolved to dotted names.
+
+    ``import a.b.c`` names its target directly. ``from a.b import c`` is ambiguous
+    from the statement alone: ``c`` is a submodule (``a.b.c``) when that file exists
+    in this repository, and otherwise a name ``a.b`` defines or re-exports -- a
+    function, a class, or (the facade case) another module's symbol threaded through
+    an ``__init__.py`` -- in which case the dependency is on ``a.b`` itself. ``known``
+    (every module this repository defines, from ``_build_module_index``) is what
+    tells the two apart. Relative imports are resolved to an absolute dotted base
+    first (``_relative_base``) so the same rule then applies to both.
+    """
+    targets: set[str] = set()
+    if isinstance(node, ast.Import):
+        for alias in node.names:
+            targets.add(alias.name)
+        return targets
+    if not isinstance(node, ast.ImportFrom):
+        return targets
+
+    if node.level:
+        base = _relative_base(module, rel_path, node.level)
+        if base is None:
+            return targets
+        if node.module:
+            base = f"{base}.{node.module}" if base else node.module
+    else:
+        base = node.module or ""
+    if not base:
+        return targets
+
+    for alias in node.names:
+        name = alias.name
+        if name == "*":
+            # A star import pulls in the whole module; there is no name to resolve
+            # against `known`, so the dependency is on the module itself.
+            targets.add(base)
+            continue
+        candidate = f"{base}.{name}"
+        targets.add(candidate if candidate in known else base)
+    return targets
+
+
+def _build_module_index(repo_root: Path) -> dict[str, str]:
+    """Every importable module this repository defines, mapped to its file."""
+    index: dict[str, str] = {}
+    for path in repo_root.rglob("*.py"):
+        if any(part in _IMPORT_GRAPH_SKIP_DIRS for part in path.parts):
+            continue
+        rel = _normalize(str(path.relative_to(repo_root)))
+        index[_file_to_module(rel)] = rel
+    return index
+
+
+def _build_import_graph(repo_root: Path) -> tuple[dict[str, str], nx.DiGraph]:
+    """(module -> file, directed graph of module -> the repo modules it imports).
+
+    Built with ``ast`` rather than by importing anything: the same purity
+    ``compute_impact_set`` already promises (no DB, no network, no executing the
+    tree being scanned) applies here, and a file that fails to parse is skipped
+    rather than aborting the whole graph -- one bad file must not blind the gate to
+    every other change.
+    """
+    module_index = _build_module_index(repo_root)
+    known = set(module_index)
+    graph: nx.DiGraph = nx.DiGraph()
+    graph.add_nodes_from(known)
+    for module, rel in module_index.items():
+        try:
+            tree = ast.parse((repo_root / rel).read_text(encoding="utf-8", errors="replace"))
+        except (OSError, SyntaxError):
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.Import, ast.ImportFrom)):
+                continue
+            for target in _imported_targets(node, module=module, rel_path=rel, known=known):
+                if target in known and target != module:
+                    graph.add_edge(module, target)
+    return module_index, graph
+
+
+def _cached_import_graph(repo_root: Path) -> tuple[dict[str, str], nx.DiGraph]:
+    """Built once per resolved repo root, then reused for the rest of the process.
+
+    Every real caller (pre_push, impact_tests_gate, and the CI steps that invoke
+    them) is a fresh process making exactly one ``compute_impact_set`` call, so a
+    checkout never mutates mid-cache. The case this cache is FOR is this repository's
+    own test suite, which calls ``compute_impact_set`` against ``REPO_ROOT`` many
+    times in one pytest session (the PR replays in test_impact_tests_gate.py) --
+    without it, each of those calls re-walks and re-parses the whole tree. A
+    ``tmp_path`` fixture resolves to a unique path per test, so it can never collide
+    with ``REPO_ROOT`` or with another test's cache entry.
+    """
+    key = str(Path(repo_root).resolve())
+    cached = _IMPORT_GRAPH_CACHE.get(key)
+    if cached is None:
+        cached = _build_import_graph(Path(repo_root))
+        _IMPORT_GRAPH_CACHE[key] = cached
+    return cached
+
+
+def _transitive_dependents(
+    changed: set[str], graph: nx.DiGraph, *, max_depth: int | None
+) -> set[str]:
+    """Every module whose forward-import chain reaches a changed module.
+
+    Ancestors of ``changed`` in the import graph are descendants of ``changed`` in
+    the REVERSED graph (``.reverse(copy=False)`` is an O(E) view, not a copy), and
+    ``single_source_shortest_path_length`` is the depth-bounded BFS networkx already
+    ships -- reused rather than a second hand-rolled traversal doing the same thing.
+    """
+    if not changed:
+        return set()
+    reverse = graph.reverse(copy=False)
+    dependents: set[str] = set()
+    for module in changed:
+        if module in reverse:
+            dependents.update(
+                nx.single_source_shortest_path_length(reverse, module, cutoff=max_depth)
+            )
+    return dependents - changed
+
+
 def compute_impact_set(
     changed_files: Iterable[str],
     *,
@@ -96,7 +305,12 @@ def compute_impact_set(
         names that pack as a string literal (``"ds-project"``), because tests about packs
         build their paths from parts rather than writing them out;
       - any other changed file selects every test whose text names its
-        repo-relative path (``canonical/rules.yml``), the same way.
+        repo-relative path (``canonical/rules.yml``), the same way;
+      - ADDITIVELY, a changed ``.py`` source module also selects every test that
+        imports it through the repository's import graph -- directly, through
+        ``from pkg import mod``, through a facade ``__init__.py``, or through a
+        chain of any of those up to ``IMPORT_GRAPH_MAX_DEPTH`` hops -- which the
+        text rule above cannot see (see the module docstring).
     """
     root = Path(repo_root)
     changed = sorted({_normalize(f) for f in changed_files if f})
@@ -167,6 +381,23 @@ def compute_impact_set(
                 continue
             if any(pat.search(text) for pat in patterns):
                 dependent.add(rel)
+
+    # IMPORT-GRAPH CLOSURE -- see the module docstring for the two shapes text
+    # matching above cannot see (`from pkg import mod`, and a facade `__init__.py`).
+    # `module_tokens` already holds every dotted module a changed .py source file
+    # exposes (test files are excluded from it above), so no second pass over
+    # `changed` is needed to find the graph's starting set. Gated on `module_tokens`
+    # so a non-.py-only or empty change set never pays for the whole-repo AST walk.
+    if module_tokens:
+        module_index, import_graph = _cached_import_graph(root)
+        known_changed = module_tokens & set(module_index)
+        if known_changed:
+            for ancestor in _transitive_dependents(
+                known_changed, import_graph, max_depth=IMPORT_GRAPH_MAX_DEPTH
+            ):
+                rel = module_index[ancestor]
+                if _is_test_file(rel):
+                    dependent.add(rel)
 
     impacted_domains: list[str] = []
     try:
