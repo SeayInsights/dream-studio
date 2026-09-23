@@ -9,6 +9,14 @@ WORKDIR /workspace
 
 RUN mkdir -p "$HOME" "$DREAM_STUDIO_HOME"
 
+# git, because 21 test files build throwaway repositories with it. This image is also
+# the review lanes' sandbox (core/gates/lane_sandbox.py), where a reviewer's
+# reproduction is re-run before it is recorded -- and a test that fails because the
+# image has no git is a finding about the image, recorded as one about the code.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt requirements-dev.txt pyproject.toml ./
 RUN python -m pip install --upgrade pip \
     && python -m pip install --no-cache-dir -r requirements-dev.txt
