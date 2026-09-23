@@ -64,7 +64,8 @@ def authority(tmp_path):
     conn.execute(
         "INSERT INTO business_work_orders (work_order_id, project_id, milestone_id, title,"
         " description, work_order_type, status, created_at, updated_at)"
-        " VALUES (?,?,NULL,'WO','d','cleanup','in_review',?,?)",
+        # close accepts only pushed/ci_issues.
+        " VALUES (?,?,NULL,'WO','d','cleanup','pushed',?,?)",
         (wo_id, project_id, now, now),
     )
     conn.commit()
@@ -162,23 +163,13 @@ def test_force_closes_past_it_recorded_not_silently(tmp_path, authority):
     ], "the forced close did not record the lane review it bypassed"
 
 
-def test_in_review_but_never_dispatched_fails_the_close(authority):
-    """Round three, boundary-semantics: "never reviewed" read as "reviewed clean", on the
-    reasoning that the push gate owns it -- but close does not require `pushed`."""
-    db, wo_id = authority  # the fixture's work order is in_review
+def test_past_review_but_never_dispatched_fails_the_close(authority):
+    """Round three, boundary-semantics: "never reviewed" read as "reviewed clean". Close
+    now accepts only `pushed`/`ci_issues` -- both past review -- so a missing dispatch at
+    the fixture's status is unconditionally a failure, not a status-conditioned one."""
+    db, wo_id = authority
     failure = lane_review_failure(wo_id, db_path=db)
     assert failure and "no review was ever dispatched" in failure
-
-
-def test_a_legacy_work_order_that_never_entered_review_is_not_failed_for_it(authority):
-    db, wo_id = authority
-    conn = sqlite3.connect(str(db))
-    conn.execute(
-        "UPDATE business_work_orders SET status='in_progress' WHERE work_order_id=?", (wo_id,)
-    )
-    conn.commit()
-    conn.close()
-    assert lane_review_failure(wo_id, db_path=db) is None
 
 
 def test_a_clean_review_adds_no_lane_failure(authority):
@@ -199,12 +190,9 @@ def test_a_forced_close_records_whether_it_was_ever_reviewed(tmp_path, authority
     recorded exactly like one reviewed clean. The state now rides the result and the
     work_order.closed event, blocking or not."""
     db, wo_id = authority
-    conn = sqlite3.connect(str(db))
-    conn.execute(
-        "UPDATE business_work_orders SET status='in_progress' WHERE work_order_id=?", (wo_id,)
-    )
-    conn.commit()
-    conn.close()
+    # The fixture already seeds `pushed`, which is what this test needs: close accepts
+    # only pushed/ci_issues (force does not change that), and lane_review_state reads
+    # never_dispatched from the absence of a dispatch, not from this status field.
     emitted = []
     with patch("spool.writer.write_event", side_effect=lambda env, **k: emitted.append(env)):
         result = _close(tmp_path, db, wo_id, force=True)

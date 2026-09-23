@@ -135,6 +135,23 @@ def _seed_wo(
     return wo
 
 
+def _dispatch_clean_review(db_path: Path, work_order_id: str) -> None:
+    """A work order past review must have had one, so lane_review_failure demands a review
+    dispatch exist before close — a gate independent of the autostart-parity
+    behavior this file exercises. Record the minimum: a dispatch with no lanes
+    assigned, so nothing is left unanswered and the gate clears."""
+    from core.work_orders.review_answers import record_dispatch
+
+    record_dispatch(
+        work_order_id,
+        sha="0" * 40,
+        image="test",
+        change_set=[],
+        assignments=[],
+        db_path=db_path,
+    )
+
+
 # ---------------------------------------------------------------------------
 # T1 — auto_started matches the advertised next_work_order
 # ---------------------------------------------------------------------------
@@ -162,11 +179,13 @@ def test_advertised_next_is_readyset_pick(tmp_path: Path) -> None:
         db,
         project_id=project,
         milestone_id=m2,
-        status="in_progress",
+        # close accepts only pushed/ci_issues; the phase is not what this test checks.
+        status="pushed",
         sequence_order=10,
         with_passing_task=True,
     )
     wo_a = _seed_wo(db, project_id=project, milestone_id=m2, status="created", sequence_order=20)
+    _dispatch_clean_review(db, wo_close)
 
     with _patch_close_runtime(db):
         result = close_work_order(
@@ -215,10 +234,12 @@ def test_end_to_end(tmp_path: Path) -> None:
         db,
         project_id=project,
         milestone_id=m2,
-        status="in_progress",
+        # close accepts only pushed/ci_issues; the phase is not what this test checks.
+        status="pushed",
         sequence_order=10,
         with_passing_task=True,
     )
+    _dispatch_clean_review(db, wo_close)
 
     with _patch_close_runtime(db):
         result = close_work_order(

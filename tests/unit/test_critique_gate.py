@@ -39,7 +39,9 @@ def db_home(tmp_path):
             "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, NULL, 'Build hero component', NULL, 'created', 'ui_component', ?, ?)",
+            # close accepts only pushed/ci_issues; every test in this file that uses this
+            # fixture closes the work order, and none depends on the earlier status.
+            " VALUES (?, ?, NULL, 'Build hero component', NULL, 'pushed', 'ui_component', ?, ?)",
             (WO_UI_ID, PROJECT_ID, NOW, NOW),
         )
         # Seed a task with a passing executable AC so the always-on AC gate is satisfied.
@@ -60,6 +62,21 @@ def db_home(tmp_path):
         conn.commit()
     finally:
         conn.close()
+    # `pushed` is past review, so close now also consults the lane review
+    # (test_close_consults_lane_review.py) -- an empty, ownership-less dispatch records
+    # "reviewed, nothing outstanding" without pulling in the seat/lane registry, which is
+    # not what this file's gates (anti_slop_passed, design_critique) are about.
+    from core.work_orders.review_answers import record_dispatch
+
+    record_dispatch(
+        WO_UI_ID,
+        sha="0" * 40,
+        image="none",
+        change_set=[],
+        assignments=[],
+        db_path=db_path,
+        ownership={},
+    )
     return tmp_path
 
 

@@ -74,7 +74,10 @@ def _seed(
         "INSERT INTO business_work_orders"
         " (work_order_id, project_id, milestone_id, title, description,"
         "  work_order_type, status, sequence_order, created_at, updated_at, last_updated_at)"
-        " VALUES (?,?,?,?,?,?,'in_progress',1,?,?,?)",
+        # close accepts only pushed/ci_issues; the tests in this file that close the
+        # WO are not testing the phase, and verify_work_order (used by the others)
+        # does not read status at all.
+        " VALUES (?,?,?,?,?,?,'pushed',1,?,?,?)",
         (work_order_id, project_id, milestone_id, title, "desc", wo_type, NOW, NOW, NOW),
     )
     conn.commit()
@@ -115,6 +118,23 @@ def _add_task(
     conn.commit()
     conn.close()
     return task_id
+
+
+def _dispatch_clean_review(db_path: Path, work_order_id: str) -> None:
+    """A work order past review must have had one, so lane_review_failure demands a review
+    dispatch exist before close — a gate independent of the grader-traceability
+    behavior this file exercises. Record the minimum: a dispatch with no lanes
+    assigned, so nothing is left unanswered and the gate clears."""
+    from core.work_orders.review_answers import record_dispatch
+
+    record_dispatch(
+        work_order_id,
+        sha="0" * 40,
+        image="test",
+        change_set=[],
+        assignments=[],
+        db_path=db_path,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -571,6 +591,7 @@ def test_end_to_end(tmp_path: Path) -> None:
         "spawned_work_orders": [],
         "verdict_path": str(planning_root / "work-orders" / work_order_id / "review-verdict.json"),
     }
+    _dispatch_clean_review(db_path, work_order_id)
 
     with _patch_db(db_path):
         # Patch verify at its definition site; close.py does a deferred

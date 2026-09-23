@@ -1230,6 +1230,16 @@ def test_close_reports_bookkeeping_that_did_not_land(db, tmp_path, monkeypatch):
 
     repo, _head = _git_repo(tmp_path / "repo")
     wid = _wo_with_boundary(db, repo, "core/")
+    # close accepts only pushed/ci_issues; `_wo_with_boundary` seeds `in_progress`, and
+    # this test is about the bookkeeping report reaching a close, not about the phase.
+    import sqlite3
+
+    _conn = sqlite3.connect(str(db))
+    _conn.execute(
+        "UPDATE business_work_orders SET status = 'pushed' WHERE work_order_id = ?", (wid,)
+    )
+    _conn.commit()
+    _conn.close()
     monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "events"))
     # force=True only to get PAST the gates to the code under test -- a hermetic WO has
@@ -1502,6 +1512,17 @@ def test_a_gate_blocked_close_still_reports_bookkeeping_that_did_not_land(
 
     repo, _head = _git_repo(tmp_path / "repo")
     wid = _wo_with_boundary(db, repo, "core/")
+    # close accepts only pushed/ci_issues; this test needs a GATE refusal (verdict,
+    # affirmation), not a phase refusal, so the WO must first be past the phase check --
+    # `_wo_with_boundary` seeds `in_progress`.
+    import sqlite3
+
+    _conn = sqlite3.connect(str(db))
+    _conn.execute(
+        "UPDATE business_work_orders SET status = 'pushed' WHERE work_order_id = ?", (wid,)
+    )
+    _conn.commit()
+    _conn.close()
     monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "events"))
 

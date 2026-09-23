@@ -12,15 +12,17 @@ from typing import Any
 from core.event_store.studio_db import _connect
 from core.work_orders.models import (
     DEFAULT_WORK_ORDER_PRIORITY,
-    TERMINAL_WO_STATUSES,
     WORK_ORDER_PRIORITIES,
 )
 from core.work_orders.task_status import (
+    BLOCKABLE_WORK_ORDER_STATUSES,
     TASK_ABANDONED_STATUSES,
     TASK_DONE_STATUSES,
     is_open,
+    remembers_block_phase,
     sql_placeholders,
     status_for,
+    transition_refusal,
 )
 
 
@@ -416,11 +418,10 @@ def advance_work_order(
     the status comes from the vocabulary either way. Three copies would be three places a
     status could be spelled inline, which is what `status_for` exists to prevent.
 
-    A TERMINAL WORK ORDER IS NOT ADVANCED. Closed, cancelled and deleted mean the work is
-    over; moving one to `in_review` would quietly make it open again with nothing recording
-    that it had been reopened -- `work_order.reopened` exists for exactly that and says so
-    in the event stream. Refusing here keeps "is this work order over" answerable from the
-    status alone.
+    THE PHASES RUN IN ORDER, and WORK_ORDER_TRANSITIONS says which move is next. This
+    refused only terminal statuses, so a work order went created -> pushed in one command
+    and its review phase was decorative. A terminal work order is still refused -- moving
+    one would quietly reopen it, and `work_order.reopened` exists to say that out loud.
     """
     if to not in _ADVANCE_EVENTS:
         return {
@@ -444,17 +445,11 @@ def advance_work_order(
             return {"ok": False, "error": f"Work order not found: {work_order_id}"}
 
         title, project_id, current = row[0], row[1], row[2]
-        if current in TERMINAL_WO_STATUSES:
-            return {
-                "ok": False,
-                "error": (
-                    f"Work order {work_order_id} is {current}, which is terminal."
-                    " Reopen it first if the work is genuinely resuming; that is recorded"
-                    " as work_order.reopened rather than inferred from a status change."
-                ),
-            }
         if current == to:
             return {"ok": True, "already": True, "work_order_id": work_order_id, "status": to}
+        refusal = transition_refusal(work_order_id, current, to)
+        if refusal:
+            return {"ok": False, "error": refusal, "status": current}
 
         # THE LANES RUN BEFORE ANYTHING IS PUSHED. `pushed` means the work is on GitHub
         # waiting for Full CI; getting there with an open finding, an unanswered lane or no
@@ -559,22 +554,40 @@ def block_work_order(
     source_root: Path,
     dream_studio_home: Path | None = None,
 ) -> dict[str, Any]:
+    """Block a work order from whatever open phase it is in, remembering which.
+
+    UNBLOCK RETURNS HERE. It sent every work order to `in_progress`, so one blocked while
+    `pushed` came back with its review and its push erased, and the watcher -- which looks
+    for work at `pushed` -- never found it again. The phase travels on the event as
+    `from_status`, so a replay rebuilds it.
+    """
     db_path = _require_db(source_root, dream_studio_home)
     with _connect(db_path) as conn:
         wo_row = conn.execute(
-            "SELECT work_order_id, title, project_id FROM business_work_orders WHERE work_order_id = ?",
+            "SELECT work_order_id, title, project_id, status FROM business_work_orders"
+            " WHERE work_order_id = ?",
             (work_order_id,),
         ).fetchone()
         if wo_row is None:
             return {"ok": False, "error": f"Work order not found: {work_order_id}"}
 
-        _, title, project_id = wo_row
+        _, title, project_id, current = wo_row
+        if current not in BLOCKABLE_WORK_ORDER_STATUSES:
+            return {
+                "ok": False,
+                "error": (
+                    f"Work order {work_order_id} is {current}; only an open phase"
+                    f" ({', '.join(BLOCKABLE_WORK_ORDER_STATUSES)}) can be blocked."
+                ),
+                "status": current,
+            }
         now = datetime.now(UTC).isoformat()
 
+        remembered = ", blocked_from_status = ?" if remembers_block_phase(conn) else ""
         conn.execute(
             "UPDATE business_work_orders"
             " SET status = ?, blocked_at = ?, block_reason = ?,"
-            " updated_at = ?, last_updated_at = ?"
+            f" updated_at = ?, last_updated_at = ?{remembered}"
             " WHERE work_order_id = ?",
             (
                 status_for("work_order.blocked", work_order=True),
@@ -582,6 +595,7 @@ def block_work_order(
                 reason,
                 now,
                 now,
+                *((current,) if remembered else ()),
                 work_order_id,
             ),
         )
@@ -600,6 +614,7 @@ def block_work_order(
                         "title": title,
                         "project_id": project_id,
                         "reason": reason,
+                        "from_status": current,
                     },
                     timestamp=now,
                     severity="warning",
@@ -619,6 +634,7 @@ def block_work_order(
         "work_order_id": work_order_id,
         "status": "blocked",
         "block_reason": reason,
+        "from_status": current,
     }
 
 
@@ -645,14 +661,27 @@ def unblock_work_order(
                 "error": f"Work order is not blocked (status: {wo_status})",
             }
 
+        # BACK TO THE PHASE IT WAS BLOCKED FROM. A work order blocked before migration 158
+        # recorded none and returns to `in_progress`, which is what unblock always did.
+        remembers = remembers_block_phase(conn)
+        back_to = None
+        if remembers:
+            back_to = conn.execute(
+                "SELECT blocked_from_status FROM business_work_orders WHERE work_order_id = ?",
+                (work_order_id,),
+            ).fetchone()[0]
+        if back_to not in BLOCKABLE_WORK_ORDER_STATUSES:
+            back_to = status_for("work_order.unblocked", work_order=True)
+
         now = datetime.now(UTC).isoformat()
 
+        cleared = ", blocked_from_status = NULL" if remembers else ""
         conn.execute(
             "UPDATE business_work_orders"
             " SET status = ?, unblocked_at = ?, block_reason = NULL,"
-            " updated_at = ?, last_updated_at = ?"
+            f" updated_at = ?, last_updated_at = ?{cleared}"
             " WHERE work_order_id = ?",
-            (status_for("work_order.unblocked", work_order=True), now, now, now, work_order_id),
+            (back_to, now, now, now, work_order_id),
         )
 
     try:
@@ -668,6 +697,7 @@ def unblock_work_order(
                     "work_order_id": work_order_id,
                     "title": title,
                     "project_id": project_id,
+                    "to_status": back_to,
                 },
                 timestamp=now,
                 severity="info",
@@ -685,7 +715,7 @@ def unblock_work_order(
     return {
         "ok": True,
         "work_order_id": work_order_id,
-        "status": "in_progress",
+        "status": back_to,
     }
 
 
@@ -716,6 +746,19 @@ def reopen_work_order(
             return {"ok": False, "error": f"Work order not found: {work_order_id}"}
 
         _, title, prev_status, project_id = wo_row
+        # ONLY WHAT IS CLOSED REOPENS. This accepted any status, so "reopening" a work
+        # order sitting at `in_review` or `pushed` sent it back to `in_progress` -- a
+        # backwards move the phase order does not allow, spelled as an event that claims the
+        # work had finished.
+        if prev_status != "closed":
+            return {
+                "ok": False,
+                "error": (
+                    f"Work order {work_order_id} is {prev_status}; only a closed work order"
+                    " reopens."
+                ),
+                "status": prev_status,
+            }
         now = datetime.now(UTC).isoformat()
 
         conn.execute(

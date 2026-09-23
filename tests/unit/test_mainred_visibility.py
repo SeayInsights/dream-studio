@@ -487,10 +487,13 @@ def test_close_surfaces_main_red_advisory(tmp_path):
         " VALUES (?,?,?,?,?,?)",
         (project_id, "P", "", "active", now, now),
     )
+    # Seeded at 'pushed': close accepts only pushed/ci_issues, and force=True no longer
+    # bypasses the phase -- only the gates below it. The phase is not what this test
+    # checks (it checks the main-red advisory on an otherwise-forced close).
     conn.execute(
         "INSERT INTO business_work_orders"
         " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
-        "  status, created_at, updated_at) VALUES (?,?,NULL,'WO','d','cleanup','in_progress',?,?)",
+        "  status, created_at, updated_at) VALUES (?,?,NULL,'WO','d','cleanup','pushed',?,?)",
         (wo_id, project_id, now, now),
     )
     conn.commit()
@@ -542,10 +545,12 @@ def test_close_is_silent_when_main_is_green(tmp_path):
         " VALUES (?,?,?,?,?,?)",
         (project_id, "P", "", "active", now, now),
     )
+    # Seeded at 'pushed' for the same reason as test_close_surfaces_main_red_advisory
+    # above: force does not bypass the phase, only the gates.
     conn.execute(
         "INSERT INTO business_work_orders"
         " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
-        "  status, created_at, updated_at) VALUES (?,?,NULL,'WO','d','cleanup','in_progress',?,?)",
+        "  status, created_at, updated_at) VALUES (?,?,NULL,'WO','d','cleanup','pushed',?,?)",
         (wo_id, project_id, now, now),
     )
     conn.commit()

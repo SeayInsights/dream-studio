@@ -91,7 +91,10 @@ def _seed_wo(db_path: Path, *, wo_type: str = "cleanup") -> tuple[str, str, str]
         "INSERT INTO business_work_orders"
         " (work_order_id, project_id, milestone_id, title, description,"
         "  work_order_type, status, sequence_order, created_at, updated_at, last_updated_at)"
-        " VALUES (?,?,?,?,?,?,'in_progress',1,?,?,?)",
+        # close accepts only pushed/ci_issues; every close test in this file needs that,
+        # and verify_work_order does not gate on phase, so the two verify-only tests are
+        # unaffected.
+        " VALUES (?,?,?,?,?,?,'pushed',1,?,?,?)",
         (work_order_id, project_id, milestone_id, "Test WO", "d", wo_type, NOW, NOW, NOW),
     )
     conn.execute(
@@ -103,6 +106,21 @@ def _seed_wo(db_path: Path, *, wo_type: str = "cleanup") -> tuple[str, str, str]
     )
     conn.commit()
     conn.close()
+    # `pushed` is past review, so close now also consults the lane review
+    # (test_close_consults_lane_review.py) -- an empty, ownership-less dispatch records
+    # "reviewed, nothing outstanding" without pulling in the seat/lane registry, which is
+    # not what this file's gate (independent_review default-on) is about.
+    from core.work_orders.review_answers import record_dispatch
+
+    record_dispatch(
+        work_order_id,
+        sha="0" * 40,
+        image="none",
+        change_set=[],
+        assignments=[],
+        db_path=db_path,
+        ownership={},
+    )
     return project_id, milestone_id, work_order_id
 
 

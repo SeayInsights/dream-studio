@@ -161,10 +161,11 @@ def test_close_work_order_force_emits_well_formed_envelopes(
 ) -> None:
     from core.work_orders.close import close_work_order
 
-    # Move the WO to in_progress so close has something to mutate.
+    # close accepts only pushed/ci_issues, and force does not change that -- move the WO
+    # there so close has something to mutate.
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "UPDATE business_work_orders SET status = 'in_progress' WHERE work_order_id = ?",
+        "UPDATE business_work_orders SET status = 'pushed' WHERE work_order_id = ?",
         (WO_ID,),
     )
     conn.commit()
