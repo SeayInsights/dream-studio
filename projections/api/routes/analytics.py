@@ -2,6 +2,7 @@
 
 import statistics
 from datetime import datetime, timedelta
+from pathlib import Path
 from fastapi import APIRouter, Query
 from typing import Any
 
@@ -20,8 +21,8 @@ def _connect():
     return get_connection()
 
 
-def _connect_analytics():
-    return connect_analytics(read_only=True)
+def _connect_analytics(analytics_db_path: Path | None = None):
+    return connect_analytics(analytics_db_path, read_only=True)
 
 
 def _empty_anomalies() -> dict[str, Any]:
@@ -63,49 +64,52 @@ async def get_anomalies(days: int = Query(default=30, ge=1, le=365)) -> dict[str
     """Detect anomalies using z-score on session duration and token usage.
 
     Session data reads from DuckDB aggregate_metrics.db (raw_sessions view with
-    ended_at derived from system.session.closed events). Token join stays on SQLite
-    since token_usage_sql() targets the SQLite authority source.
+    ended_at derived from system.session.closed events), scoped to the analytics
+    store colocated with this request's own SQLite authority — never whatever
+    aggregate_metrics.db happens to sit in the ambient DREAM_STUDIO_HOME. Token
+    join stays on SQLite since token_usage_sql() targets the SQLite authority
+    source, and reuses the same connection (and the same resolved analytics
+    path) opened to determine that authority.
     """
+    sql_conn = _connect()
     try:
-        duck_conn = _connect_analytics()
-    except AnalyticsStoreMissingError:
-        # Analytics store not built yet — honest empty shape, never a fabricated store.
-        return _empty_anomalies()
-    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
-
-    try:
-        # Fetch session rows with duration_s from DuckDB (ended_at now populated)
+        analytics_path = analytics_db_path_for_connection(sql_conn)
         try:
-            session_rows = duck_conn.execute(
-                """
-                SELECT
-                    session_id,
-                    started_at,
-                    duration_s,
-                    COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0) AS total_tokens
-                FROM raw_sessions
-                WHERE started_at >= ?
-                  AND ended_at IS NOT NULL
-                  AND duration_s IS NOT NULL
-                  AND duration_s > 0
-            """,
-                [cutoff],
-            ).fetchall()
-        except Exception:
-            # Fresh analytics store: the projection runner has not created the
-            # compat views yet. Empty shape, never a 500.
+            duck_conn = _connect_analytics(analytics_path)
+        except AnalyticsStoreMissingError:
+            # Analytics store not built yet — honest empty shape, never a fabricated store.
             return _empty_anomalies()
+        cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
-        if len(session_rows) < 3:
-            return _empty_anomalies()
-
-        # Augment tokens from SQLite token_usage_sql if available
-        token_by_session: dict[str, int] = {}
-        sql_conn = _connect()
         try:
-            token_sql = token_usage_sql(
-                sql_conn, analytics_db_path=analytics_db_path_for_connection(sql_conn)
-            )
+            # Fetch session rows with duration_s from DuckDB (ended_at now populated)
+            try:
+                session_rows = duck_conn.execute(
+                    """
+                    SELECT
+                        session_id,
+                        started_at,
+                        duration_s,
+                        COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0) AS total_tokens
+                    FROM raw_sessions
+                    WHERE started_at >= ?
+                      AND ended_at IS NOT NULL
+                      AND duration_s IS NOT NULL
+                      AND duration_s > 0
+                """,
+                    [cutoff],
+                ).fetchall()
+            except Exception:
+                # Fresh analytics store: the projection runner has not created the
+                # compat views yet. Empty shape, never a 500.
+                return _empty_anomalies()
+
+            if len(session_rows) < 3:
+                return _empty_anomalies()
+
+            # Augment tokens from SQLite token_usage_sql if available
+            token_by_session: dict[str, int] = {}
+            token_sql = token_usage_sql(sql_conn, analytics_db_path=analytics_path)
             if token_sql is not None:
                 tok_rows = sql_conn.execute(f"""
                     SELECT session_id, SUM(input_tokens + output_tokens) as total_tokens
@@ -115,78 +119,78 @@ async def get_anomalies(days: int = Query(default=30, ge=1, le=365)) -> dict[str
                 """).fetchall()
                 for tr in tok_rows:
                     token_by_session[tr["session_id"]] = tr["total_tokens"] or 0
-        finally:
-            sql_conn.close()
 
-        rows_data = [
-            {
-                "session_id": r[0],
-                "started_at": r[1],
-                "duration_s": r[2],
-                "tokens": token_by_session.get(r[0], r[3] or 0),
-            }
-            for r in session_rows
-        ]
-
-        durations = [r["duration_s"] for r in rows_data]
-        tokens = [r["tokens"] for r in rows_data]
-        dur_mean, dur_std = statistics.mean(durations), statistics.pstdev(durations) or 1
-        tok_mean, tok_std = statistics.mean(tokens), statistics.pstdev(tokens) or 1
-
-        scatter_data: list[dict[str, Any]] = []
-        anomalies: list[dict[str, Any]] = []
-        severity_counts = {"low": 0, "medium": 0, "high": 0}
-
-        for r in rows_data:
-            dur_z = abs(r["duration_s"] - dur_mean) / dur_std
-            tok_z = abs(r["tokens"] - tok_mean) / tok_std
-            max_z = max(dur_z, tok_z)
-            is_anomaly = max_z > 2.0
-
-            scatter_data.append(
+            rows_data = [
                 {
-                    "duration": round(r["duration_s"], 1),
-                    "tokens": r["tokens"],
-                    "is_anomaly": is_anomaly,
+                    "session_id": r[0],
+                    "started_at": r[1],
+                    "duration_s": r[2],
+                    "tokens": token_by_session.get(r[0], r[3] or 0),
                 }
-            )
+                for r in session_rows
+            ]
 
-            if is_anomaly:
-                severity = "high" if max_z > 3.0 else "medium" if max_z > 2.5 else "low"
-                severity_counts[severity] += 1
-                anomalies.append(
+            durations = [r["duration_s"] for r in rows_data]
+            tokens = [r["tokens"] for r in rows_data]
+            dur_mean, dur_std = statistics.mean(durations), statistics.pstdev(durations) or 1
+            tok_mean, tok_std = statistics.mean(tokens), statistics.pstdev(tokens) or 1
+
+            scatter_data: list[dict[str, Any]] = []
+            anomalies: list[dict[str, Any]] = []
+            severity_counts = {"low": 0, "medium": 0, "high": 0}
+
+            for r in rows_data:
+                dur_z = abs(r["duration_s"] - dur_mean) / dur_std
+                tok_z = abs(r["tokens"] - tok_mean) / tok_std
+                max_z = max(dur_z, tok_z)
+                is_anomaly = max_z > 2.0
+
+                scatter_data.append(
                     {
-                        "session_id": r["session_id"],
-                        "timestamp": r["started_at"],
-                        "duration_s": round(r["duration_s"], 1),
+                        "duration": round(r["duration_s"], 1),
                         "tokens": r["tokens"],
-                        "z_score": round(max_z, 2),
-                        "severity": severity,
+                        "is_anomaly": is_anomaly,
                     }
                 )
 
-        anomalies.sort(key=lambda a: a["z_score"], reverse=True)
-        last_detected = anomalies[0]["timestamp"] if anomalies else "Never"
-        avg_severity = (
-            "High"
-            if severity_counts["high"] > 0
-            else "Medium" if severity_counts["medium"] > 0 else "Low"
-        )
+                if is_anomaly:
+                    severity = "high" if max_z > 3.0 else "medium" if max_z > 2.5 else "low"
+                    severity_counts[severity] += 1
+                    anomalies.append(
+                        {
+                            "session_id": r["session_id"],
+                            "timestamp": r["started_at"],
+                            "duration_s": round(r["duration_s"], 1),
+                            "tokens": r["tokens"],
+                            "z_score": round(max_z, 2),
+                            "severity": severity,
+                        }
+                    )
 
-        return {
-            "anomalies": anomalies[:50],
-            "scatter_data": scatter_data,
-            "summary": {
-                "total_anomalies": len(anomalies),
-                "severity_breakdown": severity_counts,
-                "affected_metrics": ["duration", "tokens"] if anomalies else [],
-            },
-            "last_detected": last_detected,
-            "detection_rate": round(len(anomalies) / len(rows_data), 3) if rows_data else 0,
-            "avg_severity": avg_severity,
-        }
+            anomalies.sort(key=lambda a: a["z_score"], reverse=True)
+            last_detected = anomalies[0]["timestamp"] if anomalies else "Never"
+            avg_severity = (
+                "High"
+                if severity_counts["high"] > 0
+                else "Medium" if severity_counts["medium"] > 0 else "Low"
+            )
+
+            return {
+                "anomalies": anomalies[:50],
+                "scatter_data": scatter_data,
+                "summary": {
+                    "total_anomalies": len(anomalies),
+                    "severity_breakdown": severity_counts,
+                    "affected_metrics": ["duration", "tokens"] if anomalies else [],
+                },
+                "last_detected": last_detected,
+                "detection_rate": round(len(anomalies) / len(rows_data), 3) if rows_data else 0,
+                "avg_severity": avg_severity,
+            }
+        finally:
+            duck_conn.close()
     finally:
-        duck_conn.close()
+        sql_conn.close()
 
 
 @router.get("/trends")
@@ -199,9 +203,19 @@ async def get_trends(days: int = Query(default=30, ge=1, le=365)) -> dict[str, A
     retired; the DuckDB view (derived from canonical token.consumed events)
     already carries model-priced estimated_cost, so cost trends read from the
     same connection already open for sessions.
+
+    The analytics store read is scoped to the SQLite authority this request
+    would otherwise use (via a short-lived connection just to resolve that
+    authority) — never whatever aggregate_metrics.db happens to sit in the
+    ambient DREAM_STUDIO_HOME.
     """
+    sql_conn = _connect()
     try:
-        duck_conn = _connect_analytics()
+        analytics_path = analytics_db_path_for_connection(sql_conn)
+    finally:
+        sql_conn.close()
+    try:
+        duck_conn = _connect_analytics(analytics_path)
     except AnalyticsStoreMissingError:
         # Analytics store not built yet — honest empty shape, never a fabricated store.
         return {
@@ -307,10 +321,17 @@ async def get_trends(days: int = Query(default=30, ge=1, le=365)) -> dict[str, A
 async def get_performance(days: int = Query(default=30, ge=1, le=365)) -> dict[str, Any]:
     """Analyze session performance: flow breakdown, day-of-week, and hourly activity.
 
-    Reads from DuckDB aggregate_metrics.db (raw_sessions view over events_fact).
+    Reads from DuckDB aggregate_metrics.db (raw_sessions view over events_fact),
+    scoped to the analytics store colocated with this request's own SQLite
+    authority — never the ambient DREAM_STUDIO_HOME default.
     """
+    sql_conn = _connect()
     try:
-        conn = _connect_analytics()
+        analytics_path = analytics_db_path_for_connection(sql_conn)
+    finally:
+        sql_conn.close()
+    try:
+        conn = _connect_analytics(analytics_path)
     except AnalyticsStoreMissingError:
         # Analytics store not built yet — honest empty shape, never a fabricated store.
         return _empty_performance()

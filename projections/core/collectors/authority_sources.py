@@ -23,6 +23,32 @@ _GOVERNANCE_DEFAULTS = {
 }
 
 
+def resolve_collector_paths(db_path: str | None) -> tuple[str, Path | None]:
+    """Resolve a collector's (studio db_path, analytics db_path) from one raw arg.
+
+    Shared by SessionCollector/TokenCollector/ModelCollector.__init__, which used
+    to each copy-paste this exact two-step resolution independently (a review
+    lane finding: mechanical duplication, not a correctness bug — but exactly
+    the kind of copy that drifts once one class changes and the others don't).
+
+    analytics_db_path is computed from the RAW argument, before the None ->
+    default rewrite below: analytics_db_path_for(None) is already "no explicit
+    authority -> ambient default", so this one call is the whole explicit-vs-
+    ambient decision. db_path itself defaults to ~/.dream-studio/state/studio.db
+    when the caller passes None — the SQLite fallback source every collector
+    reads when its DuckDB read comes up empty.
+    """
+    from core.analytics.duckdb_store import analytics_db_path_for
+
+    analytics_path = analytics_db_path_for(db_path)
+    resolved_db_path = (
+        str(Path.home() / ".dream-studio" / "state" / "studio.db")
+        if db_path is None
+        else db_path
+    )
+    return resolved_db_path, analytics_path
+
+
 def fetch_token_usage_records(
     since: str | None = None, *, analytics_db_path: Path | None = None
 ) -> list[dict[str, Any]] | None:

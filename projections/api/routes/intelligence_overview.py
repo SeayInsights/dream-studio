@@ -138,12 +138,13 @@ def get_performance_alerts(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     """Detect slow hooks impacting developer experience.
 
     Alert triggered when: avg_duration > 10s in past 7 days.
-    Reads hook_executions from DuckDB (derived from canonical events via events_fact).
-    The conn parameter is unused; kept for API compatibility with get_critical_issues().
+    Reads hook_executions from DuckDB (derived from canonical events via events_fact),
+    scoped to the analytics store colocated with *conn*'s own authority — never
+    whatever aggregate_metrics.db happens to sit in the ambient DREAM_STUDIO_HOME.
     """
     duck_conn = None
     try:
-        duck_conn = connect_analytics(read_only=True)
+        duck_conn = connect_analytics(analytics_db_path_for_connection(conn), read_only=True)
         query = """
             SELECT
                 hook_name,
@@ -257,10 +258,12 @@ def get_health_snapshot() -> dict[str, Any]:
         tokens_30d = row["total"] if row and row["total"] else 0
         cost_status = "high" if tokens_30d > 100_000_000 else "ok"
 
-        # 3. Performance (avg hook duration in past 7 days) — reads DuckDB hook_executions view
+        # 3. Performance (avg hook duration in past 7 days) — reads DuckDB
+        # hook_executions view, scoped to the analytics store colocated with
+        # this same conn's own authority.
         duck_conn = None
         try:
-            duck_conn = connect_analytics(read_only=True)
+            duck_conn = connect_analytics(analytics_db_path_for_connection(conn), read_only=True)
             hook_row = duck_conn.execute("""
                 SELECT AVG(duration_ms) as avg_duration
                 FROM hook_executions
@@ -375,10 +378,12 @@ def get_whats_working() -> list[dict[str, Any]]:
                 }
             )
 
-        # Win 3: Hook reliability (if very high) — reads DuckDB hook_executions view
+        # Win 3: Hook reliability (if very high) — reads DuckDB hook_executions
+        # view, scoped to the analytics store colocated with this same conn's
+        # own authority.
         duck_conn_wins = None
         try:
-            duck_conn_wins = connect_analytics(read_only=True)
+            duck_conn_wins = connect_analytics(analytics_db_path_for_connection(conn), read_only=True)
             hook_row = duck_conn_wins.execute("""
                 SELECT
                     COUNT(*) as total,

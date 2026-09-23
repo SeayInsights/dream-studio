@@ -2,15 +2,18 @@
 
 import sqlite3
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any
-from projections.core.collectors.authority_sources import skill_usage_sql, token_usage_sql
+from projections.core.collectors.authority_sources import (
+    resolve_collector_paths,
+    skill_usage_sql,
+    token_usage_sql,
+)
 
 
 class ModelCollector:
     """Collects and aggregates model metrics from current telemetry authority."""
 
-    def __init__(self, db_path: str | None = None):
+    def __init__(self, db_path: str | None = None) -> None:
         """
         Initialize ModelCollector
 
@@ -20,20 +23,10 @@ class ModelCollector:
                 connect_analytics()'s ambient default. If given explicitly, the
                 analytics store used is the aggregate_metrics.db beside *this*
                 db_path — never whatever store sits in the ambient
-                DREAM_STUDIO_HOME (see self._analytics_db_path, set below).
+                DREAM_STUDIO_HOME (see self._analytics_db_path, set below, and
+                resolve_collector_paths()'s docstring for the shared logic).
         """
-        from core.analytics.duckdb_store import analytics_db_path_for
-
-        # See SessionCollector.__init__ for why this single call (against the
-        # RAW argument, before the None -> default rewrite) is the whole
-        # explicit-vs-default decision, and why it replaced a per-class
-        # _analytics_db_path() wrapper method that used to be copy-pasted
-        # identically across SessionCollector/TokenCollector/ModelCollector.
-        self._analytics_db_path: Path | None = analytics_db_path_for(db_path)
-        if db_path is None:
-            self.db_path = str(Path.home() / ".dream-studio" / "state" / "studio.db")
-        else:
-            self.db_path = db_path
+        self.db_path, self._analytics_db_path = resolve_collector_paths(db_path)
 
     def collect(self, days: int = 90) -> dict[str, Any]:
         """

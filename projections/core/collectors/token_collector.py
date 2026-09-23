@@ -6,17 +6,16 @@ an explicit cost visibility/source that makes the amount reportable.
 
 import sqlite3
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any
 from core.shared_intelligence.usage_accounting import REPORTABLE_COST_VISIBILITIES
 from projections.api.routes.sqlite_schema import source_status
-from projections.core.collectors.authority_sources import token_usage_sql
+from projections.core.collectors.authority_sources import resolve_collector_paths, token_usage_sql
 
 
 class TokenCollector:
     """Collects and aggregates token usage metrics from token_usage_records."""
 
-    def __init__(self, db_path: str | None = None):
+    def __init__(self, db_path: str | None = None) -> None:
         """
         Initialize TokenCollector
 
@@ -26,20 +25,10 @@ class TokenCollector:
                 connect_analytics()'s ambient default. If given explicitly, the
                 analytics store used is the aggregate_metrics.db beside *this*
                 db_path — never whatever store sits in the ambient
-                DREAM_STUDIO_HOME (see self._analytics_db_path, set below).
+                DREAM_STUDIO_HOME (see self._analytics_db_path, set below, and
+                resolve_collector_paths()'s docstring for the shared logic).
         """
-        from core.analytics.duckdb_store import analytics_db_path_for
-
-        # See SessionCollector.__init__ for why this single call (against the
-        # RAW argument, before the None -> default rewrite) is the whole
-        # explicit-vs-default decision, and why it replaced a per-class
-        # _analytics_db_path() wrapper method that used to be copy-pasted
-        # identically across SessionCollector/TokenCollector/ModelCollector.
-        self._analytics_db_path: Path | None = analytics_db_path_for(db_path)
-        if db_path is None:
-            self.db_path = str(Path.home() / ".dream-studio" / "state" / "studio.db")
-        else:
-            self.db_path = db_path
+        self.db_path, self._analytics_db_path = resolve_collector_paths(db_path)
 
     def collect(self, days: int = 90) -> dict[str, Any]:
         """

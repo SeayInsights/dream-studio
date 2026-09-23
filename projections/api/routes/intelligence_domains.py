@@ -444,9 +444,17 @@ async def get_system_controls_intelligence() -> dict[str, Any]:
     """Get hooks/security domain intelligence.
 
     Returns attention_needed, health metrics, and wins for system controls.
-    Reads hook_executions from DuckDB aggregate_metrics.db (derived from canonical events).
+    Reads hook_executions from DuckDB aggregate_metrics.db (derived from canonical
+    events), scoped to the analytics store colocated with this request's own
+    SQLite authority (a short-lived connection resolves that authority — never
+    whatever aggregate_metrics.db happens to sit in the ambient DREAM_STUDIO_HOME).
     """
-    conn = connect_analytics(read_only=True)
+    sql_conn = get_connection()
+    try:
+        analytics_path = analytics_db_path_for_connection(sql_conn)
+    finally:
+        sql_conn.close()
+    conn = connect_analytics(analytics_path, read_only=True)
     try:
         attention_needed = []
 

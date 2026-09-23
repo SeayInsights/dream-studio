@@ -321,6 +321,172 @@ def test_model_metrics_route_reads_its_own_authoritys_store_not_ambient(
         os.environ.pop("DREAM_STUDIO_HOME", None)
 
 
+# ── T6: dashboard routes read their own authority's analytics store, not
+# ambient (round-2 review finding: 9df1eba/06a4d87/8f166e7 threaded
+# analytics_db_path_for_connection through every token_usage_sql()/
+# fetch_token_usage_records() call in analytics.py, intelligence_domains.py,
+# intelligence_overview.py and metrics.py -- but those same route modules also
+# call connect_analytics() DIRECTLY (for raw_sessions and hook_executions),
+# bypassing token_usage_sql entirely. Those sibling call sites still resolved
+# connect_analytics()'s ambient default regardless of which authority the
+# request's own conn belonged to. Two representative shapes below: analytics.py
+# ::get_performance (already held a conn nearby, via the module's _connect()
+# helper) and intelligence_domains.py::get_system_controls_intelligence (held
+# no SQLite conn at all before this fix).
+
+
+def test_analytics_performance_route_reads_its_own_authoritys_store_not_ambient(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """GET /api/v1/analytics/performance reads raw_sessions from the analytics
+    store colocated with the request's own authority, not the ambient one.
+
+    Seeds the ambient store (an isolated DREAM_STUDIO_HOME) with sessions whose
+    outcome is 'failed', binds the TestClient to a SEPARATE explicit db_path
+    (via DB_PATH_ENV) whose own aggregate_metrics.db sibling holds sessions
+    whose outcome is 'completed', and shows only that authority's sessions
+    come back."""
+    import json
+
+    from core.analytics.duckdb_store import connect_analytics, ensure_analytics_schema
+
+    recent = (datetime.now(UTC) - timedelta(days=1)).isoformat()
+
+    # Ambient store, under an isolated DREAM_STUDIO_HOME: 4 failed sessions.
+    # Distinct session_id per row (in payload) -- raw_sessions dedupes by
+    # session_id via ROW_NUMBER() PARTITION BY, so same-session_id (NULL, if
+    # omitted) rows collapse to one.
+    ambient_home = tmp_path / "ambient-home"
+    (ambient_home / "state").mkdir(parents=True)
+    os.environ["DREAM_STUDIO_HOME"] = str(ambient_home)
+    ambient_conn = connect_analytics(
+        ambient_home / "state" / "aggregate_metrics.db", read_only=False
+    )
+    try:
+        ensure_analytics_schema(ambient_conn)
+        for i in range(4):
+            sid = f"ambient-sess-{i}"
+            ambient_conn.execute(
+                "INSERT INTO events_fact (event_id, event_type, event_timestamp, outcome,"
+                " payload) VALUES (?, 'system.session.recorded', ?, 'failed', ?)",
+                [sid, recent, json.dumps({"session_id": sid})],
+            )
+    finally:
+        ambient_conn.close()
+
+    # This authority's OWN db_path + its OWN sibling aggregate_metrics.db, at a
+    # location unrelated to the ambient DREAM_STUDIO_HOME set above: 3 completed
+    # sessions.
+    own_dir = tmp_path / "own-authority"
+    own_dir.mkdir()
+    db_path = own_dir / "studio.db"
+    own_conn = connect_analytics(own_dir / "aggregate_metrics.db", read_only=False)
+    try:
+        ensure_analytics_schema(own_conn)
+        for i in range(3):
+            sid = f"own-sess-{i}"
+            own_conn.execute(
+                "INSERT INTO events_fact (event_id, event_type, event_timestamp, outcome,"
+                " payload) VALUES (?, 'system.session.recorded', ?, 'completed', ?)",
+                [sid, recent, json.dumps({"session_id": sid})],
+            )
+    finally:
+        own_conn.close()
+
+    client = _client_for_db(db_path, monkeypatch)
+    try:
+        resp = client.get("/api/v1/analytics/performance")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["session_flow"]["completed"] == 3, data["session_flow"]
+        assert data["session_flow"]["failed"] == 0, data["session_flow"]
+        assert data["session_flow"]["started"] == 3, data["session_flow"]
+    finally:
+        DatabaseRuntime.reset_instance()
+        os.environ.pop("DREAM_STUDIO_HOME", None)
+
+
+def test_system_controls_route_reads_its_own_authoritys_store_not_ambient(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """GET /api/v1/intelligence/system-controls reads hook_executions from the
+    analytics store colocated with the request's own authority, not the
+    ambient one.
+
+    get_system_controls_intelligence held no SQLite conn at all before this
+    fix -- it called connect_analytics(read_only=True) with nothing to scope
+    it. Seeds the ambient store with a failing hook, the request's own store
+    (a separate db_path via DB_PATH_ENV) with a DIFFERENT, healthy hook, and
+    shows the response reflects only the request's own hook."""
+    import json
+
+    from core.analytics.duckdb_store import connect_analytics, ensure_analytics_schema
+
+    recent = (datetime.now(UTC) - timedelta(days=1)).isoformat()
+
+    def _hook_row(hook_name: str, status: str) -> dict:
+        return {
+            "hook_name": hook_name,
+            "hook_type": "pre_push",
+            "started_at": recent,
+            "completed_at": recent,
+            "duration_ms": 50,
+            "exit_code": 0 if status == "success" else 1,
+            "status": status,
+        }
+
+    # Ambient store: a hook that fails consistently (attention_needed material).
+    ambient_home = tmp_path / "ambient-home"
+    (ambient_home / "state").mkdir(parents=True)
+    os.environ["DREAM_STUDIO_HOME"] = str(ambient_home)
+    ambient_conn = connect_analytics(
+        ambient_home / "state" / "aggregate_metrics.db", read_only=False
+    )
+    try:
+        ensure_analytics_schema(ambient_conn)
+        for i in range(6):
+            payload = _hook_row("ambient-flaky-hook", "failed")
+            ambient_conn.execute(
+                "INSERT INTO events_fact (event_id, source, event_type, event_timestamp,"
+                " duration_ms, exit_code, status, payload) VALUES"
+                " (?, 'ai', 'system.hook.execution.logged', ?, 50, 1, 'failed', ?)",
+                [f"ambient-hook-{i}", recent, json.dumps(payload)],
+            )
+    finally:
+        ambient_conn.close()
+
+    # Own authority: a DIFFERENT hook, all successful.
+    own_dir = tmp_path / "own-authority"
+    own_dir.mkdir()
+    db_path = own_dir / "studio.db"
+    own_conn = connect_analytics(own_dir / "aggregate_metrics.db", read_only=False)
+    try:
+        ensure_analytics_schema(own_conn)
+        for i in range(6):
+            payload = _hook_row("own-healthy-hook", "success")
+            own_conn.execute(
+                "INSERT INTO events_fact (event_id, source, event_type, event_timestamp,"
+                " duration_ms, exit_code, status, payload) VALUES"
+                " (?, 'ai', 'system.hook.execution.logged', ?, 50, 0, 'success', ?)",
+                [f"own-hook-{i}", recent, json.dumps(payload)],
+            )
+    finally:
+        own_conn.close()
+
+    client = _client_for_db(db_path, monkeypatch)
+    try:
+        resp = client.get("/api/v1/intelligence/system-controls")
+        assert resp.status_code == 200
+        data = resp.json()
+        titles = [issue["title"] for issue in data["attention_needed"]]
+        assert not any("ambient-flaky-hook" in t for t in titles), titles
+        assert data["health"]["hook_success_rate"]["display"] == "6 executions", data["health"]
+        assert data["health"]["hook_success_rate"]["value"] == "100.0%", data["health"]
+    finally:
+        DatabaseRuntime.reset_instance()
+        os.environ.pop("DREAM_STUDIO_HOME", None)
+
+
 # ── T4: process_run_drilldowns reads from execution_events ─────────────────
 
 
