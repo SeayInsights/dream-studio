@@ -204,7 +204,9 @@ ds review --findings --work-order <id> --as-tasks  # files open findings as task
 
 It blocks on an unanswered lane and on any open finding — **whether or not the finding
 could be filed as a task**. Filing is for tracking the work; a finding with no executable
-check yet blocks exactly as hard.
+check yet blocks exactly as hard. And it is enforced, not advisory: `ds work-order pushed
+<id>` refuses while the review holds the work order, naming what holds it. There is no
+override — the lanes run before anything is pushed.
 
 **5. Fix, commit, dispatch again.** Each dispatch is a new round against the new commit.
 A finding is resolved only when a later round answers that lane with a verified pass, and

@@ -308,7 +308,11 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
 
     wo_pushed = work_order_sub.add_parser(
         "pushed",
-        help="Record that the work is on GitHub and waiting for Full CI (status: pushed)",
+        help=(
+            "Record that the work is on GitHub and waiting for Full CI (status: pushed)."
+            " Refused while the review still holds the work order -- no dispatch, an"
+            " unanswered lane or an open finding; see `ds review --status`."
+        ),
     )
     wo_pushed.add_argument("work_order_id", help="Work order UUID")
     wo_pushed.add_argument("--note", default=None, help="The PR or branch it went out on")

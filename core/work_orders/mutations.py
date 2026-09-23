@@ -456,6 +456,33 @@ def advance_work_order(
         if current == to:
             return {"ok": True, "already": True, "work_order_id": work_order_id, "status": to}
 
+        # THE LANES RUN BEFORE ANYTHING IS PUSHED. `pushed` means the work is on GitHub
+        # waiting for Full CI; getting there with an open finding, an unanswered lane or no
+        # review at all is pushing work the bench never cleared. The review records what
+        # holds the work order; this is the one place that must read it -- a report nothing
+        # is required to consult was the bench's own round-one finding against itself.
+        if to == "pushed":
+            from core.work_orders.review_answers import review_status
+
+            review = review_status(work_order_id, db_path=db_path)
+            if review["blocking"]:
+                return {
+                    "ok": False,
+                    "error": (
+                        f"Work order {work_order_id} cannot be pushed: its review still"
+                        f" holds it -- {'; '.join(review['reasons'])}. Run `ds review"
+                        f" --status --work-order {work_order_id}` for the detail."
+                    ),
+                    "review": {
+                        "reasons": review["reasons"],
+                        "unanswered": review["unanswered"],
+                        "open_findings": [
+                            {"lane": f.get("lane"), "reviewer": f.get("reviewer")}
+                            for f in review["open_findings"]
+                        ],
+                    },
+                }
+
         now = datetime.now(UTC).isoformat()
         # A CI FAILURE IS A BLOCKER, and BOTH writers must say so. This row is written
         # directly here and again by WorkOrderProjection on replay; if only the projection
