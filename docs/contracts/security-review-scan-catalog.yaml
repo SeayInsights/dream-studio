@@ -1,5 +1,7 @@
 # Security Review Scan Catalog
-# Generated as documentation/data only. Not execution authority.
+# Hand-authored structured draft -- documentation/data only, not execution
+# authority. Drafted from source_standard_ref below; kept in sync with it by the
+# security_lifecycle_gate docs-drift domain, not by a script.
 catalog_id: "security_review_scan_catalog"
 version: "0.1.0"
 draft_status: "structured_draft"

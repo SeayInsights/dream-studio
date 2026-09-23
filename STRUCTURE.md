@@ -7,7 +7,11 @@ Dream Studio is a local-first AI orchestration and operational intelligence plat
 
 ---
 
-<!-- BEGIN DIRECTORY-TREE: auto-generated from packs.yaml — do not edit manually -->
+<!-- BEGIN DIRECTORY-TREE: hand-maintained, not generated. A pack or top-level
+     directory change requires updating this section in the same changeset --
+     enforced by the repo_structure_navigation docs-drift domain
+     (core/shared_intelligence/contract_registry_domains_ops.py), not by a script.
+     Record the review below with a dated HTML comment, the way prior edits have. -->
 ## Top-Level Layout
 
 ```text

@@ -229,6 +229,25 @@ def _tracked_files(base: Path) -> set[str] | None:
     return {line.strip() for line in (proc.stdout or "").splitlines() if line.strip()}
 
 
+#: A fenced code block is the file SHOWING content -- a rendered example, a template,
+#: a diagram of what ANOTHER file looks like -- not a claim about ITSELF. Two of the
+#: seven files this scan once reported open a fenced example whose first line is
+#: "Generated: [timestamp]": `canonical/skills/analyze/modes/intelligence/reference/
+#: output-format.md` and the review skill's `findings-report.md` template. That is the
+#: same field label this codebase's own generators write for real
+#: (`control/analysis/synthesis.py`, `core/work_orders/start_context.py`) -- accurate
+#: about the REPORT the template describes, not a claim that the template itself is
+#: generated. `docs/reference/layer-map.md`'s architecture diagram says
+#: ".claude/CLAUDE.md (generated from canonical/adapter_authority)" inside its fenced
+#: box, which is also true and also about a different file. Stripped before the banner
+#: search runs. A fence opened but not closed within the scanned prefix is still a
+#: fence -- the prefix is a truncated read, not the end of the block, so the trailing
+#: (odd-indexed) part is dropped along with any closed pair.
+def _drop_fenced_examples(text: str) -> str:
+    parts = text.split("```")
+    return "".join(part for i, part in enumerate(parts) if i % 2 == 0)
+
+
 def unverifiable_generated_claims(root: Path | None = None) -> list[str]:
     """Files asserting they are generated while naming no runnable generator.
 
@@ -260,7 +279,7 @@ def unverifiable_generated_claims(root: Path | None = None) -> list[str]:
             head = path.read_text(encoding="utf-8", errors="replace")[:600]
         except OSError:
             continue
-        if _BANNER.search(head):
+        if _BANNER.search(_drop_fenced_examples(head)):
             out.append(rel.as_posix())
     return sorted(out)
 

@@ -95,11 +95,12 @@ def test_unverifiable_claims_are_reported_but_never_fail():
     worth no more than no claim — but blocking a push on all of them would be a
     wall, so they are a count, not a verdict."""
     claims = gate.unverifiable_generated_claims()
-    # WAS `> 10`, WRITTEN WHEN THIS REPORTED 96. Of those, 42 were files this gate
-    # already verifies, 40 were the word "generated" in prose about a different
-    # file, and 7 were untracked local scratch. Seven are real. The old floor
-    # asserted the noise.
-    assert len(claims) >= 5, "expected the known backlog of unverifiable banners"
+    # WAS `>= 5`, ASSERTING A BACKLOG. The seven pinned in KNOWN_UNVERIFIABLE below
+    # were each resolved (a generator, a reworded claim, or -- for the two field-
+    # label false positives -- a scanner fix) rather than left as permanent debt, so
+    # the live count is whatever KNOWN_UNVERIFIABLE says, not a floor asserting there
+    # must always be some.
+    assert len(claims) == len(KNOWN_UNVERIFIABLE)
     assert gate.run()["status"] == "pass", "unverifiable claims must not fail the gate"
     # And the registered artifacts are not double-counted as unverifiable.
     registered = {a for a, _, _ in gate.ARTIFACTS}
@@ -120,15 +121,25 @@ def test_unverifiable_claims_are_reported_but_never_fail():
 #: works" -- and that the COUNTING survived as measurement asserted by behavioural
 #: tests. This follows that, deliberately: the measurement is pinned here, not turned
 #: into a tenth such gate.
-KNOWN_UNVERIFIABLE = {
-    "STRUCTURE.md",
-    "canonical/skills/analyze/modes/intelligence/reference/output-format.md",
-    "canonical/skills/core/modes/review/templates/output-formats/findings-report.md",
-    "canonical/skills/quality/modes/accessibility/gotchas.yml",
-    "docs/contracts/security-review-scan-catalog.yaml",
-    "docs/reference/adapters.md",
-    "docs/reference/layer-map.md",
-}
+#:
+#: WAS SEVEN. Each was read in full, not just its matched banner phrase, and resolved
+#: on its own merits rather than mechanically:
+#:   STRUCTURE.md, accessibility/gotchas.yml, security-review-scan-catalog.yaml --
+#:     genuinely hand-authored, and each already said so once you read past the
+#:     phrase that matched (a "Last reviewed" trail, "verbatim from ... agent",
+#:     "draft_status: structured_draft"). Reworded to say that plainly instead of
+#:     claiming generation.
+#:   docs/reference/adapters.md -- one sentence used the "generated from" banner
+#:     idiom to describe a DIFFERENT file (.claude/CLAUDE.md); reworded to the
+#:     "projection" vocabulary the rest of the doc already uses for exactly that.
+#:   output-format.md, findings-report.md, layer-map.md -- never a real claim. Each
+#:     matched inside a FENCED example: a rendered template or an architecture
+#:     diagram describing what some OTHER, actually-generated file contains. Fixed
+#:     in the scanner (`_drop_fenced_examples`), not the content, which was already
+#:     accurate.
+#: None needed a generator: none had a code source whose drift a render could catch,
+#: only prose, a judgment call, or a description of a different file.
+KNOWN_UNVERIFIABLE: set[str] = set()
 
 
 def test_the_worklist_is_exactly_the_files_that_need_a_generator():
@@ -196,16 +207,82 @@ def test_a_real_banner_is_still_detected():
         assert _BANNER.search(banner), f"missed a real banner: {banner!r}"
 
 
+def test_a_rendered_examples_field_label_is_not_a_banner():
+    """`output-format.md` and `findings-report.md` are templates a human wrote to show
+    what an actually-generated document (a PRD, a review report) looks like once
+    produced. Both open a fenced example whose first line is "Generated: <something>"
+    -- the same field label this codebase's own generators write for real
+    (`control/analysis/synthesis.py`, `core/work_orders/start_context.py`). That is
+    true of the OUTPUT the template renders, not a claim that the template itself is
+    generated, and the two are indistinguishable to `_BANNER` without knowing they
+    sit inside a fence."""
+    from core.gates.generated_artifacts import _BANNER, _drop_fenced_examples
+
+    example = "Display template for analysis results.\n\n" "```\nPRD Generated: {prd_path}\n```\n"
+    assert _BANNER.search(example), "the raw text still reads as a banner match"
+    assert not _BANNER.search(_drop_fenced_examples(example))
+
+
+def test_a_diagram_about_another_file_is_not_a_banner():
+    """`layer-map.md`'s architecture diagram states, correctly, that
+    `.claude/CLAUDE.md` is generated from the adapter authority -- inside a fenced
+    box-drawing diagram of the whole layer stack, not a claim about layer-map.md."""
+    from core.gates.generated_artifacts import _BANNER, _drop_fenced_examples
+
+    diagram = (
+        "## Layer Stack\n\n```\n"
+        "Projection: .claude/CLAUDE.md (generated from canonical/adapter_authority)\n"
+        "```\n"
+    )
+    assert _BANNER.search(diagram)
+    assert not _BANNER.search(_drop_fenced_examples(diagram))
+
+
+def test_an_unclosed_fence_at_the_read_boundary_still_strips():
+    """`unverifiable_generated_claims` only reads a 600-character prefix of each file,
+    so a fence opened inside that prefix is often not yet closed within it. The read
+    stopping early does not end the block -- treating the tail as unfenced would
+    re-introduce exactly the two false positives this was written to fix."""
+    from core.gates.generated_artifacts import _BANNER, _drop_fenced_examples
+
+    truncated = "before the fence\n```\nGenerated: 2026-04-28 15:30\nthis never clos"
+    assert _BANNER.search(truncated)
+    assert not _BANNER.search(_drop_fenced_examples(truncated))
+
+
+def test_a_banner_outside_any_fence_is_still_caught():
+    """The fence carve-out must not blind the scan to a real banner that sits
+    alongside fenced content elsewhere in the same file -- STRUCTURE.md's own
+    (now-fixed) claim opened outside its directory-tree fence, ahead of it."""
+    from core.gates.generated_artifacts import _BANNER, _drop_fenced_examples
+
+    doc = (
+        "<!-- auto-generated from packs.yaml -- do not edit manually -->\n"
+        "## Layout\n\n```text\nsome/example/tree\n```\n"
+    )
+    assert _BANNER.search(_drop_fenced_examples(doc)), "a real banner outside the fence was lost"
+
+
 def test_the_report_is_not_wired_into_the_verdict():
     """Deliberate, and recorded in task_criteria_measure.py: a ratchet gate over the
     platform's own bookkeeping was one of nine that got deleted. The gate passes while
-    files remain on the list."""
-    from core.gates.generated_artifacts import main, unverifiable_generated_claims
+    files remain on the list.
+
+    WAS `assert unverifiable_generated_claims(), "nothing left to report -- rewrite
+    this test"`, borrowing the real repo's backlog to prove it. That backlog reaching
+    zero -- resolving the seven pinned in KNOWN_UNVERIFIABLE -- is exactly the event
+    that comment warned about, so the property is proven with a planted claim instead
+    of a live one that can run out.
+    """
+    from core.gates.generated_artifacts import main
 
     import sys
     from unittest import mock
 
-    assert unverifiable_generated_claims(), "nothing left to report -- rewrite this test"
-    # main() parses sys.argv, which under pytest holds pytest's own arguments.
-    with mock.patch.object(sys, "argv", ["generated-artifacts"]):
-        assert main() == 0
+    with mock.patch.object(
+        gate, "unverifiable_generated_claims", return_value=["some/planted/claim.md"]
+    ):
+        assert gate.run()["status"] == "pass"
+        # main() parses sys.argv, which under pytest holds pytest's own arguments.
+        with mock.patch.object(sys, "argv", ["generated-artifacts"]):
+            assert main() == 0

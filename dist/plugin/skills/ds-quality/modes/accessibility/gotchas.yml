@@ -1,7 +1,7 @@
 # Accessibility skill — captured gotchas
-# Source: verbatim from accessibility-expert agent (promoted 2026-05-28)
-# These represent real operational knowledge. Do not edit without evidence
-# from a real audit that a gotcha is wrong or outdated.
+# Hand-authored, not generated. Source: verbatim from accessibility-expert agent
+# (promoted 2026-05-28). These represent real operational knowledge; edit only
+# with evidence from a real audit that a gotcha is wrong or outdated.
 
 gotchas:
   - id: a11y-g1
