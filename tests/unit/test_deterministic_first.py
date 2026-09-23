@@ -491,11 +491,16 @@ def test_the_detector_reports_this_repos_real_remaining_cases():
 #: while `ds-workorder execute` and `ds-workorder close` carried nothing and an agent
 #: executing or closing a work order never read it. A test scoped to what exists cannot
 #: report what is missing. Removing an entry here is removing a deliverable.
+#
+# THE TWO ds-workorder ROWS LEFT WITH THEIR PACK, and what each carried has a named home
+# rather than a silent deletion -- both asserted by
+# test_what_the_dissolved_surfaces_carried_still_exists below:
+#   execute  "if it can be computed, compute it", now the registry rule
+#            `a-claim-with-an-exact-answer-is-computed-not-read`
+#   close    naming `prose_only_criteria`, which `ds work-order close` prints itself now
 _RULE_BEARING = [
     ("core", "ds-core", "build"),
     ("core", "ds-core", "verify"),
-    ("ds-workorder", "ds-workorder", "execute"),
-    ("ds-workorder", "ds-workorder", "close"),
 ]
 
 # Each surface carries a DIFFERENT half on purpose: build tells an agent how to prove a
@@ -508,8 +513,6 @@ _RULE_BEARING = [
 _MODE_PHRASES = {
     ("core", "build"): ("grep is not a drive", "unknown"),
     ("core", "verify"): ("computed facts", "unknown"),
-    ("ds-workorder", "execute"): ("grep is not a drive", "unknown"),
-    ("ds-workorder", "close"): ("computed facts", "unknown"),
 }
 
 
@@ -519,8 +522,16 @@ def test_every_surface_the_work_order_named_is_covered():
     Task 5 named four skill surfaces and the rule reached two. The parametrised test below
     passed anyway, because it iterated the same list that had been narrowed. Pinning the
     count separately means a future narrowing fails here rather than passing quietly.
+
+    IT DID ITS JOB. Dissolving the work-order pack took the execute and close surfaces
+    with it, and this refused the shrink until both halves had a stated home:
+    "if it can be computed, compute it" became the registry rule
+    `a-claim-with-an-exact-answer-is-computed-not-read`, and naming `prose_only_criteria`
+    became something `ds work-order close` prints rather than something prose asks a model
+    to do. `test_what_the_dissolved_surfaces_carried_still_exists` asserts both, so the
+    count here may drop only alongside that check passing.
     """
-    assert len(_RULE_BEARING) == 4, _RULE_BEARING
+    assert len(_RULE_BEARING) == 2, _RULE_BEARING
     assert {(pack, mode) for pack, _, mode in _RULE_BEARING} == set(_MODE_PHRASES)
 
 
@@ -548,13 +559,23 @@ def test_the_projection_carries_the_rule(pack, projected_pack, mode):
     ), f"dist/plugin {projected_pack}/{mode} is stale — rebuild with build_plugin_dist"
 
 
-def test_the_close_skill_names_the_reported_key():
-    """An engine key with no reader is the defect this milestone keeps finding."""
-    text = (
-        _REPO / "canonical" / "skills" / "ds-workorder" / "modes" / "close" / "SKILL.md"
-    ).read_text(encoding="utf-8")
-    assert "prose_only_criteria" in text
-    assert "advisory" in text.lower() or "never blocking" in text.lower()
+def test_the_close_command_names_the_reported_key():
+    """An engine key with no reader is the defect this milestone keeps finding.
+
+    `close_work_order` reports `prose_only_criteria` -- which acceptance criteria were
+    prose rather than something it could execute -- and the only thing that surfaced it
+    was a line in the dissolved close mode telling the model to name it. The command
+    prints it now, to stderr beside the main-CI advisory, so an operator reading "closed"
+    is told how many criteria nobody could check whether or not any prose is read.
+    """
+    produced = (_REPO / "core" / "work_orders" / "close_main.py").read_text(encoding="utf-8")
+    assert "prose_only_criteria" in produced, "the close path no longer reports the key"
+
+    surfaced = (_REPO / "interfaces" / "cli" / "commands" / "work_order_lifecycle.py").read_text(
+        encoding="utf-8"
+    )
+    assert "prose_only_criteria" in surfaced, "the key is produced and read by nothing"
+    assert "advisory" in surfaced.lower(), "the key is surfaced without saying it never blocks"
 
 
 # ── Task 6: nothing may fabricate certainty ──────────────────────────────────
@@ -1048,3 +1069,33 @@ def test_a_projection_that_was_never_added_is_not_reported_clean(tmp_path):
     report = projection_parity(tmp_path)
     assert report["status"] == UNKNOWN, report
     assert "SKILL.md" in report["reason"], report["reason"]
+
+
+def test_what_the_dissolved_surfaces_carried_still_exists():
+    """_RULE_BEARING lost two rows. This is what stops that being a quiet deletion.
+
+    The note on that list says removing an entry removes a deliverable, and it is right:
+    its first version covered only the two ds-core modes -- the two that already carried
+    the rule -- so it stayed green while execute and close carried nothing and an agent
+    executing or closing a work order never read it.
+    """
+    import yaml
+
+    registry = yaml.safe_load((_REPO / "canonical" / "rules.yml").read_text(encoding="utf-8"))
+    rule = next(
+        (
+            r
+            for r in registry["rules"]
+            if r["id"] == "a-claim-with-an-exact-answer-is-computed-not-read"
+        ),
+        None,
+    )
+    assert rule is not None, "what the execute surface carried is in no rule"
+    body = " ".join(f"{rule['statement']} {rule.get('why', '')}".split())
+    assert "computed" in body
+    assert "proves the line was typed" in body, "the rule dropped the grep-is-not-a-drive half"
+
+    surfaced = (_REPO / "interfaces" / "cli" / "commands" / "work_order_lifecycle.py").read_text(
+        encoding="utf-8"
+    )
+    assert "prose_only_criteria" in surfaced, "what the close surface carried reaches nobody"

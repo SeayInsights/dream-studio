@@ -145,6 +145,20 @@ rules:
       a typo became a work order whose gates nothing could run. The seeded rows in
       business_work_order_types carry each type's gates, so a type you can create is
       checked to be a type that can be started and closed.
+  - id: a-claim-with-an-exact-answer-is-computed-not-read
+    statement: >
+      A claim that can be computed is computed: run the check and use its result. Finding
+      a symbol in a file proves the line was typed, not that it runs; a remembered shape
+      is not a read one; a symbol existing is not a caller reaching it.
+    source: canonical/rules.yml
+    guidance: true
+    why: >
+      No check can tell a computed answer from a confident reading -- both arrive as the
+      same assertion, which is the whole difficulty. What IS enforced is the consequence:
+      close executes every acceptance criterion anyway, so a task marked done on a reading
+      fails at close, later and with less context than if it had been run at the time.
+      This carried the same weight in the dissolved work-order execute mode and was the one
+      statement there that no other rule covered.
   - id: a-context-artifact-leads-with-the-prompt-chain
     statement: >
       The context an agent reads before executing a work order opens with the prompt
