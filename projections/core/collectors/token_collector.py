@@ -6,7 +6,6 @@ an explicit cost visibility/source that makes the amount reportable.
 
 import sqlite3
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any
 from core.shared_intelligence.usage_accounting import REPORTABLE_COST_VISIBILITIES
 from projections.api.routes.sqlite_schema import source_status
@@ -24,7 +23,9 @@ class TokenCollector:
             db_path: Path to studio.db. If None, uses default ~/.dream-studio/state/studio.db
         """
         if db_path is None:
-            self.db_path = str(Path.home() / ".dream-studio" / "state" / "studio.db")
+            from core.config.database import _default_db_path
+
+            self.db_path = str(_default_db_path())
         else:
             self.db_path = db_path
 

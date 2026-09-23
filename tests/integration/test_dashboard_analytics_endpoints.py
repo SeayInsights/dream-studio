@@ -19,7 +19,6 @@ hardcoded absolute date).
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -30,13 +29,21 @@ from core.event_store.studio_db import _connect
 from projections.api.main import app
 
 
-def _client_with_isolated_stores(tmp_path: Path) -> tuple[TestClient, Path]:
-    """TestClient with the SQLite authority and DuckDB analytics store isolated to tmp."""
+def _client_with_isolated_stores(tmp_path: Path, monkeypatch) -> tuple[TestClient, Path]:
+    """TestClient with the SQLite authority and DuckDB analytics store isolated to tmp.
+
+    monkeypatch.setenv, not a raw os.environ assignment: `_reset_env()` used to undo this
+    with an unconditional os.environ.pop(...), which does not RESTORE the value conftest.py
+    sets for the whole session -- it deletes it, so every test after this one in the same
+    session read a real ~/.dream-studio default from home_dir() instead of the isolated
+    tmp dir conftest chose. Harmless while production code read Path.home() directly and
+    ignored DREAM_STUDIO_HOME; live now that it does not (this sweep).
+    """
     from core.analytics.duckdb_store import connect_analytics, ensure_analytics_schema
 
     home = tmp_path / "ds-home"
     (home / "state").mkdir(parents=True, exist_ok=True)
-    os.environ["DREAM_STUDIO_HOME"] = str(home)
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(home))
     db_path = home / "state" / "studio.db"
     _connect(db_path).close()
     agg = connect_analytics(home / "state" / "aggregate_metrics.db", read_only=False)
@@ -45,7 +52,7 @@ def _client_with_isolated_stores(tmp_path: Path) -> tuple[TestClient, Path]:
     finally:
         agg.close()
     DatabaseRuntime.reset_instance()
-    os.environ[DB_PATH_ENV] = str(db_path)
+    monkeypatch.setenv(DB_PATH_ENV, str(db_path))
     return TestClient(app), home
 
 
@@ -74,19 +81,13 @@ def _seed_session(home: Path, *, session_id: str, started_at: str, outcome: str)
         conn.close()
 
 
-def _reset_env() -> None:
-    DatabaseRuntime.reset_instance()
-    os.environ.pop(DB_PATH_ENV, None)
-    os.environ.pop("DREAM_STUDIO_HOME", None)
-
-
 def _recent_iso() -> str:
     """A full ISO timestamp one day ago — inside the default 30-day window."""
     return (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
 
 
-def test_trends_200(tmp_path: Path) -> None:
-    client, home = _client_with_isolated_stores(tmp_path)
+def test_trends_200(tmp_path: Path, monkeypatch) -> None:
+    client, home = _client_with_isolated_stores(tmp_path, monkeypatch)
     try:
         _seed_session(home, session_id="s-trends", started_at=_recent_iso(), outcome="success")
         resp = client.get("/api/v1/analytics/trends", params={"days": 30})
@@ -97,11 +98,11 @@ def test_trends_200(tmp_path: Path) -> None:
         assert all(isinstance(d, str) for d in body["dates"])
         assert body["dates"], "seeded session should produce at least one trend date"
     finally:
-        _reset_env()
+        DatabaseRuntime.reset_instance()
 
 
-def test_performance_200(tmp_path: Path) -> None:
-    client, home = _client_with_isolated_stores(tmp_path)
+def test_performance_200(tmp_path: Path, monkeypatch) -> None:
+    client, home = _client_with_isolated_stores(tmp_path, monkeypatch)
     try:
         _seed_session(home, session_id="s-perf", started_at=_recent_iso(), outcome="success")
         resp = client.get("/api/v1/analytics/performance", params={"days": 30})
@@ -112,4 +113,4 @@ def test_performance_200(tmp_path: Path) -> None:
         assert "hourly_activity" in body
         assert body["session_flow"]["started"] >= 1
     finally:
-        _reset_env()
+        DatabaseRuntime.reset_instance()

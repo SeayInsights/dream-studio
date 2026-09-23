@@ -83,7 +83,11 @@ def _get_db_path() -> Path | None:
         override = os.environ.get("DREAM_STUDIO_DB_PATH")
         if override:
             return Path(override)
-        return Path.home() / ".dream-studio" / "state" / "studio.db"
+        # _PLUGIN_ROOT is already on sys.path (module load, above); paths.py is
+        # dependency-free so this costs nothing extra over the Path.home() it replaces.
+        from core.config.paths import home_dir
+
+        return home_dir() / "state" / "studio.db"
     except Exception:
         return None
 

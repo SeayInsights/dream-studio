@@ -64,12 +64,16 @@ def _get_db_path() -> Path:
     """Return the canonical path to the Dream Studio SQLite authority database.
 
     Honors the ``DREAM_STUDIO_DB_PATH`` env-var override so tests can redirect
-    away from the operator's real ``~/.dream-studio/state/``.
+    away from the operator's real ``~/.dream-studio/state/``, and DREAM_STUDIO_HOME
+    (via home_dir()) so a relocated home is honored even without an explicit
+    DREAM_STUDIO_DB_PATH.
     """
     override = os.environ.get(_DS_DB_ENV)
     if override:
         return Path(override)
-    return Path.home() / ".dream-studio" / "state" / "studio.db"
+    from core.config.paths import home_dir
+
+    return home_dir() / "state" / "studio.db"
 
 
 def get_active_project_id(db_path: Path) -> str | None:

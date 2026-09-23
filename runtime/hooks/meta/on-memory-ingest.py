@@ -24,8 +24,17 @@ from datetime import UTC
 
 _DEFAULT_INTERVAL_SECS = 300
 
-_STATE_DIR = Path.home() / ".dream-studio" / "state"
-_LAST_RUN_FILE = _STATE_DIR / "memory-ingest-last-run.json"
+
+def _state_dir() -> Path:
+    """Resolved lazily: module import happens before _get_plugin_root() below has put
+    the repo on sys.path, so core.config.paths cannot be imported at module level."""
+    from core.config.paths import home_dir
+
+    return home_dir() / "state"
+
+
+def _last_run_file() -> Path:
+    return _state_dir() / "memory-ingest-last-run.json"
 
 
 def _get_plugin_root() -> Path:
@@ -53,10 +62,11 @@ def _cooldown_secs() -> int:
 
 
 def _within_cooldown() -> bool:
-    if not _LAST_RUN_FILE.is_file():
+    last_run_file = _last_run_file()
+    if not last_run_file.is_file():
         return False
     try:
-        data = json.loads(_LAST_RUN_FILE.read_text(encoding="utf-8"))
+        data = json.loads(last_run_file.read_text(encoding="utf-8"))
         elapsed = time.time() - data.get("completed_at_ts", 0)
         return elapsed < _cooldown_secs()
     except Exception:
@@ -67,7 +77,7 @@ def _write_result(results: list, duration_ms: float) -> None:
     try:
         from datetime import datetime
 
-        _STATE_DIR.mkdir(parents=True, exist_ok=True)
+        _state_dir().mkdir(parents=True, exist_ok=True)
         summary = {
             "ok": True,
             "completed_at": datetime.now(UTC).isoformat(),
@@ -88,7 +98,7 @@ def _write_result(results: list, duration_ms: float) -> None:
             "total_updated": sum(r.records_updated for r in results),
             "total_errors": sum(len(r.errors) for r in results),
         }
-        _LAST_RUN_FILE.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        _last_run_file().write_text(json.dumps(summary, indent=2), encoding="utf-8")
     except Exception:
         pass
 

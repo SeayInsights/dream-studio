@@ -19,6 +19,12 @@ from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
+# `py scripts/runtime_state_hash_guard.py` puts this file's own directory on
+# sys.path, not the repo root, so the resolver import below needs a manual add.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 MUTATION_EXIT_CODE = 90
 
 
@@ -33,7 +39,17 @@ class FileSnapshot:
 
 
 def default_watch_paths(home: Path | None = None) -> list[Path]:
-    state = (home or Path.home()) / ".dream-studio" / "state"
+    # `home`, when given, is an OS-home-LIKE base (tests pass tmp_path and expect
+    # tmp_path/.dream-studio/state -- see test_runtime_state_hash_guard.py), so it
+    # still gets ".dream-studio" appended here. Only the "nothing given" branch used
+    # to hardcode Path.home() directly, which is the one that ignored DREAM_STUDIO_HOME;
+    # home_dir() already resolves the override, so it is not appended a second time.
+    if home is not None:
+        state = home / ".dream-studio" / "state"
+    else:
+        from core.config.paths import home_dir
+
+        state = home_dir() / "state"
     return [
         state / "studio.db",
         state / "studio.db.bak",

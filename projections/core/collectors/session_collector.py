@@ -9,7 +9,6 @@ the window while SQLite does (events not yet harvested).
 
 import sqlite3
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any
 from projections.api.routes.sqlite_schema import (
     has_columns,
@@ -42,7 +41,9 @@ class SessionCollector:
                 store is resolved by connect_analytics().
         """
         if db_path is None:
-            self.db_path = str(Path.home() / ".dream-studio" / "state" / "studio.db")
+            from core.config.database import _default_db_path
+
+            self.db_path = str(_default_db_path())
         else:
             self.db_path = db_path
 

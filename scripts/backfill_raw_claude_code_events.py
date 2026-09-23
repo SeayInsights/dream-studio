@@ -25,7 +25,12 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 DB_PATH_ENV = "DREAM_STUDIO_DB_PATH"
-_DEFAULT_DB_PATH = Path.home() / ".dream-studio" / "state" / "studio.db"
+
+# `py scripts/backfill_raw_claude_code_events.py` puts this file's own directory
+# on sys.path, not the repo root, so the resolver import below needs a manual add.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 
 def _resolve_db_path(cli_override: str | None) -> Path:
@@ -34,7 +39,9 @@ def _resolve_db_path(cli_override: str | None) -> Path:
     env = os.environ.get(DB_PATH_ENV)
     if env:
         return Path(env)
-    return _DEFAULT_DB_PATH
+    from core.config.database import _default_db_path
+
+    return _default_db_path()
 
 
 # ---------------------------------------------------------------------------

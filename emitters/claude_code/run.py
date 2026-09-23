@@ -92,10 +92,12 @@ def _version_check() -> str | None:
             _db_derived = _get_db_path().parent.parent / "state" / "installed-version"
         except Exception:
             pass
-        home = os.environ.get("USERPROFILE") or os.environ.get("HOME") or ""
-        _home_derived: Path | None = (
-            Path(home) / ".dream-studio" / "state" / "installed-version" if home else None
-        )
+        # home_dir(), not USERPROFILE/HOME directly: those are the OS user profile,
+        # not the Dream Studio home -- reading them here bypassed DREAM_STUDIO_HOME.
+        # sys.path already carries plugin_root (main(), above), so this import is cheap.
+        from core.config.paths import home_dir
+
+        _home_derived: Path | None = home_dir() / "state" / "installed-version"
         installed_version_file: Path | None = None
         for candidate in (_db_derived, _home_derived):
             if candidate is not None and candidate.exists():
@@ -139,16 +141,18 @@ def _should_nag_this_session(payload: dict) -> bool:
         return True
     try:
         safe = "".join(c for c in session_id if c.isalnum() or c in "-_")[:64]
-        home = os.environ.get("USERPROFILE") or os.environ.get("HOME") or ""
-        if not home:
-            return True
-        marker = Path(home) / ".dream-studio" / "state" / f".nagged-{safe}"
+        # home_dir(), not USERPROFILE/HOME: those name the OS user profile, and
+        # reading them here wrote this marker into the real home even under
+        # `ds --home X`, which sets DREAM_STUDIO_HOME, not the OS home vars.
+        from core.config.paths import home_dir
+
+        marker = home_dir() / "state" / f".nagged-{safe}"
         if marker.exists():
             return False
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.touch()
         return True
-    except OSError:
+    except Exception:
         return True
 
 

@@ -15,9 +15,17 @@ Dependencies: PyYAML (stdlib + yaml only)
 import argparse
 import fnmatch
 import json
-import os
 import sys
 from pathlib import Path
+
+# This script runs in place from the repo (`py -3.12 templates/security/etl/...py`,
+# see templates/security/README.md), which puts its own directory on sys.path, not
+# the repo root -- the resolver import below needs a manual add.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from core.config.paths import home_dir  # noqa: E402
 
 try:
     import yaml
@@ -47,7 +55,7 @@ def compliance_dir() -> Path:
 
 
 def load_client_profile(client: str) -> dict:
-    profile_path = Path(os.path.expanduser(f"~/.dream-studio/clients/{client}.yaml"))
+    profile_path = home_dir() / "clients" / f"{client}.yaml"
     if not profile_path.exists():
         print(
             f"[map_compliance] WARNING: client profile not found at {profile_path}. "

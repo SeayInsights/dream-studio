@@ -36,13 +36,18 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-STATE_DIR = Path.home() / ".dream-studio" / "state"
+# runtime.lib is the stdlib-only sibling this file already lives in (see
+# _enqueue_hook_execution's docstring) -- importing it does not pull core, so the
+# --home fix does not reopen the 259 ms import cost this module exists to avoid.
+from runtime.lib.home import home_dir as _home_dir
+
+STATE_DIR = _home_dir() / "state"
 AUTHORITY_DB = STATE_DIR / "studio.db"
 FILES_DB = STATE_DIR / "files.db"
 SESSION_DIR = STATE_DIR / "enforce"
 
 # Paths never subject to enforcement (module constants so tests can patch them).
-DS_HOME = Path.home() / ".dream-studio"
+DS_HOME = _home_dir()
 TEMP_ROOT = Path(tempfile.gettempdir())
 
 # Repo-internal directories whose files are never product source.

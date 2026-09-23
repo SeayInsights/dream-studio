@@ -42,6 +42,7 @@ if str(PLUGIN_ROOT) not in sys.path:
 sys.path.insert(0, str(PLUGIN_ROOT / "hooks"))
 
 from control.execution.dispatch_tracking import run_handlers  # noqa: E402
+from core.config import paths  # noqa: E402
 
 HANDLERS = [
     (
@@ -53,7 +54,7 @@ HANDLERS = [
     ("on-structure-check", PLUGIN_ROOT / "runtime" / "hooks" / "quality" / "on-structure-check.py"),
 ]
 
-STATE_DIR = Path.home() / ".dream-studio" / "state"
+STATE_DIR = paths.state_dir()
 
 PROTECTED_PATHS = [
     "settings.json",
