@@ -168,13 +168,11 @@ def _resolve_project_id(
         try:
             db_path = _require_db(source_root, dream_studio_home)
             if db_path is not None:
-                with _connect(db_path) as conn:
-                    row = conn.execute(
-                        "SELECT project_id FROM business_work_orders WHERE work_order_id = ?",
-                        (work_order_id,),
-                    ).fetchone()
-                    if row:
-                        return row[0]
+                from core.work_orders.queries import work_order_project
+
+                found = work_order_project(work_order_id, db_path=db_path)
+                if found:
+                    return found
         except Exception:
             pass
 

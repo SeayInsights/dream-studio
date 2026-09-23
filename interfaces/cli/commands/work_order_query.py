@@ -524,7 +524,6 @@ def _work_order_add_task(
     it is not -- rather than refusing, which would reject exactly the just-created work
     order the mutation goes out of its way to accept.
     """
-    import sqlite3
 
     from core.installed_runtime import resolve_installed_runtime_paths
     from core.work_orders.mutations import create_task
@@ -557,15 +556,10 @@ def _work_order_add_task(
         db_path = resolve_installed_runtime_paths(
             source_root=source_root, dream_studio_home=dream_studio_home
         ).sqlite_path
-        conn = sqlite3.connect(str(db_path))
-        try:
-            row = conn.execute(
-                "SELECT project_id FROM business_work_orders WHERE work_order_id = ?",
-                (work_order_id,),
-            ).fetchone()
-        finally:
-            conn.close()
-        if row is None:
+        from core.work_orders.queries import work_order_project
+
+        project_id = work_order_project(work_order_id, db_path=db_path)
+        if project_id is None:
             print(
                 json.dumps(
                     {
@@ -579,7 +573,6 @@ def _work_order_add_task(
                 )
             )
             return 1
-        project_id = row[0]
 
     # THE DECLARATION IS PERSISTED, not printed and discarded. Found by the
     # task-criteria-baseline ratchet reporting `0 declared` while a task admitted on a
