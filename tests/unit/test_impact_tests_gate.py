@@ -16,6 +16,7 @@ needs three sources, not one:
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -66,11 +67,35 @@ def test_the_selection_blind_test_is_found_as_a_sweep_test():
 
 
 def test_sweep_discovery_is_by_pattern_not_by_list():
-    """A hand-maintained list is the thing that rots. The module holds a pattern and
-    walks the tree; it must not carry a literal test path anywhere."""
+    """A hand-maintained list is the thing that rots. Sweep discovery holds a pattern and
+    walks the tree.
+
+    ALWAYS_RUN is a list, and deliberately so: those files are a third category -- the
+    cross-cutting guards that used to be a separate ci.yml step -- and enumeration is what
+    they ARE, because nothing about a diff reaches them. So the claim here is the one that
+    was always meant: the SWEEP class is discovered, never enumerated, and no test path is
+    hardcoded anywhere except inside that one declaration.
+    """
     source = Path(gate.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    sweep = next(
+        n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "sweep_tests"
+    )
+    assert not re.search(
+        r"tests/unit/[a-z_/]+\.py", ast.get_source_segment(source, sweep) or ""
+    ), "sweep_tests enumerates a test path instead of discovering it"
+
+    always = next(
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Assign)
+        and any(getattr(t, "id", None) == "ALWAYS_RUN" for t in n.targets)
+    )
+    declared = ast.get_source_segment(source, always) or ""
     body = source.split('"""', 2)[-1]  # after the module docstring, which cites examples
-    assert not re.search(r"tests/unit/[a-z_/]+\.py", body), "a test path is hardcoded"
+    stray = [m for m in re.findall(r"tests/unit/[a-z_/]+\.py", body) if m not in declared]
+    assert not stray, f"a test path is hardcoded outside ALWAYS_RUN: {stray}"
 
 
 def test_a_test_that_merely_mentions_glob_in_prose_is_not_swept(tmp_path):
@@ -172,7 +197,11 @@ def test_the_union_is_never_empty():
     selection = gate.select_tests([], REPO_ROOT)
     assert selection["dependent_tests"] == []
     assert selection["tests"], "an empty change set produced nothing to run"
-    assert selection["tests"] == selection["sweep_tests"]
+    # The two sources a change cannot switch off: the sweep class and the always-run
+    # guards. A diff of nothing still runs both.
+    assert selection["tests"] == sorted(
+        set(selection["sweep_tests"]) | set(selection["always_run"])
+    )
 
 
 def test_selection_keeps_provenance_for_the_log():
@@ -180,7 +209,11 @@ def test_selection_keeps_provenance_for_the_log():
     the test was reached by the change or always runs, because the remedies differ."""
     selection = gate.select_tests(PR_782, REPO_ROOT)
     for path in selection["tests"]:
-        assert path in selection["dependent_tests"] or path in selection["sweep_tests"], path
+        assert (
+            path in selection["dependent_tests"]
+            or path in selection["sweep_tests"]
+            or path in selection["always_run"]
+        ), path
 
 
 def test_a_dependent_test_that_no_longer_exists_is_dropped_not_passed_to_pytest(tmp_path):
@@ -224,3 +257,67 @@ def test_the_gate_reuses_the_ci_test_environment_rather_than_defining_a_second()
     source = Path(gate.__file__).read_text(encoding="utf-8")
     assert "_isolated_test_env" in source
     assert "mkdtemp" not in source, "the gate defines its own isolation instead of reusing"
+
+
+def test_the_always_run_files_exist_and_are_the_only_hardcoded_list():
+    """pr-smoke had TWO places deciding what it runs: the impact step and a hardcoded
+    sixteen-file step in ci.yml. The list is here now, so the union is computed once.
+
+    Transcribing it was the risk and it nearly bit: the first pass captured eleven of the
+    sixteen, having read the step's first screenful, which would have quietly stopped
+    running the locale-decode, fail-open, test-isolation, fixture-parity and payload-seam
+    gates. A path that no longer exists is caught here rather than by a step that silently
+    runs fewer files than it names.
+    """
+    missing = [p for p in gate.ALWAYS_RUN if not (REPO_ROOT / p).is_file()]
+    assert not missing, f"ALWAYS_RUN names files that are not in the tree: {missing}"
+    assert len(gate.ALWAYS_RUN) >= 16, "the always-run list shrank; was that deliberate?"
+
+
+def test_ci_no_longer_carries_a_second_list_of_tests_to_run():
+    """One decider. A second list in the workflow would have to agree with this one by
+    inspection, which is the arrangement these gates keep removing."""
+    import yaml
+
+    ci = yaml.safe_load(
+        (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    )
+    steps = ci["jobs"]["pr-smoke"]["steps"]
+
+    # One step may still name files, and it is not a selection. The Store-alias step
+    # reruns two hook tests with a stub shadowing bare `python`, which is a SCENARIO --
+    # the impact step runs with a working interpreter and cannot express it.
+    SCENARIO = "Stock Windows Store-alias state"
+    offenders = [
+        s.get("name", "(unnamed)")
+        for s in steps
+        if "pytest" in str(s.get("run", "")) and s.get("name") != SCENARIO
+    ]
+    assert not offenders, (
+        "ci.yml runs pytest directly again, so what pr-smoke runs is decided in two "
+        f"places: {offenders}"
+    )
+
+    # And the exemption is checked, not granted, or a plain list of tests could take the
+    # exempt step's name and walk straight through this gate.
+    for step in steps:
+        if step.get("name") == SCENARIO:
+            assert "store-alias" in str(step.get("run", "")), (
+                f"{SCENARIO!r} no longer builds the Store-alias shim, so it is now just a "
+                "second list of tests wearing the exemption's name"
+            )
+
+    assert any("impact_tests_gate.py" in str(s.get("run", "")) for s in steps)
+
+
+def test_the_job_budget_matches_the_work():
+    """Measured: the impact step took 12m05s on Windows for a 127-file selection, and the
+    job's 15-minute budget -- set when it ran sixteen hardcoded files -- cancelled Windows
+    mid-step. A cancelled leg reported as a non-pass is exactly the two-of-three green this
+    line of work exists to refuse."""
+    import yaml
+
+    ci = yaml.safe_load(
+        (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    )
+    assert ci["jobs"]["pr-smoke"].get("timeout-minutes", 0) >= 25
