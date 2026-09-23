@@ -269,6 +269,45 @@ def test_pre_push_docs_drift_gate_blocks_a_real_missing_doc_case() -> None:
     assert result.exit_code != 0
 
 
+def test_pre_push_docs_drift_gate_degrades_gracefully_with_no_resolvable_base_ref() -> None:
+    """Pre-push runs on a machine where `origin/main` may not resolve -- no
+    `origin` remote, a clone that has not fetched, a first push with no
+    upstream. contract_docs_drift_gate.py::_changed_files already degrades for
+    an unresolvable base ref (the `git diff` subprocess fails, `_git_changed`
+    catches the non-zero exit and returns [], and the function falls back to
+    staged/HEAD/untracked) rather than raising -- but that fallback was never
+    exercised through the actual pre-push invocation this gate now gets. Pins
+    it there so a future change on either side cannot reintroduce a crash or a
+    hang that would refuse every push on such a machine. Detached HEAD and a
+    branch with no upstream need no equivalent case: the gate diffs the fixed
+    ref name `origin/main`, never `HEAD`'s own branch or its upstream, so
+    those two states cannot affect it either way."""
+    from core.gates import pre_push as pre_push_mod
+
+    manifest = pre_push_mod.load_manifest()
+    gate = next(g for g in manifest["gates"] if g["id"] == "docs-drift")
+    gate = dict(gate)
+    gate["env"] = {
+        **(gate.get("env") or {}),
+        "DREAM_STUDIO_BASE_REF": "origin/this-ref-does-not-exist-anywhere",
+    }
+
+    result = pre_push_mod.run_gate(gate, repo_root=REPO_ROOT, timeout_seconds=30)
+
+    assert result.exit_code != -1, (
+        "an unresolvable base ref crashed or hung the gate instead of degrading gracefully:\n"
+        f"{result.stdout_tail}\n{result.stderr_tail}"
+    )
+    # exit_code != -1 alone would not catch an UNCAUGHT exception inside the gate
+    # script itself: Python's own crash exit (1) is indistinguishable from a real
+    # "docs are stale" failure (also exit 1) by exit code alone. Only the traceback
+    # in stderr tells them apart, so check for it directly.
+    assert "Traceback" not in result.stderr_tail, (
+        "an unresolvable base ref crashed the gate script (uncaught exception) rather than "
+        f"degrading to its documented staged/HEAD/untracked fallback:\n{result.stderr_tail}"
+    )
+
+
 def test_engine_skill_coupling_domains_exist() -> None:
     """WO-SKILL-COUPLING: the three new deterministic engine→skill coupling domains
     must be registered and release-blocking."""
