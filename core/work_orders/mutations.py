@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import Any
 
 from core.event_store.studio_db import _connect
+from core.work_orders.models import (
+    DEFAULT_WORK_ORDER_PRIORITY,
+    WORK_ORDER_PRIORITIES,
+)
 from core.work_orders.task_status import (
     TASK_ABANDONED_STATUSES,
     TASK_DONE_STATUSES,
@@ -723,6 +727,7 @@ def create_work_order(
     title: str,
     description: str = "",
     work_order_type: str | None = None,
+    priority: str = DEFAULT_WORK_ORDER_PRIORITY,
     originating_symptom: str | None = None,
     module_boundary: str | list[str] | None = None,
     source_root: Path,
@@ -767,6 +772,23 @@ def create_work_order(
         return {
             "ok": False,
             "error": "milestone_id is required: every work order must belong to a milestone",
+        }
+
+    # REFUSED HERE, BECAUSE THE COLUMN CANNOT REFUSE OUT LOUD. Migration 157 puts a CHECK
+    # on priority, but the projection inserts with INSERT OR IGNORE -- so a value the CHECK
+    # rejects does not raise: SQLite skips the row. Measured: a work order created with
+    # `priority="urgent"` produced no row at all, no error, and no trace. A work order that
+    # silently does not exist is worse than one carrying a wrong label, and the CHECK is the
+    # last line of defence rather than the one that reports.
+    if priority not in WORK_ORDER_PRIORITIES:
+        return {
+            "ok": False,
+            "error": (
+                f"priority {priority!r} is not one the platform declares."
+                f" Valid: {', '.join(WORK_ORDER_PRIORITIES)}."
+                " The queue sorts on this, so an unrecognised value is not a label that"
+                " reads oddly -- it decides when the work is picked up."
+            ),
         }
 
     # THE WORK ORDER IS A PROMPT, NOT A LABEL. Each layer of project -> milestone ->
@@ -824,6 +846,12 @@ def create_work_order(
             "title": title,
             "status": "created",
             "type": work_order_type or "",
+            # IN THE PAYLOAD, not only in the signature. `description` was accepted by
+            # this door, left out of the payload and never read by the projection -- 443
+            # of 920 work orders stored an empty one. A field that stops at any layer is
+            # indistinguishable from a field nobody set, and this one is what the queue
+            # sorts on.
+            "priority": priority,
         }
         if originating_symptom is not None:
             _payload["originating_symptom"] = originating_symptom
