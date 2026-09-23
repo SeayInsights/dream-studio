@@ -100,6 +100,8 @@ xfail marker. This decision is about the word, not the window.
 
 from __future__ import annotations
 
+from typing import Any
+
 #: Statuses meaning the task is finished. Order is not significant.
 TASK_DONE_STATUSES: tuple[str, ...] = ("complete", "done")
 
@@ -219,14 +221,31 @@ WORK_ORDER_TRANSITIONS: dict[str, tuple[str, ...]] = {
     "deleted": (),
 }
 
-#: The phases a work order can be blocked from -- and so the phases unblock may return to.
-BLOCKABLE_WORK_ORDER_STATUSES: tuple[str, ...] = (
-    "created",
-    "in_progress",
-    "in_review",
-    "pushed",
-    "ci_issues",
+#: The phases a work order can be blocked from -- and so the phases unblock may return to:
+#: every status the table lets move on. DERIVED, not listed, so the moves that sit outside
+#: the chain read the same vocabulary as the chain itself and cannot drift from it. (The
+#: CHECK in migration 158 has to spell them out; a test holds it to this.)
+BLOCKABLE_WORK_ORDER_STATUSES: tuple[str, ...] = tuple(
+    status for status, moves in WORK_ORDER_TRANSITIONS.items() if moves
 )
+
+#: The phases a work order closes from -- the ones the table lets reach `closed`.
+CLOSEABLE_WORK_ORDER_STATUSES: tuple[str, ...] = tuple(
+    status for status, moves in WORK_ORDER_TRANSITIONS.items() if "closed" in moves
+)
+
+
+def remembers_block_phase(conn: Any) -> bool:
+    """Whether migration 158 has given this authority `blocked_from_status`.
+
+    Unreleased migrations do not auto-apply to a live authority DB, so the column can be
+    absent while the code that uses it is present. The writers and the projection both
+    ask, and ask HERE: two copies of this check would be two answers to one question.
+    """
+    return any(
+        r[1] == "blocked_from_status"
+        for r in conn.execute("PRAGMA table_info(business_work_orders)").fetchall()
+    )
 
 
 def transition_refusal(work_order_id: str, current: str | None, target: str) -> str | None:

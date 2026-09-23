@@ -143,13 +143,21 @@ def test_advance_takes_the_next_step(home):
     assert result["ok"] is True and _status(home) == "in_review"
 
 
-def test_close_refuses_from_in_progress_even_forced(home):
+def test_close_refuses_from_in_progress_even_forced(home, monkeypatch):
     """Force waives gates, which are judgments. The phase is a fact about where the work
-    is, and a refused close must leave nothing behind: no status change, no event."""
+    is, and a refused close must leave nothing behind: no status change, no event -- and
+    no bookkeeping, because the refusal comes before the boundary is pinned (the write at
+    the end refuses too, but only after everything before it has run)."""
+    from core.work_orders import delivery_boundary
     from core.work_orders.close import close_work_order
 
+    pinned = []
+    monkeypatch.setattr(
+        delivery_boundary, "record_delivery_boundary_end", lambda *a, **k: pinned.append(a)
+    )
     _set_status(home, "in_progress")
     result = close_work_order(work_order_id=WO_ID, force=True, source_root=home)
+    assert pinned == [], "the close did work before refusing the phase"
     assert result["ok"] is False and result.get("phase_refused") is True
     assert _status(home) == "in_progress"
     assert _events(home, "work_order.closed") == []
@@ -319,3 +327,120 @@ def test_a_red_run_files_nothing_new_on_a_ci_issues_work_order():
         remediation=remediation,
     )
     assert action["ok"] is True and action["did"].startswith("nothing")
+
+
+# ── round-one findings ───────────────────────────────────────────────────────
+
+
+def test_a_block_that_lands_while_closing_is_not_overwritten(home, monkeypatch):
+    """Close checks the phase at the top and writes `closed` minutes later; a block landing
+    in between was silently overwritten (receiver's-view lane). The write now carries the
+    condition, so the close is refused and nothing announces a close that did not land."""
+    from core.work_orders import delivery_boundary
+    from core.work_orders.close import close_work_order
+
+    _set_status(home, "pushed")
+
+    def block_meanwhile(*args, **kwargs):
+        _set_status(home, "blocked")
+
+    monkeypatch.setattr(delivery_boundary, "record_delivery_boundary_end", block_meanwhile)
+    result = close_work_order(work_order_id=WO_ID, force=True, source_root=home)
+    assert result["ok"] is False and result.get("phase_refused") is True, result
+    assert _status(home) == "blocked"
+    assert _events(home, "work_order.closed") == []
+    # The per-gate bypass records follow the write too. (Skipping the review itself is
+    # recorded earlier, and truly: it was skipped whether or not the close lands.)
+    per_gate = [
+        e
+        for e in _events(home, "gate.bypassed")
+        if "proceeded without independent review" not in json.dumps(e)
+    ]
+    assert per_gate == [], per_gate
+
+
+def _task(home: Path, criterion: str) -> None:
+    conn = sqlite3.connect(str(home / "state" / "studio.db"))
+    conn.execute(
+        "INSERT INTO business_tasks (task_id, work_order_id, project_id, title, description,"
+        " acceptance_criteria, status, created_at, updated_at)"
+        " VALUES ('t-open', ?, ?, 'Fix main', 'd', ?, 'pending', ?, ?)",
+        (WO_ID, PROJECT_ID, criterion, NOW, NOW),
+    )
+    conn.commit()
+    conn.close()
+
+
+def _task_criteria(home: Path) -> list[str]:
+    conn = sqlite3.connect(str(home / "state" / "studio.db"))
+    try:
+        return [
+            r[0]
+            for r in conn.execute(
+                "SELECT coalesce(acceptance_criteria, '') FROM business_tasks"
+                " WHERE work_order_id = ? ORDER BY created_at",
+                (WO_ID,),
+            )
+        ]
+    finally:
+        conn.close()
+
+
+_OLD = "tests/unit/test_work_order_phases_run_in_order.py::test_every_status_is_in_the_table"
+_NEW = "tests/unit/test_work_order_phases_run_in_order.py::test_advance_takes_the_next_step"
+
+
+def test_a_red_run_files_a_new_failure_on_a_ci_issues_work_order(home):
+    """ "Already recorded" was true of the old failure and false of a new one, and the new
+    one was dropped (receiver's-view lane). Only what no open task names is filed."""
+    from core.health.main_ci_watch import remediation_task
+    from interfaces.cli.commands.ci import _act
+
+    repo = Path(__file__).resolve().parents[2]
+    conn = sqlite3.connect(str(home / "state" / "studio.db"))
+    conn.execute("UPDATE business_projects SET project_path = ?", (str(repo),))
+    conn.commit()
+    conn.close()
+    _set_status(home, "ci_issues")
+    _task(home, f"TEST-CHECK: {_OLD}")
+    wo = {"work_order_id": WO_ID, "project_id": PROJECT_ID, "status": "ci_issues"}
+    kwargs = dict(
+        status="failure",
+        verdict={},
+        unrunnable=[],
+        source_root=repo,
+        dream_studio_home=home,
+        dry_run=False,
+        remediation=remediation_task,
+    )
+
+    same = _act(wo, nodes=[_OLD], **kwargs)
+    assert same["did"].startswith("nothing") and len(_task_criteria(home)) == 1
+
+    more = _act(wo, nodes=[_OLD, _NEW], **kwargs)
+    assert more["ok"] is True and more["new_failures"] == [_NEW], more
+    filed = _task_criteria(home)[-1]
+    assert _NEW in filed and _OLD not in filed, filed
+    assert _status(home) == "ci_issues"
+
+
+def test_migration_158_allows_exactly_the_open_phases():
+    """SQL cannot import the vocabulary, so the CHECK spells it out; this holds the two
+    together, the way the phases themselves are held to the table."""
+    import re
+
+    sql = (
+        Path(__file__).resolve().parents[2]
+        / "core/event_store/migrations/158_work_order_blocked_from_status.sql"
+    ).read_text(encoding="utf-8")
+    listed = re.search(r"blocked_from_status IN \(([^)]*)\)", sql).group(1)
+    assert set(re.findall(r"'([a-z_]+)'", listed)) == set(BLOCKABLE_WORK_ORDER_STATUSES)
+
+
+def test_the_writer_and_the_projection_ask_one_column_check():
+    """Two copies of "has migration 158 landed" would be two answers to one question."""
+    from core.projections import work_order_projection
+    from core.work_orders import mutations, task_status
+
+    assert mutations.remembers_block_phase is task_status.remembers_block_phase
+    assert work_order_projection.remembers_block_phase is task_status.remembers_block_phase

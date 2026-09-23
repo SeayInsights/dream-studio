@@ -148,6 +148,42 @@ def remediation_task(
     return out
 
 
+def nodes_already_filed(db_path: Path, work_order_id: str) -> str:
+    """Everything the work order's OPEN tasks say, so a red run can tell a failure already
+    being worked from a new one.
+
+    Open only: a test whose task is complete and fails again is a regression, not a copy.
+    Returned as text rather than parsed node ids, because a task names its tests in the
+    criterion AND the description (only the first few make the criterion), and a node
+    named in either is being worked.
+    """
+    import sqlite3
+
+    from core.work_orders.task_status import (
+        TASK_ABANDONED_STATUSES,
+        TASK_DONE_STATUSES,
+        sql_placeholders,
+    )
+
+    settled = TASK_DONE_STATUSES + TASK_ABANDONED_STATUSES
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return ""
+    try:
+        rows = conn.execute(
+            "SELECT coalesce(acceptance_criteria, ''), coalesce(description, '')"
+            " FROM business_tasks WHERE work_order_id = ?"
+            f" AND status NOT IN ({sql_placeholders(settled)})",
+            (work_order_id, *settled),
+        ).fetchall()
+    except sqlite3.Error:
+        return ""
+    finally:
+        conn.close()
+    return "\n".join(f"{a}\n{d}" for a, d in rows)
+
+
 def work_orders_awaiting_ci(db_path: Path) -> list[dict[str, Any]]:
     """Work orders at `pushed` or `ci_issues`: the ones whose fate this run decides.
 

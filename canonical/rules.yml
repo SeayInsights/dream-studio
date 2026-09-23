@@ -251,10 +251,12 @@ rules:
   - id: a-work-order-moves-through-its-phases-in-order
     statement: >
       A work order moves created -> in_progress -> in_review -> pushed -> ci_issues ->
-      closed, and ci_issues is the only phase that may be skipped. One table decides every
-      move and start, advance, close, block, unblock and reopen all ask it: close accepts
-      only pushed or ci_issues and --force does not change that, unblock returns to the
-      phase the work order was blocked from, and reopen takes only what is closed.
+      closed, and ci_issues is the only phase that may be skipped. One table decides:
+      start, advance and close ask it for the move, and block, unblock and reopen -- the
+      moves outside the chain -- read the open and closeable phases derived from it. Close
+      accepts only pushed or ci_issues, holds that phase through its own write, and --force
+      does not change it; unblock returns to the phase the work order was blocked from, and
+      reopen takes only what is closed.
     source: core/work_orders/task_status.py
     enforced_by:
       - tests/unit/test_work_order_phases_run_in_order.py::test_the_table_is_the_chain_with_only_ci_issues_skippable
@@ -263,6 +265,7 @@ rules:
       - tests/unit/test_work_order_phases_run_in_order.py::test_start_refuses_a_work_order_past_in_progress
       - tests/unit/test_work_order_phases_run_in_order.py::test_unblock_returns_to_the_phase_it_was_blocked_from
       - tests/unit/test_work_order_phases_run_in_order.py::test_reopen_refuses_what_is_not_closed
+      - tests/unit/test_work_order_phases_run_in_order.py::test_a_block_that_lands_while_closing_is_not_overwritten
     note: >
       Operator, 2026-09-23: the phases as laid out, with ci_issues the only skip. Before
       the table each writer checked what it thought of -- start nothing, advance only

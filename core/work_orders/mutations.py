@@ -19,6 +19,7 @@ from core.work_orders.task_status import (
     TASK_ABANDONED_STATUSES,
     TASK_DONE_STATUSES,
     is_open,
+    remembers_block_phase,
     sql_placeholders,
     status_for,
     transition_refusal,
@@ -546,19 +547,6 @@ def advance_work_order(
     }
 
 
-def _remembers_block_phase(conn: Any) -> bool:
-    """Whether migration 158 has given this authority `blocked_from_status`.
-
-    Unreleased migrations do not auto-apply to a live authority DB, so the column can be
-    absent while this code is present. Without it, unblock returns to `in_progress` -- what
-    it always did -- rather than failing.
-    """
-    return any(
-        r[1] == "blocked_from_status"
-        for r in conn.execute("PRAGMA table_info(business_work_orders)").fetchall()
-    )
-
-
 def block_work_order(
     *,
     work_order_id: str,
@@ -595,7 +583,7 @@ def block_work_order(
             }
         now = datetime.now(UTC).isoformat()
 
-        remembered = ", blocked_from_status = ?" if _remembers_block_phase(conn) else ""
+        remembered = ", blocked_from_status = ?" if remembers_block_phase(conn) else ""
         conn.execute(
             "UPDATE business_work_orders"
             " SET status = ?, blocked_at = ?, block_reason = ?,"
@@ -675,7 +663,7 @@ def unblock_work_order(
 
         # BACK TO THE PHASE IT WAS BLOCKED FROM. A work order blocked before migration 158
         # recorded none and returns to `in_progress`, which is what unblock always did.
-        remembers = _remembers_block_phase(conn)
+        remembers = remembers_block_phase(conn)
         back_to = None
         if remembers:
             back_to = conn.execute(

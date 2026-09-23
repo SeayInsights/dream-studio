@@ -17,7 +17,7 @@ from typing import Any
 from core.event_store.studio_db import _connect
 
 from .start_shared import _check_sequence_order
-from core.work_orders.task_status import status_for
+from core.work_orders.task_status import status_for, transition_refusal
 
 
 def _resolve_wo_repo_root(work_order_id: str, db_path: Path, source_root: Path) -> Path:
@@ -92,8 +92,6 @@ def start_work_order(
     # way.
     _current = brief_data.get("status")
     if _current != "in_progress":
-        from .task_status import transition_refusal
-
         _refusal = transition_refusal(work_order_id, _current, "in_progress")
         if _refusal:
             return {"ok": False, "error": _refusal, "status": _current}

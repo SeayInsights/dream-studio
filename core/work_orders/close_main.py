@@ -31,7 +31,12 @@ from .close_gates import (
 )
 from .close_shared import _lookup_work_order_and_gates, _require_db
 from .models import TERMINAL_WO_STATUSES, terminal_wo_status_placeholders
-from core.work_orders.task_status import status_for, transition_refusal
+from core.work_orders.task_status import (
+    CLOSEABLE_WORK_ORDER_STATUSES,
+    sql_placeholders,
+    status_for,
+    transition_refusal,
+)
 
 # WO-GRADER-ADVERSARIAL: independent review is default-on at close for every WO
 # type except these (no code to review — their deliverable is the document, and
@@ -898,6 +903,42 @@ def close_work_order(
 
         now = datetime.now(UTC).isoformat()
 
+        # THE PHASE IS HELD, NOT JUST CHECKED. The top of this function refuses a phase
+        # close does not come from, but everything between there and here -- verify can run
+        # for ten minutes -- happened on the strength of that one read, and this write was
+        # unconditional: a `ds work-order block` landing in the window was silently
+        # overwritten with `closed` (receiver's-view lane, 2026-09-23). The write now
+        # carries the condition itself, so SQLite checks and writes as one statement, and
+        # nothing is announced unless it landed.
+        _closeable = CLOSEABLE_WORK_ORDER_STATUSES
+        _landed = conn.execute(
+            "UPDATE business_work_orders"
+            " SET status = ?, closed_at = ?, updated_at = ?, last_updated_at = ?"
+            f" WHERE work_order_id = ? AND status IN ({sql_placeholders(_closeable)})",
+            (
+                status_for("work_order.closed", work_order=True),
+                now,
+                now,
+                now,
+                work_order_id,
+                *_closeable,
+            ),
+        ).rowcount
+        if not _landed:
+            _now_status = conn.execute(
+                "SELECT status FROM business_work_orders WHERE work_order_id = ?",
+                (work_order_id,),
+            ).fetchone()
+            _now_status = _now_status[0] if _now_status else None
+            return {
+                **_bookkeeping_errors,
+                "ok": False,
+                "error": transition_refusal(work_order_id, _now_status, "closed")
+                or f"Work order {work_order_id} changed phase while closing ({_now_status}).",
+                "status": _now_status,
+                "phase_refused": True,
+            }
+
         if force and gate_failures:
             for reason in gate_failures:
                 try:
@@ -955,13 +996,6 @@ def close_work_order(
             _spool_writer.write_event(envelope.to_dict())
         except Exception:
             pass
-
-        conn.execute(
-            "UPDATE business_work_orders"
-            " SET status = ?, closed_at = ?, updated_at = ?, last_updated_at = ?"
-            " WHERE work_order_id = ?",
-            (status_for("work_order.closed", work_order=True), now, now, now, work_order_id),
-        )
 
         next_wo: dict[str, Any] | None = None
         milestone_complete = False

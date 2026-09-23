@@ -208,12 +208,47 @@ def _act(
     """Close the work order, or record the failure on it. Never both, never neither."""
     wo_id = wo["work_order_id"]
 
-    # ALREADY RECORDED. A work order at `ci_issues` carries its failure as a task from the
-    # run that put it there; a later red run is the same failure still standing, or a new
-    # one the open task's fix will meet. Filing another task on every red poll would bury
-    # the one that matters under copies of itself.
+    # WHAT IS ALREADY RECORDED IS NOT FILED AGAIN; WHAT IS NEW IS. A work order at
+    # `ci_issues` carries its failure as a task. A later red run naming the same tests is
+    # that failure still standing, and a copy on every poll would bury it. But a red run
+    # naming a DIFFERENT test is a second regression, and the first version dropped it --
+    # "already recorded" was true of the old failure and false of the new one
+    # (receiver's-view lane, 2026-09-23). The status is already ci_issues, so only a task
+    # is added.
     if status != "success" and wo.get("status") == "ci_issues":
-        return {"work_order_id": wo_id, "did": "nothing: ci_issues already recorded", "ok": True}
+        if not nodes:
+            # A red run naming no runnable test says nothing the open task does not.
+            return {"work_order_id": wo_id, "did": "nothing: already recorded", "ok": True}
+        from core.health.main_ci_watch import nodes_already_filed
+        from core.work_orders.queries import _require_db
+
+        filed = nodes_already_filed(_require_db(source_root, dream_studio_home), wo_id)
+        new = [n for n in nodes if n not in filed]
+        if not new:
+            return {"work_order_id": wo_id, "did": "nothing: already recorded", "ok": True}
+        task = remediation(new, verdict.get("run_url"), verdict.get("head_sha"))
+        if dry_run:
+            return {"work_order_id": wo_id, "would": "file new failures", "task": task, "ok": True}
+        from core.work_orders.mutations import create_task
+
+        added = create_task(
+            work_order_id=wo_id,
+            project_id=wo["project_id"],
+            title=task["title"],
+            description=task["description"],
+            acceptance_criteria=task.get("acceptance_criteria"),
+            why=task.get("why"),
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+        return {
+            "work_order_id": wo_id,
+            "did": "file new failures",
+            "new_failures": new,
+            "task_id": added.get("task_id"),
+            "ok": bool(added.get("ok")),
+            **({"error": added.get("error")} if not added.get("ok") else {}),
+        }
 
     if status == "success":
         if dry_run:

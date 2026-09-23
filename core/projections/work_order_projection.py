@@ -19,6 +19,7 @@ from core.work_orders.models import DEFAULT_WORK_ORDER_PRIORITY, WORK_ORDER_PRIO
 from core.work_orders.task_status import (
     BLOCKABLE_WORK_ORDER_STATUSES,
     creation_status,
+    remembers_block_phase,
     status_for,
 )
 
@@ -31,11 +32,6 @@ def _open_phase(value: object) -> str | None:
     """A phase a work order can be blocked from, or None. Never a value the column refuses."""
     text = str(value).strip() if value is not None else ""
     return text if text in BLOCKABLE_WORK_ORDER_STATUSES else None
-
-
-def _remembers_block_phase(conn: sqlite3.Connection) -> bool:
-    """Whether migration 158 has added `blocked_from_status` to this authority."""
-    return any(r[1] == "blocked_from_status" for r in conn.execute(f"PRAGMA table_info({_TABLE})"))
 
 
 def _coerce_priority(value: object) -> str:
@@ -322,7 +318,7 @@ class WorkOrderProjection(Projection):
             "last_updated_at": now,
         }
         # The phase unblock returns to, rebuilt from the event on replay.
-        if _remembers_block_phase(conn):
+        if remembers_block_phase(conn):
             row["blocked_from_status"] = _open_phase(payload.get("from_status"))
         return self.safe_upsert(conn, _TABLE, row, conflict_key="work_order_id")
 
@@ -341,7 +337,7 @@ class WorkOrderProjection(Projection):
         event from before that key existed falls back to the phase the blocked event
         recorded, then to `in_progress` -- what unblock always did.
         """
-        remembers = _remembers_block_phase(conn)
+        remembers = remembers_block_phase(conn)
         back_to = _open_phase(payload.get("to_status"))
         if back_to is None and remembers:
             recorded = conn.execute(
