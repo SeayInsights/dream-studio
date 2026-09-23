@@ -160,6 +160,14 @@ def brief_currency(project_id: str, *, conn: Any, db_path: Path | None = None) -
         f" ({effective}); newest: {newest[1]!r} at {newest[2]}. The brief proves"
         " existence but not currency — re-lock it (ds design-brief lock), or declare"
         " reviewed-no-change if the design language genuinely still holds."
+        # WHICH TYPES STALE A BRIEF, named from the set the gate actually tests rather
+        # than from prose. An operator whose backend work did not stale a brief is owed
+        # the reason here, where the verdict is read; the ds-project brief mode used to
+        # carry it and that pack was dissolved. Backend-only work does not stale a brief:
+        # one that still describes the UI is still true, and crying wolf teaches operators
+        # to re-lock reflexively.
+        f" Only {', '.join(sorted(_UI_TYPES))} work stales a brief; a brief is"
+        " project-scoped, so one current brief satisfies every UI work order in it."
     )
     return result
 

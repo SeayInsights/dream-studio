@@ -14,7 +14,10 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
+import pathlib
 from pathlib import Path
+
+import core.gates.brief_currency as core_brief_currency
 
 import pytest
 
@@ -295,53 +298,42 @@ def test_the_brief_table_is_not_work_order_scoped(db):
 # ── Task 4: the skill-text layer (two-layer rule) ──────────────────────────────
 
 
-def test_skill_text_documents_brief_currency():
-    """The two-layer rule this milestone keeps enforcing: an engine change with no
-    skill text is a gate an agent cannot act on. WO 55d02acf was exactly that —
-    close emitted main_ci_warning and the close skill never mentioned it.
+def test_the_gate_verdict_documents_brief_currency():
+    """The remedy has to be legible where the refusal is read.
+
+    This asserted a SKILL.md documented the distinction -- first ds-project's brief mode,
+    then ds-workorder's close mode. Both were narration over commands and both were
+    dissolved. The verdict text is the durable home: an agent that never opened a file
+    still sees it, and it names the UI types from `_UI_TYPES`, the set the gate actually
+    tests, so the explanation cannot drift from the behaviour it explains.
     """
-    repo = Path(__file__).resolve().parents[2]
-    # THE SURFACE THAT MEETS THE GATE. This read the ds-project brief mode, which was
-    # narration over `ds design-brief` and went with that pack. An agent hits
-    # design_brief_locked while CLOSING a work order, so the close mode is where the
-    # remedy has to be legible -- and it already carried the currency distinction.
-    canonical = repo / "canonical" / "skills" / "ds-workorder" / "modes" / "close" / "SKILL.md"
-    assert canonical.is_file(), f"close mode SKILL.md missing at {canonical}"
-    text = canonical.read_text(encoding="utf-8")
+    from core.gates.brief_currency import _UI_TYPES
 
-    # The distinction the gate now draws.
-    assert "existence but not currency" in text
-    # Both remedies, and that they differ.
-    assert "re-lock" in text.lower()
-    assert "reviewed-no-change" in text.lower()
-    # The rule that keeps the gate from crying wolf.
-    assert "ui_component" in text and "api_endpoint" in text
-    # The over-correction it must not invite.
-    assert "project-scoped" in text
-
-    projected = (
-        repo / "dist" / "plugin" / "skills" / "ds-workorder" / "modes" / "close" / "SKILL.md"
-    )
-    assert projected.is_file(), "the projected close SKILL.md is missing"
-    assert projected.read_text(encoding="utf-8").replace("\r\n", "\n") == text.replace(
-        "\r\n", "\n"
-    ), "dist/plugin close SKILL.md is stale — rebuild it"
+    source = pathlib.Path(core_brief_currency.__file__).read_text(encoding="utf-8")
+    assert "existence but not currency" in source, "the verdict drops the distinction"
+    assert "ds design-brief lock" in source, "the verdict does not name the re-lock command"
+    assert "reviewed-no-change" in source, "the verdict does not name the other remedy"
+    assert "project-scoped" in source, "the verdict does not say a brief is project-scoped"
+    # Named, not spelled: a hardcoded list here would be a sixth copy of the set that
+    # #790 reduced to one.
+    assert "_UI_TYPES" in source, "the verdict spells the UI types instead of naming the set"
+    assert set(_UI_TYPES) <= {"ui_component", "ui_page", "saas_feature"}
 
 
-def test_the_declaration_is_not_documented_as_a_shortcut():
-    """A declaration that says 'still holds' about a brief that does not is worse
-    than a stale lock, because it looks like someone checked. The guidance has to
-    say so, or the escape hatch becomes the default path."""
-    repo = Path(__file__).resolve().parents[2]
-    text = (
-        repo / "canonical" / "skills" / "ds-workorder" / "modes" / "close" / "SKILL.md"
-    ).read_text(encoding="utf-8")
-    assert "DON'T" in text
-    # THE CLAIM, NOT A PHRASE. This asserted "skip a real re-lock", the wording of the
-    # ds-project brief mode. That pack was dissolved and the guidance moved to the surface
-    # that meets the gate, which says the same thing in its own words -- so the check is
-    # the substance: do not use the declaration INSTEAD of a re-lock, and the reason.
-    assert "re-lock" in text, "the text does not warn against substituting for a re-lock"
+def test_the_declaration_is_not_offered_as_a_shortcut():
+    """A declaration that says "still holds" about a brief that does not is worse than a
+    stale lock, because it looks like someone checked.
+
+    This asserted a skill file said DON'T. Two skill files carried that sentence and both
+    were dissolved. The durable version is structural rather than hortatory: the verdict
+    offers BOTH remedies and describes what each one means, so an operator choosing the
+    declaration is choosing it against a stated alternative rather than reaching for the
+    only thing on offer. Prose telling an agent not to take a shortcut is weaker than a
+    verdict that puts the other path in front of it.
+    """
+    source = pathlib.Path(core_brief_currency.__file__).read_text(encoding="utf-8")
+    assert "re-lock it" in source, "the verdict does not offer the re-lock"
+    assert "reviewed-no-change" in source, "the verdict does not offer the declaration"
     assert (
-        "looks like someone checked" in text
-    ), "the text does not say WHY a false declaration is worse than a stale lock"
+        "genuinely still holds" in source
+    ), "the verdict does not say the declaration requires the brief to actually hold"

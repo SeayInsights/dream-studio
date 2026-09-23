@@ -20,7 +20,6 @@ dream-studio/
       domains/                       domain builders (ds-domains)
       workflow/                      workflow orchestration (ds-workflow)
       security/                      security analysis (ds-security)
-      workorder/                     work order lifecycle (ds-workorder)
       website/                       website builder (ds-website)
       fullstack/                     fullstack builder (ds-fullstack)
       setup/                         setup (ds-setup)

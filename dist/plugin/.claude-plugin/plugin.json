@@ -19,8 +19,7 @@
     "ds-security",
     "ds-setup",
     "ds-website",
-    "ds-workflow",
-    "ds-workorder"
+    "ds-workflow"
   ],
   "mcpServers": ".mcp.json"
 }

@@ -1,6 +1,0 @@
-triggers:
-  - "mark task done:"
-  - "task done:"
-  - "complete task:"
-
-estimated_tokens: 600

@@ -260,21 +260,6 @@ modes:
   skill: website/modes/prototype/SKILL.md
   no_agent: Nothing dispatches it and the skill is 4937 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: ds-workorder/block
-  skill: ds-workorder/modes/block/SKILL.md
-  no_agent: Records a blocker against a work order in the authority.
-- mode: ds-workorder/close
-  skill: ds-workorder/modes/close/SKILL.md
-  no_agent: Runs close gates and mutates state. The verdicts belong to the caller that must act on them.
-- mode: ds-workorder/execute
-  skill: ds-workorder/modes/execute/SKILL.md
-  no_agent: Marks tasks done in the authority as the caller completes them.
-- mode: ds-workorder/start
-  skill: ds-workorder/modes/start/SKILL.md
-  no_agent: Mutates work-order state and writes the context artifact. The caller must own the transition.
-- mode: ds-workorder/status
-  skill: ds-workorder/modes/status/SKILL.md
-  no_agent: Reads and prints work-order state. A CLI read, not a specialist question.
 - mode: quality/accessibility
   skill: quality/modes/accessibility/SKILL.md
   agent: accessibility-expert

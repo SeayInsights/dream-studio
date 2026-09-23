@@ -242,17 +242,25 @@ _CONTRACT_DOMAINS_OPS: tuple[dict[str, Any], ...] = (
         "public_export_boundary": "schema_coherence_findings_are_operational_evidence_not_public_claims",
     },
     {
-        # Work-order engine → ds-workorder skill surface coupling.
-        # core/work_orders/*.py are the authoritative functions wrapped by ds-workorder
-        # skill modes (start, execute, close, block, status). When the engine API changes
-        # (return shapes, gate names, field names), the corresponding SKILL.md surface
-        # contract must be reviewed and updated in the same changeset so operators do not
-        # get instructions that mismatch what the functions return.
-        # Phase 18 evidence: WO-GATE-PARITY (PR #269), WO-GRADER-LOOKUP (PRs #267–268),
-        # and WO-TASK-UX (PR #266) all changed engine + SKILL.md in the same PR — the
-        # coupling was implicit; this domain makes it explicit and enforced.
+        # Work-order engine → the rules that state how work orders behave.
+        #
+        # This pointed at canonical/skills/ds-workorder/SKILL.md and its five mode files.
+        # That pack was dissolved, the last of the three lifecycle packs: every one of its
+        # modes was narration over a command that already existed, and ten of its twenty
+        # numbered rules were already registry entries under other names -- a second copy
+        # free to drift, which is the argument for the dissolution stated by the pack
+        # itself. Six more moved in with the tests that enforce them.
+        #
+        # The coupling is unchanged and still real: when the engine API changes, the
+        # agent-facing statement of how work orders behave must be reviewed in the same
+        # change set, so an operator is not handed instructions that mismatch what the
+        # functions do. Only the location of that statement moved.
+        #
+        # Phase 18 evidence for the coupling: WO-GATE-PARITY (PR #269), WO-GRADER-LOOKUP
+        # (PRs #267–268) and WO-TASK-UX (PR #266) each changed engine and surface together
+        # before anything required it.
         "domain_id": "work_orders_engine_skill_surface",
-        "domain_name": "Work Orders Engine → DS-Workorder Skill Surface",
+        "domain_name": "Work Orders Engine → Work Order Rules",
         "source_patterns": [
             "core/work_orders/**",
             # A glob, because the work-order CLI is five sibling modules and naming two
@@ -261,19 +269,14 @@ _CONTRACT_DOMAINS_OPS: tuple[dict[str, Any], ...] = (
             "interfaces/cli/commands/work_order*.py",
         ],
         "contract_refs": [
-            "canonical/skills/ds-workorder/SKILL.md",
-            "canonical/skills/ds-workorder/modes/start/SKILL.md",
-            "canonical/skills/ds-workorder/modes/execute/SKILL.md",
-            "canonical/skills/ds-workorder/modes/close/SKILL.md",
-            "canonical/skills/ds-workorder/modes/block/SKILL.md",
-            "canonical/skills/ds-workorder/modes/status/SKILL.md",
+            "canonical/rules.yml",
         ],
         "docs_refs": [],
         "required_doc_refs": [
-            "canonical/skills/ds-workorder/SKILL.md",
+            "canonical/rules.yml",
         ],
         "release_blocking": True,
-        "freshness_policy": "work_orders_engine_changes_require_ds_workorder_skill_surface_review",
+        "freshness_policy": "work_orders_engine_changes_require_work_order_rule_review",
         "public_export_boundary": "skill_surface_docs_are_agent_contracts_not_public_api",
     },
     {
