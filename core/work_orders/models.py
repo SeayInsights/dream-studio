@@ -25,6 +25,23 @@ APPROVAL_MODES = frozenset(
 
 RISK_LEVELS = frozenset({"low", "medium", "high", "critical"})
 
+#: What to pick up first. ORDERED, most urgent to least -- the tuple order IS the queue
+#: order, which is why this is a tuple and not a set.
+#:
+#: Three agents write to this queue: the review lanes before a push, the watcher after
+#: one, and the session doing the building. A level each of them can choose freely would
+#: be `blocker` within a week, so the level is DERIVED where it can be -- the watcher
+#: always writes `blocker` because a red main is a fact rather than a judgment, and a lane
+#: takes its level from its own recorded precedent. `normal` is the default so that
+#: creating a work order never requires classifying it.
+#:
+#: Mirrored by a CHECK constraint in migration 157: a priority the platform does not
+#: declare is refused at the write, not stored and sorted somewhere arbitrary.
+WORK_ORDER_PRIORITIES: tuple[str, ...] = ("blocker", "defect", "normal", "backlog")
+
+#: The default, named once so the CLI, the schema and the queue cannot disagree.
+DEFAULT_WORK_ORDER_PRIORITY = "normal"
+
 #: Every work-order type the platform knows. THE ONE DEFINITION: review_rules maps each
 #: to the artifact class it reviews as, brief_currency and milestones/close carve out
 #: the UI-bearing subset, close_main exempts documentation from verification, and the

@@ -72,7 +72,13 @@ CREATE TABLE IF NOT EXISTS business_work_orders (
     originating_symptom TEXT,
     source_event_id TEXT,
     last_event_id TEXT,
-    last_updated_at TEXT NOT NULL DEFAULT (datetime('now', 'utc'))
+    last_updated_at TEXT NOT NULL DEFAULT (datetime('now', 'utc')),
+    -- Migration 157. The projection writes it, so a fixture without it is the
+    -- subset-of-the-real-schema case the comment above describes -- and worse here than
+    -- usual: the INSERT is OR IGNORE, so a missing column does not raise on the insert
+    -- path, it silently produces no row.
+    priority TEXT NOT NULL DEFAULT 'normal'
+        CHECK (priority IN ('blocker', 'defect', 'normal', 'backlog'))
 );
 """
 

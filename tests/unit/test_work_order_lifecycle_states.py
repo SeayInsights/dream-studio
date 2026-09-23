@@ -39,7 +39,12 @@ def conn():
           unblocked_at TEXT, block_reason TEXT, source_event_id TEXT, last_event_id TEXT,
           last_updated_at TEXT, description TEXT, work_order_type TEXT, updated_at TEXT,
           sequence_order INTEGER, originating_symptom TEXT, verify_status TEXT,
-          verify_score REAL, verified_at TEXT);
+          verify_score REAL, verified_at TEXT,
+          -- Migration 157. The projection writes it, and this fixture met the hazard that
+          -- migration documents: the INSERT is OR IGNORE, so a column the fixture lacks
+          -- does not raise -- the row silently is not written at all.
+          priority TEXT NOT NULL DEFAULT 'normal'
+            CHECK (priority IN ('blocker', 'defect', 'normal', 'backlog')));
         """)
     return c
 

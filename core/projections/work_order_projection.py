@@ -14,11 +14,18 @@ from datetime import datetime, UTC
 from typing import Any
 
 from core.projections.framework import Projection, RetryPolicy
+from core.work_orders.models import DEFAULT_WORK_ORDER_PRIORITY, WORK_ORDER_PRIORITIES
 from core.work_orders.task_status import creation_status, status_for
 
 logger = logging.getLogger(__name__)
 
 _TABLE = "business_work_orders"
+
+
+def _coerce_priority(value: object) -> str:
+    """A declared priority, or the default. Never a value the column would refuse."""
+    text = str(value).strip() if value is not None else ""
+    return text if text in WORK_ORDER_PRIORITIES else DEFAULT_WORK_ORDER_PRIORITY
 
 
 class WorkOrderProjection(Projection):
@@ -150,6 +157,25 @@ class WorkOrderProjection(Projection):
             "last_event_id": event_id,
             "last_updated_at": now,
             "originating_symptom": payload.get("originating_symptom"),
+            # THE QUEUE SORTS ON THIS. A priority that stopped at the payload would not
+            # read oddly in a listing -- every work order would take the default and a
+            # red `main` would sit behind a year of backlog. The fallback is the
+            # declared default rather than NULL: the column is NOT NULL, and an older
+            # event predating the field is not a missing value.
+            # COERCED, NOT TRUSTED. An event is history and may carry anything, including
+            # a priority this build does not declare -- an older spelling, a typo that got
+            # past an earlier door, a hand-written replay. The column has a CHECK, and the
+            # INSERT below is OR IGNORE so a duplicate created event is a no-op: SQLite's
+            # OR IGNORE also SKIPS a row that violates a constraint, so an unrecognised
+            # priority would not store a wrong label -- it would make the work order not
+            # exist, with no row and no error. Measured, and caught by the payload-seam
+            # test, which sets every key to a distinctive value.
+            #
+            # So an unknown level degrades to the default. That is the safe direction:
+            # a work order in the wrong queue position is findable, one that silently
+            # never materialised is not. The refusal lives at the authoring door, in
+            # create_work_order, where it can say what objected.
+            "priority": _coerce_priority(payload.get("priority")),
             # DESCRIPTION WAS DROPPED END TO END. The emitter left it out of the payload
             # and this handler never read it, so every work order authored through
             # `ds work-order create` stored an empty description -- measured on the live
@@ -174,11 +200,11 @@ class WorkOrderProjection(Projection):
             INSERT OR IGNORE INTO {_TABLE}
                 (work_order_id, project_id, milestone_id, title, work_order_type,
                  status, created_at, source_event_id, last_event_id, last_updated_at,
-                 originating_symptom, description)
+                 originating_symptom, description, priority)
             VALUES
                 (:work_order_id, :project_id, :milestone_id, :title, :work_order_type,
                  :status, :created_at, :source_event_id, :last_event_id, :last_updated_at,
-                 :originating_symptom, :description)
+                 :originating_symptom, :description, :priority)
             """,
             row,
         )
@@ -196,6 +222,7 @@ class WorkOrderProjection(Projection):
                 created_at           = COALESCE(created_at, :created_at),
                 source_event_id      = COALESCE(source_event_id, :source_event_id),
                 originating_symptom  = COALESCE(originating_symptom, :originating_symptom),
+                priority             = COALESCE(priority, :priority),
                 last_updated_at      = :last_updated_at
             WHERE work_order_id = :work_order_id
             """,

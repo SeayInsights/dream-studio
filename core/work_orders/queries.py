@@ -42,11 +42,20 @@ def list_work_orders(
 
     query = (
         "SELECT wo.work_order_id, wo.title, wo.work_order_type, wo.status,"
+        " wo.priority,"
         " m.title AS milestone_title"
         " FROM business_work_orders wo"
         " LEFT JOIN business_milestones m ON wo.milestone_id = m.milestone_id"
         f" {where}"
-        " ORDER BY wo.created_at ASC"
+        # PRIORITY FIRST, THEN AGE. This read `created_at ASC` alone, so a defect a review
+        # lane registered today queued behind every older work order -- the opposite of
+        # what a lane finding or a red `main` means. CASE rather than a plain column sort
+        # because the levels are ordered by urgency, not alphabetically: `backlog` would
+        # otherwise sort first and `normal` ahead of `defect`.
+        " ORDER BY CASE wo.priority"
+        " WHEN 'blocker' THEN 0 WHEN 'defect' THEN 1 WHEN 'normal' THEN 2"
+        " WHEN 'backlog' THEN 3 ELSE 2 END,"
+        " wo.created_at ASC"
     )
 
     with _connect(db_path) as conn:
@@ -58,7 +67,10 @@ def list_work_orders(
             "title": r[1],
             "type": r[2] or "",
             "status": r[3],
-            "milestone": r[4] or "",
+            # Surfaced, not just sorted on. A caller shown a list in an order it cannot
+            # see the reason for has to take the order on trust.
+            "priority": r[4],
+            "milestone": r[5] or "",
         }
         for r in rows
     ]

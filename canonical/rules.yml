@@ -185,6 +185,30 @@ rules:
       several, and then two things lie: the module boundary, which now describes part of
       the change, and the prompt chain, whose new work order has to restate a goal that
       already exists one row over.
+  - id: the-queue-is-ordered-by-priority-then-age
+    statement: >
+      Work is taken in priority order, oldest first within a level; a work order carries a
+      priority the platform declares, and an undeclared one is refused at the authoring
+      door rather than sorted somewhere arbitrary.
+    source: core/work_orders/queries.py
+    enforced_by:
+      - tests/unit/test_work_order_priority.py::test_the_queue_orders_by_priority_then_age
+      - tests/unit/test_work_order_priority.py::test_the_queue_query_in_the_engine_sorts_on_priority
+      - tests/unit/test_work_order_priority.py::test_an_undeclared_priority_is_refused_where_it_can_be_reported
+      - tests/unit/test_work_order_priority.py::test_an_unknown_priority_on_an_event_degrades_rather_than_losing_the_row
+    note: >
+      Three agents write to this queue -- the review lanes before a push, the watcher after
+      one, and the session doing the building -- so the order has to be a property of the
+      data rather than a rule each of them remembers. It was FIFO by created_at, which put
+      a defect a lane had just found behind every older work order.
+
+      The refusal is at the door because the column cannot refuse out loud: the projection
+      inserts OR IGNORE so a duplicate created event is a no-op, and SQLite's OR IGNORE
+      also skips a row that violates a CHECK -- an undeclared priority produced no row at
+      all, no error and no trace. The projection therefore coerces an unknown level to the
+      default rather than losing the work order, since history may carry an older spelling
+      and a work order in the wrong queue position is findable while one that never
+      materialised is not.
   - id: a-claim-with-an-exact-answer-is-computed-not-read
     statement: >
       A claim that can be computed is computed: run the check and use its result. Finding
