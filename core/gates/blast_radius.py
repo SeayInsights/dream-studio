@@ -540,14 +540,21 @@ def compute_impact_set(
         if known_changed:
             for ancestor, hops in _ancestor_hops(known_changed, import_graph).items():
                 rel = module_index[ancestor]
-                within_bound = IMPORT_GRAPH_MAX_DEPTH is None or hops <= IMPORT_GRAPH_MAX_DEPTH
                 if _is_test_file(rel):
-                    if within_bound:
-                        dependent.add(rel)
-                    else:
-                        truncated_test_count += 1
-                elif _is_conftest_file(rel) and within_bound:
-                    conftest_hits.add(rel)
+                    target = dependent
+                elif _is_conftest_file(rel):
+                    target = conftest_hits
+                else:
+                    continue
+                # ONE enforcement point for "is this ancestor within the depth
+                # bound, and must its exclusion be counted" -- a second, separately
+                # maintained copy of this decision is exactly what let the
+                # conftest branch silently drop past-bound ancestors from both
+                # selection and the count while the test-file branch counted them.
+                if IMPORT_GRAPH_MAX_DEPTH is None or hops <= IMPORT_GRAPH_MAX_DEPTH:
+                    target.add(rel)
+                else:
+                    truncated_test_count += 1
     for rel in conftest_hits:
         dependent.update(_conftest_scope_tests(root, rel))
 

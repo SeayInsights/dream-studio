@@ -253,6 +253,40 @@ def test_a_chain_deeper_than_the_bound_is_truncated_and_counted(tmp_path: Path) 
     ), "the exclusion above must be COUNTED, not silent"
 
 
+def test_a_conftest_past_the_bound_is_truncated_and_counted_not_silently_dropped(
+    tmp_path: Path,
+) -> None:
+    """The same 5-hop chain as above, but the ancestor found past the bound is a
+    conftest.py rather than a test file. The conftest branch must mirror the test
+    branch exactly: excluded from selection past the bound, AND counted -- not
+    silently dropped from both, which would hide a real fixture dependency with no
+    signal at all that anything was truncated.
+    """
+    repo = tmp_path
+    _write(repo / "pkgd" / "__init__.py", "")
+    _write(repo / "pkgd" / "a0.py", "x = 1\n")
+    _write(repo / "pkgd" / "a1.py", "from .a0 import x\n\ny = x\n")
+    _write(repo / "pkgd" / "a2.py", "from .a1 import y\n\nz = y\n")
+    _write(repo / "pkgd" / "a3.py", "from .a2 import z\n\nw = z\n")
+    _write(
+        repo / "tests" / "deep" / "conftest.py",
+        "from pkgd.a3 import w\n\n\ndef fixture_value():\n    return w\n",
+    )
+    _write(
+        repo / "tests" / "deep" / "test_uses_deep_fixture.py",
+        "def test_it():\n    assert True\n",
+    )
+
+    result = compute_impact_set(["pkgd/a0.py"], repo_root=repo)
+    assert "tests/deep/test_uses_deep_fixture.py" not in result["dependent_tests"], (
+        "the conftest sits 4 hops out from pkgd/a0.py; the default bound is 3, so its "
+        "directory scope must be excluded"
+    )
+    assert (
+        result["import_graph_truncated_test_count"] >= 1
+    ), "the excluded conftest's scope must be COUNTED, not silently dropped"
+
+
 def test_a_changed_source_file_selects_tests_that_name_it_by_path(tmp_path):
     """A test that reads source as TEXT names the file, not the module.
 
