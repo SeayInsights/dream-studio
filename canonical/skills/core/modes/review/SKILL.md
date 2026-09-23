@@ -74,23 +74,42 @@ Spec compliance BEFORE code quality. Always. Catching "built the wrong thing" ma
 **Convene the table before you push:**
 
 ```
-py -m core.gates.round_table
+ds review                 # the lanes this change set is relevant to
+ds review --all           # the whole bench regardless of relevance
+ds review --pr 812        # the files a pull request touches
+ds review --no-detectors  # list the lanes without running anything
 ```
 
 It runs the detector lanes and reports what they found, and puts the graded and declared
-lanes in front of you as questions to answer against the diff. `--no-detectors` lists the
-lanes without running anything and reports `unchecked`, because a listing that ran nothing
-is not a pass.
+lanes in front of you as questions to answer against the diff. `--no-detectors` reports
+`unchecked`, because a listing that ran nothing is not a pass.
 
-`canonical/review_lanes.yml` is the source of truth for these, not this list, and this
-section is GENERATED from it — a hand-maintained copy of a registry is a second
-vocabulary that silently disagrees with the first.
+`canonical/review_lanes.yml` is the source of truth for the bench, not this file. The
+table below is GENERATED from it by `py -m integrations.compiler.review_skill --write` and
+checked by the generated-artifacts gate — a hand-maintained copy of a registry is a second
+vocabulary that silently disagrees with the first, and this section was one. It announced
+29 seats and named four the registry no longer had.
 
-The bench is **29 seats**: the operator's 28-seat review bench, derived from real
-review history, plus the Event-substrate custodian, which asks whether a row survives
-being rebuilt from its own events — a property of this substrate with no equivalent on
-the bench. Each lane is answered by a runnable detector, a graded eval, or a declared
-judgment; the `review-lane-registry` gate refuses a lane that is none of those.
+<!-- GENERATED:bench begin -- py -m integrations.compiler.review_skill --write -->
+
+The bench is **10 seats** and **26 lanes**: 1 answered by a detector, 6 graded by an eval, and 19 by judgment — which is what the reviewer agents are for.
+
+| Seat | Lanes | Answered by |
+| --- | --- | --- |
+| Access and reach | `authz-and-identity`, `cloud-iam-and-iac`, `secrets-and-data-at-rest` | judgment |
+| Boundary semantics | `a-channel-outside-the-accounting`, `a-produced-value-with-no-reader`, `a-status-the-far-end-does-not-handle` | graded |
+| Chair and verdict owner | `chair-and-verdict-owner` | judgment |
+| Claim integrity | `a-contract-that-names-one-of-two-mechanisms`, `an-unenumerated-behaviour-change`, `governance-canon-and-board` | graded, judgment |
+| Finding integrity | `evidence-referee`, `reviewer-s-reviewer` | judgment |
+| Gate and test integrity | `a-test-that-cannot-fail`, `code-quality-and-structure`, `the-other-half-enforced-by-nothing` | graded, judgment |
+| Interface conformance | `accessibility`, `design-system-conformance`, `frontend-behavior-and-payload` | judgment |
+| Irreversible operations | `data-and-migration`, `gitops-and-rollout-safety` | judgment |
+| Publication and provenance | `release-and-version-model`, `supply-chain-and-provenance` | judgment |
+| The receiver's view | `agent-and-plugin-runtime`, `cli-and-operator-ergonomics`, `docs-style-and-attribution`, `mission-domain-consequence` | detector, judgment |
+
+Each seat but the chair compiles to an agent under `canonical/agents/review-*.md` carrying its own lanes — the question, the defect signature, the precedent it came from and the governing standard. The chair has no agent: a subagent sees only its own lanes, and reconciling findings it was never given is not a question it can answer. **The caller is the chair.**
+
+<!-- GENERATED:bench end -->
 
 **Lanes fire on relevance to the change set.** A seat whose scope does not match the diff
 is left out and the table says so. `--all` convenes every seat regardless — asking for
@@ -98,145 +117,6 @@ the whole bench directly is always available.
 
 Where a published standard governs a seat, the seat names it, so a finding is arguable
 on the standard rather than on seniority.
-
-1. **Chair and verdict owner** — *What is the single merge recommendation here, and is every finding's severity calibrated against it rather than stated in isolation?*
-   - shape: Many opinions and no verdict. Findings arrive at assorted severities with nothing reconciling them, so the author receives twenty-seven views instead of one decision and picks whichever is cheapest.
-   - answered by: declared judgment
-
-2. **Finding integrity** — *Which SHA and which command prove this claim, and does reverting the fix actually turn the check red?*
-   - shape: A claim with no reproduction. The author's summary is taken as the finding, the fix is read rather than run, and nobody checks that the guard fails when the guarded thing is broken.
-   - answered by: declared judgment
-
-3. **Finding integrity** — *Does every finding still hold against current HEAD, and which ones should be withdrawn?*
-   - shape: A finding that was true at review time and is false now, or was never true. Nobody re-checks, so the author argues with a stale objection and the reviewer's overreach costs more than the defect.
-   - answered by: declared judgment
-
-4. **Merge-order steward** — *How far behind its base is this, is it the tree that actually ships, and does anything still-open have to land first?*
-   - shape: A branch reviewed in isolation. It is clean against its own base, stale against main, and the merged tree behaves differently from either.
-   - answered by: detector
-
-5. **Claim integrity** — *Does the PR body, the comments and the docs say what the code does, and will `Closes #N` close the right issue?*
-   - shape: A description that describes an intention. Acceptance criteria partly met and reported as met, or a closing keyword pointed at an issue this head cannot satisfy.
-   - standards: Conventional Commits 1.0.0, Keep a Changelog 1.1.0
-   - answered by: graded eval
-
-6. **Gate-integrity engineer** — *Is this a gate or a report? What does it do when the thing it checks is absent, unreportable, or failing?*
-   - shape: A workflow that reports is not a gate. Required checks that never report because a path filter excluded them, always() where success() was meant, `bash -e` without pipefail swallowing a red plan.
-   - standards: OpenSSF Scorecard, SLSA v1.0 Build L2+
-   - answered by: graded eval
-
-7. **Test-integrity inquisitor** — *This test is green. Show me it going red -- what does it look like when the thing it protects is broken?*
-   - shape: An assertion true by construction, new logic with no committed test, a happy path standing in for coverage, or a flake answered with a longer timeout instead of a root cause.
-   - standards: ISO/IEC/IEEE 29119-4 test techniques
-   - answered by: graded eval
-
-8. **AuthZ and identity** — *Which principal is this, what may it do, and what happens to the sessions that already exist when that answer changes?*
-   - shape: Permission derive-and-intersect that widens, a token class mistaken for another, admin scope acquired by a path nobody enumerated, or a lifecycle where revocation does not revoke.
-   - standards: OWASP ASVS v5.0.0 V8 Authorization, OWASP Top 10 A01:2025 Broken Access Control, NIST SP 800-63B session lifecycle
-   - answered by: declared judgment
-
-9. **Boundary semantics** — *What is the full capability surface of the thing being guarded, as opposed to what the guard's own rule list says about it?*
-   - shape: A guard that enumerates the attacks it knows. The format has a mechanism the rule list never named -- a PAX header, a nested archive, a decompression ratio -- and the guard reports clean.
-   - standards: OWASP ASVS v5.0.0 V1 Encoding and Sanitization + V2 Validation and Business Logic, OWASP Top 10 A05:2025 Injection, CWE-22 path traversal, CWE-409 decompression bomb
-   - answered by: graded eval
-
-10. **Secrets and data-at-rest** — *Where does this secret come to rest, who can read it there, and what rotates it?*
-   - shape: A credential written somewhere durable with the wrong mode or the wrong scope -- a cluster dump in plaintext, a secret store with no condition, a PAT seeded into a script that ships.
-   - standards: OWASP ASVS v5.0.0 V11 Cryptography, CWE-312 cleartext storage of sensitive information, NIST SP 800-57 key management
-   - answered by: declared judgment
-
-11. **Supply chain and provenance** — *What exactly is being installed and published here, and does the identity signing it match the identity that built it?*
-   - shape: A lockfile valid on the branch and invalid on the merge, a tag where a digest was meant, a signature check that trusts any dispatch ref, or a name that resolves to somebody else's package.
-   - standards: SLSA v1.0, NIST SP 800-218 SSDF, OpenSSF Scorecard, SPDX or CycloneDX SBOM, Sigstore signature verification
-   - answered by: declared judgment
-
-12. **Cloud IAM and IaC** — *Which external identity can assume this role, and what can it reach once it has?*
-   - shape: An OIDC trust subject matched loosely, a policy pairing CreateRole with PassRole on a wildcard resource, an unpinned provider, or a default region that silently places data elsewhere.
-   - standards: CIS Benchmarks, NIST SP 800-53 AC family, CWE-269 improper privilege management
-   - answered by: declared judgment
-
-13. **GitOps and rollout safety** — *What is the blast radius when this reconciles automatically, and what does prune remove that nobody listed?*
-   - shape: Automation whose failure mode is deletion. Self-heal and prune acting on an incomplete inventory, or an optional mount that silently disables a provider rather than failing.
-   - standards: CIS Kubernetes Benchmark, NIST SP 800-190 container security
-   - answered by: declared judgment
-
-14. **Release and version model** — *Does the version this produces mean what the ecosystem consuming it thinks it means?*
-   - shape: A tag treated as a release, an upgrade task scaffolded and presented as validation, or a version string that is legal here and illegal to the platform that reads it.
-   - standards: Semantic Versioning 2.0.0, Keep a Changelog 1.1.0
-   - answered by: declared judgment
-
-15. **Distributed state and concurrency** — *This wait is bounded per item. How many items can there be, and does anything bound the total?*
-   - shape: A per-item timeout with no aggregate deadline, a process-local cache in a multi-replica deployment, or a guard evaluated outside the transaction it is meant to protect.
-   - standards: CWE-362 race condition, CWE-367 time-of-check time-of-use
-   - answered by: detector
-
-16. **Data and migration** — *Does this migration go forward and back, and does the schema still hold every invariant afterwards?*
-   - shape: Forward-only in practice, numbering that collides or skips, a constraint relaxed to make a migration pass, or orphan rows nobody counted.
-   - standards: ACID transaction properties, ISO/IEC 9075 SQL constraints
-   - answered by: declared judgment
-
-17. **Claim integrity** — *The code says mechanisms X and Y make this claim true. Does the contract document name both?*
-   - shape: A decision record that names one of two mechanisms. The contract is accurate about what it mentions and silent about the half that is also load bearing, so the next author removes it.
-   - standards: OpenAPI 3.1, JSON Schema 2020-12, RFC 9457 problem details, Semantic Versioning 2.0.0 for API surface
-   - answered by: declared judgment
-
-18. **Boundary semantics** — *The producer's vocabulary has more members than the consumer has branches. What does the far end do with the ones it does not handle?*
-   - shape: A confident silent default. An unknown status becomes a plausible known one, a truncation is not reported, an exception is swallowed and the caller is told everything succeeded.
-   - standards: CWE-703 improper check or handling of exceptional conditions, CWE-754 improper check for unusual conditions, Saltzer and Schroeder fail-safe defaults
-   - answered by: graded eval
-
-19. **Boundary semantics** — *A value is produced and honestly computed. Does anything actually read it, and does every path that matters leave a record?*
-   - shape: A produced value with no reader, or a failure path that returns before it audits. The diagnostic a document promises and the code never emits.
-   - standards: OWASP ASVS v5.0.0 V16 Security Logging and Error Handling, OWASP Top 10 A09:2025 Security Logging and Alerting Failures, NIST SP 800-92 log management, OpenTelemetry semantic conventions
-   - answered by: graded eval
-
-20. **Interface conformance** — *Does this component take the promotion path, and does the styling actually reach the browser?*
-   - shape: A token bypassed for a raw value, a component that never enters the barrel, or a stylesheet that is written, reviewed, merged, and never served.
-   - standards: W3C Design Tokens Community Group format
-   - answered by: declared judgment
-
-21. **Interface conformance** — *Can this be operated without a mouse, and does every control have a name a screen reader will say?*
-   - shape: An ARIA ownership tree that does not match the visual one, a collapsed nav whose controls lose their accessible names, a tooltip with no association and no Escape.
-   - standards: WCAG 2.2 Level AA, WAI-ARIA 1.2, EN 301 549, Section 508
-   - answered by: declared judgment
-
-22. **Interface conformance** — *Does this control do what it looks like it does, and what did it cost to download?*
-   - shape: A control that looks live and is dead, a hooks-rules violation that only shows under a specific render order, or a payload nobody measured.
-   - standards: WCAG 2.2 Level AA, Core Web Vitals
-   - answered by: declared judgment
-
-23. **CLI and operator ergonomics** — *Can an operator run this from a clean box using only what the docs say?*
-   - shape: Help text that contradicts the defaults, a deprecated alias the documentation still recommends, an exit code that reports success on failure, or a runbook with a missing step.
-   - standards: POSIX Utility Syntax Guidelines (IEEE Std 1003.1), GNU coding standards for command-line interfaces
-   - answered by: declared judgment
-
-24. **Agent and plugin runtime** — *What does this cap or namespace do to the model rather than to the operator?*
-   - shape: A limit that misleads the thing consuming it. A silent truncation the agent reads as the whole input, a manifest placeholder that ships, an allowlist that widens a profile nobody reviewed.
-   - answered by: declared judgment
-
-25. **Mission-domain consequence** — *Weighted by mission effect rather than code severity, what is the worst thing this change permits?*
-   - shape: A control enforced as vocabulary rather than as a ceiling. A marking that does not follow the data, a dissemination rule that is advisory, an air-gap assumption contradicted by a default URL.
-   - standards: 32 CFR Part 2002 CUI, DoDI 5200.48 CUI marking, NIST SP 800-171, EO 13526 classification
-   - answered by: declared judgment
-
-26. **Claim integrity** — *Does this contradict another document that is also in force?*
-   - shape: Two canonical documents authorizing and forbidding the same act, an ADR edited rather than superseded, or canon propagated to one repo and not its siblings.
-   - standards: ISO/IEC/IEEE 42010 architecture description
-   - answered by: declared judgment
-
-27. **Docs, style, and attribution** — *Does anything shipping here carry a name, a path, or a trailer that should not leave this machine?*
-   - shape: AI attribution trailers on commits, a personal absolute path in a shipped file, a required section missing from SECURITY.md, or an entry-point link that 404s.
-   - standards: Diataxis documentation framework, Keep a Changelog 1.1.0, SPDX licence identifiers
-   - answered by: declared judgment
-
-28. **Code quality and structure** — *Is this reachable, is it duplicated, and does it sit on the right side of a module boundary?*
-   - shape: Dead code kept because deleting it felt risky, a second copy of a rule that must agree with the first, or a layering violation that makes the next change cost more.
-   - standards: PEP 8, PEP 484 type hints, CWE-561 dead code
-   - answered by: declared judgment
-
-29. **Event-substrate custodian** — *If this record were rebuilt from its events tomorrow, would it still be here, and would it still say the same thing?*
-   - shape: A row written straight into a projection. It is correct today and gone after a rebuild, or present with a field the replay could not reproduce.
-   - answered by: detector
 
 ## Fast scan mode
 When invoked with Haiku for fast scan:
@@ -253,40 +133,98 @@ Dispatch spec reviewer first, then code quality reviewer after spec passes. Revi
 
 **Operator rule.** A review is run by an agent that did not write the code, and that agent
 reviews through `canonical/review_lanes.yml`, not through questions it thought of on the
-spot. A hand-written checklist is one agent's taste on the day; the registry is 29 seats
-derived from real review history, each held to a published standard where one governs.
+spot. A hand-written checklist is one agent's taste on the day; the registry is derived
+from real review history, each lane held to a published standard where one governs.
 
-This is rule `dispatched-review-convenes-the-round-table` in `canonical/rules.yml`,
-enforced by the tests named there. The dispatch prompt instructs the subagent to:
+This is rule `dispatched-review-convenes-the-round-table` in `canonical/rules.yml`.
 
-1. Run `py -m core.gates.round_table` (add `--json` for a machine-readable report, `--all`
-   to convene the whole bench rather than the lanes relevant to this diff).
-2. Report the detector lanes as the table found them — `clean`, `FOUND`, or `UNRUN`. An
-   `UNRUN` lane is NOT a clean lane and must not be reported as one.
-3. Answer **every** lane in the `ASKED OF YOU` section against the diff. Each answer is
-   either a concrete defect with `file:line` and how it fails, or "no finding" with one
-   sentence naming what was checked. A lane the reviewer did not examine is reported as
-   **not examined** — never silently omitted, and never folded into "no findings".
+#### The loop
 
-   **Convene the reviewer each lane names.** Every seat prints `convene: review-<seat>`
-   beside its question, and that agent exists: it is compiled from that seat's own lanes
-   by `integrations/compiler/reviewers.py` and carries the question, the defect signature,
-   the precedent it came from and the governing standard. Dispatch it with the diff and
-   the lane ids it owns, and it returns one verdict per lane — `pass`, `finding` or
-   `cannot-tell`, each with evidence.
+`ds review` is the CLI door to `core.gates.round_table`; every step below goes through it.
+**A lane answers by testing, in a container built from the commit under review — never by
+reading and opining.** That is the reason the bench is lanes and not hardcoded seats.
 
-   **DO** convene seats in parallel; they are independent by construction, which is what
-   having one seat per question buys.
-   **DO** treat `cannot-tell` as an answer and carry it to the report. It is what keeps a
-   lane honest when the evidence is absent, and folding it into "no finding" is how a lane
-   stops being asked while still appearing to be answered.
-   **DON'T** answer nineteen specialist questions yourself in one pass. Until 2026-09-22
-   the table ended at "N lane(s) need a person" and that is exactly what happened — the
-   seats were specialists and nothing specialist answered them.
-4. Respect the lanes the table declares it is not deciding. A lane prints
-   `NOT DECIDED HERE: …` for the half of its question its check does not answer; that half
-   is the reviewer's to answer, which is the whole reason it is printed.
-5. Report an `ABSTAINED` seat as abstained, not as clean.
+**1. Commit, then dispatch the round.**
+
+```
+ds review --dispatch --work-order <id>            # reviews HEAD
+ds review --dispatch --work-order <id> --pr 812   # reviews the PR's head commit
+```
+
+It builds the lane image from exactly that commit (`git archive`, so uncommitted edits,
+untracked files and every `studio.db` stay out), records the round on the work order, and
+returns the outstanding lanes — the table's `ASKED OF YOU` section — grouped by the
+reviewer that owns them. Lanes that still hold an open finding from an earlier round are
+always included, so a fix cannot escape re-review by moving files. The chair's lanes come
+back with a `null` reviewer: **you are the chair**. Docker must be running; without it
+there is no review to dispatch, and the door says so rather than falling back to reading.
+
+**2. Convene each reviewer, in parallel**, with the diff, its own lane ids and the work
+order id. Each agent is compiled from its seat and carries the question, the defect
+signature, the precedent and the standard. It tests in the lane container:
+
+```
+ds review --run "python -m pytest tests/unit/test_x.py::test_y -q" --work-order <id>
+```
+
+No network and no host state, and every run starts fresh, so a reviewer can break
+anything in there. It must never modify the working tree to test something. It returns
+one answer per lane:
+
+```json
+[{"lane": "a-test-that-cannot-fail",
+  "verdict": "pass | finding | cannot-tell",
+  "reproduction": {"command": "python -m pytest /tmp/t.py -q", "exit_code": 1},
+  "evidence": "what the output shows, and file:line of the defect",
+  "why": "one or two sentences tying it to the lane's signature",
+  "check": "TEST-CHECK: tests/unit/test_x.py::test_y   (findings only, optional)"}]
+```
+
+**DON'T** answer the specialist lanes yourself in one pass. Until the reviewers existed
+the table ended at "N lane(s) need a person", and that is exactly what happened.
+
+**3. Record what came back.**
+
+```
+ds review --record answers.json --reviewer review-gate-and-test-integrity --work-order <id>
+```
+
+The door **re-runs every reproduction** in a fresh container from the round's image and
+refuses any answer whose exit code does not match what the reviewer reported. It also
+refuses a lane the reviewer was not dispatched, a finding with no evidence, and a pass or
+finding with no reproduction. With Docker down it records nothing. It reports which of
+that reviewer's lanes are **still unanswered**.
+
+**4. Ask whether the review still holds the work order.**
+
+```
+ds review --status --work-order <id>              # exits 1 while it blocks
+ds review --findings --work-order <id> --as-tasks  # files open findings as tasks
+```
+
+It blocks on an unanswered lane and on any open finding — **whether or not the finding
+could be filed as a task**. Filing is for tracking the work; a finding with no executable
+check yet blocks exactly as hard.
+
+**5. Fix, commit, dispatch again.** Each dispatch is a new round against the new commit.
+A finding is resolved only when a later round answers that lane with a verified pass, and
+the record says which round resolved it — nothing is overwritten. This loop is one work
+order's work, and it ends when `--status` stops blocking, not when a reviewer stops
+talking.
+
+#### What the answers must preserve
+
+- **A lane the reviewer did not examine is reported as not examined**, never silently
+  omitted and never folded into "no finding". Leaving it out of the answers does exactly
+  that: `--record` lists it as unanswered, and an unanswered lane holds the work order.
+- **`cannot-tell` is an answer.** Carry it. It is what keeps a lane honest when the lane
+  could not be tested, and folding it into "no finding" is how a lane stops being asked
+  while still appearing to be answered. It must say what would have been needed.
+- **An `UNRUN` detector lane is not a clean lane** and must not be reported as one.
+- **An `ABSTAINED` seat is abstained**, not clean.
+- **Respect what a lane declares it is not deciding.** A lane prints `NOT DECIDED HERE: …`
+  for the half of its question its check does not answer; that half is the reviewer's,
+  which is the whole reason it is printed.
 
 **Why the subagent and not the caller.** The author of a change cannot convene a table
 against their own work and have the result mean anything — the seats would be read by the
@@ -296,42 +234,13 @@ no lane. The subagent path is the same rule applied to reviews that do not run t
 work order.
 
 **When the change set edits the table itself** — `canonical/review_lanes.yml`,
-`core/gates/round_table.py`, `scripts/seat_lanes_data.py`, or
-`core/gates/review_lane_registry.py` — the report says `SELF-REVIEW` at the top. The lens
-and the subject are the same artifact. That is not a reason to skip the review; it is a
-reason the report must not be read as independent, and a second reviewer who did not write
-the registry change should answer the seats that govern review process itself
-(Chair and verdict owner, Evidence referee, Reviewer's reviewer, Grader-integrity).
-
-Each reviewer returns a JSON object matching the schema in ../../orchestration.md, extended
-with the table's own output:
-
-```json
-{
-  "seats": [
-    {"lane": "a-write-no-event-can-reconstruct", "seat": "Event-substrate custodian",
-     "answer": "no finding | not examined | <the defect>", "location": "file:line"}
-  ]
-}
-```
-
-The base schema:
-```json
-{
-  "signal": "compliant | non_compliant",
-  "confidence": 0.0-1.0,
-  "summary": "One sentence verdict",
-  "issues": [
-    {
-      "requirement": "the requirement from spec",
-      "issue": "what is wrong",
-      "location": "file:line",
-      "fix": "specific, actionable fix"
-    }
-  ]
-}
-```
-Parse `result.signal`: `compliant` → next stage. `non_compliant` → re-dispatch implementer with `result.issues`.
+`core/gates/round_table.py`, `scripts/seat_lanes_data.py`,
+`core/gates/review_lane_registry.py`, `core/work_orders/review_answers.py`, or
+`core/gates/lane_sandbox.py` — the report
+says `SELF-REVIEW` at the top. The lens and the subject are the same artifact. That is not
+a reason to skip the review; it is a reason the report must not be read as independent, and
+a second reviewer who did not write the change should answer the seats that govern review
+process itself (Chair and verdict owner, Finding integrity).
 
 ## Findings format
 

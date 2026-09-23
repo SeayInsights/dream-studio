@@ -83,6 +83,10 @@ _SELF = frozenset(
         "core/gates/round_table.py",
         "scripts/seat_lanes_data.py",
         "core/gates/review_lane_registry.py",
+        # How an answer is held and verified is part of the table's definition too: an
+        # edit here changes what a recorded review means.
+        "core/work_orders/review_answers.py",
+        "core/gates/lane_sandbox.py",
     }
 )
 
@@ -467,6 +471,51 @@ def convene(
             s["lane"] for s in seats if s["kind"] != "detector" and not s.get("abstained")
         ],
     }
+
+
+def assignments(report: dict) -> list[dict]:
+    """Group a convened table into one assignment per reviewer.
+
+    THE HANDOFF THAT WAS MISSING. `convene()` names the reviewer each lane needs and stops
+    there, deliberately -- a Python gate cannot dispatch a subagent. But "cannot dispatch"
+    became "produces nothing a dispatcher could use": the caller held a flat list of 26
+    lanes and had to regroup it by reviewer itself, which is a second place deciding which
+    seat owns which question.
+
+    So this returns the grouping and nothing else. It starts from `awaiting_judgment` --
+    the report's own answer to "what is outstanding" -- rather than recomputing the
+    condition, because a lane counted outstanding by one definition and dispatched by
+    another is how a question gets asked twice or not at all.
+
+    A lane whose seat has no compiled agent (the chair) is not an assignment. The caller
+    holds those lanes: it IS the chair.
+    """
+    outstanding = set(report.get("awaiting_judgment") or [])
+    by_reviewer: dict[str, dict] = {}
+    chair: list[str] = []
+
+    for entry in report.get("lanes") or []:
+        lane = str(entry.get("lane", ""))
+        if lane not in outstanding:
+            continue
+        reviewer = entry.get("reviewer")
+        if not reviewer:
+            chair.append(lane)
+            continue
+        slot = by_reviewer.setdefault(
+            str(reviewer), {"reviewer": str(reviewer), "seat": entry.get("seat", "?"), "lanes": []}
+        )
+        slot["lanes"].append(lane)
+
+    out = sorted(by_reviewer.values(), key=lambda a: str(a["reviewer"]))
+    for slot in out:
+        slot["lanes"].sort()
+    if chair:
+        # Named, not hidden. The chair's lanes are outstanding too, and a dispatcher that
+        # silently dropped them would report every lane assigned while one seat's
+        # questions went nowhere.
+        out.append({"reviewer": None, "seat": "Chair and verdict owner", "lanes": sorted(chair)})
+    return out
 
 
 def _render(report: dict) -> str:
