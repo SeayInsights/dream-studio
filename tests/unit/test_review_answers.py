@@ -52,6 +52,8 @@ IMAGE = "ds-review:fake"
 FAILS = {"command": "python -m pytest /tmp/t.py -q", "exit_code": 1}
 HOLDS = {"command": "python -m pytest tests/unit/test_x.py -q", "exit_code": 0}
 REAL_TEST = "TEST-CHECK: tests/unit/test_review_answers.py::test_two_reviewers_answers_coexist"
+#: The fake lanes' ownership, declared the way the registry declares the real ones.
+OWNED = {REVIEWER: {"lane-one", "lane-two"}, OTHER: {"lane-nine"}, None: {"chair-lane"}}
 
 
 def _up():
@@ -73,7 +75,13 @@ def _record(db, reviewer, answers, **kw):
 def _dispatch(db, slots=None):
     slots = slots or [{"reviewer": REVIEWER, "seat": "Claim integrity", "lanes": LANES}]
     return record_dispatch(
-        WO_ID, sha="a" * 40, image=IMAGE, change_set=["x.py"], assignments=slots, db_path=db
+        WO_ID,
+        sha="a" * 40,
+        image=IMAGE,
+        change_set=["x.py"],
+        assignments=slots,
+        db_path=db,
+        ownership=OWNED,
     )
 
 
@@ -677,3 +685,40 @@ def test_cli_dispatch_preview_returns_assignments_and_records_nothing(
     assert len([a for a in out["assignments"] if a["reviewer"]]) == 9
     assert out["recorded"] is False
     assert ra.read_dispatch(WO_ID, db_path=db) is None
+
+
+# ── the dispatch door is held to the registry ───────────────────────────────
+
+
+def test_a_dispatch_may_not_hand_a_reviewer_another_seats_lane(db):
+    """Round two's access-and-reach finding, against the REAL registry: dispatching
+    review-access-and-reach a Publication and provenance lane was accepted, and a verified
+    pass on it recorded. Round one's widening had moved to this door, not closed."""
+    with pytest.raises(ValueError, match="does not own supply-chain-and-provenance"):
+        record_dispatch(
+            WO_ID,
+            sha="a" * 40,
+            image=IMAGE,
+            change_set=["x.py"],
+            assignments=[
+                {
+                    "reviewer": "review-access-and-reach",
+                    "seat": "Access and reach",
+                    "lanes": ["authz-and-identity", "supply-chain-and-provenance"],
+                }
+            ],
+            db_path=db,
+        )
+    assert ra.read_dispatch(WO_ID, db_path=db) is None, "a refused dispatch records nothing"
+
+
+def test_the_registry_ownership_gives_every_lane_exactly_one_owner():
+    from core.gates.round_table import _lanes
+
+    owned = ra.lane_ownership()
+    every = [lane for lanes in owned.values() for lane in lanes]
+    assert sorted(every) == sorted(str(ln["id"]) for ln in _lanes())
+    assert len(every) == len(set(every))
+    assert (
+        "reviewer-s-reviewer" in owned["review-finding-integrity"]
+    ), "an abstaining seat still owns its lane in later rounds"

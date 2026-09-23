@@ -140,14 +140,29 @@ def record_dispatch(
     assignments: list[dict[str, Any]],
     db_path: Path | None = None,
     project_root: Path | None = None,
+    ownership: dict[Any, set[str]] | None = None,
 ) -> dict[str, Any]:
     """Record who was asked what, against which commit, as a new round.
+
+    Every assignment is held to the registry's seat-to-lane mapping; a lane handed to a
+    reviewer whose seat does not own it raises ValueError and nothing is recorded.
 
     `assignments` is extended with every lane that still holds an open finding, assigned
     to the reviewer that found it -- a finding is resolved by a later verified pass on the
     same lane, and a dispatch that dropped the lane because the new change set did not
     select it would let the finding lapse unanswered.
     """
+    owned = lane_ownership(project_root) if ownership is None else ownership
+    for slot in assignments:
+        reviewer = slot.get("reviewer")
+        stray = sorted(set(slot.get("lanes") or []) - set(owned.get(reviewer, ())))
+        if stray:
+            raise ValueError(
+                f"{reviewer or 'the chair'} does not own {', '.join(stray)} in the lane"
+                " registry. A dispatch may only hand a reviewer its own seat's lanes --"
+                " anything else lets a name answer a question it was never compiled to ask."
+            )
+
     prior = read_dispatch(work_order_id, db_path=db_path)
     round_no = int(prior.get("round", 0)) + 1 if prior else 1
 
@@ -194,6 +209,23 @@ def record_dispatch(
     )
     doc["stored"] = stored
     return doc
+
+
+def lane_ownership(repo_root: Path | None = None) -> dict[Any, set[str]]:
+    """Which lanes each reviewer owns, from the registry: lane -> seat -> reviewer.
+
+    The chair's seat has no compiled reviewer and maps to None. Read from the registry
+    rather than from a convened table, because a convening leaves out an abstaining seat
+    and ownership does not change with who happens to be asked this round.
+    """
+    from core.gates.round_table import _lanes
+    from integrations.compiler.reviewers import reviewer_for_seat
+
+    owned: dict[Any, set[str]] = {}
+    for lane in _lanes(repo_root):
+        reviewer = reviewer_for_seat(str(lane.get("seat", "")))
+        owned.setdefault(reviewer, set()).add(str(lane.get("id")))
+    return owned
 
 
 def dispatched_lanes(dispatch: dict[str, Any] | None, reviewer: str) -> list[str]:

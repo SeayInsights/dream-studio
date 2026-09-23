@@ -365,15 +365,19 @@ def _dispatch(
         print(f"ds review --dispatch: {exc}", file=sys.stderr)
         return 2
 
-    doc = record_dispatch(
-        args.work_order,
-        sha=sha,
-        image=image,
-        change_set=plan["change_set"],
-        assignments=plan["assignments"],
-        db_path=db_path,
-        project_root=repo_root,
-    )
+    try:
+        doc = record_dispatch(
+            args.work_order,
+            sha=sha,
+            image=image,
+            change_set=plan["change_set"],
+            assignments=plan["assignments"],
+            db_path=db_path,
+            project_root=repo_root,
+        )
+    except ValueError as exc:
+        print(f"ds review --dispatch: {exc}", file=sys.stderr)
+        return 2
     if not args.pr and _tree_is_dirty(repo_root):
         doc["warning"] = (
             f"uncommitted changes are NOT in this review: the lane image is commit"
