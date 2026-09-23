@@ -222,3 +222,85 @@ def test_every_home_name_production_code_reads_is_one_home_sets():
     assert names, "the scan found no reads at all -- the pattern is broken, not the code clean"
     missing = names - _OS_HOMES - set(home_variables(Path("/h")))
     assert not missing, f"--home does not set {sorted(missing)}, which production code reads"
+
+
+def test_diagnostics_follow_home_not_the_user_directory(tmp_path, monkeypatch):
+    """Round 3: `ds --home X project register` wrote diagnostics under the real home,
+    because the diagnostics directory spelled `Path.home() / ".dream-studio"` itself and
+    never read DREAM_STUDIO_HOME -- the variable --home sets."""
+    from core.telemetry.diagnostics import log_diagnostic
+
+    fake_user = tmp_path / "user"
+    fake_user.mkdir()
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(fake_user))
+    monkeypatch.setenv("USERPROFILE", str(fake_user))
+    monkeypatch.delenv("DS_DIAGNOSTICS_DIR", raising=False)
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(home))
+
+    log_diagnostic("anomaly", "register_project", context={"probe": True})
+
+    assert list((home / "state" / "diagnostics").glob("*.jsonl")), "not under --home"
+    assert [p for p in fake_user.rglob("*") if p.is_file()] == []
+
+
+#: The only places core/ and interfaces/ may spell the default home themselves, each for a
+#: reason that is about the operator's REAL install rather than whichever home is in force.
+_MAY_SPELL_THE_DEFAULT_HOME = {
+    # The resolver.
+    "core/config/paths.py",
+    # Recognising and backing up the live authority: protection for the operator's real
+    # database, which must not be redirected by the variable it protects against.
+    "core/config/sqlite_bootstrap.py:_is_live_authority_db",
+    "core/config/sqlite_bootstrap.py:_backup_live_db",
+    # Cutover planning describes the live install on this machine.
+    "core/upgrade/",
+}
+
+
+def test_core_and_the_cli_spell_the_default_home_in_one_place():
+    """THE NEXT HARDCODED HOME FAILS HERE. Three review rounds each found one more way a
+    `--home` command escaped its home; the third was a module that built the path itself.
+    Every default home in core/ and interfaces/ goes through core.config.paths.home_dir()."""
+    import ast
+    import re
+    import subprocess
+
+    spelled = re.compile(
+        r"""home\(\)\s*/\s*["']\.dream-studio|expanduser\(["']~/?\.dream-studio"""
+        r"""|expanduser\(["']~["']\)\)?\s*/\s*["']\.dream-studio"""
+    )
+    files = subprocess.run(
+        ["git", "ls-files", "core/*.py", "interfaces/*.py"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=True,
+    ).stdout.split()
+    assert len(files) > 100, "the scan found almost nothing -- the listing is broken"
+    offenders = []
+    for rel in files:
+        if rel in _MAY_SPELL_THE_DEFAULT_HOME or any(
+            rel.startswith(p) for p in _MAY_SPELL_THE_DEFAULT_HOME if p.endswith("/")
+        ):
+            continue
+        text = (REPO_ROOT / rel).read_text(encoding="utf-8", errors="replace")
+        if not spelled.search(text):
+            continue
+        functions = [
+            n
+            for n in ast.walk(ast.parse(text))
+            if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)
+        ]
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if not spelled.search(line) or line.lstrip().startswith("#"):
+                continue
+            owner = next(
+                (f.name for f in functions if f.lineno <= lineno <= (f.end_lineno or f.lineno)),
+                None,
+            )
+            if f"{rel}:{owner}" not in _MAY_SPELL_THE_DEFAULT_HOME:
+                offenders.append(f"{rel}:{lineno}")
+    assert not offenders, f"spell the home through core.config.paths.home_dir(): {offenders}"

@@ -26,7 +26,9 @@ def _default_db_path() -> Path:
     override = os.environ.get(DB_PATH_ENV)
     if override:
         return Path(override)
-    return Path.home() / ".dream-studio" / "state" / "studio.db"
+    from core.config.paths import home_dir
+
+    return home_dir() / "state" / "studio.db"
 
 
 def _read_only_db_path() -> Path:

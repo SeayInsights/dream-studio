@@ -172,7 +172,9 @@ def activate_pending_migrations(db_path: Path | None = None) -> dict:
     to the latest merged migration after successful apply.
     """
     if db_path is None:
-        db_path = Path.home() / ".dream-studio" / "state" / "studio.db"
+        from core.config.paths import home_dir
+
+        db_path = home_dir() / "state" / "studio.db"
 
     pending = pending_migrations_info()
     if not pending:

@@ -194,7 +194,9 @@ def dispatch(
         # Read skip_hook_install from ~/.dream-studio/config.json if present.
         _skip_hook = False
         try:
-            _cfg_path = (ds_home or (Path.home() / ".dream-studio")) / "config.json"
+            from core.config.paths import home_dir
+
+            _cfg_path = (ds_home or home_dir()) / "config.json"
             if _cfg_path.is_file():
                 import json as _json
 

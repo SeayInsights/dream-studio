@@ -25,7 +25,9 @@ def _active_task_path() -> Path:
     override = os.environ.get(ACTIVE_TASK_PATH_ENV)
     if override:
         return Path(override)
-    return Path.home() / ".dream-studio" / "state" / "active_task.json"
+    from core.config.paths import home_dir
+
+    return home_dir() / "state" / "active_task.json"
 
 
 def _use_authority() -> bool:

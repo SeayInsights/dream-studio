@@ -59,10 +59,24 @@ def plugin_version() -> str:
     return "unknown"
 
 
-def user_data_dir() -> Path:
-    """Return `~/.dream-studio/`, creating it if absent."""
+def home_dir() -> Path:
+    """The Dream Studio home -- DREAM_STUDIO_HOME, else ~/.dream-studio -- NOT created.
+
+    THE ONE PLACE THE DEFAULT HOME IS SPELLED. Code that built `Path.home() /
+    ".dream-studio"` itself ignored DREAM_STUDIO_HOME, so `ds --home X` -- which sets it --
+    could not reach it: `ds --home X project register` wrote diagnostics into the real
+    home (boundary-semantics lane, 2026-09-23). tests/unit/test_home_means_home.py fails
+    on a new spelling in core/ or interfaces/.
+
+    Resolving a path does not create it; user_data_dir() is the one that does.
+    """
     override = os.environ.get("DREAM_STUDIO_HOME")
-    path = Path(override).expanduser() if override else Path.home() / USER_DATA_DIRNAME
+    return Path(override).expanduser() if override else Path.home() / USER_DATA_DIRNAME
+
+
+def user_data_dir() -> Path:
+    """Return the Dream Studio home, creating it if absent."""
+    path = home_dir()
     path.mkdir(parents=True, exist_ok=True)
     return path
 

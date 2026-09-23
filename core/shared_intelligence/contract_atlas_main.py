@@ -103,6 +103,7 @@ def build_contract_atlas(
     declarations from the provided repo root. It never writes to SQLite, adapter
     configs, or local runtime state.
     """
+    from core.config.paths import home_dir
 
     if export_scope not in EXPORT_SCOPES:
         raise ValueError(f"unsupported export_scope: {export_scope}")
@@ -181,7 +182,7 @@ def build_contract_atlas(
         "runtime_profiles": _runtime_profiles(),
         "installed_runtime_model": installed_runtime_model(
             source_root=root,
-            dream_studio_home=Path.home() / ".dream-studio",
+            dream_studio_home=home_dir(),
         ),
         "installed_module_profiles": module_profiles(),
         "analytics_only_profile": _analytics_only_profile(),

@@ -252,7 +252,9 @@ def _telemetry_home_exists() -> bool:
     # `--home` elsewhere leaked its event into the default spool, the directory appeared,
     # and this guard then let 514 gate events into a home nobody had installed. Only the
     # installer writes config/runtime.json.
-    home = Path(os.environ.get("DREAM_STUDIO_HOME") or (Path.home() / ".dream-studio"))
+    from core.config.paths import home_dir
+
+    home = home_dir()
     return (home / CONFIG_RELATIVE_PATH).is_file()
 
 

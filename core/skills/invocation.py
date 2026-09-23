@@ -271,7 +271,9 @@ def record_skill_invocation(
             from core.runtime_state import db_write_runtime_state
 
             if not db_write_runtime_state("active_skill", _active_skill):
-                _state_dir = Path.home() / ".dream-studio" / "state"
+                from core.config.paths import home_dir
+
+                _state_dir = home_dir() / "state"
                 _state_dir.mkdir(parents=True, exist_ok=True)
                 (_state_dir / "active_skill.json").write_text(
                     json.dumps(_active_skill), encoding="utf-8"

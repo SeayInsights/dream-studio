@@ -122,9 +122,12 @@ def test_telemetry_does_not_create_the_runtime_it_reports_into(monkeypatch, tmp_
 
 def test_telemetry_still_records_when_a_home_exists(monkeypatch, tmp_path, captured):
     """The guard is about not CREATING the home, not about refusing to report to
-    one. An operator with Dream Studio installed still gets every outcome."""
+    one. An operator with Dream Studio installed still gets every outcome -- and installed
+    means the installer's config/runtime.json, not a directory any stray write creates."""
     monkeypatch.delenv("DS_SPOOL_ROOT", raising=False)
-    (tmp_path / ".dream-studio").mkdir()
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
+    (tmp_path / ".dream-studio" / "config").mkdir(parents=True)
+    (tmp_path / ".dream-studio" / "config" / "runtime.json").write_text("{}", encoding="utf-8")
     monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
 
     pre_push.emit_gate_outcome_event(_result(gate_id="rule1", passed=True))

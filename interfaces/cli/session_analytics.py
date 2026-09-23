@@ -40,7 +40,9 @@ except ImportError as exc:
 
 
 def _load_config() -> dict:
-    config_path = Path.home() / ".dream-studio" / "config.json"
+    from core.config.paths import home_dir
+
+    config_path = home_dir() / "config.json"
     if config_path.exists():
         try:
             return json.loads(config_path.read_text(encoding="utf-8"))
@@ -238,7 +240,9 @@ def compute_analytics(sessions: list[dict], window_days: int) -> dict:
 
 
 def _save_output(analytics: dict) -> Path:
-    state_dir = Path.home() / ".dream-studio" / "state"
+    from core.config.paths import home_dir
+
+    state_dir = home_dir() / "state"
     state_dir.mkdir(parents=True, exist_ok=True)
     out_path = state_dir / "session-analytics.json"
     out_path.write_text(json.dumps(analytics, indent=2), encoding="utf-8")
