@@ -185,14 +185,14 @@ def _split_changed_files(raw: str) -> list[str]:
     return [item.strip() for item in normalized.splitlines() if item.strip()]
 
 
-def _git_diff_names(args: list[str]) -> list[str] | None:
-    """Like _git_changed, but returns None — never [] — when the git command
-    itself failed or the ref could not be resolved, instead of conflating
-    that with "the diff genuinely contains zero files". The two cases need
-    different fallbacks; see _changed_files."""
+def _run_git_names(args: list[str]) -> list[str] | None:
+    """Run a read-only `git <args>` and return its output as line-per-name,
+    or None if the git binary could not be invoked or it returned non-zero.
+    Every git query below is this same shape (invoke, decode leniently,
+    split lines); this is the one place that shape is written."""
     try:
         result = subprocess.run(
-            ["git", "diff", "--name-only", *args],
+            ["git", *args],
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
@@ -205,6 +205,14 @@ def _git_diff_names(args: list[str]) -> list[str] | None:
     if result.returncode != 0:
         return None
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def _git_diff_names(args: list[str]) -> list[str] | None:
+    """Like _git_changed, but returns None — never [] — when the git command
+    itself failed or the ref could not be resolved, instead of conflating
+    that with "the diff genuinely contains zero files". The two cases need
+    different fallbacks; see _changed_files."""
+    return _run_git_names(["diff", "--name-only", *args])
 
 
 def _git_ls_files() -> list[str] | None:
@@ -214,57 +222,15 @@ def _git_ls_files() -> list[str] | None:
     not, and doing so is what stops a file already committed to this branch
     from going unnoticed just because there is no origin/main to diff it
     against."""
-    try:
-        result = subprocess.run(
-            ["git", "ls-files"],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
-        )
-    except OSError:
-        return None
-    if result.returncode != 0:
-        return None
-    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    return _run_git_names(["ls-files"])
 
 
 def _git_changed(args: list[str]) -> list[str]:
-    try:
-        result = subprocess.run(
-            ["git", "diff", "--name-only", *args],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
-        )
-    except OSError:
-        return []
-    if result.returncode != 0:
-        return []
-    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    return _git_diff_names(args) or []
 
 
 def _git_untracked() -> list[str]:
-    try:
-        result = subprocess.run(
-            ["git", "ls-files", "--others", "--exclude-standard"],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
-        )
-    except OSError:
-        return []
-    if result.returncode != 0:
-        return []
-    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    return _run_git_names(["ls-files", "--others", "--exclude-standard"]) or []
 
 
 if __name__ == "__main__":
