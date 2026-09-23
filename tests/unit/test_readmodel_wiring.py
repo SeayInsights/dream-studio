@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -246,6 +247,75 @@ def test_hooks_executions_returns_real_rows_when_hook_executions_populated(
         hook_names = {e["hook_name"] for e in data["executions"]}
         assert "on-pre-push" in hook_names
         assert "on-post-commit" in hook_names
+    finally:
+        DatabaseRuntime.reset_instance()
+        os.environ.pop("DREAM_STUDIO_HOME", None)
+
+
+# ── T5: /api/v1/metrics/models reads its own authority's analytics store ───
+#
+# projections/api/routes/metrics.py::get_model_metrics calls token_usage_sql(conn)
+# with conn scoped to DB_PATH_ENV's db_path — but until
+# core.analytics.duckdb_store.analytics_db_path_for_connection(conn) was threaded
+# through, the DuckDB branch resolved connect_analytics()'s ambient default (the
+# aggregate_metrics.db sitting in DREAM_STUDIO_HOME) instead, regardless of which
+# authority the request's own conn belonged to.
+
+
+def test_model_metrics_route_reads_its_own_authoritys_store_not_ambient(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Reproduces the leak directly: seed the ambient store (an isolated
+    DREAM_STUDIO_HOME) with a token row for an unrelated model, bind the
+    TestClient to a SEPARATE explicit db_path (via DB_PATH_ENV) whose own
+    aggregate_metrics.db sibling holds a DIFFERENT model's row, and show only
+    that authority's model comes back from GET /api/v1/metrics/models."""
+    from core.analytics.duckdb_store import connect_analytics, ensure_analytics_schema
+
+    recent = (datetime.now(UTC) - timedelta(days=1)).isoformat()
+
+    # Ambient store, under an isolated DREAM_STUDIO_HOME: an unrelated model.
+    ambient_home = tmp_path / "ambient-home"
+    (ambient_home / "state").mkdir(parents=True)
+    os.environ["DREAM_STUDIO_HOME"] = str(ambient_home)
+    ambient_conn = connect_analytics(
+        ambient_home / "state" / "aggregate_metrics.db", read_only=False
+    )
+    try:
+        ensure_analytics_schema(ambient_conn)
+        ambient_conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp, model_id,"
+            " input_tokens, output_tokens, payload)"
+            " VALUES ('ambient-tok', 'token.consumed', ?, 'claude-opus-4-8', 9000, 9000, '{}')",
+            [recent],
+        )
+    finally:
+        ambient_conn.close()
+
+    # This authority's OWN db_path + its OWN sibling aggregate_metrics.db, at a
+    # location unrelated to the ambient DREAM_STUDIO_HOME set above.
+    own_dir = tmp_path / "own-authority"
+    own_dir.mkdir()
+    db_path = own_dir / "studio.db"
+    own_conn = connect_analytics(own_dir / "aggregate_metrics.db", read_only=False)
+    try:
+        ensure_analytics_schema(own_conn)
+        own_conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp, model_id,"
+            " input_tokens, output_tokens, payload)"
+            " VALUES ('own-tok', 'token.consumed', ?, 'claude-haiku-4-5', 1000, 500, '{}')",
+            [recent],
+        )
+    finally:
+        own_conn.close()
+
+    client = _client_for_db(db_path, monkeypatch)
+    try:
+        resp = client.get("/api/v1/metrics/models")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "claude-haiku-4-5" in data["by_model"], data["by_model"]
+        assert "claude-opus-4-8" not in data["by_model"], data["by_model"]
     finally:
         DatabaseRuntime.reset_instance()
         os.environ.pop("DREAM_STUDIO_HOME", None)

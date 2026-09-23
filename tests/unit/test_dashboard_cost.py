@@ -277,3 +277,72 @@ def test_api_equivalent_cost_correctness(tmp_path: Path, monkeypatch: pytest.Mon
     assert result["priced_record_count"] == 2
     assert result["unpriced_record_count"] == 0
     assert result["record_count"] == 2
+
+
+# ── api_equivalent_cost reads its own conn's authority, not the ambient store ─
+#
+# _make_seeded_conn() above is an in-memory connection: PRAGMA database_list
+# reports no filename for it, so analytics_db_path_for_connection(conn) falls
+# back to None (the ambient default) — the tests above pass BECAUSE they rely
+# on that fallback. A conn opened against a real file must instead resolve
+# its OWN aggregate_metrics.db sibling; before that wiring, it read whatever
+# store sat in the ambient DREAM_STUDIO_HOME regardless of which authority
+# the conn belonged to.
+
+
+def test_api_equivalent_cost_reads_conns_own_store_not_ambient(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Seed the ambient store (an isolated DREAM_STUDIO_HOME) with an unrelated
+    model's token row, seed a REAL file-backed conn's own aggregate_metrics.db
+    sibling with a DIFFERENT model's row, and show api_equivalent_cost(conn)
+    reports only the conn's own model."""
+    import os
+
+    from core.analytics import duckdb_store
+    from projections.core.cost_analysis import api_equivalent_cost
+
+    # Ambient store, under an isolated DREAM_STUDIO_HOME: an unrelated model.
+    ambient_home = tmp_path / "ambient-home"
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(ambient_home))
+    ambient_conn = duckdb_store.connect_analytics(read_only=False)  # ambient default path
+    try:
+        duckdb_store.ensure_analytics_schema(ambient_conn)
+        ambient_conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp, model_id,"
+            " input_tokens, output_tokens, payload)"
+            " VALUES ('ambient-tok', 'token.consumed', '2026-07-03T00:00:00Z',"
+            " 'claude-opus-4-8', 9000, 9000, '{}')"
+        )
+    finally:
+        ambient_conn.close()
+    assert "DREAM_STUDIO_HOME" in os.environ  # sanity: the env var really moved
+
+    # A REAL sqlite file (not :memory:) with its OWN sibling aggregate_metrics.db,
+    # seeded with a DIFFERENT model — a location unrelated to DREAM_STUDIO_HOME.
+    own_dir = tmp_path / "own-authority"
+    own_dir.mkdir()
+    db_path = own_dir / "studio.db"
+    sqlite3.connect(str(db_path)).close()
+    own_analytics = duckdb_store.connect_analytics(
+        own_dir / "aggregate_metrics.db", read_only=False
+    )
+    try:
+        duckdb_store.ensure_analytics_schema(own_analytics)
+        own_analytics.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp, model_id,"
+            " input_tokens, output_tokens, payload)"
+            " VALUES ('own-tok', 'token.consumed', '2026-07-03T00:00:00Z',"
+            " 'claude-haiku-4-5', 1000, 500, '{}')"
+        )
+    finally:
+        own_analytics.close()
+
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    result = api_equivalent_cost(conn)
+    conn.close()
+
+    models = {row["model_id"] for row in result["by_model"]}
+    assert models == {"claude-haiku-4-5"}, models
+    assert result["record_count"] == 1
