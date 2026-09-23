@@ -157,9 +157,11 @@ def _home_environment(home: Path | None):
     spool, created a default studio.db, and left the --home authority empty (measured
     2026-09-23). So the three variables those paths read are set from --home.
 
-    Only where unset, and only for this command. A variable set explicitly wins -- nine
-    tests set DS_SPOOL_ROOT on purpose and call this in-process with --home -- and an
-    in-process caller must not inherit the export after the command returns.
+    The flag wins over an inherited variable. The first version filled in only unset
+    ones, and the runtime-check image sets DREAM_STUDIO_HOME itself: there, `--home` never
+    took effect and analytics landed in the image's home (found by the boundary-semantics
+    lane, 2026-09-23). The previous values come back when the command returns, so an
+    in-process caller does not inherit the export.
     """
     if home is None:
         yield
@@ -169,14 +171,16 @@ def _home_environment(home: Path | None):
         "DS_SPOOL_ROOT": str(home / "events"),
         "DREAM_STUDIO_DB_PATH": str(home / "state" / "studio.db"),
     }
-    added = [key for key in wanted if key not in os.environ]
-    for key in added:
-        os.environ[key] = wanted[key]
+    previous = {key: os.environ.get(key) for key in wanted}
+    os.environ.update(wanted)
     try:
         yield
     finally:
-        for key in added:
-            os.environ.pop(key, None)
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -76,7 +76,6 @@ def db_home(tmp_path):
 
 
 def _task_done(db_home, tmp_path, monkeypatch, work_order_id, task_id, planning_root=None):
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     argv = ["--home", str(db_home), "work-order", "task-done", work_order_id, task_id]
     if planning_root:
         argv += ["--planning-root", str(planning_root)]
@@ -91,21 +90,21 @@ def _tasks(db_home, monkeypatch, work_order_id):
 
 
 def test_task_done_emits_event_not_direct_write(db_home, tmp_path, monkeypatch):
-    # Phase 18.2.3: task.completed is now event-sourced. mark_task_done() emits
-    # a canonical event; the TaskProjection applies it to business_tasks
-    # asynchronously. The DB row stays 'pending' until the projection runs.
-    spool_root = tmp_path / "spool-root"
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
+    # Phase 18.2.3: task.completed is event-sourced. mark_task_done() emits a
+    # canonical event and runs sync_tick() inline (WO-TASKDONE-SYNC), so the
+    # TaskProjection applies it to the --home authority before the command returns.
+    # This asserted 'pending' while the projection ran against the default authority
+    # instead of --home -- the leak --home now closes.
+    spool_root = db_home / "events"
     rc = _task_done(db_home, tmp_path, monkeypatch, WO_ID, TASK_A)
     assert rc == 0
-    # DB row is NOT changed directly — projection owns the write.
     db_path = db_home / "state" / "studio.db"
     conn = sqlite3.connect(str(db_path))
     try:
         row = conn.execute(
             "SELECT status FROM business_tasks WHERE task_id = ?", (TASK_A,)
         ).fetchone()
-        assert row[0] == "pending"
+        assert row[0] == "complete"
     finally:
         conn.close()
     # Canonical event was emitted.
@@ -142,7 +141,7 @@ def test_task_done_emits_task_completed_event(db_home, tmp_path, monkeypatch):
     # the emitted event out of spool/ into processed/. Scan the whole spool tree,
     # not just the unprocessed spool/ subdir, and scope to this task.
     events = [
-        json.loads(p.read_text(encoding="utf-8")) for p in (tmp_path / "spool-root").rglob("*.json")
+        json.loads(p.read_text(encoding="utf-8")) for p in (db_home / "events").rglob("*.json")
     ]
     task_events = [
         e

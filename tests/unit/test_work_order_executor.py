@@ -93,7 +93,6 @@ def db_home(tmp_path):
 
 
 def _start(db_home, tmp_path, monkeypatch, work_order_id=WORK_ORDER_ID):
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     return main(
         [
             "--home",
@@ -126,7 +125,6 @@ def _list(db_home, monkeypatch, extra=None):
 
 
 def test_start_exits_1_when_work_order_not_found(db_home, tmp_path, monkeypatch):
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     rc = main(
         [
             "--home",
@@ -202,8 +200,7 @@ def test_start_updates_status_to_in_progress(db_home, tmp_path, monkeypatch):
 
 
 def test_start_emits_spool_event_json(db_home, tmp_path, monkeypatch):
-    spool_root = tmp_path / "spool-root"
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
+    spool_root = db_home / "events"
     main(
         [
             "--home",
@@ -229,7 +226,6 @@ def test_start_spool_failure_is_non_blocking(db_home, tmp_path, monkeypatch):
         raise OSError("disk full")
 
     monkeypatch.setattr(_spool, "write_event", _fail)
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     rc = main(
         [
             "--home",

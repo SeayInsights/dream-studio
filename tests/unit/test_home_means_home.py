@@ -139,17 +139,31 @@ def test_the_home_export_ends_with_the_command(tmp_path, monkeypatch):
     assert "DS_SPOOL_ROOT" not in os.environ, "the export outlived the command"
 
 
-def test_an_explicit_spool_root_wins_over_home(tmp_path, monkeypatch):
-    """Nine tests set DS_SPOOL_ROOT on purpose and pass --home; the first version overwrote
-    their choice and their events went missing."""
+def test_the_flag_wins_over_an_inherited_home_and_gives_it_back(tmp_path, monkeypatch):
+    """The runtime-check image sets DREAM_STUDIO_HOME itself. When --home only filled in
+    unset variables it never took effect there, and analytics landed in the image's home.
+    The inherited value is restored once the command returns."""
     from interfaces.cli import ds
 
-    explicit = str(tmp_path / "explicit-spool")
-    monkeypatch.setenv("DS_SPOOL_ROOT", explicit)
+    inherited = {
+        "DREAM_STUDIO_HOME": str(tmp_path / "inherited"),
+        "DS_SPOOL_ROOT": str(tmp_path / "inherited" / "events"),
+        "DREAM_STUDIO_DB_PATH": str(tmp_path / "inherited" / "state" / "studio.db"),
+    }
+    for key, value in inherited.items():
+        monkeypatch.setenv(key, value)
     seen = {}
-    monkeypatch.setattr(
-        ds, "_run", lambda p, a, s, h: seen.setdefault("spool", os.environ["DS_SPOOL_ROOT"]) and 0
-    )
-    ds.main(["--home", str(tmp_path / "home"), "version"])
-    assert seen["spool"] == explicit
-    assert os.environ["DS_SPOOL_ROOT"] == explicit, "an explicit variable was disturbed"
+
+    def spy(parser, args, source_root, home):
+        seen.update({k: os.environ.get(k) for k in inherited})
+        return 0
+
+    monkeypatch.setattr(ds, "_run", spy)
+    home = (tmp_path / "home").resolve()
+    assert ds.main(["--home", str(home), "version"]) == 0
+    assert seen == {
+        "DREAM_STUDIO_HOME": str(home),
+        "DS_SPOOL_ROOT": str(home / "events"),
+        "DREAM_STUDIO_DB_PATH": str(home / "state" / "studio.db"),
+    }, "an inherited variable beat --home"
+    assert {k: os.environ.get(k) for k in inherited} == inherited, "not restored"
