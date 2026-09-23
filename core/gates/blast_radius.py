@@ -121,6 +121,13 @@ def compute_impact_set(
             stem = f.rsplit("/", 1)[-1][: -len(".py")]
             if "-" in stem:
                 module_tokens.add(stem)
+            # AND THE PATH ITSELF, for the tests that read source as text rather than
+            # importing it: gate guards, AST walkers, drift checks. They name the file the
+            # only way they can -- `interfaces/cli/commands/work_order_dispatch.py` -- and
+            # a dotted module token never matches that. Both other branches below already
+            # add the path; this one stopped at the module, on the assumption that a test
+            # depending on a source file imports it.
+            module_tokens.add(f)
         elif f.startswith("canonical/skills/") and len(f.split("/")) > 2:
             # A SKILL FILE SELECTS THE TESTS THAT NAME ITS PACK. Tests about packs build
             # their paths from parts -- REPO_ROOT / "canonical" / "skills" / "ds-project"
