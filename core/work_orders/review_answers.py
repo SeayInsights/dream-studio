@@ -496,24 +496,38 @@ def record_answers(
                 " which lanes each reviewer is asked, and answers are held to that record."
             )
         }
-    expected = (dispatch.get("credential_hashes") or {}).get(reviewer)
-    if expected and _credential_hash(str(credential or "")) != expected:
-        # A NAME IS NOT A REVIEWER. The referee hold was cleared in round five by an answer
-        # submitted under the referee's typed name; the credential issued at dispatch is
-        # what the name is now held to.
-        return {
-            "refused_submission": (
-                f"this submission does not carry the credential issued to {reviewer!r} when"
-                f" round {dispatch.get('round')} was dispatched. Each reviewer is handed its"
-                " own; one seat cannot answer as another."
-            )
-        }
     assigned = dispatched_lanes(dispatch, reviewer)
     if not assigned:
         return {
             "refused_submission": (
                 f"{reviewer!r} was dispatched no lane in round {dispatch.get('round')} of"
                 f" {work_order_id}."
+            )
+        }
+
+    # A NAME IS NOT A REVIEWER, and the check FAILS CLOSED. The referee hold was cleared in
+    # round five by an answer under the referee's typed name; the credential issued at
+    # dispatch is what a name is now held to. A round with no credential on record for
+    # this reviewer -- dispatched before credentials existed, or written by any path but
+    # record_dispatch -- is refused rather than waved through: the first version skipped
+    # the check when no hash existed, and every such round accepted any credential or none
+    # (access-and-reach, round six). The remedy is cheap: dispatch a new round.
+    expected = (dispatch.get("credential_hashes") or {}).get(reviewer)
+    if not expected:
+        return {
+            "refused_submission": (
+                f"round {dispatch.get('round')} of {work_order_id} carries no credential for"
+                f" {reviewer!r}, so nothing can show this submission comes from it. Dispatch"
+                f" a new round (`ds review --dispatch --work-order {work_order_id}`), which"
+                " issues each reviewer its own."
+            )
+        }
+    if _credential_hash(str(credential or "")) != expected:
+        return {
+            "refused_submission": (
+                f"this submission does not carry the credential issued to {reviewer!r} when"
+                f" round {dispatch.get('round')} was dispatched. Each reviewer is handed its"
+                " own; one seat cannot answer as another."
             )
         }
 

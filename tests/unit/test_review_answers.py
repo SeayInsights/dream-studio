@@ -1215,3 +1215,34 @@ def test_credentials_are_hashed_at_rest_and_returned_once(db):
     token = doc["credentials"][REVIEWER]
     assert token not in json.dumps(stored)
     assert stored["credential_hashes"][REVIEWER] == ra._credential_hash(token)
+
+
+def test_a_round_with_no_credential_on_record_fails_closed(db):
+    """Round six, access-and-reach: the check was skipped when no hash existed, so a dispatch
+    written before credentials -- or by any path but record_dispatch -- accepted any
+    credential or none, exactly as if the mechanism did not exist."""
+    from core.work_orders.artifacts import set_wo_artifact
+
+    set_wo_artifact(
+        WO_ID,
+        ARTIFACT_KIND,
+        json.dumps(
+            {
+                "round": 1,
+                "sha": "a" * 40,
+                "image": IMAGE,
+                "assignments": [{"reviewer": REVIEWER, "seat": "s", "lanes": ["lane-one"]}],
+            }
+        ),
+        instance_key=ra.DISPATCH_KEY,
+        db_path=db,
+    )
+    for credential in (None, "made-up"):
+        result = _record(
+            db,
+            REVIEWER,
+            [{"lane": "lane-one", "verdict": "pass", "reproduction": HOLDS}],
+            credential=credential,
+        )
+        assert "carries no credential" in result["refused_submission"]
+    assert recorded_answers(WO_ID, db_path=db) == []
