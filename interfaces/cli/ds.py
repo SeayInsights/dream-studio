@@ -13,6 +13,8 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
+import contextlib
+import os
 import sys
 from pathlib import Path
 
@@ -145,11 +147,48 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+@contextlib.contextmanager
+def _home_environment(home: Path | None):
+    """--HOME MEANS HOME FOR EVERYTHING THIS COMMAND WRITES.
+
+    The argument reached the functions that take a dream_studio_home, and not the event
+    path or the projection runner, which resolve their locations from process
+    environment: a `--home <scratch> work-order create` wrote its event to the default
+    spool, created a default studio.db, and left the --home authority empty (measured
+    2026-09-23). So the three variables those paths read are set from --home.
+
+    Only where unset, and only for this command. A variable set explicitly wins -- nine
+    tests set DS_SPOOL_ROOT on purpose and call this in-process with --home -- and an
+    in-process caller must not inherit the export after the command returns.
+    """
+    if home is None:
+        yield
+        return
+    wanted = {
+        "DREAM_STUDIO_HOME": str(home),
+        "DS_SPOOL_ROOT": str(home / "events"),
+        "DREAM_STUDIO_DB_PATH": str(home / "state" / "studio.db"),
+    }
+    added = [key for key in wanted if key not in os.environ]
+    for key in added:
+        os.environ[key] = wanted[key]
+    try:
+        yield
+    finally:
+        for key in added:
+            os.environ.pop(key, None)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     source_root = Path(args.source_root).resolve() if args.source_root else REPO_ROOT
     home = Path(args.home).resolve() if args.home else None
+    with _home_environment(home):
+        return _run(parser, args, source_root, home)
+
+
+def _run(parser, args, source_root: Path, home: Path | None) -> int:
 
     if getattr(args, "debug", False):
         try:

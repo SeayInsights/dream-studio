@@ -243,9 +243,17 @@ def _telemetry_home_exists() -> bool:
     """
     import os
 
+    from core.installed_runtime import CONFIG_RELATIVE_PATH
+
     if os.environ.get("DS_SPOOL_ROOT"):
         return True
-    return (Path.home() / ".dream-studio").is_dir()
+    # AN INSTALL, NOT A DIRECTORY. The first version checked that ~/.dream-studio
+    # existed -- and a single stray write creates it: on 2026-09-23 a mutation run with
+    # `--home` elsewhere leaked its event into the default spool, the directory appeared,
+    # and this guard then let 514 gate events into a home nobody had installed. Only the
+    # installer writes config/runtime.json.
+    home = Path(os.environ.get("DREAM_STUDIO_HOME") or (Path.home() / ".dream-studio"))
+    return (home / CONFIG_RELATIVE_PATH).is_file()
 
 
 def _judged_repo(repo_root: Path | None) -> dict[str, object]:
