@@ -59,15 +59,25 @@ gates:
       same base CI resolves to (origin/<base-branch>, defaulting to main), so
       both lanes diff the same branch point and honor the same
       Docs-Reviewed-No-Change trailer (see interfaces/cli/_gate_review_context.py)
-      -- local-green now means CI-green for this gate again.
+      -- local-green now means CI-green for this gate again. env also pins
+      DREAM_STUDIO_CHANGED_FILES empty: the gate script honors that var as an
+      override that bypasses git-based diffing entirely (a documented, real
+      escape hatch -- see the gate's own --help), and CI only ever ran this
+      script in a clean Actions runner where a stray export could not exist.
+      Pre-push runs it in a developer's own shell, where it could -- pinning
+      it here means a value left set for something unrelated cannot silently
+      replace this gate's detection on every push made from that shell.
     command: [py, interfaces/cli/contract_docs_drift_gate.py]
     env:
       DREAM_STUDIO_BASE_REF: origin/main
+      DREAM_STUDIO_CHANGED_FILES: ""
     fail_hint: >
-      A changed contract domain's required docs were not refreshed. Update the
-      required_doc_refs the gate's JSON names (e.g. docs/HOOK_RUNTIME.md,
-      docs/WORKFLOW_RUNTIME.md), or add an accurate `Docs-Reviewed-No-Change:
-      <domain_id>` commit trailer if the domain genuinely needs no doc change.
+      A changed contract domain's required docs were not refreshed -- see the
+      "contract docs drift: FAIL" lines the gate prints to stderr for which
+      domain and which docs (the same detail is in the stdout JSON under
+      blocking_domains[]). Refresh those docs in this change set, or add an
+      accurate `Docs-Reviewed-No-Change: <domain_id>` commit trailer if the
+      domain genuinely needs no doc change.
 
   - id: skill-sync
     tier: blocking

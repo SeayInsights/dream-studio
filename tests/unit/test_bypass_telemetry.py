@@ -221,10 +221,19 @@ def test_trailer_consumption_records_bypass(monkeypatch, capsys):
     from interfaces.cli import contract_docs_drift_gate as gate
 
     def _fake_report(cleared: bool) -> dict:
-        status = "docs_reviewed_no_change_needed" if cleared else "docs_current"
+        # freshness_status is the real per-domain key (change_impact_report,
+        # core/shared_intelligence/contract_registry_report.py) — "status" is
+        # only the report's OVERALL pass/fail, a different field. This fixture
+        # used to fabricate "status" here too, matching the production code's
+        # matching bug rather than the real report shape (WO 48bd8ab3): both
+        # sides were wrong the same way, so the test passed while
+        # record_gate_bypass stayed unreachable in production.
+        freshness_status = "docs_reviewed_no_change_needed" if cleared else "docs_current"
         return {
             "status": "pass",
-            "domains": [{"domain_id": "release_publication_gate", "status": status}],
+            "domains": [
+                {"domain_id": "release_publication_gate", "freshness_status": freshness_status}
+            ],
         }
 
     recorded: list[tuple] = []

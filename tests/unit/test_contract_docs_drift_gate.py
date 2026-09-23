@@ -232,6 +232,32 @@ def test_docs_drift_runs_in_both_pre_push_and_ci_and_blocks_in_both() -> None:
     ), "the CI copy must block, or #263 can happen again"
 
 
+def test_gates_docs_do_not_claim_atlas_leak_blocks_pre_push() -> None:
+    """docs/reference/gates.md and docs/operations/gates.md must not claim
+    atlas-leak is a pre-push gate. It runs CI-only
+    (interfaces/cli/contract_atlas_lifecycle_gate.py is not registered in
+    canonical/workflows/pre-push.yaml) -- both docs previously listed it in
+    the exact same Pre-Push Gate table as docs-drift with no qualifier,
+    stale since #752 removed it from pre-push (the same commit that removed
+    docs-drift) and nothing ever corrected the claim."""
+    import yaml
+
+    manifest = yaml.safe_load(
+        (REPO_ROOT / "canonical" / "workflows" / "pre-push.yaml").read_text(encoding="utf-8")
+    )
+    assert not [g for g in manifest["gates"] if g["id"] == "atlas-leak"], (
+        "atlas-leak is back in pre-push.yaml -- the CI-only doc claims this test guards need "
+        "a matching update"
+    )
+    for doc_path in ("docs/reference/gates.md", "docs/operations/gates.md"):
+        text = (REPO_ROOT / doc_path).read_text(encoding="utf-8")
+        assert "atlas-leak" in text, f"{doc_path} lost its atlas-leak mention entirely"
+        assert "CI-only" in text, (
+            f"{doc_path} mentions atlas-leak without saying it is CI-only -- a reader could "
+            "read it as a pre-push gate again"
+        )
+
+
 def test_pre_push_docs_drift_gate_blocks_a_real_missing_doc_case() -> None:
     """Runs the pre-push manifest's actual docs-drift entry through
     core.gates.pre_push.run_gate -- the same subprocess-plus-env-merge path
@@ -250,15 +276,21 @@ def test_pre_push_docs_drift_gate_blocks_a_real_missing_doc_case() -> None:
     gate = next(g for g in manifest["gates"] if g["id"] == "docs-drift")
     assert gate["tier"] == "blocking"
 
-    # DREAM_STUDIO_CHANGED_FILES stands in for "what git diff would report for
-    # this push" -- the gate reads it before touching git (see
-    # contract_docs_drift_gate.py::_changed_files), so this exercises the real
-    # script's real domain-matching logic without needing a second git repo.
+    # `py` (the manifest's literal interpreter) is a Windows-only launcher and
+    # does not exist on the ubuntu/macos review containers -- swap in
+    # sys.executable, same convention tests/unit/gates/test_pre_push.py uses
+    # for every synthetic gate it runs, and keep the rest of the real command.
+    # --changed-file is the explicit, documented flag for "what changed" (see
+    # --help) -- preferred here over the DREAM_STUDIO_CHANGED_FILES env var,
+    # which the manifest's own env now pins empty (see the ambient-env test
+    # below) and which an explicit CLI arg makes unambiguous either way.
     gate = dict(gate)
-    gate["env"] = {
-        **(gate.get("env") or {}),
-        "DREAM_STUDIO_CHANGED_FILES": "core/shared_intelligence/contract_atlas.py",
-    }
+    gate["command"] = [
+        sys.executable,
+        *gate["command"][1:],
+        "--changed-file",
+        "core/shared_intelligence/contract_atlas.py",
+    ]
 
     result = pre_push_mod.run_gate(gate, repo_root=REPO_ROOT)
 
@@ -272,10 +304,9 @@ def test_pre_push_docs_drift_gate_blocks_a_real_missing_doc_case() -> None:
 def test_pre_push_docs_drift_gate_degrades_gracefully_with_no_resolvable_base_ref() -> None:
     """Pre-push runs on a machine where `origin/main` may not resolve -- no
     `origin` remote, a clone that has not fetched, a first push with no
-    upstream. contract_docs_drift_gate.py::_changed_files already degrades for
-    an unresolvable base ref (the `git diff` subprocess fails, `_git_changed`
-    catches the non-zero exit and returns [], and the function falls back to
-    staged/HEAD/untracked) rather than raising -- but that fallback was never
+    upstream. contract_docs_drift_gate.py::_changed_files degrades for an
+    unresolvable base ref by enumerating every file git tracks at HEAD
+    (`_git_ls_files`) rather than raising -- but that fallback was never
     exercised through the actual pre-push invocation this gate now gets. Pins
     it there so a future change on either side cannot reintroduce a crash or a
     hang that would refuse every push on such a machine. Detached HEAD and a
@@ -287,6 +318,7 @@ def test_pre_push_docs_drift_gate_degrades_gracefully_with_no_resolvable_base_re
     manifest = pre_push_mod.load_manifest()
     gate = next(g for g in manifest["gates"] if g["id"] == "docs-drift")
     gate = dict(gate)
+    gate["command"] = [sys.executable, *gate["command"][1:]]
     gate["env"] = {
         **(gate.get("env") or {}),
         "DREAM_STUDIO_BASE_REF": "origin/this-ref-does-not-exist-anywhere",
@@ -304,7 +336,140 @@ def test_pre_push_docs_drift_gate_degrades_gracefully_with_no_resolvable_base_re
     # in stderr tells them apart, so check for it directly.
     assert "Traceback" not in result.stderr_tail, (
         "an unresolvable base ref crashed the gate script (uncaught exception) rather than "
-        f"degrading to its documented staged/HEAD/untracked fallback:\n{result.stderr_tail}"
+        f"degrading to its documented git-ls-files fallback:\n{result.stderr_tail}"
+    )
+
+
+def test_pre_push_docs_drift_manifest_neutralizes_ambient_changed_files_env(monkeypatch) -> None:
+    """A developer's shell could have DREAM_STUDIO_CHANGED_FILES exported for
+    an unrelated reason -- it is a real, intentional escape hatch the gate
+    script honors (see --help) that completely bypasses git-based detection.
+    CI only ever ran this script in a clean Actions runner where a stray
+    export could not exist; pre-push runs it inside exactly that developer
+    shell. core.gates.pre_push.run_gate merges the AMBIENT process
+    environment UNDER the gate's own manifest env
+    (`{**os.environ, **gate_env}`), so the manifest must pin
+    DREAM_STUDIO_CHANGED_FILES to override any ambient value, or a value left
+    exported for something else silently replaces this gate's detection on
+    every push made from that shell."""
+    from core.gates import pre_push as pre_push_mod
+
+    manifest = pre_push_mod.load_manifest()
+    gate = next(g for g in manifest["gates"] if g["id"] == "docs-drift")
+    gate = dict(gate)
+    gate["command"] = [sys.executable, *gate["command"][1:]]
+
+    # Poison the AMBIENT environment -- what run_gate merges FIRST, before the
+    # manifest's own env -- with a real domain-triggering path that has no
+    # actual change behind it on this branch, so a leak would flip a correct
+    # pass into a false, confusing fail.
+    monkeypatch.setenv("DREAM_STUDIO_CHANGED_FILES", "core/shared_intelligence/contract_atlas.py")
+
+    result = pre_push_mod.run_gate(gate, repo_root=REPO_ROOT)
+
+    assert result.passed is True, (
+        "an ambient DREAM_STUDIO_CHANGED_FILES leaked through the manifest's own env and "
+        f"replaced real git-based detection:\n{result.stdout_tail}\n{result.stderr_tail}"
+    )
+
+
+def _init_bare_repo(tmp_path: Path) -> Path:
+    """A tmp repo with one base commit and NO `origin` remote of any kind --
+    the "fresh checkout, nothing configured" scenario the base-ref fallback
+    must handle without going blind."""
+    repo = tmp_path / "repo"
+    repo.mkdir(parents=True)
+    run = dict(cwd=str(repo), capture_output=True, text=True, check=True)
+    subprocess.run(["git", "init", "-q", "-b", "main"], **run)
+    subprocess.run(["git", "config", "user.email", "t@t"], **run)
+    subprocess.run(["git", "config", "user.name", "t"], **run)
+    (repo / "base.txt").write_text("base", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], **run)
+    subprocess.run(["git", "commit", "-q", "-m", "base"], **run)
+    return repo
+
+
+def test_no_resolvable_base_ref_still_sees_a_committed_private_artifact(
+    tmp_path, monkeypatch
+) -> None:
+    """WO-DOCS-DRIFT-BLIND-FALLBACK reproduction: a fresh checkout with no
+    `origin` remote at all, a file matching PRIVATE_ARTIFACT_PATTERNS already
+    committed to HEAD, and a clean working tree. Before the fix, base_ref
+    ("origin/main") failed to resolve, that failure was indistinguishable
+    from "zero changes", and the fallback (--cached + worktree-vs-HEAD +
+    untracked) only ever looks at UNCOMMITTED state -- so a file already
+    committed to HEAD was invisible, changed_files came back [], and
+    private_artifact_risk_detected stayed False with status: pass."""
+    import argparse
+
+    import interfaces.cli.contract_docs_drift_gate as gate_mod
+
+    repo = _init_bare_repo(tmp_path)
+    run = dict(cwd=str(repo), capture_output=True, text=True, check=True)
+    (repo / "data").mkdir()
+    # PRIVATE_ARTIFACT_PATTERNS matches via fnmatch, not pathlib glob -- "**/*.db"
+    # requires a literal "/" in the path (fnmatch has no directory-recursion
+    # semantics), so a nested path is needed to actually match the pattern.
+    (repo / "data" / "studio.db").write_bytes(b"not a real sqlite file, just needs to match")
+    subprocess.run(["git", "add", "-A"], **run)
+    subprocess.run(["git", "commit", "-q", "-m", "feat: add a database file"], **run)
+    remotes = subprocess.run(["git", "remote"], **run).stdout
+    assert remotes.strip() == "", "test setup must have no origin remote to reproduce this"
+
+    monkeypatch.setattr(gate_mod, "REPO_ROOT", repo)
+    monkeypatch.delenv("DREAM_STUDIO_CHANGED_FILES", raising=False)
+    monkeypatch.delenv("DREAM_STUDIO_BASE_REF", raising=False)
+    monkeypatch.delenv("GITHUB_BASE_REF", raising=False)
+    args = argparse.Namespace(
+        changed_file=[], changed_files=None, base_ref="origin/main", docs_reviewed_no_change=[]
+    )
+
+    changed = gate_mod._changed_files(args)
+
+    assert (
+        "data/studio.db" in changed
+    ), f"a committed private artifact went undetected with no origin remote: {changed}"
+    report = change_impact_report(changed)
+    assert report["publication_risk"]["private_artifact_risk_detected"] is True
+    assert report["status"] == "fail"
+
+
+def test_a_genuinely_empty_diff_is_not_replaced_by_an_unrelated_working_tree_file(
+    tmp_path, monkeypatch
+) -> None:
+    """A resolvable base_ref reporting a genuinely empty diff (HEAD IS
+    origin/main, nothing committed beyond it) must not be treated the same as
+    an UNRESOLVABLE one. Before the fix, `if diff:` could not tell a real
+    empty result apart from a failed git command -- both are falsy -- so both
+    fell through to the staged/HEAD/untracked fallback, which then reported
+    an unrelated file sitting in the working tree as if it were part of this
+    push's diff."""
+    import argparse
+
+    import interfaces.cli.contract_docs_drift_gate as gate_mod
+
+    repo = _init_bare_repo(tmp_path)
+    run = dict(cwd=str(repo), capture_output=True, text=True, check=True)
+    base_sha = subprocess.run(["git", "rev-parse", "HEAD"], **run).stdout.strip()
+    subprocess.run(["git", "update-ref", "refs/remotes/origin/main", base_sha], **run)
+    # No new commit -- HEAD IS origin/main, so the diff against it is
+    # genuinely, correctly empty. An unrelated file sits in the working tree,
+    # uncommitted and untracked (someone's in-progress, unrelated edit).
+    (repo / "unrelated_wip.txt").write_text("someone's in-progress edit", encoding="utf-8")
+
+    monkeypatch.setattr(gate_mod, "REPO_ROOT", repo)
+    monkeypatch.delenv("DREAM_STUDIO_CHANGED_FILES", raising=False)
+    monkeypatch.delenv("DREAM_STUDIO_BASE_REF", raising=False)
+    monkeypatch.delenv("GITHUB_BASE_REF", raising=False)
+    args = argparse.Namespace(
+        changed_file=[], changed_files=None, base_ref="origin/main", docs_reviewed_no_change=[]
+    )
+
+    changed = gate_mod._changed_files(args)
+
+    assert changed == [], (
+        "a genuinely empty diff against a resolvable base_ref picked up an unrelated "
+        f"working-tree file instead of reporting no changes: {changed}"
     )
 
 
