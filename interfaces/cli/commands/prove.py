@@ -226,7 +226,28 @@ def _claim_defect_symptom_gate(s: _Scratch) -> tuple[bool, str]:
     symptom = (
         "SQL-CHECK: SELECT COUNT(*) FROM business_projects WHERE description = '%s'" % sentinel
     )
-    wo_id = s.add_work_order(status="in_progress", title="Defect: symptom must not reproduce")
+    # PUSHED, NOT in_progress. Close now accepts only pushed or ci_issues -- the phase the
+    # work is actually in when it reaches this gate -- and refuses everything else before
+    # any other gate runs, --force included. Seeding in_progress here made every close in
+    # this claim phase-refused before originating_symptom was ever consulted: "BLOCKED"
+    # was true for the wrong reason, and the second close, meant to demonstrate the gate
+    # LIFTING, failed exactly the same way the first one did (main red, 2026-09-23).
+    wo_id = s.add_work_order(status="pushed", title="Defect: symptom must not reproduce")
+
+    # A clean, empty-assignments dispatch, so lane_review has nothing to hold: this scratch
+    # authority never runs `ds review --dispatch`, and a pushed work order with no recorded
+    # review is refused for that reason too, which would mask the one gate this claim exists
+    # to demonstrate.
+    from core.work_orders.review_answers import record_dispatch
+
+    record_dispatch(
+        wo_id,
+        sha="prove-scratch",
+        image="prove-scratch",
+        change_set=[],
+        assignments=[],
+        db_path=s.db,
+    )
 
     conn = sqlite3.connect(str(s.db))
     try:
