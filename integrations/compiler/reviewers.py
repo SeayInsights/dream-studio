@@ -46,26 +46,85 @@ BANNER = (
     "     drifted. To change what this reviewer asks, change the lane. -->"
 )
 
-CONTRACT = """## What you return
+CONTRACT = """## How you answer: by testing
 
-One verdict per lane you were given, and nothing else. You are convened by a review that
-owns the process and the merge decision; you supply an answer to your own questions and
-hand it back.
+You answer by RUNNING things, not by reading them. That is the whole reason the bench is
+lanes rather than hardcoded seats: a seat could claim something was wrong without testing
+it. Reading is how you decide what to test; it is never the answer.
 
-For each lane, return:
+The review is dispatched against one commit, and a container image is built from exactly
+that commit — no network, no host state, an isolated `HOME` and `DREAM_STUDIO_HOME`.
+Test in it with the work order id you were given:
+
+```
+ds review --run "python -m pytest tests/unit/test_x.py::test_y -q" --work-order <id>
+```
+
+It prints the output and exits with the command's exit code. Mutate, delete or break
+anything inside — every run starts from a fresh container. **Never modify the working
+tree** to test something; the container is where experiments happen.
+
+- To prove a defect, write the test that fails because of it. It can live inside the
+  command: `sh -c` receives it, so `printf '...' > /tmp/t.py && python -m pytest /tmp/t.py -q`
+  works.
+- The exit code is the whole command's. `cmd | tail` reports `tail`'s, not `cmd`'s — run
+  the command plain, or redirect to a file and `cat` it after.
+
+## What you return
+
+One answer per lane you were dispatched, and nothing else, in an object that carries the
+**credential** you were handed with your dispatch:
+
+```json
+{"credential": "<the credential issued to you>", "lanes": [ ...one answer per lane... ]}
+```
+
+The recording door refuses a submission that does not carry the credential issued to the
+reviewer it claims to be — one seat cannot answer as another. You are convened by a review
+that owns the process and the merge decision; you answer your own questions and hand them
+back.
+
+For each lane:
 
 - **`lane`** — its id, exactly as given.
 - **`verdict`** — `pass`, `finding`, or `cannot-tell`.
-- **`evidence`** — for a finding, the file and line, the command and its output, or the
-  quoted text. For `cannot-tell`, what you would have needed. A finding with no evidence is
-  an opinion, and this bench exists because opinions do not survive review.
-- **`why`** — one or two sentences tying the evidence to the lane's signature.
+- **`reproduction`** — for `pass` and `finding`: `{"command": "...", "exit_code": N}`, the
+  command you ran in the lane container and the exit code you saw. The recording door
+  RE-RUNS it in a fresh container and refuses the answer if the exit code differs. A
+  finding's reproduction exits non-zero because the defect is there; a pass's exits 0
+  because the property held. Without one, the only honest verdict is `cannot-tell`.
+- **`evidence`** — for a finding: what the reproduction's output shows, and where the
+  defect is (file and line). A finding with no evidence is an opinion.
+- **`why`** — one or two sentences tying the evidence to the lane's signature. For
+  `cannot-tell`, what you would have needed (in `why` or `evidence`).
+- **`check`** — optional, findings only: an executable criterion that will show it fixed
+  (`TEST-CHECK: <path>::<node>` against a test file that EXISTS, `SQL-CHECK`,
+  `API-CHECK`). It becomes the task's acceptance criterion. Leave it empty when the fix
+  needs a test that does not exist yet — the finding still holds the work order open
+  either way.
+- **`declare`** — optional and rare, findings only: why NO executable check could ever
+  decide this finding. The task is then filed as a declared claim instead of a checked
+  one. It is not a place for the explanation — that goes in `why`.
 
-`cannot-tell` is a first-class answer. Narrowing a question until it fits what you can see
-is how a lane stops being asked while still appearing to be answered.
+`cannot-tell` is a first-class answer. Narrowing a question until it fits what you can
+test is how a lane stops being asked while still appearing to be answered.
 
-Do not answer a lane you were not given, do not rank the findings, and do not decide
-whether the change merges — the chair does that."""
+Do not answer a lane you were not dispatched, do not rank the findings, and do not decide
+whether the change merges — the chair does that.
+
+Your answers are recorded against the work order (`ds review --record`) and kept: a lane
+you leave out is reported unanswered rather than assumed clean. A finding stays open until
+a later round answers that lane `pass` AND the finding's own reproduction, re-run by the
+door at the new commit, exits 0 — the test that proved the defect must go green. So write
+a finding's reproduction to PASS once the defect is fixed; it will be re-run at later
+commits. If an earlier finding's reproduction has gone stale (its harness no longer runs
+for reasons unrelated to the defect), give the pass a **`resolves_with`** command instead:
+the door runs it at the commit the finding was recorded against, where it must FAIL, and
+at this commit, where it must PASS. A test that passes at both resolves nothing. That
+proves the test discriminates the fix, not that it tests the defect, so a resolution by
+`resolves_with` brings the evidence-referee lane into the next round, and the review does
+not clear until that lane has judged it. A
+`cannot-tell` never resolves a finding; it is recorded and the finding stays open."""
 
 
 def _slug(seat: str) -> str:

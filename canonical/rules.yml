@@ -185,6 +185,85 @@ rules:
       several, and then two things lie: the module boundary, which now describes part of
       the change, and the prompt chain, whose new work order has to restate a goal that
       already exists one row over.
+  - id: a-review-lane-answers-by-testing
+    statement: >
+      A review lane's pass or finding carries a reproduction -- the command it ran in a
+      container built from the reviewed commit and the exit code it saw -- and the
+      recording door re-runs it in a fresh container before storing it, refusing what does
+      not reproduce. Reading alone can answer only cannot-tell, and with no container
+      engine nothing is recorded.
+    source: core/work_orders/review_answers.py
+    enforced_by:
+      - tests/unit/test_review_answers.py::test_a_tested_verdict_without_a_reproduction_is_refused
+      - tests/unit/test_review_answers.py::test_a_reproduction_that_does_not_reproduce_is_refused
+      - tests/unit/test_review_answers.py::test_docker_down_records_nothing
+      - tests/unit/test_lane_sandbox.py::test_a_reported_exit_code_the_rerun_does_not_match_is_refused
+    note: >
+      Operator, 2026-09-23: lanes "use docker and do a real test, not just read code --
+      that is the whole reason to move to lanes and not hardcoded seats claiming something
+      is wrong without testing it." The re-run earned its place in the lanes' own review:
+      it drew a url-safe credential beginning with a dash on a reviewer's passing test and
+      exposed a one-in-sixty-four command failure the reviewer's run had missed.
+
+  - id: a-finding-resolves-only-when-its-test-goes-green
+    statement: >
+      A recorded finding stays open until a later answer on its lane is a pass AND the
+      finding's own reproduction, re-run at the new commit, exits 0 -- or a resolves_with
+      test fails at the finding's commit and passes at the new one. A replacement proves
+      discrimination, not relevance, so it waits for an evidence-referee pass in a later
+      round. A cannot-tell never resolves a finding and never releases a replacement.
+    source: core/work_orders/review_answers.py
+    enforced_by:
+      - tests/unit/test_review_answers.py::test_a_vacuous_pass_does_not_resolve_a_finding_whose_test_still_fails
+      - tests/unit/test_review_answers.py::test_a_later_cannot_tell_does_not_clear_a_finding
+      - tests/unit/test_review_answers.py::test_a_replacement_that_passes_before_the_fix_resolves_nothing
+      - tests/unit/test_review_answers.py::test_a_replacement_resolution_holds_the_review_until_the_referee_has_seen_it
+      - tests/unit/test_review_answers.py::test_a_referee_cannot_tell_does_not_release_a_replacement
+      - tests/unit/test_review_answers.py::test_a_later_plain_pass_does_not_erase_the_referee_requirement
+    note: >
+      Each clause is a bypass the lanes found in their own review: a vacuous `true`
+      resolving a real finding, a cannot-tell clearing one, a replacement test that
+      discriminated two commits through unrelated churn, and a later plain pass erasing the
+      referee requirement.
+
+  - id: a-work-order-is-not-pushed-while-its-review-holds-it
+    statement: >
+      While the lane review holds a work order -- no dispatch, an unanswered lane, or an
+      open finding, filed as a task or not -- `ds work-order pushed` refuses with no
+      override, the pre-push lane-review gate stops `git push` of the branch naming it,
+      merge readiness reports not ready, and close refuses unless forced, the force
+      recorded as gate.bypassed. All four read one predicate.
+    source: core/work_orders/mutations.py
+    enforced_by:
+      - tests/unit/test_push_needs_a_clean_review.py::test_a_work_order_never_reviewed_cannot_be_pushed
+      - tests/unit/test_push_needs_a_clean_review.py::test_an_open_finding_holds_the_work_order
+      - tests/unit/test_lane_review_gate.py::test_an_open_finding_blocks_the_push
+      - tests/unit/test_close_consults_lane_review.py::test_an_open_lane_finding_refuses_the_close
+      - tests/unit/test_close_consults_lane_review.py::test_force_closes_past_it_recorded_not_silently
+      - tests/unit/test_review_answers.py::test_an_unfilable_finding_blocks_exactly_as_hard_as_a_filed_one
+    note: >
+      Operator: the lanes run before anything reaches GitHub, and a work order's review is
+      one work order's work until the lanes are satisfied. The first live review found
+      10 of 12 findings unfilable as tasks, the command exiting 0 and nothing holding the
+      work order -- so the finding holds it by itself, and the pre-push gate exists because
+      this repository pushes with plain `git push`, which the status gate alone never saw.
+
+  - id: one-seat-cannot-answer-as-another
+    statement: >
+      Each review dispatch issues every reviewer a one-time credential, stored only as a
+      hash; a submission must carry the credential issued to the reviewer it claims to be,
+      and a round with none on record fails closed. The dispatcher holds every credential
+      it issues -- that is the chair, and the declared trust boundary.
+    source: core/work_orders/review_answers.py
+    enforced_by:
+      - tests/unit/test_review_answers.py::test_a_submission_without_the_issued_credential_is_refused
+      - tests/unit/test_review_answers.py::test_one_seat_cannot_answer_with_another_seats_credential
+      - tests/unit/test_review_answers.py::test_credentials_are_hashed_at_rest_and_returned_once
+      - tests/unit/test_review_answers.py::test_a_round_with_no_credential_on_record_fails_closed
+    note: >
+      A reviewer was only the name a caller typed; in the lanes' own review that cleared
+      the evidence-referee hold under the referee's name.
+
   - id: the-queue-is-ordered-by-priority-then-age
     statement: >
       Work is taken in priority order, oldest first within a level; a work order carries a

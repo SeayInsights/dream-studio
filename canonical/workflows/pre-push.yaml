@@ -18,6 +18,17 @@ on_failure: stop
 # Exit code 0 = pass, non-zero = fail. cwd is the repo root.
 # Order matters — cheapest gates first so a failure halts the slow ones.
 gates:
+  - id: lane-review
+    tier: blocking
+    description: >
+      The branch's work order is not pushed while its lane review holds it -- no
+      dispatch, an unanswered lane, or an open finding. The review lanes run before
+      anything reaches GitHub; the pushed-status gate governs a status, and this is
+      where an actual `git push` stops. A branch naming no work order is reported
+      NOT GATED rather than passed.
+    command: [py, -m, interfaces.cli.lane_review_gate]
+    fail_hint: "Run `ds review --status --work-order <id>`; answer the open findings, re-dispatch, record."
+
   - id: format-check
     tier: blocking
     description: >

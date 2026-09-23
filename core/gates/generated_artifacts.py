@@ -155,6 +155,20 @@ def _check_reviewers() -> tuple[bool, str]:
     return True, f"{total} reviewers match the seat registry"
 
 
+def _check_review_skill() -> tuple[bool, str]:
+    """The review skill's bench listing, against the registry that defines the bench.
+
+    It said "this section is GENERATED from it" and warned in its own next line that a
+    hand-maintained copy of a registry is a second vocabulary that silently disagrees with
+    the first. Nothing generated it. It drifted to announcing 29 seats and naming four the
+    registry no longer had, in the document the dispatch rule points a subagent at -- so
+    the wrong bench is what a reviewer was told to convene.
+    """
+    from integrations.compiler.review_skill import check as _skill_check
+
+    return _skill_check()
+
+
 #: (artifact, generator command a human should run, freshness check)
 ARTIFACTS: tuple[tuple[str, str, Callable[[], tuple[bool, str]]], ...] = (
     ("AGENTS.md", "py -m integrations.compiler.agents_md --write", _check_agents_md),
@@ -164,6 +178,11 @@ ARTIFACTS: tuple[tuple[str, str, Callable[[], tuple[bool, str]]], ...] = (
         "canonical/agents (reviewers)",
         "py -m integrations.compiler.reviewers --write",
         _check_reviewers,
+    ),
+    (
+        "canonical/skills/core/modes/review/SKILL.md (bench)",
+        "py -m integrations.compiler.review_skill --write",
+        _check_review_skill,
     ),
     (
         "dist/plugin",

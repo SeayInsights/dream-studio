@@ -125,12 +125,16 @@ const result2 = await Agent({
 4. Parse reviewer result.signal:
    - compliant → proceed to step 5
    - non_compliant → re-dispatch implementer with result.issues, go to step 3
-5. Dispatch code quality reviewer
-6. Parse reviewer result.signal:
-   - compliant → commit
-   - non_compliant → re-dispatch implementer with result.issues, go to step 5
-7. Commit
+5. Commit, then review through the lanes (modes/review/SKILL.md, "The loop"):
+   ds review --dispatch --work-order <id>, convene each named reviewer, which TESTS in
+   the lane container and returns the lane contract; ds review --record each answer set
+6. ds review --status --work-order <id>:
+   - blocking (open finding / unanswered lane) → implementer fixes, commit, go to step 5
+   - clear → push
 ```
+
+The code-quality step is the lanes, not a generic reviewer: each lane answers by running
+a reproduction in a container built from the commit, and the recording door re-runs it.
 
 ### Parallel analyst pattern (think, secure, analyze skills)
 ```
@@ -252,6 +256,11 @@ Respond with a JSON object:
 
 issues array is empty when signal = compliant.
 ```
+
+This is the Stage 1 **spec-compliance** reviewer's shape. Code review runs through the
+lanes, which return the lane contract instead (`lane`, `verdict`, `reproduction`,
+`evidence`, `why` — see modes/review/SKILL.md). Two reviewers, two shapes; neither is a
+substitute for the other.
 
 ## Handling agent responses
 
