@@ -83,7 +83,10 @@ a finding's reproduction to PASS once the defect is fixed; it will be re-run at 
 commits. If an earlier finding's reproduction has gone stale (its harness no longer runs
 for reasons unrelated to the defect), give the pass a **`resolves_with`** command instead:
 the door runs it at the commit the finding was recorded against, where it must FAIL, and
-at this commit, where it must PASS. A test that passes at both resolves nothing. A
+at this commit, where it must PASS. A test that passes at both resolves nothing. That
+proves the test discriminates the fix, not that it tests the defect, so a resolution by
+`resolves_with` brings the evidence-referee lane into the next round, and the review does
+not clear until that lane has judged it. A
 `cannot-tell` never resolves a finding; it is recorded and the finding stays open.
 
 ---

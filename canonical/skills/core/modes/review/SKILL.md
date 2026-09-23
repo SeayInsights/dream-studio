@@ -218,6 +218,9 @@ re-running the finding's own reproduction at the new commit, gets exit 0** — t
 proved the defect has to go green, so a vacuous pass resolves nothing whoever records it.
 When that reproduction has gone stale, the pass may carry `resolves_with`: a test the door
 runs at the finding's original commit (it must fail) and at the new one (it must pass).
+That proves the test discriminates the fix, not that it is about the defect — so a
+replacement resolution carries the **evidence-referee** lane into the next round, and the
+review does not clear until the referee, answering in a later round, has judged it.
 A `cannot-tell` never resolves a finding. The record says which round resolved each one;
 nothing is overwritten. This loop is one work
 order's work, and it ends when `--status` stops blocking, not when a reviewer stops

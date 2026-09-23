@@ -83,6 +83,11 @@ CHAIR_SEAT = "Chair and verdict owner"
 #: was never actually reviewed.
 REVIEWED_STATUSES = ("in_review", "pushed", "ci_issues")
 
+#: The lane that judges whether a replacement test actually exercises the defect it
+#: resolves. The door proves a `resolves_with` test discriminates the fix; only a judgment
+#: can say it is ABOUT the defect, and this is the seat whose question that is.
+REFEREE_LANE = "evidence-referee"
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -177,6 +182,30 @@ def record_dispatch(
         if lane not in slot["lanes"]:
             slot["lanes"] = sorted([*slot["lanes"], lane])
             carried.append(lane)
+
+    # A REPLACEMENT RESOLUTION GOES TO THE REFEREE. It proves the test discriminates the
+    # two commits, not that the test is about the defect -- a grep of churned source did
+    # it in round four. The evidence-referee is carried to its owner so that judgment is
+    # made, and review_status blocks until it has been.
+    if awaiting_referee(work_order_id, db_path=db_path):
+        referee = next((key for key, lanes in owned.items() if REFEREE_LANE in lanes), None)
+        if referee is None:
+            raise ValueError(
+                f"a finding was resolved by a replacement test and no seat owns"
+                f" {REFEREE_LANE!r} to judge whether that test exercises the defect"
+            )
+        is_seat = str(referee).startswith("seat:")
+        slot = slots.setdefault(
+            referee,
+            {
+                "reviewer": None if is_seat else referee,
+                "seat": str(referee).removeprefix("seat:") if is_seat else None,
+                "lanes": [],
+            },
+        )
+        if REFEREE_LANE not in slot["lanes"]:
+            slot["lanes"] = sorted([*slot["lanes"], REFEREE_LANE])
+            carried.append(REFEREE_LANE)
 
     doc = {
         "round": round_no,
@@ -695,6 +724,26 @@ def _answered_in_round(work_order_id: str, round_no: int, *, db_path: Path | Non
     return answered
 
 
+def awaiting_referee(work_order_id: str, *, db_path: Path | None = None) -> list[dict[str, Any]]:
+    """Findings resolved by a replacement test that the evidence-referee has not yet seen.
+
+    Seen means answered in a round AFTER the one the replacement was recorded in: a referee
+    answer in the same round may have been given before the replacement existed.
+    """
+    last_referee_round = 0
+    for doc in _all_reviewer_docs(work_order_id, db_path=db_path):
+        for submission in doc["submissions"]:
+            for lane in submission.get("lanes") or []:
+                if lane.get("lane") == REFEREE_LANE:
+                    last_referee_round = max(last_referee_round, int(submission.get("round", 0)))
+    return [
+        a
+        for a in recorded_answers(work_order_id, db_path=db_path)
+        if (a.get("resolution_run") or {}).get("kind") == "replacement"
+        and int(a.get("round", 0)) >= last_referee_round
+    ]
+
+
 def open_findings(work_order_id: str, *, db_path: Path | None = None) -> list[dict[str, Any]]:
     """Lanes whose latest recorded answer is a finding."""
     return [
@@ -743,6 +792,12 @@ def review_status(work_order_id: str, *, db_path: Path | None = None) -> dict[st
             reasons.append(f"{count} dispatched lane(s) unanswered in round {round_no}")
     if findings:
         reasons.append(f"{len(findings)} open finding(s)")
+    pending_referee = awaiting_referee(work_order_id, db_path=db_path)
+    if pending_referee:
+        reasons.append(
+            f"{len(pending_referee)} finding(s) resolved by a replacement test await the"
+            f" {REFEREE_LANE} lane, which judges whether that test exercises the defect"
+        )
 
     return {
         "work_order_id": work_order_id,
@@ -754,6 +809,7 @@ def review_status(work_order_id: str, *, db_path: Path | None = None) -> dict[st
         "open_findings": findings,
         "cannot_tell": cannot_tell,
         "resolved": resolved,
+        "awaiting_referee": pending_referee,
         "chair_lanes": sorted(chair_lanes),
         "blocking": bool(reasons),
         "reasons": reasons,

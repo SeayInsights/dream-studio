@@ -58,6 +58,7 @@ OWNED = {
     OTHER: {"lane-nine"},
     "seat:Chair and verdict owner": {"chair-lane"},
     "seat:Freshly Added Seat": {"new-lane"},
+    "review-finding-integrity": {"evidence-referee"},
 }
 
 
@@ -1009,3 +1010,81 @@ def test_merge_readiness_is_not_ready_while_the_lane_review_blocks(db, monkeypat
     assert report["ready"] is False
     assert report["lane_review"]["blocking"] is True
     assert "lane review still holds" in report["advice"]
+
+
+# ── a replacement resolution is judged by the evidence-referee ──────────────
+
+
+def test_a_replacement_resolution_holds_the_review_until_the_referee_has_seen_it(db):
+    """Round four, access-and-reach: `grep -q resolves_with review_answers.py`
+    discriminates the two commits through unrelated churn and closed a finding. The door
+    proves a replacement DISCRIMINATES the fix; whether it is ABOUT the defect is the
+    evidence-referee's judgment, so the review waits for it."""
+    _finding_at_old_then_round_two(db)
+    _resolve(db, {(NEW, STALE["command"]): 1, (OLD, REPLACEMENT): 1, (NEW, REPLACEMENT): 0})
+    assert open_findings(WO_ID, db_path=db) == []
+
+    status = review_status(WO_ID, db_path=db)
+    assert status["blocking"] is True
+    assert [a["lane"] for a in status["awaiting_referee"]] == ["lane-one"]
+    assert any("evidence-referee" in r for r in status["reasons"])
+
+    # The next round carries the referee lane to its owner, whatever relevance selects.
+    doc = record_dispatch(
+        WO_ID,
+        sha="3" * 40,
+        image="ds-review:third",
+        change_set=[],
+        ownership=OWNED,
+        db_path=db,
+        assignments=[{"reviewer": REVIEWER, "seat": "s", "lanes": ["lane-one"]}],
+    )
+    assert "evidence-referee" in ra.dispatched_lanes(doc, "review-finding-integrity")
+
+
+def test_the_referee_answering_in_a_later_round_releases_it(db):
+    _finding_at_old_then_round_two(db)
+    _resolve(db, {(NEW, STALE["command"]): 1, (OLD, REPLACEMENT): 1, (NEW, REPLACEMENT): 0})
+    record_dispatch(
+        WO_ID,
+        sha="3" * 40,
+        image="ds-review:third",
+        change_set=[],
+        ownership=OWNED,
+        db_path=db,
+        assignments=[{"reviewer": REVIEWER, "seat": "s", "lanes": ["lane-one"]}],
+    )
+    _record(db, REVIEWER, [{"lane": "lane-one", "verdict": "pass", "reproduction": HOLDS}])
+    _record(
+        db,
+        "review-finding-integrity",
+        [{"lane": "evidence-referee", "verdict": "pass", "reproduction": HOLDS}],
+    )
+    status = review_status(WO_ID, db_path=db)
+    assert status["awaiting_referee"] == []
+    assert status["blocking"] is False, status["reasons"]
+
+
+def test_a_referee_answer_in_the_same_round_does_not_count(db):
+    """Seen means answered AFTER the replacement: an answer in the same round may have been
+    given before the replacement existed."""
+    _finding_at_old_then_round_two(db)
+    record_dispatch(
+        WO_ID,
+        sha="2" * 40,
+        image=NEW,
+        change_set=[],
+        ownership=OWNED,
+        db_path=db,
+        assignments=[
+            {"reviewer": REVIEWER, "seat": "s", "lanes": ["lane-one"]},
+            {"reviewer": "review-finding-integrity", "seat": "f", "lanes": ["evidence-referee"]},
+        ],
+    )
+    _record(
+        db,
+        "review-finding-integrity",
+        [{"lane": "evidence-referee", "verdict": "pass", "reproduction": HOLDS}],
+    )
+    _resolve(db, {(NEW, STALE["command"]): 1, (OLD, REPLACEMENT): 1, (NEW, REPLACEMENT): 0})
+    assert [a["lane"] for a in review_status(WO_ID, db_path=db)["awaiting_referee"]] == ["lane-one"]
