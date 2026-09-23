@@ -8,11 +8,16 @@ calls are marked **NETWORK** — they are always opt-in.
 
 ## Core path overrides
 
+`ds --home <dir>` sets `DREAM_STUDIO_HOME`, both alternate names, `DS_SPOOL_ROOT` and
+`DREAM_STUDIO_DB_PATH` from `<dir>` for the length of the command, over any inherited
+value, and restores them afterwards.
+
 | Variable | Default | Purpose |
 |---|---|---|
 | `CLAUDE_PLUGIN_ROOT` | Resolved from `__file__` ancestors or `.plugin-root` sidecar | Path to the dream-studio repo root. Set when installed to a non-standard location. |
 | `DREAM_STUDIO_HOME` | `~/.dream-studio` | Override the dream-studio runtime home directory (state, DB, handoffs). |
-| `DS_DREAM_STUDIO_HOME` | Same as above | Alternate name accepted by `integrations/manifest.py`. |
+| `DS_DREAM_STUDIO_HOME` | Same as above | Alternate name accepted by `integrations/manifest.py` and `ds render`. |
+| `DS_HOME` | Same as above | Alternate name read by the event-enqueue hook. |
 | `DREAM_STUDIO_DB_PATH` | `$DREAM_STUDIO_HOME/state/studio.db` | Override the SQLite authority database path. Useful for CI isolation. |
 | `DS_SPOOL_ROOT` | `$DREAM_STUDIO_HOME/spool` | Override the spool root directory. Used in tests to isolate writes. |
 | `WORK_ORDER_ROOT` | `$DREAM_STUDIO_HOME/work-orders` | Override work order storage root. |

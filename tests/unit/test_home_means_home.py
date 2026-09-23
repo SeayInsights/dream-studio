@@ -145,10 +145,14 @@ def test_the_flag_wins_over_an_inherited_home_and_gives_it_back(tmp_path, monkey
     The inherited value is restored once the command returns."""
     from interfaces.cli import ds
 
+    decoy = tmp_path / "inherited"
     inherited = {
-        "DREAM_STUDIO_HOME": str(tmp_path / "inherited"),
-        "DS_SPOOL_ROOT": str(tmp_path / "inherited" / "events"),
-        "DREAM_STUDIO_DB_PATH": str(tmp_path / "inherited" / "state" / "studio.db"),
+        "DREAM_STUDIO_HOME": str(decoy),
+        # Round 2: `ds render` read this alternate name first, and --home did not set it.
+        "DS_DREAM_STUDIO_HOME": str(decoy),
+        "DS_HOME": str(decoy),
+        "DS_SPOOL_ROOT": str(decoy / "events"),
+        "DREAM_STUDIO_DB_PATH": str(decoy / "state" / "studio.db"),
     }
     for key, value in inherited.items():
         monkeypatch.setenv(key, value)
@@ -163,7 +167,58 @@ def test_the_flag_wins_over_an_inherited_home_and_gives_it_back(tmp_path, monkey
     assert ds.main(["--home", str(home), "version"]) == 0
     assert seen == {
         "DREAM_STUDIO_HOME": str(home),
+        "DS_DREAM_STUDIO_HOME": str(home),
+        "DS_HOME": str(home),
         "DS_SPOOL_ROOT": str(home / "events"),
         "DREAM_STUDIO_DB_PATH": str(home / "state" / "studio.db"),
     }, "an inherited variable beat --home"
     assert {k: os.environ.get(k) for k in inherited} == inherited, "not restored"
+
+
+def test_render_follows_home_past_an_inherited_alternate_name(tmp_path, monkeypatch):
+    """The round-2 finding, at the reader: `ds render` resolves its home from
+    DS_DREAM_STUDIO_HOME first, and never receives --home as an argument."""
+    from interfaces.cli import ds, ds_render
+
+    monkeypatch.setenv("DS_DREAM_STUDIO_HOME", str(tmp_path / "decoy"))
+    seen = {}
+    monkeypatch.setattr(ds, "_run", lambda *a: seen.setdefault("home", ds_render._ds_home()) and 0)
+    home = (tmp_path / "home").resolve()
+    ds.main(["--home", str(home), "version"])
+    assert seen["home"] == home
+
+
+#: Environment names ending in HOME that are the operating system's, not Dream Studio's.
+_OS_HOMES = {"HOME", "USERPROFILE"}
+
+
+def test_every_home_name_production_code_reads_is_one_home_sets():
+    """THE NEXT ALIAS FAILS HERE, not in a review. Twice the export missed a name the code
+    reads -- first by precedence, then by a spelling (DS_DREAM_STUDIO_HOME) -- so the set
+    is checked against what the code actually reads, not against what was remembered."""
+    import re
+    import subprocess
+
+    from interfaces.cli.ds import home_variables
+
+    files = subprocess.run(
+        ["git", "ls-files", "*.py"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=True,
+    ).stdout.split()
+    reads = re.compile(
+        r"""(?:environ\.get|getenv|environ\[|setdefault)\(?\s*["']([A-Z0-9_]*HOME)["']"""
+    )
+    names = set()
+    for rel in files:
+        if rel.startswith(("tests/", "dist/")):
+            continue
+        text = (REPO_ROOT / rel).read_text(encoding="utf-8", errors="replace")
+        names.update(reads.findall(text))
+    assert names, "the scan found no reads at all -- the pattern is broken, not the code clean"
+    missing = names - _OS_HOMES - set(home_variables(Path("/h")))
+    assert not missing, f"--home does not set {sorted(missing)}, which production code reads"

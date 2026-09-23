@@ -147,6 +147,25 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def home_variables(home: Path) -> dict[str, str]:
+    """Every environment name for a location --home decides, and its value under `home`.
+
+    EVERY NAME FOR THE HOME, not the one most code reads. `DS_DREAM_STUDIO_HOME` is an
+    alternate spelling integrations/manifest.py and `ds render` read first, and `DS_HOME`
+    one the event-enqueue hook reads; with only DREAM_STUDIO_HOME set, `ds --home X render
+    findings` read and wrote under an inherited DS_DREAM_STUDIO_HOME and nothing landed in
+    X (boundary-semantics lane, round 2). tests/unit/test_home_means_home.py fails when
+    production code reads a *_HOME name this does not set.
+    """
+    return {
+        "DREAM_STUDIO_HOME": str(home),
+        "DS_DREAM_STUDIO_HOME": str(home),
+        "DS_HOME": str(home),
+        "DS_SPOOL_ROOT": str(home / "events"),
+        "DREAM_STUDIO_DB_PATH": str(home / "state" / "studio.db"),
+    }
+
+
 @contextlib.contextmanager
 def _home_environment(home: Path | None):
     """--HOME MEANS HOME FOR EVERYTHING THIS COMMAND WRITES.
@@ -155,7 +174,7 @@ def _home_environment(home: Path | None):
     path or the projection runner, which resolve their locations from process
     environment: a `--home <scratch> work-order create` wrote its event to the default
     spool, created a default studio.db, and left the --home authority empty (measured
-    2026-09-23). So the three variables those paths read are set from --home.
+    2026-09-23). So the variables those paths read are set from --home.
 
     The flag wins over an inherited variable. The first version filled in only unset
     ones, and the runtime-check image sets DREAM_STUDIO_HOME itself: there, `--home` never
@@ -166,11 +185,7 @@ def _home_environment(home: Path | None):
     if home is None:
         yield
         return
-    wanted = {
-        "DREAM_STUDIO_HOME": str(home),
-        "DS_SPOOL_ROOT": str(home / "events"),
-        "DREAM_STUDIO_DB_PATH": str(home / "state" / "studio.db"),
-    }
+    wanted = home_variables(home)
     previous = {key: os.environ.get(key) for key in wanted}
     os.environ.update(wanted)
     try:
