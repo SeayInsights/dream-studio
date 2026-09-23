@@ -68,11 +68,17 @@ def _read_triggers(path: Path) -> list[str]:
 
 
 def _load_trigger_map(plugin_root: Path) -> list[tuple[str, str, str]]:
-    """Build [(trigger_lower, skill_id, mode)], longest trigger first.
+    """Build [(trigger_lower, target, mode, kind)], longest trigger first.
 
     Longest-first so a specific trigger ('review pr:') wins over a shorter
     prefix of another ('review:'). Derived from the same single source as the
     routing table — packs.yaml modes + mode metadata.yml triggers.
+
+    `kind` is "skill" or "command". A COMMAND TRIGGER names a `ds` command instead of a
+    skill, declared under packs.yaml's `command_triggers`. It exists because lifecycle
+    work is commands: dissolving ds-project would otherwise have deleted `resume:`,
+    `continue:` and `what's next:` along with the prose, when the capability behind them
+    is `ds project state` and only the wrapper was going away.
     """
     try:
         import yaml
@@ -82,7 +88,20 @@ def _load_trigger_map(plugin_root: Path) -> list[tuple[str, str, str]]:
         return []
 
     canonical = plugin_root / "canonical"
-    entries: list[tuple[str, str, str]] = []
+    entries: list[tuple[str, str, str, str]] = []
+
+    # Commands first in construction order; the longest-first sort below is what actually
+    # decides precedence, so declaration order carries no meaning.
+    for spec in data.get("command_triggers", []) or []:
+        if not isinstance(spec, dict):
+            continue
+        command = str(spec.get("command") or "").strip()
+        if not command:
+            continue
+        for trig in spec.get("triggers", []) or []:
+            if isinstance(trig, str) and trig.strip():
+                entries.append((trig.strip().lower(), command, "", "command"))
+
     for pack_key, cfg in (data.get("packs", {}) or {}).items():
         if not isinstance(cfg, dict):
             continue
@@ -95,20 +114,23 @@ def _load_trigger_map(plugin_root: Path) -> list[tuple[str, str, str]]:
         if modes:
             for mode in modes:
                 for trig in _read_triggers(base / "modes" / mode / "metadata.yml") or [f"{mode}:"]:
-                    entries.append((trig.lower(), skill_id, mode))
+                    entries.append((trig.lower(), skill_id, mode, "skill"))
         else:
             for trig in _read_triggers(base / "metadata.yml"):
-                entries.append((trig.lower(), skill_id, ""))
+                entries.append((trig.lower(), skill_id, "", "skill"))
 
     entries.sort(key=lambda e: len(e[0]), reverse=True)
     return entries
 
 
-def _match(prompt: str, entries: list[tuple[str, str, str]]) -> tuple[str, str, str] | None:
+def _match(
+    prompt: str, entries: list[tuple[str, str, str, str]]
+) -> tuple[str, str, str, str] | None:
     low = prompt.lower()
-    for trig, skill, mode in entries:
+    for entry in entries:
+        trig = entry[0]
         if trig and trig in low:
-            return (trig, skill, mode)
+            return entry
     return None
 
 
@@ -152,13 +174,22 @@ def _route(payload: dict) -> None:
     matched = _match(prompt, entries)
     if not matched:
         return
-    trig, skill, mode = matched
-    args = f', args="{mode}"' if mode else ""
+    trig, target, mode, kind = matched
+    if kind == "command":
+        # A COMMAND, NOT A SKILL. Saying Skill(...) here would name something that does
+        # not exist, which is worse than staying silent: the model would go looking.
+        directive = (
+            f"This request matches the Dream Studio trigger '{trig}'. Run this before "
+            f"other work: `{target}`."
+        )
+    else:
+        args = f', args="{mode}"' if mode else ""
+        directive = (
+            f"This request matches the Dream Studio trigger '{trig}'. Invoke the matching "
+            f'skill before other work: Skill(skill="{target}"{args}).'
+        )
     print(
-        "<dream-studio-routing>\n"
-        f"This request matches the Dream Studio trigger '{trig}'. Invoke the matching "
-        f'skill before other work: Skill(skill="{skill}"{args}).\n'
-        "</dream-studio-routing>",
+        "<dream-studio-routing>\n" + directive + "\n</dream-studio-routing>",
         flush=True,
     )
 

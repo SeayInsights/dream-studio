@@ -301,8 +301,12 @@ def test_skill_text_documents_brief_currency():
     close emitted main_ci_warning and the close skill never mentioned it.
     """
     repo = Path(__file__).resolve().parents[2]
-    canonical = repo / "canonical" / "skills" / "ds-project" / "modes" / "brief" / "SKILL.md"
-    assert canonical.is_file(), f"brief mode SKILL.md missing at {canonical}"
+    # THE SURFACE THAT MEETS THE GATE. This read the ds-project brief mode, which was
+    # narration over `ds design-brief` and went with that pack. An agent hits
+    # design_brief_locked while CLOSING a work order, so the close mode is where the
+    # remedy has to be legible -- and it already carried the currency distinction.
+    canonical = repo / "canonical" / "skills" / "ds-workorder" / "modes" / "close" / "SKILL.md"
+    assert canonical.is_file(), f"close mode SKILL.md missing at {canonical}"
     text = canonical.read_text(encoding="utf-8")
 
     # The distinction the gate now draws.
@@ -315,11 +319,13 @@ def test_skill_text_documents_brief_currency():
     # The over-correction it must not invite.
     assert "project-scoped" in text
 
-    projected = repo / "dist" / "plugin" / "skills" / "ds-project" / "modes" / "brief" / "SKILL.md"
-    assert projected.is_file(), "the projected brief SKILL.md is missing"
+    projected = (
+        repo / "dist" / "plugin" / "skills" / "ds-workorder" / "modes" / "close" / "SKILL.md"
+    )
+    assert projected.is_file(), "the projected close SKILL.md is missing"
     assert projected.read_text(encoding="utf-8").replace("\r\n", "\n") == text.replace(
         "\r\n", "\n"
-    ), "dist/plugin brief SKILL.md is stale — rebuild it"
+    ), "dist/plugin close SKILL.md is stale — rebuild it"
 
 
 def test_the_declaration_is_not_documented_as_a_shortcut():
@@ -328,7 +334,14 @@ def test_the_declaration_is_not_documented_as_a_shortcut():
     say so, or the escape hatch becomes the default path."""
     repo = Path(__file__).resolve().parents[2]
     text = (
-        repo / "canonical" / "skills" / "ds-project" / "modes" / "brief" / "SKILL.md"
+        repo / "canonical" / "skills" / "ds-workorder" / "modes" / "close" / "SKILL.md"
     ).read_text(encoding="utf-8")
     assert "DON'T" in text
-    assert "skip a real re-lock" in text
+    # THE CLAIM, NOT A PHRASE. This asserted "skip a real re-lock", the wording of the
+    # ds-project brief mode. That pack was dissolved and the guidance moved to the surface
+    # that meets the gate, which says the same thing in its own words -- so the check is
+    # the substance: do not use the declaration INSTEAD of a re-lock, and the reason.
+    assert "re-lock" in text, "the text does not warn against substituting for a re-lock"
+    assert (
+        "looks like someone checked" in text
+    ), "the text does not say WHY a false declaration is worse than a stale lock"

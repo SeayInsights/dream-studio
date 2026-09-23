@@ -76,7 +76,7 @@ def _dispatch_handoff_continuation() -> None:
     """
     If a handoff packet was written to the authority DB during this session,
     spawn a new session with a reference-only prompt (no content in argv).
-    The continuation session queries the authority via ds-project:resume.
+    The continuation session queries the authority via `ds project state`.
     """
     if _spawn_new_session is None:
         _log_spawner_warning(

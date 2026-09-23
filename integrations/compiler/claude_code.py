@@ -95,7 +95,6 @@ _PACK_DISPLAY_NAMES: dict[str, str] = {
     "domains": "Domain builders",
     "meta": "Workflow orchestration",
     "security": "Security analysis",
-    "ds-project": "Project lifecycle",
     "ds-workorder": "Work order lifecycle",
     "website": "Website builder",
     "fullstack": "Fullstack builder",
@@ -163,7 +162,30 @@ def _build_routing_table(
 
         rows.append(f"| {display_name} | `{skill_id}` | {keyword_parts} |")
 
-    return header + "\n".join(rows) + "\n"
+    # COMMAND TRIGGERS BELONG IN THE TABLE TOO. Lifecycle work is commands, so some
+    # phrases reach a `ds` command rather than a skill. Leaving them out would make the
+    # routing table quietly wrong in the direction that matters: an agent reading it would
+    # conclude `resume:` routes nowhere, when the hook routes it to `ds project state`.
+    command_rows: list[str] = []
+    for spec in data.get("command_triggers", []) or []:
+        if not isinstance(spec, dict):
+            continue
+        command = str(spec.get("command") or "").strip()
+        triggers = [t for t in (spec.get("triggers") or []) if isinstance(t, str)]
+        if not command or not triggers:
+            continue
+        command_rows.append(f"| `{command}` | {', '.join(triggers)} |")
+
+    table = header + "\n".join(rows) + "\n"
+    if command_rows:
+        table += (
+            "\n### Command Routing\n\n"
+            "These keywords reach a `ds` command, not a skill. Run the command; there is no "
+            "Skill to invoke.\n\n"
+            "| Command | Keywords |\n"
+            "|---------|----------|\n" + "\n".join(command_rows) + "\n"
+        )
+    return table
 
 
 def _read_mode_triggers(

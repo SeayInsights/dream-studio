@@ -1,5 +1,34 @@
 schema_version: 2
 
+# A trigger that reaches a COMMAND rather than a skill.
+#
+# WHY THIS SECTION EXISTS. Lifecycle work -- projects, milestones, work orders -- is
+# commands, not skills: every operation already had a `ds` door and the packs around them
+# were narration. But the words an operator types are not narration. `resume:` and
+# `what's next:` were ds-project's most-used triggers, and dissolving the pack would have
+# deleted the phrasing along with the prose.
+#
+# So a trigger may name a command. The routing hook reads this list from the same file it
+# reads packs from, so there is one trigger source and not two.
+command_triggers:
+  - command: ds project state
+    why: >
+      One query for where the work stands: the active project, the next open work order,
+      which gates are open, the design brief, outstanding tasks and recorded gotchas.
+      This is what the ds-project pack's resume mode did, and these are its triggers.
+    triggers:
+      - "resume:"
+      - "pick up:"
+      - "get back to:"
+      - "what's next:"
+      - "what's active:"
+      - "start project:"
+      - "start building:"
+      - "continue:"
+      - "where was I:"
+      - "what am I working on:"
+      - "what should I do:"
+
 packs:
   core:
     description: Build lifecycle — think through ship, core agents, session context
@@ -91,13 +120,6 @@ packs:
       - scan output lands in the diagnostics home, never the repo root
     # review added — Flag 2 fix
     modes: [scan, dast, binary-scan, mitigate, comply, netcompat, dashboard, review]
-
-  ds-project:
-    description: Project lifecycle — scope, brief, resume, and portfolio-level management (list/switch/archive/delete)
-    skill: ds-project
-    invariants:
-      - project state is read from the authority, not inferred from the working tree
-    modes: [scope, resume, brief, manage, brownfield]
 
   ds-workorder:
     description: Work order lifecycle — start, mark tasks done, close (with gate checks), block, and read-only status

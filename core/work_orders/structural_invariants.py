@@ -12,9 +12,9 @@ milestone has zero work orders. A creation-time check would refuse everything or
 nothing; it cannot tell a badly-sized unit from a correctly-sized one that is one second
 old.
 
-WHY NOT AT START EITHER, which is where this was built first. ds-project decomposes only
-the first work order of the first milestone, and its own instructions say the rest "get
-tasks when they are started (by calling start_work_order())". So a work order legitimately
+WHY NOT AT START EITHER, which is where this was built first. The authoring path
+decomposes only the first work order of the active milestone; the rest get their tasks
+when they are started, by start_work_order(). So a work order legitimately
 arrives at start with zero tasks and acquires them a moment later. Refusing there blocked
 the documented authoring path -- measured, it broke 18 existing tests whose fixtures seed a
 work order and no tasks, which is exactly the shape start is supposed to accept.

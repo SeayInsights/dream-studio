@@ -673,7 +673,7 @@ def close_work_order(
         # refused. Nothing had ever refused one.
         #
         # Refused HERE and not at creation or start. A work order has zero tasks when it is
-        # created and often still has zero when it is started — ds-project decomposes only
+        # created and often still has zero when it is started — the authoring path decomposes only
         # the first work order of the first milestone and the rest "get tasks when they are
         # started". Close is the first moment the count is a fact rather than a not-yet: it
         # is where "this work order is done" gets claimed, and one task is a claim about a

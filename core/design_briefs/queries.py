@@ -42,9 +42,7 @@ def get_design_brief(
             "ok": True,
             "project_id": project_id,
             "brief": None,
-            "message": (
-                f"No design brief. Create one for project {project_id} via ds-project:brief."
-            ),
+            "message": (f"No design brief. Create one: ds design-brief create {project_id}."),
         }
     (
         brief_id,

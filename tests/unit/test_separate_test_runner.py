@@ -30,6 +30,7 @@ import sqlite3
 import subprocess
 import sys
 import uuid
+import pathlib
 from pathlib import Path
 
 import pytest
@@ -510,11 +511,22 @@ def test_project_state_stays_quiet_for_an_execution_backed_verdict(db, tmp_path)
 
 def test_resume_skill_text_tells_the_agent_to_surface_it(db):
     """An engine key with no reader is the defect this milestone keeps finding. The
-    briefing composed by resume mode has to name the key, or the payload is talking
-    to nobody."""
-    text = _flat((_CANONICAL / "ds-project" / "SKILL.md").read_text(encoding="utf-8"))
+    briefing has to name the key, or the payload is talking to nobody.
+
+    This read the ds-project pack, whose resume mode was INSTRUCTED to render the key. The
+    pack was dissolved, and the reader is better than it was: `ds project state` renders
+    the line itself, so surfacing it no longer depends on a model following prose. The
+    check is therefore on the two things that now carry it -- the command that prints it
+    and the close surface that explains what it means.
+    """
+    repo = pathlib.Path(__file__).resolve().parents[2]
+    cli = (repo / "interfaces" / "cli" / "commands" / "project.py").read_text(encoding="utf-8")
+    assert "test_execution_warning" in cli, "`ds project state` does not read the key"
+
+    text = _flat(
+        (_CANONICAL / "ds-workorder" / "modes" / "close" / "SKILL.md").read_text(encoding="utf-8")
+    )
     assert "test_execution_warning" in text
-    assert "verbatim" in text
     assert "advisory" in text or "must not block" in text
 
 

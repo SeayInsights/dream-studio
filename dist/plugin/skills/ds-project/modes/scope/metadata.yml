@@ -1,4 +1,0 @@
-triggers:
-  - "scope project:"
-  - "ds project scope:"
-  - "create prd:"

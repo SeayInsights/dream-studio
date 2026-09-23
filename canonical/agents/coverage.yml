@@ -260,18 +260,6 @@ modes:
   skill: website/modes/prototype/SKILL.md
   no_agent: Nothing dispatches it and the skill is 4937 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: ds-project/brief
-  skill: ds-project/modes/brief/SKILL.md
-  no_agent: A wizard that fills and locks a design brief through operator dialogue.
-- mode: ds-project/brownfield
-  skill: ds-project/modes/brownfield/SKILL.md
-  no_agent: Registers existing checkouts and runs intake against them, writing authority rows.
-- mode: ds-project/manage
-  skill: ds-project/modes/manage/SKILL.md
-  no_agent: Switches, archives and deletes projects in the authority. State mutation, not knowledge.
-- mode: ds-project/scope
-  skill: ds-project/modes/scope/SKILL.md
-  no_agent: A guided intake conversation, one question at a time, writing to the authority as it goes.
 - mode: ds-workorder/block
   skill: ds-workorder/modes/block/SKILL.md
   no_agent: Records a blocker against a work order in the authority.

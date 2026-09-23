@@ -122,12 +122,41 @@ def test_chain_1_link_5_skill_to_cli_call_untested():
 
 
 def test_chain_2_link_1_resume_skill_routable():
-    """C2-L1: 'start working' → ds-project:resume invoked. UNIT_TESTED."""
-    resume_skill = REPO_ROOT / "canonical" / "skills" / "ds-project" / "modes" / "resume"
-    assert resume_skill.is_dir(), "ds-project:resume mode directory missing"
-    assert (resume_skill / "SKILL.md").is_file() or (
-        resume_skill / "metadata.yml"
-    ).is_file(), "Resume skill has no SKILL.md or metadata.yml"
+    """C2-L1: 'start working' reaches the resume capability. UNIT_TESTED.
+
+    THE CLAIM, NOT A PROXY FOR IT. This used to assert that
+    canonical/skills/ds-project/modes/resume/ existed. That directory held a metadata.yml
+    with eleven triggers and no SKILL.md, so the check was green for a mode the routing
+    collector dropped and no operator could reach.
+
+    The ds-project pack was dissolved -- every operation it narrated was already a
+    command -- and resume's capability is `ds project state`: active project, next work
+    order, open gates, brief, tasks, gotchas, in one query. The eleven phrases now reach
+    it through a command trigger, so this drives the real hook and asserts the prompt
+    arrives.
+    """
+    import importlib.util
+    import io
+    import sys as _sys
+
+    spec = importlib.util.spec_from_file_location(
+        "_route_c2l1", REPO_ROOT / "runtime" / "hooks" / "meta" / "on-prompt-route.py"
+    )
+    route = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(route)
+    route._PLUGIN_ROOT = REPO_ROOT
+
+    for prompt in ("resume: where was I", "what's next: on this project", "continue: building"):
+        buf = io.StringIO()
+        held = _sys.stdout
+        _sys.stdout = buf
+        try:
+            route._route({"prompt": prompt})
+        finally:
+            _sys.stdout = held
+        out = buf.getvalue()
+        assert "<dream-studio-routing>" in out, f"{prompt!r} routed nowhere"
+        assert "ds project state" in out, f"{prompt!r} did not reach the resume capability"
 
 
 @pytest.mark.xfail(

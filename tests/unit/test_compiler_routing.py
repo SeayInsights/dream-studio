@@ -262,22 +262,42 @@ def test_mode_with_no_metadata_uses_mode_name_as_keyword(tmp_path):
     assert "plan:" in result
 
 
-def test_ds_project_row_contains_scope_and_resume_keywords():
-    """The generated AGENTS.md routing table for ds-project must include scope + resume."""
+def test_the_resume_keywords_reach_a_command_row():
+    """The generated routing table names the command the resume keywords reach.
+
+    This asserted that "scope" and "resume" appeared somewhere in AGENTS.md, when both
+    were ds-project modes. That pack was dissolved -- every operation it narrated was
+    already a command -- and its resume keywords now reach `ds project state` through a
+    command trigger. The table has to SAY so, or an agent reading it concludes those
+    phrases route nowhere.
+    """
     from integrations.compiler.agents_md import build_agents_md
 
     agents_md = build_agents_md()
-    assert "scope" in agents_md, "routing table missing 'scope' for ds-project"
-    assert "resume" in agents_md, "routing table missing 'resume' for ds-project"
+    assert "### Command Routing" in agents_md, "the routing table has no command section"
+    assert "ds project state" in agents_md, "the command the resume keywords reach is missing"
+    assert "resume:" in agents_md, "the resume trigger is not listed"
 
 
-def test_ds_project_resume_triggers_from_metadata_yml():
-    """Generated AGENTS.md routing table contains 'start building' from resume metadata.yml."""
+def test_every_resume_trigger_appears_in_the_command_row():
+    """Every declared resume trigger reaches the table, not just the obvious one.
+
+    The eleven phrases were a mode's metadata.yml; they are now a command trigger in
+    packs.yaml. `start building:` is the one furthest from the command's name, so it is
+    the one most likely to be dropped by a renderer that only prints what it recognises.
+    """
+    import yaml
+
     from integrations.compiler.agents_md import build_agents_md
 
-    assert (
-        "start building" in build_agents_md()
-    ), "routing table should include 'start building' trigger from resume metadata.yml"
+    agents_md = build_agents_md()
+    declared = yaml.safe_load((REPO_ROOT / "packs.yaml").read_text(encoding="utf-8"))
+    triggers = [
+        t for spec in declared.get("command_triggers", []) for t in (spec.get("triggers") or [])
+    ]
+    assert triggers, "no command triggers are declared"
+    missing = [t for t in triggers if t not in agents_md]
+    assert not missing, f"the routing table drops declared command triggers: {missing}"
 
 
 def test_meta_pack_uses_workflow_keyword_not_meta(tmp_path):

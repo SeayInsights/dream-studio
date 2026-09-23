@@ -110,6 +110,19 @@ The gate asks two questions now, and the failure text says which one failed (WO-
   `ds design-brief reviewed-no-change <project_id> --note "<why it still holds>"`
   The note is required and recorded, and the declaration carries its own timestamp — so later UI work stales the brief again. It is a judgement on the record, not a mute button.
 
+**Which work closes stale a brief.** A brief goes stale when a **UI-class work order
+closes** after it was locked -- `ui_component`, `ui_page`, `saas_feature`. Backend-only
+work (`api_endpoint`, `data_pipeline`, `infrastructure`, `deployment`, `documentation`)
+does **not** stale it: a brief that still describes the UI is still true, and crying wolf
+would train operators to re-lock reflexively. The gate computes that set from
+`core.work_orders.models.WORK_ORDER_TYPES`, so it cannot drift from the types you can
+actually create.
+
+**DON'T** ask for a brief per work order. `business_design_briefs` is **project-scoped**
+deliberately: a brief per WO would proliferate near-duplicates and destroy the shared
+design language that is the whole point of having one. One current project brief satisfies
+every UI work order in the project.
+
 **DON'T** reach for the declaration to avoid a re-lock. A recorded "still holds" about a brief that no longer does is worse than a stale lock, because it looks like someone checked.
 
 ## What the tests rest on {#separate-test-runner}

@@ -1169,7 +1169,7 @@ nodes:
         "Dream Studio is onboarded. To start your first project:
          1. ds project register --name 'Your Project'
          2. ds project set-active <project_id>
-         3. ds skill invoke ds-project:scope
+         3. ds project state
          4. ds project start <project_id>"
 
       End with: VERDICT: onboarding complete — weekly self-audit scheduled
