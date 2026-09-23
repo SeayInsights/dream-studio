@@ -51,6 +51,15 @@ jobs:
           DREAM_STUDIO_BASE_REF: origin/${{ github.base_ref || 'main' }}
         run: python -m core.gates.blast_radius
 
+      # THE HALF THE BLAST-RADIUS GATE WAS WAITING FOR. It computes the tests this diff
+      # reaches "so the matrix step can run the dependent tests"; this is that step. It
+      # also runs the sweep tests reference selection cannot see, so it is never empty.
+      # Measured on #786: 36 dependent files, ~100s, 4 of 5 main-red failures inside.
+      - name: Run the impact set
+        env:
+          DREAM_STUDIO_BASE_REF: origin/${{ github.base_ref || 'main' }}
+        run: python interfaces/cli/impact_tests_gate.py
+
       - name: Dashboard truth gate
         run: python -m interfaces.cli.ds doctor dashboard-truth
 
