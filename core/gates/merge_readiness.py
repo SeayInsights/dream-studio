@@ -303,6 +303,16 @@ def merge_readiness(
     info = verdict_state(resolved, db_path=db_path, planning_root=planning_root)
     state = info["state"]
     ready = state == "passed"
+
+    # THE LANE REVIEW TOO. This report read only the verify verdict, so a work order held
+    # by an open lane finding read as ready to merge (the bench's receiver's-view seat,
+    # round three). A blocking lane review makes it not ready, whatever the verdict says.
+    from core.work_orders.review_answers import review_status
+
+    lanes = review_status(resolved, db_path=db_path)
+    lane_block = lanes["dispatched"] and lanes["blocking"]
+    if lane_block:
+        ready = False
     advice = {
         "passed": "Verify certified this work order. Merge on a green 3-platform matrix.",
         "failed": (
@@ -331,6 +341,12 @@ def merge_readiness(
         if caveat:
             advice += f" CAVEAT: {caveat}"
 
+    if lane_block:
+        advice = (
+            f"The lane review still holds this work order -- {'; '.join(lanes['reasons'])}."
+            f" See `ds review --status --work-order {resolved}`. " + advice
+        )
+
     return {
         "ready": ready,
         "state": state,
@@ -338,6 +354,11 @@ def merge_readiness(
         "reason": info.get("reason"),
         "summary": info.get("summary"),
         "execution": execution,
+        "lane_review": {
+            "dispatched": lanes["dispatched"],
+            "blocking": lanes["blocking"],
+            "reasons": lanes["reasons"],
+        },
         "advice": advice,
     }
 

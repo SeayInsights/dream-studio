@@ -271,6 +271,7 @@ def validate_answers(
         why = str(raw.get("why", "") or "").strip()
         check = str(raw.get("check", "") or "").strip()
         declare = str(raw.get("declare", "") or "").strip()
+        resolves_with = str(raw.get("resolves_with", "") or "").strip()
         reproduction = raw.get("reproduction")
 
         if not lane:
@@ -351,6 +352,8 @@ def validate_answers(
             "check": check,
             "declare": declare,
         }
+        if resolves_with and verdict == "pass":
+            entry["resolves_with"] = resolves_with
         if isinstance(reproduction, dict):
             entry["reproduction"] = {
                 "command": str(reproduction.get("command", "") or "").strip(),
@@ -419,6 +422,7 @@ def record_answers(
     project_root: Path | None = None,
     available: Callable[[], tuple[bool, str]] | None = None,
     verify: Callable[..., tuple[bool, dict[str, Any] | None, str]] | None = None,
+    ensure_image: Callable[[str], str] | None = None,
 ) -> dict[str, Any]:
     """Validate, verify and store a reviewer's answers for the current round.
 
@@ -459,6 +463,7 @@ def record_answers(
 
     available = available or lane_sandbox.docker_available
     verify = verify or lane_sandbox.verify_reproduction
+    ensure_image = ensure_image or lane_sandbox.build_image
     ok, why_not = available()
     if not ok:
         return {
@@ -495,6 +500,77 @@ def record_answers(
             # is gone -- a vacuous `true` resolved a real finding in round three. The
             # finding's reproduction exited non-zero because the defect was there; run in
             # this round's image it must now exit 0.
+            replacement = entry.get("resolves_with")
+            if replacement:
+                # A REPLACEMENT TEST MUST DISCRIMINATE THE FIX: fail at the commit the
+                # finding was recorded against, pass at this one. Round three found a
+                # finding's own reproduction gone stale -- its harness broke on a guard
+                # added since -- with the defect fixed and no way to show it.
+                old_tag = str((prior.get("run") or {}).get("image") or "")
+                if ":" not in old_tag:
+                    refused.append(
+                        {
+                            "lane": entry["lane"],
+                            "reason": (
+                                f"the finding from round {prior['round']} records no image,"
+                                " so a replacement test cannot be run against the commit it"
+                                " was found in"
+                            ),
+                        }
+                    )
+                    continue
+                try:
+                    before_image = ensure_image(old_tag.split(":", 1)[1])
+                except Exception as exc:  # noqa: BLE001 - reported, never trusted
+                    refused.append(
+                        {
+                            "lane": entry["lane"],
+                            "reason": f"cannot rebuild {old_tag} to test the replacement: {exc}",
+                        }
+                    )
+                    continue
+                now_ok, now_run, now_reason = verify(
+                    image, {"command": replacement, "exit_code": 0}
+                )
+                if not now_ok:
+                    refused.append(
+                        {
+                            "lane": entry["lane"],
+                            "reason": (
+                                "the replacement test does not pass at this commit --"
+                                f" {now_reason}"
+                            ),
+                            "run": now_run,
+                        }
+                    )
+                    continue
+                before_ok, before_run, _ = verify(
+                    before_image, {"command": replacement, "exit_code": 0}
+                )
+                if before_ok or before_run is None or before_run.get("timed_out"):
+                    refused.append(
+                        {
+                            "lane": entry["lane"],
+                            "reason": (
+                                f"the replacement test did not fail at {old_tag}, where the"
+                                f" finding was recorded in round {prior['round']}, so it does"
+                                " not discriminate the fix -- a test that passes before and"
+                                " after resolves nothing"
+                            ),
+                            "run": before_run,
+                        }
+                    )
+                    continue
+                entry["resolution_run"] = {
+                    "command": replacement,
+                    "kind": "replacement",
+                    "exit_code_before": before_run.get("exit_code"),
+                    "image_before": before_image,
+                    "exit_code": now_run.get("exit_code") if now_run else None,
+                    "image": image,
+                }
+                verified.append(entry)
+                continue
             found = prior.get("reproduction") or {}
             if not str(found.get("command", "") or "").strip():
                 refused.append(
@@ -515,7 +591,9 @@ def record_answers(
                         "reason": (
                             f"lane {entry['lane']} holds an open finding from round"
                             f" {prior['round']}, and a pass resolves it only when that"
-                            f" finding's own reproduction now exits 0 -- {reason}"
+                            f" finding's own reproduction now exits 0 -- {reason}. If that"
+                            " reproduction has gone stale, give a `resolves_with` test that"
+                            " fails at the finding's commit and passes at this one"
                         ),
                         "run": run,
                     }
@@ -680,6 +758,14 @@ def review_status(work_order_id: str, *, db_path: Path | None = None) -> dict[st
         "blocking": bool(reasons),
         "reasons": reasons,
     }
+
+
+def lane_review_state(work_order_id: str, *, db_path: Path | None = None) -> str:
+    """One word for the record: ``never_dispatched``, ``blocking`` or ``clear``."""
+    status = review_status(work_order_id, db_path=db_path)
+    if not status["dispatched"]:
+        return "never_dispatched"
+    return "blocking" if status["blocking"] else "clear"
 
 
 def lane_review_failure(work_order_id: str, *, db_path: Path | None = None) -> str | None:

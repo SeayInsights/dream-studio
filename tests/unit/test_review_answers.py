@@ -890,3 +890,122 @@ def test_the_registry_keys_the_chair_by_its_seat():
     owned = ra.lane_ownership()
     assert "chair-and-verdict-owner" in owned[f"seat:{ra.CHAIR_SEAT}"]
     assert None not in owned
+
+
+# ── a stale reproduction: resolve with a test that discriminates the fix ────
+
+OLD, NEW = "ds-review:before", "ds-review:after"
+STALE = {"command": "sh old_harness.sh", "exit_code": 1}
+REPLACEMENT = "python -m pytest tests/unit/test_fix.py -q"
+
+
+def _images(table):
+    """A sandbox keyed by (image, command): the same test can fail before a fix and pass
+    after it, which is the only thing a replacement test is allowed to prove."""
+
+    def verify(image, repro):
+        actual = table.get((image, repro["command"]), 0)
+        run = {"exit_code": actual, "output_sha256": "x", "output_tail": ""}
+        return actual == repro["exit_code"], run, f"re-run exited {actual}"
+
+    return verify
+
+
+def _finding_at_old_then_round_two(db):
+    record_dispatch(
+        WO_ID,
+        sha="1" * 40,
+        image=OLD,
+        change_set=[],
+        ownership=OWNED,
+        db_path=db,
+        assignments=[{"reviewer": REVIEWER, "seat": "s", "lanes": ["lane-one"]}],
+    )
+    _record(
+        db,
+        REVIEWER,
+        [{"lane": "lane-one", "verdict": "finding", "evidence": "e", "reproduction": STALE}],
+        verify=_images({(OLD, STALE["command"]): 1}),
+    )
+    record_dispatch(
+        WO_ID,
+        sha="2" * 40,
+        image=NEW,
+        change_set=[],
+        ownership=OWNED,
+        db_path=db,
+        assignments=[{"reviewer": REVIEWER, "seat": "s", "lanes": ["lane-one"]}],
+    )
+
+
+def _resolve(db, table, replacement=REPLACEMENT):
+    return _record(
+        db,
+        REVIEWER,
+        [
+            {
+                "lane": "lane-one",
+                "verdict": "pass",
+                "reproduction": HOLDS,
+                "resolves_with": replacement,
+            }
+        ],
+        verify=_images(table),
+        ensure_image=lambda sha: OLD,
+    )
+
+
+def test_a_stale_finding_resolves_with_a_test_that_fails_before_and_passes_after(db):
+    """Found recording round three: a finding's own reproduction crashed on a guard added
+    since -- defect fixed, no way to show it -- so the finding could never resolve."""
+    _finding_at_old_then_round_two(db)
+    table = {
+        (NEW, STALE["command"]): 1,  # the stale harness still crashes
+        (OLD, REPLACEMENT): 1,  # the replacement fails where the finding was found
+        (NEW, REPLACEMENT): 0,  # and passes now
+    }
+    result = _resolve(db, table)
+    assert result["refused"] == [], result["refused"]
+    assert open_findings(WO_ID, db_path=db) == []
+    [answer] = [a for a in recorded_answers(WO_ID, db_path=db) if a["lane"] == "lane-one"]
+    assert answer["resolution_run"]["kind"] == "replacement"
+    assert answer["resolution_run"]["exit_code_before"] == 1
+
+
+def test_a_replacement_that_passes_before_the_fix_resolves_nothing(db):
+    """`true` passes at both commits. A test that cannot tell the fix happened is the
+    vacuous pass round three closed, re-entering through the replacement door."""
+    _finding_at_old_then_round_two(db)
+    result = _resolve(db, {(NEW, "true"): 0, (OLD, "true"): 0}, replacement="true")
+    assert result["accepted"] == []
+    assert "does not discriminate the fix" in result["refused"][0]["reason"]
+    assert [f["lane"] for f in open_findings(WO_ID, db_path=db)] == ["lane-one"]
+
+
+def test_a_replacement_that_still_fails_now_resolves_nothing(db):
+    _finding_at_old_then_round_two(db)
+    result = _resolve(db, {(OLD, REPLACEMENT): 1, (NEW, REPLACEMENT): 1})
+    assert result["accepted"] == []
+    assert "does not pass at this commit" in result["refused"][0]["reason"]
+
+
+def test_merge_readiness_is_not_ready_while_the_lane_review_blocks(db, monkeypatch):
+    """Round three, receiver's view: merge readiness read only the verify verdict.
+
+    The verify verdict is made to say PASSED, so the lane review is the only thing that
+    can make this not ready -- the first version had no verdict at all, was not ready for
+    that reason, and passed with the lane check removed.
+    """
+    import core.gates.merge_readiness as mr
+
+    monkeypatch.setattr(
+        mr, "verdict_state", lambda wo, **k: {"state": "passed", "reason": None, "execution": None}
+    )
+    monkeypatch.setattr(mr, "execution_caveat", lambda execution: None)
+    merge_readiness = mr.merge_readiness
+
+    _dispatch(db)
+    report = merge_readiness(work_order_id=WO_ID, db_path=db)
+    assert report["ready"] is False
+    assert report["lane_review"]["blocking"] is True
+    assert "lane review still holds" in report["advice"]

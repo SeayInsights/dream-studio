@@ -780,6 +780,12 @@ def close_work_order(
         _lane_failure = lane_review_failure(work_order_id, db_path=db_path)
         if _lane_failure:
             gate_failures.append(_lane_failure)
+        # AND THE STATE GOES ON THE RECORD, blocking or not. A forced close of a work order
+        # nobody reviewed was recorded exactly like a close of one reviewed clean (the
+        # bench's receiver's-view seat, round three).
+        from core.work_orders.review_answers import lane_review_state
+
+        _lane_state = lane_review_state(work_order_id, db_path=db_path)
 
         # WO-ESCALATION-LADDER T3: an escalated WO (reopened because the deterministic
         # verifier said NOT FIXED) must re-close through a PASSING independent review.
@@ -909,6 +915,7 @@ def close_work_order(
                 session_id=None,
                 payload={
                     "work_order_id": work_order_id,
+                    "lane_review": _lane_state,
                     "title": title,
                     "project_id": project_id,
                     "forced": force,
@@ -969,6 +976,7 @@ def close_work_order(
         "status": "closed",
         "forced": force,
         "bypassed_gates": gate_failures if force else [],
+        "lane_review": _lane_state,
     }
     # NOT EVALUATED REACHES THE OPERATOR, or it was not recorded at all. `1a212a8`
     # stopped a forced close paying for the acceptance-criteria run it overrides and

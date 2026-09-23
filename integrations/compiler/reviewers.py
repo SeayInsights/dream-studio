@@ -107,7 +107,12 @@ whether the change merges — the chair does that.
 Your answers are recorded against the work order (`ds review --record`) and kept: a lane
 you leave out is reported unanswered rather than assumed clean. A finding stays open until
 a later round answers that lane `pass` AND the finding's own reproduction, re-run by the
-door at the new commit, exits 0 — the test that proved the defect must go green. A
+door at the new commit, exits 0 — the test that proved the defect must go green. So write
+a finding's reproduction to PASS once the defect is fixed; it will be re-run at later
+commits. If an earlier finding's reproduction has gone stale (its harness no longer runs
+for reasons unrelated to the defect), give the pass a **`resolves_with`** command instead:
+the door runs it at the commit the finding was recorded against, where it must FAIL, and
+at this commit, where it must PASS. A test that passes at both resolves nothing. A
 `cannot-tell` never resolves a finding; it is recorded and the finding stays open."""
 
 

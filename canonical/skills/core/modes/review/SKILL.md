@@ -204,7 +204,9 @@ ds review --findings --work-order <id> --as-tasks  # files open findings as task
 
 It blocks on an unanswered lane and on any open finding — **whether or not the finding
 could be filed as a task**. Filing is for tracking the work; a finding with no executable
-check yet blocks exactly as hard. And it is enforced, not advisory: `ds work-order pushed
+check yet blocks exactly as hard. And it is enforced, not advisory: the pre-push `lane-review` gate stops `git push` of a
+branch whose work order (`wo-<shortid>` in the branch name) the review still holds — a
+branch naming no work order is reported NOT GATED, never "clear" — and `ds work-order pushed
 <id>` refuses while the review holds the work order, naming what holds it, with no
 override — the lanes run before anything is pushed. `ds work-order close` refuses too;
 `--force` can close past it as it can past any close gate, and the bypass is recorded as
@@ -214,6 +216,8 @@ override — the lanes run before anything is pushed. `ds work-order close` refu
 A finding is resolved only when a later round answers that lane `pass` **and the door,
 re-running the finding's own reproduction at the new commit, gets exit 0** — the test that
 proved the defect has to go green, so a vacuous pass resolves nothing whoever records it.
+When that reproduction has gone stale, the pass may carry `resolves_with`: a test the door
+runs at the finding's original commit (it must fail) and at the new one (it must pass).
 A `cannot-tell` never resolves a finding. The record says which round resolved each one;
 nothing is overwritten. This loop is one work
 order's work, and it ends when `--status` stops blocking, not when a reviewer stops

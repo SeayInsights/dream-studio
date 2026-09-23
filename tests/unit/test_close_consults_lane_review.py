@@ -175,3 +175,23 @@ def test_a_clean_review_adds_no_lane_failure(authority):
         ],
     )
     assert lane_review_failure(wo_id, db_path=db) is None
+
+
+def test_a_forced_close_records_whether_it_was_ever_reviewed(tmp_path, authority):
+    """Round three, receiver's view: a forced close of a work order nobody reviewed was
+    recorded exactly like one reviewed clean. The state now rides the result and the
+    work_order.closed event, blocking or not."""
+    db, wo_id = authority
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "UPDATE business_work_orders SET status='in_progress' WHERE work_order_id=?", (wo_id,)
+    )
+    conn.commit()
+    conn.close()
+    emitted = []
+    with patch("spool.writer.write_event", side_effect=lambda env, **k: emitted.append(env)):
+        result = _close(tmp_path, db, wo_id, force=True)
+    assert result["ok"] is True, result
+    assert result["lane_review"] == "never_dispatched"
+    [closed] = [e for e in emitted if e.get("event_type") == "work_order.closed"]
+    assert closed["payload"]["lane_review"] == "never_dispatched"
