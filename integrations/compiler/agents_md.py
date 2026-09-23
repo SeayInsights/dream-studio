@@ -167,15 +167,15 @@ _GATES: list[tuple[str, str]] = [
 _AUTHORITY_RULES = """\
 ## Authority & Operating Rules
 
-- **Before any work:** invoke `ds-project:resume` (calls `get_project_state()`),
-  then `start_work_order(work_order_id=…)`. Working without it is working blind.
+- **Before any work:** `ds project state` (where the work stands), then
+  `ds work-order start <id>`. Working without it is working blind.
 - **Tasks live in SQLite, not docs.** Read the work order's task list and
   acceptance criteria from the authority (`ds work-order tasks <id>`). The
   `.planning` docstore entries are reference only — never the execution source of truth.
-- **During work:** stay within the work order's `module_boundary`; complete tasks
-  in order via `mark_task_done(...)`.
-- **Before finishing:** `close_work_order(...)`. Gates must pass; never
-  `force=True` without explicit operator approval.
+- **During work:** stay within the work order's `module_boundary`; start a task with
+  `ds work-order task-start <wo> <task>` and finish it with `ds work-order task-done`.
+- **Before finishing:** `ds work-order close <id>`. Gates must pass; never `--force`
+  without explicit operator approval, and a forced close is recorded.
 - **No fabricated data, no false-done.** Every discovered defect is registered as
   a work order in the authority (not a GitHub-issue-only or PR-note).
 
@@ -206,6 +206,54 @@ def _gates_section() -> str:
     )
 
 
+#: The registry lives at canonical/rules.yml, which `dist/plugin` does not ship.
+_RULES_YAML = _REPO_ROOT / "canonical" / "rules.yml"
+
+
+def _rules_section(rules_path: Path | None = None) -> str:
+    """The guidance rules, projected into what an install receives.
+
+    ONLY THE GUIDANCE ONES. A rule with `enforced_by` does not need to be read: the gate
+    refuses and the refusal names what objected. A rule declared `guidance` is one no
+    check can settle -- an instruction to the model, answerable only by an eval -- so an
+    agent that never receives it simply does not follow it. Those are the ones that have
+    to travel, and until the three lifecycle packs were dissolved they travelled as skill
+    text.
+
+    Projecting all 56 would put the registry in every session's context to restate what
+    the code already does, which is the context cost the dissolution exists to remove.
+
+    An unreadable or absent registry yields an EMPTY STRING rather than a stub heading: a
+    section that says "Operating Rules" and lists nothing reads as "there are none",
+    which is worse than the section being absent and noticed.
+    """
+    import yaml
+
+    path = rules_path if rules_path is not None else _RULES_YAML
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (OSError, ValueError):
+        return ""
+    rules = [r for r in (data.get("rules") or []) if isinstance(r, dict)]
+    guidance = [r for r in rules if r.get("guidance") is True]
+    if not guidance:
+        return ""
+
+    lines = [
+        "## Operating Rules",
+        "",
+        "These are the rules **nothing enforces**. Every other rule in Dream Studio is held",
+        "up by a gate that refuses and says what objected; these cannot be, so following",
+        "them is yours to do.",
+        "",
+    ]
+    for rule in sorted(guidance, key=lambda r: str(r.get("id", ""))):
+        statement = " ".join(str(rule.get("statement", "")).split())
+        if statement:
+            lines.append(f"- {statement}")
+    return "\n".join(lines) + "\n"
+
+
 def build_agents_md(
     canonical_root: Path | None = None,
     packs_yaml_path: Path | None = None,
@@ -233,8 +281,11 @@ def build_agents_md(
         _wo_types_section().rstrip(),
         _gates_section().rstrip(),
         _AUTHORITY_RULES.rstrip(),
+        # The guidance rules, which reach an install through nothing else: the registry
+        # they live in is not shipped, and they are the half no gate can enforce.
+        _rules_section().rstrip(),
     ]
-    return "\n\n".join(sections).rstrip() + "\n"
+    return "\n\n".join(s for s in sections if s).rstrip() + "\n"
 
 
 def build_repo_agents_md() -> str:
