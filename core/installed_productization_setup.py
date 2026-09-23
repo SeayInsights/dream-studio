@@ -268,8 +268,23 @@ def _write_runtime_config(
     return config_path
 
 
+def _install_interpreter() -> str:
+    """The absolute Python running this install -- known to hold the requirements."""
+    import sys
+
+    return sys.executable
+
+
 def _windows_cmd_launcher(source_root: Path, dream_studio_home: Path) -> str:
+    """A cmd launcher that runs a Python that RUNS, the installing one first.
+
+    Order: DS_PYTHON when set; the installing interpreter, absolute and known to hold the
+    requirements; then the probed order the repo launcher uses. Every call goes through
+    CALL, because a .bat -- which a Microsoft Store alias stub may be -- run without it
+    never returns to the launcher.
+    """
     cli = source_root / "interfaces" / "cli" / "ds.py"
+    interpreter = _install_interpreter()
     return "\n".join(
         [
             "@echo off",
@@ -277,51 +292,72 @@ def _windows_cmd_launcher(source_root: Path, dream_studio_home: Path) -> str:
             f'set "DREAM_STUDIO_SOURCE_ROOT={source_root}"',
             f'set "DREAM_STUDIO_HOME={dream_studio_home}"',
             f'set "DREAM_STUDIO_CLI={cli}"',
-            "where py >nul 2>nul",
-            "if %ERRORLEVEL% EQU 0 (",
-            '  py -3 "%DREAM_STUDIO_CLI%" --source-root "%DREAM_STUDIO_SOURCE_ROOT%" '
-            '--home "%DREAM_STUDIO_HOME%" %*',
-            "  exit /b %ERRORLEVEL%",
-            ")",
-            "where python >nul 2>nul",
-            "if %ERRORLEVEL% EQU 0 (",
-            '  python "%DREAM_STUDIO_CLI%" --source-root "%DREAM_STUDIO_SOURCE_ROOT%" '
-            '--home "%DREAM_STUDIO_HOME%" %*',
-            "  exit /b %ERRORLEVEL%",
-            ")",
-            "echo Python 3.11+ was not found on PATH. >&2",
+            'set "PYEXE="',
+            'set "PYARGS="',
+            'if defined DS_PYTHON call :probe "%DS_PYTHON%" && (set "PYEXE=%DS_PYTHON%" & goto run)',
+            f'call :probe "{interpreter}" && (set "PYEXE={interpreter}" & goto run)',
+            'call :probe python && (set "PYEXE=python" & goto run)',
+            'call :probe py -3 && (set "PYEXE=py" & set "PYARGS=-3" & goto run)',
+            'call :probe python3 && (set "PYEXE=python3" & goto run)',
+            "echo No working Python found (a Microsoft Store alias stub does not count)."
+            " Install Python 3.12+ and retry, or set DS_PYTHON. >&2",
             "exit /b 1",
+            ":run",
+            'call "%PYEXE%" %PYARGS% "%DREAM_STUDIO_CLI%" --source-root "%DREAM_STUDIO_SOURCE_ROOT%" '
+            '--home "%DREAM_STUDIO_HOME%" %*',
+            "exit /b %ERRORLEVEL%",
+            ":probe",
+            'call %* -c "import sys; sys.exit(0)" >nul 2>nul',
+            "exit /b %ERRORLEVEL%",
             "",
         ]
     )
 
 
 def _windows_powershell_launcher(source_root: Path, dream_studio_home: Path) -> str:
+    """A PowerShell launcher with the same order: DS_PYTHON, the installing interpreter,
+    then python, py -3, python3 -- each used only if it runs."""
     cli = source_root / "interfaces" / "cli" / "ds.py"
+    interpreter = _install_interpreter()
     return "\n".join(
         [
             '$ErrorActionPreference = "Stop"',
             f'$env:DREAM_STUDIO_SOURCE_ROOT = "{source_root}"',
             f'$env:DREAM_STUDIO_HOME = "{dream_studio_home}"',
             f'$Cli = "{cli}"',
+            "function Test-Python([string[]]$Command) {",
+            "    try {",
+            "        $exe = $Command[0]",
+            "        $rest = @($Command | Select-Object -Skip 1)",
+            '        & $exe @rest -c "import sys; sys.exit(0)" *> $null',
+            "        return ($LASTEXITCODE -eq 0)",
+            "    } catch {",
+            "        return $false",
+            "    }",
+            "}",
+            "$candidates = @()",
+            "if ($env:DS_PYTHON) { $candidates += , @($env:DS_PYTHON) }",
+            f'$candidates += , @("{interpreter}")',
+            '$candidates += , @("python")',
+            '$candidates += , @("py", "-3")',
+            '$candidates += , @("python3")',
             "$PythonCmd = $null",
-            'foreach ($candidate in @("py", "python3", "python")) {',
-            "    if (Get-Command $candidate -ErrorAction SilentlyContinue) {",
+            "foreach ($candidate in $candidates) {",
+            "    if ((Get-Command $candidate[0] -ErrorAction SilentlyContinue)"
+            " -and (Test-Python $candidate)) {",
             "        $PythonCmd = $candidate",
             "        break",
             "    }",
             "}",
             "if (-not $PythonCmd) {",
-            '    Write-Error "Python 3.11+ was not found on PATH."',
+            '    Write-Error "No working Python found (a Microsoft Store alias stub does not'
+            ' count). Install Python 3.12+ and retry, or set DS_PYTHON."',
             "    exit 1",
             "}",
-            'if ($PythonCmd -eq "py") {',
-            "    py -3 $Cli --source-root $env:DREAM_STUDIO_SOURCE_ROOT "
-            "--home $env:DREAM_STUDIO_HOME @args",
-            "} else {",
-            "    & $PythonCmd $Cli --source-root $env:DREAM_STUDIO_SOURCE_ROOT "
-            "--home $env:DREAM_STUDIO_HOME @args",
-            "}",
+            "$exe = $PythonCmd[0]",
+            "$rest = @($PythonCmd | Select-Object -Skip 1)",
+            "& $exe @rest $Cli --source-root $env:DREAM_STUDIO_SOURCE_ROOT"
+            " --home $env:DREAM_STUDIO_HOME @args",
             "exit $LASTEXITCODE",
             "",
         ]
