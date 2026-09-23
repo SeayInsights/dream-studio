@@ -12,6 +12,8 @@ import json
 import sys
 from pathlib import Path
 
+from core.work_orders.models import DEFAULT_WORK_ORDER_PRIORITY
+
 
 def _work_order_executor(
     *,
@@ -455,6 +457,7 @@ def _work_order_create(
     title: str,
     description: str,
     work_order_type: str,
+    priority: str = DEFAULT_WORK_ORDER_PRIORITY,
     originating_symptom: str | None,
     module_boundary: str | None = None,
     source_root: Path,
@@ -480,6 +483,7 @@ def _work_order_create(
         title=title,
         description=description,
         work_order_type=work_order_type,
+        priority=priority,
         originating_symptom=originating_symptom,
         module_boundary=module_boundary,
         source_root=source_root,
