@@ -1246,3 +1246,15 @@ def test_a_round_with_no_credential_on_record_fails_closed(db):
         )
         assert "carries no credential" in result["refused_submission"]
     assert recorded_answers(WO_ID, db_path=db) == []
+
+
+def test_a_credential_can_always_be_passed_on_the_command_line(db):
+    """Found when the recording door re-ran a reviewer's pass in round six and it failed:
+    credentials were url-safe tokens, which can begin with "-", and argparse reads
+    `--credential -abc...` as a new option. Random, one dispatch in sixty-four -- so it
+    passed for the reviewer and failed for the door."""
+    import re
+
+    for _ in range(64):
+        for token in _dispatch(db)["credentials"].values():
+            assert re.fullmatch(r"[0-9a-f]{32}", token), token

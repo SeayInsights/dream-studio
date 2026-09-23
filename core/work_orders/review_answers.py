@@ -222,8 +222,12 @@ def record_dispatch(
 
     # ONE CREDENTIAL PER NAMED REVIEWER, hashed at rest. The plaintext leaves this function
     # once, in its return value, for the dispatcher to hand each reviewer its own.
+    # HEX, because a url-safe token can begin with "-", and `--credential -abc...` is read
+    # by argparse as a new option: the command fails at random, one dispatch in sixty-four.
+    # Found by the recording door re-running a reviewer's pass in round six and getting the
+    # other side of the coin.
     credentials = {
-        str(slot["reviewer"]): secrets.token_urlsafe(18)
+        str(slot["reviewer"]): secrets.token_hex(16)
         for slot in slots.values()
         if slot.get("reviewer")
     }
