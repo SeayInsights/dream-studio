@@ -59,6 +59,104 @@
 version: 1
 
 rules:
+  - id: an-unrecognised-gate-name-fails-closed
+    statement: >
+      A close gate the engine cannot run refuses the close, naming the unknown gate and
+      the set it accepts; a work-order type that declares no gate still passes.
+    source: core/work_orders/close_gates.py
+    enforced_by:
+      - tests/unit/test_close_gates.py::test_an_unrecognised_gate_name_fails_closed
+      - tests/unit/test_close_gates.py::test_no_gate_at_all_still_passes
+      - tests/unit/test_close_gates.py::test_every_implemented_gate_is_registered
+      - tests/unit/test_close_gates.py::test_the_registry_names_nothing_imaginary
+      - tests/unit/test_close_gates.py::test_every_seeded_work_order_type_names_a_real_gate
+    note: >
+      This used to end in an unconditional pass, which made a gate nobody implemented
+      byte-indistinguishable from a gate that ran and succeeded: a typo in a work-order
+      type row, a rename applied on one side only, or an external project's aspirational
+      gate name all closed the work order clean and said nothing. Declaring NO gate still
+      passes, because absence is a choice and an unrunnable name is not. The registry is
+      checked in both directions -- every implemented gate registered, and nothing
+      registered that is imaginary -- so the set cannot drift from what can actually run.
+  - id: a-work-order-closes-only-over-finished-tasks
+    statement: >
+      A work order with any task not done is refused at close; there is no partial close.
+    source: core/work_orders/close_gates.py
+    enforced_by:
+      - tests/unit/test_tasks_done_gate.py::test_sync_tick_before_status_read
+      - tests/unit/test_close_gates.py::test_the_ac_gate_skips_a_carried_tasks_criterion
+    note: >
+      The gate reads the projection, so it runs a sync tick first: `task.completed` is an
+      event, and a gate that read `business_tasks` before the tick would refuse a work
+      order whose tasks were all done a moment earlier. The failure mode this prevents is
+      not a wrong answer but an intermittent one, which is worse -- it trains an operator
+      to re-run the close rather than to believe it.
+  - id: a-task-nobody-can-check-cannot-be-filed
+    statement: >
+      A task is admitted with an executable acceptance criterion, or with a declared
+      reason why the claim cannot be computed; prose that mentions a check is not one.
+    source: core/work_orders/admission.py
+    enforced_by:
+      - tests/unit/test_admission.py::test_a_task_with_no_criterion_is_refused
+      - tests/unit/test_admission.py::test_prose_that_merely_mentions_a_check_is_still_prose
+      - tests/unit/test_admission.py::test_a_declared_reason_admits_what_cannot_be_computed
+      - tests/unit/test_admission.py::test_a_shrug_is_not_a_declared_reason
+      - tests/unit/test_admission.py::test_the_criterion_predicate_is_the_executor_s_own
+    note: >
+      Admission is at INTAKE rather than at close because a task nobody can check is
+      cheapest to fix while it is being written and most expensive once the work is done
+      and the close is refused. The predicate is the executor's own, not a second
+      implementation: a criterion the gate would accept and the executor could not run is
+      the same defect one layer down. The declared-reason escape carries the same
+      character floor as every other escape in this repo, because one that costs nothing
+      becomes the default path.
+  - id: a-failed-completion-is-not-a-completion
+    statement: >
+      When marking a task done fails, the task is not done: the status reported is what
+      the authority holds after the write, never what the caller intended.
+    source: core/work_orders/mutations.py
+    enforced_by:
+      - tests/unit/test_task_done_write_honesty.py::test_happy_path_still_reports_complete
+      - tests/unit/test_task_done_write_honesty.py::test_read_model_lag_is_pending_not_complete
+      - tests/unit/test_task_done_write_honesty.py::test_stalled_projection_is_reported_as_not_done
+      - tests/unit/test_task_done_write_honesty.py::test_event_write_failure_is_surfaced
+      - tests/unit/test_task_done_write_honesty.py::test_projection_exception_is_surfaced
+    note: >
+      Issue #718. The call asserted "complete" without reading the row back, and a
+      projection failure does not raise -- the framework catches a handler error,
+      dead-letters the event and returns normally -- so a task could be reported complete
+      while no row existed at all. Ordinary read-model lag and a lost completion look
+      identical to a caller and are not the same thing, so they are distinguished: lag
+      stays ok with the pending status named, a lost completion fails. The distinction
+      matters because the first chains into close and the second must not.
+  - id: a-work-order-type-is-refused-at-the-door
+    statement: >
+      A work-order type the platform does not declare is refused when the work order is
+      created, and the refusal names the types that exist.
+    source: core/work_orders/models.py
+    enforced_by:
+      - tests/unit/test_work_order_types_one_definition.py::test_the_door_refuses_an_undeclared_type
+      - tests/unit/test_work_order_types_one_definition.py::test_the_baseline_migration_seeds_exactly_the_declared_types
+      - tests/unit/test_work_order_types_one_definition.py::test_the_review_map_covers_exactly_the_declared_types
+    note: >
+      `--type` accepted any string and stored it, defaulting to infrastructure, while its
+      help said "one of the declared work-order types" -- nothing declared them anywhere
+      the CLI could ask. That is the same shape as an unrecognised gate name one rule up:
+      a typo became a work order whose gates nothing could run. The seeded rows in
+      business_work_order_types carry each type's gates, so a type you can create is
+      checked to be a type that can be started and closed.
+  - id: a-context-artifact-leads-with-the-prompt-chain
+    statement: >
+      The context an agent reads before executing a work order opens with the prompt
+      chain -- project, milestone and work-order descriptions -- not with its task list.
+    source: canonical/rules.yml
+    guidance: true
+    why: >
+      A task list read without the goal it serves produces work that satisfies every
+      instruction and misses the point, and the failure is invisible until review. No
+      check can tell whether an agent read the top of a file first. What IS enforced is
+      that the descriptions exist to be read, by
+      every-node-in-the-prompt-chain-carries-its-own-prompt.
   - id: a-milestone-is-something-that-can-be-demonstrated
     statement: >
       A milestone names a deliverable someone can demo or test in isolation, not a phase

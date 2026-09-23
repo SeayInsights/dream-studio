@@ -130,6 +130,18 @@ def _work_order_close(
         for reason in result["bypassed_gates"]:
             print(f"[gate.bypassed] WARNING: {reason}", file=sys.stderr)
 
+    # THE ADVISORY IS PRINTED, NOT LEFT IN THE PAYLOAD. close_work_order has returned
+    # main_ci_warning since WO 55d02acf and the only thing that surfaced it was a line of
+    # skill prose telling the model to print it verbatim -- so whether an operator heard
+    # that main was red depended on prose being read. It goes to stderr beside the
+    # bypassed gates, which is where this command already puts what must not be missed.
+    #
+    # ADVISORY, DELIBERATELY. It never changes the exit code: a red main someone else
+    # caused must not block this close, and one you caused is the next thing you work on.
+    _ci_warning = result.get("main_ci_warning")
+    if _ci_warning:
+        print(f"[main-ci] {_ci_warning}", file=sys.stderr)
+
     print(json.dumps(result, indent=2))
     if result.get("ok") and result.get("next_block"):
         print(file=sys.stderr)

@@ -315,7 +315,7 @@ def test_the_registers_guidance_entries_are_the_ones_the_dissolution_produced(tm
     """Pinned like the unenforced set, for the same reason: the pile is only meaningful
     while every entry is deliberate. Every one came out of a dissolved skill pack, where
     it was a numbered instruction charged as context on every invocation and enforced by
-    nothing: three from ds-milestone, eight from ds-project.
+    nothing: three from ds-milestone, eight from ds-project, one from ds-workorder.
 
     Widening this set is meant to cost an edit. A rule declared guidance is a rule no gate
     will ever hold up, so the list growing quietly is exactly how a repo talks itself out
@@ -334,6 +334,8 @@ def test_the_registers_guidance_entries_are_the_ones_the_dissolution_produced(tm
         "a-scope-covering-two-projects-is-split-before-it-is-scoped",
         "a-milestone-is-something-that-can-be-demonstrated",
         "only-the-active-milestone-is-decomposed",
+        # ds-workorder: the one thing in that pack no check could settle
+        "a-context-artifact-leads-with-the-prompt-chain",
     }
 
 

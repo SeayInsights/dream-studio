@@ -75,13 +75,24 @@ def test_every_mode_is_classified():
     assert len(rows) > 50, f"only {len(rows)} modes — has the layout moved?"
 
 
-def test_a_cli_backed_mode_is_not_called_unreachable():
-    """`ds-workorder/start` is reached by `ds work-order start`. Calling it unreachable
-    would be the detector not knowing how the product works."""
-    by_mode = {r["mode"]: r for r in routes()}
-    for mode in ("ds-workorder/start",):
-        assert mode in by_mode, mode
-        assert by_mode[mode]["routes"], f"{mode} reported unreachable but the CLI enters it"
+def test_no_mode_claims_a_cli_route_that_no_command_group_backs():
+    """The detector must not invent a route any more than it may miss one.
+
+    This asserted `ds-workorder/start` was reachable because `ds work-order start` enters
+    it. All three lifecycle packs have since been dissolved -- their operations were always
+    commands -- so no mode is CLI-backed any more and the original subject is gone. The
+    claim worth keeping is the inverse: PACK_TO_CLI_GROUP must not name a pack that has no
+    modes, because a route to nothing is the same defect as a missing route, pointed the
+    other way.
+    """
+    from core.skills.reachability import PACK_TO_CLI_GROUP
+
+    packs_with_modes = {r["pack"] for r in routes()}
+    phantom = sorted(set(PACK_TO_CLI_GROUP) - packs_with_modes)
+    assert not phantom, f"PACK_TO_CLI_GROUP grants a CLI route to packs with no modes: {phantom}"
+
+    for row in routes():
+        assert "cli" not in row["routes"] or row["pack"] in PACK_TO_CLI_GROUP, row
 
 
 def test_the_unreachable_set_is_exactly_what_is_pinned():

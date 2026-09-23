@@ -121,14 +121,6 @@ packs:
     # review added — Flag 2 fix
     modes: [scan, dast, binary-scan, mitigate, comply, netcompat, dashboard, review]
 
-  ds-workorder:
-    description: Work order lifecycle — start, mark tasks done, close (with gate checks), block, and read-only status
-    skill: ds-workorder
-    invariants:
-      - task state lives in the authority; a task is done when the authority says so
-      - close runs the gates, and a forced close carries recorded operator approval
-    modes: [start, execute, close, block, status]
-
   website:
     description: Website build pipeline — discovery through delivery, 9 sub-modes
     skill: ds-website

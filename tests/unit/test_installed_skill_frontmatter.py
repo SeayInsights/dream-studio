@@ -47,11 +47,11 @@ def _top_level_skill_op(ops):
 
 def test_top_level_skill_md_is_installed_with_frontmatter(tmp_path: Path) -> None:
     """A routable pack's SKILL.md arrives with a description, or it never auto-invokes."""
-    skill_dir = tmp_path / "canonical" / "ds-workorder"
+    skill_dir = tmp_path / "canonical" / "ds-core"
     skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text("# ds-workorder\n\nBody.\n", encoding="utf-8")
+    (skill_dir / "SKILL.md").write_text("# ds-core\n\nBody.\n", encoding="utf-8")
 
-    op = _top_level_skill_op(_ops_for(skill_dir, tmp_path, "ds-workorder"))
+    op = _top_level_skill_op(_ops_for(skill_dir, tmp_path, "ds-core"))
 
     assert op.source_content is not None
     assert op.source_content.lstrip().startswith("---"), (
@@ -63,12 +63,12 @@ def test_top_level_skill_md_is_installed_with_frontmatter(tmp_path: Path) -> Non
 
 def test_the_prepended_content_is_rehashed(tmp_path: Path) -> None:
     """WO-AUTOACT-A-FIX: hashing the canonical file would make the rewrite a no-op."""
-    skill_dir = tmp_path / "canonical" / "ds-workorder"
+    skill_dir = tmp_path / "canonical" / "ds-core"
     skill_dir.mkdir(parents=True)
-    canonical = "# ds-workorder\n\nBody.\n"
+    canonical = "# ds-core\n\nBody.\n"
     (skill_dir / "SKILL.md").write_text(canonical, encoding="utf-8")
 
-    op = _top_level_skill_op(_ops_for(skill_dir, tmp_path, "ds-workorder"))
+    op = _top_level_skill_op(_ops_for(skill_dir, tmp_path, "ds-core"))
 
     assert op.source_hash == hashlib.sha256(op.source_content.encode("utf-8")).hexdigest()
     assert op.source_hash != hashlib.sha256(canonical.encode("utf-8")).hexdigest(), (
@@ -80,12 +80,12 @@ def test_the_prepended_content_is_rehashed(tmp_path: Path) -> None:
 def test_an_already_framed_skill_is_left_alone(tmp_path: Path) -> None:
     """The branch is guarded on absence -- a skill that ships its own frontmatter is
     not given a second block."""
-    skill_dir = tmp_path / "canonical" / "ds-workorder"
+    skill_dir = tmp_path / "canonical" / "ds-core"
     skill_dir.mkdir(parents=True)
-    already = "---\nname: ds-workorder\ndescription: mine\n---\n\n# ds-workorder\n"
+    already = "---\nname: ds-core\ndescription: mine\n---\n\n# ds-core\n"
     (skill_dir / "SKILL.md").write_text(already, encoding="utf-8")
 
-    op = _top_level_skill_op(_ops_for(skill_dir, tmp_path, "ds-workorder"))
+    op = _top_level_skill_op(_ops_for(skill_dir, tmp_path, "ds-core"))
 
     assert op.source_content == already
     assert op.source_content.count("description:") == 1
@@ -97,12 +97,12 @@ def test_mode_skill_files_are_not_framed(tmp_path: Path) -> None:
     Framing every mode would enter them all into the auto-invoker as competing
     candidates.
     """
-    skill_dir = tmp_path / "canonical" / "ds-workorder"
+    skill_dir = tmp_path / "canonical" / "ds-core"
     (skill_dir / "modes" / "resume").mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text("# ds-workorder\n", encoding="utf-8")
+    (skill_dir / "SKILL.md").write_text("# ds-core\n", encoding="utf-8")
     (skill_dir / "modes" / "resume" / "SKILL.md").write_text("# resume\n", encoding="utf-8")
 
-    ops = _ops_for(skill_dir, tmp_path, "ds-workorder")
+    ops = _ops_for(skill_dir, tmp_path, "ds-core")
     mode_op = next(op for op in ops if "modes" in Path(op.target).parts)
 
     assert mode_op.source_content == "# resume\n"
@@ -158,5 +158,5 @@ def test_a_routable_pack_is_still_framed() -> None:
     auto-invoking."""
     from integrations.compiler.claude_code import synthesize_skill_frontmatter
 
-    fm = synthesize_skill_frontmatter("ds-workorder")
+    fm = synthesize_skill_frontmatter("ds-core")
     assert fm and "description:" in fm

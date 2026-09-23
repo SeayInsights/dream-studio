@@ -237,7 +237,10 @@ def test_engine_skill_coupling_domains_exist() -> None:
 
 
 def test_work_orders_engine_change_triggers_skill_surface_domain() -> None:
-    """Changing a work_orders engine file must require canonical/skills/ds-workorder/SKILL.md."""
+    """A work_orders engine change must require the agent-facing statement of how work
+    orders behave. That was canonical/skills/ds-workorder/SKILL.md until the pack was
+    dissolved -- ten of its twenty rules were already registry entries under other names --
+    and it is canonical/rules.yml now. The coupling is what this checks, not the path."""
     report = change_impact_report(["core/work_orders/verify.py"])
 
     wo_domain = next(
@@ -246,15 +249,13 @@ def test_work_orders_engine_change_triggers_skill_surface_domain() -> None:
     )
     assert wo_domain is not None
     assert wo_domain["impacted"] is True
-    assert "canonical/skills/ds-workorder/SKILL.md" in wo_domain["missing_required_doc_refs"]
+    assert "canonical/rules.yml" in wo_domain["missing_required_doc_refs"]
     assert wo_domain["release_blocking"] is True
 
 
 def test_work_orders_engine_change_passes_when_skill_doc_included() -> None:
     """Including canonical/skills/ds-workorder/SKILL.md in the changeset satisfies the coupling."""
-    report = change_impact_report(
-        ["core/work_orders/verify.py", "canonical/skills/ds-workorder/SKILL.md"]
-    )
+    report = change_impact_report(["core/work_orders/verify.py", "canonical/rules.yml"])
 
     wo_domain = next(
         d for d in report["domains"] if d["domain_id"] == "work_orders_engine_skill_surface"

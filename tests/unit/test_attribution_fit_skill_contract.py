@@ -28,7 +28,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # rather than left as a claim in this comment.
 _SKILL_FILES = [
     "canonical/skills/core/modes/plan/SKILL.md",
-    "canonical/skills/ds-workorder/SKILL.md",
 ]
 
 

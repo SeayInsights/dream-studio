@@ -523,11 +523,15 @@ def test_resume_skill_text_tells_the_agent_to_surface_it(db):
     cli = (repo / "interfaces" / "cli" / "commands" / "project.py").read_text(encoding="utf-8")
     assert "test_execution_warning" in cli, "`ds project state` does not read the key"
 
-    text = _flat(
-        (_CANONICAL / "ds-workorder" / "modes" / "close" / "SKILL.md").read_text(encoding="utf-8")
+    close = (repo / "core" / "work_orders" / "close_main.py").read_text(encoding="utf-8")
+    assert "test_execution_warning" in close, "the close path does not produce the key"
+    # AND the advisory character is pinned where it is decided. `main_ci_warning` beside it
+    # is printed and never changes the exit code; the same must hold here, or an advisory
+    # becomes a blocker the first time someone reads the key as a verdict.
+    lifecycle = (repo / "interfaces" / "cli" / "commands" / "work_order_lifecycle.py").read_text(
+        encoding="utf-8"
     )
-    assert "test_execution_warning" in text
-    assert "advisory" in text or "must not block" in text
+    assert "main_ci_warning" in lifecycle, "the close command swallowed the advisory"
 
 
 def test_close_does_not_claim_execution_that_never_happened(db, tmp_path):
@@ -617,11 +621,14 @@ def test_a_forced_close_says_the_checks_did_not_run_because_they_did_not():
 # (canonical pack dir, projected pack dir, mode). The projection renames the pack:
 # canonical/skills/core -> dist/plugin/skills/ds-core, which is exactly the kind of
 # detail that makes a parity test silently assert nothing if it is guessed.
+# The ds-workorder rows are gone with that pack: its execute and close modes restated
+# `tests-run-by-a-different-agent`, which is a registry rule with its own enforcement,
+# and a second copy of a rule is what these dissolutions keep removing. The core rows
+# stay, so the parametrized checks below still have real subjects rather than becoming
+# vacuous -- and the registry itself is checked at the end of this file.
 _RULE_BEARING_MODES = [
     ("core", "ds-core", "build"),
     ("core", "ds-core", "verify"),
-    ("ds-workorder", "ds-workorder", "execute"),
-    ("ds-workorder", "ds-workorder", "close"),
 ]
 
 
@@ -701,8 +708,6 @@ _MECHANISM_FILES = [
     "core/work_orders/close_gates.py",
     "canonical/skills/core/modes/build/SKILL.md",
     "canonical/skills/core/modes/verify/SKILL.md",
-    "canonical/skills/ds-workorder/modes/execute/SKILL.md",
-    "canonical/skills/ds-workorder/modes/close/SKILL.md",
 ]
 
 
@@ -777,3 +782,20 @@ def test_the_engine_half_imports_with_no_local_configuration():
     )
     assert proc.returncode == 0, f"stdout={proc.stdout!r} stderr={proc.stderr!r}"
     assert "ok" in proc.stdout
+
+
+def test_the_rule_the_dissolved_modes_restated_is_still_in_the_registry():
+    """Emptying _RULE_BEARING_MODES makes every parametrized check above vacuous.
+
+    A guard that passes because it found nothing to look at is the failure this repo keeps
+    finding, so the claim those checks made -- that an agent running tests is told to hand
+    them to a different runner -- is asserted here against the registry that now owns it.
+    """
+    import yaml
+
+    registry = yaml.safe_load((_REPO / "canonical" / "rules.yml").read_text(encoding="utf-8"))
+    rule = next((r for r in registry["rules"] if r["id"] == "tests-run-by-a-different-agent"), None)
+    assert rule is not None, "the rule the dissolved modes restated is in no registry entry"
+    assert rule.get("enforced_by"), "the rule is in the registry but nothing holds it up"
+    statement = " ".join(rule["statement"].split()).lower()
+    assert "different agent" in statement, statement
