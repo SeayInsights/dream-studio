@@ -223,13 +223,13 @@ def dispatch(
     db_path = _db_path(source_root, dream_studio_home)
     # The doors about a review that already happened convene nothing: convening the bench
     # to answer them would be a report about one change set wearing another's questions.
-    if args.record:
+    if getattr(args, "record", None):
         return _record_answers(args, db_path=db_path, source_root=source_root)
-    if args.findings:
+    if getattr(args, "findings", None):
         return _show_findings(args, db_path=db_path)
-    if args.status:
+    if getattr(args, "status", None):
         return _show_status(args, db_path=db_path)
-    if args.run:
+    if getattr(args, "run", None):
         return _run_in_lane(args, db_path=db_path)
 
     repo_root = Path(args.repo) if args.repo else None
@@ -257,7 +257,7 @@ def dispatch(
         print(f"ds review: {exc}".replace('"', ""), file=sys.stderr)
         return 2
 
-    if args.dispatch:
+    if getattr(args, "dispatch", None):
         return _dispatch(args, report, paths, db_path=db_path, repo_root=repo_root or source_root)
 
     print(json.dumps(report, indent=2, sort_keys=True) if args.json else _render(report))
@@ -272,16 +272,16 @@ def _companion_flags(args: argparse.Namespace) -> str | None:
     without their companion were silently dropped and the command exited 0, so an operator
     who asked for tasks got none and was told it worked.
     """
-    if args.as_tasks and not args.findings:
+    if getattr(args, "as_tasks", None) and not getattr(args, "findings", None):
         return "--as-tasks only means something with --findings"
-    if args.reviewer and not args.record:
+    if getattr(args, "reviewer", None) and not getattr(args, "record", None):
         return "--reviewer only means something with --record"
-    if args.project_id and not args.as_tasks:
+    if getattr(args, "project_id", None) and not getattr(args, "as_tasks", None):
         return "--project only means something with --findings --as-tasks"
-    needs_wo = [f for f in ("record", "findings", "status", "run") if getattr(args, f)]
-    if needs_wo and not args.work_order:
+    needs_wo = [f for f in ("record", "findings", "status", "run") if getattr(args, f, None)]
+    if needs_wo and not getattr(args, "work_order", None):
         return f"--{needs_wo[0]} needs --work-order"
-    if args.record and not args.reviewer:
+    if getattr(args, "record", None) and not getattr(args, "reviewer", None):
         return "--record needs --reviewer"
     return None
 
