@@ -46,6 +46,34 @@ SWEEP_PATTERN = re.compile(
 
 TEST_ROOTS = ("tests/unit", "tests/integration")
 
+#: Cross-cutting guards that run whatever the diff touches.
+#:
+#: These were a SEPARATE pr-smoke step -- ten files named in ci.yml -- and they are in
+#: neither the impact set nor the sweep class: they do not glob a source tree, and a change
+#: to a release gate does not name them. They only ever ran because they were listed, which
+#: made ci.yml a second place deciding what pr-smoke runs.
+#:
+#: They live here now so the union is computed once. A list that must agree with another
+#: list by inspection is the arrangement this repo keeps removing.
+ALWAYS_RUN = (
+    "tests/integration/test_pr_smoke_impact.py",
+    "tests/unit/test_contract_atlas_lifecycle.py",
+    "tests/unit/test_contract_docs_drift_gate.py",
+    "tests/unit/test_ds_update_skill_drift.py",
+    "tests/unit/test_fail_open_probe_gate.py",
+    "tests/unit/test_fixture_schema_parity_gate.py",
+    "tests/unit/test_github_pr_cicd_release_gate.py",
+    "tests/unit/test_hanging_detectors.py",
+    "tests/unit/test_impact_selection.py",
+    "tests/unit/test_locale_decode_gate.py",
+    "tests/unit/test_plugin_dist.py",
+    "tests/unit/test_release_gate_lint_baseline_policy.py",
+    "tests/unit/test_release_gates_dependency_rules.py",
+    "tests/unit/test_seam_payload_to_projection.py",
+    "tests/unit/test_skill_module_paths_resolve.py",
+    "tests/unit/test_test_isolation_gate.py",
+)
+
 
 def sweep_tests(repo_root: Path | str = REPO_ROOT) -> list[str]:
     """Tests that scan source trees, which module-reference selection cannot see."""
@@ -73,11 +101,13 @@ def select_tests(changed_files: list[str], repo_root: Path | str = REPO_ROOT) ->
     impact = compute_impact_set(changed_files, repo_root=root)
     dependent = [t for t in impact["dependent_tests"] if (root / t).is_file()]
     sweep = sweep_tests(root)
-    union = sorted(set(dependent) | set(sweep))
+    always = [p for p in ALWAYS_RUN if (root / p).is_file()]
+    union = sorted(set(dependent) | set(sweep) | set(always))
     return {
         "changed_files": impact["changed_files"],
         "dependent_tests": dependent,
         "sweep_tests": sweep,
+        "always_run": always,
         "tests": union,
     }
 
@@ -102,13 +132,20 @@ def main() -> int:
     print(
         f"[impact-tests] {len(selection['changed_files'])} changed file(s) -> "
         f"{len(selection['dependent_tests'])} dependent test file(s) + "
-        f"{len(selection['sweep_tests'])} sweep test file(s) = {len(selection['tests'])} to run"
+        f"{len(selection['sweep_tests'])} sweep + {len(selection['always_run'])} always"
+        f" = {len(selection['tests'])} to run"
     )
     for path in selection["tests"]:
-        why = "impact" if path in selection["dependent_tests"] else "sweep"
-        if path in selection["dependent_tests"] and path in selection["sweep_tests"]:
-            why = "impact+sweep"
-        print(f"    {why:13s} {path}")
+        why = "+".join(
+            k
+            for k, v in (
+                ("impact", selection["dependent_tests"]),
+                ("sweep", selection["sweep_tests"]),
+                ("always", selection["always_run"]),
+            )
+            if path in v
+        )
+        print(f"    {why:18s} {path}")
     sys.stdout.flush()
 
     result = subprocess.run(

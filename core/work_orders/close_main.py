@@ -251,6 +251,74 @@ def closability(
     return passed, failures
 
 
+def project_repo_root(project_id: str | None, *, db_path: Path | None = None) -> Path | None:
+    """The checkout a project's work actually lands in, or None.
+
+    A work order belongs to a project and projects are not this repo. Closing another
+    project's work order against Dream Studio's CI answers a question nobody asked --
+    the same ruling already in force for close gates generally: they run the WORK'S repo
+    checks, never this one's.
+    """
+    if not project_id:
+        return None
+    import sqlite3
+
+    if db_path is None:
+        return None
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return None
+    try:
+        row = conn.execute(
+            "SELECT project_path FROM business_projects WHERE project_id = ?",
+            (project_id,),
+        ).fetchone()
+    except sqlite3.Error:
+        return None
+    finally:
+        conn.close()
+    if not row or not row[0]:
+        return None
+    candidate = Path(str(row[0]))
+    # A path that is not a checkout cannot have a default branch to be red, and asking
+    # about one is how a test in a tmp directory ends up consulting GitHub.
+    return candidate if (candidate / ".git").exists() else None
+
+
+def main_ci_blocks_close(source_root: Path, *, force: bool = False) -> dict | None:
+    """The red-main state blocking this close, or None.
+
+    Takes the repository the WORK lands in, which is the project's checkout and not
+    necessarily this one.
+
+    MAIN MUST BE GREEN before a work order is done. This was read here already, and
+    already live -- `max_age_seconds=0`, because declaring work done is the one
+    high-consequence moment that must not be told about main by a cache. It was simply
+    attached to the RESULT, after the row had been written, as an advisory an operator
+    might notice. Three times in one day a work order's own merge put main red and the
+    work was closed anyway.
+
+    UNKNOWN DOES NOT BLOCK. An absent `gh`, a rate limit, or a run nobody has started yet
+    all read unknown, and an unreadable answer is unknown too. Blocking there would make
+    closing depend on network weather, and a check nobody can satisfy is bypassed by habit
+    until it means nothing. Only a KNOWN failure blocks.
+
+    `force` bypasses it, because closing over a red main someone else caused is legitimate
+    and should not require editing code; the bypass is recorded as a `gate.bypassed` event
+    like every other.
+    """
+    if force:
+        return None
+    try:
+        from core.health.main_ci import main_ci_status
+
+        state = main_ci_status(repo_root=source_root, max_age_seconds=0) or {}
+    except Exception:
+        return None  # unreadable is unknown, and unknown does not block
+    return state if state.get("status") == "failure" else None
+
+
 def close_work_order(
     *,
     work_order_id: str,
@@ -754,6 +822,39 @@ def close_work_order(
                 "ok": False,
                 "error": "Gate check failed",
                 "failures": gate_failures,
+            }
+
+        # MAIN MUST BE GREEN. Read live -- never from the cache -- because this is the
+        # moment the claim "this is done" is made, and it is the one the cache exists to
+        # be too fast for.
+        #
+        # This used to be read AFTER the row was written and attached to the result as an
+        # advisory. Three times in one day a work order's own merge put main red and the
+        # work was closed anyway, because the only thing standing between the two was an
+        # operator noticing a line of output.
+        #
+        # UNKNOWN DOES NOT REFUSE. An absent `gh`, a rate limit, or a run nobody has
+        # started yet all read unknown; refusing there would make closing depend on
+        # network weather, and a check nobody can satisfy is bypassed by habit until it
+        # means nothing. Only a KNOWN red main refuses.
+        # THE WORK ORDER'S OWN REPOSITORY, not wherever Dream Studio lives. A project
+        # with no recorded checkout yields None, and the read then reports unknown --
+        # which does not block, so a project DS only tracks is never gated on a branch it
+        # does not own.
+        _ci_root = project_repo_root(meta.get("project_id"), db_path=db_path)
+        _ci_block = main_ci_blocks_close(_ci_root, force=force) if _ci_root else None
+        if _ci_block is not None:
+            return {
+                **_bookkeeping_errors,
+                "ok": False,
+                "error": (
+                    "main is RED, so this work order is not done: the work is on the"
+                    " default branch and the default branch is failing. Fix main, or"
+                    " close with --force if this red is not yours (the bypass is"
+                    " recorded)."
+                ),
+                "main_ci": _ci_block,
+                "failures": ["main_ci_green"],
             }
 
         now = datetime.now(UTC).isoformat()

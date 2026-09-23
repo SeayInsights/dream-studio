@@ -299,6 +299,27 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         help="Override .planning/ directory (default: <cwd>/.planning)",
     )
 
+    wo_review = work_order_sub.add_parser(
+        "review",
+        help="Hand the work order to the review lanes (status: in_review)",
+    )
+    wo_review.add_argument("work_order_id", help="Work order UUID")
+    wo_review.add_argument("--note", default=None, help="What is being handed over")
+
+    wo_pushed = work_order_sub.add_parser(
+        "pushed",
+        help="Record that the work is on GitHub and waiting for Full CI (status: pushed)",
+    )
+    wo_pushed.add_argument("work_order_id", help="Work order UUID")
+    wo_pushed.add_argument("--note", default=None, help="The PR or branch it went out on")
+
+    wo_ci_failed = work_order_sub.add_parser(
+        "ci-failed",
+        help="Record that main went red for this work (status: ci_issues)",
+    )
+    wo_ci_failed.add_argument("work_order_id", help="Work order UUID")
+    wo_ci_failed.add_argument("--note", default=None, help="Which run, and what failed")
+
     wo_block = work_order_sub.add_parser("block", help="Block a work order with a reason")
     wo_block.add_argument("work_order_id", help="Work order UUID")
     wo_block.add_argument("--reason", required=True, help="Block reason")
@@ -575,6 +596,25 @@ def dispatch(
             planning_root=planning_root,
             accept_structure=getattr(args, "accept_structure", None),
         )
+    if args.work_order_command in ("review", "pushed", "ci-failed"):
+        from core.work_orders.mutations import advance_work_order
+
+        import json as _json
+
+        _advanced = advance_work_order(
+            work_order_id=args.work_order_id,
+            # The command name is the destination, with one spelling difference:
+            # `ci-failed` reads as an event and `ci_issues` is the status it lands on.
+            to={"review": "in_review", "pushed": "pushed", "ci-failed": "ci_issues"}[
+                args.work_order_command
+            ],
+            note=args.note,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+        print(_json.dumps(_advanced, indent=2))
+        return 0 if _advanced.get("ok") else 1
+
     if args.work_order_command == "block":
         return _work_order_block(
             work_order_id=args.work_order_id,

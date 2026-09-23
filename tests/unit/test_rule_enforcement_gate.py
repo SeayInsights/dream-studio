@@ -339,6 +339,9 @@ def test_the_registers_guidance_entries_are_the_ones_the_dissolution_produced(tm
         # Recovered from the dissolved execute mode when main went red: it was the
         # one statement there that no other rule covered.
         "a-claim-with-an-exact-answer-is-computed-not-read",
+        # the review loop: the substrate makes it expressible, the reading is not
+        # something a check can do
+        "work-found-wanting-is-the-same-work-orders-unfinished-work",
     }
 
 

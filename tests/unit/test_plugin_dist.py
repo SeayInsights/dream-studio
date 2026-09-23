@@ -153,11 +153,17 @@ def test_pre_push_manifest_includes_dist_freshness_gate():
 
 def test_pr_smoke_runs_dist_freshness():
     """The pr-smoke matrix (merge-authorization) must also run the dist freshness test, so a stale
-    dist/plugin fails on all three platforms at PR time rather than post-merge in full-ci."""
-    ci = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    dist/plugin fails on all three platforms at PR time rather than post-merge in full-ci.
+
+    It runs as a declared always-run guard rather than because a workflow step names it:
+    a change to the renderer does not name this file and it globs no tree, so neither
+    reference selection nor the sweep class would ever reach it.
+    """
+    from interfaces.cli import impact_tests_gate
+
     assert (
-        "tests/unit/test_plugin_dist.py" in ci
-    ), "pr-smoke focused smoke tests must include tests/unit/test_plugin_dist.py"
+        "tests/unit/test_plugin_dist.py" in impact_tests_gate.ALWAYS_RUN
+    ), "pr-smoke's always-run guards must include tests/unit/test_plugin_dist.py"
 
 
 def test_committed_dist_plugin_is_fresh(tmp_path: Path):

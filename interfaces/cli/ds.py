@@ -28,6 +28,7 @@ from core.installed_runtime import installed_runtime_model  # noqa: E402,F401
 
 # Per-group command modules
 from interfaces.cli.commands import analyze  # noqa: E402
+from interfaces.cli.commands import ci as ci_cmd  # noqa: E402
 from interfaces.cli.commands import client as client_cmd  # noqa: E402
 from interfaces.cli.commands import config  # noqa: E402
 from interfaces.cli.commands import design_brief  # noqa: E402
@@ -132,6 +133,7 @@ def build_parser() -> argparse.ArgumentParser:
     prove_cmd.register(subcommands)
     enforce_cmd.register(subcommands)
     review_cmd.register(subcommands)
+    ci_cmd.register(subcommands)
     analyze.register(subcommands)
     eval_cmd.register(subcommands)
     config.register(subcommands)
@@ -251,6 +253,8 @@ def main(argv: list[str] | None = None) -> int:
             return enforce_cmd.dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "review":
             return review_cmd.dispatch(args, source_root=source_root, dream_studio_home=home)
+        if args.command == "ci":
+            return ci_cmd.dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "analyze":
             return analyze.dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "eval":

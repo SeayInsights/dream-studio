@@ -91,6 +91,27 @@ _BUSINESS_ENTRIES: tuple[RegistryEntry, ...] = (
         payload_required_keys=frozenset({"work_order_id", "title", "type", "project_id"}),
     ),
     RegistryEntry(
+        "work_order.review_requested",
+        _BUSINESS,
+        "meaningful-unit",
+        "Work order handed to the review lanes (in_review)",
+        payload_required_keys=frozenset({"work_order_id", "title", "project_id"}),
+    ),
+    RegistryEntry(
+        "work_order.pushed",
+        _BUSINESS,
+        "meaningful-unit",
+        "Work order's work is on GitHub, waiting for Full CI (pushed)",
+        payload_required_keys=frozenset({"work_order_id", "title", "project_id"}),
+    ),
+    RegistryEntry(
+        "work_order.ci_failed",
+        _BUSINESS,
+        "meaningful-unit",
+        "Full CI failed on main for this work order's work (ci_issues)",
+        payload_required_keys=frozenset({"work_order_id", "title", "project_id"}),
+    ),
+    RegistryEntry(
         "work_order.blocked",
         _BUSINESS,
         "meaningful-unit",
