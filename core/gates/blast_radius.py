@@ -18,9 +18,9 @@ This module closes the gap at merge time. From the diff it:
 `compute_impact_set` is pure and deterministic (no DB, no network) so the gate
 can run identically in pre-push and in the pr-smoke matrix.
 
-TEXT MATCHING IS BLIND TO TWO IMPORT SHAPES, so a third selector walks an AST-built
-import graph and adds their transitive dependents (see ``_build_import_graph`` /
-``_transitive_dependents``):
+TEXT MATCHING IS BLIND TO SEVERAL IMPORT SHAPES, so a third selector walks an
+AST-built import graph and adds their dependents (see ``_build_import_graph`` /
+``_ancestor_hops``):
 
   - ``from pkg import mod`` splits a changed module's dotted path across two tokens
     -- ``pkg`` then ``mod``, joined by the word ``import`` -- and the literal
@@ -33,9 +33,32 @@ import graph and adds their transitive dependents (see ``_build_import_graph`` /
     re-exports a name without its wrapped module's dotted path ever appearing in a
     test that imports the package instead of the module. Measured to put main red
     twice before this.
+  - a CONFTEST FIXTURE -- a conftest.py that imports a module and exposes it as a
+    fixture (tests/conftest.py's own autouse ``guard_real_homedir`` does this) --
+    reaches a consuming test through pytest's collection machinery, not an import
+    statement, so no AST edge connects them either. Handled by directory scope
+    rather than by resolving fixture names (see ``_conftest_scope_tests``).
 
-Both are relationships an AST sees and a regex cannot, so they are resolved by
+These are relationships an AST sees and a regex cannot, so they are resolved by
 walking the graph rather than by adding more patterns.
+
+KNOWN OPEN GAP, NOT FIXED HERE: a module-level ``__getattr__`` doing a runtime
+``importlib.import_module(name)`` (PEP 562 lazy re-export -- see
+``core/work_orders/start.py``, whose ``_require_db``/``read_work_order_brief``/
+``write_work_order_context`` are re-exported this way, deliberately, so a test's
+``patch()`` sees the live sibling rather than a frozen first-import snapshot)
+produces NO graph edge at all: the target module is a runtime string, not an
+``ast.Import``/``ast.ImportFrom`` node. Measured on this repository:
+``core.work_orders.start`` has static edges to ``.start_main`` and ``.start_shared``
+only; ``.start_brief`` and ``.start_context`` -- both re-exported dynamically -- have
+none, from that facade. Tests that patch them by their sibling-module dotted string
+(``patch("core.work_orders.start_brief...")``) still get selected through the
+pre-existing text-matching rule, which is why this has not been the source of a
+measured red main the way the other two were; a test that reaches them ONLY through
+``core.work_orders.start`` with no literal sibling-module string anywhere in it would
+not be selected by either rule. Resolving a runtime ``importlib.import_module(name)``
+call in general requires dataflow analysis this module does not do; flagged rather
+than special-cased for one file.
 """
 
 from __future__ import annotations
@@ -95,30 +118,38 @@ _IMPORT_GRAPH_SKIP_DIRS = frozenset(
     {".git", "__pycache__", ".pytest_cache", "node_modules", ".venv", "venv"}
 )
 
-#: Hops the import-graph closure follows before it stops.
+#: Hops the import-graph closure SELECTS on before it stops counting a test as
+#: dependent. The search itself is always unbounded (see ``_ancestor_hops``); this
+#: only draws the line between "selected" and "truncated, and counted".
 #:
-#: MEASURED UNBOUNDED, on this repository, 695 test files total: a change to
-#: core/gates/pre_push.py selected 9 test files by text matching alone and 332
-#: (48%) with an unbounded closure; core/work_orders/task_status.py, one of the
-#: most-imported modules in the tree, went from 4 to 425 (61%). Past a few hops a
-#: monolith's import graph is nearly fully connected, so "transitively imports the
-#: changed module" stops meaning "plausibly affected by it" and starts meaning
-#: "somewhere in the same program" -- exactly the ceremony-without-signal shape
-#: this file's own docstring already names for the pr-smoke gap. It would also risk
-#: the CI budget directly: 127 files measured at 12m05s against a 25-minute job
-#: budget, and 332-425 files scales past it.
+#: MEASURED ON THIS REPOSITORY, 695 test files total, and the numbers argue against
+#: any finite bound ever being "enough": core/gates/pre_push.py went from 9 tests
+#: (text matching) to 332 (48%) unbounded; core/work_orders/task_status.py from 4 to
+#: 425 (61%); core/work_orders/start_brief.py -- picked because its own facade,
+#: core/work_orders/start.py, re-exports it through a PEP-562 ``__getattr__`` this
+#: graph cannot see at all (a separate, open gap -- see the module docstring) -- has
+#: real test ancestors at EVERY hop count from 1 to 21, not clustered near the front:
+#: 3 tests at hop 1, 3 at hop 2, 8 at hop 3, 2 at hop 4, climbing back up to 63 at hop
+#: 8 and 51 at hop 13. A first version of this bound claimed "a full hop of margin
+#: past both measured failure modes" -- wrong: it was measured against two
+#: hand-built scenarios, not the repository's real chains, several of which sit at
+#: exactly hop 3 already. There is no bound that leaves real margin here; past a few
+#: hops this repo's import graph is close to fully connected, so raising the number
+#: only moves where the truncation happens, never removes it.
 #:
-#: BOUNDED AT 3: the regression this feature exists to fix
-#: (test_pre_push_outcome_event.py, `from core.gates import pre_push`) is one hop;
-#: the facade shape (a package __init__ re-exporting a changed submodule, read by a
-#: test that imports the package) is two. Depth 3 keeps a full hop of margin past
-#: both measured failure modes while holding the worst case measured here to 37
-#: (pre_push.py) and 107 (task_status.py) test files -- large, but an order of
-#: magnitude short of "everything", and the number a future measurement should be
-#: checked against before this is loosened.
+#: SO THE BOUND STOPS THE SELECTION FROM BALLOONING (protecting the pr-smoke job's
+#: cost -- 127 files already measured at 12m05s against a 25-minute budget) AND THE
+#: TRUNCATION IS COUNTED, NOT ASSUMED AWAY: every ``compute_impact_set`` result
+#: reports ``import_graph_truncated_test_count``, the number of real test ancestors
+#: this bound cut off, and both CLI entry points print it when it is nonzero. A
+#: silent bound is the defect (a human trusting "the closure caught it" with no way
+#: to tell); a bound that admits what it dropped is the fix.
 IMPORT_GRAPH_MAX_DEPTH: int | None = 3
 
-_IMPORT_GRAPH_CACHE: dict[str, tuple[dict[str, str], nx.DiGraph]] = {}
+#: Cache value: (tree fingerprint at build time, module index, import graph). The
+#: fingerprint is what makes reuse safe -- see ``_tree_fingerprint`` and
+#: ``_cached_import_graph``.
+_IMPORT_GRAPH_CACHE: dict[str, tuple[tuple, dict[str, str], nx.DiGraph]] = {}
 
 
 def _file_to_module(rel_path: str) -> str:
@@ -196,15 +227,51 @@ def _imported_targets(node: ast.AST, *, module: str, rel_path: str, known: set[s
     return targets
 
 
-def _build_module_index(repo_root: Path) -> dict[str, str]:
-    """Every importable module this repository defines, mapped to its file."""
-    index: dict[str, str] = {}
+def _iter_repo_python_files(repo_root: Path) -> Iterable[Path]:
+    """Every .py file the import graph can consider, VCS/build internals excluded.
+
+    Shared by the module index, the graph build, and the cache fingerprint below --
+    the same walk was being repeated with the same skip-list; one definition is one
+    place for that list to be right.
+    """
     for path in repo_root.rglob("*.py"):
         if any(part in _IMPORT_GRAPH_SKIP_DIRS for part in path.parts):
             continue
+        yield path
+
+
+def _build_module_index(repo_root: Path) -> dict[str, str]:
+    """Every importable module this repository defines, mapped to its file."""
+    index: dict[str, str] = {}
+    for path in _iter_repo_python_files(repo_root):
         rel = _normalize(str(path.relative_to(repo_root)))
         index[_file_to_module(rel)] = rel
     return index
+
+
+def _tree_fingerprint(repo_root: Path) -> tuple[tuple[str, int, int], ...]:
+    """A cheap stand-in for "has anything in this tree changed since the graph was
+    built", so the cache below can detect a stale answer instead of assuming there
+    isn't one.
+
+    ``compute_impact_set``'s own docstring promises it is pure and deterministic; a
+    cache keyed on repo root ALONE breaks that promise for any caller that builds
+    the graph, the checkout changes on disk, and it builds again in the same
+    process -- the second call would silently return the first call's answer.
+    Stats every file rather than re-reading and re-parsing it (the cost the cache
+    exists to avoid): path, mtime, and size are what changes when a file is edited,
+    added, or removed, and comparing them costs a directory walk, not 1696 AST
+    parses.
+    """
+    stamps: list[tuple[str, int, int]] = []
+    for path in _iter_repo_python_files(repo_root):
+        try:
+            st = path.stat()
+        except OSError:
+            continue
+        rel = _normalize(str(path.relative_to(repo_root)))
+        stamps.append((rel, st.st_mtime_ns, st.st_size))
+    return tuple(sorted(stamps))
 
 
 def _build_import_graph(repo_root: Path) -> tuple[dict[str, str], nx.DiGraph]:
@@ -215,6 +282,32 @@ def _build_import_graph(repo_root: Path) -> tuple[dict[str, str], nx.DiGraph]:
     tree being scanned) applies here, and a file that fails to parse is skipped
     rather than aborting the whole graph -- one bad file must not blind the gate to
     every other change.
+
+    NOT BUILT ON TOP OF THE TWO EXISTING AST/GRAPH TOOLS IN THIS REPOSITORY, checked
+    and rejected rather than overlooked:
+
+    - ``core/graph/query_traversal.py`` (``build_graph`` / ``get_dependents``) IS a
+      cached, depth-bounded dependents query over an ``nx.DiGraph`` -- exactly this
+      shape -- but its graph comes from the ``pi_components``/``pi_dependencies``
+      tables in studio.db (``core/graph/query_shared.py``), pre-indexed by a separate
+      job and cached with a 5-minute TTL keyed on that index's own timestamp, not on
+      the current git tree. Building on it would mean either giving
+      ``compute_impact_set`` a hard DB dependency it does not otherwise have, or
+      trusting a graph that can be stale relative to the diff being gated -- the
+      exact defect class ``_cached_import_graph``'s fingerprint above exists to rule
+      out for THIS graph. networkx itself (the traversal library, not this module) is
+      shared -- see ``_ancestor_hops``.
+    - ``core/org_intelligence/ingestor.py`` (``RepoParser._parse_file``) also walks
+      ``ast.Import``/``ast.ImportFrom`` nodes, but resolves each ``ImportFrom`` to
+      bare ``node.module`` with no disambiguation between a submodule and a
+      re-exported member (``from core.gates import pre_push`` records the edge as
+      ``core.gates``, never ``core.gates.pre_push``) and drops relative imports
+      whose ``node.module`` is ``None`` entirely (``from . import x``). Both are
+      exactly the gaps this module exists to close (see the module docstring), so
+      reusing it here would silently reintroduce them. It is also deliberately
+      decoupled from ``core.gates`` ("avoids importing main runtime internals", its
+      own docstring) for the org-intelligence tool's cross-repo portability, a
+      boundary this module has no reason to cross for a one-repository gate.
     """
     module_index = _build_module_index(repo_root)
     known = set(module_index)
@@ -235,45 +328,85 @@ def _build_import_graph(repo_root: Path) -> tuple[dict[str, str], nx.DiGraph]:
 
 
 def _cached_import_graph(repo_root: Path) -> tuple[dict[str, str], nx.DiGraph]:
-    """Built once per resolved repo root, then reused for the rest of the process.
+    """Built once per resolved repo root and tree state, then reused.
 
     Every real caller (pre_push, impact_tests_gate, and the CI steps that invoke
-    them) is a fresh process making exactly one ``compute_impact_set`` call, so a
-    checkout never mutates mid-cache. The case this cache is FOR is this repository's
-    own test suite, which calls ``compute_impact_set`` against ``REPO_ROOT`` many
-    times in one pytest session (the PR replays in test_impact_tests_gate.py) --
-    without it, each of those calls re-walks and re-parses the whole tree. A
-    ``tmp_path`` fixture resolves to a unique path per test, so it can never collide
-    with ``REPO_ROOT`` or with another test's cache entry.
+    them) is a fresh process making exactly one ``compute_impact_set`` call. The case
+    this cache is FOR is this repository's own test suite, which calls
+    ``compute_impact_set`` against ``REPO_ROOT`` many times in one pytest session
+    (the PR replays in test_impact_tests_gate.py) -- without it, each of those calls
+    re-walks and re-parses the whole tree.
+
+    The fingerprint check is what makes this safe rather than merely usually-safe: a
+    stale cache is silently WRONG, not just slow, so a resolved-root key alone was
+    the wrong contract to sign given ``compute_impact_set``'s own "pure and
+    deterministic" claim. Recomputing the fingerprint costs one directory walk with a
+    ``stat`` per file (no read, no parse), so a cache hit still means skipping the
+    expensive part -- 1696 files parsed -- not skipping the walk that proves it is
+    still safe to.
     """
-    key = str(Path(repo_root).resolve())
+    root = Path(repo_root)
+    key = str(root.resolve())
+    fingerprint = _tree_fingerprint(root)
     cached = _IMPORT_GRAPH_CACHE.get(key)
-    if cached is None:
-        cached = _build_import_graph(Path(repo_root))
+    if cached is None or cached[0] != fingerprint:
+        cached = (fingerprint, *_build_import_graph(root))
         _IMPORT_GRAPH_CACHE[key] = cached
-    return cached
+    return cached[1], cached[2]
 
 
-def _transitive_dependents(
-    changed: set[str], graph: nx.DiGraph, *, max_depth: int | None
-) -> set[str]:
-    """Every module whose forward-import chain reaches a changed module.
+def _ancestor_hops(changed: set[str], graph: nx.DiGraph) -> dict[str, int]:
+    """Hop-distance from the nearest module in ``changed`` to every module whose
+    forward-import chain reaches it -- UNBOUNDED.
+
+    Traversal over the already-built, in-memory graph is cheap regardless of depth
+    (milliseconds, measured on this repository's ~3600-edge graph even for the
+    most-connected modules in it), so nothing is saved by bounding the SEARCH.
+    Bounding the search is also how a truncation goes silent: a cutoff BFS simply
+    never visits what lies past it, so there is nothing left to report having
+    dropped. Computing the full distance map instead is what lets
+    ``compute_impact_set`` draw the ``IMPORT_GRAPH_MAX_DEPTH`` line itself AND count
+    exactly what fell on the far side of it.
 
     Ancestors of ``changed`` in the import graph are descendants of ``changed`` in
-    the REVERSED graph (``.reverse(copy=False)`` is an O(E) view, not a copy), and
-    ``single_source_shortest_path_length`` is the depth-bounded BFS networkx already
-    ships -- reused rather than a second hand-rolled traversal doing the same thing.
+    the REVERSED graph (``.reverse(copy=False)`` is an O(E) view, not a copy).
     """
     if not changed:
-        return set()
+        return {}
     reverse = graph.reverse(copy=False)
-    dependents: set[str] = set()
+    hops: dict[str, int] = {}
     for module in changed:
-        if module in reverse:
-            dependents.update(
-                nx.single_source_shortest_path_length(reverse, module, cutoff=max_depth)
-            )
-    return dependents - changed
+        if module not in reverse:
+            continue
+        for node, dist in nx.single_source_shortest_path_length(reverse, module).items():
+            if node in changed:
+                continue
+            if node not in hops or dist < hops[node]:
+                hops[node] = dist
+    return hops
+
+
+def _is_conftest_file(rel_path: str) -> bool:
+    return Path(_normalize(rel_path)).name == "conftest.py"
+
+
+def _conftest_scope_tests(repo_root: Path, conftest_rel_path: str) -> set[str]:
+    """Every test file pytest hands this conftest.py's fixtures to.
+
+    FIXTURE INJECTION IS A DEPENDENCY EDGE THE AST GRAPH CANNOT SEE. A conftest.py
+    can import a module and expose it through a fixture -- tests/conftest.py's own
+    autouse ``guard_real_homedir`` fixture does exactly this -- and a test consuming
+    that fixture writes no import statement naming the module at all; pytest wires
+    them together by fixture name at collection time, not by anything ``ast`` can
+    see. Modeling that precisely would mean resolving which fixture a test actually
+    requests, name by name. Instead this is conservative but correct: pytest already
+    scopes a conftest.py's fixtures to every test AT OR BELOW its own directory
+    (never siblings, never a parent's directory), so that directory scope is used
+    directly -- every test in it is selected, whether or not it uses the fixture
+    the changed import feeds.
+    """
+    conftest_dir = (repo_root / conftest_rel_path).parent
+    return {_normalize(str(p.relative_to(repo_root))) for p in conftest_dir.rglob("test_*.py")}
 
 
 def compute_impact_set(
@@ -290,6 +423,7 @@ def compute_impact_set(
           "dependent_tests": [...pytest file paths, sorted...],
           "impacted_contract_domains": [...domain_id...],
           "module_tokens": [...dotted modules the source changes expose...],
+          "import_graph_truncated_test_count": N,  # real ancestors past the depth bound
         }
 
     Selection rules:
@@ -310,7 +444,13 @@ def compute_impact_set(
         imports it through the repository's import graph -- directly, through
         ``from pkg import mod``, through a facade ``__init__.py``, or through a
         chain of any of those up to ``IMPORT_GRAPH_MAX_DEPTH`` hops -- which the
-        text rule above cannot see (see the module docstring).
+        text rule above cannot see (see the module docstring). A real ancestor
+        PAST that bound is not silently dropped: it is counted in
+        ``import_graph_truncated_test_count``;
+      - and a changed module reached ONLY through a conftest.py -- a fixture the
+        conftest builds by importing the module, with no import statement in the
+        test that uses the fixture -- selects every test in that conftest's
+        directory scope (see ``_conftest_scope_tests``).
     """
     root = Path(repo_root)
     changed = sorted({_normalize(f) for f in changed_files if f})
@@ -382,22 +522,34 @@ def compute_impact_set(
             if any(pat.search(text) for pat in patterns):
                 dependent.add(rel)
 
-    # IMPORT-GRAPH CLOSURE -- see the module docstring for the two shapes text
-    # matching above cannot see (`from pkg import mod`, and a facade `__init__.py`).
-    # `module_tokens` already holds every dotted module a changed .py source file
-    # exposes (test files are excluded from it above), so no second pass over
-    # `changed` is needed to find the graph's starting set. Gated on `module_tokens`
-    # so a non-.py-only or empty change set never pays for the whole-repo AST walk.
+    # IMPORT-GRAPH CLOSURE -- see the module docstring for the shapes text matching
+    # above cannot see (`from pkg import mod`, a facade `__init__.py`, and a
+    # conftest.py fixture). `module_tokens` already holds every dotted module a
+    # changed .py source file exposes (test files are excluded from it above), so no
+    # second pass over `changed` is needed to find the graph's starting set. Gated on
+    # `module_tokens` so a non-.py-only or empty change set never pays for the
+    # whole-repo AST walk.
+    truncated_test_count = 0
+    #: conftest.py files reached by this change, whose test-directory SCOPE (not
+    #: just the conftest file itself) must be unioned in below -- both a changed
+    #: conftest.py directly and one found while walking the import-graph ancestors.
+    conftest_hits = {f for f in changed if _is_conftest_file(f)}
     if module_tokens:
         module_index, import_graph = _cached_import_graph(root)
         known_changed = module_tokens & set(module_index)
         if known_changed:
-            for ancestor in _transitive_dependents(
-                known_changed, import_graph, max_depth=IMPORT_GRAPH_MAX_DEPTH
-            ):
+            for ancestor, hops in _ancestor_hops(known_changed, import_graph).items():
                 rel = module_index[ancestor]
+                within_bound = IMPORT_GRAPH_MAX_DEPTH is None or hops <= IMPORT_GRAPH_MAX_DEPTH
                 if _is_test_file(rel):
-                    dependent.add(rel)
+                    if within_bound:
+                        dependent.add(rel)
+                    else:
+                        truncated_test_count += 1
+                elif _is_conftest_file(rel) and within_bound:
+                    conftest_hits.add(rel)
+    for rel in conftest_hits:
+        dependent.update(_conftest_scope_tests(root, rel))
 
     impacted_domains: list[str] = []
     try:
@@ -413,6 +565,7 @@ def compute_impact_set(
         "dependent_tests": sorted(dependent),
         "impacted_contract_domains": impacted_domains,
         "module_tokens": sorted(module_tokens),
+        "import_graph_truncated_test_count": truncated_test_count,
     }
 
 
@@ -483,6 +636,24 @@ def main() -> int:
     diff_text, changed = _resolve_diff_and_changed(REPO_ROOT, base_ref)
     report = evaluate(diff_text, changed, repo_root=REPO_ROOT)
     print(json.dumps(report, indent=2, sort_keys=True))
+    truncated = report["impact_set"].get("import_graph_truncated_test_count", 0)
+    if truncated:
+        # LOUD ON PURPOSE. IMPORT_GRAPH_MAX_DEPTH cuts off real ancestors past a
+        # finite hop count (see the constant's docstring -- this repo has real
+        # chains 21 hops deep); a human or CI reading only "PASS" has no way to know
+        # the closure was truncated rather than exhaustive. This does not fail the
+        # gate -- the bound exists precisely to keep the run affordable -- it makes
+        # the trade-off visible every time it is paid.
+        print()
+        print("=" * 70)
+        print(
+            f"IMPORT-GRAPH CLOSURE TRUNCATED: {truncated} real dependent test file(s) "
+            f"sit beyond IMPORT_GRAPH_MAX_DEPTH={IMPORT_GRAPH_MAX_DEPTH} hops and were "
+            "NOT selected."
+        )
+        print("This is a known, counted trade-off, not a failure -- see")
+        print("IMPORT_GRAPH_MAX_DEPTH's docstring in core/gates/blast_radius.py.")
+        print("=" * 70)
     if report["status"] != "pass":
         print()
         print("=" * 70)

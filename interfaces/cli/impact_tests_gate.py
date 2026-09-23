@@ -109,6 +109,11 @@ def select_tests(changed_files: list[str], repo_root: Path | str = REPO_ROOT) ->
         "sweep_tests": sweep,
         "always_run": always,
         "tests": union,
+        # Real import-graph ancestors past IMPORT_GRAPH_MAX_DEPTH -- see that
+        # constant's docstring in core/gates/blast_radius.py. Propagated (not
+        # recomputed) so this step's log is the one place a human or CI actually
+        # reads that says whether the closure was truncated.
+        "import_graph_truncated_test_count": impact.get("import_graph_truncated_test_count", 0),
     }
 
 
@@ -146,6 +151,13 @@ def main() -> int:
             if path in v
         )
         print(f"    {why:18s} {path}")
+    truncated = selection.get("import_graph_truncated_test_count", 0)
+    if truncated:
+        print(
+            f"    [import-graph] {truncated} real dependent test file(s) sit beyond the "
+            "depth bound and were NOT selected -- see IMPORT_GRAPH_MAX_DEPTH in "
+            "core/gates/blast_radius.py"
+        )
     sys.stdout.flush()
 
     result = subprocess.run(

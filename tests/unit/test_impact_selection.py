@@ -148,6 +148,111 @@ def test_a_relative_import_chain_is_followed_transitively(tmp_path: Path) -> Non
     assert "tests/unit/test_wrapper.py" in result["dependent_tests"]
 
 
+def test_the_import_graph_cache_detects_in_process_edits(tmp_path: Path) -> None:
+    """compute_impact_set's own docstring claims it is "pure and deterministic", but
+    the import-graph cache was keyed on repo root alone: build once, edit the tree
+    on disk, build again with the SAME root, and a stale cache would silently
+    return the first call's answer. Reproduced here by adding, between two calls in
+    the same process, a test file with the exact from-pkg-import-mod shape this PR
+    exists to catch -- the second call must see it.
+    """
+    repo = tmp_path
+    _write(repo / "mypkg" / "__init__.py", "")
+    _write(repo / "mypkg" / "sub.py", "def f():\n    return 1\n")
+    _write(repo / "tests" / "unit" / "test_untouched.py", "def test_x():\n    assert True\n")
+
+    first = compute_impact_set(["mypkg/sub.py"], repo_root=repo)
+    assert "tests/unit/test_importer.py" not in first["dependent_tests"]
+
+    # Same process, same repo_root -- the tree just grew a new importer.
+    _write(
+        repo / "tests" / "unit" / "test_importer.py",
+        "from mypkg import sub\n\n\ndef test_it():\n    assert sub.f() == 1\n",
+    )
+    second = compute_impact_set(["mypkg/sub.py"], repo_root=repo)
+    assert "tests/unit/test_importer.py" in second["dependent_tests"], (
+        "stale cache: the second call did not see a file added after the first "
+        f"(dependent_tests={second['dependent_tests']})"
+    )
+
+
+def test_a_conftest_fixture_reexport_selects_tests_in_its_scope(tmp_path: Path) -> None:
+    """A conftest.py can import a changed module and expose it as a fixture -- the
+    shape tests/conftest.py's own autouse guard_real_homedir fixture uses -- and a
+    test consuming that fixture writes NO import statement naming the module at
+    all, so neither text matching nor the import graph's AST edges can see the
+    dependency directly. Conservative fix: every test in the conftest's directory
+    scope is selected once the conftest itself is known to depend on the change.
+    """
+    repo = tmp_path
+    _write(repo / "core" / "foo" / "bar.py", "def helper():\n    return 1\n")
+    _write(
+        repo / "tests" / "conftest.py",
+        "from core.foo.bar import helper\n\n\ndef fixture_value():\n    return helper()\n",
+    )
+    # No import of core.foo.bar anywhere in this file -- it only consumes whatever
+    # the conftest wires up, exactly like a fixture-consuming test would.
+    _write(repo / "tests" / "unit" / "test_uses_fixture.py", "def test_it():\n    assert True\n")
+
+    result = compute_impact_set(["core/foo/bar.py"], repo_root=repo)
+    assert "tests/unit/test_uses_fixture.py" in result["dependent_tests"]
+
+
+def test_a_changed_conftest_selects_every_test_in_its_directory_scope(tmp_path: Path) -> None:
+    """Editing a conftest.py directly must widen the same way: pytest scopes a
+    conftest.py's fixtures to every test AT OR BELOW its own directory, never a
+    sibling directory, so the selection must match that scope exactly -- not the
+    whole suite, and not just the conftest's own directory non-recursively.
+    """
+    repo = tmp_path
+    _write(repo / "tests" / "unit" / "conftest.py", "def helper():\n    return 1\n")
+    _write(repo / "tests" / "unit" / "test_in_scope.py", "def test_it():\n    assert True\n")
+    _write(
+        repo / "tests" / "unit" / "sub" / "test_nested_in_scope.py",
+        "def test_it():\n    assert True\n",
+    )
+    _write(
+        repo / "tests" / "integration" / "test_out_of_scope.py",
+        "def test_it():\n    assert True\n",
+    )
+
+    result = compute_impact_set(["tests/unit/conftest.py"], repo_root=repo)
+    dependent = set(result["dependent_tests"])
+    assert "tests/unit/test_in_scope.py" in dependent
+    assert "tests/unit/sub/test_nested_in_scope.py" in dependent
+    assert "tests/integration/test_out_of_scope.py" not in dependent
+
+
+def test_a_chain_deeper_than_the_bound_is_truncated_and_counted(tmp_path: Path) -> None:
+    """The import graph has real chains far deeper than IMPORT_GRAPH_MAX_DEPTH --
+    measured on the live repo, core/work_orders/start_brief.py has test ancestors
+    as far out as 21 hops, several real tests sitting at exactly hop 3 already. Any
+    finite bound leaves something beyond it, so the honest contract is not "the
+    bound has margin" but "a truncation is counted and reported". Built here as a
+    5-hop chain (two hops past the default bound of 3): the distant test must be
+    excluded from selection AND the exclusion must be counted, not silent.
+    """
+    repo = tmp_path
+    _write(repo / "pkgd" / "__init__.py", "")
+    _write(repo / "pkgd" / "a0.py", "x = 1\n")
+    _write(repo / "pkgd" / "a1.py", "from .a0 import x\n\ny = x\n")
+    _write(repo / "pkgd" / "a2.py", "from .a1 import y\n\nz = y\n")
+    _write(repo / "pkgd" / "a3.py", "from .a2 import z\n\nw = z\n")
+    _write(repo / "pkgd" / "a4.py", "from .a3 import w\n\nv = w\n")
+    _write(
+        repo / "tests" / "unit" / "test_deep.py",
+        "from pkgd.a4 import v\n\n\ndef test_it():\n    assert v == 1\n",
+    )
+
+    result = compute_impact_set(["pkgd/a0.py"], repo_root=repo)
+    assert (
+        "tests/unit/test_deep.py" not in result["dependent_tests"]
+    ), "this test sits 5 hops out; the default bound is 3, so it must be excluded"
+    assert (
+        result["import_graph_truncated_test_count"] >= 1
+    ), "the exclusion above must be COUNTED, not silent"
+
+
 def test_a_changed_source_file_selects_tests_that_name_it_by_path(tmp_path):
     """A test that reads source as TEXT names the file, not the module.
 
