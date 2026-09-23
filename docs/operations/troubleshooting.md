@@ -35,6 +35,27 @@ Check:
 
 Commands are expected to work from outside the repo.
 
+### The launcher picked the wrong Python
+
+Symptom: `ds` fails before it starts with `ModuleNotFoundError` (often
+`jsonschema`), or with "No working Python found".
+
+The Windows launchers (`ds.cmd`, `ds.ps1`, and the ones `ds install-command`
+writes) use the first Python that actually RUNS, in this order:
+
+1. `DS_PYTHON`, when set -- set it to the interpreter you installed Dream
+   Studio's requirements into to take the guess out entirely.
+2. For an installed launcher, the absolute Python that ran the install.
+3. `python` on PATH.
+4. `py -3` -- the Windows launcher's default is the newest Python installed,
+   which on a machine with several may not be the one holding the requirements.
+5. `python3`.
+
+A Microsoft Store alias stub (bare `python` on a stock Windows box, which
+prints "Python was not found" and exits 9009) never counts: every candidate is
+run once before it is used.
+
+
 Use `ds version` to confirm the source/runtime resolver, `ds doctor` for
 read-only health checks, and `ds repair` for a non-mutating repair plan. These
 commands do not perform cleanup, live SQLite writes, or destructive repair.
