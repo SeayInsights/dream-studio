@@ -232,6 +232,28 @@ def test_docs_drift_runs_in_both_pre_push_and_ci_and_blocks_in_both() -> None:
     ), "the CI copy must block, or #263 can happen again"
 
 
+def test_ci_workflow_pins_changed_files_env_for_both_ambient_readers() -> None:
+    """contract_docs_drift_gate.py AND contract_atlas_lifecycle_gate.py both honor
+    DREAM_STUDIO_CHANGED_FILES as an override that bypasses git-based diffing
+    entirely. pre-push.yaml's manifest and ci_gate.py's isolated check env are
+    already pinned against an ambient value replacing real detection; ci.yml's
+    own "Contract docs drift" and "Contract Atlas lifecycle" steps were not,
+    even though both run the same two scripts -- a value carried over from an
+    earlier step in the same job (or a self-hosted runner's leftover
+    environment) would silently replace real detection there too."""
+    ci = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    for step_name, script in (
+        ("Contract docs drift", "contract_docs_drift_gate"),
+        ("Contract Atlas lifecycle", "contract_atlas_lifecycle_gate"),
+    ):
+        assert script in ci, f"{step_name} lost its CI home"
+        step_block = ci.split(step_name)[1].split("- name:")[0]
+        assert 'DREAM_STUDIO_CHANGED_FILES: ""' in step_block, (
+            f"the {step_name!r} CI step does not pin DREAM_STUDIO_CHANGED_FILES -- an "
+            "ambient value could silently replace real git-based detection"
+        )
+
+
 def test_gates_docs_do_not_claim_atlas_leak_blocks_pre_push() -> None:
     """docs/reference/gates.md and docs/operations/gates.md must not claim
     atlas-leak is a pre-push gate. It runs CI-only
