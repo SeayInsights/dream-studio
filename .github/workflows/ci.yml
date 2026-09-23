@@ -15,7 +15,11 @@ jobs:
   pr-smoke:
     name: pr-smoke (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    # 15 was honest when this job ran sixteen hardcoded files. The impact step runs
+    # the tests a change actually reaches -- measured on one PR: 4m08s ubuntu, 4m22s
+    # macos, 12m05s Windows for a 127-file selection -- and Windows got through it and
+    # was CANCELLED in the next step. The gate passed; the job ran out of time after.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -110,23 +114,3 @@ jobs:
             -q --tb=short
           if ($LASTEXITCODE -ne 0) { throw "hooks do not survive the stock Windows Store-alias state" }
 
-      - name: Focused smoke tests
-        run: >
-          python -m pytest
-          tests/unit/test_contract_docs_drift_gate.py
-          tests/unit/test_contract_atlas_lifecycle.py
-          tests/unit/test_github_pr_cicd_release_gate.py
-          tests/unit/test_release_gate_lint_baseline_policy.py
-          tests/unit/test_release_gates_dependency_rules.py
-          tests/unit/test_impact_selection.py
-          tests/unit/test_hanging_detectors.py
-          tests/unit/test_plugin_dist.py
-          tests/unit/test_skill_module_paths_resolve.py
-          tests/unit/test_ds_update_skill_drift.py
-          tests/unit/test_locale_decode_gate.py
-          tests/unit/test_fail_open_probe_gate.py
-          tests/unit/test_test_isolation_gate.py
-          tests/unit/test_fixture_schema_parity_gate.py
-          tests/unit/test_seam_payload_to_projection.py
-          tests/integration/test_pr_smoke_impact.py
-          -q --tb=short
