@@ -134,10 +134,40 @@ def test_the_authoring_skill_lists_exactly_the_declared_types():
     if not skill.is_file():
         pytest.skip("the ds-project pack has been dissolved; the table went with it")
     block = skill.read_text(encoding="utf-8")
-    block = block[block.index("### Valid Work Order Types") :]
-    if "
-## " in block:
-        block = block[: block.index("
-## ")]
+    start = block.index("### Valid Work Order Types")
+    block = block[start:]
+    if "\n## " in block:
+        block = block[: block.index("\n## ")]
     listed = set(re.findall(r"^\| `([a-z_]+)` \|", block, re.M))
     assert listed == set(WORK_ORDER_TYPES)
+
+
+def test_the_baseline_migration_seeds_exactly_the_declared_types():
+    """The seventh site, and the load-bearing one.
+
+    `business_work_order_types` is not a mirror of the tuple: each row carries that type's
+    pre_build_gate, post_build_gate, build_executor and precondition_skill, and
+    `run_gate_check` reads them when a work order closes. A declared type with no row is a
+    work order that can be created and then started against nothing; a row with no
+    declared type is a set of gates nothing can reach, which is the shape rule 18 of the
+    ds-workorder pack exists to refuse one level up.
+
+    Read from the migration, not from a live authority, so the answer does not depend on
+    whose database is at hand.
+    """
+    import re
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[2]
+    sql = (repo / "core" / "event_store" / "migrations" / "142_lean_baseline.sql").read_text(
+        encoding="utf-8"
+    )
+    start = sql.index("INSERT OR IGNORE INTO business_work_order_types")
+    end = sql.index(";", start)
+    block = sql[start:end]
+    seeded = set(re.findall(r"^\s*\('([a-z_]+)',", block, re.M))
+    assert seeded == set(WORK_ORDER_TYPES), (
+        "the tuple and the seeded type rows disagree; a type with no row cannot be started, "
+        f"a row with no type is unreachable. only-seeded={sorted(seeded - set(WORK_ORDER_TYPES))} "
+        f"only-declared={sorted(set(WORK_ORDER_TYPES) - seeded)}"
+    )
