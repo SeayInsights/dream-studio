@@ -159,7 +159,11 @@ def _watch(
         print(json.dumps(report, indent=2))
         return 0
 
+    # BOTH DECLARED BEFORE THE BRANCH. `unrunnable` was assigned only on a red run and
+    # passed to every `_act` -- so a GREEN run, the one that closes work, raised
+    # UnboundLocalError before closing anything (boundary-semantics lane, round two).
     nodes: list[str] = []
+    unrunnable: list[str] = []
     if status == "failure":
         run_url = verdict.get("run_url") or ""
         run_id = run_url.rstrip("/").split("/")[-1] if run_url else ""

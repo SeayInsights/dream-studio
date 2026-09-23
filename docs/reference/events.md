@@ -61,7 +61,7 @@ Pure operator actions. Route to `business_canonical_events`. Drive all SDLC proj
 | `WORK_ORDER_CREATED` | `work_order.created` | New work order created |
 | `WORK_ORDER_DELETED` | `work_order.deleted` | Work order deleted (cascade) |
 | `WORK_ORDER_STARTED` | `work_order.started` | Work order entered `in_progress` |
-| `WORK_ORDER_CLOSED` | `work_order.closed` | Work order closed (gates passed) |
+| `WORK_ORDER_CLOSED` | `work_order.closed` | Work order closed from `pushed` or `ci_issues` -- its gates passed, or a forced bypass recorded as `gate.bypassed` |
 | `WORK_ORDER_BLOCKED` | `work_order.blocked` | Work order blocked with reason |
 | `WORK_ORDER_UNBLOCKED` | `work_order.unblocked` | Work order unblocked → the phase it was blocked from (`to_status`; `in_progress` for older events) _(registry-only)_ |
 

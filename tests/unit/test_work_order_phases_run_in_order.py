@@ -444,3 +444,42 @@ def test_the_writer_and_the_projection_ask_one_column_check():
 
     assert mutations.remembers_block_phase is task_status.remembers_block_phase
     assert work_order_projection.remembers_block_phase is task_status.remembers_block_phase
+
+
+# ── round-two findings ───────────────────────────────────────────────────────
+
+
+def test_a_filed_test_does_not_hide_a_new_one_whose_name_it_contains(home):
+    """`node in text` was substring containment: a filed `..._10` made a new failure in
+    `..._1` read as already recorded (boundary-semantics lane, round two)."""
+    from core.health.main_ci_watch import nodes_already_filed
+
+    longer = "tests/unit/test_foo.py::test_x_10"
+    shorter = "tests/unit/test_foo.py::test_x_1"
+    _set_status(home, "ci_issues")
+    _task(home, f"TEST-CHECK: {longer}")
+    filed = nodes_already_filed(home / "state" / "studio.db", WO_ID)
+    assert longer in filed
+    assert shorter not in filed, "a node id whose name is a prefix of a filed one read as filed"
+
+
+def test_a_green_run_through_the_watcher_reaches_the_close(home, monkeypatch, capsys):
+    """`unrunnable` was assigned only on a red run and passed to every `_act`, so a GREEN
+    run -- the one that closes work -- raised UnboundLocalError before closing anything
+    (boundary-semantics lane, round two). Driven through `_watch`, not `_act`, because
+    that is where it was: every earlier test called `_act` directly."""
+    from interfaces.cli.commands import ci
+
+    _set_status(home, "pushed")
+    monkeypatch.setattr(ci, "_await_verdict", lambda **k: {"status": "success"})
+    rc = ci._watch(
+        source_root=home,
+        dream_studio_home=home,
+        timeout_seconds=0,
+        poll_seconds=0,
+        once=True,
+        dry_run=True,
+    )
+    report = json.loads(capsys.readouterr().out)
+    assert rc == 0, report
+    assert report["actions"] == [{"work_order_id": WO_ID, "would": "close", "ok": True}]

@@ -148,14 +148,19 @@ def remediation_task(
     return out
 
 
-def nodes_already_filed(db_path: Path, work_order_id: str) -> str:
-    """Everything the work order's OPEN tasks say, so a red run can tell a failure already
-    being worked from a new one.
+def nodes_already_filed(db_path: Path, work_order_id: str) -> set[str]:
+    """The node ids the work order's OPEN tasks name, so a red run can tell a failure
+    already being worked from a new one.
 
     Open only: a test whose task is complete and fails again is a regression, not a copy.
-    Returned as text rather than parsed node ids, because a task names its tests in the
-    criterion AND the description (only the first few make the criterion), and a node
-    named in either is being worked.
+    Read from the criterion AND the description, because a task names only its first few
+    tests in the criterion.
+
+    WHOLE TOKENS, NOT TEXT. This returned the text and the caller asked `node in text`,
+    which is substring containment: a filed `test_x_10` made a new failure in `test_x_1`
+    read as already recorded (boundary-semantics lane, round two) -- the same false
+    reassurance the check was written to stop. A node id contains no whitespace, so the
+    tokens are exactly the ids named.
     """
     import sqlite3
 
@@ -169,7 +174,7 @@ def nodes_already_filed(db_path: Path, work_order_id: str) -> str:
     try:
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     except sqlite3.Error:
-        return ""
+        return set()
     try:
         rows = conn.execute(
             "SELECT coalesce(acceptance_criteria, ''), coalesce(description, '')"
@@ -178,10 +183,10 @@ def nodes_already_filed(db_path: Path, work_order_id: str) -> str:
             (work_order_id, *settled),
         ).fetchall()
     except sqlite3.Error:
-        return ""
+        return set()
     finally:
         conn.close()
-    return "\n".join(f"{a}\n{d}" for a, d in rows)
+    return {token for a, d in rows for token in f"{a} {d}".split()}
 
 
 def work_orders_awaiting_ci(db_path: Path) -> list[dict[str, Any]]:

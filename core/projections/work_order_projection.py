@@ -47,7 +47,7 @@ class WorkOrderProjection(Projection):
       work_order.created   → INSERT row with status='created'
       work_order.started   → status='in_progress', set started_at
       work_order.blocked   → status='blocked', set blocked_at + block_reason
-      work_order.unblocked → status='in_progress', clear block_reason
+      work_order.unblocked → status=the phase it was blocked from (payload to_status, else the recorded blocked_from_status, else 'in_progress'), clear block_reason
       work_order.closed    → status='closed', set closed_at
 
     Out-of-order tolerance:
