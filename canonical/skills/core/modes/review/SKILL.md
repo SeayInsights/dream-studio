@@ -211,8 +211,11 @@ override — the lanes run before anything is pushed. `ds work-order close` refu
 `gate.bypassed`, never silent.
 
 **5. Fix, commit, dispatch again.** Each dispatch is a new round against the new commit.
-A finding is resolved only when a later round answers that lane with a verified pass, and
-the record says which round resolved it — nothing is overwritten. This loop is one work
+A finding is resolved only when a later round answers that lane `pass` **and the door,
+re-running the finding's own reproduction at the new commit, gets exit 0** — the test that
+proved the defect has to go green, so a vacuous pass resolves nothing whoever records it.
+A `cannot-tell` never resolves a finding. The record says which round resolved each one;
+nothing is overwritten. This loop is one work
 order's work, and it ends when `--status` stops blocking, not when a reviewer stops
 talking.
 

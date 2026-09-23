@@ -47,6 +47,28 @@ def work_order_project(work_order_id: str, *, db_path: Path | None = None) -> st
     return str(row[0]) if row and row[0] else None
 
 
+def work_order_status(work_order_id: str, *, db_path: Path | None = None) -> str | None:
+    """The work order's status, or None when no such work order exists."""
+    import sqlite3
+
+    from core.work_orders.artifacts import _resolve_db
+
+    try:
+        conn = sqlite3.connect(f"file:{_resolve_db(db_path)}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return None
+    try:
+        row = conn.execute(
+            "SELECT status FROM business_work_orders WHERE work_order_id = ?",
+            (work_order_id,),
+        ).fetchone()
+    except sqlite3.Error:
+        return None
+    finally:
+        conn.close()
+    return str(row[0]) if row and row[0] else None
+
+
 def list_work_orders(
     *,
     project_id: str | None = None,

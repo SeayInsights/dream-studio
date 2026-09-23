@@ -53,7 +53,12 @@ FAILS = {"command": "python -m pytest /tmp/t.py -q", "exit_code": 1}
 HOLDS = {"command": "python -m pytest tests/unit/test_x.py -q", "exit_code": 0}
 REAL_TEST = "TEST-CHECK: tests/unit/test_review_answers.py::test_two_reviewers_answers_coexist"
 #: The fake lanes' ownership, declared the way the registry declares the real ones.
-OWNED = {REVIEWER: {"lane-one", "lane-two"}, OTHER: {"lane-nine"}, None: {"chair-lane", "new-lane"}}
+OWNED = {
+    REVIEWER: {"lane-one", "lane-two"},
+    OTHER: {"lane-nine"},
+    "seat:Chair and verdict owner": {"chair-lane"},
+    "seat:Freshly Added Seat": {"new-lane"},
+}
 
 
 def _up():
@@ -760,3 +765,128 @@ def test_a_dispatch_against_no_work_order_is_refused_by_the_mechanism(db):
             db_path=db,
             ownership=OWNED,
         )
+
+
+# ── a finding resolves only when its own test goes green ────────────────────
+
+
+def _world(exit_codes):
+    """A sandbox where each command has one true exit code, as in a real image.
+
+    `_faithful` echoes whatever is claimed, which would let any resolution through; this
+    models the thing the door exists to check.
+    """
+
+    def verify(image, repro):
+        actual = exit_codes.get(repro["command"], 0)
+        run = {"exit_code": actual, "output_sha256": "x", "output_tail": ""}
+        if actual != repro["exit_code"]:
+            return False, run, f"re-run exited {actual}, the reviewer reported {repro['exit_code']}"
+        return True, run, "reproduced"
+
+    return verify
+
+
+def _open_a_finding(db):
+    _dispatch(db)
+    _record(
+        db,
+        REVIEWER,
+        [{"lane": "lane-one", "verdict": "finding", "evidence": "x.py:1", "reproduction": FAILS}],
+        verify=_world({FAILS["command"]: 1}),
+    )
+    assert [f["lane"] for f in open_findings(WO_ID, db_path=db)] == ["lane-one"]
+
+
+def test_a_vacuous_pass_does_not_resolve_a_finding_whose_test_still_fails(db):
+    """Round three, access-and-reach: `true`, exit 0, under the reviewer's name closed a real
+    open finding. The pass's own command held; the defect was untouched."""
+    _open_a_finding(db)
+    _dispatch(db)
+    result = _record(
+        db,
+        REVIEWER,
+        [
+            {
+                "lane": "lane-one",
+                "verdict": "pass",
+                "reproduction": {"command": "true", "exit_code": 0},
+            }
+        ],
+        verify=_world({FAILS["command"]: 1, "true": 0}),
+    )
+    assert result["accepted"] == []
+    assert "own reproduction now exits 0" in result["refused"][0]["reason"]
+    assert [f["lane"] for f in open_findings(WO_ID, db_path=db)] == ["lane-one"]
+
+
+def test_a_pass_resolves_a_finding_when_the_findings_test_now_passes(db):
+    _open_a_finding(db)
+    _dispatch(db)
+    result = _record(
+        db,
+        REVIEWER,
+        [{"lane": "lane-one", "verdict": "pass", "reproduction": HOLDS}],
+        verify=_world({FAILS["command"]: 0, HOLDS["command"]: 0}),  # the fix landed
+    )
+    assert result["refused"] == [], result["refused"]
+    assert open_findings(WO_ID, db_path=db) == []
+    [answer] = [a for a in recorded_answers(WO_ID, db_path=db) if a["lane"] == "lane-one"]
+    assert answer["resolution_run"]["command"] == FAILS["command"]
+
+
+def test_a_later_cannot_tell_does_not_clear_a_finding(db):
+    """Found probing round three's sibling: "I could not tell" displaced the finding and the
+    work order unblocked. It is recorded against the lane, and the finding stays open."""
+    _open_a_finding(db)
+    _dispatch(db)
+    _record(db, REVIEWER, [{"lane": "lane-one", "verdict": "cannot-tell", "why": "could not see"}])
+    [still] = open_findings(WO_ID, db_path=db)
+    assert still["lane"] == "lane-one" and still["cannot_tell_rounds"] == [2]
+    status = review_status(WO_ID, db_path=db)
+    assert status["blocking"] is True
+    assert (
+        REVIEWER not in status["unanswered"] or "lane-one" not in status["unanswered"][REVIEWER]
+    ), "the cannot-tell still answers the lane this round"
+
+
+def test_two_reviewerless_seats_do_not_share_ownership(db, monkeypatch):
+    """Round three, boundary-semantics: ownership keyed by reviewer put every reviewer-less
+    seat in one None bucket, so a new seat's lane could be dispatched under the chair.
+
+    Ownership is DERIVED here, from a registry holding two seats with no compiled
+    reviewer, because an injected mapping already keyed per seat cannot see the collapse:
+    the first version of this test did exactly that and passed with the bug restored.
+    """
+    import core.gates.round_table as rt
+
+    monkeypatch.setattr(
+        rt,
+        "_lanes",
+        lambda repo_root=None: [
+            {"id": "chair-lane", "seat": ra.CHAIR_SEAT},
+            {"id": "new-lane", "seat": "Freshly Added Seat"},
+        ],
+    )
+
+    def dispatch(seat, lane):
+        return record_dispatch(
+            WO_ID,
+            sha="a" * 40,
+            image=IMAGE,
+            change_set=["x.py"],
+            assignments=[{"reviewer": None, "seat": seat, "lanes": [lane]}],
+            db_path=db,
+        )
+
+    with pytest.raises(ValueError, match="does not own new-lane"):
+        dispatch(ra.CHAIR_SEAT, "new-lane")
+    # And the right pairing is accepted, so the refusal above is about the seat, not a
+    # guard that refuses every reviewer-less lane.
+    assert dispatch("Freshly Added Seat", "new-lane")["stored"]
+
+
+def test_the_registry_keys_the_chair_by_its_seat():
+    owned = ra.lane_ownership()
+    assert "chair-and-verdict-owner" in owned[f"seat:{ra.CHAIR_SEAT}"]
+    assert None not in owned

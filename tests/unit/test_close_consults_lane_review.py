@@ -145,9 +145,27 @@ def test_force_closes_past_it_recorded_not_silently(tmp_path, authority):
     ], "the forced close did not record the lane review it bypassed"
 
 
-def test_a_clean_or_undispatched_review_adds_no_lane_failure(authority):
+def test_in_review_but_never_dispatched_fails_the_close(authority):
+    """Round three, boundary-semantics: "never reviewed" read as "reviewed clean", on the
+    reasoning that the push gate owns it -- but close does not require `pushed`."""
+    db, wo_id = authority  # the fixture's work order is in_review
+    failure = lane_review_failure(wo_id, db_path=db)
+    assert failure and "no review was ever dispatched" in failure
+
+
+def test_a_legacy_work_order_that_never_entered_review_is_not_failed_for_it(authority):
     db, wo_id = authority
-    assert lane_review_failure(wo_id, db_path=db) is None, "no dispatch: the push gate owns it"
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "UPDATE business_work_orders SET status='in_progress' WHERE work_order_id=?", (wo_id,)
+    )
+    conn.commit()
+    conn.close()
+    assert lane_review_failure(wo_id, db_path=db) is None
+
+
+def test_a_clean_review_adds_no_lane_failure(authority):
+    db, wo_id = authority
     _review(
         db,
         wo_id,

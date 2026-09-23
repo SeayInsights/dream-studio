@@ -78,6 +78,11 @@ DISPATCH_KEY = "dispatch"
 #: nobody can answer, and it blocks as unanswered.
 CHAIR_SEAT = "Chair and verdict owner"
 
+#: The statuses that mean a work order has been handed to the lanes: in review, and the two
+#: that only follow a cleared review. A work order in one of them with no dispatched review
+#: was never actually reviewed.
+REVIEWED_STATUSES = ("in_review", "pushed", "ci_issues")
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -140,7 +145,8 @@ def record_dispatch(
     owned = lane_ownership(project_root) if ownership is None else ownership
     for slot in assignments:
         reviewer = slot.get("reviewer")
-        stray = sorted(set(slot.get("lanes") or []) - set(owned.get(reviewer, ())))
+        key = _owner_key(reviewer, slot.get("seat"))
+        stray = sorted(set(slot.get("lanes") or []) - set(owned.get(key, ())))
         if stray:
             raise ValueError(
                 f"{reviewer or 'the chair'} does not own {', '.join(stray)} in the lane"
@@ -155,7 +161,7 @@ def record_dispatch(
     for slot in assignments:
         # Keyed by reviewer, or by seat when there is none, so two reviewer-less seats do
         # not collapse into one slot.
-        slots[slot.get("reviewer") or f"seat:{slot.get('seat')}"] = {
+        slots[_owner_key(slot.get("reviewer"), slot.get("seat"))] = {
             "reviewer": slot.get("reviewer"),
             "seat": slot.get("seat"),
             "lanes": sorted(set(slot.get("lanes") or [])),
@@ -165,7 +171,7 @@ def record_dispatch(
         reviewer = finding.get("reviewer")
         lane = finding.get("lane")
         slot = slots.setdefault(
-            reviewer or f"seat:{finding.get('seat')}",
+            _owner_key(reviewer, finding.get("seat")),
             {"reviewer": reviewer, "seat": finding.get("seat"), "lanes": []},
         )
         if lane not in slot["lanes"]:
@@ -211,9 +217,19 @@ def lane_ownership(repo_root: Path | None = None) -> dict[Any, set[str]]:
 
     owned: dict[Any, set[str]] = {}
     for lane in _lanes(repo_root):
-        reviewer = reviewer_for_seat(str(lane.get("seat", "")))
-        owned.setdefault(reviewer, set()).add(str(lane.get("id")))
+        seat = str(lane.get("seat", ""))
+        owned.setdefault(_owner_key(reviewer_for_seat(seat), seat), set()).add(str(lane.get("id")))
     return owned
+
+
+def _owner_key(reviewer: str | None, seat: str | None) -> str:
+    """Who owns a lane: the reviewer, or the seat itself when it has no compiled reviewer.
+
+    Keying by reviewer alone put every reviewer-less seat in one None bucket, so the guard
+    could not tell the chair's lane from a newly added seat's (boundary-semantics, round
+    three). The same key names dispatch slots.
+    """
+    return reviewer if reviewer else f"seat:{seat}"
 
 
 def dispatched_lanes(dispatch: dict[str, Any] | None, reviewer: str) -> list[str]:
@@ -363,6 +379,37 @@ def _reviewer_doc(work_order_id: str, reviewer: str, *, db_path: Path | None) ->
     return {"reviewer": reviewer, "submissions": []}
 
 
+def _current_by_lane(submissions: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """The answer that currently stands on each lane, with its round.
+
+    A finding opens a lane and only a pass closes it; a cannot-tell becomes current only
+    when no finding is open, because "I could not tell" is not "it is fixed". The first
+    live convening found a later cannot-tell silently clearing a finding.
+    """
+    current: dict[str, dict[str, Any]] = {}
+    for submission in submissions:
+        for lane in submission.get("lanes") or []:
+            name = str(lane.get("lane"))
+            entry = dict(lane)
+            entry["round"] = int(submission.get("round", 0))
+            standing = current.get(name)
+            if (
+                entry.get("verdict") == "cannot-tell"
+                and standing is not None
+                and standing.get("verdict") == "finding"
+            ):
+                standing.setdefault("cannot_tell_rounds", []).append(entry["round"])
+                continue
+            if (
+                entry.get("verdict") == "pass"
+                and standing is not None
+                and standing.get("verdict") == "finding"
+            ):
+                entry["resolves_finding_from_round"] = standing["round"]
+            current[name] = entry
+    return current
+
+
 def record_answers(
     work_order_id: str,
     reviewer: str,
@@ -423,6 +470,9 @@ def record_answers(
 
     accepted, refused = validate_answers(answers, reviewer=reviewer, assigned_lanes=assigned)
 
+    doc = _reviewer_doc(work_order_id, reviewer, db_path=db_path)
+    standing = _current_by_lane(doc["submissions"])
+
     verified: list[dict[str, Any]] = []
     image = str(dispatch.get("image", ""))
     for entry in accepted:
@@ -438,9 +488,47 @@ def record_answers(
                 "output_tail": (run.get("output_tail") or "")[-1500:] if run else "",
                 "image": image,
             }
+        prior = standing.get(entry["lane"])
+        if entry["verdict"] == "pass" and prior and prior.get("verdict") == "finding":
+            # A PASS RESOLVES A FINDING ONLY WHEN THE FINDING'S OWN TEST GOES GREEN. The
+            # pass's own reproduction proves something held; it does not prove the defect
+            # is gone -- a vacuous `true` resolved a real finding in round three. The
+            # finding's reproduction exited non-zero because the defect was there; run in
+            # this round's image it must now exit 0.
+            found = prior.get("reproduction") or {}
+            if not str(found.get("command", "") or "").strip():
+                refused.append(
+                    {
+                        "lane": entry["lane"],
+                        "reason": (
+                            f"the finding from round {prior['round']} carries no reproduction"
+                            " to re-run, so no pass can show it resolved"
+                        ),
+                    }
+                )
+                continue
+            holds, run, reason = verify(image, {"command": found["command"], "exit_code": 0})
+            if not holds:
+                refused.append(
+                    {
+                        "lane": entry["lane"],
+                        "reason": (
+                            f"lane {entry['lane']} holds an open finding from round"
+                            f" {prior['round']}, and a pass resolves it only when that"
+                            f" finding's own reproduction now exits 0 -- {reason}"
+                        ),
+                        "run": run,
+                    }
+                )
+                continue
+            entry["resolution_run"] = {
+                "command": found["command"],
+                "exit_code": run.get("exit_code") if run else None,
+                "output_sha256": run.get("output_sha256") if run else None,
+                "image": image,
+            }
         verified.append(entry)
 
-    doc = _reviewer_doc(work_order_id, reviewer, db_path=db_path)
     round_no = int(dispatch.get("round", 1))
     if verified:
         doc["submissions"].append({"round": round_no, "at": _now(), "lanes": verified})
@@ -501,31 +589,32 @@ def _all_reviewer_docs(work_order_id: str, *, db_path: Path | None) -> list[dict
 
 
 def recorded_answers(work_order_id: str, *, db_path: Path | None = None) -> list[dict[str, Any]]:
-    """The CURRENT answer per (reviewer, lane): the latest one recorded.
+    """The answer that currently stands per (reviewer, lane).
 
-    Each carries ``round`` and, when an earlier answer on the same lane was a finding and
-    this one is a pass, ``resolves_finding_from_round`` -- so a finding that became a pass
-    says so instead of vanishing.
+    A finding stays current until a later verified pass on the lane; that pass carries
+    ``resolves_finding_from_round``. A later cannot-tell does not displace a finding; it is
+    noted on it as ``cannot_tell_rounds``.
     """
     out: list[dict[str, Any]] = []
     for doc in _all_reviewer_docs(work_order_id, db_path=db_path):
         reviewer = str(doc["reviewer"])
-        latest: dict[str, dict[str, Any]] = {}
-        found_in: dict[str, int] = {}
-        for sub in doc["submissions"]:
-            for lane in sub.get("lanes") or []:
-                name = str(lane.get("lane"))
-                entry = dict(lane)
-                entry["reviewer"] = reviewer
-                entry["round"] = int(sub.get("round", 0))
-                if name in latest and latest[name].get("verdict") == "finding":
-                    found_in.setdefault(name, latest[name]["round"])
-                latest[name] = entry
-        for name, entry in latest.items():
-            if entry.get("verdict") == "pass" and name in found_in:
-                entry["resolves_finding_from_round"] = found_in[name]
+        for entry in _current_by_lane(doc["submissions"]).values():
+            entry["reviewer"] = reviewer
             out.append(entry)
     return sorted(out, key=lambda e: (str(e.get("reviewer")), str(e.get("lane"))))
+
+
+def _answered_in_round(work_order_id: str, round_no: int, *, db_path: Path | None) -> set:
+    """(reviewer, lane) pairs answered in a round, from the raw submissions -- so a
+    cannot-tell answers its lane even while the finding it did not resolve stays current."""
+    answered = set()
+    for doc in _all_reviewer_docs(work_order_id, db_path=db_path):
+        for submission in doc["submissions"]:
+            if int(submission.get("round", 0)) != round_no:
+                continue
+            for lane in submission.get("lanes") or []:
+                answered.add((str(doc["reviewer"]), str(lane.get("lane"))))
+    return answered
 
 
 def open_findings(work_order_id: str, *, db_path: Path | None = None) -> list[dict[str, Any]]:
@@ -555,9 +644,7 @@ def review_status(work_order_id: str, *, db_path: Path | None = None) -> dict[st
         reasons.append("no review has been dispatched for this work order")
     else:
         round_no = int(dispatch.get("round", 1))
-        this_round = {
-            (a["reviewer"], a["lane"]) for a in answers if int(a.get("round", 0)) == round_no
-        }
+        this_round = _answered_in_round(work_order_id, round_no, db_path=db_path)
         for slot in dispatch.get("assignments") or []:
             reviewer = slot.get("reviewer")
             if reviewer is None and slot.get("seat") == CHAIR_SEAT:
@@ -603,7 +690,21 @@ def lane_review_failure(work_order_id: str, *, db_path: Path | None = None) -> s
     waivers -- which answer whether the verify verdict can be trusted -- never strip it.
     """
     status = review_status(work_order_id, db_path=db_path)
-    if not status["dispatched"] or not status["blocking"]:
+    if not status["dispatched"]:
+        # "Never reviewed" is not "reviewed clean". A work order that is IN review, or
+        # past it, was handed to the lanes, so a missing dispatch is a failure here, not
+        # the push gate's problem -- close does not require passing through `pushed`
+        # (boundary-semantics, round three). A legacy work order closing straight from
+        # in_progress never entered review and is not failed for it.
+        from core.work_orders.queries import work_order_status
+
+        if work_order_status(work_order_id, db_path=db_path) in REVIEWED_STATUSES:
+            return (
+                "lane_review: this work order is in review but no review was ever"
+                f" dispatched. Run `ds review --dispatch --work-order {work_order_id}`."
+            )
+        return None
+    if not status["blocking"]:
         return None
     return (
         f"lane_review: the round {status['round']} lane review still holds this work order"

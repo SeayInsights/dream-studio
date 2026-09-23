@@ -105,8 +105,10 @@ Do not answer a lane you were not dispatched, do not rank the findings, and do n
 whether the change merges — the chair does that.
 
 Your answers are recorded against the work order (`ds review --record`) and kept: a lane
-you leave out is reported unanswered rather than assumed clean, and a finding stays open
-until a later round answers that lane with a verified pass."""
+you leave out is reported unanswered rather than assumed clean. A finding stays open until
+a later round answers that lane `pass` AND the finding's own reproduction, re-run by the
+door at the new commit, exits 0 — the test that proved the defect must go green. A
+`cannot-tell` never resolves a finding; it is recorded and the finding stays open."""
 
 
 def _slug(seat: str) -> str:
