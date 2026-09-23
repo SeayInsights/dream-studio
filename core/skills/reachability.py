@@ -41,7 +41,6 @@ COVERAGE = REPO_ROOT / "canonical" / "agents" / "coverage.yml"
 #: `ds-workorder/start` is reached by `ds work-order start`; it needs no trigger word,
 #: and calling it unreachable would be the detector not knowing how the product works.
 PACK_TO_CLI_GROUP = {
-    "ds-project": "project",
     "ds-workorder": "work-order",
     "analyze": "analyze",
     "setup": "install",

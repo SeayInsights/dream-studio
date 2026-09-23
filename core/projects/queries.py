@@ -482,7 +482,7 @@ def get_project_state(
             return {
                 "ok": True,
                 "projects": [],
-                "next_action": "No active projects. Run `ds-project scope` to scope a new one.",
+                "next_action": "No active projects. Run `ds project register` to add one.",
                 "bypass_summary": bypass_summary,
                 "main_ci": main_ci,
                 **cwd_fields,
@@ -590,7 +590,7 @@ def get_project_state(
                 ]
 
                 if not gate_satisfied and pre_gate:
-                    skill_hint = precondition_skill or "ds-project:brief"
+                    skill_hint = precondition_skill or "ds design-brief lock"
                     next_action = (
                         f"Gate `{pre_gate}` is not satisfied. "
                         f"Invoke `{skill_hint}` to resolve it."

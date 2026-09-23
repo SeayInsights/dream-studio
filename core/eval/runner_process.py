@@ -340,7 +340,7 @@ def _synthesize_events_from_output(raw_output: str) -> list[dict]:
     """Convert claude --output-format json stdout into a list of event dicts.
 
     The JSON output stream contains lines like:
-      {"type": "tool_use", "name": "Skill", "input": {"skill": "ds-project", "args": "resume"}}
+      {"type": "tool_use", "name": "Skill", "input": {"skill": "ds-core", "args": "plan"}}
       {"type": "tool_result", "name": "Skill", ...}
 
     We synthesize Dream Studio event types:

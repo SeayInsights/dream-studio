@@ -94,7 +94,7 @@ def _check_pending_handoff(payload: dict) -> bool:
             f"Dream Studio has saved handoff packet #{handoff_id} to its authority database. "
             "Finish your current thought gracefully. "
             "Tell the user: 'Context window nearly full — Dream Studio is opening a "
-            "continuation session. Run `ds-project resume` in the new session to pick up "
+            "continuation session. Run `ds project state` in the new session to pick up "
             "where we left off.'"
         )
 

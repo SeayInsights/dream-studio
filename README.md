@@ -320,7 +320,7 @@ health checks — lives in **[docs/CLI.md](docs/CLI.md)**.
 scope → register → set-active → next → start → [build] → task-done (×N) → close → milestone close
 ```
 
-1. **Scope** — run `ds skill invoke ds-project:scope` for a guided intake conversation. Dream Studio produces a machine-executable PRD from your answers.
+1. **Scope** — run `ds project register`, then create its milestones and work orders (`ds milestone create`, `ds work-order create`). Dream Studio produces a machine-executable PRD from your answers.
 
 2. **Register** — `ds project register --name "My Project"` creates the project record in SQLite. The PRD populates milestones, work orders, and tasks.
 
@@ -381,7 +381,6 @@ Each pack is a single skill with multiple modes. Invoke via `Skill(skill="ds-<pa
 | `ds-analyze` | Analysis engine | multi, domain-re, repo, intelligence |
 | `ds-domains` | Domain builders | game-dev, saas-build, mcp-build, dashboard-dev, power-platform, design |
 | `ds-security` | Security analysis | scan, dast, binary-scan, mitigate, comply, netcompat, dashboard, review |
-| `ds-project` | Project lifecycle | scope |
 | `ds-domains-website` | Website builder | discover, direction, page, prototype, animate, brand, cip, critique, deck |
 | `ds-domains-fullstack` | Fullstack builder | frontend, backend, integrate, secure |
 | `ds-setup` | Platform setup | wizard, status, jit |

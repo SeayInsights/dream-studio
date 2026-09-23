@@ -52,10 +52,10 @@ def test_resolve_specifier_unknown_bare_falls_back_to_core():
     assert resolve_specifier("unknown-mode") == "ds-core:unknown-mode"
 
 
-def test_resolve_specifier_scope_maps_to_ds_project():
-    assert resolve_specifier("scope") == "ds-project:scope"
-
-
+# test_resolve_specifier_scope_maps_to_ds_project REMOVED. `scope` was a ds-project mode,
+# and that pack was dissolved because every operation it narrated was already a command.
+# No workflow node names `scope` as a skill, so the mapping had no caller to keep and a
+# test of removed behaviour is removed rather than kept alive against a stub.
 def test_resolve_specifier_dast_maps_to_security():
     assert resolve_specifier("dast") == "ds-security:dast"
 

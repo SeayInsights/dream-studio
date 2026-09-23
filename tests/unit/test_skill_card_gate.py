@@ -136,7 +136,11 @@ def test_the_real_tree_is_clean():
     # 52 BEFORE `website` and `fullstack` moved out of the domains tree. They were
     # modes then and are packs now, and a pack carries no card -- its metadata lives
     # in packs.yaml. Two fewer cards is the move landing, not coverage lost.
-    assert len(result["cards_checked"]) >= 50
+    # A floor, not a pin: dissolving a pack removes its cards, and this number has
+    # stepped down twice for that reason (51 -> 50 with ds-milestone, 50 -> 49 with
+    # ds-project). It exists to catch the gate finding NOTHING, which is the failure
+    # mode the file is about.
+    assert len(result["cards_checked"]) >= 49
 
 
 def test_every_real_card_declares_a_known_posture():

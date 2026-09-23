@@ -158,7 +158,7 @@ def brief_currency(project_id: str, *, conn: Any, db_path: Path | None = None) -
     result["reason"] = (
         f"{len(moved)} UI-class work order(s) closed after the brief became effective"
         f" ({effective}); newest: {newest[1]!r} at {newest[2]}. The brief proves"
-        " existence but not currency — re-lock it (ds-project:brief), or declare"
+        " existence but not currency — re-lock it (ds design-brief lock), or declare"
         " reviewed-no-change if the design language genuinely still holds."
     )
     return result

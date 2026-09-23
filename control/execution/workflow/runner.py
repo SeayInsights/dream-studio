@@ -77,8 +77,6 @@ _BARE_TO_PACK: dict[str, str] = {
     "power-platform": "ds-domains",
     "design": "ds-domains",
     # ds-project
-    "scope": "ds-project",
-    "resume": "ds-project",
     # ds-setup
     "wizard": "ds-setup",
     "jit": "ds-setup",

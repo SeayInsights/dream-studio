@@ -19,9 +19,14 @@ from core.config.sqlite_bootstrap import bootstrap_database
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# The three canonical skill files that perform (or govern) WO/task/milestone attribution.
+# The canonical skill files that perform (or govern) WO/task/milestone attribution.
+#
+# ds-project/SKILL.md was the third until the pack was dissolved. Its attribution
+# instruction did not disappear with it: `an-ambiguous-reference-stops-and-asks` in
+# canonical/rules.yml carries the statement and names `ds project fit-check` as the
+# runnable path, which is what this file exists to insist on. The rule is checked below
+# rather than left as a claim in this comment.
 _SKILL_FILES = [
-    "canonical/skills/ds-project/SKILL.md",
     "canonical/skills/core/modes/plan/SKILL.md",
     "canonical/skills/ds-workorder/SKILL.md",
 ]
@@ -127,3 +132,24 @@ def test_wrapper_errors_without_active_project(tmp_path: Path, monkeypatch) -> N
     result = queries.fit_check_work_order(work_title="anything", source_root=REPO_ROOT)
     assert result["ok"] is False
     assert "active project" in result["error"]
+
+
+def test_the_rule_registry_carries_the_dissolved_surface_s_instruction() -> None:
+    """The scoping surface was the third file in the list above.
+
+    When a pack is dissolved its normative content moves to the registry or it is lost,
+    and "it moved" is a claim worth checking rather than asserting in a comment. The rule
+    must exist, must name the runnable command, and must still be the stop-and-ask
+    statement -- not a softened paraphrase of it.
+    """
+    import yaml
+
+    registry = yaml.safe_load((REPO_ROOT / "canonical" / "rules.yml").read_text(encoding="utf-8"))
+    rule = next(
+        (r for r in registry["rules"] if r["id"] == "an-ambiguous-reference-stops-and-asks"),
+        None,
+    )
+    assert rule is not None, "the dissolved surface's instruction is in no rule"
+    body = f"{rule['statement']} {rule.get('why', '')}"
+    assert "ds project fit-check" in body, "the rule does not name the runnable path"
+    assert "asks" in rule["statement"], "the rule no longer says to ask"

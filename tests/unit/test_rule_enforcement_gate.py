@@ -313,13 +313,27 @@ def test_a_rule_cannot_be_guidance_and_a_removed_enforcer_at_once(tmp_path):
 
 def test_the_registers_guidance_entries_are_the_ones_the_dissolution_produced(tmp_path):
     """Pinned like the unenforced set, for the same reason: the pile is only meaningful
-    while every entry is deliberate. These three came out of ds-milestone, where they
-    were numbered instructions in a skill pack, charged as context on every invocation
-    and enforced by nothing."""
+    while every entry is deliberate. Every one came out of a dissolved skill pack, where
+    it was a numbered instruction charged as context on every invocation and enforced by
+    nothing: three from ds-milestone, eight from ds-project.
+
+    Widening this set is meant to cost an edit. A rule declared guidance is a rule no gate
+    will ever hold up, so the list growing quietly is exactly how a repo talks itself out
+    of enforcement one statement at a time."""
     assert {g["rule"] for g in audit()["guidance"]} == {
+        # ds-milestone
         "surfaced-state-is-what-the-call-returned",
         "a-gate-bypass-needs-an-explicit-yes",
         "a-read-does-not-chain-into-a-mutation",
+        # ds-project: the interview, and what it must not write down
+        "an-interview-asks-one-question-at-a-time",
+        "a-field-with-no-answer-is-asked-for-never-filled-in",
+        "a-rejection-is-revised-not-regenerated",
+        "an-ambiguous-reference-stops-and-asks",
+        "a-destructive-action-needs-an-unambiguous-yes",
+        "a-scope-covering-two-projects-is-split-before-it-is-scoped",
+        "a-milestone-is-something-that-can-be-demonstrated",
+        "only-the-active-milestone-is-decomposed",
     }
 
 

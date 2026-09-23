@@ -59,6 +59,118 @@
 version: 1
 
 rules:
+  - id: a-milestone-is-something-that-can-be-demonstrated
+    statement: >
+      A milestone names a deliverable someone can demo or test in isolation, not a phase
+      of work; "done" and "complete" are not deliverables.
+    source: canonical/rules.yml
+    guidance: true
+    why: >
+      A milestone nobody can demonstrate cannot be closed honestly -- its gates have
+      nothing to run against, and the close becomes a judgement call at exactly the moment
+      judgement should not be needed. Whether a title names a demonstrable thing is a
+      reading of intent, which no check makes, so this is an eval rather than a gate.
+  - id: only-the-active-milestone-is-decomposed
+    statement: >
+      Work orders are decomposed into tasks for the milestone being worked; later
+      milestones are recorded as sketches -- title, boundary, dependencies -- until their
+      turn.
+    source: core/work_orders/structural_invariants.py
+    guidance: true
+    why: >
+      Decomposing everything up front produces tasks written against assumptions the first
+      milestone is about to invalidate, and they are indistinguishable from current ones.
+      The engine already depends on this shape: a work order legitimately arrives at start
+      with zero tasks and acquires them from start_work_order(), which is why the
+      one-task-per-work-order invariant is checked at CLOSE and only reported at start.
+      That dependency is structural; the discipline that produces it is judgement.
+  - id: a-cascade-delete-previews-what-it-destroys
+    statement: >
+      Deleting a project that has dependents is refused until it is confirmed, and the
+      refusal states how many tasks, work orders and milestones would go.
+    source: core/projects/mutations_delete.py
+    enforced_by:
+      - tests/unit/test_delete_project_cascade.py::test_delete_project_refuses_when_dependents_and_no_confirm
+      - tests/unit/test_delete_project_cascade.py::test_delete_project_cascades_with_confirm
+    note: >
+      The counts are the point, not the confirmation. An operator asked "delete this
+      project?" and an operator told "this deletes 14 tasks, 6 work orders and 2
+      milestones, and is not reversible" are answering two different questions, and only
+      the second one can be answered honestly. The safe default is the unconfirmed call,
+      so a caller that forgets the flag gets the preview rather than the deletion; the
+      test asserts the project row still exists after the refusal, because a refusal that
+      had already written would be worse than no refusal.
+  - id: an-interview-asks-one-question-at-a-time
+    statement: >
+      A guided intake asks one question per message, offers numbered choices when the
+      answer set is bounded, and defines any term it cannot avoid.
+    source: canonical/rules.yml
+    guidance: true
+    why: >
+      No static check can count the questions in a message or judge whether a term was
+      explained. This is an eval. It is stated once here because four separate wizards --
+      project scope, the design brief, brownfield onboarding and first-run setup -- each
+      carried their own copy, which is four places for one instruction to drift.
+  - id: a-field-with-no-answer-is-asked-for-never-filled-in
+    statement: >
+      A required field with no answer is asked for again; it is never written as TBD, to
+      be defined, or any other placeholder.
+    source: canonical/rules.yml
+    guidance: true
+    why: >
+      A placeholder is indistinguishable from an answer to everything downstream: a work
+      order whose boundary reads "TBD" passes every structural check and tells the agent
+      executing it nothing. Only an eval can tell a real answer from a filled-in one, so
+      no gate is claimed here.
+  - id: a-rejection-is-revised-not-regenerated
+    statement: >
+      When an operator rejects part of a proposal, ask what is wrong with that part and
+      change it; do not re-derive the whole proposal.
+    source: canonical/rules.yml
+    guidance: true
+    why: >
+      Regenerating discards the parts the operator already accepted, so the next round
+      asks them to re-approve work they had approved -- and the third round asks again.
+      Whether an edit was surgical is a judgement about intent, which no check can make.
+  - id: an-ambiguous-reference-stops-and-asks
+    statement: >
+      A name that matches more than one record stops and asks which was meant; it is
+      never resolved by recency, by activity, or by picking the first match.
+    source: canonical/rules.yml
+    guidance: true
+    why: >
+      The failure this prevents is silent: acting on the wrong project looks exactly like
+      acting on the right one until much later. Two clients each having an "API" project
+      is the ordinary case, not the edge case. A check cannot see which one the operator
+      meant, which is the whole reason the answer has to come from them.
+
+      THE RUNNABLE PATH IS `ds project fit-check` (and `ds client fit-check` one layer
+      up): it returns a verdict, and `ambiguous` or `no_fit` is the signal to stop and
+      ask rather than to pick. This is the instruction the dissolved ds-project scoping
+      surface carried, which is why the rule names a command and not only a posture.
+  - id: a-destructive-action-needs-an-unambiguous-yes
+    statement: >
+      Before an irreversible action, an unambiguous yes is required: a bare "ok", "sure"
+      or "go ahead" is not one, and the question is asked again naming the subject.
+    source: canonical/rules.yml
+    guidance: true
+    why: >
+      Those words acknowledge that a message was read, which is not the same as agreeing
+      to destroy something, and the difference only matters once. The code cannot tell an
+      agreement from an acknowledgement -- both arrive as the same confirmation -- so what
+      the code guarantees is the preview, covered by
+      a-cascade-delete-previews-what-it-destroys. The judgement above that line is an eval.
+  - id: a-scope-covering-two-projects-is-split-before-it-is-scoped
+    statement: >
+      Work that covers independent subsystems is identified as more than one project and
+      split before any scoping question is asked.
+    source: canonical/rules.yml
+    guidance: true
+    why: >
+      Scoping two things together produces milestones that cannot be ordered and work
+      orders that cannot be bounded, and the cost is not visible until someone tries to
+      execute them. Whether two subsystems are independent is a design judgement; no
+      check can make it, and an eval is the honest instrument.
   - id: a-milestone-closes-only-over-finished-work
     statement: >
       An open work order refuses a milestone close, and the force flag does not reach that

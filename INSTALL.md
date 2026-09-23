@@ -67,7 +67,8 @@ Register your first project:
 py -m interfaces.cli.ds project register --name "My Project"
 ```
 
-Then invoke `ds-project:resume` in Claude Code to begin.
+Then run `ds project state` to see where the work stands. In Claude Code, `resume:`
+or `what's next:` routes you there.
 
 ## Updating
 

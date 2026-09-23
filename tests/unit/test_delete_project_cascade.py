@@ -1,8 +1,15 @@
-"""A6.3 — ds-project:manage mode + delete_project lift.
+"""``delete_project``: the cascade, and the preview that has to come first.
 
-Tests the new ``manage`` mode under the existing ``ds-project`` pack
-and the ``core.projects.mutations.delete_project`` function lifted out
-of ``_project_delete``.
+Originally A6.3, which covered both the ds-project:manage mode's shape and the
+``delete_project`` function the mode wrapped. The pack was dissolved -- every branch of
+that mode was already `ds project list|set-active|deactivate|delete` -- and its seven
+shape tests went with it. These four cover the function, which nothing about the
+dissolution changed and which enforces
+``a-cascade-delete-previews-what-it-destroys`` in canonical/rules.yml.
+
+The unconfirmed call is the safe default, so a caller that forgets the flag is handed the
+dependent counts rather than a deletion; the refusal test asserts the project row is still
+there afterwards, because a refusal that had already written would be worse than none.
 """
 
 from __future__ import annotations
@@ -24,70 +31,6 @@ OTHER_PROJECT_ID = "p-manage-ext-other-0001"
 
 
 # ── Skill pack registration ───────────────────────────────────────────────────
-
-
-def test_manage_mode_registered_in_packs_yaml() -> None:
-    import yaml
-
-    data = yaml.safe_load((REPO_ROOT / "packs.yaml").read_text(encoding="utf-8"))
-    cfg = data["packs"][PACK_NAME]
-    assert MODE_NAME in cfg["modes"], f"{MODE_NAME!r} missing from ds-project modes"
-
-
-def test_manage_mode_files_exist() -> None:
-    mode_dir = REPO_ROOT / "canonical" / "skills" / PACK_NAME / "modes" / MODE_NAME
-    assert (mode_dir / "SKILL.md").is_file()
-    assert (mode_dir / "metadata.yml").is_file()
-
-
-def test_manage_mode_metadata_has_spec_triggers_and_token_estimate() -> None:
-    import yaml
-
-    metadata = REPO_ROOT / "canonical" / "skills" / PACK_NAME / "modes" / MODE_NAME / "metadata.yml"
-    data = yaml.safe_load(metadata.read_text(encoding="utf-8"))
-    triggers = set(data.get("triggers", []))
-    expected = {"list projects:", "switch project:", "archive project:", "delete project:"}
-    assert expected <= triggers, f"missing spec triggers: {expected - triggers}"
-    assert isinstance(data.get("estimated_tokens"), int) and data["estimated_tokens"] > 0
-
-
-def test_load_skill_content_resolves_manage_mode() -> None:
-    from core.skills.invocation import load_skill_content
-
-    result = load_skill_content(specifier=f"{PACK_NAME}:{MODE_NAME}", source_root=REPO_ROOT)
-    assert result["ok"] is True, f"load failed: {result.get('error')}"
-    assert result["pack"] == PACK_NAME
-    assert result["mode"] == MODE_NAME
-
-
-def test_manage_mode_names_each_project_function() -> None:
-    """AI-presents-from-database discipline: the manage mode SKILL.md
-    must name every project lifecycle function it wraps."""
-
-    skill_md = REPO_ROOT / "canonical" / "skills" / PACK_NAME / "modes" / MODE_NAME / "SKILL.md"
-    content = skill_md.read_text(encoding="utf-8")
-    for fn in (
-        "get_project_list",
-        "set_active_project",
-        "deactivate_project",
-        "delete_project",
-    ):
-        assert fn in content, f"manage mode does not reference {fn}"
-
-
-def test_manage_mode_skill_md_has_no_legacy_cli_commands() -> None:
-    skill_md = REPO_ROOT / "canonical" / "skills" / PACK_NAME / "modes" / MODE_NAME / "SKILL.md"
-    content = skill_md.read_text(encoding="utf-8")
-    assert "py -m interfaces.cli.ds" not in content
-
-
-def test_pack_skill_md_dispatch_table_lists_manage() -> None:
-    pack_skill = REPO_ROOT / "canonical" / "skills" / PACK_NAME / "SKILL.md"
-    content = pack_skill.read_text(encoding="utf-8")
-    assert "| manage |" in content, "ds-project SKILL.md dispatch table missing manage row"
-
-
-# ── delete_project direct-call tests ──────────────────────────────────────────
 
 
 @pytest.fixture

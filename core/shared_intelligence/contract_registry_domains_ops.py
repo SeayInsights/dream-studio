@@ -293,12 +293,18 @@ _CONTRACT_DOMAINS_OPS: tuple[dict[str, Any], ...] = (
             # the `Docs-Reviewed-No-Change: <domain>` trailer covers the cosmetic ones.
             "interfaces/cli/commands/project.py",
         ],
+        # Repointed when the ds-project pack was dissolved. Every operation it narrated
+        # was already a `ds project ...` or `ds design-brief ...` command; what was
+        # normative -- how an intake asks, what it must not write down, when it stops --
+        # moved to the rule registry. The coupling this domain guards is real, so it
+        # survives the pack: a projects-engine change must still land against the
+        # agent-facing statement of how projects behave. That statement is now the rules.
         "contract_refs": [
-            "canonical/skills/ds-project/SKILL.md",
+            "canonical/rules.yml",
         ],
         "docs_refs": [],
         "required_doc_refs": [
-            "canonical/skills/ds-project/SKILL.md",
+            "canonical/rules.yml",
         ],
         "release_blocking": True,
         "freshness_policy": "projects_engine_changes_require_ds_project_skill_surface_review",

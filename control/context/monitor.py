@@ -231,7 +231,7 @@ def _write_handoff_packet_to_db(
             project_id,
             "context threshold handoff",
             branch=branch or None,
-            next_action="invoke ds-project:resume to rehydrate work order context",
+            next_action="run `ds project state` to rehydrate work order context",
             file_id=file_id,
             checksum=checksum,
         )

@@ -151,7 +151,7 @@ def start_work_order(
     # CLOSE.
     #
     # Start looks like the right place to refuse and is not. The scoping flow decomposes
-    # only the first work order of the first milestone; ds-project's own instructions say
+    # only the first work order of the active milestone; the authoring path says
     # the rest "get tasks when they are started (by calling start_work_order())". So a work
     # order legitimately arrives at start with zero tasks and acquires them immediately
     # after — refusing here would block the documented authoring path, and it did: it broke
