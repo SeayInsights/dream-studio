@@ -142,6 +142,21 @@ def _work_order_close(
     if _ci_warning:
         print(f"[main-ci] {_ci_warning}", file=sys.stderr)
 
+    # THE SAME SHAPE, ONE KEY OVER. close_work_order reports which acceptance criteria
+    # were prose rather than something it could execute, and the only thing that surfaced
+    # it was a line in the dissolved work-order close mode telling the model to name it.
+    # An operator reading "closed" is owed the count of criteria nobody could check.
+    #
+    # ADVISORY, like the CI warning: prose criteria do not block a close -- admission is
+    # where they are refused -- so this never changes the exit code.
+    _prose_only = result.get("prose_only_criteria")
+    if _prose_only:
+        print(
+            f"[criteria] {len(_prose_only)} acceptance criterion(a) were prose, not executed:"
+            f" {', '.join(str(c) for c in _prose_only)}",
+            file=sys.stderr,
+        )
+
     print(json.dumps(result, indent=2))
     if result.get("ok") and result.get("next_block"):
         print(file=sys.stderr)

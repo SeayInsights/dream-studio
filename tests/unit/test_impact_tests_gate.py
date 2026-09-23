@@ -124,6 +124,48 @@ def test_a_hook_change_reaches_the_test_that_loads_it_by_name():
     assert "tests/integration/test_hook_on_token_log.py" in selection["dependent_tests"]
 
 
+def test_a_skill_change_reaches_the_tests_that_name_its_pack():
+    """The fourth replay, and the one that put main red twice.
+
+    Tests about skill packs build their paths from parts --
+    `REPO_ROOT / "canonical" / "skills" / "website" / "SKILL.md"` -- or name the pack
+    alone in a table of surfaces. The repo-relative path never appears as a string, so
+    neither the module rule nor the data-file rule reaches them, and they do not glob a
+    source tree so the sweep class does not either. Eight tests went red on main across
+    the ds-project and ds-workorder dissolutions for exactly this reason: the impact step
+    ran, passed, and had selected none of them.
+    """
+    selection = gate.select_tests(["canonical/skills/website/SKILL.md"], REPO_ROOT)
+    assert (
+        "tests/unit/test_website_fullstack_packs.py" in selection["dependent_tests"]
+    ), "a skill change does not reach the test that names its pack"
+
+
+def test_the_pack_name_is_matched_quoted_not_as_a_bare_word(tmp_path):
+    """Precision is what makes the rule usable rather than a slow way to run everything.
+
+    Measured over 683 test files: the bare word `core` appears in 522 of them and the
+    quoted `"core"` in 89, while `"website"` selects 8. Matching bare words would make a
+    one-pack edit select most of the suite, and a step everyone distrusts is a step
+    nobody reads.
+    """
+    root = tmp_path
+    (root / "canonical" / "skills" / "website").mkdir(parents=True)
+    (root / "canonical" / "skills" / "website" / "SKILL.md").write_text("x\n", encoding="utf-8")
+    (root / "tests" / "unit").mkdir(parents=True)
+    (root / "tests" / "unit" / "test_names_it.py").write_text(
+        'PACK = "website"\n\n\ndef test_a():\n    assert PACK\n', encoding="utf-8"
+    )
+    (root / "tests" / "unit" / "test_mentions_it.py").write_text(
+        '"""This test builds a website, in prose, and names no pack."""\n\n\n'
+        "def test_b():\n    assert 1\n",
+        encoding="utf-8",
+    )
+    selected = gate.select_tests(["canonical/skills/website/SKILL.md"], root)["dependent_tests"]
+    assert "tests/unit/test_names_it.py" in selected
+    assert "tests/unit/test_mentions_it.py" not in selected, "a bare word pulled in prose"
+
+
 def test_the_union_is_never_empty():
     """A step that can go green by finding nothing to run is the failure this gate
     exists to end. With no changed files at all the sweep tests still run."""

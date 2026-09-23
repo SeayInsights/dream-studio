@@ -92,6 +92,9 @@ def compute_impact_set(
       - a changed hook (a ``.py`` whose stem is hyphenated, so it has no importable
         module path) also selects every test whose text names its file stem
         (``on-token-log``), which is how tests load hooks;
+      - a changed file under ``canonical/skills/<pack>/`` selects every test whose text
+        names that pack as a string literal (``"ds-project"``), because tests about packs
+        build their paths from parts rather than writing them out;
       - any other changed file selects every test whose text names its
         repo-relative path (``canonical/rules.yml``), the same way.
     """
@@ -100,6 +103,10 @@ def compute_impact_set(
 
     dependent: set[str] = set()
     module_tokens: set[str] = set()
+    #: Pack names, matched as string literals rather than as words. Kept apart from
+    #: module_tokens because those are matched with a trailing word boundary, which a
+    #: closing quote can never satisfy.
+    quoted_tokens: set[str] = set()
     for f in changed:
         if _is_test_file(f):
             dependent.add(f)
@@ -114,6 +121,20 @@ def compute_impact_set(
             stem = f.rsplit("/", 1)[-1][: -len(".py")]
             if "-" in stem:
                 module_tokens.add(stem)
+        elif f.startswith("canonical/skills/") and len(f.split("/")) > 2:
+            # A SKILL FILE SELECTS THE TESTS THAT NAME ITS PACK. Tests about packs build
+            # their paths from parts -- REPO_ROOT / "canonical" / "skills" / "ds-project"
+            # -- or name the pack alone, so the repo-relative path never appears and the
+            # data-file rule below reaches none of them. Eight tests went red on main
+            # across two dissolutions for this reason.
+            #
+            # The pack name is added QUOTED, because a test naming a pack writes a string
+            # literal. Measured over 683 test files: bare `core` appears in 522 of them
+            # and `"core"` in 89, while `"website"` selects 8. The bare form would make a
+            # one-pack edit select the whole suite.
+            quoted_tokens.add(f.split("/")[2])
+            # The path still counts, for the tests that do write it out.
+            module_tokens.add(f)
         else:
             # A DATA FILE IS A DEPENDENCY TOO. Replayed on the change that edited
             # canonical/rules.yml and broke two tests naming that path three times, this
@@ -124,8 +145,11 @@ def compute_impact_set(
             # that limit is real and is the reason the sweep tests also always run.)
             module_tokens.add(f)
 
-    if module_tokens:
+    if module_tokens or quoted_tokens:
         patterns = [re.compile(re.escape(tok) + r"\b") for tok in module_tokens]
+        # No trailing \b for these: the token ends in a quote, and a boundary between a
+        # quote and whatever follows it is not one the engine will ever find.
+        patterns += [re.compile(f"[\"']{re.escape(tok)}[\"']") for tok in quoted_tokens]
         for test_path in _iter_test_files(root):
             rel = _normalize(str(test_path.relative_to(root)))
             if rel in dependent:
