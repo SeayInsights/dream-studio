@@ -310,7 +310,11 @@ def merge_readiness(
     from core.work_orders.review_answers import review_status
 
     lanes = review_status(resolved, db_path=db_path)
-    lane_block = lanes["dispatched"] and lanes["blocking"]
+    # THE SAME PREDICATE AS PUSH AND PRE-PUSH: the review's own blocking signal, which
+    # counts "never dispatched" as blocking. Narrowing it to dispatched reviews reported
+    # a never-reviewed work order ready while the pre-push gate blocked it
+    # (gate-and-test-integrity, round four).
+    lane_block = lanes["blocking"]
     if lane_block:
         ready = False
     advice = {

@@ -102,11 +102,53 @@ def test_an_unknown_id_in_a_branch_is_not_invented(db):
 # ── Verdict classification ─────────────────────────────────────────────────────
 
 
-def test_a_passing_verdict_is_ready(db):
+def _clear_lane_review(db, wo_id):
+    """Record a dispatched, fully answered, clean lane review for the work order."""
+    from core.work_orders.review_answers import record_answers, record_dispatch
+
+    reviewer = "review-gate-and-test-integrity"
+    record_dispatch(
+        wo_id,
+        sha="e" * 40,
+        image="ds-review:fake",
+        change_set=[],
+        db_path=db,
+        assignments=[{"reviewer": reviewer, "seat": "s", "lanes": ["lane-one"]}],
+        ownership={reviewer: {"lane-one"}},
+    )
+    record_answers(
+        wo_id,
+        reviewer,
+        [
+            {
+                "lane": "lane-one",
+                "verdict": "pass",
+                "reproduction": {"command": "true", "exit_code": 0},
+            }
+        ],
+        db_path=db,
+        available=lambda: (True, ""),
+        verify=lambda image, repro: (True, {"exit_code": repro["exit_code"]}, "ok"),
+    )
+
+
+def test_a_passing_verdict_with_a_clear_lane_review_is_ready(db):
+    wo_id = _wo(db)
+    _store_verdict(db, wo_id, {"passed": True, "summary": "all tasks substantiated"})
+    _clear_lane_review(db, wo_id)
+    out = merge_readiness(work_order_id=wo_id, db_path=db)
+    assert out["ready"] is True and out["state"] == "passed"
+
+
+def test_a_passing_verdict_with_no_lane_review_is_not_ready(db):
+    """Round four, gate-and-test-integrity: merge readiness said ready for a work order
+    the pre-push gate blocks, because it narrowed the lane predicate to dispatched
+    reviews. A work order that was never reviewed never reaches a PR under the lanes."""
     wo_id = _wo(db)
     _store_verdict(db, wo_id, {"passed": True, "summary": "all tasks substantiated"})
     out = merge_readiness(work_order_id=wo_id, db_path=db)
-    assert out["ready"] is True and out["state"] == "passed"
+    assert out["ready"] is False
+    assert "no review has been dispatched" in out["advice"]
 
 
 def test_a_failing_verdict_is_not_ready_and_names_the_reason(db):
