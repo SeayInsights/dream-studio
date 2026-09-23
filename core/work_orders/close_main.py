@@ -251,6 +251,36 @@ def closability(
     return passed, failures
 
 
+def main_ci_blocks_close(source_root: Path, *, force: bool = False) -> dict | None:
+    """The red-main state blocking this close, or None.
+
+    MAIN MUST BE GREEN before a work order is done. This was read here already, and
+    already live -- `max_age_seconds=0`, because declaring work done is the one
+    high-consequence moment that must not be told about main by a cache. It was simply
+    attached to the RESULT, after the row had been written, as an advisory an operator
+    might notice. Three times in one day a work order's own merge put main red and the
+    work was closed anyway.
+
+    UNKNOWN DOES NOT BLOCK. An absent `gh`, a rate limit, or a run nobody has started yet
+    all read unknown, and an unreadable answer is unknown too. Blocking there would make
+    closing depend on network weather, and a check nobody can satisfy is bypassed by habit
+    until it means nothing. Only a KNOWN failure blocks.
+
+    `force` bypasses it, because closing over a red main someone else caused is legitimate
+    and should not require editing code; the bypass is recorded as a `gate.bypassed` event
+    like every other.
+    """
+    if force:
+        return None
+    try:
+        from core.health.main_ci import main_ci_status
+
+        state = main_ci_status(repo_root=source_root, max_age_seconds=0) or {}
+    except Exception:
+        return None  # unreadable is unknown, and unknown does not block
+    return state if state.get("status") == "failure" else None
+
+
 def close_work_order(
     *,
     work_order_id: str,
@@ -754,6 +784,34 @@ def close_work_order(
                 "ok": False,
                 "error": "Gate check failed",
                 "failures": gate_failures,
+            }
+
+        # MAIN MUST BE GREEN. Read live -- never from the cache -- because this is the
+        # moment the claim "this is done" is made, and it is the one the cache exists to
+        # be too fast for.
+        #
+        # This used to be read AFTER the row was written and attached to the result as an
+        # advisory. Three times in one day a work order's own merge put main red and the
+        # work was closed anyway, because the only thing standing between the two was an
+        # operator noticing a line of output.
+        #
+        # UNKNOWN DOES NOT REFUSE. An absent `gh`, a rate limit, or a run nobody has
+        # started yet all read unknown; refusing there would make closing depend on
+        # network weather, and a check nobody can satisfy is bypassed by habit until it
+        # means nothing. Only a KNOWN red main refuses.
+        _ci_block = main_ci_blocks_close(source_root, force=force)
+        if _ci_block is not None:
+            return {
+                **_bookkeeping_errors,
+                "ok": False,
+                "error": (
+                    "main is RED, so this work order is not done: the work is on the"
+                    " default branch and the default branch is failing. Fix main, or"
+                    " close with --force if this red is not yours (the bypass is"
+                    " recorded)."
+                ),
+                "main_ci": _ci_block,
+                "failures": ["main_ci_green"],
             }
 
         now = datetime.now(UTC).isoformat()

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from core.event_store.studio_db import _connect
+from core.work_orders.models import TERMINAL_WO_STATUSES
 from core.work_orders.task_status import (
     TASK_ABANDONED_STATUSES,
     TASK_DONE_STATUSES,
@@ -386,6 +387,121 @@ def mark_task_done(
             result["delivery_boundary_end_error"] = f"{type(exc).__name__}: {exc}"[:200]
 
     return result
+
+
+#: The three transitions between "working on it" and "it worked", and the event each emits.
+#: Declared here rather than taken as a free string so a caller cannot invent a fourth.
+_ADVANCE_EVENTS: dict[str, str] = {
+    "in_review": "work_order.review_requested",
+    "pushed": "work_order.pushed",
+    "ci_issues": "work_order.ci_failed",
+}
+
+
+def advance_work_order(
+    *,
+    work_order_id: str,
+    to: str,
+    source_root: Path,
+    dream_studio_home: Path | None = None,
+    note: str | None = None,
+) -> dict[str, Any]:
+    """Move a work order to `in_review`, `pushed` or `ci_issues`.
+
+    ONE FUNCTION FOR THREE TRANSITIONS, because they differ only in the event emitted and
+    the status comes from the vocabulary either way. Three copies would be three places a
+    status could be spelled inline, which is what `status_for` exists to prevent.
+
+    A TERMINAL WORK ORDER IS NOT ADVANCED. Closed, cancelled and deleted mean the work is
+    over; moving one to `in_review` would quietly make it open again with nothing recording
+    that it had been reopened -- `work_order.reopened` exists for exactly that and says so
+    in the event stream. Refusing here keeps "is this work order over" answerable from the
+    status alone.
+    """
+    if to not in _ADVANCE_EVENTS:
+        return {
+            "ok": False,
+            "error": (
+                f"{to!r} is not a transition this function performs."
+                f" Valid: {', '.join(sorted(_ADVANCE_EVENTS))}."
+                " Use start/block/unblock/close for the others."
+            ),
+        }
+
+    db_path = _require_db(source_root, dream_studio_home)
+    event_type = _ADVANCE_EVENTS[to]
+
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT title, project_id, status FROM business_work_orders" " WHERE work_order_id = ?",
+            (work_order_id,),
+        ).fetchone()
+        if row is None:
+            return {"ok": False, "error": f"Work order not found: {work_order_id}"}
+
+        title, project_id, current = row[0], row[1], row[2]
+        if current in TERMINAL_WO_STATUSES:
+            return {
+                "ok": False,
+                "error": (
+                    f"Work order {work_order_id} is {current}, which is terminal."
+                    " Reopen it first if the work is genuinely resuming; that is recorded"
+                    " as work_order.reopened rather than inferred from a status change."
+                ),
+            }
+        if current == to:
+            return {"ok": True, "already": True, "work_order_id": work_order_id, "status": to}
+
+        now = datetime.now(UTC).isoformat()
+        conn.execute(
+            "UPDATE business_work_orders"
+            " SET status = ?, updated_at = ?, last_updated_at = ?"
+            " WHERE work_order_id = ?",
+            (status_for(event_type, work_order=True), now, now, work_order_id),
+        )
+        conn.commit()
+
+    event_write_error: str | None = None
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        _payload: dict[str, Any] = {
+            "work_order_id": work_order_id,
+            "title": title,
+            "project_id": project_id,
+            "from_status": current,
+        }
+        if note:
+            _payload["note"] = note
+
+        _spool_writer.write_event(
+            CanonicalEventEnvelope(
+                event_type=event_type,
+                session_id=None,
+                payload=_payload,
+                timestamp=now,
+                severity="warning" if to == "ci_issues" else "info",
+                trace={
+                    "domain": "sdlc",
+                    "work_order_id": work_order_id,
+                    "project_id": project_id,
+                    "attribution_status": "fully_attributed",
+                },
+            ).to_dict()
+        )
+    except Exception as _exc:
+        event_write_error = f"{type(_exc).__name__}: {_exc}"[:200]
+
+    return {
+        "ok": True,
+        "work_order_id": work_order_id,
+        "title": title,
+        "status": to,
+        "from_status": current,
+        **({"event_write_error": event_write_error} if event_write_error else {}),
+    }
 
 
 def block_work_order(

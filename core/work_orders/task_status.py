@@ -59,7 +59,7 @@ Grounds, measured rather than argued:
   - Removing it means every read waits for a drain. `ds work-order start` followed
     immediately by `ds work-order tasks` is the common path, and the drain is not
     synchronous with either.
-  - WRITER-COUNTS: total=13 routed=11
+  - WRITER-COUNTS: total=14 routed=12
     The authoritative figures, in one declared form so a check reads them instead of
     guessing at prose. `test_both_records_state_the_same_writer_counts` parses this line
     out of BOTH records and holds them against what the finder discovers, so the numbers
@@ -70,7 +70,10 @@ Grounds, measured rather than argued:
     integrations/ on 2026-09-13: 12 sites write a status into a projected table -- 7 via
     UPDATE and 5 via INSERT. Ten of those take their value from the vocabulary. The
     thirteenth arrived with `start_task` on 2026-09-22 and is routed like the rest; it
-    first landed spelling `in_progress` inline, which these two tests caught. The other
+    first landed spelling `in_progress` inline, which these two tests caught. The
+    fourteenth is `advance_work_order` (2026-09-23), the single writer behind the three
+    statuses between working and done -- one function rather than three, precisely so this
+    count went up by one instead of three. The other
     two are in interfaces/cli/commands/prove.py, which binds status as a parameter in a
     DISPOSABLE scratch authority it creates and tears down, and carries its own recorded
     exemption for exactly that reason.
@@ -137,6 +140,13 @@ TASK_STATUS_SYNONYMS: dict[str, str] = {"done": "complete", "open": "pending"}
 CANONICAL_WORK_ORDER_STATUSES: tuple[str, ...] = (
     "created",
     "in_progress",
+    # THE THREE BETWEEN WORKING AND DONE. Without them a work order went straight from
+    # in_progress to closed, so "I think this is finished" and "this actually worked" were
+    # the same event -- and closure landed at the moment of least evidence, before the
+    # review lanes had looked and before CI had run.
+    "in_review",
+    "pushed",
+    "ci_issues",
     "blocked",
     "closed",
     "cancelled",
@@ -148,6 +158,9 @@ CANONICAL_WORK_ORDER_STATUSES: tuple[str, ...] = (
 WORK_ORDER_STATUS_EVENT: dict[str, str | None] = {
     "created": None,
     "in_progress": "work_order.started",
+    "in_review": "work_order.review_requested",
+    "pushed": "work_order.pushed",
+    "ci_issues": "work_order.ci_failed",
     "blocked": "work_order.blocked",
     "closed": "work_order.closed",
     "cancelled": "work_order.cancelled",
@@ -190,6 +203,14 @@ WORK_ORDER_EVENT_STATUS: dict[str, str] = {
     # inverted from the one above: reopening returns a closed work order to work, and no
     # inverse of status->event could express three events sharing one status.
     "work_order.reopened": "in_progress",
+    # FOUR EVENTS NOW REACH `in_progress`, and the reason the two maps are declared
+    # separately rather than inverted from each other only gets stronger: work returns to
+    # progress when the review lanes send findings back and when a CI failure is picked
+    # up, and both reuse `started` because a fourth spelling of "work is happening" is
+    # exactly the drift this module exists to stop.
+    "work_order.review_requested": "in_review",
+    "work_order.pushed": "pushed",
+    "work_order.ci_failed": "ci_issues",
     "work_order.blocked": "blocked",
     "work_order.closed": "closed",
     "work_order.cancelled": "cancelled",

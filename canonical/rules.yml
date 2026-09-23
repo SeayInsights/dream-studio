@@ -145,6 +145,46 @@ rules:
       a typo became a work order whose gates nothing could run. The seeded rows in
       business_work_order_types carry each type's gates, so a type you can create is
       checked to be a type that can be started and closed.
+  - id: a-work-order-is-not-done-until-main-is-green
+    statement: >
+      A work order closes only when the default branch is green; a known-red main refuses
+      the close, and the bypass is recorded.
+    source: core/work_orders/close_main.py
+    enforced_by:
+      - tests/unit/test_work_order_lifecycle_states.py::test_a_known_red_main_blocks_the_close
+      - tests/unit/test_work_order_lifecycle_states.py::test_anything_that_is_not_a_known_failure_does_not_block
+      - tests/unit/test_work_order_lifecycle_states.py::test_force_is_the_declared_escape
+      - tests/unit/test_work_order_lifecycle_states.py::test_the_close_path_consults_the_predicate
+    note: >
+      "I think this is finished" and "this actually worked" were the same event: a work
+      order went in_progress -> closed, so closure landed at the moment of least evidence,
+      before the review lanes had looked and before CI had run. The CI state was already
+      read here, and already read LIVE rather than from cache because declaring work done
+      is the high-consequence moment -- it was simply attached to the result after the row
+      had been written, as an advisory an operator might notice. Three times in one day a
+      work order's own merge put main red and the work was closed anyway.
+
+      UNKNOWN DOES NOT REFUSE. An absent `gh`, a rate limit, a run nobody has started, and
+      an exception reading any of it are all unknown; refusing there would make closing
+      depend on network weather, and a check nobody can satisfy is bypassed by habit until
+      it means nothing. Only a known failure refuses.
+  - id: work-found-wanting-is-the-same-work-orders-unfinished-work
+    statement: >
+      A review finding about work done inside a work order is appended to that work order
+      as a task; it does not open a new one, and the work order returns to in_progress
+      rather than closing.
+    source: core/work_orders/task_status.py
+    guidance: true
+    why: >
+      No check can tell whether a finding is about the work just done or about something
+      adjacent -- that is a reading of the finding. What the substrate guarantees is that
+      the loop is expressible: in_review and ci_issues exist, and returning from either to
+      in_progress reuses work_order.started rather than inventing a fourth spelling.
+
+      Filing a finding as a NEW work order would fragment one piece of work across
+      several, and then two things lie: the module boundary, which now describes part of
+      the change, and the prompt chain, whose new work order has to restate a goal that
+      already exists one row over.
   - id: a-claim-with-an-exact-answer-is-computed-not-read
     statement: >
       A claim that can be computed is computed: run the check and use its result. Finding

@@ -40,6 +40,9 @@ class WorkOrderProjection(Projection):
     consumed_event_types = [
         "work_order.created",
         "work_order.started",
+        "work_order.review_requested",
+        "work_order.pushed",
+        "work_order.ci_failed",
         "work_order.blocked",
         "work_order.unblocked",
         "work_order.reopened",
@@ -96,6 +99,12 @@ class WorkOrderProjection(Projection):
 
         if event_type == "work_order.started":
             return self._handle_started(conn, work_order_id, event_id, ts, now)
+        if event_type in (
+            "work_order.review_requested",
+            "work_order.pushed",
+            "work_order.ci_failed",
+        ):
+            return self._handle_status_only(conn, work_order_id, event_type, event_id, now)
         if event_type == "work_order.blocked":
             return self._handle_blocked(conn, work_order_id, payload, event_id, ts, now)
         if event_type == "work_order.unblocked":
@@ -193,6 +202,38 @@ class WorkOrderProjection(Projection):
             row,
         )
         return 1
+
+    def _handle_status_only(
+        self,
+        conn: sqlite3.Connection,
+        work_order_id: str,
+        event_type: str,
+        event_id: str,
+        now: str,
+    ) -> int:
+        """The three statuses between working and done: in_review, pushed, ci_issues.
+
+        ONE HANDLER, because they differ only in the status they land on and that status
+        comes from the vocabulary rather than from here. Three near-identical handlers
+        would be three places for a status to be spelled inline, which is what
+        `status_for` exists to stop.
+
+        `started_at` is deliberately untouched. A work order returning from review or from
+        a CI failure was started once; overwriting that timestamp would reset the clock on
+        every round trip and lose how long the work actually took -- and the round trips
+        are the thing worth measuring.
+        """
+        return self.safe_upsert(
+            conn,
+            _TABLE,
+            {
+                "work_order_id": work_order_id,
+                "status": status_for(event_type, work_order=True),
+                "last_event_id": event_id,
+                "last_updated_at": now,
+            },
+            conflict_key="work_order_id",
+        )
 
     def _handle_started(
         self,
