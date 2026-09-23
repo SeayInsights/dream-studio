@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -119,14 +120,21 @@ class TestDuckDBPath:
 
 
 class TestSqliteFallback:
-    def test_missing_analytics_store_falls_back(self, tmp_path, sqlite_db, monkeypatch):
-        from core.analytics import duckdb_store
+    def test_missing_analytics_store_falls_back(self, sqlite_db):
+        """No aggregate_metrics.db exists beside sqlite_db at all.
+
+        SessionCollector(db_path=...) resolves its analytics store as the
+        canonical aggregate_metrics.db sibling of sqlite_db (see
+        core.analytics.duckdb_store.analytics_db_path_for); nothing here ever
+        creates that file, so connect_analytics raises
+        AnalyticsStoreMissingError before any DuckDB query runs. No
+        monkeypatch is needed -- unlike the pre-fix collector, which always
+        resolved the ambient DREAM_STUDIO_HOME store, this collector consults
+        sqlite_db's own directory, so simply not creating a store there is
+        sufficient to exercise the genuinely-missing-store path.
+        """
         from projections.core.collectors.session_collector import SessionCollector
 
-        # Point analytics at an empty store: connect succeeds, views absent.
-        monkeypatch.setattr(
-            duckdb_store, "analytics_db_path", lambda: tmp_path / "empty-analytics.db"
-        )
         metrics = SessionCollector(db_path=str(sqlite_db)).collect(days=3650)
         assert metrics["total_sessions"] == 1
         assert metrics["by_project"] == {"proj-sqlite": 1}
@@ -134,18 +142,48 @@ class TestSqliteFallback:
         recent = SessionCollector(db_path=str(sqlite_db)).get_recent_sessions()
         assert [r["session_id"] for r in recent] == ["sqlite-sess"]
 
-    def test_empty_view_falls_back_to_sqlite_rows(self, tmp_path, sqlite_db, monkeypatch):
+    def test_empty_view_falls_back_to_sqlite_rows(self, tmp_path, sqlite_db):
+        """The analytics store DOES exist beside sqlite_db (schema/views
+        present) but holds zero session events -- distinct from
+        test_missing_analytics_store_falls_back, where connect_analytics
+        never succeeds at all.
+
+        Built at aggregate_metrics.db, the canonical sibling of sqlite_db
+        (tmp_path is shared by both fixtures), which is exactly where the
+        collector now looks given an explicit db_path -- a monkeypatch of
+        analytics_db_path() would go unread, since an explicit db_path
+        bypasses that resolver entirely.
+
+        collect() normalizes both this path and the missing-store path onto
+        identical final metrics (it only returns _collect_duckdb's own result
+        when total_sessions > 0), so asserting on collect()'s return value
+        alone cannot tell the two apart. Calling _collect_duckdb directly
+        first proves THIS test actually drove a successful, zero-row DuckDB
+        read rather than an exception being swallowed the same way the
+        missing-store case swallows one.
+        """
         from core.analytics import duckdb_store
         from projections.core.collectors.session_collector import SessionCollector
 
-        db = tmp_path / "analytics-with-views.db"
-        monkeypatch.setattr(duckdb_store, "analytics_db_path", lambda: db)
+        db = tmp_path / "aggregate_metrics.db"
         conn = duckdb_store.connect_analytics(db, read_only=False)
         try:
             duckdb_store.ensure_analytics_schema(conn)  # views exist, zero events
         finally:
             conn.close()
 
-        metrics = SessionCollector(db_path=str(sqlite_db)).collect(days=3650)
+        collector = SessionCollector(db_path=str(sqlite_db))
+        cutoff_date = (datetime.now() - timedelta(days=3650)).strftime("%Y-%m-%d")
+        try:
+            duckdb_metrics = collector._collect_duckdb(cutoff_date)
+        except Exception as exc:  # pragma: no cover - failure path, not the happy path
+            pytest.fail(
+                "_collect_duckdb raised instead of returning the empty-view result "
+                f"(the DuckDB branch was skipped rather than exercised): {exc!r}"
+            )
+        assert duckdb_metrics is not None
+        assert duckdb_metrics["total_sessions"] == 0
+
+        metrics = collector.collect(days=3650)
         assert metrics["total_sessions"] == 1
         assert metrics["by_project"] == {"proj-sqlite": 1}
