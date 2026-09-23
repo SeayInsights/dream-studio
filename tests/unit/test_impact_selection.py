@@ -73,3 +73,25 @@ def test_a_data_file_no_test_names_selects_nothing(tmp_path: Path) -> None:
     _write(repo / "docs" / "README.md", "# docs\n")
     result = compute_impact_set(["docs/README.md"], repo_root=repo)
     assert result["dependent_tests"] == []
+
+
+def test_a_changed_source_file_selects_tests_that_name_it_by_path(tmp_path):
+    """A test that reads source as TEXT names the file, not the module.
+
+    The guards that walk an AST, parse a workflow or check for drift all depend on a
+    source file without importing it, and the only handle they have is its repo-relative
+    path. Before this, editing the file they guard did not select them -- which is how a
+    check ends up correct and wired to nothing.
+    """
+    root = tmp_path
+    (root / "interfaces" / "cli").mkdir(parents=True)
+    (root / "interfaces" / "cli" / "dispatch.py").write_text("x = 1\n", encoding="utf-8")
+    (root / "tests" / "unit").mkdir(parents=True)
+    # Names the file by path and imports nothing from it, exactly as a guard does.
+    (root / "tests" / "unit" / "test_guard.py").write_text(
+        'PATHS = ["interfaces/cli/dispatch.py"]\n\n\ndef test_g():\n    assert PATHS\n',
+        encoding="utf-8",
+    )
+
+    result = compute_impact_set(["interfaces/cli/dispatch.py"], repo_root=root)
+    assert "tests/unit/test_guard.py" in result["dependent_tests"]
