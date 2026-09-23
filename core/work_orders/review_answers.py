@@ -41,10 +41,17 @@ Three refusals come from the reviewers' own contract:
   - A FINDING CARRIES EVIDENCE. "A finding with no evidence is an opinion."
   - `cannot-tell` SAYS WHAT WOULD HAVE BEEN NEEDED, in `why` or `evidence`.
 
-WHAT IT CANNOT DO. A reviewer is identified by the name the caller passes. A local CLI has
-no identity to check that against; the recorded dispatch bounds what a name may answer,
-and the provenance envelope records which commit it was answered against, and neither
-proves who typed it. That limit is stated here rather than implied away.
+WHO MAY ANSWER. Each dispatch issues every named reviewer a one-time credential, stores
+only its sha256, and returns the plaintext once to the dispatcher, who hands each reviewer
+its own. A submission must carry the credential issued to the reviewer it claims to be, and
+a round with no credential on record fails closed -- so one seat cannot answer as another,
+the evidence-referee included. The recorded dispatch bounds which lanes a reviewer may
+answer; the provenance envelope records which commit it answered against.
+
+WHAT IT CANNOT DO. The dispatcher holds every credential it issues, because handing them
+out is its job. That is the chair -- the operator's own process -- and it is the trust
+boundary: a local tool without an identity system cannot prove the chair did not answer
+as a seat. The limit is stated here rather than implied away.
 """
 
 from __future__ import annotations
