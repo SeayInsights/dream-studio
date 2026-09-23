@@ -10,7 +10,10 @@ calls are marked **NETWORK** — they are always opt-in.
 
 `ds --home <dir>` sets `DREAM_STUDIO_HOME`, both alternate names, `DS_SPOOL_ROOT` and
 `DREAM_STUDIO_DB_PATH` from `<dir>` for the length of the command, over any inherited
-value, and restores them afterwards.
+value, and restores them afterwards. Every location derived from the home follows it.
+A variable that names ONE location -- `DS_DIAGNOSTICS_DIR`, `WORK_ORDER_ROOT`,
+`DREAM_STUDIO_CORRECTIONS_PATH` and the like below -- is an explicit override of that
+location, and it still wins: set it only where you mean it.
 
 | Variable | Default | Purpose |
 |---|---|---|

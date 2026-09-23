@@ -51,6 +51,10 @@ def _env_for(home: Path) -> dict[str, str]:
     env = os.environ.copy()
     env["HOME"] = str(home)
     env["USERPROFILE"] = str(home)
+    # The default home under this fake OS home. The session guard sets DREAM_STUDIO_HOME,
+    # and the runtime now honours it, as --home needs it to -- so it is cleared here.
+    for name in ("DREAM_STUDIO_HOME", "DS_DREAM_STUDIO_HOME", "DS_HOME"):
+        env.pop(name, None)
     env["PYTHONIOENCODING"] = "utf-8"
     return env
 
@@ -127,6 +131,8 @@ def test_dashboard_bootstrap_blocks_before_connect_on_newer_than_code(tmp_path, 
     _schema_db(fake_home, latest + 2)
     monkeypatch.setenv("HOME", str(fake_home))
     monkeypatch.setenv("USERPROFILE", str(fake_home))
+    for name in ("DREAM_STUDIO_HOME", "DS_DREAM_STUDIO_HOME", "DS_HOME"):
+        monkeypatch.delenv(name, raising=False)
 
     with patch(
         "core.event_store.studio_db._connect", side_effect=AssertionError("_connect called")
@@ -141,6 +147,8 @@ def test_check_migrations_blocks_before_connect_on_newer_than_code(tmp_path, mon
     _schema_db(fake_home, latest + 2)
     monkeypatch.setenv("HOME", str(fake_home))
     monkeypatch.setenv("USERPROFILE", str(fake_home))
+    for name in ("DREAM_STUDIO_HOME", "DS_DREAM_STUDIO_HOME", "DS_HOME"):
+        monkeypatch.delenv(name, raising=False)
 
     with patch(
         "core.event_store.studio_db._connect", side_effect=AssertionError("_connect called")

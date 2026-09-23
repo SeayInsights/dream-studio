@@ -61,6 +61,8 @@ def test_default_storage_root_is_fake_home_safe_and_not_created(tmp_path, monkey
     monkeypatch.setenv("HOME", str(fake_home))
     monkeypatch.setenv("USERPROFILE", str(fake_home))
     monkeypatch.delenv("DREAM_STUDIO_WORK_ORDER_ROOT", raising=False)
+    # The default under the OS home: no Dream Studio home is in force.
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
 
     root = default_storage_root()
 

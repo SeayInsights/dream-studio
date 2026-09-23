@@ -16,8 +16,10 @@ import json
 from pathlib import Path
 
 # ── Paths ──────────────────────────────────────────────────────────────
-HOME = Path.home()
-DS = HOME / ".dream-studio"
+from core.config.paths import home_dir  # noqa: E402
+
+# The Dream Studio home, DREAM_STUDIO_HOME honoured -- not the OS home's copy of it.
+DS = home_dir()
 
 DIRS = [
     DS / "clients",

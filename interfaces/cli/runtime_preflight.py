@@ -51,7 +51,8 @@ UNKNOWN_SCHEMA_GUIDANCE = [
 @dataclass(frozen=True)
 class PreflightConfig:
     repo_root: Path = REPO_ROOT
-    home: Path = Path.home()
+    # None: the Dream Studio home --home decides. A Path: an OS home named explicitly.
+    home: Path | None = None
     replay_migrations: bool = True
 
 
@@ -64,21 +65,24 @@ def _check(name: str, status: str, severity: str = "info", **details: Any) -> di
     }
 
 
-def _user_data_dir(home: Path) -> Path:
-    return home / USER_DATA_DIRNAME
+def _user_data_dir(home: Path | None) -> Path:
+    """The Dream Studio home under an explicit OS home, else the one --home decides."""
+    from core.config.paths import home_dir
+
+    return home / USER_DATA_DIRNAME if home is not None else home_dir()
 
 
-def _state_dir(home: Path) -> Path:
+def _state_dir(home: Path | None) -> Path:
     return _user_data_dir(home) / STATE_DIRNAME
 
 
-def _db_path(home: Path) -> Path:
+def _db_path(home: Path | None) -> Path:
     return _state_dir(home) / DB_FILENAME
 
 
 def canonical_db_path(home: Path | None = None) -> Path:
     """Return the expected local runtime DB path without creating directories."""
-    return _db_path(home or Path.home())
+    return _db_path(home)
 
 
 def _latest_migration_version(repo_root: Path) -> int:
@@ -298,7 +302,7 @@ def _check_paths(config: PreflightConfig) -> dict[str, Any]:
         "runtime_paths",
         status,
         "warning" if status == "warn" else "info",
-        home=str(config.home),
+        home=str(_user_data_dir(config.home).parent),
         user_data_dir=str(user_dir),
         user_data_exists=user_dir.exists(),
         user_data_writable=_writable_without_create(user_dir),

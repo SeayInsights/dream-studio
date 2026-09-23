@@ -244,32 +244,87 @@ def test_diagnostics_follow_home_not_the_user_directory(tmp_path, monkeypatch):
     assert [p for p in fake_user.rglob("*") if p.is_file()] == []
 
 
-#: The only places core/ and interfaces/ may spell the default home themselves, each for a
-#: reason that is about the operator's REAL install rather than whichever home is in force.
-_MAY_SPELL_THE_DEFAULT_HOME = {
-    # The resolver.
-    "core/config/paths.py",
-    # Recognising and backing up the live authority: protection for the operator's real
-    # database, which must not be redirected by the variable it protects against.
-    "core/config/sqlite_bootstrap.py:_is_live_authority_db",
-    "core/config/sqlite_bootstrap.py:_backup_live_db",
-    # Cutover planning describes the live install on this machine.
-    "core/upgrade/",
+#: Every line in core/ and interfaces/ that may spell ".dream-studio" itself, and why. Keyed
+#: by the exact line, so changing one of them means reading this list again.
+#:
+#: The rule is about the USER's home. A project keeps its own `.dream-studio` directory
+#: (standards, gate manifest, local analytics), and an isolated run builds a home on
+#: purpose; those are not the home --home decides, and each is listed with that reason.
+_MAY_SPELL_THE_HOME = {
+    # The resolver, and the live-install protection that must not follow the variable it
+    # protects against: recognising and backing up the operator's real authority.
+    (
+        "core/config/sqlite_bootstrap.py",
+        'Path(db_file).resolve().relative_to((Path.home() / ".dream-studio").resolve())',
+    ): "live authority",
+    (
+        "core/config/sqlite_bootstrap.py",
+        'backup_dir = Path.home() / ".dream-studio" / "state" / "backups"',
+    ): "live authority backup",
+    # A directory NAME, not a location.
+    (
+        "core/gates/hanging_detectors.py",
+        '_SKIP_DIRS = {".git", "node_modules", "__pycache__", ".dream-studio"}',
+    ): "directory name",
+    ("core/work_orders/handoff_validate_dryrun.py", 'if ".dream-studio" not in path:'): "path test",
+    # A project's own .dream-studio directory.
+    (
+        "core/projects/standards.py",
+        'STANDARDS_PATH = (".dream-studio", "standards.yml")',
+    ): "project",
+    ("core/projects/standards.py", '(".dream-studio", "pre-push.yaml"),'): "project",
+    (
+        "core/telemetry/processor.py",
+        'db_path=str(repo_root / ".dream-studio" / "data" / "studio.db"),',
+    ): "project",
+    (
+        "interfaces/cli/ds_analytics/main.py",
+        'output = project_roots[0] / ".dream-studio" / "analytics" / "dashboard.html"',
+    ): "project",
+    (
+        "interfaces/cli/ds_workflow.py",
+        'PROJECT_GATE_MANIFEST = Path(".dream-studio") / "pre-push.yaml"',
+    ): "project",
+    (
+        "interfaces/cli/migrate_files_to_sqlite.py",
+        'team_gotchas = BASE_DIR / ".dream-studio" / "team" / "gotchas.yml"',
+    ): "repository",
+    # A home under an OS home the caller named explicitly, or built on purpose.
+    (
+        "core/work_orders/storage.py",
+        'base = home / ".dream-studio" if home is not None else home_dir()',
+    ): "explicit OS home",
+    (
+        "interfaces/cli/ci_gate.py",
+        'dream_studio_home = isolated_home / ".dream-studio"',
+    ): "isolated home",
+    (
+        "interfaces/cli/commands/prove.py",
+        'self.ds_home = self.home / ".dream-studio"',
+    ): "isolated home",
+    (
+        "interfaces/cli/runtime_preflight.py",
+        'USER_DATA_DIRNAME = ".dream-studio"',
+    ): "explicit OS home",
 }
 
+#: Trees the rule does not reach: the resolver itself, and cutover planning, which
+#: describes the live install on this machine.
+_EXEMPT_TREES = ("core/config/paths.py", "core/upgrade/")
 
-def test_core_and_the_cli_spell_the_default_home_in_one_place():
-    """THE NEXT HARDCODED HOME FAILS HERE. Three review rounds each found one more way a
-    `--home` command escaped its home; the third was a module that built the path itself.
-    Every default home in core/ and interfaces/ goes through core.config.paths.home_dir()."""
-    import ast
+
+def test_core_and_the_cli_spell_the_home_in_one_place():
+    """THE NEXT HARDCODED HOME FAILS HERE. Four review rounds each found one more way a
+    `--home` command escaped its home. The fourth was `(home or Path.home()) / ".dream-studio"`,
+    a shape the first version of this guard -- a pattern for `home() / ".dream-studio"` --
+    did not match. So the rule is now the literal itself: every ".dream-studio" in core/ and
+    interfaces/ is either the resolver's or listed above with its reason. Any expression
+    shape is caught, and a new one needs a reason written down."""
     import re
     import subprocess
 
-    spelled = re.compile(
-        r"""home\(\)\s*/\s*["']\.dream-studio|expanduser\(["']~/?\.dream-studio"""
-        r"""|expanduser\(["']~["']\)\)?\s*/\s*["']\.dream-studio"""
-    )
+    literal = re.compile(r"""["']\.dream-studio["']""")
+    via_constant = re.compile(r"home\(\)[^#\n]*USER_DATA_DIRNAME")
     files = subprocess.run(
         ["git", "ls-files", "core/*.py", "interfaces/*.py"],
         cwd=REPO_ROOT,
@@ -282,25 +337,39 @@ def test_core_and_the_cli_spell_the_default_home_in_one_place():
     assert len(files) > 100, "the scan found almost nothing -- the listing is broken"
     offenders = []
     for rel in files:
-        if rel in _MAY_SPELL_THE_DEFAULT_HOME or any(
-            rel.startswith(p) for p in _MAY_SPELL_THE_DEFAULT_HOME if p.endswith("/")
-        ):
+        if rel.startswith(_EXEMPT_TREES):
             continue
         text = (REPO_ROOT / rel).read_text(encoding="utf-8", errors="replace")
-        if not spelled.search(text):
-            continue
-        functions = [
-            n
-            for n in ast.walk(ast.parse(text))
-            if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)
-        ]
         for lineno, line in enumerate(text.splitlines(), 1):
-            if not spelled.search(line) or line.lstrip().startswith("#"):
+            code = line.strip()
+            if code.startswith("#") or not (literal.search(code) or via_constant.search(code)):
                 continue
-            owner = next(
-                (f.name for f in functions if f.lineno <= lineno <= (f.end_lineno or f.lineno)),
-                None,
-            )
-            if f"{rel}:{owner}" not in _MAY_SPELL_THE_DEFAULT_HOME:
-                offenders.append(f"{rel}:{lineno}")
-    assert not offenders, f"spell the home through core.config.paths.home_dir(): {offenders}"
+            if (rel, code) not in _MAY_SPELL_THE_HOME:
+                offenders.append(f"{rel}:{lineno}: {code}")
+    assert not offenders, "spell the user's home through core.config.paths.home_dir():\n" + (
+        "\n".join(offenders)
+    )
+
+
+def test_every_allowed_spelling_still_exists():
+    """An entry whose line is gone is an exemption nobody is using -- remove it, or the list
+    stops describing the code."""
+    stale = [
+        f"{rel}: {code}"
+        for (rel, code) in _MAY_SPELL_THE_HOME
+        if code
+        not in {ln.strip() for ln in (REPO_ROOT / rel).read_text(encoding="utf-8").splitlines()}
+    ]
+    assert not stale, stale
+
+
+def test_work_order_storage_follows_home(tmp_path, monkeypatch):
+    """Round 4: `ds --home X work-order packet` read a work order from the real home,
+    because the storage root was `(home or Path.home()) / ".dream-studio"`."""
+    from core.work_orders.storage import default_storage_root
+
+    monkeypatch.delenv("DREAM_STUDIO_WORK_ORDER_ROOT", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path / "user"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "user"))
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / "home"))
+    assert default_storage_root() == tmp_path / "home" / "meta" / "work-orders"
