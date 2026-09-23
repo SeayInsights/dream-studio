@@ -14,7 +14,11 @@ import argparse
 import sys
 from pathlib import Path
 
-from core.work_orders.models import WORK_ORDER_TYPES
+from core.work_orders.models import (
+    DEFAULT_WORK_ORDER_PRIORITY,
+    WORK_ORDER_PRIORITIES,
+    WORK_ORDER_TYPES,
+)
 
 from interfaces.cli.commands.work_order_lifecycle import (
     _work_order_block,
@@ -114,6 +118,19 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         # ask. argparse prints the choices in the refusal, so the operator sees the list.
         choices=WORK_ORDER_TYPES,
         help="One of the declared work-order types (selects which standards review it)",
+    )
+    wo_create.add_argument(
+        "--priority",
+        default=DEFAULT_WORK_ORDER_PRIORITY,
+        # Refused at the door, like --type. The queue sorts on this, so an unrecognised
+        # value would not be a label that reads oddly -- it would be a work order that
+        # sorts somewhere nobody intended and is picked up in the wrong order.
+        choices=WORK_ORDER_PRIORITIES,
+        help=(
+            "What to pick up first: blocker (main is red, or a blocker-class finding),"
+            " defect (a regression or non-blocking finding), normal (planned work,"
+            " the default), backlog (parked below planned work)."
+        ),
     )
     wo_create.add_argument(
         "--originating-symptom",
@@ -492,6 +509,7 @@ def dispatch(
             title=args.title,
             description=args.description,
             work_order_type=args.work_order_type,
+            priority=args.priority,
             originating_symptom=args.originating_symptom,
             module_boundary=args.module_boundary,
             source_root=source_root,

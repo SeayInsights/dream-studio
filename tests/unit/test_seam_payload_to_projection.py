@@ -110,6 +110,27 @@ def authority(tmp_path: Path) -> sqlite3.Connection:
     conn.close()
 
 
+#: Keys whose column has a CLOSED VOCABULARY, and a valid member to send for each.
+#:
+#: The distinctive-value technique below cannot reach these. A CHECK rejects
+#: `seam-priority-value`, the projection's INSERT is OR IGNORE so a duplicate created
+#: event is a no-op, and SQLite's OR IGNORE also SKIPS a row that violates a constraint --
+#: so the work order does not exist at all, with no row and no error. That is what this
+#: test found on the first constrained key anyone added.
+#:
+#: These are still asserted to survive; only the value changes. Declaring them unpersisted
+#: would be false, and skipping them would be the subset-of-what-it-checks shape this file
+#: exists to refuse.
+_CONSTRAINED_SAMPLES = {
+    "priority": "blocker",
+}
+
+
+def _sample_for(key: str) -> str:
+    """A distinctive value, unless the column only accepts a declared one."""
+    return _CONSTRAINED_SAMPLES.get(key, f"seam-{key}-value")
+
+
 def _created_event(work_order_id: str, payload: dict) -> dict:
     return {
         "event_id": str(uuid.uuid4()),
@@ -131,7 +152,7 @@ def test_the_emitter_and_the_projection_agree_on_every_payload_key(authority):
     # value rather than by guessing which column it maps to. `type` becomes
     # `work_order_type`; matching on names would have to encode that mapping and would
     # then be wrong the next time a column is renamed.
-    payload = {key: f"seam-{key}-value" for key in keys}
+    payload = {key: _sample_for(key) for key in keys}
     work_order_id = "wo-seam-0001"
 
     projection = WorkOrderProjection()
@@ -250,3 +271,26 @@ def test_the_canonical_event_payload_is_json_serializable():
     """The seam runs through JSON, so a key whose value is not serializable never arrives."""
     keys = _emitter_payload_keys()
     json.dumps({key: f"seam-{key}" for key in keys})
+
+
+def test_every_constrained_sample_is_a_value_its_vocabulary_declares():
+    """A sample that drifts out of its vocabulary would make the survival check above pass
+    against a row the projection coerced, which is the quiet version of not checking."""
+    from core.work_orders.models import WORK_ORDER_PRIORITIES
+
+    vocabularies = {"priority": WORK_ORDER_PRIORITIES}
+    for key, sample in _CONSTRAINED_SAMPLES.items():
+        assert key in vocabularies, f"{key} has a sample but no declared vocabulary here"
+        assert sample in vocabularies[key], f"{key} sample {sample!r} is not a declared value"
+
+
+def test_a_constrained_key_is_not_quietly_exempted():
+    """`_CONSTRAINED_SAMPLES` changes the VALUE sent, never whether the key is checked.
+    Listing a key here must not become a way to stop asserting that it survives."""
+    keys = _emitter_payload_keys()
+    for key in _CONSTRAINED_SAMPLES:
+        assert key in keys, f"{key} is sampled but the emitter no longer sends it"
+        assert key not in _DECLARED_UNPERSISTED, (
+            f"{key} is both sampled and declared unpersisted -- one says it survives and "
+            "the other says it does not"
+        )
