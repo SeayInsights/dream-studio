@@ -770,6 +770,17 @@ def close_work_order(
 
         gate_failures.extend(check_change_impact_affirmed(conn, work_order_id, db_path))
 
+        # THE LANE REVIEW HOLDS A CLOSE, not only a push. Two review seats found close
+        # passing with an open lane finding: this path read the verify verdict and never
+        # the lane answers, which live under their own instance key. Ordinary gate
+        # failure, so --force bypasses it recorded, and a `lane_review` prefix the
+        # independent_review waivers below do not match.
+        from core.work_orders.review_answers import lane_review_failure
+
+        _lane_failure = lane_review_failure(work_order_id, db_path=db_path)
+        if _lane_failure:
+            gate_failures.append(_lane_failure)
+
         # WO-ESCALATION-LADDER T3: an escalated WO (reopened because the deterministic
         # verifier said NOT FIXED) must re-close through a PASSING independent review.
         # For escalated WOs the independent_review gate is mandatory: the gaps/unreviewable

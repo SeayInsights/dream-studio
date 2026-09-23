@@ -53,7 +53,7 @@ FAILS = {"command": "python -m pytest /tmp/t.py -q", "exit_code": 1}
 HOLDS = {"command": "python -m pytest tests/unit/test_x.py -q", "exit_code": 0}
 REAL_TEST = "TEST-CHECK: tests/unit/test_review_answers.py::test_two_reviewers_answers_coexist"
 #: The fake lanes' ownership, declared the way the registry declares the real ones.
-OWNED = {REVIEWER: {"lane-one", "lane-two"}, OTHER: {"lane-nine"}, None: {"chair-lane"}}
+OWNED = {REVIEWER: {"lane-one", "lane-two"}, OTHER: {"lane-nine"}, None: {"chair-lane", "new-lane"}}
 
 
 def _up():
@@ -444,7 +444,7 @@ def test_the_chairs_lanes_are_reported_not_gated(db):
         db,
         [
             {"reviewer": REVIEWER, "seat": "a", "lanes": ["lane-one"]},
-            {"reviewer": None, "seat": "Chair and verdict owner", "lanes": ["chair-lane"]},
+            {"reviewer": None, "seat": ra.CHAIR_SEAT, "lanes": ["chair-lane"]},
         ],
     )
     _record(db, REVIEWER, [{"lane": "lane-one", "verdict": "pass", "reproduction": HOLDS}])
@@ -722,3 +722,41 @@ def test_the_registry_ownership_gives_every_lane_exactly_one_owner():
     assert (
         "reviewer-s-reviewer" in owned["review-finding-integrity"]
     ), "an abstaining seat still owns its lane in later rounds"
+
+
+def test_a_seat_with_no_compiled_reviewer_keeps_its_own_seat_and_blocks():
+    """Round two, boundary-semantics: every reviewer-less lane was filed under the chair,
+    whose lanes are not gated -- so a seat added before its agent compiled would have been
+    waved through. It keeps its own seat, and nobody being able to answer it blocks."""
+    report = {
+        "awaiting_judgment": ["new-lane", "chair-lane"],
+        "lanes": [
+            {"lane": "new-lane", "seat": "Freshly Added Seat", "reviewer": None},
+            {"lane": "chair-lane", "seat": ra.CHAIR_SEAT, "reviewer": None},
+        ],
+    }
+    slots = {s["seat"]: s for s in assignments(report)}
+    assert slots["Freshly Added Seat"]["lanes"] == ["new-lane"]
+    assert slots[ra.CHAIR_SEAT]["lanes"] == ["chair-lane"]
+
+
+def test_a_reviewerless_seat_that_is_not_the_chair_blocks_the_work_order(db):
+    _dispatch(db, [{"reviewer": None, "seat": "Freshly Added Seat", "lanes": ["new-lane"]}])
+    status = review_status(WO_ID, db_path=db)
+    assert status["blocking"] is True
+    assert status["unanswered"] == {"(no reviewer compiled for Freshly Added Seat)": ["new-lane"]}
+
+
+def test_a_dispatch_against_no_work_order_is_refused_by_the_mechanism(db):
+    """Round two, boundary-semantics: only the CLI handler checked, so any other caller
+    could record a round against an id that names nothing."""
+    with pytest.raises(ValueError, match="no work order"):
+        record_dispatch(
+            "no-such-wo",
+            sha="a" * 40,
+            image=IMAGE,
+            change_set=["x.py"],
+            assignments=[{"reviewer": REVIEWER, "seat": "s", "lanes": ["lane-one"]}],
+            db_path=db,
+            ownership=OWNED,
+        )

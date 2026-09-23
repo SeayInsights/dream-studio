@@ -54,6 +54,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+# The one work-order -> project lookup; the review door refuses a miss rather than
+# recording a review against an id that names nothing.
+from core.work_orders.queries import work_order_project  # noqa: E402,F401
+
 #: The closed verdict set, from the reviewers' own contract in
 #: integrations/compiler/reviewers.py. One vocabulary, one definition.
 LANE_VERDICTS = ("pass", "finding", "cannot-tell")
@@ -69,8 +73,10 @@ DISPATCH_KEY = "dispatch"
 
 #: The chair's lanes are dispatched to no one -- a subagent sees only its own lanes and
 #: cannot reconcile findings it was never given. The caller is the chair, and its decision
-#: is the act of advancing the work order or not. They are reported, not gated on.
-CHAIR = None
+#: is the act of advancing the work order or not. They are reported, not gated on. Only
+#: the chair's SEAT is the chair's: another seat with no compiled reviewer is a question
+#: nobody can answer, and it blocks as unanswered.
+CHAIR_SEAT = "Chair and verdict owner"
 
 
 def _now() -> str:
@@ -87,33 +93,6 @@ def _instance_key(reviewer: str) -> str:
 
 
 # ── the work order ──────────────────────────────────────────────────────────
-
-
-def work_order_project(work_order_id: str, *, db_path: Path | None = None) -> str | None:
-    """The work order's project, or None when no such work order exists.
-
-    The recording door refuses an id that names no work order. The first convening found
-    a mistyped id recording a "complete" review that nothing would ever read: the artifact
-    table has no foreign key, so the write succeeded against nothing.
-    """
-    import sqlite3
-
-    from core.work_orders.artifacts import _resolve_db
-
-    try:
-        conn = sqlite3.connect(f"file:{_resolve_db(db_path)}?mode=ro", uri=True)
-    except sqlite3.Error:
-        return None
-    try:
-        row = conn.execute(
-            "SELECT project_id FROM business_work_orders WHERE work_order_id = ?",
-            (work_order_id,),
-        ).fetchone()
-    except sqlite3.Error:
-        return None
-    finally:
-        conn.close()
-    return str(row[0]) if row and row[0] else None
 
 
 # ── the dispatch ────────────────────────────────────────────────────────────
@@ -152,6 +131,12 @@ def record_dispatch(
     same lane, and a dispatch that dropped the lane because the new change set did not
     select it would let the finding lapse unanswered.
     """
+    # THE MECHANISM CHECKS, not one caller. The existence check lived in the CLI's
+    # dispatch handler only, so any other caller could record a round against an id that
+    # names nothing (the bench's boundary-semantics seat, round two).
+    if work_order_project(work_order_id, db_path=db_path) is None:
+        raise ValueError(f"no work order {work_order_id!r} in this authority")
+
     owned = lane_ownership(project_root) if ownership is None else ownership
     for slot in assignments:
         reviewer = slot.get("reviewer")
@@ -168,7 +153,9 @@ def record_dispatch(
 
     slots: dict[Any, dict[str, Any]] = {}
     for slot in assignments:
-        slots[slot.get("reviewer")] = {
+        # Keyed by reviewer, or by seat when there is none, so two reviewer-less seats do
+        # not collapse into one slot.
+        slots[slot.get("reviewer") or f"seat:{slot.get('seat')}"] = {
             "reviewer": slot.get("reviewer"),
             "seat": slot.get("seat"),
             "lanes": sorted(set(slot.get("lanes") or [])),
@@ -178,7 +165,8 @@ def record_dispatch(
         reviewer = finding.get("reviewer")
         lane = finding.get("lane")
         slot = slots.setdefault(
-            reviewer, {"reviewer": reviewer, "seat": finding.get("seat"), "lanes": []}
+            reviewer or f"seat:{finding.get('seat')}",
+            {"reviewer": reviewer, "seat": finding.get("seat"), "lanes": []},
         )
         if lane not in slot["lanes"]:
             slot["lanes"] = sorted([*slot["lanes"], lane])
@@ -572,8 +560,15 @@ def review_status(work_order_id: str, *, db_path: Path | None = None) -> dict[st
         }
         for slot in dispatch.get("assignments") or []:
             reviewer = slot.get("reviewer")
-            if reviewer is CHAIR:
+            if reviewer is None and slot.get("seat") == CHAIR_SEAT:
                 chair_lanes.extend(slot.get("lanes") or [])
+                continue
+            if reviewer is None:
+                # A seat with no compiled reviewer: nobody can answer it, so every lane
+                # in it is unanswered, and says why.
+                unanswered[f"(no reviewer compiled for {slot.get('seat')})"] = list(
+                    slot.get("lanes") or []
+                )
                 continue
             missing = [ln for ln in slot.get("lanes") or [] if (reviewer, ln) not in this_round]
             if missing:
@@ -598,6 +593,23 @@ def review_status(work_order_id: str, *, db_path: Path | None = None) -> dict[st
         "blocking": bool(reasons),
         "reasons": reasons,
     }
+
+
+def lane_review_failure(work_order_id: str, *, db_path: Path | None = None) -> str | None:
+    """A close-gate failure when a DISPATCHED lane review still holds the work order.
+
+    None when no review was dispatched (the push gate owns that case) or when the review
+    is clear. The text starts with ``lane_review`` so the close path's independent_review
+    waivers -- which answer whether the verify verdict can be trusted -- never strip it.
+    """
+    status = review_status(work_order_id, db_path=db_path)
+    if not status["dispatched"] or not status["blocking"]:
+        return None
+    return (
+        f"lane_review: the round {status['round']} lane review still holds this work order"
+        f" -- {'; '.join(status['reasons'])}. See `ds review --status --work-order"
+        f" {work_order_id}`."
+    )
 
 
 # ── findings become work ────────────────────────────────────────────────────

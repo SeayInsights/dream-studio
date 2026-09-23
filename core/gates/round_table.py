@@ -492,29 +492,34 @@ def assignments(report: dict) -> list[dict]:
     """
     outstanding = set(report.get("awaiting_judgment") or [])
     by_reviewer: dict[str, dict] = {}
-    chair: list[str] = []
+    unreviewed: dict[str, dict] = {}
 
     for entry in report.get("lanes") or []:
         lane = str(entry.get("lane", ""))
         if lane not in outstanding:
             continue
         reviewer = entry.get("reviewer")
+        seat = str(entry.get("seat", "?"))
         if not reviewer:
-            chair.append(lane)
+            # A lane with no compiled reviewer keeps ITS OWN seat. It used to be filed
+            # under the chair by default, and the chair's lanes are not gated -- so a seat
+            # added before its agent was compiled would have been waved through as the
+            # chair's business (the bench's boundary-semantics seat, round two).
+            unreviewed.setdefault(seat, {"reviewer": None, "seat": seat, "lanes": []})[
+                "lanes"
+            ].append(lane)
             continue
         slot = by_reviewer.setdefault(
-            str(reviewer), {"reviewer": str(reviewer), "seat": entry.get("seat", "?"), "lanes": []}
+            str(reviewer), {"reviewer": str(reviewer), "seat": seat, "lanes": []}
         )
         slot["lanes"].append(lane)
 
     out = sorted(by_reviewer.values(), key=lambda a: str(a["reviewer"]))
+    # Named, not hidden. These lanes are outstanding too, and a dispatcher that silently
+    # dropped them would report every lane assigned while a seat's questions went nowhere.
+    out += sorted(unreviewed.values(), key=lambda a: str(a["seat"]))
     for slot in out:
         slot["lanes"].sort()
-    if chair:
-        # Named, not hidden. The chair's lanes are outstanding too, and a dispatcher that
-        # silently dropped them would report every lane assigned while one seat's
-        # questions went nowhere.
-        out.append({"reviewer": None, "seat": "Chair and verdict owner", "lanes": sorted(chair)})
     return out
 
 
