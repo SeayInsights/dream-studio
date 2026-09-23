@@ -406,11 +406,11 @@ def test_no_resolvable_base_ref_still_sees_a_committed_private_artifact(
 
     repo = _init_bare_repo(tmp_path)
     run = dict(cwd=str(repo), capture_output=True, text=True, check=True)
-    (repo / "data").mkdir()
-    # PRIVATE_ARTIFACT_PATTERNS matches via fnmatch, not pathlib glob -- "**/*.db"
-    # requires a literal "/" in the path (fnmatch has no directory-recursion
-    # semantics), so a nested path is needed to actually match the pattern.
-    (repo / "data" / "studio.db").write_bytes(b"not a real sqlite file, just needs to match")
+    # Root-level, deliberately: the plainest shape of a private artifact, and the
+    # one PRIVATE_ARTIFACT_PATTERNS' fnmatch-based matching used to miss entirely
+    # (fnmatch has no real globstar -- a leading "**/" still requires a literal
+    # "/" somewhere in the path, so "**/*.db" never matched a root-level file).
+    (repo / "studio.db").write_bytes(b"not a real sqlite file, just needs to match")
     subprocess.run(["git", "add", "-A"], **run)
     subprocess.run(["git", "commit", "-q", "-m", "feat: add a database file"], **run)
     remotes = subprocess.run(["git", "remote"], **run).stdout
@@ -427,7 +427,7 @@ def test_no_resolvable_base_ref_still_sees_a_committed_private_artifact(
     changed = gate_mod._changed_files(args)
 
     assert (
-        "data/studio.db" in changed
+        "studio.db" in changed
     ), f"a committed private artifact went undetected with no origin remote: {changed}"
     report = change_impact_report(changed)
     assert report["publication_risk"]["private_artifact_risk_detected"] is True
