@@ -184,5 +184,46 @@ def test_the_close_path_consults_the_predicate():
     source = pathlib.Path(
         __import__("core.work_orders.close_main", fromlist=["x"]).__file__
     ).read_text(encoding="utf-8")
-    assert "main_ci_blocks_close(source_root, force=force)" in source
+    assert (
+        "main_ci_blocks_close(_ci_root, force=force)" in source
+    ), "close no longer consults the predicate, or consults it against the wrong repo"
     assert "main_ci_green" in source, "the refusal does not name itself as a failure"
+
+
+def test_the_ci_check_asks_about_the_work_orders_own_repository(tmp_path):
+    """A work order belongs to a project, and projects are not this repo.
+
+    It read `source_root` -- where Dream Studio lives -- so closing another project's work
+    order consulted Dream Studio's CI, which answers a question nobody asked. The ruling
+    is already on record for close gates generally: they run the WORK'S repo checks, never
+    this one's. Every close test in the suite began failing when the check landed, because
+    Dream Studio's main was red at the time; a test whose result depends on the live state
+    of a GitHub branch is not a test.
+    """
+    from core.work_orders.close_main import project_repo_root
+
+    db = tmp_path / "studio.db"
+    conn = sqlite3.connect(db)
+    conn.executescript(
+        "CREATE TABLE business_projects (project_id TEXT PRIMARY KEY, project_path TEXT);"
+    )
+    checkout = tmp_path / "a-real-checkout"
+    (checkout / ".git").mkdir(parents=True)
+    conn.executemany(
+        "INSERT INTO business_projects VALUES (?,?)",
+        [
+            ("p-checkout", str(checkout)),
+            ("p-not-a-repo", str(tmp_path / "just-a-folder")),
+            ("p-no-path", None),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    assert project_repo_root("p-checkout", db_path=db) == checkout
+    # A path that is not a checkout has no default branch to be red, and asking about one
+    # is how a tmp directory in a test ends up consulting GitHub.
+    assert project_repo_root("p-not-a-repo", db_path=db) is None
+    assert project_repo_root("p-no-path", db_path=db) is None
+    assert project_repo_root(None, db_path=db) is None
+    assert project_repo_root("p-checkout", db_path=tmp_path / "missing.db") is None

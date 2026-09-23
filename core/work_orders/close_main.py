@@ -251,8 +251,46 @@ def closability(
     return passed, failures
 
 
+def project_repo_root(project_id: str | None, *, db_path: Path | None = None) -> Path | None:
+    """The checkout a project's work actually lands in, or None.
+
+    A work order belongs to a project and projects are not this repo. Closing another
+    project's work order against Dream Studio's CI answers a question nobody asked --
+    the same ruling already in force for close gates generally: they run the WORK'S repo
+    checks, never this one's.
+    """
+    if not project_id:
+        return None
+    import sqlite3
+
+    if db_path is None:
+        return None
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return None
+    try:
+        row = conn.execute(
+            "SELECT project_path FROM business_projects WHERE project_id = ?",
+            (project_id,),
+        ).fetchone()
+    except sqlite3.Error:
+        return None
+    finally:
+        conn.close()
+    if not row or not row[0]:
+        return None
+    candidate = Path(str(row[0]))
+    # A path that is not a checkout cannot have a default branch to be red, and asking
+    # about one is how a test in a tmp directory ends up consulting GitHub.
+    return candidate if (candidate / ".git").exists() else None
+
+
 def main_ci_blocks_close(source_root: Path, *, force: bool = False) -> dict | None:
     """The red-main state blocking this close, or None.
+
+    Takes the repository the WORK lands in, which is the project's checkout and not
+    necessarily this one.
 
     MAIN MUST BE GREEN before a work order is done. This was read here already, and
     already live -- `max_age_seconds=0`, because declaring work done is the one
@@ -799,7 +837,12 @@ def close_work_order(
         # started yet all read unknown; refusing there would make closing depend on
         # network weather, and a check nobody can satisfy is bypassed by habit until it
         # means nothing. Only a KNOWN red main refuses.
-        _ci_block = main_ci_blocks_close(source_root, force=force)
+        # THE WORK ORDER'S OWN REPOSITORY, not wherever Dream Studio lives. A project
+        # with no recorded checkout yields None, and the read then reports unknown --
+        # which does not block, so a project DS only tracks is never gated on a branch it
+        # does not own.
+        _ci_root = project_repo_root(meta.get("project_id"), db_path=db_path)
+        _ci_block = main_ci_blocks_close(_ci_root, force=force) if _ci_root else None
         if _ci_block is not None:
             return {
                 **_bookkeeping_errors,

@@ -457,12 +457,29 @@ def advance_work_order(
             return {"ok": True, "already": True, "work_order_id": work_order_id, "status": to}
 
         now = datetime.now(UTC).isoformat()
-        conn.execute(
-            "UPDATE business_work_orders"
-            " SET status = ?, updated_at = ?, last_updated_at = ?"
-            " WHERE work_order_id = ?",
-            (status_for(event_type, work_order=True), now, now, work_order_id),
-        )
+        # A CI FAILURE IS A BLOCKER, and BOTH writers must say so. This row is written
+        # directly here and again by WorkOrderProjection on replay; if only the projection
+        # raised the priority, the queue would order correctly after a rebuild and wrongly
+        # until one happened -- which is the same two-writers-disagreeing shape the status
+        # vocabulary exists to prevent, one column over.
+        #
+        # Derived, not chosen: main being red is a fact about the default branch, not a
+        # judgement about urgency, and a level any writer may pick is `blocker` within a
+        # week.
+        if to == "ci_issues":
+            conn.execute(
+                "UPDATE business_work_orders"
+                " SET status = ?, priority = 'blocker', updated_at = ?, last_updated_at = ?"
+                " WHERE work_order_id = ?",
+                (status_for(event_type, work_order=True), now, now, work_order_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE business_work_orders"
+                " SET status = ?, updated_at = ?, last_updated_at = ?"
+                " WHERE work_order_id = ?",
+                (status_for(event_type, work_order=True), now, now, work_order_id),
+            )
         conn.commit()
 
     event_write_error: str | None = None

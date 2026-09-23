@@ -59,7 +59,7 @@ Grounds, measured rather than argued:
   - Removing it means every read waits for a drain. `ds work-order start` followed
     immediately by `ds work-order tasks` is the common path, and the drain is not
     synchronous with either.
-  - WRITER-COUNTS: total=14 routed=12
+  - WRITER-COUNTS: total=15 routed=13
     The authoritative figures, in one declared form so a check reads them instead of
     guessing at prose. `test_both_records_state_the_same_writer_counts` parses this line
     out of BOTH records and holds them against what the finder discovers, so the numbers
@@ -73,7 +73,10 @@ Grounds, measured rather than argued:
     first landed spelling `in_progress` inline, which these two tests caught. The
     fourteenth is `advance_work_order` (2026-09-23), the single writer behind the three
     statuses between working and done -- one function rather than three, precisely so this
-    count went up by one instead of three. The other
+    count went up by one instead of three. The fifteenth is its ci_issues branch, which
+    also raises priority: the status and the priority are written together because the
+    projection writes them together on replay, and a row that agreed after a rebuild and
+    disagreed until one happened would be the worse of the two failures. The other
     two are in interfaces/cli/commands/prove.py, which binds status as a parameter in a
     DISPOSABLE scratch authority it creates and tears down, and carries its own recorded
     exemption for exactly that reason.

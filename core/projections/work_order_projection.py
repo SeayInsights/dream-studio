@@ -250,17 +250,21 @@ class WorkOrderProjection(Projection):
         every round trip and lose how long the work actually took -- and the round trips
         are the thing worth measuring.
         """
-        return self.safe_upsert(
-            conn,
-            _TABLE,
-            {
-                "work_order_id": work_order_id,
-                "status": status_for(event_type, work_order=True),
-                "last_event_id": event_id,
-                "last_updated_at": now,
-            },
-            conflict_key="work_order_id",
-        )
+        row = {
+            "work_order_id": work_order_id,
+            "status": status_for(event_type, work_order=True),
+            "last_event_id": event_id,
+            "last_updated_at": now,
+        }
+        # A CI FAILURE IS A BLOCKER, DERIVED RATHER THAN CHOSEN. Main being red is a fact,
+        # not a judgement about urgency -- the work is on the default branch and the
+        # default branch is failing. Deriving it here is also what stops the level being
+        # something an agent selects: a priority any writer can pick is `blocker` within a
+        # week, which is the same reason the rule registry makes its escape cost twenty
+        # characters.
+        if event_type == "work_order.ci_failed":
+            row["priority"] = "blocker"
+        return self.safe_upsert(conn, _TABLE, row, conflict_key="work_order_id")
 
     def _handle_started(
         self,
