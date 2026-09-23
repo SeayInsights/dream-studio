@@ -64,8 +64,11 @@ def test_changed_file_selects_dependent_tests(tmp_path: Path) -> None:
     ), "a test importing an unrelated module must NOT be selected"
 
 
-def test_no_python_changes_selects_nothing(tmp_path: Path) -> None:
-    """Changed files with no .py and no test impact yield an empty dependent set."""
+def test_a_data_file_no_test_names_selects_nothing(tmp_path: Path) -> None:
+    """A changed data file selects the tests whose text names its path; when none does,
+    the dependent set is empty. This used to assert that any non-.py change selected
+    nothing at all, which is the rule that let the canonical/rules.yml edit in #784 reach
+    zero of the two tests naming that file."""
     repo = tmp_path
     _write(repo / "docs" / "README.md", "# docs\n")
     result = compute_impact_set(["docs/README.md"], repo_root=repo)

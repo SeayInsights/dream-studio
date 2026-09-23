@@ -53,7 +53,14 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """The whole `ds` command tree, without parsing anything.
+
+    Separated from main() so the tree can be inspected in-process: `ds work-order
+    create --help` raised TypeError from an unescaped % in a help string, and the only
+    way to prove every other subcommand's help renders was to shell out to each one.
+    tests/unit/test_every_help_renders.py walks this instead.
+    """
     parser = argparse.ArgumentParser(prog="ds", description="Dream Studio global command")
     parser.add_argument("--source-root", default=None, help="Dream Studio source/build root")
     parser.add_argument("--home", default=None, help="Dream Studio user-local state root")
@@ -133,6 +140,11 @@ def main(argv: list[str] | None = None) -> int:
     # -----------------------------------------------------------------------
     # Parse & resolve globals
     # -----------------------------------------------------------------------
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
     args = parser.parse_args(argv)
     source_root = Path(args.source_root).resolve() if args.source_root else REPO_ROOT
     home = Path(args.home).resolve() if args.home else None

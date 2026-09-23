@@ -101,7 +101,7 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
             "The PROMPT for the tasks under this work order: what is being done and why."
             " Required, because a work order without one breaks the prompt chain in the"
             " middle and the tasks have to re-derive an intent nobody wrote down."
-            " Measured 2026-09-21: 446 of 1,038 work orders had none, 78-100% on projects"
+            " Measured 2026-09-21: 446 of 1,038 work orders had none, 78-100%% on projects"
             " outside this repo."
         ),
     )
