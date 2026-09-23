@@ -427,6 +427,27 @@ def analytics_db_path() -> Path:
     return state_dir() / "aggregate_metrics.db"
 
 
+def analytics_db_path_for(studio_db_path: str | Path | None) -> Path | None:
+    """Return the analytics store colocated with *studio_db_path*, or None.
+
+    state_dir() always places aggregate_metrics.db next to studio.db (both
+    live under .../state/), so a caller holding an EXPLICIT authority path —
+    a test fixture, or any studio.db other than the ambient default — must
+    resolve the analytics store as that path's sibling, never whatever
+    aggregate_metrics.db happens to sit in the ambient DREAM_STUDIO_HOME.
+    Falling through to the ambient store meant a collector built on an
+    isolated test db_path silently read another test's (or another run's)
+    rows once anything had populated the ambient store first.
+
+    Returns None when studio_db_path is None, so callers can pass the result
+    straight through to connect_analytics(db_path=...) unchanged: None keeps
+    resolving to analytics_db_path() (the ambient default).
+    """
+    if studio_db_path is None:
+        return None
+    return Path(studio_db_path).parent / "aggregate_metrics.db"
+
+
 def connect_analytics(
     db_path: Path | None = None,
     *,
