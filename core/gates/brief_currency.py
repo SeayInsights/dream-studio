@@ -27,6 +27,8 @@ would never age, and would quietly disable the gate forever.
 
 from __future__ import annotations
 
+from core.work_orders.models import WORK_ORDER_TYPES
+
 import json
 from pathlib import Path
 from typing import Any
@@ -35,7 +37,9 @@ from typing import Any
 # is included because it spans UI and API by definition; `api_endpoint`,
 # `data_pipeline`, `infrastructure`, `deployment` and `documentation` are not, so a
 # backend-only stretch of work does not stale a brief that still describes the UI.
-_UI_TYPES = ("ui_component", "ui_page", "saas_feature")
+# A subset of the one definition, by construction: a member spelled wrong here drops out
+# rather than becoming a fifth type nothing else knows.
+_UI_TYPES = tuple(t for t in ("ui_component", "ui_page", "saas_feature") if t in WORK_ORDER_TYPES)
 
 _RNC_KEY_PREFIX = "brief_reviewed_no_change."
 

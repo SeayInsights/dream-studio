@@ -12,6 +12,8 @@ extracted verbatim from the original module.
 
 from __future__ import annotations
 
+from core.work_orders.models import WORK_ORDER_TYPES
+
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -34,7 +36,7 @@ from core.work_orders.task_status import status_for
 # WO-GRADER-ADVERSARIAL: independent review is default-on at close for every WO
 # type except these (no code to review — their deliverable is the document, and
 # the executable_ac / attestation path covers them).
-_VERIFY_EXEMPT_TYPES = frozenset({"documentation"})
+_VERIFY_EXEMPT_TYPES = frozenset({"documentation"}) & frozenset(WORK_ORDER_TYPES)
 
 
 def check_close_gates(

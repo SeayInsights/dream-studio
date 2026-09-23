@@ -34,11 +34,11 @@ from typing import Any
 from core.event_store.studio_db import _connect
 
 from core.milestones.status import MILESTONE_COMPLETE
-from core.work_orders.models import TERMINAL_WO_STATUSES
+from core.work_orders.models import TERMINAL_WO_STATUSES, WORK_ORDER_TYPES
 
 logger = logging.getLogger(__name__)
 
-_UI_WO_TYPES: frozenset[str] = frozenset({"ui_component", "ui_page"})
+_UI_WO_TYPES: frozenset[str] = frozenset({"ui_component", "ui_page"}) & frozenset(WORK_ORDER_TYPES)
 
 
 def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
