@@ -77,7 +77,7 @@ Applied by `ds work-order close <wo_id>`. Gate checked automatically — failure
 | `design_critique` | `.planning/work-orders/<id>/design-critique.md` with `Score: N/M ≥ 3` | `ui_component`, `ui_page` |
 | `spec_approved` | `.planning/work-orders/<id>/spec.md` | `game_mechanic` |
 
-**Force-close:** `ds work-order close <id> --force` bypasses gates. Requires explicit operator approval. Emits `gate.bypassed` event.
+**Force-close:** `ds work-order close <id> --force` bypasses gates. Requires explicit operator approval. Emits `gate.bypassed` event. It does not bypass the phase: a work order closes only from `pushed` or `ci_issues` (phases run created → in_progress → in_review → pushed → ci_issues → closed, only ci_issues skippable), because where the work is is a fact, not a gate.
 
 ---
 

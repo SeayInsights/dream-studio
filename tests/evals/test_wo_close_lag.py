@@ -42,7 +42,7 @@ def live_like_home(tmp_path, monkeypatch):
 
 
 def _seed_project_milestone_wo(db: Path) -> tuple[str, str, str]:
-    """Seed a project + milestone + a work order (status 'created'). Returns ids."""
+    """Seed a project + milestone + a work order (status 'pushed'). Returns ids."""
     project_id = str(uuid.uuid4())
     milestone_id = str(uuid.uuid4())
     wo_id = str(uuid.uuid4())
@@ -63,7 +63,11 @@ def _seed_project_milestone_wo(db: Path) -> tuple[str, str, str]:
             "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description,"
             "  work_order_type, status, sequence_order, created_at, updated_at, last_updated_at)"
-            " VALUES (?,?,?,?,?,?,'created',1,?,?,?)",
+            # close accepts only pushed/ci_issues; test_close_flushes_projection closes
+            # this WO straight from the seed and the phase is not what it checks.
+            # test_milestone_close_flushes_projection overwrites status to 'closed'
+            # via a raw UPDATE below regardless of the seeded value.
+            " VALUES (?,?,?,?,?,?,'pushed',1,?,?,?)",
             (wo_id, project_id, milestone_id, "Test WO", "desc", "infrastructure", NOW, NOW, NOW),
         )
         # One complete task with a passing executable AC so the close gates
@@ -118,6 +122,23 @@ def _seed_project_milestone_wo(db: Path) -> tuple[str, str, str]:
     return project_id, milestone_id, wo_id
 
 
+def _dispatch_clean_review(db_path: Path, work_order_id: str) -> None:
+    """A work order past review must have had one, so lane_review_failure demands a review
+    dispatch exist before close — a gate independent of WO-P20-CLOSE-LAG's
+    projection-flush behavior. Record the minimum: a dispatch with no lanes
+    assigned, so nothing is left unanswered and the gate clears."""
+    from core.work_orders.review_answers import record_dispatch
+
+    record_dispatch(
+        work_order_id,
+        sha="0" * 40,
+        image="test",
+        change_set=[],
+        assignments=[],
+        db_path=db_path,
+    )
+
+
 def _status(db: Path, table: str, id_col: str, id_val: str) -> str:
     conn = sqlite3.connect(str(db))
     try:
@@ -135,6 +156,7 @@ def test_close_flushes_projection(live_like_home, monkeypatch):
     monkeypatch.setenv("DREAM_STUDIO_VERIFY_MOCK", "1")
     home, db = live_like_home
     _project_id, _milestone_id, wo_id = _seed_project_milestone_wo(db)
+    _dispatch_clean_review(db, wo_id)
 
     from core.work_orders.close import close_work_order
 

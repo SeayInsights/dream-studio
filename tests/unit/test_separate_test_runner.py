@@ -418,6 +418,14 @@ def test_close_surfaces_a_verdict_that_nothing_executed(db, tmp_path):
             },
         },
     )
+    # close accepts only pushed/ci_issues, and force does not change that;
+    # `_wo_with_acs` seeds `in_progress`, and the phase is not what this test checks.
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "UPDATE business_work_orders SET status = 'pushed' WHERE work_order_id = ?", (wo_id,)
+    )
+    conn.commit()
+    conn.close()
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db
     with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
@@ -596,6 +604,14 @@ def test_close_does_not_claim_execution_that_never_happened(db, tmp_path):
             },
         },
     )
+    # close accepts only pushed/ci_issues, and force does not change that;
+    # `_wo_with_acs` seeds `in_progress`, and the phase is not what this test checks.
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "UPDATE business_work_orders SET status = 'pushed' WHERE work_order_id = ?", (wo_id,)
+    )
+    conn.commit()
+    conn.close()
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db
     with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):

@@ -63,7 +63,7 @@ Pure operator actions. Route to `business_canonical_events`. Drive all SDLC proj
 | `WORK_ORDER_STARTED` | `work_order.started` | Work order entered `in_progress` |
 | `WORK_ORDER_CLOSED` | `work_order.closed` | Work order closed (gates passed) |
 | `WORK_ORDER_BLOCKED` | `work_order.blocked` | Work order blocked with reason |
-| `WORK_ORDER_UNBLOCKED` | `work_order.unblocked` | Work order unblocked → `in_progress` _(registry-only)_ |
+| `WORK_ORDER_UNBLOCKED` | `work_order.unblocked` | Work order unblocked → the phase it was blocked from (`to_status`; `in_progress` for older events) _(registry-only)_ |
 
 ### Tasks
 

@@ -64,12 +64,14 @@ def db_path(tmp_path: Path) -> Path:
             (MILESTONE_ID, PROJECT_ID, NOW, NOW),
         )
         # Primary WO — infrastructure type has post_build_gate='independent_review'
-        # (set by migration 114).
+        # (set by migration 114). Seeded at 'pushed' — close accepts only
+        # pushed/ci_issues, and every test in this file closes WO_INFRA (some
+        # successfully, some blocked on a gate, but always past the phase check).
         conn.execute(
             "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, sequence_order, created_at, updated_at)"
-            " VALUES (?, ?, ?, 'Infra WO', '', 'in_progress', 'infrastructure', 10, ?, ?)",
+            " VALUES (?, ?, ?, 'Infra WO', '', 'pushed', 'infrastructure', 10, ?, ?)",
             (WO_INFRA, PROJECT_ID, MILESTONE_ID, NOW, NOW),
         )
         conn.execute(
@@ -100,6 +102,22 @@ def db_path(tmp_path: Path) -> Path:
         conn.commit()
     finally:
         conn.close()
+    # WO_INFRA sits at 'pushed', past review, so close's lane_review
+    # gate now refuses it as "in review but no review was ever dispatched" unless a
+    # dispatch is on record. Zero assignments -> nothing unanswered, no findings -> the
+    # review reads clean, so the auto-verify / gap / pass-path scenarios below exercise
+    # only what they intend to.
+    from core.work_orders.review_answers import record_dispatch
+
+    record_dispatch(
+        WO_INFRA,
+        sha="0" * 40,
+        image="test-fixture",
+        change_set=[],
+        assignments=[],
+        db_path=target,
+        ownership={},
+    )
     return target
 
 

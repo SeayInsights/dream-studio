@@ -87,11 +87,6 @@ DISPATCH_KEY = "dispatch"
 #: nobody can answer, and it blocks as unanswered.
 CHAIR_SEAT = "Chair and verdict owner"
 
-#: The statuses that mean a work order has been handed to the lanes: in review, and the two
-#: that only follow a cleared review. A work order in one of them with no dispatched review
-#: was never actually reviewed.
-REVIEWED_STATUSES = ("in_review", "pushed", "ci_issues")
-
 #: The lane that judges whether a replacement test actually exercises the defect it
 #: resolves. The door proves a `resolves_with` test discriminates the fix; only a judgment
 #: can say it is ABOUT the defect, and this is the seat whose question that is.
@@ -896,27 +891,22 @@ def lane_review_state(work_order_id: str, *, db_path: Path | None = None) -> str
 
 
 def lane_review_failure(work_order_id: str, *, db_path: Path | None = None) -> str | None:
-    """A close-gate failure when a DISPATCHED lane review still holds the work order.
+    """A close-gate failure when the lane review holds the work order, or never ran.
 
-    None when no review was dispatched (the push gate owns that case) or when the review
-    is clear. The text starts with ``lane_review`` so the close path's independent_review
+    None only when a dispatched review is clear. The text starts with ``lane_review`` so the close path's independent_review
     waivers -- which answer whether the verify verdict can be trusted -- never strip it.
     """
     status = review_status(work_order_id, db_path=db_path)
     if not status["dispatched"]:
-        # "Never reviewed" is not "reviewed clean". A work order that is IN review, or
-        # past it, was handed to the lanes, so a missing dispatch is a failure here, not
-        # the push gate's problem -- close does not require passing through `pushed`
-        # (boundary-semantics, round three). A legacy work order closing straight from
-        # in_progress never entered review and is not failed for it.
-        from core.work_orders.queries import work_order_status
-
-        if work_order_status(work_order_id, db_path=db_path) in REVIEWED_STATUSES:
-            return (
-                "lane_review: this work order is in review but no review was ever"
-                f" dispatched. Run `ds review --dispatch --work-order {work_order_id}`."
-            )
-        return None
+        # "Never reviewed" is not "reviewed clean". Close accepts only a work order at
+        # `pushed` or `ci_issues`, both past review, so a missing dispatch here is a
+        # review that never happened. A work order used to be able to close straight from
+        # in_progress and was exempt; the phase order removed that path, and the exemption
+        # with it.
+        return (
+            "lane_review: this work order is past review but no review was ever"
+            f" dispatched. Run `ds review --dispatch --work-order {work_order_id}`."
+        )
     if not status["blocking"]:
         return None
     return (

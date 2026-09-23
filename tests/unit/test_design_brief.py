@@ -69,6 +69,21 @@ def _insert_brief(
         conn.close()
 
 
+def _ready_to_close(db_home: Path) -> None:
+    """Move WO_UI_ID to a phase close will actually evaluate.
+
+    close accepts only pushed/ci_issues; `db_home` seeds `created` because the same
+    fixture also backs `work-order start` tests, which need `created`. The
+    design_brief_locked gate is what these close tests check, not the phase.
+    """
+    conn = sqlite3.connect(str(_db_path(db_home)))
+    conn.execute(
+        "UPDATE business_work_orders SET status = 'pushed' WHERE work_order_id = ?", (WO_UI_ID,)
+    )
+    conn.commit()
+    conn.close()
+
+
 # ── 1. migration: business_design_briefs table exists after bootstrap ───────────
 
 
@@ -354,6 +369,7 @@ def test_design_brief_set_system_exits_1_on_locked_brief(db_home, capsys):
 
 def test_gate_check_design_brief_locked_passes_when_locked(db_home, tmp_path, monkeypatch, capsys):
     _insert_brief(db_home, status="locked")
+    _ready_to_close(db_home)
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     main(
         [
@@ -376,6 +392,7 @@ def test_gate_check_design_brief_locked_passes_when_locked(db_home, tmp_path, mo
 
 
 def test_gate_check_design_brief_locked_fails_when_no_brief(db_home, tmp_path, monkeypatch, capsys):
+    _ready_to_close(db_home)
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     rc = main(
         [
@@ -399,6 +416,7 @@ def test_gate_check_design_brief_locked_fails_when_no_brief(db_home, tmp_path, m
 
 def test_gate_check_design_brief_locked_fails_when_draft(db_home, tmp_path, monkeypatch, capsys):
     _insert_brief(db_home, status="draft")
+    _ready_to_close(db_home)
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     rc = main(
         [

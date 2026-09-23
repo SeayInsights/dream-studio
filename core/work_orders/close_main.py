@@ -31,7 +31,7 @@ from .close_gates import (
 )
 from .close_shared import _lookup_work_order_and_gates, _require_db
 from .models import TERMINAL_WO_STATUSES, terminal_wo_status_placeholders
-from core.work_orders.task_status import status_for
+from core.work_orders.task_status import status_for, transition_refusal
 
 # WO-GRADER-ADVERSARIAL: independent review is default-on at close for every WO
 # type except these (no code to review — their deliverable is the document, and
@@ -105,6 +105,12 @@ def check_close_gates(
         _structure_preview = check_structure(work_order_id, db_path=db_path)
         if _structure_preview and not recorded_exception(work_order_id, db_path=db_path):
             failures.append(_render_structure(_structure_preview, work_order_id))
+
+    # The phase, previewed for the same reason: close refuses a work order that has not
+    # reached `pushed` or `ci_issues`, and no --force changes that.
+    _phase = transition_refusal(work_order_id, meta.get("wo_status"), "closed")
+    if _phase:
+        failures.append(_phase)
 
     meta["gate_failures"] = failures
     meta["gates_pass"] = not failures
@@ -358,6 +364,22 @@ def close_work_order(
 
     p_root = planning_root or Path.cwd() / ".planning"
     db_path = _require_db(source_root, dream_studio_home)
+
+    # CLOSED COMES AFTER PUSHED, AND --force DOES NOT CHANGE THAT. A work order closes from
+    # `pushed` (its CI met no issue) or `ci_issues` (the issues were fixed), and from
+    # nowhere else. This used to close from any status, so `in_progress -> closed` was one
+    # command and the review lanes and CI were steps a work order could simply not take.
+    # Force waives GATES -- a judgment about criteria, recorded as gate.bypassed -- and the
+    # phase is not a gate: it is a fact about where the work is. Checked before anything
+    # below writes, so a refused close leaves no boundary stamp or ownership claim behind.
+    with _connect(db_path) as _conn:
+        _row = _conn.execute(
+            "SELECT status FROM business_work_orders WHERE work_order_id = ?", (work_order_id,)
+        ).fetchone()
+    if _row is not None:
+        _refusal = transition_refusal(work_order_id, _row[0], "closed")
+        if _refusal:
+            return {"ok": False, "error": _refusal, "status": _row[0], "phase_refused": True}
 
     # T1: Auto-verify — if the independent_review gate applies and no verdict file
     # exists yet, run verify inline before the gate evaluation so operators don't

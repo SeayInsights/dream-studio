@@ -152,8 +152,9 @@ def _watch(
 
     if not awaiting:
         report["note"] = (
-            "No work order is at `pushed`, so this run vindicates or breaks nothing"
-            " recorded. Mark work `ds work-order pushed <id>` when it goes out."
+            "No work order is at `pushed` or `ci_issues`, so this run vindicates or"
+            " breaks nothing recorded. Mark work `ds work-order pushed <id>` when it goes"
+            " out."
         )
         print(json.dumps(report, indent=2))
         return 0
@@ -206,6 +207,13 @@ def _act(
 ) -> dict[str, Any]:
     """Close the work order, or record the failure on it. Never both, never neither."""
     wo_id = wo["work_order_id"]
+
+    # ALREADY RECORDED. A work order at `ci_issues` carries its failure as a task from the
+    # run that put it there; a later red run is the same failure still standing, or a new
+    # one the open task's fix will meet. Filing another task on every red poll would bury
+    # the one that matters under copies of itself.
+    if status != "success" and wo.get("status") == "ci_issues":
+        return {"work_order_id": wo_id, "did": "nothing: ci_issues already recorded", "ok": True}
 
     if status == "success":
         if dry_run:

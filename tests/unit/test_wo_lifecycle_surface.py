@@ -931,6 +931,24 @@ def _complete_all_tasks(db: Path, work_order_id: str) -> None:
     conn.close()
 
 
+def _ready_to_close(db: Path, work_order_id: str) -> None:
+    """Move a freshly scaffolded work order to a phase close will actually evaluate.
+
+    close accepts only pushed/ci_issues; these tests exercise gates OTHER than the
+    phase (structural invariants, tasks_done, carry-over), so the phase itself must not
+    be what refuses the close -- `_scaffold` leaves a work order at `created`.
+    """
+    import sqlite3
+
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "UPDATE business_work_orders SET status = 'pushed' WHERE work_order_id = ?",
+        (work_order_id,),
+    )
+    conn.commit()
+    conn.close()
+
+
 def test_start_reports_the_invariants_without_blocking(db, tmp_path, monkeypatch):
     """START REPORTS; CLOSE REFUSES. Refusing here looked right and was wrong.
 
@@ -996,6 +1014,7 @@ def test_closing_a_malformed_work_order_is_refused_with_the_escape_named(db, tmp
 
     _, _, wid = _scaffold(db, tasks=1, siblings=1)
     _complete_all_tasks(db, wid)
+    _ready_to_close(db, wid)
 
     result = close_work_order(
         work_order_id=wid,
@@ -1019,6 +1038,7 @@ def test_a_recorded_reason_lets_the_close_through(db, tmp_path):
 
     _, _, wid = _scaffold(db, tasks=1, siblings=1)
     _complete_all_tasks(db, wid)
+    _ready_to_close(db, wid)
     record_exception(wid, "Single task: the change is one constant in one file.", db_path=db)
 
     result = close_work_order(
@@ -1037,6 +1057,7 @@ def test_a_well_formed_work_order_is_not_refused_at_close(db, tmp_path):
 
     _, _, wid = _scaffold(db, tasks=2, siblings=2)
     _complete_all_tasks(db, wid)
+    _ready_to_close(db, wid)
 
     result = close_work_order(
         work_order_id=wid,
@@ -1059,6 +1080,7 @@ def test_the_preview_and_the_close_agree_about_the_invariants(db, tmp_path):
 
     _, _, wid = _scaffold(db, tasks=1, siblings=1)
     _complete_all_tasks(db, wid)
+    _ready_to_close(db, wid)
 
     preview = check_close_gates(work_order_id=wid, source_root=tmp_path, dream_studio_home=tmp_path)
     closed = close_work_order(
@@ -1080,6 +1102,7 @@ def test_the_refusal_names_the_command_it_can_actually_be_answered_with(db, tmp_
 
     _, _, wid = _scaffold(db, tasks=1, siblings=1)
     _complete_all_tasks(db, wid)
+    _ready_to_close(db, wid)
     result = close_work_order(
         work_order_id=wid, source_root=tmp_path, dream_studio_home=tmp_path, skip_verify=True
     )
@@ -1690,6 +1713,7 @@ def test_carry_over_closes_the_original_at_its_true_scope(db, tmp_path, monkeypa
 
     # The original can now close at its true scope, through the gates.
     _complete_all_tasks(db, wid)
+    _ready_to_close(db, wid)
     closed = close_work_order(
         work_order_id=wid, source_root=tmp_path, dream_studio_home=tmp_path, skip_verify=True
     )
@@ -1856,6 +1880,7 @@ def test_carry_over_is_not_recorded_as_a_gate_bypass(db, tmp_path, monkeypatch):
         dream_studio_home=tmp_path,
     )
     _complete_all_tasks(db, wid)
+    _ready_to_close(db, wid)
 
     closed = close_work_order(
         work_order_id=wid, source_root=tmp_path, dream_studio_home=tmp_path, skip_verify=True
@@ -1885,6 +1910,7 @@ def test_a_deleted_task_with_no_recorded_split_still_blocks_the_close(db, tmp_pa
     conn.execute("UPDATE business_tasks SET status='deleted' WHERE work_order_id=?", (wid,))
     conn.commit()
     conn.close()
+    _ready_to_close(db, wid)
 
     closed = close_work_order(
         work_order_id=wid, source_root=tmp_path, dream_studio_home=tmp_path, skip_verify=True

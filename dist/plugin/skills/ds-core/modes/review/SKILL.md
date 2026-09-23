@@ -212,9 +212,12 @@ check yet blocks exactly as hard. And it is enforced, not advisory: the pre-push
 branch whose work order (`wo-<shortid>` in the branch name) the review still holds — a
 branch naming no work order is reported NOT GATED, never "clear" — and `ds work-order pushed
 <id>` refuses while the review holds the work order, naming what holds it, with no
-override — the lanes run before anything is pushed. `ds work-order close` refuses too;
-`--force` can close past it as it can past any close gate, and the bypass is recorded as
-`gate.bypassed`, never silent.
+override — the lanes run before anything is pushed. The phases run in order — created,
+in_progress, in_review, pushed, ci_issues, closed, with only ci_issues skippable — so
+`ds work-order close` accepts only a work order at `pushed` or `ci_issues`, and no `--force`
+changes that. A review re-dispatched after the push can still hold it: close refuses then
+too, `--force` can close past the review as it can past any close gate, and the bypass is
+recorded as `gate.bypassed`, never silent.
 
 **5. Fix, commit, dispatch again.** Each dispatch is a new round against the new commit.
 A finding is resolved only when a later round answers that lane `pass` **and the door,

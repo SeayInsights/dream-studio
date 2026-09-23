@@ -149,12 +149,18 @@ def remediation_task(
 
 
 def work_orders_awaiting_ci(db_path: Path) -> list[dict[str, Any]]:
-    """Work orders at `pushed`: the ones whose fate this run decides.
+    """Work orders at `pushed` or `ci_issues`: the ones whose fate this run decides.
 
     `pushed` is the link between a merge and the work that caused it. It is deliberately
     not terminal, which is what makes this query meaningful -- a work order that had
     already closed on being pushed would be invisible here, and the run that broke it
     would have nothing to attach to.
+
+    `ci_issues` is here because it is the other phase a work order closes from. Its fixes
+    are pushed from inside that phase, and a green main is what says they worked; a
+    watcher that only saw `pushed` would leave every fixed work order at `ci_issues`
+    forever. Each row carries its status, because a red run means something different
+    for each: new for one, already recorded for the other.
     """
     import sqlite3
 
@@ -164,11 +170,13 @@ def work_orders_awaiting_ci(db_path: Path) -> list[dict[str, Any]]:
         return []
     try:
         rows = conn.execute(
-            "SELECT work_order_id, title, project_id FROM business_work_orders"
-            " WHERE status = 'pushed' ORDER BY last_updated_at ASC"
+            "SELECT work_order_id, title, project_id, status FROM business_work_orders"
+            " WHERE status IN ('pushed', 'ci_issues') ORDER BY last_updated_at ASC"
         ).fetchall()
     except sqlite3.Error:
         return []
     finally:
         conn.close()
-    return [{"work_order_id": r[0], "title": r[1], "project_id": r[2]} for r in rows]
+    return [
+        {"work_order_id": r[0], "title": r[1], "project_id": r[2], "status": r[3]} for r in rows
+    ]
