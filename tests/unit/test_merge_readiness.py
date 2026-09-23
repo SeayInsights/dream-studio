@@ -107,7 +107,7 @@ def _clear_lane_review(db, wo_id):
     from core.work_orders.review_answers import record_answers, record_dispatch
 
     reviewer = "review-gate-and-test-integrity"
-    record_dispatch(
+    issued = record_dispatch(
         wo_id,
         sha="e" * 40,
         image="ds-review:fake",
@@ -129,6 +129,7 @@ def _clear_lane_review(db, wo_id):
         db_path=db,
         available=lambda: (True, ""),
         verify=lambda image, repro: (True, {"exit_code": repro["exit_code"]}, "ok"),
+        credential=issued["credentials"][reviewer],
     )
 
 

@@ -20,6 +20,22 @@ from core.config.sqlite_bootstrap import bootstrap_database
 from core.work_orders.mutations import advance_work_order
 from core.work_orders.review_answers import record_answers, record_dispatch
 
+#: Credentials issued by each dispatch in this module, so recording helpers can present
+#: the one issued to the reviewer they record for -- as a real reviewer must.
+_ISSUED: dict = {}
+
+
+def _issuing(fn):
+    def wrapper(*args, **kwargs):
+        doc = fn(*args, **kwargs)
+        _ISSUED.update(doc.get("credentials") or {})
+        return doc
+
+    return wrapper
+
+
+record_dispatch = _issuing(record_dispatch)
+
 PROJECT_ID = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
 WO_ID = "ffffffff-ffff-ffff-ffff-ffffffffffff"
 NOW = "2026-09-23T00:00:00+00:00"
@@ -106,6 +122,7 @@ def _answer(home, answers):
         db_path=_db(home),
         available=lambda: (True, "fake"),
         verify=_faithful,
+        credential=_ISSUED.get(REVIEWER),
     )
 
 

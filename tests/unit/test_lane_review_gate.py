@@ -16,6 +16,22 @@ from core.config.sqlite_bootstrap import bootstrap_database
 from core.work_orders.review_answers import record_answers, record_dispatch
 from interfaces.cli.lane_review_gate import REPO_ROOT, evaluate
 
+#: Credentials issued by each dispatch in this module, so recording helpers can present
+#: the one issued to the reviewer they record for -- as a real reviewer must.
+_ISSUED: dict = {}
+
+
+def _issuing(fn):
+    def wrapper(*args, **kwargs):
+        doc = fn(*args, **kwargs)
+        _ISSUED.update(doc.get("credentials") or {})
+        return doc
+
+    return wrapper
+
+
+record_dispatch = _issuing(record_dispatch)
+
 WO_ID = "abcdef12-0000-0000-0000-000000000000"
 BRANCH = "feat/wo-abcdef12-the-thing"
 REVIEWER = "review-gate-and-test-integrity"
@@ -65,6 +81,7 @@ def _review(db, answers):
         db_path=db,
         available=lambda: (True, ""),
         verify=_faithful,
+        credential=_ISSUED.get(REVIEWER),
     )
 
 

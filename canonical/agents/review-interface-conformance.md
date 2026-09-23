@@ -43,7 +43,15 @@ tree** to test something; the container is where experiments happen.
 
 ## What you return
 
-One answer per lane you were dispatched, and nothing else. You are convened by a review
+One answer per lane you were dispatched, and nothing else, in an object that carries the
+**credential** you were handed with your dispatch:
+
+```json
+{"credential": "<the credential issued to you>", "lanes": [ ...one answer per lane... ]}
+```
+
+The recording door refuses a submission that does not carry the credential issued to the
+reviewer it claims to be — one seat cannot answer as another. You are convened by a review
 that owns the process and the merge decision; you answer your own questions and hand them
 back.
 

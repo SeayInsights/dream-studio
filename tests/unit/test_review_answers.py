@@ -42,6 +42,22 @@ from core.work_orders.review_answers import (
     validate_answers,
 )
 
+#: Credentials issued by each dispatch in this module, so recording helpers can present
+#: the one issued to the reviewer they record for -- as a real reviewer must.
+_ISSUED: dict = {}
+
+
+def _issuing(fn):
+    def wrapper(*args, **kwargs):
+        doc = fn(*args, **kwargs)
+        _ISSUED.update(doc.get("credentials") or {})
+        return doc
+
+    return wrapper
+
+
+record_dispatch = _issuing(record_dispatch)
+
 PROJECT_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc"
 WO_ID = "dddddddd-dddd-dddd-dddd-dddddddddddd"
 NOW = "2026-09-23T00:00:00+00:00"
@@ -75,6 +91,7 @@ def _faithful(image, repro):
 def _record(db, reviewer, answers, **kw):
     kw.setdefault("available", _up)
     kw.setdefault("verify", _faithful)
+    kw.setdefault("credential", _ISSUED.get(reviewer))
     return record_answers(WO_ID, reviewer, answers, db_path=db, **kw)
 
 
@@ -568,6 +585,9 @@ def _cli(argv, home, monkeypatch, *, engine=True):
     parser = argparse.ArgumentParser(prog="ds")
     sub = parser.add_subparsers(dest="command", required=True)
     review.register(sub)
+    if "--record" in argv and "--credential" not in argv and _ISSUED.get(REVIEWER):
+        # The reviewer's credential, as the dispatcher would hand it over.
+        argv = [*argv, "--credential", _ISSUED[REVIEWER]]
     args = parser.parse_args(["review", *argv])
     from pathlib import Path
 
@@ -600,7 +620,15 @@ def test_cli_record_exits_0_on_a_complete_review(db, home, tmp_path, monkeypatch
 def test_cli_record_exits_1_when_an_answer_is_refused(db, home, tmp_path, monkeypatch):
     _dispatch(db)
     f = tmp_path / "a.json"
-    f.write_text(json.dumps([{"lane": "lane-one", "verdict": "pass"}]), encoding="utf-8")
+    f.write_text(
+        json.dumps(
+            {
+                "credential": _ISSUED.get(REVIEWER),
+                "lanes": [{"lane": "lane-one", "verdict": "pass"}],
+            }
+        ),
+        encoding="utf-8",
+    )
     code = _cli(
         ["--record", str(f), "--reviewer", REVIEWER, "--work-order", WO_ID], home, monkeypatch
     )
@@ -632,7 +660,12 @@ def test_cli_record_with_docker_down_exits_2(db, home, tmp_path, monkeypatch):
     _dispatch(db)
     f = tmp_path / "a.json"
     f.write_text(
-        json.dumps([{"lane": "lane-one", "verdict": "pass", "reproduction": HOLDS}]),
+        json.dumps(
+            {
+                "credential": _ISSUED.get(REVIEWER),
+                "lanes": [{"lane": "lane-one", "verdict": "pass", "reproduction": HOLDS}],
+            }
+        ),
         encoding="utf-8",
     )
     code = _cli(
@@ -1055,6 +1088,10 @@ def test_the_referee_answering_in_a_later_round_releases_it(db):
         assignments=[{"reviewer": REVIEWER, "seat": "s", "lanes": ["lane-one"]}],
     )
     _record(db, REVIEWER, [{"lane": "lane-one", "verdict": "pass", "reproduction": HOLDS}])
+    # HELD BEFORE THE REFEREE ANSWERS. Without this the test cannot fail: a "released"
+    # assertion also passes when there was never a hold -- the evidence-referee killed the
+    # whole mechanism in round five and this test stayed green.
+    assert review_status(WO_ID, db_path=db)["awaiting_referee"], "no hold to release"
     _record(
         db,
         "review-finding-integrity",
@@ -1088,3 +1125,93 @@ def test_a_referee_answer_in_the_same_round_does_not_count(db):
     )
     _resolve(db, {(NEW, STALE["command"]): 1, (OLD, REPLACEMENT): 1, (NEW, REPLACEMENT): 0})
     assert [a["lane"] for a in review_status(WO_ID, db_path=db)["awaiting_referee"]] == ["lane-one"]
+
+
+def test_a_referee_cannot_tell_does_not_release_a_replacement(db):
+    """Round five, boundary-semantics: the hold checked only that the referee ANSWERED, so
+    "I could not judge this" released it like a pass -- the cannot-tell bug of round
+    three, one level up. Only a referee pass certifies a replacement."""
+    _finding_at_old_then_round_two(db)
+    _resolve(db, {(NEW, STALE["command"]): 1, (OLD, REPLACEMENT): 1, (NEW, REPLACEMENT): 0})
+    record_dispatch(
+        WO_ID,
+        sha="3" * 40,
+        image="ds-review:third",
+        change_set=[],
+        ownership=OWNED,
+        db_path=db,
+        assignments=[{"reviewer": REVIEWER, "seat": "s", "lanes": ["lane-one"]}],
+    )
+    _record(db, REVIEWER, [{"lane": "lane-one", "verdict": "pass", "reproduction": HOLDS}])
+    _record(
+        db,
+        "review-finding-integrity",
+        [{"lane": "evidence-referee", "verdict": "cannot-tell", "why": "could not judge it"}],
+    )
+    status = review_status(WO_ID, db_path=db)
+    assert [a["lane"] for a in status["awaiting_referee"]] == ["lane-one"]
+    assert status["blocking"] is True
+
+
+def test_a_later_plain_pass_does_not_erase_the_referee_requirement(db):
+    """A plain pass on the same lane next round became the current answer and the
+    replacement fell out of view -- the referee hold vanished without a judgment. Found
+    writing the cannot-tell test, whose sibling had been passing for this wrong reason."""
+    _finding_at_old_then_round_two(db)
+    _resolve(db, {(NEW, STALE["command"]): 1, (OLD, REPLACEMENT): 1, (NEW, REPLACEMENT): 0})
+    record_dispatch(
+        WO_ID,
+        sha="3" * 40,
+        image="ds-review:third",
+        change_set=[],
+        ownership=OWNED,
+        db_path=db,
+        assignments=[{"reviewer": REVIEWER, "seat": "s", "lanes": ["lane-one"]}],
+    )
+    _record(db, REVIEWER, [{"lane": "lane-one", "verdict": "pass", "reproduction": HOLDS}])
+    assert [a["lane"] for a in review_status(WO_ID, db_path=db)["awaiting_referee"]] == ["lane-one"]
+
+
+# ── a name is not a reviewer ────────────────────────────────────────────────
+
+
+def test_a_submission_without_the_issued_credential_is_refused(db):
+    """Round five, access-and-reach: the referee hold was cleared by an answer submitted
+    under the referee's typed name. Each dispatch now issues every reviewer a credential,
+    and a submission is held to the one issued to the name it claims."""
+    _dispatch(db)
+    for wrong in (None, "not-the-credential"):
+        result = _record(
+            db,
+            REVIEWER,
+            [{"lane": "lane-one", "verdict": "pass", "reproduction": HOLDS}],
+            credential=wrong,
+        )
+        assert "does not carry the credential" in result["refused_submission"]
+    assert recorded_answers(WO_ID, db_path=db) == []
+
+
+def test_one_seat_cannot_answer_with_another_seats_credential(db):
+    _dispatch(
+        db,
+        [
+            {"reviewer": REVIEWER, "seat": "a", "lanes": ["lane-one"]},
+            {"reviewer": OTHER, "seat": "b", "lanes": ["lane-nine"]},
+        ],
+    )
+    result = _record(
+        db,
+        REVIEWER,
+        [{"lane": "lane-one", "verdict": "pass", "reproduction": HOLDS}],
+        credential=_ISSUED[OTHER],
+    )
+    assert "does not carry the credential" in result["refused_submission"]
+
+
+def test_credentials_are_hashed_at_rest_and_returned_once(db):
+    doc = _dispatch(db)
+    stored = ra.read_dispatch(WO_ID, db_path=db)
+    assert "credentials" not in stored, "the plaintext must never reach the authority"
+    token = doc["credentials"][REVIEWER]
+    assert token not in json.dumps(stored)
+    assert stored["credential_hashes"][REVIEWER] == ra._credential_hash(token)

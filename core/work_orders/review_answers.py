@@ -49,7 +49,9 @@ proves who typed it. That limit is stated here rather than implied away.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -87,6 +89,10 @@ REVIEWED_STATUSES = ("in_review", "pushed", "ci_issues")
 #: resolves. The door proves a `resolves_with` test discriminates the fix; only a judgment
 #: can say it is ABOUT the defect, and this is the seat whose question that is.
 REFEREE_LANE = "evidence-referee"
+
+
+def _credential_hash(credential: str) -> str:
+    return hashlib.sha256(credential.encode("utf-8")).hexdigest()
 
 
 def _now() -> str:
@@ -207,7 +213,16 @@ def record_dispatch(
             slot["lanes"] = sorted([*slot["lanes"], REFEREE_LANE])
             carried.append(REFEREE_LANE)
 
+    # ONE CREDENTIAL PER NAMED REVIEWER, hashed at rest. The plaintext leaves this function
+    # once, in its return value, for the dispatcher to hand each reviewer its own.
+    credentials = {
+        str(slot["reviewer"]): secrets.token_urlsafe(18)
+        for slot in slots.values()
+        if slot.get("reviewer")
+    }
+
     doc = {
+        "credential_hashes": {name: _credential_hash(c) for name, c in credentials.items()},
         "round": round_no,
         "sha": sha,
         "image": image,
@@ -231,6 +246,7 @@ def record_dispatch(
         project_root=project_root,
     )
     doc["stored"] = stored
+    doc["credentials"] = credentials  # returned, never stored
     return doc
 
 
@@ -452,6 +468,7 @@ def record_answers(
     available: Callable[[], tuple[bool, str]] | None = None,
     verify: Callable[..., tuple[bool, dict[str, Any] | None, str]] | None = None,
     ensure_image: Callable[[str], str] | None = None,
+    credential: str | None = None,
 ) -> dict[str, Any]:
     """Validate, verify and store a reviewer's answers for the current round.
 
@@ -477,6 +494,18 @@ def record_answers(
                 f"no dispatch is recorded for {work_order_id}. Run `ds review --dispatch"
                 f" --work-order {work_order_id}` first: it builds the lane image and records"
                 " which lanes each reviewer is asked, and answers are held to that record."
+            )
+        }
+    expected = (dispatch.get("credential_hashes") or {}).get(reviewer)
+    if expected and _credential_hash(str(credential or "")) != expected:
+        # A NAME IS NOT A REVIEWER. The referee hold was cleared in round five by an answer
+        # submitted under the referee's typed name; the credential issued at dispatch is
+        # what the name is now held to.
+        return {
+            "refused_submission": (
+                f"this submission does not carry the credential issued to {reviewer!r} when"
+                f" round {dispatch.get('round')} was dispatched. Each reviewer is handed its"
+                " own; one seat cannot answer as another."
             )
         }
     assigned = dispatched_lanes(dispatch, reviewer)
@@ -727,21 +756,38 @@ def _answered_in_round(work_order_id: str, round_no: int, *, db_path: Path | Non
 def awaiting_referee(work_order_id: str, *, db_path: Path | None = None) -> list[dict[str, Any]]:
     """Findings resolved by a replacement test that the evidence-referee has not yet seen.
 
-    Seen means answered in a round AFTER the one the replacement was recorded in: a referee
-    answer in the same round may have been given before the replacement existed.
+    Seen means a referee PASS in a round AFTER the one the replacement was recorded in: an
+    answer in the same round may have been given before the replacement existed, and a
+    cannot-tell certifies nothing.
     """
     last_referee_round = 0
     for doc in _all_reviewer_docs(work_order_id, db_path=db_path):
         for submission in doc["submissions"]:
             for lane in submission.get("lanes") or []:
-                if lane.get("lane") == REFEREE_LANE:
+                # ONLY A PASS RELEASES IT. A referee cannot-tell is an honest "I could not
+                # judge this", not a certification; counting it released the hold exactly
+                # as a pass would (boundary-semantics, round five) -- round three's
+                # cannot-tell-clears-a-finding, one level up. A referee finding is an open
+                # finding on its own lane and holds the review by itself.
+                if lane.get("lane") == REFEREE_LANE and lane.get("verdict") == "pass":
                     last_referee_round = max(last_referee_round, int(submission.get("round", 0)))
-    return [
-        a
-        for a in recorded_answers(work_order_id, db_path=db_path)
-        if (a.get("resolution_run") or {}).get("kind") == "replacement"
-        and int(a.get("round", 0)) >= last_referee_round
-    ]
+    # FROM THE HISTORY, not the current answer. A later plain pass on the same lane became
+    # the current answer and the replacement fell out of view, so the referee requirement
+    # vanished without anyone judging it -- found writing the round-five cannot-tell test,
+    # whose sibling had been passing for exactly that wrong reason.
+    pending: list[dict[str, Any]] = []
+    for doc in _all_reviewer_docs(work_order_id, db_path=db_path):
+        for submission in doc["submissions"]:
+            round_no = int(submission.get("round", 0))
+            if round_no < last_referee_round:
+                continue
+            for lane in submission.get("lanes") or []:
+                if (lane.get("resolution_run") or {}).get("kind") == "replacement":
+                    entry = dict(lane)
+                    entry["reviewer"] = str(doc["reviewer"])
+                    entry["round"] = round_no
+                    pending.append(entry)
+    return sorted(pending, key=lambda e: (str(e.get("reviewer")), str(e.get("lane"))))
 
 
 def open_findings(work_order_id: str, *, db_path: Path | None = None) -> list[dict[str, Any]]:

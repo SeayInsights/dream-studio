@@ -159,8 +159,11 @@ always included, so a fix cannot escape re-review by moving files. The chair's l
 back with a `null` reviewer: **you are the chair**. Docker must be running; without it
 there is no review to dispatch, and the door says so rather than falling back to reading.
 
-**2. Convene each reviewer, in parallel**, with the diff, its own lane ids and the work
-order id. Each agent is compiled from its seat and carries the question, the defect
+**2. Convene each reviewer, in parallel**, with the diff, its own lane ids, the work
+order id, and **its own credential** from the dispatch output. The dispatch issues every
+reviewer a one-time credential and stores only its hash; a submission must carry the one
+issued to the reviewer it claims to be, so no seat can answer as another — the referee
+included. The dispatcher holds them all: that is the trust boundary, and it is the chair. Each agent is compiled from its seat and carries the question, the defect
 signature, the precedent and the standard. It tests in the lane container:
 
 ```
@@ -172,12 +175,13 @@ anything in there. It must never modify the working tree to test something. It r
 one answer per lane:
 
 ```json
-[{"lane": "a-test-that-cannot-fail",
+{"credential": "<its credential>", "lanes": [
+ {"lane": "a-test-that-cannot-fail",
   "verdict": "pass | finding | cannot-tell",
   "reproduction": {"command": "python -m pytest /tmp/t.py -q", "exit_code": 1},
   "evidence": "what the output shows, and file:line of the defect",
   "why": "one or two sentences tying it to the lane's signature",
-  "check": "TEST-CHECK: tests/unit/test_x.py::test_y   (findings only, optional)"}]
+  "check": "TEST-CHECK: tests/unit/test_x.py::test_y   (findings only, optional)"}]}
 ```
 
 **DON'T** answer the specialist lanes yourself in one pass. Until the reviewers existed

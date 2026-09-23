@@ -144,6 +144,14 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         "--reviewer", default=None, help="With --record: the reviewer whose answers these are."
     )
     review_cmd.add_argument(
+        "--credential",
+        default=None,
+        help=(
+            "With --record: the credential --dispatch issued to this reviewer. Also read from"
+            " a `credential` key in the answers file, where the reviewer puts it."
+        ),
+    )
+    review_cmd.add_argument(
         "--work-order",
         dest="work_order",
         default=None,
@@ -276,6 +284,8 @@ def _companion_flags(args: argparse.Namespace) -> str | None:
         return "--as-tasks only means something with --findings"
     if getattr(args, "reviewer", None) and not getattr(args, "record", None):
         return "--reviewer only means something with --record"
+    if getattr(args, "credential", None) and not getattr(args, "record", None):
+        return "--credential only means something with --record"
     if getattr(args, "project_id", None) and not getattr(args, "as_tasks", None):
         return "--project only means something with --findings --as-tasks"
     needs_wo = [f for f in ("record", "findings", "status", "run") if getattr(args, f, None)]
@@ -428,6 +438,15 @@ def _run_in_lane(args: argparse.Namespace, *, db_path: Path) -> int:
     return int(run["exit_code"])
 
 
+def _submission_credential(source: str) -> str | None:
+    """A `credential` key in an answers file that wraps its list in an object."""
+    try:
+        doc = json.loads(Path(source).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return str(doc.get("credential")) if isinstance(doc, dict) and doc.get("credential") else None
+
+
 def _load_answers(source: str) -> tuple[list | None, str | None]:
     """The submission as a list, or a reason it is not one. Never an empty guess."""
     try:
@@ -459,10 +478,14 @@ def _record_answers(args: argparse.Namespace, *, db_path: Path, source_root: Pat
 
     from core.work_orders.review_answers import record_answers
 
+    credential = getattr(args, "credential", None)
+    if not credential and args.record != "-":
+        credential = _submission_credential(args.record)
     result = record_answers(
         args.work_order,
         args.reviewer,
         answers,
+        credential=credential,
         db_path=db_path,
         project_root=Path(args.repo) if args.repo else source_root,
     )

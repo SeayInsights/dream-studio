@@ -22,6 +22,22 @@ from core.work_orders.review_answers import (
     record_dispatch,
 )
 
+#: Credentials issued by each dispatch in this module, so recording helpers can present
+#: the one issued to the reviewer they record for -- as a real reviewer must.
+_ISSUED: dict = {}
+
+
+def _issuing(fn):
+    def wrapper(*args, **kwargs):
+        doc = fn(*args, **kwargs)
+        _ISSUED.update(doc.get("credentials") or {})
+        return doc
+
+    return wrapper
+
+
+record_dispatch = _issuing(record_dispatch)
+
 REVIEWER = "review-gate-and-test-integrity"
 HOLDS = {"command": "true", "exit_code": 0}
 FAILS = {"command": "false", "exit_code": 1}
@@ -73,6 +89,7 @@ def _review(db, wo_id, answers):
         db_path=db,
         available=lambda: (True, "fake"),
         verify=_faithful,
+        credential=_ISSUED.get(REVIEWER),
     )
 
 
