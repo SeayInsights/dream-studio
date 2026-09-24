@@ -145,10 +145,19 @@ def _isolate_analytics_store(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     """Point the DuckDB analytics store at an isolated tmp path (WO-DBA-DROP:
     the three token invariants read the DuckDB token_usage_records view, not
     the retired SQLite table — every test that exercises them needs its own
-    isolated store so it never reads a real local/CI analytics store)."""
+    isolated store so it never reads a real local/CI analytics store).
+
+    Under state/, matching _make_db's own db_path (tmp_path/state/studio.db):
+    run_dashboard_truth now resolves the analytics store as db_path's own
+    sibling (analytics_db_path_for), not the ambient default this used to
+    patch alone -- a follow-up to the same leak PR #807 closed for the API
+    routes and collectors, for the three DuckDB token invariants here. The
+    ambient default is still patched too, for any caller that falls through
+    to it (an absent/None db_path)."""
     from core.analytics import duckdb_store
 
-    analytics_db = tmp_path / "aggregate_metrics.db"
+    analytics_db = tmp_path / "state" / "aggregate_metrics.db"
+    analytics_db.parent.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(duckdb_store, "analytics_db_path", lambda: analytics_db)
     return analytics_db
 
@@ -429,3 +438,64 @@ def test_attribution_scope_excludes_pre_epoch_and_empty_rows(
         f"attribution invariant; got {result}"
     )
     assert result["ok"] is True, f"gate must pass when only excluded rows exist; got {result}"
+
+
+# ---------------------------------------------------------------------------
+# test_token_invariants_read_the_authority_they_were_asked_to_check
+# ---------------------------------------------------------------------------
+
+
+def test_token_invariants_read_the_authority_they_were_asked_to_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The three DuckDB token invariants must read db_path's own sibling
+    aggregate_metrics.db, not whatever the AMBIENT default happens to be.
+
+    Seeds the ambient store (patched separately from db_path's own authority)
+    with all-NULL-model tokens — a real violation — and db_path's own sibling
+    store with clean, fully-attributed tokens. run_dashboard_truth(db_path)
+    must read db_path's own store and pass, proving it never fell through to
+    the ambient one."""
+    from core.analytics import duckdb_store
+
+    db_path = _make_db(tmp_path / "own")
+
+    # Ambient store: patched directly (bypassing _isolate_analytics_store, which
+    # now points at db_path's own sibling) at an UNRELATED location, seeded with
+    # a real violation this authority's own read must not see.
+    ambient_db = tmp_path / "ambient" / "aggregate_metrics.db"
+    ambient_db.parent.mkdir(parents=True)
+    monkeypatch.setattr(duckdb_store, "analytics_db_path", lambda: ambient_db)
+    ambient_conn = duckdb_store.connect_analytics(ambient_db, read_only=False)
+    try:
+        duckdb_store.ensure_analytics_schema(ambient_conn)
+        for _ in range(3):
+            ambient_conn.execute(
+                "INSERT INTO events_fact (event_id, event_type, event_timestamp,"
+                " input_tokens, output_tokens, payload)"
+                " VALUES (?, 'token.consumed', ?, 100, 50, '{}')",
+                [str(uuid.uuid4()), _POST_EPOCH_TS],
+            )
+    finally:
+        ambient_conn.close()
+
+    # db_path's OWN sibling store: clean, attributed tokens — no violation.
+    own_analytics = db_path.parent / "aggregate_metrics.db"
+    own_conn = duckdb_store.connect_analytics(own_analytics, read_only=False)
+    try:
+        duckdb_store.ensure_analytics_schema(own_conn)
+        for _ in range(3):
+            own_conn.execute(
+                "INSERT INTO events_fact (event_id, event_type, event_timestamp,"
+                " input_tokens, output_tokens, model_id, skill_id, payload)"
+                " VALUES (?, 'token.consumed', ?, 100, 50, 'claude-sonnet-5', 'build', '{}')",
+                [str(uuid.uuid4()), _POST_EPOCH_TS],
+            )
+    finally:
+        own_conn.close()
+
+    result = run_dashboard_truth(db_path)
+    assert result["ok"] is True, (
+        "run_dashboard_truth(db_path) must read db_path's own sibling analytics "
+        f"store (clean), not the ambient one (a real violation); got {result}"
+    )

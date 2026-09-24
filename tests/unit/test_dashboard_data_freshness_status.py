@@ -106,3 +106,48 @@ def test_dashboard_freshness_has_no_authority_drift_after_latest_bootstrap(tmp_p
     assert sections["legacy_session_metrics"]["classification"] == "empty by design"
     assert sections["security_dashboard"]["classification"] == "empty by design"
     assert sections["alerts_dashboard"]["classification"] == "empty by design"
+
+
+def test_duckdb_token_count_reads_db_paths_own_sibling_not_the_ambient_store(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """_duckdb_token_count(path) must read db_path's own sibling aggregate_metrics.db,
+    not whatever the AMBIENT DREAM_STUDIO_HOME default happens to hold.
+
+    Seeds the ambient store (patched to an unrelated location) with token rows —
+    if the freshness status leaked into it, legacy_token_metrics would wrongly
+    classify as 'fresh' even though this authority's own analytics store has
+    no rows at all."""
+    from core.analytics import duckdb_store
+
+    db_path = tmp_path / "own" / "current-dashboard-authority.db"
+    db_path.parent.mkdir(parents=True)
+    bootstrap_database(db_path)
+
+    ambient_db = tmp_path / "ambient" / "aggregate_metrics.db"
+    ambient_db.parent.mkdir(parents=True)
+    monkeypatch.setattr(duckdb_store, "analytics_db_path", lambda: ambient_db)
+    ambient_conn = duckdb_store.connect_analytics(ambient_db, read_only=False)
+    try:
+        duckdb_store.ensure_analytics_schema(ambient_conn)
+        ambient_conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp,"
+            " input_tokens, output_tokens, model_id, skill_id, payload)"
+            " VALUES ('ambient-tok', 'token.consumed', '2026-05-14T00:00:00Z',"
+            " 10, 15, 'claude-sonnet-5', 'ds-core', '{}')"
+        )
+    finally:
+        ambient_conn.close()
+
+    # db_path's OWN sibling aggregate_metrics.db is never created — this
+    # authority has no analytics data of its own.
+    own_analytics = db_path.parent / "aggregate_metrics.db"
+    assert not own_analytics.exists()
+
+    status = dashboard_data_freshness_status(db_path)
+
+    sections = {item["section_id"]: item for item in status["section_statuses"]}
+    assert sections["legacy_token_metrics"]["classification"] == "empty by design", (
+        "legacy_token_metrics classified as fresh from the AMBIENT store's rows, not "
+        f"this authority's own (empty) one; got {sections['legacy_token_metrics']}"
+    )
