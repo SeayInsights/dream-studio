@@ -26,6 +26,15 @@ from interfaces.cli.setup_shared import HOOKS_JSON, REPO_ROOT, StepResult
 
 SETTINGS_JSON = Path.home() / ".claude" / "settings.json"
 
+# Packs whose runtime/hooks/<pack>/ subdir holds real handler files. Kept in
+# sync with core.health.doctor_shared._PROJECTED_HOOK_SUBDIRS and
+# interfaces.cli.runtime_preflight.HOOK_PACKS by
+# tests/unit/test_hook_pack_projection_consistency.py, which computes the
+# real set from the filesystem — a pack split that moves a hook (like the
+# apps pack's on-game-validate) without updating all three fails that test.
+SYNC_HOOK_PACKS = ("quality", "apps", "core", "meta")
+UNINSTALL_HOOK_PACKS = ("quality", "apps", "core")
+
 
 # ---------------------------------------------------------------------------
 # Step implementations
@@ -303,7 +312,7 @@ def step_sync_hook_projection() -> StepResult:
             return StepResult(name, False, f"source not found: {src_base}")
 
         copied = 0
-        for sub in ("quality", "domains", "core", "meta"):
+        for sub in SYNC_HOOK_PACKS:
             src_dir = src_base / sub
             dst_dir = dst_base / sub
             if not src_dir.exists():
@@ -394,7 +403,7 @@ def step_uninstall() -> int:
 
     # 2 — Remove .claude/hooks/ DS projection subdirs (gitignored, DS-owned)
     projection_root = REPO_ROOT / ".claude" / "hooks" / "runtime" / "hooks"
-    for sub in ("quality", "domains", "core"):
+    for sub in UNINSTALL_HOOK_PACKS:
         sub_dir = projection_root / sub
         if sub_dir.exists():
             try:

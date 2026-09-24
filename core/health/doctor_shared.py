@@ -22,7 +22,7 @@ _ENTRY_HOOK_RELPATHS = (
 )
 
 # Hook subdirs the projection sync copies (setup_hooks.step_sync_hook_projection).
-_PROJECTED_HOOK_SUBDIRS = ("quality", "domains", "core", "meta")
+_PROJECTED_HOOK_SUBDIRS = ("quality", "apps", "core", "meta")
 
 
 def projected_hook_relpaths(source_root: Path) -> list[str]:
