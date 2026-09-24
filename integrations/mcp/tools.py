@@ -78,6 +78,22 @@ def _work_order_tasks(*, work_order_id: str, dream_studio_home: Path | None = No
     )
 
 
+def _require_work_order(work_order_id: str, db_path: Path) -> None:
+    """Raise if `work_order_id` names no work order at all.
+
+    `review_status()`/`open_findings()` on an unknown id return the SAME shape as a
+    real, not-yet-dispatched one ("no review has been dispatched", zero findings) --
+    a caller cannot tell "this id is wrong" from "this id is real but unreviewed".
+    `ds review --status` already distinguishes the two (interfaces/cli/commands/
+    review.py's `_show_status`); this mirrors it so the MCP tool doesn't quietly
+    hand back a misleadingly clean status for a typo'd id.
+    """
+    from core.work_orders.review_answers import work_order_project
+
+    if work_order_project(work_order_id, db_path=db_path) is None:
+        raise ValueError(f"no work order {work_order_id!r}")
+
+
 def _review_status(*, work_order_id: str, dream_studio_home: Path | None = None) -> Any:
     from core.installed_runtime import resolve_installed_runtime_paths
     from core.work_orders.review_answers import review_status
@@ -85,6 +101,7 @@ def _review_status(*, work_order_id: str, dream_studio_home: Path | None = None)
     paths = resolve_installed_runtime_paths(
         source_root=REPO_ROOT, dream_studio_home=dream_studio_home
     )
+    _require_work_order(work_order_id, paths.sqlite_path)
     return review_status(work_order_id, db_path=paths.sqlite_path)
 
 
@@ -95,6 +112,7 @@ def _review_findings(*, work_order_id: str, dream_studio_home: Path | None = Non
     paths = resolve_installed_runtime_paths(
         source_root=REPO_ROOT, dream_studio_home=dream_studio_home
     )
+    _require_work_order(work_order_id, paths.sqlite_path)
     return {"open_findings": open_findings(work_order_id, db_path=paths.sqlite_path)}
 
 

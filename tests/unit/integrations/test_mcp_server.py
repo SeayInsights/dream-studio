@@ -126,6 +126,88 @@ def test_every_tool_handler_reports_an_exception_as_isError_not_a_raise():
             assert resp["result"]["isError"] is True
 
 
+# ── review tools distinguish "no such work order" from "not yet reviewed" ──
+
+
+@pytest.fixture
+def bootstrapped_home(tmp_path):
+    """A home with a real SQLite authority carrying one real, undispatched work order."""
+    import sqlite3
+
+    from core.config.sqlite_bootstrap import bootstrap_database
+    from core.installed_runtime import resolve_installed_runtime_paths
+
+    home = tmp_path / "ds_home"
+    db_path = resolve_installed_runtime_paths(dream_studio_home=home).sqlite_path
+    bootstrap_database(db_path)
+    now = "2026-01-01T00:00:00+00:00"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO business_projects (project_id, name, description, status, "
+        "project_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("proj-1", "p", "p", "active", "/tmp", now, now),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders (work_order_id, project_id, milestone_id, "
+        "title, description, status, work_order_type, created_at, updated_at) "
+        "VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?)",
+        ("wo-real", "proj-1", "t", "d", "in_progress", "infrastructure", now, now),
+    )
+    conn.commit()
+    conn.close()
+    return home
+
+
+def test_review_status_rejects_a_work_order_id_that_names_nothing(bootstrapped_home):
+    """Round 2 finding: review_status()/open_findings() return the SAME shape for a
+    typo'd id as for a real, not-yet-dispatched one -- a caller can't tell "this id is
+    wrong" from "this id is real but unreviewed". `ds review --status` already makes
+    this distinction (interfaces/cli/commands/review.py); the MCP tool must too."""
+    with pytest.raises(ValueError, match="no work order"):
+        TOOLS_BY_NAME["ds_review_status"].handler(
+            work_order_id="wo-does-not-exist", dream_studio_home=bootstrapped_home
+        )
+
+
+def test_review_status_succeeds_for_a_real_undispatched_work_order(bootstrapped_home):
+    result = TOOLS_BY_NAME["ds_review_status"].handler(
+        work_order_id="wo-real", dream_studio_home=bootstrapped_home
+    )
+    assert result["blocking"] is True
+    assert "no review has been dispatched" in " ".join(result["reasons"])
+
+
+def test_review_findings_rejects_a_work_order_id_that_names_nothing(bootstrapped_home):
+    with pytest.raises(ValueError, match="no work order"):
+        TOOLS_BY_NAME["ds_review_findings"].handler(
+            work_order_id="wo-does-not-exist", dream_studio_home=bootstrapped_home
+        )
+
+
+def test_review_findings_succeeds_for_a_real_work_order(bootstrapped_home):
+    result = TOOLS_BY_NAME["ds_review_findings"].handler(
+        work_order_id="wo-real", dream_studio_home=bootstrapped_home
+    )
+    assert result == {"open_findings": []}
+
+
+def test_tools_call_surfaces_the_unknown_work_order_as_isError(bootstrapped_home):
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_review_status",
+                "arguments": {"work_order_id": "wo-does-not-exist"},
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+    )
+    assert resp["result"]["isError"] is True
+    assert "no work order" in resp["result"]["content"][0]["text"]
+
+
 # ── auth ─────────────────────────────────────────────────────────────────────
 
 
