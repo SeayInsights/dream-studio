@@ -17,7 +17,7 @@ from typing import Any
 from core.event_store.studio_db import _connect
 
 from .start_shared import _check_sequence_order
-from core.work_orders.task_status import status_for
+from core.work_orders.task_status import status_for, transition_refusal
 
 
 def _resolve_wo_repo_root(work_order_id: str, db_path: Path, source_root: Path) -> Path:
@@ -84,6 +84,17 @@ def start_work_order(
         )
     if not brief_data.get("ok"):
         return brief_data
+
+    # THE PHASES RUN IN ORDER, and start is the move from `created`. It checked no status
+    # at all, so a work order at `pushed` or `closed` could be started again, silently
+    # erasing the phases after it. Starting one already `in_progress` is a resume -- the
+    # status does not move -- and stays allowed, because a new session picks work up that
+    # way.
+    _current = brief_data.get("status")
+    if _current != "in_progress":
+        _refusal = transition_refusal(work_order_id, _current, "in_progress")
+        if _refusal:
+            return {"ok": False, "error": _refusal, "status": _current}
 
     if brief_data.get("brief_warning") and not accept_no_brief:
         return {

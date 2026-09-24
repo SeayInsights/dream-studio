@@ -103,6 +103,40 @@ def _seed(
     conn.close()
 
 
+def _mark_pushed(db_path: Path, work_order_id: str) -> None:
+    """Move a work order seeded by `_seed()` (which leaves it at 'in_progress') to
+    'pushed', the phase close_work_order requires before it will evaluate any other
+    gate. `_seed()` itself stays at 'in_progress' because most of its callers in this
+    file only call verify_work_order(), which does not gate on phase.
+    """
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "UPDATE business_work_orders SET status = 'pushed' WHERE work_order_id = ?",
+        (work_order_id,),
+    )
+    conn.commit()
+    conn.close()
+
+
+def _dispatch_clean_review(db_path: Path, work_order_id: str) -> None:
+    """Record an empty lane-review dispatch so close's lane_review gate doesn't refuse
+    a work order sitting at 'pushed' (past review) that never went through a
+    real `ds review --dispatch`. Zero assignments -> nothing unanswered, no findings ->
+    the review reads clean.
+    """
+    from core.work_orders.review_answers import record_dispatch
+
+    record_dispatch(
+        work_order_id,
+        sha="0" * 40,
+        image="test-fixture",
+        change_set=[],
+        assignments=[],
+        db_path=db_path,
+        ownership={},
+    )
+
+
 def _add_task(
     db_path: Path,
     *,
@@ -642,6 +676,14 @@ def test_unreviewable_with_passing_ac_proceeds(
         ),
     )
 
+    # close accepts only pushed/ci_issues; _seed() leaves the WO at in_progress, and
+    # the phase is not what this test checks.
+    _mark_pushed(db_path, work_order_id)
+    # 'pushed' is also past review, so close's lane_review gate refuses a WO
+    # with no dispatch on record; a clean (empty) dispatch keeps this test about the
+    # unreviewable-verdict-plus-passing-AC contract, not about lane review.
+    _dispatch_clean_review(db_path, work_order_id)
+
     planning_root = tmp_path / "planning"
     mock_no_summary = {"unreviewable": True, "reason": "grader_no_summary"}
 
@@ -715,6 +757,10 @@ def test_unreviewable_without_ac_blocks_close(tmp_path: pytest.TempPathFactory) 
             " WHERE project_id='does-not-exist-00000000'"
         ),
     )
+
+    # close accepts only pushed/ci_issues; _seed() leaves the WO at in_progress, and
+    # the phase is not what this test checks.
+    _mark_pushed(db_path, work_order_id)
 
     planning_root = tmp_path / "planning"
     mock_no_summary = {"unreviewable": True, "reason": "grader_no_summary"}

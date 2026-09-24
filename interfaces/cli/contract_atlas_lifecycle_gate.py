@@ -24,21 +24,56 @@ from core.shared_intelligence.contract_atlas_lifecycle import (  # noqa: E402
     validate_contract_atlas_lifecycle_manifest,
 )
 from interfaces.cli._gate_review_context import (  # noqa: E402
+    resolve_base_ref,
     reviewed_no_change_domains as _gather_reviewed_no_change,
 )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--changed-file", action="append", default=[])
-    parser.add_argument("--changed-files", default=None)
-    parser.add_argument("--docs-reviewed-no-change", action="append", default=[])
+    parser.add_argument(
+        "--changed-file",
+        action="append",
+        default=[],
+        help=(
+            "Changed file path. May be supplied multiple times. Also readable from the "
+            "DREAM_STUDIO_CHANGED_FILES env var (newline/semicolon/comma separated), which "
+            "takes priority over any git-based diff -- prefer this flag over exporting that "
+            "var, since an ambient value left set in a shell silently replaces detection on "
+            "every run made from it."
+        ),
+    )
+    parser.add_argument(
+        "--changed-files",
+        default=None,
+        help="Newline, semicolon, or comma separated changed file paths. See --changed-file.",
+    )
+    parser.add_argument(
+        "--base-ref",
+        default=None,
+        help=(
+            "Optional base ref for git diff, for example origin/main. Also readable from the "
+            "DREAM_STUDIO_BASE_REF env var, or GITHUB_BASE_REF (prefixed with origin/) when "
+            "neither is set."
+        ),
+    )
+    parser.add_argument(
+        "--docs-reviewed-no-change",
+        action="append",
+        default=[],
+        help=(
+            "Domain id whose impacted docs/contracts were reviewed and need no change. Also "
+            "readable from the DREAM_STUDIO_DOCS_REVIEWED_NO_CHANGE env var and from "
+            "`Docs-Reviewed-No-Change: <domain_id>` commit trailers in the diff range."
+        ),
+    )
     args = parser.parse_args()
 
     changed_files = _changed_files(args)
     reviewed_no_change = _gather_reviewed_no_change(
         cli_domains=args.docs_reviewed_no_change,
         repo_root=REPO_ROOT,
+        base_ref=args.base_ref,
     )
     with tempfile.TemporaryDirectory(prefix="dream-studio-contract-atlas-gate-") as tmp:
         temp_root = Path(tmp)
@@ -80,10 +115,7 @@ def _changed_files(args: argparse.Namespace) -> list[str]:
     if files:
         return sorted({item for item in files if item})
 
-    base_ref = os.environ.get("DREAM_STUDIO_BASE_REF")
-    github_base = os.environ.get("GITHUB_BASE_REF")
-    if github_base and not base_ref:
-        base_ref = f"origin/{github_base}"
+    base_ref = resolve_base_ref(args.base_ref)
     if base_ref:
         diff = _git_changed([base_ref + "...HEAD"])
         if diff:

@@ -61,7 +61,10 @@ def db_path(tmp_path: Path) -> Path:
             "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, ?, 'UI WO', '', 'in_progress', 'ui_component', ?, ?)",
+            # close accepts only pushed/ci_issues; eval_gate_failure closes this WO
+            # directly to see the design_brief_locked gate failure, and the phase
+            # is not what that eval checks.
+            " VALUES (?, ?, ?, 'UI WO', '', 'pushed', 'ui_component', ?, ?)",
             (WO_UI_ID, PROJECT_ID, MILESTONE_ID, NOW_LATE, NOW_LATE),
         )
         # A trivially-passing executable AC: close_work_order now runs an always-on
@@ -98,6 +101,23 @@ def patched_paths(db_path: Path, tmp_path: Path):
     fake.dream_studio_home = tmp_path
     with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake):
         yield fake
+
+
+def _dispatch_clean_review(db_path: Path, work_order_id: str) -> None:
+    """A work order past review must have had one, so lane_review_failure demands a review
+    dispatch exist before close — a gate independent of the one this eval checks.
+    Record the minimum: a dispatch with no lanes assigned, so nothing is left
+    unanswered and the gate clears."""
+    from core.work_orders.review_answers import record_dispatch
+
+    record_dispatch(
+        work_order_id,
+        sha="0" * 40,
+        image="test",
+        change_set=[],
+        assignments=[],
+        db_path=db_path,
+    )
 
 
 # ── eval_continue ─────────────────────────────────────────────────────────────
@@ -206,9 +226,16 @@ def test_eval_close_wo(patched_paths, db_path: Path, tmp_path: Path) -> None:
     conn = sqlite3.connect(str(db_path))
     try:
         conn.execute("UPDATE business_tasks SET status = 'complete' WHERE task_id = ?", (TASK_ID,))
+        # close accepts only pushed/ci_issues; start_work_order left the WO at
+        # in_progress and the phase is not what this eval checks.
+        conn.execute(
+            "UPDATE business_work_orders SET status = 'pushed' WHERE work_order_id = ?",
+            (WO_DOCS_ID,),
+        )
         conn.commit()
     finally:
         conn.close()
+    _dispatch_clean_review(db_path, WO_DOCS_ID)
 
     result = close_work_order(
         work_order_id=WO_DOCS_ID,

@@ -45,6 +45,40 @@ gates:
     command: [py, interfaces/cli/lint_baseline.py, check]
     fail_hint: "Fix new lint findings; do not bypass the baseline."
 
+  - id: docs-drift
+    tier: blocking
+    description: >
+      Contract docs drift gate. Detects when a changed contract domain's
+      required docs were not refreshed alongside it. Runs here AND in CI's
+      pr-smoke (Contract docs drift step) -- #752 gave it CI as its one home,
+      reasoning the two blocking copies were redundant since CI always catches
+      it; the accepted cost was that drift then surfaces from a 3-platform CI
+      round trip instead of your own push. That cost proved too high: a push
+      passed every local gate and went red on all three CI platforms on this
+      exact drift the same week. Uses DREAM_STUDIO_BASE_REF=origin/main, the
+      same base CI resolves to (origin/<base-branch>, defaulting to main), so
+      both lanes diff the same branch point and honor the same
+      Docs-Reviewed-No-Change trailer (see interfaces/cli/_gate_review_context.py)
+      -- local-green now means CI-green for this gate again. env also pins
+      DREAM_STUDIO_CHANGED_FILES empty: the gate script honors that var as an
+      override that bypasses git-based diffing entirely (a documented, real
+      escape hatch -- see the gate's own --help), and CI only ever ran this
+      script in a clean Actions runner where a stray export could not exist.
+      Pre-push runs it in a developer's own shell, where it could -- pinning
+      it here means a value left set for something unrelated cannot silently
+      replace this gate's detection on every push made from that shell.
+    command: [py, interfaces/cli/contract_docs_drift_gate.py]
+    env:
+      DREAM_STUDIO_BASE_REF: origin/main
+      DREAM_STUDIO_CHANGED_FILES: ""
+    fail_hint: >
+      A changed contract domain's required docs were not refreshed -- see the
+      "contract docs drift: FAIL" lines the gate prints to stderr for which
+      domain and which docs (the same detail is in the stdout JSON under
+      blocking_domains[]). Refresh those docs in this change set, or add an
+      accurate `Docs-Reviewed-No-Change: <domain_id>` commit trailer if the
+      domain genuinely needs no doc change.
+
   - id: skill-sync
     tier: blocking
     description: >

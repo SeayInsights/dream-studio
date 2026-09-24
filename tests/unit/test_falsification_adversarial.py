@@ -261,7 +261,12 @@ def test_commits_are_budgeted_before_evidence_but_order_is_preserved():
 
 
 def _seed_closeable_wo(db: Path) -> str:
-    """A minimal in_progress WO with no tasks, closeable with force=True."""
+    """A minimal WO with no tasks, closeable with force=True.
+
+    Seeded at `pushed` rather than `in_progress`: close accepts only pushed/ci_issues,
+    and force does not bypass the phase. Every test using this fixture closes the work
+    order, and none depends on the earlier status.
+    """
     project_id, wo_id = str(uuid.uuid4()), str(uuid.uuid4())
     now = "2026-08-19T00:00:00+00:00"
     conn = sqlite3.connect(str(db))
@@ -273,7 +278,7 @@ def _seed_closeable_wo(db: Path) -> str:
     conn.execute(
         "INSERT INTO business_work_orders"
         " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
-        "  status, created_at, updated_at) VALUES (?,?,NULL,'WO','d','cleanup','in_progress',?,?)",
+        "  status, created_at, updated_at) VALUES (?,?,NULL,'WO','d','cleanup','pushed',?,?)",
         (wo_id, project_id, now, now),
     )
     conn.commit()

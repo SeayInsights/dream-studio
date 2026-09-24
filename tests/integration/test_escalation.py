@@ -228,6 +228,23 @@ def _set_status(db_path: Path, wo: str, status: str) -> None:
         conn.close()
 
 
+def _dispatch_clean_review(db_path: Path, work_order_id: str) -> None:
+    """A work order past review must have had one, so lane_review_failure demands a review
+    dispatch exist before close — a gate independent of the escalation ladder this
+    file exercises. Record the minimum: a dispatch with no lanes assigned, so
+    nothing is left unanswered and the gate clears."""
+    from core.work_orders.review_answers import record_dispatch
+
+    record_dispatch(
+        work_order_id,
+        sha="0" * 40,
+        image="test",
+        change_set=[],
+        assignments=[],
+        db_path=db_path,
+    )
+
+
 # ---------------------------------------------------------------------------
 # T2 — escalated WO routes its retry to Opus
 # ---------------------------------------------------------------------------
@@ -302,6 +319,11 @@ def test_escalated_reclose_requires_independent_review(tmp_path: Path, monkeypat
     planning_root = tmp_path / ".planning"
     wo = _seed_inprogress_wo(db, ac="SQL-CHECK: SELECT 1")  # AC + tasks_done both pass
     mark_escalated(wo, db_path=db, reason="symptom regressed")
+    # close accepts only pushed/ci_issues; _seed_inprogress_wo leaves the WO at
+    # in_progress (needed by test_loop_and_manual_honor_escalation's resume path,
+    # which shares this helper) and the phase is not what this test checks — it is
+    # about the mandatory-review rule for an escalated WO.
+    _set_status(db, wo, "pushed")
 
     # No passing verdict yet. Inline auto-verify will be unreviewable (source_root has
     # no git → no diff). force=True must NOT silently bypass the mandatory review.
@@ -316,10 +338,11 @@ def test_escalated_reclose_requires_independent_review(tmp_path: Path, monkeypat
     assert forced["ok"] is False, f"force must not bypass mandatory review; got: {forced}"
     assert forced.get("escalated") is True
     assert any(f.startswith("independent_review") for f in forced["failures"])
-    assert _wo_status(db, wo) == "in_progress"
+    assert _wo_status(db, wo) == "pushed"
 
     # Provide a PASSING independent-review verdict → close now succeeds (no force).
     _write_passing_verdict(planning_root, wo, db)
+    _dispatch_clean_review(db, wo)
     with _patch_close_runtime(db):
         ok = close_work_order(
             work_order_id=wo,

@@ -1,8 +1,9 @@
 """Work order projection — derives business_work_orders from business_canonical_events.
 
 This is the first v2-compliant projection and serves as the template for all
-future projections.  It implements the work order state machine: created →
-in_progress ↔ blocked → closed.
+future projections.  It replays the work order lifecycle: created → in_progress →
+in_review → pushed → [ci_issues] → closed, with blocked reachable from any open phase
+and unblock returning to it (core.work_orders.task_status.WORK_ORDER_TRANSITIONS).
 
 Phase 18.1.5 — ProjectionEngine reads from business_canonical_events; this
 class contains only the state-machine logic, not any engine plumbing.
@@ -15,11 +16,22 @@ from typing import Any
 
 from core.projections.framework import Projection, RetryPolicy
 from core.work_orders.models import DEFAULT_WORK_ORDER_PRIORITY, WORK_ORDER_PRIORITIES
-from core.work_orders.task_status import creation_status, status_for
+from core.work_orders.task_status import (
+    BLOCKABLE_WORK_ORDER_STATUSES,
+    creation_status,
+    remembers_block_phase,
+    status_for,
+)
 
 logger = logging.getLogger(__name__)
 
 _TABLE = "business_work_orders"
+
+
+def _open_phase(value: object) -> str | None:
+    """A phase a work order can be blocked from, or None. Never a value the column refuses."""
+    text = str(value).strip() if value is not None else ""
+    return text if text in BLOCKABLE_WORK_ORDER_STATUSES else None
 
 
 def _coerce_priority(value: object) -> str:
@@ -35,7 +47,7 @@ class WorkOrderProjection(Projection):
       work_order.created   → INSERT row with status='created'
       work_order.started   → status='in_progress', set started_at
       work_order.blocked   → status='blocked', set blocked_at + block_reason
-      work_order.unblocked → status='in_progress', clear block_reason
+      work_order.unblocked → status=the phase it was blocked from (payload to_status, else the recorded blocked_from_status, else 'in_progress'), clear block_reason
       work_order.closed    → status='closed', set closed_at
 
     Out-of-order tolerance:
@@ -115,7 +127,7 @@ class WorkOrderProjection(Projection):
         if event_type == "work_order.blocked":
             return self._handle_blocked(conn, work_order_id, payload, event_id, ts, now)
         if event_type == "work_order.unblocked":
-            return self._handle_unblocked(conn, work_order_id, event_id, ts, now)
+            return self._handle_unblocked(conn, work_order_id, payload, event_id, ts, now)
         if event_type == "work_order.reopened":
             return self._handle_reopened(conn, work_order_id, event_id, ts, now)
         if event_type == "work_order.closed":
@@ -297,41 +309,53 @@ class WorkOrderProjection(Projection):
         now: str,
     ) -> int:
         block_reason = payload.get("reason") or payload.get("block_reason")
-        return self.safe_upsert(
-            conn,
-            _TABLE,
-            {
-                "work_order_id": work_order_id,
-                "status": status_for("work_order.blocked", work_order=True),
-                "blocked_at": ts,
-                "block_reason": block_reason,
-                "last_event_id": event_id,
-                "last_updated_at": now,
-            },
-            conflict_key="work_order_id",
-        )
+        row = {
+            "work_order_id": work_order_id,
+            "status": status_for("work_order.blocked", work_order=True),
+            "blocked_at": ts,
+            "block_reason": block_reason,
+            "last_event_id": event_id,
+            "last_updated_at": now,
+        }
+        # The phase unblock returns to, rebuilt from the event on replay.
+        if remembers_block_phase(conn):
+            row["blocked_from_status"] = _open_phase(payload.get("from_status"))
+        return self.safe_upsert(conn, _TABLE, row, conflict_key="work_order_id")
 
     def _handle_unblocked(
         self,
         conn: sqlite3.Connection,
         work_order_id: str,
+        payload: dict,
         event_id: str,
         ts: str,
         now: str,
     ) -> int:
-        return self.safe_upsert(
-            conn,
-            _TABLE,
-            {
-                "work_order_id": work_order_id,
-                "status": status_for("work_order.unblocked", work_order=True),
-                "unblocked_at": ts,
-                "block_reason": None,
-                "last_event_id": event_id,
-                "last_updated_at": now,
-            },
-            conflict_key="work_order_id",
-        )
+        """Back to the phase the work order was blocked from.
+
+        The event says where (`to_status`), and that wins: it is what the writer did. An
+        event from before that key existed falls back to the phase the blocked event
+        recorded, then to `in_progress` -- what unblock always did.
+        """
+        remembers = remembers_block_phase(conn)
+        back_to = _open_phase(payload.get("to_status"))
+        if back_to is None and remembers:
+            recorded = conn.execute(
+                f"SELECT blocked_from_status FROM {_TABLE} WHERE work_order_id = ?",
+                (work_order_id,),
+            ).fetchone()
+            back_to = _open_phase(recorded[0]) if recorded else None
+        row = {
+            "work_order_id": work_order_id,
+            "status": back_to or status_for("work_order.unblocked", work_order=True),
+            "unblocked_at": ts,
+            "block_reason": None,
+            "last_event_id": event_id,
+            "last_updated_at": now,
+        }
+        if remembers:
+            row["blocked_from_status"] = None
+        return self.safe_upsert(conn, _TABLE, row, conflict_key="work_order_id")
 
     def _handle_reopened(
         self,

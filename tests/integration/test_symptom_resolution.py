@@ -80,7 +80,9 @@ def _seed_wo(
             "Test WO",
             "desc",
             wo_type,
-            "in_progress",
+            # close accepts only pushed/ci_issues; every test in this file seeds a
+            # WO then closes it, and the phase is not what these tests check.
+            "pushed",
             originating_symptom,
             NOW,
             NOW,
@@ -109,6 +111,23 @@ def _seed_wo(
     )
     conn.commit()
     conn.close()
+
+
+def _dispatch_clean_review(db_path: Path, work_order_id: str) -> None:
+    """A work order past review must have had one, so lane_review_failure demands a review
+    dispatch exist before close — a gate independent of the originating-symptom
+    gate this file exercises. Record the minimum: a dispatch with no lanes
+    assigned, so nothing is left unanswered and the gate clears."""
+    from core.work_orders.review_answers import record_dispatch
+
+    record_dispatch(
+        work_order_id,
+        sha="0" * 40,
+        image="test",
+        change_set=[],
+        assignments=[],
+        db_path=db_path,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -221,6 +240,7 @@ def test_end_to_end(tmp_path):
         work_order_id=work_order_id,
         originating_symptom=passing_symptom,
     )
+    _dispatch_clean_review(db_path, work_order_id)
 
     with _patch_db(db_path):
         result = close_work_order(
@@ -248,6 +268,7 @@ def test_end_to_end_no_symptom(tmp_path):
         work_order_id=work_order_id,
         originating_symptom=None,
     )
+    _dispatch_clean_review(db_path, work_order_id)
 
     with _patch_db(db_path):
         result = close_work_order(

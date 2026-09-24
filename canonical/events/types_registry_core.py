@@ -332,14 +332,16 @@ _CORE_ENTRIES: tuple[EventTypeMeta, ...] = (
     EventTypeMeta(
         EventType.WORK_ORDER_CLOSED,
         "sdlc",
-        "Work order closed after gate checks passed",
+        "Work order closed from pushed or ci_issues, its gates passed or a forced"
+        " bypass recorded as gate.bypassed",
         True,
         EventCategory.PRODUCTION_EMITTED,
     ),
     EventTypeMeta(
         EventType.WORK_ORDER_BLOCKED,
         "sdlc",
-        "Work order blocked with a stated reason",
+        "Work order blocked from an open phase, with a stated reason and the phase"
+        " it left (from_status)",
         True,
         EventCategory.PRODUCTION_EMITTED,
     ),

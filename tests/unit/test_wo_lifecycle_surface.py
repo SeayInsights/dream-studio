@@ -931,6 +931,24 @@ def _complete_all_tasks(db: Path, work_order_id: str) -> None:
     conn.close()
 
 
+def _ready_to_close(db: Path, work_order_id: str) -> None:
+    """Move a freshly scaffolded work order to a phase close will actually evaluate.
+
+    close accepts only pushed/ci_issues; these tests exercise gates OTHER than the
+    phase (structural invariants, tasks_done, carry-over), so the phase itself must not
+    be what refuses the close -- `_scaffold` leaves a work order at `created`.
+    """
+    import sqlite3
+
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "UPDATE business_work_orders SET status = 'pushed' WHERE work_order_id = ?",
+        (work_order_id,),
+    )
+    conn.commit()
+    conn.close()
+
+
 def test_start_reports_the_invariants_without_blocking(db, tmp_path, monkeypatch):
     """START REPORTS; CLOSE REFUSES. Refusing here looked right and was wrong.
 
@@ -996,6 +1014,7 @@ def test_closing_a_malformed_work_order_is_refused_with_the_escape_named(db, tmp
 
     _, _, wid = _scaffold(db, tasks=1, siblings=1)
     _complete_all_tasks(db, wid)
+    _ready_to_close(db, wid)
 
     result = close_work_order(
         work_order_id=wid,
@@ -1019,6 +1038,7 @@ def test_a_recorded_reason_lets_the_close_through(db, tmp_path):
 
     _, _, wid = _scaffold(db, tasks=1, siblings=1)
     _complete_all_tasks(db, wid)
+    _ready_to_close(db, wid)
     record_exception(wid, "Single task: the change is one constant in one file.", db_path=db)
 
     result = close_work_order(
@@ -1037,6 +1057,7 @@ def test_a_well_formed_work_order_is_not_refused_at_close(db, tmp_path):
 
     _, _, wid = _scaffold(db, tasks=2, siblings=2)
     _complete_all_tasks(db, wid)
+    _ready_to_close(db, wid)
 
     result = close_work_order(
         work_order_id=wid,
@@ -1059,6 +1080,7 @@ def test_the_preview_and_the_close_agree_about_the_invariants(db, tmp_path):
 
     _, _, wid = _scaffold(db, tasks=1, siblings=1)
     _complete_all_tasks(db, wid)
+    _ready_to_close(db, wid)
 
     preview = check_close_gates(work_order_id=wid, source_root=tmp_path, dream_studio_home=tmp_path)
     closed = close_work_order(
@@ -1080,6 +1102,7 @@ def test_the_refusal_names_the_command_it_can_actually_be_answered_with(db, tmp_
 
     _, _, wid = _scaffold(db, tasks=1, siblings=1)
     _complete_all_tasks(db, wid)
+    _ready_to_close(db, wid)
     result = close_work_order(
         work_order_id=wid, source_root=tmp_path, dream_studio_home=tmp_path, skip_verify=True
     )
@@ -1649,6 +1672,26 @@ def _tasks_of(db: Path, work_order_id: str) -> list[tuple[str, str, str]]:
         conn.close()
 
 
+def _gate_failures(db: Path, wid: str, tmp_path: Path) -> tuple[dict, str]:
+    """Close, and return the result with its gate failures as one string.
+
+    ASSERTED TO HAVE REACHED THE GATES. The carry-over tests below claim `tasks_done` is
+    absent from a close's failures -- which is true of a close that returned before
+    evaluating anything, so on its own it could not fail (gate-and-test-integrity lane,
+    2026-09-23). A close that reached the gates says so with a non-empty failure list and
+    no phase refusal; the other gates here fail for reasons these tests do not stage.
+    """
+    from core.work_orders.close import close_work_order
+
+    _ready_to_close(db, wid)
+    closed = close_work_order(
+        work_order_id=wid, source_root=tmp_path, dream_studio_home=tmp_path, skip_verify=True
+    )
+    assert not closed.get("phase_refused"), closed
+    assert closed.get("failures"), f"the close never reached the gates: {closed}"
+    return closed, " ".join(closed["failures"])
+
+
 def test_carry_over_closes_the_original_at_its_true_scope(db, tmp_path, monkeypatch):
     """THE THIRD OPTION THAT DID NOT EXIST.
 
@@ -1668,6 +1711,10 @@ def test_carry_over_closes_the_original_at_its_true_scope(db, tmp_path, monkeypa
     _, _, wid = _scaffold(db, tasks=3, siblings=2)
     tasks = _tasks_of(db, wid)
     carry = [t[0] for t in tasks[1:]]
+
+    # The control: before the carry-over, the pending tasks hold the close.
+    _, before = _gate_failures(db, wid, tmp_path)
+    assert "tasks_done" in before, before
 
     result = carry_over(
         work_order_id=wid,
@@ -1690,10 +1737,7 @@ def test_carry_over_closes_the_original_at_its_true_scope(db, tmp_path, monkeypa
 
     # The original can now close at its true scope, through the gates.
     _complete_all_tasks(db, wid)
-    closed = close_work_order(
-        work_order_id=wid, source_root=tmp_path, dream_studio_home=tmp_path, skip_verify=True
-    )
-    failures = " ".join(closed.get("failures", []))
+    _, failures = _gate_failures(db, wid, tmp_path)
     assert "tasks_done" not in failures, failures
 
 
@@ -1846,6 +1890,8 @@ def test_carry_over_is_not_recorded_as_a_gate_bypass(db, tmp_path, monkeypatch):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "events"))
     _, _, wid = _scaffold(db, tasks=3, siblings=2)
     tasks = _tasks_of(db, wid)
+    _, before = _gate_failures(db, wid, tmp_path)
+    assert "tasks_done" in before, before
 
     carry_over(
         work_order_id=wid,
@@ -1857,13 +1903,11 @@ def test_carry_over_is_not_recorded_as_a_gate_bypass(db, tmp_path, monkeypatch):
     )
     _complete_all_tasks(db, wid)
 
-    closed = close_work_order(
-        work_order_id=wid, source_root=tmp_path, dream_studio_home=tmp_path, skip_verify=True
-    )
+    closed, failures = _gate_failures(db, wid, tmp_path)
 
     assert closed.get("forced") is not True, "a carry-over close must not be a forced close"
     assert not closed.get("bypassed_gates"), closed.get("bypassed_gates")
-    assert "tasks_done" not in " ".join(closed.get("failures", []))
+    assert "tasks_done" not in failures, failures
 
 
 def test_a_deleted_task_with_no_recorded_split_still_blocks_the_close(db, tmp_path):
@@ -1885,6 +1929,7 @@ def test_a_deleted_task_with_no_recorded_split_still_blocks_the_close(db, tmp_pa
     conn.execute("UPDATE business_tasks SET status='deleted' WHERE work_order_id=?", (wid,))
     conn.commit()
     conn.close()
+    _ready_to_close(db, wid)
 
     closed = close_work_order(
         work_order_id=wid, source_root=tmp_path, dream_studio_home=tmp_path, skip_verify=True

@@ -27,6 +27,20 @@ def split_ids(raw: str) -> list[str]:
     return [item.strip() for item in normalized.splitlines() if item.strip()]
 
 
+def resolve_base_ref(explicit: str | None) -> str | None:
+    """CLI flag wins, then DREAM_STUDIO_BASE_REF, then GITHUB_BASE_REF
+    (prefixed with origin/) as a last resort. Both gates' own --changed-files
+    resolution and this module's own trailer scan must all agree on this same
+    precedence -- a third, independently-coded copy of it is exactly how they
+    silently disagreed before (a --base-ref flag added to one gate that drove
+    its own diff but was never forwarded to the trailer scan)."""
+    base_ref = explicit or os.environ.get("DREAM_STUDIO_BASE_REF")
+    github_base = os.environ.get("GITHUB_BASE_REF")
+    if github_base and not base_ref:
+        base_ref = f"origin/{github_base}"
+    return base_ref
+
+
 def reviewed_no_change_domains(
     *,
     cli_domains: list[str] | None,
@@ -53,10 +67,7 @@ def reviewed_no_change_domains(
 
 
 def _trailer_domains(*, repo_root: Path, base_ref: str | None) -> list[str]:
-    base_ref = base_ref or os.environ.get("DREAM_STUDIO_BASE_REF")
-    github_base = os.environ.get("GITHUB_BASE_REF")
-    if github_base and not base_ref:
-        base_ref = f"origin/{github_base}"
+    base_ref = resolve_base_ref(base_ref)
     log_range = [f"{base_ref}..HEAD"] if base_ref else ["-1", "HEAD"]
     domains: list[str] = []
     for message in _git_log_messages(repo_root, log_range):

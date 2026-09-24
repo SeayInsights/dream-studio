@@ -282,7 +282,11 @@ class TestForwardEmissionIntegration:
             "project_id": "proj-test",
             "milestone_id": "ms-test",
             "milestone_title": "M1",
-            "status": "open",
+            # A real work-order status, matching the row inserted below (status='created').
+            # start_work_order now refuses to move a WO to in_progress unless its current
+            # status permits that transition, and 'open' was never a work-order status --
+            # the phase is not what this test checks.
+            "status": "created",
             "pre_gate": None,
             "post_gate": None,
             "build_exec": None,

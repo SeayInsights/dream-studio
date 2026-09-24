@@ -270,7 +270,10 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
     wo_close = work_order_sub.add_parser("close", help="Close a work order (gate-checked)")
     wo_close.add_argument("work_order_id", help="Work order UUID")
     wo_close.add_argument(
-        "--force", action="store_true", default=False, help="Bypass gate failures"
+        "--force",
+        action="store_true",
+        default=False,
+        help="Bypass gate failures -- not the phase: close needs pushed or ci_issues",
     )
     wo_close.add_argument(
         "--skip-verify",
@@ -329,7 +332,7 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
     wo_block.add_argument("--reason", required=True, help="Block reason")
 
     wo_unblock = work_order_sub.add_parser(
-        "unblock", help="Unblock a work order (restore to in_progress)"
+        "unblock", help="Unblock a work order (back to the phase it was blocked from)"
     )
     wo_unblock.add_argument("work_order_id", help="Work order UUID")
 

@@ -115,21 +115,24 @@ _BUSINESS_ENTRIES: tuple[RegistryEntry, ...] = (
         "work_order.blocked",
         _BUSINESS,
         "meaningful-unit",
-        "Work order blocked with a stated reason",
+        "Work order blocked from an open phase, with a stated reason and the phase"
+        " it left (from_status)",
         payload_required_keys=frozenset({"work_order_id", "title", "project_id", "reason"}),
     ),
     RegistryEntry(
         "work_order.unblocked",
         _BUSINESS,
         "meaningful-unit",
-        "Work order unblocked and returned to in_progress state",
+        "Work order unblocked and returned to the phase it was blocked from"
+        " (to_status; in_progress for events without it)",
         payload_required_keys=frozenset({"work_order_id", "title", "project_id"}),
     ),
     RegistryEntry(
         "work_order.closed",
         _BUSINESS,
         "meaningful-unit",
-        "Work order closed after gate checks passed",
+        "Work order closed from pushed or ci_issues, its gates passed or a forced"
+        " bypass recorded as gate.bypassed",
         payload_required_keys=frozenset({"work_order_id", "title", "project_id", "forced"}),
     ),
     RegistryEntry(
