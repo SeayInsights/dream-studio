@@ -19,7 +19,13 @@ jobs:
     # the tests a change actually reaches -- measured on one PR: 4m08s ubuntu, 4m22s
     # macos, 12m05s Windows for a 127-file selection -- and Windows got through it and
     # was CANCELLED in the next step. The gate passed; the job ran out of time after.
-    timeout-minutes: 30
+    # 30 was itself too low for a change to a foundational, widely-imported module:
+    # fix/home-means-home's 44-file diff selects 286 test files (measured locally,
+    # ~10m48s just for the impact step on this machine), more than double the 127-file
+    # case above -- Windows' own ~3x-slower-than-Linux ratio for this same step means
+    # the job needs real margin past the impact step alone, not just past its own worst
+    # case at a smaller selection size.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
