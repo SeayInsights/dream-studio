@@ -53,8 +53,8 @@ def main() -> None:
         default=[],
         help=(
             "Domain id whose impacted docs/contracts were reviewed and need no change. Also "
-            "readable from `Docs-Reviewed-No-Change: <domain_id>` commit trailers in the diff "
-            "range."
+            "readable from the DREAM_STUDIO_DOCS_REVIEWED_NO_CHANGE env var and from "
+            "`Docs-Reviewed-No-Change: <domain_id>` commit trailers in the diff range."
         ),
     )
     args = parser.parse_args()
