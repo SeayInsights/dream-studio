@@ -267,6 +267,23 @@ def test_contract_atlas_lifecycle_gate_help_documents_its_env_vars() -> None:
         )
 
 
+def test_contract_atlas_lifecycle_gate_accepts_a_base_ref_flag() -> None:
+    """This gate resolved DREAM_STUDIO_BASE_REF/GITHUB_BASE_REF from the
+    environment ONLY -- no --base-ref argparse argument existed for it at all,
+    unlike its sibling gate, so there was nothing to hang --help text on and an
+    operator had no CLI-flag way to set it. Both a real --base-ref flag and its
+    mention in --help must exist now."""
+    help_result = subprocess.run(
+        [sys.executable, "interfaces/cli/contract_atlas_lifecycle_gate.py", "--help"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "--base-ref" in help_result.stdout, help_result.stdout
+    assert "DREAM_STUDIO_BASE_REF" in help_result.stdout, help_result.stdout
+
+
 def _db(tmp_path: Path) -> Path:
     return tmp_path / "contract-atlas-lifecycle" / "studio.db"
 

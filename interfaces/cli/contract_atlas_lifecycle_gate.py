@@ -48,6 +48,15 @@ def main() -> None:
         help="Newline, semicolon, or comma separated changed file paths. See --changed-file.",
     )
     parser.add_argument(
+        "--base-ref",
+        default=None,
+        help=(
+            "Optional base ref for git diff, for example origin/main. Also readable from the "
+            "DREAM_STUDIO_BASE_REF env var, or GITHUB_BASE_REF (prefixed with origin/) when "
+            "neither is set."
+        ),
+    )
+    parser.add_argument(
         "--docs-reviewed-no-change",
         action="append",
         default=[],
@@ -104,7 +113,7 @@ def _changed_files(args: argparse.Namespace) -> list[str]:
     if files:
         return sorted({item for item in files if item})
 
-    base_ref = os.environ.get("DREAM_STUDIO_BASE_REF")
+    base_ref = args.base_ref or os.environ.get("DREAM_STUDIO_BASE_REF")
     github_base = os.environ.get("GITHUB_BASE_REF")
     if github_base and not base_ref:
         base_ref = f"origin/{github_base}"
