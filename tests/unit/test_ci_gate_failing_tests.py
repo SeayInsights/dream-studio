@@ -76,9 +76,7 @@ class TestCiGateFailingTests:
             "DREAM_STUDIO_CHANGED_FILES", "core/shared_intelligence/contract_atlas.py"
         )
         mock_result = MagicMock(returncode=0, stdout="", stderr="")
-        with patch(
-            "interfaces.cli.ci_gate.subprocess.run", return_value=mock_result
-        ) as mock_run:
+        with patch("interfaces.cli.ci_gate.subprocess.run", return_value=mock_result) as mock_run:
             run_check("contract-docs-drift", ["py", "interfaces/cli/contract_docs_drift_gate.py"])
 
         passed_env = mock_run.call_args.kwargs["env"]
