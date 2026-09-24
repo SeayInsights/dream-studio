@@ -143,7 +143,7 @@ def parse_config_yml_fallback(config_yml: Path) -> dict:
 
 def read_activity() -> list[dict]:
     """Read recent tool activity."""
-    activity_path = Path.home() / ".dream-studio" / "state" / "activity.json"
+    activity_path = paths.state_dir() / "activity.json"
     if not activity_path.exists():
         return []
     try:
@@ -211,7 +211,7 @@ def check_root_cause_found() -> bool:
 
 def check_debug_iterations_gte(threshold: int) -> bool:
     """Check if debug skill invoked >= threshold times today."""
-    usage_path = Path.home() / ".dream-studio" / "state" / "skill-usage.jsonl"
+    usage_path = paths.state_dir() / "skill-usage.jsonl"
     if not usage_path.exists():
         return False
     count = 0
@@ -255,7 +255,7 @@ def evaluate_condition(condition: str) -> bool:
 
 def log_suggestion(skill: str, suggested_next: str, condition: str) -> None:
     """Log suggestion to chain-suggestions.jsonl."""
-    state_dir = Path.home() / ".dream-studio" / "state"
+    state_dir = paths.state_dir()
     state_dir.mkdir(parents=True, exist_ok=True)
     log_path = state_dir / "chain-suggestions.jsonl"
 

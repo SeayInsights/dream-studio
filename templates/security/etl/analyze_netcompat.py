@@ -26,6 +26,15 @@ import json
 import pathlib
 import sys
 
+# This script runs in place from the repo (`py -3.12 templates/security/etl/...py`,
+# see templates/security/README.md), which puts its own directory on sys.path, not
+# the repo root -- the resolver import below needs a manual add.
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from core.config.paths import home_dir  # noqa: E402
+
 try:
     import yaml
 except ImportError:
@@ -570,9 +579,7 @@ def run_sample_mode(client: str) -> None:
     )
     print("[sample] repo-gamma: 0 netcompat findings, score=100")
 
-    output_path = (
-        pathlib.Path.home() / ".dream-studio" / "security" / "datasets" / client / "netcompat.csv"
-    )
+    output_path = home_dir() / "security" / "datasets" / client / "netcompat.csv"
     write_csv(output_path, rows)
     print_summary(rows, output_path, proxy_type)
     print(f"[sample] CSV written to: {output_path}")
@@ -621,7 +628,7 @@ def main() -> None:
         return
 
     # Load client profile
-    profile_path = pathlib.Path.home() / ".dream-studio" / "clients" / f"{client}.yaml"
+    profile_path = home_dir() / "clients" / f"{client}.yaml"
     if not profile_path.exists():
         print(
             f"ERROR: Client profile not found at {profile_path}\n"
@@ -643,7 +650,7 @@ def main() -> None:
     if args.scans_dir:
         scans_dir = pathlib.Path(args.scans_dir)
     else:
-        scans_dir = pathlib.Path.home() / ".dream-studio" / "security" / "scans" / client
+        scans_dir = home_dir() / "security" / "scans" / client
 
     if not scans_dir.exists():
         print(
@@ -683,9 +690,7 @@ def main() -> None:
                 for fix in fixes:
                     print(f"  {fix}")
 
-    output_path = (
-        pathlib.Path.home() / ".dream-studio" / "security" / "datasets" / client / "netcompat.csv"
-    )
+    output_path = home_dir() / "security" / "datasets" / client / "netcompat.csv"
     write_csv(output_path, rows)
     print_summary(rows, output_path, proxy_type)
 

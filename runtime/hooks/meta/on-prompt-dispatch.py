@@ -43,6 +43,7 @@ if str(PLUGIN_ROOT) not in sys.path:
 sys.path.insert(0, str(PLUGIN_ROOT / "hooks"))
 
 from control.execution.dispatch_tracking import execute_handlers  # noqa: E402
+from core.config import paths  # noqa: E402
 
 HANDLERS: list[tuple[str, Path]] = [
     ("on-prompt-validate", PLUGIN_ROOT / "runtime" / "hooks" / "meta" / "on-prompt-validate.py"),
@@ -64,7 +65,7 @@ HANDLERS: list[tuple[str, Path]] = [
     ("on-pulse", PLUGIN_ROOT / "runtime" / "hooks" / "meta" / "on-pulse.py"),
 ]
 
-STATE_DIR = Path.home() / ".dream-studio" / "state"
+STATE_DIR = paths.state_dir()
 
 
 def main() -> None:

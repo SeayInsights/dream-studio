@@ -11,11 +11,18 @@ from pathlib import Path
 
 
 def _studio_db_path() -> Path:
-    """Resolve studio.db path from env or default location."""
+    """Resolve studio.db path from env or default location.
+
+    core.config.paths is dependency-free (os + pathlib only), so importing it here
+    does not reopen the "no control.research imports" constraint above -- it pulls
+    in no more than this function's own Path.home() call did.
+    """
     env_path = os.environ.get("DREAM_STUDIO_DB_PATH")
     if env_path:
         return Path(env_path)
-    return Path.home() / ".dream-studio" / "state" / "studio.db"
+    from core.config.paths import home_dir
+
+    return home_dir() / "state" / "studio.db"
 
 
 def get_tainted_paths(db_path: Path | None = None) -> set[str]:

@@ -28,7 +28,13 @@ from pathlib import Path
 from typing import Any
 
 DB_PATH_ENV = "DREAM_STUDIO_DB_PATH"
-_DEFAULT_DB_PATH = Path.home() / ".dream-studio" / "state" / "studio.db"
+
+# `py scripts/backfill_dual_canonical.py` puts this file's own directory on
+# sys.path, not the repo root, so the resolver import below needs a manual add --
+# same fix run_backfill() already applies for the registry import.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 
 def _resolve_db_path(cli_override: str | None) -> Path:
@@ -37,7 +43,9 @@ def _resolve_db_path(cli_override: str | None) -> Path:
     env = os.environ.get(DB_PATH_ENV)
     if env:
         return Path(env)
-    return _DEFAULT_DB_PATH
+    from core.config.database import _default_db_path
+
+    return _default_db_path()
 
 
 def _safe_json(raw: Any) -> dict:
@@ -156,11 +164,7 @@ def run_backfill(db_path: Path, dry_run: bool = False) -> int:
         print(f"ERROR: database not found: {db_path}", file=sys.stderr)
         return 1
 
-    # Import registry from repo root (add to sys.path if needed)
-    repo_root = Path(__file__).parent.parent
-    if str(repo_root) not in sys.path:
-        sys.path.insert(0, str(repo_root))
-
+    # _REPO_ROOT (module level, above) is already on sys.path.
     from config.event_type_registry import get_routes, is_registered
 
     try:

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -59,18 +58,26 @@ def _seed_duckdb_hook_event(
         conn.close()
 
 
-def _client_with_isolated_stores(tmp_path: Path) -> tuple[TestClient, Path]:
+def _client_with_isolated_stores(tmp_path: Path, monkeypatch) -> tuple[TestClient, Path]:
     """A TestClient with both the SQLite authority and DuckDB analytics store isolated to tmp.
 
     The DuckDB analytics schema (tables + read-model views) is created so an empty store
     presents the dashboard-safe empty shape — mirroring a fresh install where
     ensure_analytics_schema() runs at startup.
+
+    monkeypatch.setenv, not a raw os.environ assignment: the old `_reset_env()` undid this
+    with an unconditional os.environ.pop(...), which does not RESTORE the value
+    tests/conftest.py sets for the whole session -- it deletes it, so every test after
+    this one in the same session read a real ~/.dream-studio default from home_dir()
+    instead of the isolated tmp dir conftest chose. Harmless while production code read
+    Path.home() directly and ignored DREAM_STUDIO_HOME; live now that it does not
+    (tests/unit/test_home_means_home.py's tree sweep).
     """
     from core.analytics.duckdb_store import connect_analytics, ensure_analytics_schema
 
     home = tmp_path / "ds-home"
     (home / "state").mkdir(parents=True, exist_ok=True)
-    os.environ["DREAM_STUDIO_HOME"] = str(home)
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(home))
     db_path = home / "state" / "studio.db"
     conn = _connect(db_path)
     conn.close()
@@ -81,18 +88,12 @@ def _client_with_isolated_stores(tmp_path: Path) -> tuple[TestClient, Path]:
     finally:
         agg.close()
     DatabaseRuntime.reset_instance()
-    os.environ[DB_PATH_ENV] = str(db_path)
+    monkeypatch.setenv(DB_PATH_ENV, str(db_path))
     return TestClient(app), home
 
 
-def _reset_env() -> None:
-    DatabaseRuntime.reset_instance()
-    os.environ.pop(DB_PATH_ENV, None)
-    os.environ.pop("DREAM_STUDIO_HOME", None)
-
-
-def test_legacy_hook_routes_return_empty_dashboard_safe_shapes(tmp_path: Path) -> None:
-    client, _home = _client_with_isolated_stores(tmp_path)
+def test_legacy_hook_routes_return_empty_dashboard_safe_shapes(tmp_path: Path, monkeypatch) -> None:
+    client, _home = _client_with_isolated_stores(tmp_path, monkeypatch)
     try:
         executions = client.get("/api/v1/hooks/executions", params={"limit": 50})
         stats = client.get("/api/v1/hooks/stats")
@@ -111,11 +112,13 @@ def test_legacy_hook_routes_return_empty_dashboard_safe_shapes(tmp_path: Path) -
         }
         assert stats.json()["by_hook"] == {}
     finally:
-        _reset_env()
+        DatabaseRuntime.reset_instance()
 
 
-def test_legacy_hook_routes_return_seeded_dashboard_safe_shapes(tmp_path: Path) -> None:
-    client, home = _client_with_isolated_stores(tmp_path)
+def test_legacy_hook_routes_return_seeded_dashboard_safe_shapes(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client, home = _client_with_isolated_stores(tmp_path, monkeypatch)
     try:
         _seed_duckdb_hook_event(
             home,
@@ -145,11 +148,11 @@ def test_legacy_hook_routes_return_seeded_dashboard_safe_shapes(tmp_path: Path) 
         assert stats.json()["summary"]["total_failures"] == 0
         assert stats.json()["summary"] == performance.json()["summary"]
     finally:
-        _reset_env()
+        DatabaseRuntime.reset_instance()
 
 
-def test_legacy_hook_stats_counts_failures_from_duckdb(tmp_path: Path) -> None:
-    client, home = _client_with_isolated_stores(tmp_path)
+def test_legacy_hook_stats_counts_failures_from_duckdb(tmp_path: Path, monkeypatch) -> None:
+    client, home = _client_with_isolated_stores(tmp_path, monkeypatch)
     try:
         _seed_duckdb_hook_event(
             home,
@@ -173,11 +176,13 @@ def test_legacy_hook_stats_counts_failures_from_duckdb(tmp_path: Path) -> None:
         assert stats.json()["summary"]["total_failures"] == 1
         assert stats.json()["by_hook"]["on-pulse"]["failure_count"] == 1
     finally:
-        _reset_env()
+        DatabaseRuntime.reset_instance()
 
 
-def test_telemetry_routes_still_pass_with_hook_route_db_injection(tmp_path: Path) -> None:
-    client, _home = _client_with_isolated_stores(tmp_path)
+def test_telemetry_routes_still_pass_with_hook_route_db_injection(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client, _home = _client_with_isolated_stores(tmp_path, monkeypatch)
     try:
         summary = client.get("/api/telemetry/summary")
         modules = client.get("/api/telemetry/modules")
@@ -187,4 +192,4 @@ def test_telemetry_routes_still_pass_with_hook_route_db_injection(tmp_path: Path
         assert summary.json()["derived_view"] is True
         assert summary.json()["primary_authority"] is False
     finally:
-        _reset_env()
+        DatabaseRuntime.reset_instance()

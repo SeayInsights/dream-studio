@@ -34,16 +34,18 @@ def resolve_collector_paths(db_path: str | None) -> tuple[str, Path | None]:
     analytics_db_path is computed from the RAW argument, before the None ->
     default rewrite below: analytics_db_path_for(None) is already "no explicit
     authority -> ambient default", so this one call is the whole explicit-vs-
-    ambient decision. db_path itself defaults to ~/.dream-studio/state/studio.db
-    when the caller passes None — the SQLite fallback source every collector
-    reads when its DuckDB read comes up empty.
+    ambient decision. db_path itself defaults to core.config.database's own
+    default (DREAM_STUDIO_DB_PATH, else home_dir()/state/studio.db) when the
+    caller passes None — the SQLite fallback source every collector reads when
+    its DuckDB read comes up empty. Resolving it independently as a hardcoded
+    OS-home-plus-dirname ignored DREAM_STUDIO_HOME the same way the rest of
+    core/ and interfaces/ did before the home-resolver sweep.
     """
     from core.analytics.duckdb_store import analytics_db_path_for
+    from core.config.database import _default_db_path
 
     analytics_path = analytics_db_path_for(db_path)
-    resolved_db_path = (
-        str(Path.home() / ".dream-studio" / "state" / "studio.db") if db_path is None else db_path
-    )
+    resolved_db_path = str(_default_db_path()) if db_path is None else db_path
     return resolved_db_path, analytics_path
 
 

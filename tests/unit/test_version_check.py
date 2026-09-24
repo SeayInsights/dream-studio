@@ -91,11 +91,13 @@ def test_version_check_returns_update_notice_when_versions_differ(tmp_path, monk
     _version_check = _get_version_check()
 
     # `_version_check` reads the installed-version file from
-    # `Path(USERPROFILE or HOME) / ".dream-studio" / "state" / "installed-version"`,
-    # not from `_get_plugin_root()`. Point both home env vars at tmp_path
-    # so the test fixture controls what the function sees.
-    monkeypatch.setenv("USERPROFILE", str(tmp_path))
-    monkeypatch.setenv("HOME", str(tmp_path))
+    # `home_dir() / "state" / "installed-version"`, not from `_get_plugin_root()`.
+    # home_dir() reads DREAM_STUDIO_HOME (not USERPROFILE/HOME -- reading those
+    # directly was the bug this sweep fixed: `ds --home X` sets DREAM_STUDIO_HOME,
+    # not the OS home vars), and the test session already has one set
+    # (tests/conftest.py's isolation guard), so it must be overridden here too or the
+    # function reads the session's tmp dir instead of this fixture's.
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / ".dream-studio"))
 
     (tmp_path / "VERSION").write_text("2026-05-17\n", encoding="utf-8")
     installed_dir = tmp_path / ".dream-studio" / "state"
@@ -116,10 +118,9 @@ def test_version_check_returns_install_notice_when_installed_file_absent(tmp_pat
     """When installed-version file doesn't exist, returns install notice."""
     _version_check = _get_version_check()
 
-    # Point the env vars the function uses at a directory that has no
-    # `.dream-studio/state/installed-version` file.
-    monkeypatch.setenv("USERPROFILE", str(tmp_path))
-    monkeypatch.setenv("HOME", str(tmp_path))
+    # Point DREAM_STUDIO_HOME (what home_dir() reads -- see the sibling test above)
+    # at a directory that has no .dream-studio/state/installed-version file.
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / ".dream-studio"))
 
     (tmp_path / "VERSION").write_text("2026-05-17\n", encoding="utf-8")
     # Do NOT create the installed-version file under .dream-studio/state/.

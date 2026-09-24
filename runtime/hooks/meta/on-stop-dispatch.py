@@ -40,6 +40,7 @@ except ImportError:
     _spawn_new_session = None
 
 from control.execution.dispatch_helpers import load_module, write_timing  # noqa: E402
+from core.config import paths  # noqa: E402
 
 HANDLERS: list[tuple[str, Path]] = [
     ("on-session-end", PLUGIN_ROOT / "runtime" / "hooks" / "meta" / "on-session-end.py"),
@@ -57,14 +58,14 @@ HANDLERS: list[tuple[str, Path]] = [
     ("on-memory-ingest", PLUGIN_ROOT / "runtime" / "hooks" / "meta" / "on-memory-ingest.py"),
 ]
 
-STATE_DIR = Path.home() / ".dream-studio" / "state"
+STATE_DIR = paths.state_dir()
 
 
 def _log_spawner_warning(msg: str) -> None:
     """Write a timestamped warning to stderr and the diagnostics log (best-effort)."""
     print(f"[DS handoff-spawner] {msg}", file=sys.stderr)
     try:
-        diag = Path.home() / ".dream-studio" / "diagnostics" / "handoff-spawn-errors.log"
+        diag = paths.home_dir() / "diagnostics" / "handoff-spawn-errors.log"
         diag.parent.mkdir(parents=True, exist_ok=True)
         with diag.open("a", encoding="utf-8") as f:
             f.write(f"{time.time()}: {msg}\n")

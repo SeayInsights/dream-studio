@@ -38,10 +38,16 @@ if str(_PLUGIN_ROOT) not in sys.path:
 def _emergency_log(error: str, payload_raw: str) -> None:
     """Last-resort logger. Bare minimum code path; almost never can fail."""
     try:
-        log_dir = Path.home() / ".dream-studio" / "state" / "diagnostics"
         override = os.environ.get("DS_DIAGNOSTICS_DIR")
         if override:
             log_dir = Path(override)
+        else:
+            # _PLUGIN_ROOT is already on sys.path (module load, above), so this is a
+            # normal import, not a fallback that can fail differently than the rest
+            # of the try -- it is caught by the same except like everything else here.
+            from core.config.paths import home_dir
+
+            log_dir = home_dir() / "state" / "diagnostics"
         log_dir.mkdir(parents=True, exist_ok=True)
         log_path = log_dir / "hook-failures.jsonl"
         entry = {

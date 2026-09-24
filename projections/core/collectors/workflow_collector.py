@@ -13,7 +13,6 @@ matching rows — never fabricated data.
 import json
 import sqlite3
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 
@@ -29,7 +28,9 @@ class WorkflowCollector:
             db_path: Path to studio.db. If None, uses default ~/.dream-studio/state/studio.db
         """
         if db_path is None:
-            self.db_path = str(Path.home() / ".dream-studio" / "state" / "studio.db")
+            from core.config.database import _default_db_path
+
+            self.db_path = str(_default_db_path())
         else:
             self.db_path = db_path
 

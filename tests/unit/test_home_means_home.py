@@ -244,8 +244,9 @@ def test_diagnostics_follow_home_not_the_user_directory(tmp_path, monkeypatch):
     assert [p for p in fake_user.rglob("*") if p.is_file()] == []
 
 
-#: Every line in core/ and interfaces/ that may spell ".dream-studio" itself, and why. Keyed
-#: by the exact line, so changing one of them means reading this list again.
+#: Every line in the scanned trees (see test_core_and_the_cli_spell_the_home_in_one_place)
+#: that may spell ".dream-studio" itself, and why. Keyed by the exact line, so changing one
+#: of them means reading this list again.
 #:
 #: The rule is about the USER's home. A project keeps its own `.dream-studio` directory
 #: (standards, gate manifest, local analytics), and an isolated run builds a home on
@@ -306,27 +307,71 @@ _MAY_SPELL_THE_HOME = {
         "interfaces/cli/runtime_preflight.py",
         'USER_DATA_DIRNAME = ".dream-studio"',
     ): "explicit OS home",
+    # runtime/, spool/, emitters/, guardrails/, projections/, control/, scripts/, tools/,
+    # integrations/, templates/, packs/ -- the follow-up sweep past core/ and interfaces/
+    # (PR #802 built the resolver and the guard; this is the rest of the tracked tree).
+    (
+        "control/context/repo.py",
+        '{".git", "node_modules", ".venv", "__pycache__", ".sessions", ".dream-studio"}',
+    ): "directory name",
+    (
+        "packs/domains/templates/project-standards/hooks/lib/audit.py",
+        'audit_path = Path.home() / ".dream-studio" / "audit.jsonl"',
+    ): "scaffold template -- copied into a NEW target project (see its own docstring:"
+    " 'Copy to hooks/lib/audit.py'); it never runs inside this repo or imports core, so"
+    " it cannot read DREAM_STUDIO_HOME and is not the home --home decides",
+    (
+        "runtime/hooks/enqueue.py",
+        'home = os.environ.get("DS_HOME") or os.path.join(os.path.expanduser("~"), ".dream-studio")',
+    ): "stdlib-only by design (this file must not import DREAM STUDIO -- see its own"
+    " docstring); reads DS_HOME, which --home sets for exactly this reader"
+    " (interfaces/cli/ds.py home_variables())",
+    ("runtime/lib/domains/game_validate.py", 'if ".dream-studio" in normalized:'): "path test",
+    (
+        "scripts/runtime_state_hash_guard.py",
+        'state = home / ".dream-studio" / "state"',
+    ): "explicit OS home",
 }
 
 #: Trees the rule does not reach: the resolver itself, and cutover planning, which
 #: describes the live install on this machine.
-_EXEMPT_TREES = ("core/config/paths.py", "core/upgrade/")
+_EXEMPT_TREES = ("core/config/paths.py", "core/upgrade/", "runtime/lib/home.py")
+
+
+#: Every tracked tree the rule reaches. core/ and interfaces/ were PR #802's own scope;
+#: the rest is this follow-up -- every other tree found spelling ".dream-studio" by
+#: `git ls-files '*.py' | xargs grep -n '\.dream-studio'`.
+_SCANNED_TREES = (
+    "core/*.py",
+    "interfaces/*.py",
+    "runtime/*.py",
+    "spool/*.py",
+    "emitters/*.py",
+    "guardrails/*.py",
+    "projections/*.py",
+    "control/*.py",
+    "scripts/*.py",
+    "tools/*.py",
+    "integrations/*.py",
+    "templates/*.py",
+    "packs/*.py",
+)
 
 
 def test_core_and_the_cli_spell_the_home_in_one_place():
     """THE NEXT HARDCODED HOME FAILS HERE. Four review rounds each found one more way a
     `--home` command escaped its home. The fourth was `(home or Path.home()) / ".dream-studio"`,
     a shape the first version of this guard -- a pattern for `home() / ".dream-studio"` --
-    did not match. So the rule is now the literal itself: every ".dream-studio" in core/ and
-    interfaces/ is either the resolver's or listed above with its reason. Any expression
-    shape is caught, and a new one needs a reason written down."""
+    did not match. So the rule is now the literal itself: every ".dream-studio" in any
+    scanned tree (_SCANNED_TREES) is either the resolver's or listed above with its reason.
+    Any expression shape is caught, and a new one needs a reason written down."""
     import re
     import subprocess
 
     literal = re.compile(r"""["']\.dream-studio["']""")
     via_constant = re.compile(r"home\(\)[^#\n]*USER_DATA_DIRNAME")
     files = subprocess.run(
-        ["git", "ls-files", "core/*.py", "interfaces/*.py"],
+        ["git", "ls-files", *_SCANNED_TREES],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -373,3 +418,53 @@ def test_work_order_storage_follows_home(tmp_path, monkeypatch):
     monkeypatch.setenv("USERPROFILE", str(tmp_path / "user"))
     monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / "home"))
     assert default_storage_root() == tmp_path / "home" / "meta" / "work-orders"
+
+
+def test_runtime_lib_home_matches_core_config_paths(tmp_path, monkeypatch):
+    """runtime/lib/home.py is a second copy of home_dir(), kept ONLY because hooks that
+    must not import core (runtime/lib/enforcement.py's docstring: 259 ms of pydantic/
+    jsonschema/event-store imports, paid inside a hook that blocks Edit/Write/Stop) still
+    need the same answer. A copy that drifts from the original defeats the point of having
+    one resolver, so this drives both with the same environment and requires agreement --
+    both with DREAM_STUDIO_HOME set and with it unset (the ~/.dream-studio default). Neither
+    function caches anything, so no reload is needed between the two environments."""
+    from core.config import paths as core_paths
+    from runtime.lib import home as runtime_home
+
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / "scratch-home"))
+    assert runtime_home.home_dir() == core_paths.home_dir()
+    assert runtime_home.state_dir() == core_paths.home_dir() / "state"
+
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path / "os-home"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "os-home"))
+    assert runtime_home.home_dir() == core_paths.home_dir()
+
+
+def test_hook_writes_under_dream_studio_home_not_the_os_home(tmp_path, monkeypatch):
+    """Behavioral proof for one entry hook, end to end. `emitters/claude_code/run.py`'s
+    `_should_nag_this_session` used to read USERPROFILE/HOME directly (round 5, this
+    sweep): with DREAM_STUDIO_HOME unset it agreed with home_dir() by accident, so the
+    defect was invisible until a caller set DREAM_STUDIO_HOME without also being routed
+    through `ds --home` (which sets USERPROFILE/HOME's sibling DS_HOME too, masking it).
+    Here HOME/USERPROFILE point at a directory the hook must never write into."""
+    from emitters.claude_code import run as ds_run
+
+    fake_os_home = tmp_path / "not-the-dream-studio-home"
+    fake_os_home.mkdir()
+    scratch_home = tmp_path / "scratch-home"
+
+    monkeypatch.setenv("HOME", str(fake_os_home))
+    monkeypatch.setenv("USERPROFILE", str(fake_os_home))
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(scratch_home))
+
+    assert ds_run._should_nag_this_session({"session_id": "probe-session"}) is True
+
+    marker = scratch_home / "state" / ".nagged-probe-session"
+    assert marker.is_file(), "the nag marker did not land under DREAM_STUDIO_HOME"
+    assert [
+        p for p in fake_os_home.rglob("*") if p.is_file()
+    ] == [], "the hook leaked a write into the OS home instead of DREAM_STUDIO_HOME"
+
+    # A second call within the same session must not nag again.
+    assert ds_run._should_nag_this_session({"session_id": "probe-session"}) is False

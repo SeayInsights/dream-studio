@@ -20,7 +20,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from core.config.database import DB_PATH_ENV, DatabaseRuntime  # noqa: E402
+from core.config.database import DB_PATH_ENV, DatabaseRuntime, _default_db_path  # noqa: E402
 from core.event_store.studio_db import _connect  # noqa: E402
 from projections.api.main import app  # noqa: E402
 
@@ -54,7 +54,7 @@ def run_dashboard_smoke(db_path: Path | str | None = None) -> dict[str, Any]:
     """Run dashboard smoke checks against a temp or supplied non-live DB path."""
 
     path = Path(db_path) if db_path is not None else Path(tempfile.mkdtemp()) / "dashboard-smoke.db"
-    live_db = Path.home() / ".dream-studio" / "state" / "studio.db"
+    live_db = _default_db_path()
     if path.resolve() == live_db.resolve():
         raise RuntimeError("dashboard smoke harness refuses to use the live Dream Studio DB")
 

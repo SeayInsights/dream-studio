@@ -31,107 +31,108 @@ def _write_handoff(pending_file: Path, age_seconds: float, status: str = "pendin
 
 
 class TestHandoffTTLGuards:
-    def test_fresh_pending_file_is_injected(self, state_dir, pending_file):
+    def test_fresh_pending_file_is_injected(self, state_dir, pending_file, monkeypatch):
         """A brand-new pending file (age < 60s) should trigger handoff injection."""
         import sys
-        from unittest.mock import MagicMock
 
         _write_handoff(pending_file, age_seconds=5, status="pending")
 
         payload = {"prompt": "hello"}
-        # Patch Path.home to return our tmp dir
-        with patch("pathlib.Path.home", return_value=state_dir.parent.parent):
-            import importlib
+        # DREAM_STUDIO_HOME, not Path.home(): on-prompt-validate.py resolves its state
+        # dir through core.config.paths.state_dir(), which reads DREAM_STUDIO_HOME
+        # FIRST -- and the test session already has one set (tests/conftest.py's
+        # top-of-file isolation guard), so patching Path.home() alone is silently
+        # ignored and the hook reads the session's tmp dir instead of this fixture's.
+        monkeypatch.setenv("DREAM_STUDIO_HOME", str(state_dir.parent))
+        import importlib
 
-            spec = importlib.util.spec_from_file_location(
-                "on_prompt_validate",
-                Path(__file__).resolve().parents[2]
-                / "runtime"
-                / "hooks"
-                / "meta"
-                / "on-prompt-validate.py",
-            )
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
+        spec = importlib.util.spec_from_file_location(
+            "on_prompt_validate",
+            Path(__file__).resolve().parents[2]
+            / "runtime"
+            / "hooks"
+            / "meta"
+            / "on-prompt-validate.py",
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
 
-            captured = []
-            with patch.object(sys, "stdout") as mock_stdout:
-                mock_stdout.write = lambda s: captured.append(s)
-                result = mod._check_pending_handoff(payload)
+        captured = []
+        with patch.object(sys, "stdout") as mock_stdout:
+            mock_stdout.write = lambda s: captured.append(s)
+            result = mod._check_pending_handoff(payload)
 
         assert result is True
         assert pending_file.is_file()  # updated to in_progress, not deleted
 
-    def test_stale_file_is_deleted_on_read(self, state_dir, pending_file, tmp_path):
+    def test_stale_file_is_deleted_on_read(self, state_dir, pending_file, tmp_path, monkeypatch):
         """A file older than HANDOFF_STALE_TTL_S must be deleted and False returned."""
         _write_handoff(pending_file, age_seconds=400, status="in_progress")
         assert pending_file.is_file()
 
         import importlib
 
-        with patch("pathlib.Path.home", return_value=state_dir.parent.parent):
-            spec = importlib.util.spec_from_file_location(
-                "on_prompt_validate_stale",
-                Path(__file__).resolve().parents[2]
-                / "runtime"
-                / "hooks"
-                / "meta"
-                / "on-prompt-validate.py",
-            )
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            result = mod._check_pending_handoff({"prompt": "hello"})
+        monkeypatch.setenv("DREAM_STUDIO_HOME", str(state_dir.parent))
+        spec = importlib.util.spec_from_file_location(
+            "on_prompt_validate_stale",
+            Path(__file__).resolve().parents[2]
+            / "runtime"
+            / "hooks"
+            / "meta"
+            / "on-prompt-validate.py",
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        result = mod._check_pending_handoff({"prompt": "hello"})
 
         assert result is False
         assert not pending_file.is_file(), "Stale pending file should have been deleted"
 
-    def test_in_progress_past_injection_window_is_deleted(self, state_dir, pending_file):
+    def test_in_progress_past_injection_window_is_deleted(
+        self, state_dir, pending_file, monkeypatch
+    ):
         """An in_progress file older than HANDOFF_INJECTION_WINDOW_S must be deleted."""
         _write_handoff(pending_file, age_seconds=120, status="in_progress")
         assert pending_file.is_file()
 
         import importlib
 
-        with patch("pathlib.Path.home", return_value=state_dir.parent.parent):
-            spec = importlib.util.spec_from_file_location(
-                "on_prompt_validate_inprogress",
-                Path(__file__).resolve().parents[2]
-                / "runtime"
-                / "hooks"
-                / "meta"
-                / "on-prompt-validate.py",
-            )
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            result = mod._check_pending_handoff({"prompt": "hello"})
+        monkeypatch.setenv("DREAM_STUDIO_HOME", str(state_dir.parent))
+        spec = importlib.util.spec_from_file_location(
+            "on_prompt_validate_inprogress",
+            Path(__file__).resolve().parents[2]
+            / "runtime"
+            / "hooks"
+            / "meta"
+            / "on-prompt-validate.py",
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        result = mod._check_pending_handoff({"prompt": "hello"})
 
         assert result is False
         assert not pending_file.is_file(), "Stale in_progress file should have been deleted"
 
-    def test_stale_discard_writes_diagnostic(self, state_dir, pending_file):
+    def test_stale_discard_writes_diagnostic(self, state_dir, pending_file, monkeypatch):
         """Discarding a stale handoff must write a diagnostic log entry."""
         _write_handoff(pending_file, age_seconds=400, status="in_progress")
 
         import importlib
-        import os
 
         diag_dir = state_dir.parent / "diagnostics"
-        env_patch = {"DS_DIAGNOSTICS_DIR": str(diag_dir)}
-        with (
-            patch("pathlib.Path.home", return_value=state_dir.parent.parent),
-            patch.dict(os.environ, env_patch),
-        ):
-            spec = importlib.util.spec_from_file_location(
-                "on_prompt_validate_diag",
-                Path(__file__).resolve().parents[2]
-                / "runtime"
-                / "hooks"
-                / "meta"
-                / "on-prompt-validate.py",
-            )
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            mod._check_pending_handoff({"prompt": "hello"})
+        monkeypatch.setenv("DREAM_STUDIO_HOME", str(state_dir.parent))
+        monkeypatch.setenv("DS_DIAGNOSTICS_DIR", str(diag_dir))
+        spec = importlib.util.spec_from_file_location(
+            "on_prompt_validate_diag",
+            Path(__file__).resolve().parents[2]
+            / "runtime"
+            / "hooks"
+            / "meta"
+            / "on-prompt-validate.py",
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod._check_pending_handoff({"prompt": "hello"})
 
         diag_file = diag_dir / "stale-handoff.jsonl"
         assert diag_file.is_file(), "Diagnostic file should have been written"

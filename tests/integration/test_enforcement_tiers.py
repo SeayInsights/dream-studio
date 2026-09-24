@@ -130,6 +130,12 @@ def _run_edit_hook(
     env["HOME"] = str(home)
     env["TMP"] = str(home)
     env["TEMP"] = str(home)
+    # runtime/lib/enforcement.py resolves STATE_DIR through runtime.lib.home.home_dir(),
+    # which reads DREAM_STUDIO_HOME before falling back to HOME/USERPROFILE -- and the
+    # test session already has one set (tests/conftest.py's isolation guard), so without
+    # this the hook read the SESSION's authority instead of _scratch_project()'s, found no
+    # registered project, and failed open with empty stdout.
+    env["DREAM_STUDIO_HOME"] = str(home / ".dream-studio")
     env["DS_ENFORCE_TIER"] = tier
     env.pop("DS_ENFORCE", None)
     return subprocess.run(

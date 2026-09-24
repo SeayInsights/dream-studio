@@ -31,6 +31,7 @@ if str(_PLUGIN_ROOT / "hooks") not in sys.path:
 
 from control.execution.models.selector import get_model_for_skill
 from control.skills.metrics import build_display_name, write_skill_usage
+from core.config import paths  # noqa: E402
 
 
 def main() -> None:
@@ -54,7 +55,7 @@ def main() -> None:
     except Exception:
         model = "unspecified"
     write_skill_usage(
-        Path.home() / ".dream-studio" / "state",
+        paths.state_dir(),
         display_name,
         mode,
         payload.get("session_id", ""),

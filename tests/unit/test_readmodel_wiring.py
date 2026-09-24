@@ -85,12 +85,21 @@ def _db_with_execution_events(tmp_path: Path) -> Path:
     return db_path
 
 
-def _home_with_duckdb_hook_executions(tmp_path: Path) -> Path:
+def _home_with_duckdb_hook_executions(tmp_path: Path, monkeypatch) -> Path:
     """Seed the DuckDB hook_executions source under an isolated DREAM_STUDIO_HOME.
 
     Migration 129 (WO-READMODELS-DUCKDB) dropped the SQLite hook_executions table;
     /hooks/executions now reads the DuckDB hook_executions VIEW over
     system.hook.execution.logged events in events_fact.
+
+    monkeypatch.setenv, not a raw os.environ assignment: this used to leave
+    DREAM_STUDIO_HOME pointed at this test's (torn-down) tmp_path for the rest of the
+    pytest session. Harmless while runtime.lib.enforcement read Path.home() directly,
+    but once it started honoring DREAM_STUDIO_HOME (this sweep), a subprocess spawned
+    by a LATER test -- tests/unit/test_write_posture_reaches_enforcement.py, which
+    inherits os.environ -- wrote its session state under the stale path while the
+    parent process's already-imported `enforcement` module (which fixes SESSION_DIR at
+    import time) kept reading the original one, so the write became invisible.
     """
     import json
 
@@ -99,7 +108,7 @@ def _home_with_duckdb_hook_executions(tmp_path: Path) -> Path:
 
     home = tmp_path / "ds-home"
     (home / "state").mkdir(parents=True, exist_ok=True)
-    os.environ["DREAM_STUDIO_HOME"] = str(home)
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(home))
     # Authority SQLite (empty) so DB_PATH_ENV injection has a valid target.
     _connect(home / "state" / "studio.db").close()
 
@@ -237,7 +246,7 @@ def _client_for_db(db_path: Path, monkeypatch) -> TestClient:
 def test_hooks_executions_returns_real_rows_when_hook_executions_populated(
     tmp_path: Path, monkeypatch
 ) -> None:
-    db_path = _home_with_duckdb_hook_executions(tmp_path)
+    db_path = _home_with_duckdb_hook_executions(tmp_path, monkeypatch)
     client = _client_for_db(db_path, monkeypatch)
     try:
         resp = client.get("/api/v1/hooks/executions")
@@ -248,8 +257,9 @@ def test_hooks_executions_returns_real_rows_when_hook_executions_populated(
         assert "on-pre-push" in hook_names
         assert "on-post-commit" in hook_names
     finally:
+        # DREAM_STUDIO_HOME itself is restored by monkeypatch's own teardown now
+        # (_home_with_duckdb_hook_executions sets it via monkeypatch.setenv).
         DatabaseRuntime.reset_instance()
-        os.environ.pop("DREAM_STUDIO_HOME", None)
 
 
 # ── T5: /api/v1/metrics/models reads its own authority's analytics store ───

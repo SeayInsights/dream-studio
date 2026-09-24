@@ -26,7 +26,13 @@ import sys
 from pathlib import Path
 
 DB_PATH_ENV = "DREAM_STUDIO_DB_PATH"
-_DEFAULT_DB_PATH = Path.home() / ".dream-studio" / "state" / "studio.db"
+
+# `py tools/canonical_join.py` puts this file's own directory on sys.path, not
+# the repo root, so the resolver import below needs a manual add (same fix as
+# tools/correlation_validate.py's _REPO_ROOT, its sibling in this directory).
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 
 def _resolve_db_path(cli_override: str | None) -> Path:
@@ -35,7 +41,9 @@ def _resolve_db_path(cli_override: str | None) -> Path:
     env = os.environ.get(DB_PATH_ENV)
     if env:
         return Path(env)
-    return _DEFAULT_DB_PATH
+    from core.config.database import _default_db_path
+
+    return _default_db_path()
 
 
 def _connect(db_path: Path) -> sqlite3.Connection:

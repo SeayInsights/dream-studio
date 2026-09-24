@@ -28,12 +28,14 @@ if str(_PLUGIN_ROOT) not in sys.path:
 if str(_PLUGIN_ROOT / "hooks") not in sys.path:
     sys.path.insert(0, str(_PLUGIN_ROOT / "hooks"))
 
-from core.config import state
+from core.config import paths, state
 
 
 def main() -> None:
     # Marker written by setup.py on install — triggers onboarding exactly once.
-    marker = Path.home() / ".dream-studio" / "state" / "first-run-pending"
+    # home_dir(), not state_dir(): this only ever reads the marker, and state_dir()
+    # would create the state directory as a side effect of a first-run CHECK.
+    marker = paths.home_dir() / "state" / "first-run-pending"
     if marker.exists():
         try:
             marker.unlink()

@@ -13,13 +13,18 @@ MANIFEST_SCHEMA_VERSION = "ds.integration.manifest.v1"
 
 
 def get_ds_home(override: Path | None = None) -> Path:
-    """Resolve dream-studio home. Tests redirect via DS_DREAM_STUDIO_HOME."""
+    """Resolve dream-studio home. Tests redirect via DS_DREAM_STUDIO_HOME; DREAM_STUDIO_HOME
+    is the resolver's own name and wins whenever DS_DREAM_STUDIO_HOME is unset (mirrors
+    interfaces/cli/ds_render.py's _ds_home() -- both names exist because `--home` sets both,
+    but only DREAM_STUDIO_HOME is what a caller who bypasses `--home` would set)."""
     if override is not None:
         return override
     env = os.environ.get("DS_DREAM_STUDIO_HOME")
     if env:
         return Path(env)
-    return Path.home() / ".dream-studio"
+    from core.config.paths import home_dir
+
+    return home_dir()
 
 
 def get_manifest_path(tool_id: str, ds_home: Path | None = None) -> Path:

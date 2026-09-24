@@ -79,7 +79,9 @@ def record_outcome(
         duration: Execution time in seconds
         tokens: Total token count (input + output)
     """
-    calibration_dir = Path.home() / ".dream-studio"
+    from core.config.paths import home_dir
+
+    calibration_dir = home_dir()
     calibration_dir.mkdir(parents=True, exist_ok=True)
     calibration_path = calibration_dir / "calibration.jsonl"
 

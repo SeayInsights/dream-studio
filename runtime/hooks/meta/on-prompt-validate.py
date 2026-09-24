@@ -10,6 +10,8 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from core.config import paths  # noqa: E402
+
 # Maximum age (seconds) before a pending-handoff.json is considered stale
 # and discarded. Prevents in_progress files from persisting across sessions.
 HANDOFF_STALE_TTL_S = 300
@@ -56,7 +58,7 @@ def _check_pending_handoff(payload: dict) -> bool:
     Returns True if the prompt was modified and written to stdout (caller
     should exit 0 immediately). Returns False if no action was taken.
     """
-    state_dir = Path.home() / ".dream-studio" / "state"
+    state_dir = paths.state_dir()
     pending = state_dir / "pending-handoff.json"
 
     if not pending.is_file():

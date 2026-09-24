@@ -13,9 +13,17 @@ Usage:
 import argparse
 import hashlib
 import json
-import os
 import sys
 from pathlib import Path
+
+# This script runs in place from the repo (`py -3.12 templates/security/etl/...py`,
+# see templates/security/README.md), which puts its own directory on sys.path, not
+# the repo root -- the resolver import below needs a manual add.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from core.config.paths import home_dir  # noqa: E402
 
 SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 
@@ -537,8 +545,10 @@ def main() -> None:
         findings = generate_sample()
         print(f"[parse_binary] Generated {len(findings)} sample binary findings", file=sys.stderr)
     else:
-        scans_dir = Path(
-            args.scans_dir or os.path.expanduser(f"~/.dream-studio/security/scans/{args.client}/")
+        scans_dir = (
+            Path(args.scans_dir)
+            if args.scans_dir
+            else home_dir() / "security" / "scans" / args.client
         )
         if not scans_dir.exists():
             print(f"[parse_binary] ERROR: scans directory not found: {scans_dir}", file=sys.stderr)

@@ -138,8 +138,9 @@ def main() -> int:
             sys.path.insert(0, str(source_root))
 
         import control.execution.dispatch_tracking as _dt  # noqa: PLC0415
+        from core.config import paths as _paths  # noqa: PLC0415
 
-        state_dir = Path.home() / ".dream-studio" / "state"
+        state_dir = _paths.state_dir()
 
         def _run(name: str, payload: str) -> None:
             # The blocking enforce hooks queue a finished telemetry row rather than
