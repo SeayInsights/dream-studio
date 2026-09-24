@@ -37,6 +37,7 @@ from interfaces.cli.commands import design_brief  # noqa: E402
 from interfaces.cli.commands import diagnostics  # noqa: E402
 from interfaces.cli.commands import eval as eval_cmd  # noqa: E402
 from interfaces.cli.commands import integrate  # noqa: E402
+from interfaces.cli.commands import mcp as mcp_cmd  # noqa: E402
 from interfaces.cli.commands import milestone  # noqa: E402
 from interfaces.cli.commands import prd  # noqa: E402
 from interfaces.cli.commands import pulse as pulse_cmd  # noqa: E402
@@ -140,6 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
     eval_cmd.register(subcommands)
     config.register(subcommands)
     diagnostics.register(subcommands)
+    mcp_cmd.register(subcommands)
 
     # -----------------------------------------------------------------------
     # Parse & resolve globals
@@ -303,6 +305,8 @@ def _run(parser, args, source_root: Path, home: Path | None) -> int:
             return diagnostics.dispatch(args)
         if args.command == "config":
             return config.dispatch(args, source_root=source_root, dream_studio_home=home)
+        if args.command == "mcp":
+            return mcp_cmd.dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "grader":
             return grader.dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "prove":
