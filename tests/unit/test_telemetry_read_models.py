@@ -545,6 +545,60 @@ def test_global_summary_reads_telemetry_spine_and_marks_derived(
     )
 
 
+def test_global_summary_token_usage_reads_its_own_store_not_ambient(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """global_telemetry_summary's token_usage / token_cost_intelligence go
+    through _token_rollup -> _duckdb_token_rollup -> fetch_token_usage_records,
+    which must resolve db_path's OWN sibling analytics store, never whatever
+    aggregate_metrics.db sits in the ambient DREAM_STUDIO_HOME.
+
+    Reproduces the leak directly: seed db_path's own sibling store with one
+    model, seed a genuinely SEPARATE ambient store (its own DREAM_STUDIO_HOME,
+    not the monkeypatched analytics_db_path() _isolate_analytics uses
+    elsewhere in this file -- that would collide with the "own" store built
+    here) with a DIFFERENT model, and show only the former comes back.
+    """
+    from core.analytics import duckdb_store
+
+    db_path = _db(tmp_path)
+
+    # This authority's own analytics store: the canonical sibling of db_path,
+    # built directly (not via _isolate_analytics -- see docstring above).
+    own_analytics = db_path.parent / "aggregate_metrics.db"
+    own_conn = duckdb_store.connect_analytics(own_analytics, read_only=False)
+    try:
+        duckdb_store.ensure_analytics_schema(own_conn)
+        own_conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp, project_id,"
+            " model_id, input_tokens, output_tokens, payload)"
+            " VALUES ('own-tok', 'token.consumed', '2026-07-03T00:00:00Z',"
+            " 'own-project', 'claude-haiku-4-5', 1000, 500, '{}')"
+        )
+    finally:
+        own_conn.close()
+
+    # Ambient store, under a genuinely separate DREAM_STUDIO_HOME.
+    ambient_home = tmp_path / "ambient-home"
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(ambient_home))
+    ambient_conn = duckdb_store.connect_analytics(read_only=False)  # ambient default path
+    try:
+        duckdb_store.ensure_analytics_schema(ambient_conn)
+        ambient_conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp, project_id,"
+            " model_id, input_tokens, output_tokens, payload)"
+            " VALUES ('ambient-tok', 'token.consumed', '2026-07-03T00:00:00Z',"
+            " 'ambient-project', 'claude-opus-4-8', 9000, 9000, '{}')"
+        )
+    finally:
+        ambient_conn.close()
+
+    summary = global_telemetry_summary(db_path)
+
+    models = {row["model_id"] for row in summary["token_usage"]}
+    assert models == {"claude-haiku-4-5"}, models
+
+
 def test_project_milestone_task_and_process_drilldowns(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

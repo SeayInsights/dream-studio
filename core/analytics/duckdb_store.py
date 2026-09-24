@@ -436,6 +436,56 @@ def analytics_db_path() -> Path:
     return state_dir() / "aggregate_metrics.db"
 
 
+def analytics_db_path_for(studio_db_path: str | Path | None) -> Path | None:
+    """Return the analytics store colocated with *studio_db_path*, or None.
+
+    state_dir() always places aggregate_metrics.db next to studio.db (both
+    live under .../state/), so a caller holding an EXPLICIT authority path —
+    a test fixture, or any studio.db other than the ambient default — must
+    resolve the analytics store as that path's sibling, never whatever
+    aggregate_metrics.db happens to sit in the ambient DREAM_STUDIO_HOME.
+    Falling through to the ambient store meant a collector built on an
+    isolated test db_path silently read another test's (or another run's)
+    rows once anything had populated the ambient store first.
+
+    Returns None when studio_db_path is None, so callers can pass the result
+    straight through to connect_analytics(db_path=...) unchanged: None keeps
+    resolving to analytics_db_path() (the ambient default).
+    """
+    if studio_db_path is None:
+        return None
+    return Path(studio_db_path).parent / "aggregate_metrics.db"
+
+
+def analytics_db_path_for_connection(conn) -> Path | None:
+    """Return the analytics store colocated with an OPEN sqlite3.Connection's file.
+
+    Mirrors analytics_db_path_for(), for the many token_usage_sql()/
+    fetch_token_usage_records() callers that hold a live sqlite3.Connection
+    (opened against a specific authority via core.config.database.get_connection()
+    or an equivalent) rather than a path string. PRAGMA database_list is the
+    standard way to ask a connection which file it is attached to, so this
+    threads the caller's own authority through without requiring every call
+    site to separately track and pass its db_path (the same rationale as
+    core.work_orders.close_gates._carry_db_path, the same pattern for a
+    different reader). Without this, a route/reader holding a conn scoped to
+    one studio.db would still resolve its DuckDB analytics store against
+    whatever aggregate_metrics.db sits in the ambient DREAM_STUDIO_HOME.
+
+    Returns None for a connection with no backing file (e.g. ":memory:"),
+    matching analytics_db_path_for(None) — callers pass the result straight
+    through to connect_analytics(db_path=...) / fetch_token_usage_records(
+    analytics_db_path=...) unchanged, which then falls back to the ambient
+    default.
+    """
+    row = next(
+        (r for r in conn.execute("PRAGMA database_list").fetchall() if r[1] == "main"),
+        None,
+    )
+    filename = row[2] if row else None
+    return analytics_db_path_for(filename or None)
+
+
 def connect_analytics(
     db_path: Path | None = None,
     *,

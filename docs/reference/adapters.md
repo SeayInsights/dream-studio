@@ -10,7 +10,7 @@ Adapter surfaces and event normalization layer.
 
 ## Adapter Principle
 
-Adapters are **projections only** — they do not own canonical decisions, evidence, routes, or state. The SQLite authority database is the source of truth. Adapter config is generated from that authority and must not be mutated directly.
+Adapters are **projections only** — they do not own canonical decisions, evidence, routes, or state. The SQLite authority database is the source of truth. Adapter config is a projection of that authority and must not be mutated directly.
 
 ```
 adapter_authority_profiles (SQLite)

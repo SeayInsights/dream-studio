@@ -226,6 +226,16 @@ def test_project_state_carries_unverified_risks(tmp_path):
 
 
 def _close(db: Path, planning: Path, tmp_path: Path, wo_id: str) -> dict:
+    # close accepts only pushed/ci_issues, and force does not change that; the WOs this
+    # helper closes are seeded (via `_seed_wo`) at `in_progress`, which is right for the
+    # aggregation tests but not for these -- the ledger surfacing is what is under test.
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "UPDATE business_work_orders SET status = 'pushed' WHERE work_order_id = ?", (wo_id,)
+    )
+    conn.commit()
+    conn.close()
+
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db
     with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):

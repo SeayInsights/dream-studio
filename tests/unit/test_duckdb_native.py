@@ -18,6 +18,7 @@ from core.analytics.duckdb_store import (
     AnalyticsStoreFormatError,
     AnalyticsStoreMissingError,
     _ensure_native_duckdb,
+    analytics_db_path_for_connection,
     connect_analytics,
     ensure_analytics_schema,
 )
@@ -103,6 +104,36 @@ class TestFailLoud:
         empty = tmp_path / "empty.db"
         empty.write_bytes(b"")
         _ensure_native_duckdb(empty)  # no-op, no raise
+
+
+class TestAnalyticsDbPathForConnection:
+    """analytics_db_path_for_connection(conn): the caller-holds-a-sqlite3.Connection
+    counterpart to analytics_db_path_for(studio_db_path). Every token_usage_sql()/
+    fetch_token_usage_records() call site that holds a conn but not a db_path
+    string (API routes, cost_analysis.py, usage_accounting.py) derives the
+    analytics store this way instead of falling through to the ambient
+    DREAM_STUDIO_HOME store."""
+
+    def test_resolves_sibling_of_a_real_file_backed_connection(self, tmp_path):
+        db_path = tmp_path / "authority" / "studio.db"
+        db_path.parent.mkdir(parents=True)
+        conn = sqlite3.connect(str(db_path))
+        try:
+            resolved = analytics_db_path_for_connection(conn)
+        finally:
+            conn.close()
+        assert resolved == db_path.parent / "aggregate_metrics.db"
+
+    def test_in_memory_connection_resolves_to_none(self):
+        """An in-memory connection has no backing file (PRAGMA database_list's
+        filename is ''), so this must fall back to the ambient default (None) —
+        the same contract analytics_db_path_for(None) already has — rather than
+        raising or computing a nonsensical path."""
+        conn = sqlite3.connect(":memory:")
+        try:
+            assert analytics_db_path_for_connection(conn) is None
+        finally:
+            conn.close()
 
 
 class TestRunnerResilience:

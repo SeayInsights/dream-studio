@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from core.config.sqlite_bootstrap import bootstrap_database
+from core.work_orders.review_answers import record_dispatch
 from interfaces.cli.ds import main
 
 PROJECT_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
@@ -39,11 +40,15 @@ def db_home(tmp_path):
             (WO_GAME, "game_mechanic"),
             (WO_DOCS, "documentation"),
         ]:
+            # Seeded at 'pushed' rather than 'in_progress': close accepts only
+            # pushed/ci_issues, and every close test in this file goes on to close
+            # its work order. 'pushed' is still a blockable phase, so the block/
+            # unblock tests below are unaffected.
             conn.execute(
                 "INSERT INTO business_work_orders"
                 " (work_order_id, project_id, milestone_id, title, description, status,"
                 " work_order_type, created_at, updated_at)"
-                " VALUES (?, ?, NULL, 'Test WO', NULL, 'in_progress', ?, ?, ?)",
+                " VALUES (?, ?, NULL, 'Test WO', NULL, 'pushed', ?, ?, ?)",
                 (wo_id, PROJECT_ID, wo_type, NOW, NOW),
             )
         # Seed a task with a passing executable AC for each WO so the always-on AC gate
@@ -59,6 +64,21 @@ def db_home(tmp_path):
         conn.commit()
     finally:
         conn.close()
+    # A WO sitting at 'pushed' is past review, so close's lane_review gate now
+    # refuses it as "in review but no review was ever dispatched" unless a dispatch is on
+    # record. Zero assignments -> nothing unanswered, no findings -> the review reads
+    # clean, so this does not mask the design_brief_locked / design_critique / AC
+    # failures the tests above assert.
+    for wo_id in (WO_UI, WO_API, WO_GAME, WO_DOCS):
+        record_dispatch(
+            wo_id,
+            sha="0" * 40,
+            image="test-fixture",
+            change_set=[],
+            assignments=[],
+            db_path=db_path,
+            ownership={},
+        )
     return tmp_path
 
 

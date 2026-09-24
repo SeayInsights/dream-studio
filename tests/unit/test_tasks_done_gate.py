@@ -69,11 +69,14 @@ def _seed_wo_with_pending_task(db_path: Path) -> tuple[str, str, str]:
             " VALUES (?,?,?,?,?,?,?)",
             (milestone_id, project_id, "M1", "active", 1, NOW, NOW),
         )
+        # Seeded at 'pushed' -- close accepts only pushed/ci_issues, and the only test
+        # using this helper goes on to close the work order; the phase is not what it
+        # checks (it checks sync_tick ordering against the tasks_done gate).
         conn.execute(
             "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description,"
             "  work_order_type, status, sequence_order, created_at, updated_at, last_updated_at)"
-            " VALUES (?,?,?,?,?,'cleanup','in_progress',1,?,?,?)",
+            " VALUES (?,?,?,?,?,'cleanup','pushed',1,?,?,?)",
             (work_order_id, project_id, milestone_id, "Test WO", "desc", NOW, NOW, NOW),
         )
         conn.execute(
@@ -98,6 +101,21 @@ def _seed_wo_with_pending_task(db_path: Path) -> tuple[str, str, str]:
         conn.commit()
     finally:
         conn.close()
+    # The WO sits at 'pushed', past review, so close's lane_review
+    # gate refuses it as "in review but no review was ever dispatched" unless a
+    # dispatch is on record. Zero assignments -> nothing unanswered, no findings -> the
+    # review reads clean, leaving only the tasks_done/sync_tick ordering under test.
+    from core.work_orders.review_answers import record_dispatch
+
+    record_dispatch(
+        work_order_id,
+        sha="0" * 40,
+        image="test-fixture",
+        change_set=[],
+        assignments=[],
+        db_path=db_path,
+        ownership={},
+    )
     return project_id, work_order_id, task_id
 
 

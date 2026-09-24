@@ -244,6 +244,81 @@ def test_contract_atlas_lifecycle_gate_runs_without_live_home_or_db() -> None:
     assert payload["public_private_data_leakage_check"]["status"] == "pass"
 
 
+def test_contract_atlas_lifecycle_gate_help_documents_its_env_vars() -> None:
+    """This gate honors both DREAM_STUDIO_CHANGED_FILES (a documented override
+    that bypasses git-based diffing entirely) and DREAM_STUDIO_DOCS_REVIEWED_NO_CHANGE
+    (read by the shared reviewed_no_change_domains() helper for this gate too) the
+    same way contract_docs_drift_gate.py does, but until now its own --help said
+    nothing about either -- unlike its sibling gate, whose --help fully documents
+    both. A comment added to .github/workflows/ci.yml pointed an operator at "each
+    gate's own --help" for this; that breadcrumb must actually lead somewhere for
+    both gates and both vars, not just one of each."""
+    result = subprocess.run(
+        [sys.executable, "interfaces/cli/contract_atlas_lifecycle_gate.py", "--help"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+    )
+    for env_var in ("DREAM_STUDIO_CHANGED_FILES", "DREAM_STUDIO_DOCS_REVIEWED_NO_CHANGE"):
+        assert env_var in result.stdout, (
+            f"contract_atlas_lifecycle_gate.py --help does not mention {env_var}: "
+            f"{result.stdout}"
+        )
+
+
+def test_contract_atlas_lifecycle_gate_accepts_a_base_ref_flag() -> None:
+    """This gate resolved DREAM_STUDIO_BASE_REF/GITHUB_BASE_REF from the
+    environment ONLY -- no --base-ref argparse argument existed for it at all,
+    unlike its sibling gate, so there was nothing to hang --help text on and an
+    operator had no CLI-flag way to set it. Both a real --base-ref flag and its
+    mention in --help must exist now."""
+    help_result = subprocess.run(
+        [sys.executable, "interfaces/cli/contract_atlas_lifecycle_gate.py", "--help"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+    )
+    assert "--base-ref" in help_result.stdout, help_result.stdout
+    assert "DREAM_STUDIO_BASE_REF" in help_result.stdout, help_result.stdout
+
+
+def test_contract_atlas_lifecycle_gate_forwards_base_ref_to_the_trailer_scan() -> None:
+    """--base-ref drives _changed_files' git diff, but the call to
+    reviewed_no_change_domains() (which resolves `Docs-Reviewed-No-Change:
+    <domain_id>` commit trailers) did not forward it at all when the flag was
+    first added -- the two calls silently disagreed about which commit range
+    "the diff" means, so a caller who set --base-ref got the trailer scan run
+    over the wrong range. contract_docs_drift_gate.py's own call site already
+    passes base_ref=args.base_ref; this asserts the sibling does too, by
+    reading the AST rather than executing main() (which does real DB/tempdir
+    setup)."""
+    import ast
+
+    src = (REPO_ROOT / "interfaces" / "cli" / "contract_atlas_lifecycle_gate.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(src)
+    call = None
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_gather_reviewed_no_change"
+        ):
+            call = node
+            break
+    assert call is not None, "no call to _gather_reviewed_no_change found"
+    kwarg_names = {kw.arg for kw in call.keywords}
+    assert "base_ref" in kwarg_names, (
+        "_gather_reviewed_no_change is not called with base_ref -- the trailer scan "
+        f"will not honor --base-ref. Keywords passed: {kwarg_names}"
+    )
+
+
 def _db(tmp_path: Path) -> Path:
     return tmp_path / "contract-atlas-lifecycle" / "studio.db"
 

@@ -26,9 +26,10 @@ Defined in `canonical/workflows/pre-push.yaml`. Each gate declares its `tier`.
 | `lint-check` | blocking | flake8 baseline — no new findings vs pinned baseline |
 | `skill-sync` | blocking | A4/A5 enforcement block has no CLI subprocess regression |
 | `test-suite` | blocking | `tests/evals/` must pass |
-| `atlas-leak` | blocking | Contract atlas lifecycle — no PRD/contract leakage |
-| `docs-drift` | advisory | Doc/code reference drift — hygiene signal only (Item 28) |
+| `docs-drift` | blocking | Doc/code reference drift — a changed contract domain's required docs must be refreshed in the same change set, or carry a `Docs-Reviewed-No-Change` trailer. `DREAM_STUDIO_CHANGED_FILES` is pinned empty in the manifest's `env` so an ambient value in a developer's shell cannot bypass git-based diffing |
 | `migration-risk` | blocking | SQL/migration changes require explicit matrix-watch confirmation |
+
+`atlas-leak` (Contract atlas lifecycle — no PRD/contract leakage) is **CI-only**: it runs blocking in `.github/workflows/ci.yml`'s pr-smoke job. It was removed from `pre-push.yaml` in the same commit that removed `docs-drift` (#752 / db4c23f) and has not been restored here.
 
 ---
 

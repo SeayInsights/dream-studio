@@ -131,9 +131,27 @@ python interfaces/cli/contract_atlas_lifecycle_gate.py
 
 The gate reads `core/shared_intelligence/contract_registry.py`, maps changed
 files to contract domains, and fails when required docs for an impacted domain
-are not refreshed in the same change set. CI can provide changed files through
-`DREAM_STUDIO_CHANGED_FILES`, `--changed-file`, or a base ref. Local runs with
-no pending diff pass as an honest empty state.
+are not refreshed in the same change set. A caller can provide changed files
+through `--changed-file` (repeatable) or `--changed-files`
+(newline/semicolon/comma-separated), or through the identically-shaped
+`DREAM_STUDIO_CHANGED_FILES` env var — prefer the flag: the env var is read
+before git or `DREAM_STUDIO_BASE_REF` are even consulted, so a value left
+exported in a shell for an unrelated reason silently replaces detection on
+every run made from it. The pre-push manifest pins it to `""` in the
+`docs-drift` gate's own `env` for exactly this reason (`env` there wins over
+whatever is ambient in the invoking shell — see `core.gates.pre_push.run_gate`).
+
+Without an explicit changed-files source, the gate diffs `DREAM_STUDIO_BASE_REF`
+(or `origin/<GITHUB_BASE_REF>`) triple-dot `HEAD` — the same merge-base diff
+`git diff A...B` always computes. If that base ref cannot be resolved at all
+(no `origin` remote, an unfetched clone, a base branch absent locally), the
+gate does not treat that the same as "zero changes": it enumerates every file
+git tracks at HEAD (`git ls-files`) instead, so a file already committed on
+this branch is not invisible just because there is nothing to diff it
+against. Only once a resolvable base ref genuinely reports zero files does
+the gate fall back further, to staged + working-tree-vs-HEAD + untracked —
+which is also what an ad hoc local run with no base ref configured at all
+sees. Local runs with no pending diff pass as an honest empty state.
 
 If a domain is reviewed and no docs need to change — for example a
 behavior-preserving refactor such as a facade-split that touches a
@@ -386,3 +404,8 @@ docs, and prove docs drift without weakening unrelated release-gate checks.
 
 <!-- Reviewed 2026-09-03 — WO 789df02b / f1290b5c (fix/skill-propagation-and-paths): .github/workflows/ci.yml pr-smoke adds two files to the existing "Focused smoke tests" pytest list — tests/unit/test_skill_module_paths_resolve.py and tests/unit/test_ds_update_skill_drift.py — so a skill reference that no install can resolve, and a skill change that would never reach an install, both fail on all three platforms at PR time rather than post-merge. Purely additive test registration: no new CI step, no release-gate policy, publication-boundary, packaging, module-profile, or black/flake8 baseline change. Reviewed, no doc-content change needed. -->
 <!-- Reviewed 2026-09-21 — WO e56cb5ee (fix/hooks-store-alias-and-duplicate-hooks): .github/workflows/ci.yml pr-smoke gains one Windows-only step, "Stock Windows Store-alias state". It shadows bare `python` with a stub that exits 9009 — the Microsoft Store App Execution Alias, which is the out-of-the-box state setup-python hides on a runner — and reruns the two hook-interpreter test files against it, using the absolute interpreter captured before the shadowing. The step refuses to run if the stub is not actually in front of `python`, so it cannot pass vacuously. Test-only and Windows-only: no release-gate policy, publication-boundary, privacy classification, packaging, module-profile, or black/flake8 baseline change. Reviewed, no doc-content change needed. -->
+<!-- Reviewed 2026-09-24 — fix/home-means-home: .github/workflows/ci.yml's pr-smoke job timeout-minutes goes from 30 to 45. This branch's 50-file diff to core/config/paths.py (a foundational, widely-imported module) selects 697 dependent test files once the import-graph closure (#805) is counted -- measured locally at 20m02s for the impact step alone, more than double the 30-minute budget (set 2026-09-23, per the note at the top of this doc) was calibrated for. An earlier measurement (44 files -> 286 tests, ~10m48s) predated this branch merging #805 and undercounted by 2.44x; corrected here. No change to the flake8 baseline or to what the format and lint checks decide. -->
+
+<!-- Reviewed 2026-09-24 — fix/home-means-home: .github/workflows/ci.yml pr-smoke job timeout-minutes goes from 45 to 90. The 45 figure (this doc's own entry immediately above) was measured inside the review lane's own Docker container on this machine -- a Linux container despite the host OS being Windows, so it never actually exercised a Windows Python process. Real GH CI at the same 697-test selection: windows-latest's impact step exceeded 43m14s and was still running when the 45-minute job timeout killed it (twice, at two different commits on this branch), while ubuntu-latest/macos-latest finished the identical step in 18-21m in the same runs -- a >=2.07x ratio, consistent with the ~2.8x Windows/other-platform ratio already on record above. 90 gives real margin past a ~57-minute Windows projection. No change to the flake8 baseline or to what the format and lint checks decide. -->
+
+<!-- Reviewed 2026-09-24 — fix/home-means-home: .github/workflows/ci.yml pr-smoke timeout-minutes comment corrected to the real measured Windows numbers (71m51s impact step, 78m18s whole job, ~12 minutes of margin under the 90-minute budget) once the PR that carried the 90-minute bump actually ran on GH CI -- the value itself (90) is unchanged, only the projection it was justified by (a ~57-minute estimate) is replaced with what was actually measured. No change to the flake8 baseline or to what the format and lint checks decide. -->

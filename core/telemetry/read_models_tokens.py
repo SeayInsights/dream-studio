@@ -9,6 +9,7 @@ _token_rollup, _token_cost_intelligence.
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 from .read_models_outcomes import _outcome_rollup
@@ -55,14 +56,24 @@ def _token_has_sqlite_table(conn: sqlite3.Connection) -> bool:
 
 
 def _token_rows_from_duckdb(
-    scope: ScopeFilter | None = None, *, workflow_id: str | None = None
+    scope: ScopeFilter | None = None,
+    *,
+    workflow_id: str | None = None,
+    analytics_db_path: Path | None = None,
 ) -> list[dict[str, Any]]:
     """Raw (ungrouped) DuckDB token rows, filtered and ordered like the retired
     ``SELECT * FROM token_usage_records WHERE ... ORDER BY created_at,
-    token_usage_id`` queries (process_run_timeline, workflow_execution_graph)."""
+    token_usage_id`` queries (process_run_timeline, workflow_execution_graph).
+
+    analytics_db_path: forwarded to fetch_token_usage_records() -- callers
+    holding a conn scoped to a specific authority pass
+    core.analytics.duckdb_store.analytics_db_path_for_connection(conn) so this
+    reads THAT authority's analytics store rather than whatever
+    aggregate_metrics.db sits in the ambient DREAM_STUDIO_HOME.
+    """
     from projections.core.collectors.authority_sources import fetch_token_usage_records
 
-    rows = fetch_token_usage_records() or []
+    rows = fetch_token_usage_records(analytics_db_path=analytics_db_path) or []
     out: list[dict[str, Any]] = []
     for row in rows:
         if scope is not None:
@@ -86,12 +97,16 @@ def _duckdb_token_rollup(
     component_type: str | None = None,
     component_id: str | None = None,
     include_purpose: bool = False,
+    analytics_db_path: Path | None = None,
 ) -> list[dict[str, Any]]:
     """Group DuckDB token_usage_records view rows the same way the retired
-    SQLite GROUP BY query did (WO-DBA-DROP, migration 137)."""
+    SQLite GROUP BY query did (WO-DBA-DROP, migration 137).
+
+    analytics_db_path: see _token_rows_from_duckdb's docstring above.
+    """
     from projections.core.collectors.authority_sources import fetch_token_usage_records
 
-    rows = fetch_token_usage_records() or []
+    rows = fetch_token_usage_records(analytics_db_path=analytics_db_path) or []
     component_column = (
         {
             "agent": "agent_id",
@@ -178,8 +193,17 @@ def _token_rollup(
 ) -> list[dict[str, Any]]:
     if not _token_has_sqlite_table(conn):
         # WO-DBA-DROP (migration 137): token_usage_records is no longer a
-        # SQLite table in a fresh install — read the DuckDB view instead.
-        return _duckdb_token_rollup(scope, component_type=component_type, component_id=component_id)
+        # SQLite table in a fresh install — read the DuckDB view instead, for
+        # the analytics store colocated with *conn*'s own authority (never
+        # whatever aggregate_metrics.db sits in the ambient DREAM_STUDIO_HOME).
+        from core.analytics.duckdb_store import analytics_db_path_for_connection
+
+        return _duckdb_token_rollup(
+            scope,
+            component_type=component_type,
+            component_id=component_id,
+            analytics_db_path=analytics_db_path_for_connection(conn),
+        )
 
     where, params = _where_scope(scope)
     if component_type and component_id:
@@ -244,8 +268,16 @@ def _token_cost_intelligence(
 ) -> dict[str, Any]:
     if not _token_has_sqlite_table(conn):
         # WO-DBA-DROP (migration 137): token_usage_records is no longer a
-        # SQLite table in a fresh install — read the DuckDB view instead.
-        by_model_provider = _duckdb_token_rollup(scope, include_purpose=True)
+        # SQLite table in a fresh install — read the DuckDB view instead, for
+        # the analytics store colocated with *conn*'s own authority (never
+        # whatever aggregate_metrics.db sits in the ambient DREAM_STUDIO_HOME).
+        from core.analytics.duckdb_store import analytics_db_path_for_connection
+
+        by_model_provider = _duckdb_token_rollup(
+            scope,
+            include_purpose=True,
+            analytics_db_path=analytics_db_path_for_connection(conn),
+        )
     else:
         where, params = _where_scope(scope)
         by_model_provider = _rows(

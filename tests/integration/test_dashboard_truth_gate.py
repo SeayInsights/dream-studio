@@ -96,7 +96,9 @@ def _seed_wo(
         "INSERT INTO business_work_orders"
         " (work_order_id, project_id, milestone_id, title, description,"
         "  work_order_type, status, sequence_order, created_at, updated_at, last_updated_at)"
-        " VALUES (?,?,?,?,?,?,'in_progress',1,?,?,?)",
+        # close accepts only pushed/ci_issues; both tests here close the WO and the
+        # phase is not what they check.
+        " VALUES (?,?,?,?,?,?,'pushed',1,?,?,?)",
         (work_order_id, project_id, milestone_id, "Test WO", "desc", wo_type, NOW, NOW, NOW),
     )
     conn.commit()

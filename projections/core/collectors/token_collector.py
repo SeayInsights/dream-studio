@@ -9,25 +9,26 @@ from datetime import datetime, timedelta
 from typing import Any
 from core.shared_intelligence.usage_accounting import REPORTABLE_COST_VISIBILITIES
 from projections.api.routes.sqlite_schema import source_status
-from projections.core.collectors.authority_sources import token_usage_sql
+from projections.core.collectors.authority_sources import resolve_collector_paths, token_usage_sql
 
 
 class TokenCollector:
     """Collects and aggregates token usage metrics from token_usage_records."""
 
-    def __init__(self, db_path: str | None = None):
+    def __init__(self, db_path: str | None = None) -> None:
         """
         Initialize TokenCollector
 
         Args:
-            db_path: Path to studio.db. If None, uses default ~/.dream-studio/state/studio.db
+            db_path: Path to studio.db. If None, uses default ~/.dream-studio/state/studio.db,
+                and the DuckDB analytics store token_usage_sql() reads from is
+                connect_analytics()'s ambient default. If given explicitly, the
+                analytics store used is the aggregate_metrics.db beside *this*
+                db_path — never whatever store sits in the ambient
+                DREAM_STUDIO_HOME (see self._analytics_db_path, set below, and
+                resolve_collector_paths()'s docstring for the shared logic).
         """
-        if db_path is None:
-            from core.config.database import _default_db_path
-
-            self.db_path = str(_default_db_path())
-        else:
-            self.db_path = db_path
+        self.db_path, self._analytics_db_path = resolve_collector_paths(db_path)
 
     def collect(self, days: int = 90) -> dict[str, Any]:
         """
@@ -54,7 +55,7 @@ class TokenCollector:
         cutoff_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
         try:
-            source_sql = token_usage_sql(conn)
+            source_sql = token_usage_sql(conn, analytics_db_path=self._analytics_db_path)
             if source_sql is None:
                 return self._empty_metrics(
                     source_status(
@@ -315,7 +316,7 @@ class TokenCollector:
         cutoff_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
         try:
-            source_sql = token_usage_sql(conn)
+            source_sql = token_usage_sql(conn, analytics_db_path=self._analytics_db_path)
             if source_sql is None:
                 return []
 

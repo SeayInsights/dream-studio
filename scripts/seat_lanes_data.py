@@ -549,10 +549,6 @@ STANDARDS: dict[str, tuple[str, ...]] = {
         "Semantic Versioning 2.0.0",
         "Keep a Changelog 1.1.0",
     ),
-    "Distributed state and concurrency": (
-        "CWE-362 race condition",
-        "CWE-367 time-of-check time-of-use",
-    ),
     "Data and migration": ("ACID transaction properties", "ISO/IEC 9075 SQL constraints"),
     "Contract and protocol": (
         "OpenAPI 3.1",

@@ -79,7 +79,9 @@ def _seed(db_path: Path, *, project_id: str, milestone_id: str, work_order_id: s
             "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description,"
             "  work_order_type, status, sequence_order, created_at, updated_at, last_updated_at)"
-            " VALUES (?,?,?,?,?,'cleanup','in_progress',1,?,?,?)",
+            # close accepts only pushed/ci_issues; every test in this file seeds a
+            # WO then closes it, and the phase is not what these tests check.
+            " VALUES (?,?,?,?,?,'cleanup','pushed',1,?,?,?)",
             (work_order_id, project_id, milestone_id, "Test WO", "desc", NOW, NOW, NOW),
         )
         conn.commit()
@@ -120,6 +122,23 @@ def _add_task(
     finally:
         conn.close()
     return task_id
+
+
+def _dispatch_clean_review(db_path: Path, work_order_id: str) -> None:
+    """A work order past review must have had one, so lane_review_failure demands a review
+    dispatch exist before close — a gate independent of the tasks_done gate this
+    file exercises. Record the minimum: a dispatch with no lanes assigned, so
+    nothing is left unanswered and the gate clears."""
+    from core.work_orders.review_answers import record_dispatch
+
+    record_dispatch(
+        work_order_id,
+        sha="0" * 40,
+        image="test",
+        change_set=[],
+        assignments=[],
+        db_path=db_path,
+    )
 
 
 def _wo_status(db_path: Path, work_order_id: str) -> str:
@@ -185,7 +204,7 @@ def test_close_blocked_with_pending_tasks(tmp_path: Path) -> None:
     ), f"Expected a tasks_done failure; failures={result_no_force['failures']}"
     # Names the offending task and reports a count.
     assert "Still pending task" in tasks_done_failures[0]
-    assert _wo_status(db_path, work_order_id) == "in_progress"
+    assert _wo_status(db_path, work_order_id) == "pushed"
 
     # ── With force=True → closes and records the bypass ───────────────────
     with _patch_close_runtime(db_path):
@@ -245,7 +264,7 @@ def test_loop_and_cli_enforce_tasks_done(tmp_path: Path) -> None:
             planning_root=planning_root,
         )
     assert exit_code == 1, "CLI close wrapper must fail (exit 1) when a task is pending"
-    assert _wo_status(db_path, work_order_id) == "in_progress"
+    assert _wo_status(db_path, work_order_id) == "pushed"
 
     # ── Loop path: the autonomous execute-work-orders workflow closes via the
     # same gated CLI command (`ds work-order close`) rather than a raw status
@@ -300,7 +319,7 @@ def test_end_to_end(tmp_path: Path) -> None:
         )
     assert blocked["ok"] is False
     assert any(f.startswith("tasks_done") for f in blocked["failures"])
-    assert _wo_status(db_path, work_order_id) == "in_progress"
+    assert _wo_status(db_path, work_order_id) == "pushed"
 
     # ── 2. Task completed (the state mark_task_done's projection materializes) ─
     conn = sqlite3.connect(str(db_path))
@@ -309,6 +328,7 @@ def test_end_to_end(tmp_path: Path) -> None:
         conn.commit()
     finally:
         conn.close()
+    _dispatch_clean_review(db_path, work_order_id)
 
     # ── 3. All tasks done → close succeeds without force ──────────────────
     with _patch_close_runtime(db_path):
