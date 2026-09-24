@@ -58,14 +58,21 @@ def dispatch(
         from integrations.mcp import auth
         from integrations.mcp.app import build_app
 
-        token, created = auth.ensure_token(dream_studio_home=dream_studio_home)
+        _token, created = auth.ensure_token(dream_studio_home=dream_studio_home)
         if created:
-            print(f"Generated MCP bearer token: {token}", file=sys.stderr)
-        print(
-            "Dream Studio MCP server: use `ds mcp token` to print it again; "
-            "clients need `Authorization: Bearer <token>`.",
-            file=sys.stderr,
-        )
+            print(
+                "Generated a new MCP bearer token. Run `ds mcp token` on this machine to "
+                "read it -- it is never printed by `serve` itself, since a long-running "
+                "server's stderr commonly ends up captured in a log (systemd, docker logs, "
+                "CI). Clients need `Authorization: Bearer <token>`.",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                "Dream Studio MCP server. Run `ds mcp token` to read the bearer token "
+                "clients need to send as `Authorization: Bearer <token>`.",
+                file=sys.stderr,
+            )
         if args.host == "0.0.0.0":
             print(
                 "[mcp] WARNING: binding to 0.0.0.0 exposes this server to all network "

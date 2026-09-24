@@ -276,3 +276,46 @@ def test_no_tool_name_suggests_a_write_or_destructive_action():
         lowered = tool.name.lower()
         hits = [w for w in forbidden_substrings if w in lowered]
         assert not hits, f"{tool.name} looks like a write/destructive tool: {hits}"
+
+
+# ── the token is never disclosed by `ds mcp serve` ──────────────────────────
+
+
+def _serve_stderr(mcp_home, monkeypatch, capsys, *, host="127.0.0.1"):
+    """Run the `serve` dispatch path with uvicorn.run stubbed out, and return stderr."""
+    import argparse
+
+    import uvicorn
+
+    from interfaces.cli.commands import mcp as mcp_cmd
+
+    monkeypatch.setattr(uvicorn, "run", lambda *a, **k: None)
+    args = argparse.Namespace(mcp_command="serve", host=host, port=8765)
+    mcp_cmd.dispatch(args, source_root=mcp_home, dream_studio_home=mcp_home)
+    return capsys.readouterr().err
+
+
+def test_serve_never_prints_the_token_on_first_run(mcp_home, monkeypatch, capsys):
+    """Round 1 finding: `serve` used to print the freshly-generated token to stderr,
+    while the docs and auth.py's own docstring claimed it never does -- a real
+    disclosure path, since a long-running server's stderr commonly ends up captured
+    in a log (systemd, docker logs, CI)."""
+    err = _serve_stderr(mcp_home, monkeypatch, capsys)
+    token = auth.read_token(dream_studio_home=mcp_home)
+    assert token is not None, "serve should have generated a token"
+    assert token not in err
+    assert "ds mcp token" in err
+
+
+def test_serve_never_prints_the_token_on_a_later_run(mcp_home, monkeypatch, capsys):
+    """Same property on a run where the token already existed (the common case)."""
+    token, _ = auth.ensure_token(dream_studio_home=mcp_home)
+    err = _serve_stderr(mcp_home, monkeypatch, capsys)
+    assert token not in err
+    assert "ds mcp token" in err
+
+
+def test_serve_still_warns_on_non_localhost_bind(mcp_home, monkeypatch, capsys):
+    err = _serve_stderr(mcp_home, monkeypatch, capsys, host="0.0.0.0")
+    assert "0.0.0.0" in err
+    assert "WARNING" in err
