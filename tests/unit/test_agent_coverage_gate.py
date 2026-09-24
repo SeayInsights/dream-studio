@@ -83,7 +83,7 @@ def test_the_audit_fan_out_all_have_specialists():
     declared = {str(r["mode"]): r for r in declared_modes()}
     for mode in (
         "quality/code-quality",
-        "quality/database",
+        "data/database",
         "quality/security",
         "quality/testing",
         "quality/types-deps",

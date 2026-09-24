@@ -8,7 +8,7 @@
 **Pattern used:** `git diff --name-only main...HEAD` (or `origin/main...HEAD` in CI)
 **Impact if changed:** `--changed` scope breaks; fall back to `--full-repo` until fixed.
 
-### canonical/skills/quality/references/database-best-practices.md
+### canonical/skills/data/references/database-best-practices.md
 **Usage:** Authoritative source for all 22 rule definitions. Sections A-M, LIST-3.
 **Where used:** `rules.yml` — each rule's `source.list`, `source.section`, `source.item` fields.
 **Impact if changed:** `source.item` text in rules.yml may need updating. No runtime behavior change — source attribution is informational only.

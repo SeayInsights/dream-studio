@@ -1,0 +1,6 @@
+name: data
+model_tier: sonnet
+description: 'Data engineering and database quality: schema/query/migration audits, warehouse pipeline authoring.'
+argument-hint: database | data-engineering
+user_invocable: true
+args: mode

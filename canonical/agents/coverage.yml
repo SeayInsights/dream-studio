@@ -119,10 +119,10 @@ modes:
   skill: domains/modes/dashboard-dev/SKILL.md
   no_agent: Nothing dispatches it and the skill is 3031 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: domains/data-engineering
-  skill: domains/modes/data-engineering/SKILL.md
+- mode: data/data-engineering
+  skill: data/modes/data-engineering/SKILL.md
   agent: data-engineer
-  installed_skill: ds-domains/modes/data-engineering/SKILL.md
+  installed_skill: ds-data/modes/data-engineering/SKILL.md
   dispatched_because: 'isolation: the skill is 9631 bytes, enough that carrying it in a subagent protects
     the caller''s context'
   description: 'Specialist for dbt model authoring, data warehouse query debugging, pipeline orchestration
@@ -292,12 +292,12 @@ modes:
   dispatched_because: 'fan-out: several modes share a trigger, so one operator word convenes them together'
   description: 'Code quality enforcement — audits Python code for maintainability, correctness, and idiomatic
     patterns against 22 rules from LIST-4 (code-writing-best-practices.md). Three-way boundary with ds-quality:security
-    and ds-quality:database; uses shared trust_boundary_detection.py... Invoke for: audit:, code-quality
+    and ds-data:database; uses shared trust_boundary_detection.py... Invoke for: audit:, code-quality
     audit:, cq audit:, check code quality:, build:code-quality'
-- mode: quality/database
-  skill: quality/modes/database/SKILL.md
+- mode: data/database
+  skill: data/modes/database/SKILL.md
   agent: quality-database
-  installed_skill: ds-quality/modes/database/SKILL.md
+  installed_skill: ds-data/modes/database/SKILL.md
   dispatched_because: 'fan-out: several modes share a trigger, so one operator word convenes them together'
   description: 'Database quality enforcement — audits schema design, query patterns, migration safety,
     and backup strategy against 22 rules from LIST-3 (database best practices). Two modes: audit (codebase

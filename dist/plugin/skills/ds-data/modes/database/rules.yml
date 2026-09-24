@@ -3,7 +3,7 @@
 # Schema version: 1
 #
 # Source authority:
-#   LIST-3 = canonical/skills/quality/references/database-best-practices.md (sections A-M)
+#   LIST-3 = canonical/skills/data/references/database-best-practices.md (sections A-M)
 #
 # Skill boundary with ds-quality:security:
 #   Security owns: parameterized queries (sec-002, inject risk), encryption at rest (sec-009),
@@ -56,7 +56,7 @@ rules:
 
     remediation:
       summary: "Add PRIMARY KEY to every table. Use INTEGER PRIMARY KEY (SQLite rowid alias) for auto-incrementing integer PKs, or TEXT PRIMARY KEY for UUID-based PKs."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#d-schema-integrity--correctness"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#d-schema-integrity--correctness"
 
     suppressions:
       - path_glob: "tests/fixtures/**"
@@ -104,7 +104,7 @@ rules:
 
     remediation:
       summary: "Choose ON DELETE behavior deliberately: CASCADE (child rows deleted with parent), RESTRICT (block deletion if child exists), SET NULL (child FK set to NULL), or NO ACTION. Document the choice in a migration comment."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#d-schema-integrity--correctness"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#d-schema-integrity--correctness"
 
     suppressions:
       - inline_comment: "# db-002-suppress"
@@ -148,7 +148,7 @@ rules:
 
     remediation:
       summary: "Add NOT NULL to columns that logically cannot be null. If NULL is intentional (optional FK, optional metadata), document it with a comment."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#d-schema-integrity--correctness"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#d-schema-integrity--correctness"
 
     suppressions:
       - inline_comment: "# db-003-suppress"
@@ -197,7 +197,7 @@ rules:
 
     remediation:
       summary: "Add CHECK constraint: status TEXT CHECK(status IN ('active','inactive','deleted')). Alternatively, use a foreign key to a lookup table. In Postgres, a native ENUM type is an acceptable equivalent."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#d-schema-integrity--correctness"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#d-schema-integrity--correctness"
 
     suppressions:
       - inline_comment: "# db-004-suppress"
@@ -242,7 +242,7 @@ rules:
 
     remediation:
       summary: "Store money as INTEGER (cents/smallest currency unit) or NUMERIC/DECIMAL with explicit precision. Never REAL or FLOAT — floating-point arithmetic causes silent rounding errors in financial calculations."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#d-schema-integrity--correctness"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#d-schema-integrity--correctness"
 
     suppressions:
       - inline_comment: "# db-005-suppress"
@@ -291,7 +291,7 @@ rules:
 
     remediation:
       summary: "Store timestamps as UTC. In SQLite: use TEXT ISO-8601 with Z suffix convention and enforce in application code. In Postgres: use TIMESTAMPTZ. In Python: always use datetime.now(timezone.utc), never datetime.now() or datetime.utcnow()."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#d-schema-integrity--correctness"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#d-schema-integrity--correctness"
 
     suppressions:
       - inline_comment: "# db-006-suppress"
@@ -335,7 +335,7 @@ rules:
 
     remediation:
       summary: "Add CREATE INDEX idx_<table>_<column> ON <table>(<column>) for every FK column. Missing FK indexes cause table scans on join operations."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#e-query--performance"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#e-query--performance"
 
     suppressions:
       - inline_comment: "# db-007-suppress"
@@ -379,7 +379,7 @@ rules:
 
     remediation:
       summary: "Add indexes for columns used in WHERE, ORDER BY, and JOIN in frequent queries. Use EXPLAIN ANALYZE to verify the index is used. Composite indexes should list the most selective column first."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#e-query--performance"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#e-query--performance"
 
     suppressions:
       - inline_comment: "# db-008-suppress"
@@ -433,7 +433,7 @@ rules:
 
     remediation:
       summary: "Use parameterized queries: cursor.execute('SELECT * FROM t WHERE x = ?', (val,)) or SQLAlchemy bound parameters. F-string SQL is both an injection risk (see sec-002) and a code quality anti-pattern — string construction makes queries hard to cache, trace, and safely modify."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#e-query--performance"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#e-query--performance"
 
     cross_references:
       - rule_id: "sec-002"
@@ -485,7 +485,7 @@ rules:
 
     remediation:
       summary: "All schema changes must go through versioned migration files. Never alter schema via DB GUI or ad-hoc scripts. Dream Studio uses core/event_store/migrations/*.sql — follow this pattern."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#d-schema-integrity--correctness"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#d-schema-integrity--correctness"
 
     suppressions:
       - path_glob: "tests/**"
@@ -532,7 +532,7 @@ rules:
 
     remediation:
       summary: "Follow expand-contract for destructive migrations: (1) add new column, (2) migrate data in a separate step or via application dual-write, (3) remove old column in a later migration after confirming no live references. Never drop columns in the same migration that stops using them."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#d-schema-integrity--correctness"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#d-schema-integrity--correctness"
 
     suppressions:
       - inline_comment: "# db-011-suppress"
@@ -589,7 +589,7 @@ rules:
 
     remediation:
       summary: "Configure connection pool: pool_size (default connections), max_overflow (burst connections), pool_timeout (wait time before error), pool_recycle (reconnect interval). For SQLite: use a singleton connection or connection pool manager; avoid per-request sqlite3.connect(). D1 and managed cloud databases handle pooling automatically."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#e-query--performance"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#e-query--performance"
 
     suppressions:
       - inline_comment: "# db-012-suppress"
@@ -643,7 +643,7 @@ rules:
 
     remediation:
       summary: "Set statement timeouts per connection or per query: Postgres: SET statement_timeout = '30s'; SQLite: sqlite3.connect(db, timeout=30.0); MySQL: SET SESSION max_execution_time = 30000. D1 manages timeouts automatically. Unbounded queries can exhaust connection pool and block the application."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#e-query--performance"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#e-query--performance"
 
     suppressions:
       - inline_comment: "# db-013-suppress"
@@ -687,7 +687,7 @@ rules:
 
     remediation:
       summary: "Replace OFFSET pagination with keyset/cursor pagination: WHERE id > last_seen_id ORDER BY id LIMIT N. OFFSET scans grow linearly with page depth — page 1000 requires scanning 1000×N rows before returning results."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#e-query--performance"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#e-query--performance"
 
     suppressions:
       - inline_comment: "# db-014-suppress"
@@ -731,7 +731,7 @@ rules:
 
     remediation:
       summary: "Replace N+1 with batch query: db.execute('SELECT * FROM t WHERE id IN (?)', ids) outside the loop. For ORMs, use eager loading (joinedload, selectinload) or explicit batch fetch."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#e-query--performance"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#e-query--performance"
 
     suppressions:
       - inline_comment: "# db-015-suppress"
@@ -783,7 +783,7 @@ rules:
 
     remediation:
       summary: "Configure automated backups: SQLite on-prem → scheduled file copy + WAL archiving via sqlite3.backup(); Postgres/RDS → enable point-in-time recovery, configure retention in IaC; D1 → automatic daily backups managed by platform (no action needed); MongoDB Atlas → enable automated backup. Note: backup encryption is a separate concern owned by ds-quality:security (sec-023 future)."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#f-backups--disaster-recovery"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#f-backups--disaster-recovery"
 
     suppressions:
       - inline_comment: "# db-016-suppress"
@@ -827,7 +827,7 @@ rules:
 
     remediation:
       summary: "Document and schedule restore tests. At minimum quarterly: restore a backup to a test instance, verify data integrity, document the result with a date. A backup you haven't successfully restored is aspirational, not operational."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#f-backups--disaster-recovery"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#f-backups--disaster-recovery"
 
     suppressions:
       - inline_comment: "# db-017-suppress"
@@ -869,7 +869,7 @@ rules:
 
     remediation:
       summary: "Document RTO (e.g., 4 hours) and RPO (e.g., 15 minutes) for each production database. These drive backup frequency, replication strategy, and DR runbook SLAs. Without them, you cannot evaluate whether your backup strategy is adequate."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#f-backups--disaster-recovery"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#f-backups--disaster-recovery"
 
     suppressions:
       - inline_comment: "# db-018-suppress"
@@ -921,7 +921,7 @@ rules:
 
     remediation:
       summary: "Pin to a supported, actively maintained version. For SQLite: use the bundled Python version (kept current). For Postgres/MySQL/MongoDB: check official EOL schedule at https://endoflife.date; upgrade to latest LTS. D1 manages versions automatically. EOL engines receive no security patches."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#i-vulnerability--patch-management"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#i-vulnerability--patch-management"
 
     suppressions:
       - inline_comment: "# db-019-suppress"
@@ -965,7 +965,7 @@ rules:
 
     remediation:
       summary: "Store PII in explicitly named, typed columns with access control comments. Separate PII into its own table where feasible for access control granularity. Add column comments documenting sensitivity level. Cross-ref: sec-013 owns runtime PII leaks in logs/URLs."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#c-data-classification--minimization"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#c-data-classification--minimization"
 
     cross_references:
       - rule_id: "sec-013"
@@ -1015,7 +1015,7 @@ rules:
 
     remediation:
       summary: "Add created_at TEXT NOT NULL DEFAULT (datetime('now','utc')) and updated_at TEXT NOT NULL DEFAULT (datetime('now','utc')) to every business table. Ensure trigger or application code updates updated_at on UPDATE. Use consistent naming across all tables."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#d-schema-integrity--correctness"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#d-schema-integrity--correctness"
 
     suppressions:
       - path_glob: "*/migrations/*_fts*.sql"
@@ -1064,7 +1064,7 @@ rules:
 
     remediation:
       summary: "SQLite: Set PRAGMA journal_mode=WAL on first connection to enable concurrent reads with a single writer. Critical for any app with multiple readers. D1: Design reads to tolerate eventual consistency on read replicas; use the primary binding for consistency-sensitive reads."
-      guide_ref: "canonical/skills/quality/references/database-best-practices.md#m-specific-engines--quick-gotchas"
+      guide_ref: "canonical/skills/data/references/database-best-practices.md#m-specific-engines--quick-gotchas"
 
     suppressions:
       - inline_comment: "# db-022-suppress"

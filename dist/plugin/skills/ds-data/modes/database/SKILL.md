@@ -27,7 +27,7 @@ Rules are defined in `rules.yml` in this directory. Both modes read from the sam
 
 ## Reference Document
 
-Rule source list: `canonical/skills/quality/references/database-best-practices.md` (sections A-M, LIST-3).
+Rule source list: `canonical/skills/data/references/database-best-practices.md` (sections A-M, LIST-3).
 
 ## Skill Boundary
 

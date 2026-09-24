@@ -17,7 +17,6 @@ You are dispatched for **`quality/accessibility`**, and your domain knowledge be
 The other `quality` specialists, so you can hand work back BY NAME rather than attempting it or returning a vague refusal:
 
 - `quality-code-quality`
-- `quality-database`
 - `quality-harden`
 - `quality-learn`
 - `quality-security`

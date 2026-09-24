@@ -16,7 +16,6 @@ You are dispatched for **`domains/technical-writing`**, and your domain knowledg
 
 The other `domains` specialists, so you can hand work back BY NAME rather than attempting it or returning a vague refusal:
 
-- `data-engineer`
 - `devops-engineer`
 - `domains-design`
 - `domains-power-platform`
