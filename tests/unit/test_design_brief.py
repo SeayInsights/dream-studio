@@ -440,7 +440,6 @@ def test_gate_check_design_brief_locked_fails_when_draft(db_home, tmp_path, monk
 
 def test_work_order_start_includes_design_brief_section(db_home, tmp_path, monkeypatch):
     _insert_brief(db_home, status="locked")
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     rc = main(
         [
             "--home",
@@ -467,7 +466,6 @@ def test_work_order_start_includes_design_brief_section(db_home, tmp_path, monke
 
 def test_work_order_start_includes_design_system_section(db_home, tmp_path, monkeypatch):
     _insert_brief(db_home, status="locked", design_system="tech-minimal")
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     rc = main(
         [
             "--home",
@@ -493,7 +491,6 @@ def test_work_order_start_includes_design_system_section(db_home, tmp_path, monk
 
 
 def test_work_order_start_warns_when_no_brief_for_ui_type(db_home, tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     rc = main(
         [
             "--home",

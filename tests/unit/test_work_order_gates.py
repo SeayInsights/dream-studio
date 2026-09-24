@@ -83,7 +83,6 @@ def db_home(tmp_path):
 
 
 def _close(db_home, tmp_path, monkeypatch, work_order_id, extra=None):
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     argv = [
         "--home",
         str(db_home),
@@ -99,7 +98,6 @@ def _close(db_home, tmp_path, monkeypatch, work_order_id, extra=None):
 
 
 def _block(db_home, tmp_path, monkeypatch, work_order_id, reason):
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     return main(
         [
             "--home",
@@ -114,7 +112,6 @@ def _block(db_home, tmp_path, monkeypatch, work_order_id, reason):
 
 
 def _unblock(db_home, tmp_path, monkeypatch, work_order_id):
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     return main(["--home", str(db_home), "work-order", "unblock", work_order_id])
 
 
@@ -184,8 +181,7 @@ def test_close_succeeds_when_gates_are_null(db_home, tmp_path, monkeypatch, caps
 
 
 def test_close_emits_work_order_closed_event(db_home, tmp_path, monkeypatch):
-    spool_root = tmp_path / "spool-root"
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
+    spool_root = db_home / "events"
     _close(db_home, tmp_path, monkeypatch, WO_DOCS)
     # sync_tick() moves files from spool/ to processed/ after ingestion; check both.
     events = [
@@ -210,8 +206,7 @@ def test_close_force_bypasses_failed_gates(db_home, tmp_path, monkeypatch, capsy
 
 
 def test_close_force_emits_gate_bypassed_events(db_home, tmp_path, monkeypatch):
-    spool_root = tmp_path / "spool-root"
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
+    spool_root = db_home / "events"
     main(
         [
             "--home",
@@ -245,8 +240,7 @@ def test_close_force_prints_bypass_warning(db_home, tmp_path, monkeypatch, capsy
 
 
 def test_block_emits_work_order_blocked_event(db_home, tmp_path, monkeypatch):
-    spool_root = tmp_path / "spool-root"
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
+    spool_root = db_home / "events"
     _block(db_home, tmp_path, monkeypatch, WO_UI, "needs security review")
     events = [
         json.loads(p.read_text(encoding="utf-8")) for p in (spool_root / "spool").glob("*.json")
@@ -277,8 +271,7 @@ def test_unblock_emits_work_order_unblocked_event(db_home, tmp_path, monkeypatch
     finally:
         conn.close()
 
-    spool_root = tmp_path / "spool-root"
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
+    spool_root = db_home / "events"
     rc = _unblock(db_home, tmp_path, monkeypatch, WO_UI)
     assert rc == 0
 

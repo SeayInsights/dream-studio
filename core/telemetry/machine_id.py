@@ -20,7 +20,9 @@ def _machine_id_path() -> Path:
     override = os.environ.get(_DS_MACHINE_ID_PATH_ENV)
     if override:
         return Path(override)
-    return Path.home() / ".dream-studio" / "state" / "machine_id"
+    from core.config.paths import home_dir
+
+    return home_dir() / "state" / "machine_id"
 
 
 def get_machine_id() -> str:

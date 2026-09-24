@@ -169,7 +169,9 @@ def _resolve_attribution(
         except Exception:
             _skill_data = None
         if _skill_data is None:
-            _skill_path = Path.home() / ".dream-studio" / "state" / "active_skill.json"
+            from core.config.paths import home_dir
+
+            _skill_path = home_dir() / "state" / "active_skill.json"
             _skill_data = json.loads(_skill_path.read_text(encoding="utf-8"))
         active_skill_id = _skill_data.get("skill_id") or None
     except Exception:

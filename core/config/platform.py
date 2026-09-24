@@ -95,7 +95,9 @@ def _default_profile_path() -> Path:
     override = os.environ.get(PLATFORM_PROFILE_ENV)
     if override:
         return Path(override)
-    return Path.home() / ".dream-studio" / "state" / "platform.json"
+    from core.config.paths import home_dir
+
+    return home_dir() / "state" / "platform.json"
 
 
 def _use_authority(profile_path: Path | None) -> bool:

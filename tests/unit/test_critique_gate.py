@@ -99,7 +99,6 @@ def _write_lint(tmp_path: Path, content: str) -> None:
 
 
 def _close(db_home, tmp_path, monkeypatch):
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     return main(
         [
             "--home",

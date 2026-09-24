@@ -41,7 +41,6 @@ from control.session.parser import scan_sessions  # noqa: E402
 # Constants
 # ---------------------------------------------------------------------------
 
-SESSIONS_DIR = Path.home() / ".dream-studio" / ".sessions"
 
 MAX_GOTCHAS = 5
 MAX_SESSIONS = 3
@@ -91,7 +90,9 @@ def _scan_session_history(topic: str) -> list[dict]:
         return []
 
     try:
-        sessions = scan_sessions(SESSIONS_DIR, days=180)
+        from core.config.paths import home_dir
+
+        sessions = scan_sessions(home_dir() / ".sessions", days=180)
     except Exception as exc:
         sys.stderr.write(f"[spec_risk_check] WARNING: session scan failed: {exc}\n")
         sessions = []

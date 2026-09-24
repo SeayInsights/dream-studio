@@ -7,7 +7,6 @@ Call log_event() from each handler's main() with the event type and session ID.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 
 from core.utils.time import utcnow
@@ -29,7 +28,9 @@ def log_event(
             is known to have influenced user behaviour within 2 turns.
             None means "not yet measured".
     """
-    audit_path = Path.home() / ".dream-studio" / "audit.jsonl"
+    from core.config.paths import home_dir
+
+    audit_path = home_dir() / "audit.jsonl"
     try:
         audit_path.parent.mkdir(parents=True, exist_ok=True)
         record: dict[str, Any] = {

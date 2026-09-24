@@ -29,7 +29,14 @@ def default_storage_root(*, home: Path | None = None) -> Path:
     override = os.environ.get(WORK_ORDER_ROOT_ENV)
     if override:
         return Path(override).expanduser()
-    return (home or Path.home()) / ".dream-studio" / "meta" / "work-orders"
+    # `home` is the OS home a caller names explicitly; otherwise the Dream Studio home
+    # --home decides. `(home or Path.home())` read the OS home directly, so `ds --home X
+    # work-order packet` found a work order under the real home (boundary-semantics lane,
+    # round four).
+    from core.config.paths import home_dir
+
+    base = home / ".dream-studio" if home is not None else home_dir()
+    return base / "meta" / "work-orders"
 
 
 def _safe_work_order_id(work_order_id: str) -> str:

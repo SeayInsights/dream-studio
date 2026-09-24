@@ -76,9 +76,9 @@ def resolve_installed_runtime_paths(
     source = Path(
         source_root or os.environ.get(SOURCE_ENV) or Path(__file__).resolve().parents[1]
     ).resolve()
-    home = Path(
-        dream_studio_home or os.environ.get(HOME_ENV) or Path.home() / ".dream-studio"
-    ).resolve()
+    from core.config.paths import home_dir
+
+    home = Path(dream_studio_home or os.environ.get(HOME_ENV) or home_dir()).resolve()
     return InstalledRuntimePaths(source_root=source, dream_studio_home=home)
 
 

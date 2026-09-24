@@ -19,7 +19,9 @@ def _diagnostics_dir() -> Path:
     override = os.environ.get(_DS_DIAGNOSTICS_DIR_ENV)
     if override:
         return Path(override)
-    return Path.home() / ".dream-studio" / "state" / "diagnostics"
+    from core.config.paths import home_dir
+
+    return home_dir() / "state" / "diagnostics"
 
 
 def _file_prefix_from_source(source: str) -> str:

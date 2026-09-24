@@ -81,7 +81,6 @@ def _write_all_passing(tmp_path: Path) -> None:
 
 
 def _close(db_home, tmp_path, monkeypatch, extra=None):
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     argv = [
         "--home",
         str(db_home),
@@ -341,8 +340,7 @@ def test_close_force_bypasses_and_records_the_bypass(db_home, tmp_path, monkeypa
     d = _ms_dir(tmp_path)
     d.mkdir(parents=True, exist_ok=True)
     (d / "design-audit.md").write_text("Score: 3/4\n", encoding="utf-8")
-    spool_root = tmp_path / "spool-root"
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
+    spool_root = db_home / "events"
 
     rc = _close(db_home, tmp_path, monkeypatch, extra=["--force"])
     assert rc == 0
@@ -364,8 +362,7 @@ def test_close_force_bypasses_and_records_the_bypass(db_home, tmp_path, monkeypa
 
 def test_close_emits_milestone_completed_event(db_home, tmp_path, monkeypatch):
     _write_all_passing(tmp_path)
-    spool_root = tmp_path / "spool-root"
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
+    spool_root = db_home / "events"
     _close(db_home, tmp_path, monkeypatch)
     events = list(spool_root.rglob("*.json")) if spool_root.exists() else []
     contents = [p.read_text(encoding="utf-8") for p in events]

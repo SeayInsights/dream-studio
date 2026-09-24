@@ -123,7 +123,9 @@ def step_first_run_marker() -> StepResult:
     """FR-S06: Write first-run-pending marker so on-first-run hook triggers onboarding."""
     name = "First-run marker"
     try:
-        state_dir = Path.home() / ".dream-studio" / "state"
+        from core.config.paths import home_dir
+
+        state_dir = home_dir() / "state"
         state_dir.mkdir(parents=True, exist_ok=True)
         marker = state_dir / "first-run-pending"
         marker.write_text("pending", encoding="utf-8")

@@ -335,7 +335,16 @@ def derive_events_fact(conn, studio_db_path, *, full_rebuild: bool = False) -> i
     unless full_rebuild. Returns rows written.
     """
     import sqlite3
+    from pathlib import Path
 
+    # THE EXTENSION LIVES WITH THE AUTHORITY IT READS. DuckDB installs extensions under
+    # ~/.duckdb by default, so a `--home <scratch>` command wrote into the operator's
+    # home directory -- measured 2026-09-23 by a test that points the default home at a
+    # scratch directory. Placing it beside the attached studio.db makes it follow --home
+    # with no environment lookup. A new home fetches the extension once.
+    ext_dir = Path(studio_db_path).resolve().parent.parent / "duckdb_extensions"
+    ext_dir.mkdir(parents=True, exist_ok=True)
+    conn.execute(f"SET extension_directory = '{ext_dir.as_posix()}'")
     conn.execute("INSTALL sqlite")
     conn.execute("LOAD sqlite")
     conn.execute(f"ATTACH '{studio_db_path}' AS s (TYPE SQLITE, READ_ONLY)")

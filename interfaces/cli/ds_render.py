@@ -26,7 +26,9 @@ from core.findings.render import render_findings_html, render_findings_json
 
 def _ds_home() -> Path:
     env = os.environ.get("DS_DREAM_STUDIO_HOME") or os.environ.get("DREAM_STUDIO_HOME")
-    return Path(env) if env else Path.home() / ".dream-studio"
+    from core.config.paths import home_dir
+
+    return Path(env) if env else home_dir()
 
 
 def _default_out(repo: str) -> Path:

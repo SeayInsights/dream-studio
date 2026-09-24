@@ -557,7 +557,9 @@ def cmd_memory_ingest(args) -> int:
         paths = resolve_installed_runtime_paths(source_root=REPO_ROOT, dream_studio_home=None)
         db_path = paths.sqlite_path
     except Exception:
-        db_path = Path.home() / ".dream-studio" / "state" / "studio.db"
+        from core.config.paths import home_dir
+
+        db_path = home_dir() / "state" / "studio.db"
 
     project = getattr(args, "project", None)
     dry_run = getattr(args, "dry_run", False)

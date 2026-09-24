@@ -60,12 +60,9 @@ def cmd_memory_ingest_status(args) -> int:
     Reads ~/.dream-studio/state/memory-ingest-last-run.json and prints the
     last automated ingestion run summary.
     """
-    import os
-    from pathlib import Path
+    from core.config.paths import home_dir
 
-    state_file = (
-        Path(os.path.expanduser("~")) / ".dream-studio" / "state" / "memory-ingest-last-run.json"
-    )
+    state_file = home_dir() / "state" / "memory-ingest-last-run.json"
     if not state_file.exists():
         print(
             json.dumps(
