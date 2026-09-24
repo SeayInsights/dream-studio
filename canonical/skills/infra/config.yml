@@ -1,0 +1,6 @@
+name: infra
+model_tier: sonnet
+description: 'CI/CD, Kubernetes, and infrastructure as code: pipeline design, cluster operations, Terraform provisioning.'
+argument-hint: devops | kubernetes | terraform
+user_invocable: true
+args: mode

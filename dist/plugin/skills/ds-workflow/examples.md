@@ -204,7 +204,7 @@ Add an entry to `skills/domains/ingest-log.yml`:
 
 | Repo type | Target domain folder |
 |-----------|---------------------|
-| GitHub Actions, CI/CD, DevOps | `domains/devops/` |
+| GitHub Actions, CI/CD, DevOps | `infra/devops/` |
 | Testing, E2E, unit testing | `domains/testing/` |
 | Technical writing, docs | `domains/documentation/` |
 | Power BI, DAX, M-query | `domains/bi/` or `domains/powerbi/` |

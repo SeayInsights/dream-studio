@@ -29,6 +29,10 @@ DIST = REPO_ROOT / "dist" / "plugin" / "skills" / "ds-domains"
 # data-engineering split out of domains into its own data pack, 2026-09-24 (pack-split).
 CANONICAL_DATA = REPO_ROOT / "canonical" / "skills" / "data"
 DIST_DATA = REPO_ROOT / "dist" / "plugin" / "skills" / "ds-data"
+# devops, kubernetes, terraform split out of domains into their own infra pack, 2026-09-24
+# (pack-split).
+CANONICAL_INFRA = REPO_ROOT / "canonical" / "skills" / "infra"
+DIST_INFRA = REPO_ROOT / "dist" / "plugin" / "skills" / "ds-infra"
 
 # The fabricated pin. It shares its first 32 hex characters with the real v4.1.6 commit
 # (a5ac7e51b41094c92402da3b24376905380afc29) and differs only in the last 8, which is why
@@ -98,7 +102,7 @@ def test_mobile_states_the_current_store_submission_requirements() -> None:
 
 def test_kubernetes_states_one_correct_ga_version_per_feature() -> None:
     """Sidecars went alpha 1.28 / beta 1.29 / GA 1.33, and the file contradicted itself on HPA."""
-    text = _read("modes/kubernetes/SKILL.md")
+    text = (CANONICAL_INFRA / "modes" / "kubernetes" / "SKILL.md").read_text(encoding="utf-8")
     assert (
         "feature stable in 1.29" not in text
     ), "Native sidecars reached GA in 1.33, not 1.29 (1.29 was beta)."
@@ -114,19 +118,21 @@ def test_terraform_attributes_the_s3_split_to_the_provider_version_that_shipped_
     fix to SKILL.md alone would leave gotchas.yml as a stale contradicting copy.
     """
     stale = []
-    for path in (CANONICAL / "modes" / "terraform").rglob("*"):
+    for path in (CANONICAL_INFRA / "modes" / "terraform").rglob("*"):
         if not path.is_file():
             continue
         body = path.read_text(encoding="utf-8")
         if "v4->v5" in body or "AWS provider v5 (2023)" in body:
             stale.append(path.relative_to(REPO_ROOT).as_posix())
     assert stale == [], f"S3 split still attributed to v5 in: {stale}"
-    assert "AWS provider v4.0 (Feb 2022)" in _read("modes/terraform/SKILL.md")
+    assert "AWS provider v4.0 (Feb 2022)" in (
+        CANONICAL_INFRA / "modes" / "terraform" / "SKILL.md"
+    ).read_text(encoding="utf-8")
 
 
 def test_terraform_teaches_native_s3_locking_not_dynamodb() -> None:
     """use_lockfile went GA in 1.11, which deprecated the DynamoDB arguments."""
-    body = (CANONICAL / "infra" / "terraform.yml").read_text(encoding="utf-8")
+    body = (CANONICAL_INFRA / "infra" / "terraform.yml").read_text(encoding="utf-8")
     example_start = body.index("id: remote-state-with-locking")
     example_end = body.index("- id:", example_start + 10)
     example = body[example_start:example_end]
@@ -154,7 +160,7 @@ def test_data_engineering_snippets_use_apis_that_still_exist() -> None:
 def test_devops_does_not_assert_an_artifact_size_limit_that_does_not_exist() -> None:
     """'500MB public / 2GB private per run' was never a thing -- those are monthly plan quotas."""
     for rel in ("modes/devops/SKILL.md", "modes/devops/gotchas.yml", "infra/devops.yml"):
-        body = _read(rel)
+        body = (CANONICAL_INFRA / rel).read_text(encoding="utf-8")
         assert "500MB public" not in body, f"{rel} states a per-run limit that does not exist"
         assert (
             "silently truncates" not in body
@@ -167,15 +173,6 @@ def test_devops_does_not_assert_an_artifact_size_limit_that_does_not_exist() -> 
         "modes/mobile/SKILL.md",
         "modes/mobile/gotchas.yml",
         "mobile/patterns.yml",
-        "modes/kubernetes/SKILL.md",
-        "infra/kubernetes.yml",
-        "modes/terraform/SKILL.md",
-        "modes/terraform/gotchas.yml",
-        "infra/terraform.yml",
-        "modes/devops/SKILL.md",
-        "modes/devops/gotchas.yml",
-        "infra/devops.yml",
-        "devops/REFERENCES.md",
     ],
 )
 def test_the_shipped_projection_carries_the_same_corrected_text(rel: str) -> None:
@@ -207,6 +204,33 @@ def test_the_shipped_data_pack_projection_carries_the_same_corrected_text(rel: s
     pack (data-engineering split out of domains, 2026-09-24 -- pack-split)."""
     canonical_body = (CANONICAL_DATA / rel).read_text(encoding="utf-8")
     dist_path = DIST_DATA / rel
+    assert dist_path.exists(), f"dist/plugin is missing {rel} -- rebuild it from canonical"
+    dist_body = dist_path.read_text(encoding="utf-8")
+    assert canonical_body == dist_body or canonical_body in dist_body, (
+        f"dist/plugin copy of {rel} has drifted from canonical -- "
+        "rebuild with integrations.marketplace.plugin_dist.build_plugin_dist"
+    )
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "modes/kubernetes/SKILL.md",
+        "infra/kubernetes.yml",
+        "modes/terraform/SKILL.md",
+        "modes/terraform/gotchas.yml",
+        "infra/terraform.yml",
+        "modes/devops/SKILL.md",
+        "modes/devops/gotchas.yml",
+        "infra/devops.yml",
+        "devops/REFERENCES.md",
+    ],
+)
+def test_the_shipped_infra_pack_projection_carries_the_same_corrected_text(rel: str) -> None:
+    """Same as test_the_shipped_projection_carries_the_same_corrected_text, for the infra
+    pack (devops/kubernetes/terraform split out of domains, 2026-09-24 -- pack-split)."""
+    canonical_body = (CANONICAL_INFRA / rel).read_text(encoding="utf-8")
+    dist_path = DIST_INFRA / rel
     assert dist_path.exists(), f"dist/plugin is missing {rel} -- rebuild it from canonical"
     dist_body = dist_path.read_text(encoding="utf-8")
     assert canonical_body == dist_body or canonical_body in dist_body, (

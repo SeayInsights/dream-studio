@@ -294,12 +294,22 @@ def derived_scope(row: dict, rows: list[dict] | None = None) -> str:
         f" that mode's skill. Work outside it is not yours to do.",
     ]
     if siblings:
-        lines += [
-            "",
-            f"The other `{pack}` specialists, so you can hand work back BY NAME rather than"
-            " attempting it or returning a vague refusal:",
-            "",
-        ] + [f"- `{name}`" for name in siblings]
+        lines += (
+            [
+                "",
+                f"The other `{pack}` specialists, so you can hand work back BY NAME rather than"
+                " attempting it or returning a vague refusal:",
+                "",
+            ]
+            + [f"- `{name}`" for name in siblings]
+            + [
+                "",
+                "This roster reflects coverage.yml's current pack membership. A specialist that"
+                " has moved to a different pack is no longer named here by this mechanism --"
+                " hand its kind of work back as outside this pack rather than assuming it has"
+                " no home.",
+            ]
+        )
     else:
         lines += [
             "",

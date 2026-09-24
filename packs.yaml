@@ -66,8 +66,8 @@ packs:
     invariants:
       - generated code stays inside the active work order's module boundary
       - a deliverable that leaves the machine stops for the operator first
-    # fullstack and website — Flag 1 fix; devops, kubernetes — 18.9 Tier 1; technical-writing, terraform, mobile — 18.9 Tier 2-3; data-engineering — 18.9 Tier 4
-    modes: [game-dev, saas-build, mcp-build, dashboard-dev, power-platform, design, devops, kubernetes, technical-writing, terraform, mobile]
+    # fullstack and website — Flag 1 fix; technical-writing, mobile — 18.9 Tier 2-3
+    modes: [game-dev, saas-build, mcp-build, dashboard-dev, power-platform, design, technical-writing, mobile]
     agents: [game, client]
     hooks: [on-game-validate]
     rules: [game/ai-code.md, game/data-files.md, game/gameplay-code.md, game/networking-code.md, game/shader-code.md, game/ui-code.md]
@@ -120,6 +120,15 @@ packs:
       - a schema or migration change never destroys data without an explicit, stated reason
     # split out of quality (database) and domains (data-engineering) — pack-split, 2026-09-24
     modes: [database, data-engineering]
+
+  infra:
+    description: CI/CD, Kubernetes, and infrastructure as code — pipeline design, cluster operations, Terraform provisioning
+    skill: infra
+    invariants:
+      - a finding names a file and line, or the command that produced it
+      - a deliverable that leaves the machine stops for the operator first
+    # split out of domains (devops, kubernetes, terraform) — pack-split, 2026-09-24
+    modes: [devops, kubernetes, terraform]
 
   security:
     description: Enterprise security analysis — automated scanning, compliance mapping, mitigation generation, network compatibility, and executive dashboards.
