@@ -36,6 +36,13 @@ avoid:
     context: "Lowering rules mid-build passes the task check but poisons the codebase. Later tasks inherit the false-green state."
     fix: "If lint errors block a build task, stop and fix the errors in a sub-task. Never trade rule integrity for task completion speed."
 
+  - id: fix-one-instance-not-the-pattern
+    severity: high
+    discovered: 2026-09-23
+    title: "When a defect is a duplicated pattern, check every duplicate before calling the fix done"
+    context: "A review-lane pass on wo-collectors found an analytics-store-scoping leak in one route; grepping for the same shape (a call site resolving the ambient DB instead of the authority it was handed) turned up 7 call sites across 4 route files, plus the same duplicated resolution logic independently repeated in 3 collector classes. One more sibling turned up in cost_analysis.py but was unreachable in production and would have broken an intentional two-authority test contract if force-fixed — it was disclosed in the PR body instead of silently left or silently forced."
+    fix: "After fixing one instance of a defect, grep the codebase for the same shape (duplicated logic, same bug pattern, same missing call) before calling the fix complete. If a sibling instance is found but isn't safe or reachable to fix the same way, disclose it explicitly rather than leaving it unmentioned."
+
 best_practices:
   - id: commit-per-task
     title: "Commit after every task, not after every wave"
