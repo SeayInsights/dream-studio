@@ -27,10 +27,13 @@ jobs:
     # exceeded 43m14s and was still running when the 45-minute job timeout killed it,
     # both times, while ubuntu-latest/macos-latest finished the identical step in the
     # same run in 18-21m -- a >=2.07x ratio, consistent with the 2.8x already on record.
-    # 90 gives real margin past a ~57-minute Windows projection (20m ubuntu * 2.8x) plus
-    # setup and the later steps, including the Store-alias step's own pytest run. If
-    # this still isn't enough, the fix is real parallelization (pytest-xdist), not
-    # another blind bump -- this repo has now bumped this number three times.
+    # 90 was set from a ~57-minute Windows projection (20m ubuntu * 2.8x); the run that
+    # actually carried this fix (35955405941) measured the real number instead: 71m51s
+    # for the impact step alone, 78m18s for the whole windows-latest job, both under 90
+    # but by only ~12 minutes -- real margin, not the generous margin the projection
+    # implied. If a future run needs more, the fix is real parallelization
+    # (pytest-xdist), not another blind bump -- this repo has now bumped this number
+    # four times.
     timeout-minutes: 90
     strategy:
       fail-fast: false
