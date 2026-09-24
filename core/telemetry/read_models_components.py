@@ -144,6 +144,7 @@ _DUCKDB_COMPONENT_EVENT_TYPES: Mapping[str, tuple[str, ...]] = {
 
 
 def _component_usage_from_events_fact(
+    conn: sqlite3.Connection,
     component_column: str,
     event_types: Sequence[str],
     *,
@@ -155,7 +156,8 @@ def _component_usage_from_events_fact(
     Mirrors _component_usage's output shape (SQLite spine) so callers are
     source-agnostic. events_fact carries no process_run_id (canonical events do
     not), so it is reported as 'unknown' — the same honest sentinel the DuckDB
-    token rollup uses.
+    token rollup uses. *conn* scopes the DuckDB read to this SQLite authority's
+    own analytics store, not the ambient DREAM_STUDIO_HOME default.
     """
     et_placeholders = ",".join("?" for _ in event_types)
     clauses = [f"event_type IN ({et_placeholders})", f"{component_column} IS NOT NULL"]
@@ -174,6 +176,7 @@ def _component_usage_from_events_fact(
         params.append(component_id)
     where = "WHERE " + " AND ".join(clauses)
     return _analytics_rows(
+        conn,
         f"""
         SELECT
             COALESCE(project_id, 'unknown') AS project_id,
@@ -212,7 +215,7 @@ def _component_usage_rows(
     event_types = _DUCKDB_COMPONENT_EVENT_TYPES.get(component_type)
     if event_types:
         return _component_usage_from_events_fact(
-            component_column, event_types, scope=scope, component_id=component_id
+            conn, component_column, event_types, scope=scope, component_id=component_id
         )
     return _component_usage(conn, table, component_column, scope=scope, component_id=component_id)
 

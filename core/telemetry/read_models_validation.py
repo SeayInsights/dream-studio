@@ -32,7 +32,8 @@ def _validation_rollup(
     # empty until WO-VALIDATION-CAPTURE lands the capture into canonical events.
     # This is NOT the validation_failures view (event.validation.failed —
     # schema-rejected events, a different metric that must not be conflated with
-    # validation outcomes). conn is unused (kept for a stable call signature).
+    # validation outcomes). conn scopes the DuckDB read to this authority's own
+    # analytics store (analytics_db_path_for_connection), not the ambient default.
     clauses = ["event_type = 'validation.result_recorded'"]
     params: list[Any] = []
     if scope is not None:
@@ -46,6 +47,7 @@ def _validation_rollup(
                 params.append(value)
     where = "WHERE " + " AND ".join(clauses)
     return _analytics_rows(
+        conn,
         f"""
         SELECT
             COALESCE(project_id, 'unknown') AS project_id,

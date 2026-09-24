@@ -198,17 +198,22 @@ _INVARIANTS: list[tuple[str, str]] = [*_DUCKDB_TOKEN_INVARIANTS, *_SQLITE_INVARI
 # ---------------------------------------------------------------------------
 
 
-def _run_duckdb_token_invariants() -> list[dict[str, Any]]:
+def _run_duckdb_token_invariants(db_path: str | Path | None = None) -> list[dict[str, Any]]:
     """Run the three token invariants against the DuckDB view.
 
     A missing/unavailable analytics store is a pass-with-note for every token
     invariant — never a gate failure (work-order close must not be blocked by
     an absent, fully-rebuildable, NEVER-AUTHORITY analytics store).
+
+    *db_path* is the SQLite authority this gate is checking; the analytics
+    store is resolved as ITS sibling (never the ambient DREAM_STUDIO_HOME
+    default), so a gate run against an explicit or isolated authority checks
+    that authority's own data, not whatever happens to sit in the ambient home.
     """
     try:
-        from core.analytics.duckdb_store import connect_analytics
+        from core.analytics.duckdb_store import analytics_db_path_for, connect_analytics
 
-        conn = connect_analytics(read_only=True)
+        conn = connect_analytics(analytics_db_path_for(db_path), read_only=True)
     except Exception as exc:
         return [
             {
@@ -264,7 +269,7 @@ def run_dashboard_truth(db_path: str | Path) -> dict[str, Any]:
     populated data that could violate a structural guarantee.  The gate only
     fires when an authority exists *and* its data is wrong.
     """
-    token_results = _run_duckdb_token_invariants()
+    token_results = _run_duckdb_token_invariants(db_path)
 
     # No authority on disk → nothing to violate → SQLite invariants vacuously pass.
     if not Path(db_path).exists():

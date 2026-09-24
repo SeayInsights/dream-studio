@@ -50,7 +50,7 @@ def dashboard_data_freshness_status(db_path: Path | str | None = None) -> dict[s
                 "alert_history",
             )
         }
-        duckdb_token_count = _duckdb_token_count()
+        duckdb_token_count = _duckdb_token_count(path)
         sections = _section_statuses(conn, table_counts, duckdb_token_count)
         backfill_plan = plan_legacy_telemetry_backfill(path)
         generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
@@ -104,17 +104,22 @@ def dashboard_data_freshness_status(db_path: Path | str | None = None) -> dict[s
         conn.close()
 
 
-def _duckdb_token_count() -> int:
+def _duckdb_token_count(db_path: Path | str | None = None) -> int:
     """Row count of the DuckDB aggregate_metrics.db token_usage_records view.
 
     WO-DBA-DROP (migration 137): token_usage_records is no longer a SQLite
     table — this is the freshness signal for the token-related sections now.
     Returns 0 (never raises) when the analytics store/view is unavailable.
+
+    *db_path* is the SQLite authority this status is being computed for; the
+    analytics store is resolved as ITS sibling (never the ambient
+    DREAM_STUDIO_HOME default), so a freshness check against an explicit or
+    isolated authority reflects that authority's own data.
     """
     try:
-        from core.analytics.duckdb_store import connect_analytics
+        from core.analytics.duckdb_store import analytics_db_path_for, connect_analytics
 
-        conn = connect_analytics(read_only=True)
+        conn = connect_analytics(analytics_db_path_for(db_path), read_only=True)
     except Exception:
         return 0
     try:

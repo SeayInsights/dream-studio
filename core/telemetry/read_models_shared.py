@@ -295,29 +295,38 @@ def _security_finding_row_count(conn: sqlite3.Connection, scope: ScopeFilter | N
     )
 
 
-def _analytics_rows(sql: str, params: Sequence[Any] = ()) -> list[dict[str, Any]]:
+def _analytics_rows(
+    sql_conn: sqlite3.Connection, sql: str, params: Sequence[Any] = ()
+) -> list[dict[str, Any]]:
     """Read rows from the DuckDB analytics store (events_fact + views), read-only.
 
     Fail-open: returns [] if the store, schema, or view is unavailable (fresh
     install with no aggregate_metrics.db yet, or DuckDB not importable) so a
     dashboard read never raises. The analytics store is NEVER-AUTHORITY.
+
+    *sql_conn* is the SQLite authority connection this read model is scoped
+    to; the analytics store is resolved as ITS sibling (via
+    analytics_db_path_for_connection), never the ambient DREAM_STUDIO_HOME
+    default, so a caller reading a specific/isolated authority reads that
+    authority's own analytics data.
     """
     try:
-        from core.analytics.duckdb_store import connect_analytics
+        from core.analytics.duckdb_store import analytics_db_path_for_connection, connect_analytics
     except Exception:
         return []
-    conn = None
+    duck_conn = None
     try:
-        conn = connect_analytics(read_only=True)
-        cur = conn.execute(sql, list(params))
+        analytics_path = analytics_db_path_for_connection(sql_conn)
+        duck_conn = connect_analytics(analytics_path, read_only=True)
+        cur = duck_conn.execute(sql, list(params))
         columns = [desc[0] for desc in cur.description]
         return [dict(zip(columns, row)) for row in cur.fetchall()]
     except Exception:
         return []
     finally:
-        if conn is not None:
+        if duck_conn is not None:
             try:
-                conn.close()
+                duck_conn.close()
             except Exception:
                 pass
 

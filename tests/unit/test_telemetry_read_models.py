@@ -599,6 +599,73 @@ def test_global_summary_token_usage_reads_its_own_store_not_ambient(
     assert models == {"claude-haiku-4-5"}, models
 
 
+def test_component_usage_and_validation_rollup_read_their_own_store_not_ambient(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """component_usage_summary("agent", ...) exercises two DuckDB-events_fact
+    read paths in one call: _component_usage_from_events_fact (usage["agent"])
+    and _validation_rollup (validations). Neither took a conn before this fix,
+    so both fell back to connect_analytics()'s ambient default regardless of
+    which authority the request's own conn belonged to.
+
+    Reproduces the leak directly: seed db_path's own sibling store with one
+    agent and one validation outcome, seed a genuinely separate ambient store
+    (its own DREAM_STUDIO_HOME, not _isolate_analytics -- that would collide
+    with the "own" store built here, same reasoning as the token_usage test
+    above) with a DIFFERENT agent and validation outcome, and show only the
+    former comes back."""
+    from core.analytics import duckdb_store
+
+    db_path = _db(tmp_path)
+
+    # This authority's own analytics store: db_path's canonical sibling.
+    own_analytics = db_path.parent / "aggregate_metrics.db"
+    own_conn = duckdb_store.connect_analytics(own_analytics, read_only=False)
+    try:
+        duckdb_store.ensure_analytics_schema(own_conn)
+        own_conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp, agent_id,"
+            " outcome, payload)"
+            " VALUES ('own-agent', 'agent.execution.completed', '2026-07-03T00:00:00Z',"
+            " 'own-reviewer', 'completed', '{}')"
+        )
+        own_conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp, status, payload)"
+            " VALUES ('own-val', 'validation.result_recorded', '2026-07-03T00:00:00Z',"
+            " 'passed', '{\"validation_type\": \"own-check\"}')"
+        )
+    finally:
+        own_conn.close()
+
+    # Ambient store, under a genuinely separate DREAM_STUDIO_HOME.
+    ambient_home = tmp_path / "ambient-home"
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(ambient_home))
+    ambient_conn = duckdb_store.connect_analytics(read_only=False)  # ambient default path
+    try:
+        duckdb_store.ensure_analytics_schema(ambient_conn)
+        ambient_conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp, agent_id,"
+            " outcome, payload)"
+            " VALUES ('ambient-agent', 'agent.execution.completed', '2026-07-03T00:00:00Z',"
+            " 'ambient-reviewer', 'completed', '{}')"
+        )
+        ambient_conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp, status, payload)"
+            " VALUES ('ambient-val', 'validation.result_recorded', '2026-07-03T00:00:00Z',"
+            " 'failed', '{\"validation_type\": \"ambient-check\"}')"
+        )
+    finally:
+        ambient_conn.close()
+
+    summary = component_usage_summary("agent", db_path=db_path)
+
+    agent_ids = {row["component_id"] for row in summary["usage"]["agent"]["rows"]}
+    assert agent_ids == {"own-reviewer"}, agent_ids
+
+    validation_types = {row["component_id"] for row in summary["validations"]}
+    assert validation_types == {"own-check"}, validation_types
+
+
 def test_project_milestone_task_and_process_drilldowns(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -262,6 +262,80 @@ def test_hooks_executions_returns_real_rows_when_hook_executions_populated(
         DatabaseRuntime.reset_instance()
 
 
+def _seed_hook_execution(conn, *, event_id: str, hook_name: str) -> None:
+    import json
+
+    payload = {
+        "hook_name": hook_name,
+        "hook_type": "pre_push",
+        "started_at": "2026-06-14T00:00:00Z",
+        "completed_at": "2026-06-14T00:00:01Z",
+        "duration_ms": 100,
+        "exit_code": 0,
+        "status": "success",
+    }
+    conn.execute(
+        "INSERT INTO events_fact (event_id, source, event_type, event_timestamp, "
+        "duration_ms, exit_code, status, payload) VALUES "
+        "(?, 'ai', 'system.hook.execution.logged', ?, 100, 0, 'success', ?)",
+        [event_id, "2026-06-14T00:00:00Z", json.dumps(payload)],
+    )
+
+
+def test_hooks_executions_route_reads_its_own_authoritys_store_not_ambient(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """GET /api/v1/hooks/executions must read the analytics store colocated
+    with the request's own SQLite authority, not the ambient one. Four
+    hooks.py routes (list_hook_executions, get_hook_execution_details,
+    get_hook_performance, list_validation_failures) shared the same
+    connect_analytics(read_only=True)-with-no-path leak; this exercises the
+    one shared mechanism (analytics_db_path_for_connection(sql_conn)) all
+    four now go through.
+
+    Seeds the ambient store (a genuinely separate DREAM_STUDIO_HOME) with a
+    hook this authority never ran, binds the TestClient to a SEPARATE
+    explicit db_path (via DB_PATH_ENV) whose own aggregate_metrics.db
+    sibling holds a DIFFERENT hook, and shows only that authority's hook
+    comes back."""
+    from core.analytics.duckdb_store import connect_analytics, ensure_analytics_schema
+
+    # Ambient store, under a genuinely separate DREAM_STUDIO_HOME.
+    ambient_home = tmp_path / "ambient-home"
+    (ambient_home / "state").mkdir(parents=True)
+    os.environ["DREAM_STUDIO_HOME"] = str(ambient_home)
+    ambient_conn = connect_analytics(
+        ambient_home / "state" / "aggregate_metrics.db", read_only=False
+    )
+    try:
+        ensure_analytics_schema(ambient_conn)
+        _seed_hook_execution(ambient_conn, event_id="ambient-hook", hook_name="ambient-only-hook")
+    finally:
+        ambient_conn.close()
+
+    # This authority's OWN db_path + its own sibling aggregate_metrics.db.
+    own_dir = tmp_path / "own-authority"
+    own_dir.mkdir()
+    db_path = own_dir / "studio.db"
+    own_conn = connect_analytics(own_dir / "aggregate_metrics.db", read_only=False)
+    try:
+        ensure_analytics_schema(own_conn)
+        _seed_hook_execution(own_conn, event_id="own-hook", hook_name="own-authority-hook")
+    finally:
+        own_conn.close()
+
+    client = _client_for_db(db_path, monkeypatch)
+    try:
+        resp = client.get("/api/v1/hooks/executions")
+        assert resp.status_code == 200
+        data = resp.json()
+        hook_names = {e["hook_name"] for e in data["executions"]}
+        assert hook_names == {"own-authority-hook"}, hook_names
+    finally:
+        DatabaseRuntime.reset_instance()
+        os.environ.pop("DREAM_STUDIO_HOME", None)
+
+
 # ── T5: /api/v1/metrics/models reads its own authority's analytics store ───
 #
 # projections/api/routes/metrics.py::get_model_metrics calls token_usage_sql(conn)
@@ -416,6 +490,76 @@ def test_analytics_performance_route_reads_its_own_authoritys_store_not_ambient(
         os.environ.pop("DREAM_STUDIO_HOME", None)
 
 
+def test_work_rhythm_route_reads_its_own_authoritys_store_not_ambient(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """GET /api/v1/insights/rhythm reads raw_sessions from the analytics store
+    colocated with the request's own authority, not the ambient one.
+    get_work_rhythm held no SQLite conn at all before this fix -- it called
+    connect_analytics(read_only=True) with nothing to scope it.
+
+    Seeds the ambient store (a genuinely separate DREAM_STUDIO_HOME) with 5
+    sessions, binds the TestClient to a SEPARATE explicit db_path (via
+    DB_PATH_ENV) whose own aggregate_metrics.db sibling holds 1 session, and
+    shows the busiest-day count reflects only that authority's 1 session."""
+    import json
+
+    from core.analytics.duckdb_store import connect_analytics, ensure_analytics_schema
+
+    recent = (datetime.now(UTC) - timedelta(days=1)).isoformat()
+
+    def _session_row(sid: str) -> tuple:
+        return (
+            sid,
+            "system.session.recorded",
+            recent,
+            json.dumps({"session_id": sid}),
+        )
+
+    # Ambient store, under a genuinely separate DREAM_STUDIO_HOME: 5 sessions.
+    ambient_home = tmp_path / "ambient-home"
+    (ambient_home / "state").mkdir(parents=True)
+    os.environ["DREAM_STUDIO_HOME"] = str(ambient_home)
+    ambient_conn = connect_analytics(
+        ambient_home / "state" / "aggregate_metrics.db", read_only=False
+    )
+    try:
+        ensure_analytics_schema(ambient_conn)
+        for i in range(5):
+            ambient_conn.execute(
+                "INSERT INTO events_fact (event_id, event_type, event_timestamp, payload)"
+                " VALUES (?, ?, ?, ?)",
+                _session_row(f"ambient-sess-{i}"),
+            )
+    finally:
+        ambient_conn.close()
+
+    # This authority's OWN db_path + its own sibling aggregate_metrics.db: 1 session.
+    own_dir = tmp_path / "own-authority"
+    own_dir.mkdir()
+    db_path = own_dir / "studio.db"
+    own_conn = connect_analytics(own_dir / "aggregate_metrics.db", read_only=False)
+    try:
+        ensure_analytics_schema(own_conn)
+        own_conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp, payload)"
+            " VALUES (?, ?, ?, ?)",
+            _session_row("own-sess-0"),
+        )
+    finally:
+        own_conn.close()
+
+    client = _client_for_db(db_path, monkeypatch)
+    try:
+        resp = client.get("/api/v1/insights/rhythm")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["busiest_day_count"] == 1, data
+    finally:
+        DatabaseRuntime.reset_instance()
+        os.environ.pop("DREAM_STUDIO_HOME", None)
+
+
 def test_system_controls_route_reads_its_own_authoritys_store_not_ambient(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -521,3 +665,113 @@ def test_process_run_drilldowns_uses_execution_events_when_process_runs_empty(
             assert "/api/telemetry/process-runs/" in entry["api_path"]
     finally:
         conn.close()
+
+
+def test_attribution_breakouts_route_reads_its_own_authoritys_store_not_ambient(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """GET /api/v1/insights/attribution-breakouts reads token_usage_records
+    from the analytics store colocated with the request's own authority, not
+    the ambient one. get_attribution_breakouts held a conn only for the
+    SQLite project-name enrichment step, opened AFTER duck_conn was already
+    connected with nothing to scope it.
+
+    Seeds the ambient store (a genuinely separate DREAM_STUDIO_HOME) with 900
+    tokens under one skill, binds the TestClient to a SEPARATE explicit
+    db_path (via DB_PATH_ENV) whose own aggregate_metrics.db sibling holds
+    150 tokens under a different skill, and shows total_tokens reflects only
+    that authority's own 150."""
+    from core.analytics.duckdb_store import connect_analytics, ensure_analytics_schema
+
+    recent = (datetime.now(UTC) - timedelta(days=1)).isoformat()
+
+    # Ambient store, under a genuinely separate DREAM_STUDIO_HOME.
+    ambient_home = tmp_path / "ambient-home"
+    (ambient_home / "state").mkdir(parents=True)
+    os.environ["DREAM_STUDIO_HOME"] = str(ambient_home)
+    ambient_conn = connect_analytics(
+        ambient_home / "state" / "aggregate_metrics.db", read_only=False
+    )
+    try:
+        ensure_analytics_schema(ambient_conn)
+        ambient_conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp,"
+            " input_tokens, output_tokens, skill_id, payload)"
+            " VALUES ('ambient-tok', 'token.consumed', ?, 600, 300, 'ambient-skill', '{}')",
+            [recent],
+        )
+    finally:
+        ambient_conn.close()
+
+    # This authority's OWN db_path + its own sibling aggregate_metrics.db.
+    own_dir = tmp_path / "own-authority"
+    own_dir.mkdir()
+    db_path = own_dir / "studio.db"
+    own_conn = connect_analytics(own_dir / "aggregate_metrics.db", read_only=False)
+    try:
+        ensure_analytics_schema(own_conn)
+        own_conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp,"
+            " input_tokens, output_tokens, skill_id, payload)"
+            " VALUES ('own-tok', 'token.consumed', ?, 100, 50, 'own-skill', '{}')",
+            [recent],
+        )
+    finally:
+        own_conn.close()
+
+    client = _client_for_db(db_path, monkeypatch)
+    try:
+        resp = client.get("/api/v1/insights/attribution-breakouts")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_tokens"] == 150, data
+        skill_ids = {row["skill_id"] for row in data["by_skill"]}
+        assert skill_ids == {"own-skill"}, skill_ids
+    finally:
+        DatabaseRuntime.reset_instance()
+        os.environ.pop("DREAM_STUDIO_HOME", None)
+
+
+def test_hooks_and_rhythm_routes_degrade_gracefully_when_no_analytics_store_exists(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """All four connect_analytics()-with-no-path sites in hooks.py, and
+    insights_rhythm.py's get_work_rhythm, must return a dashboard-safe empty
+    shape (never a 500) when db_path's own sibling aggregate_metrics.db does
+    not exist at all -- a genuinely fresh install where the aggregation
+    pipeline has never run, not just an empty-but-present store.
+
+    Each of these five sites calls connect_analytics(analytics_path,
+    read_only=True) outside any AnalyticsStoreMissingError handling before
+    this fix; CI caught list_hook_executions/get_hook_performance's sibling
+    (via a different pre-existing test whose own setup happened to always
+    seed a present-but-empty store) but this exercises the missing-entirely
+    case directly, for all five, in one place."""
+    own_dir = tmp_path / "own-authority"
+    own_dir.mkdir()
+    db_path = own_dir / "studio.db"
+    # No aggregate_metrics.db created here at all -- the missing-store case.
+    assert not (own_dir / "aggregate_metrics.db").exists()
+
+    client = _client_for_db(db_path, monkeypatch)
+    try:
+        resp = client.get("/api/v1/hooks/executions")
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["count"] == 0
+
+        resp = client.get("/api/v1/hooks/executions/some-exec-id")
+        assert resp.status_code == 404, resp.text
+
+        resp = client.get("/api/v1/hooks/performance")
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["summary"]["total_executions"] == 0
+
+        resp = client.get("/api/v1/hooks/validation-failures")
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["count"] == 0
+
+        resp = client.get("/api/v1/insights/rhythm")
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["busiest_day_count"] == 0
+    finally:
+        DatabaseRuntime.reset_instance()

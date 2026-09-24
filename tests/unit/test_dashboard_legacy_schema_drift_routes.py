@@ -101,15 +101,15 @@ def _schema_drift_db(tmp_path: Path) -> Path:
 def _client(tmp_path: Path, monkeypatch) -> TestClient:
     db_path = _schema_drift_db(tmp_path)
     # Isolate the DuckDB analytics store too: /hooks/stats reads the DuckDB
-    # hook_executions VIEW (migration 129, WO-READMODELS-DUCKDB), not SQLite. Point
-    # DREAM_STUDIO_HOME at tmp so state_dir()/aggregate_metrics.db is an isolated,
-    # empty analytics store and the route returns the dashboard-safe zero shape.
-    home = tmp_path / "ds-home"
-    (home / "state").mkdir(parents=True, exist_ok=True)
-    monkeypatch.setenv("DREAM_STUDIO_HOME", str(home))
+    # hook_executions VIEW (migration 129, WO-READMODELS-DUCKDB), not SQLite. The
+    # routes now resolve the analytics store as db_path's OWN sibling
+    # (analytics_db_path_for_connection, closing a cross-authority leak -- see
+    # docs/contracts/dashboard-projection-model-contract.md's 2026-09-24 entry),
+    # not the ambient DREAM_STUDIO_HOME default, so the empty store must be
+    # seeded at db_path.parent, not under a separately-isolated home.
     from core.analytics.duckdb_store import connect_analytics, ensure_analytics_schema
 
-    agg = connect_analytics(home / "state" / "aggregate_metrics.db", read_only=False)
+    agg = connect_analytics(db_path.parent / "aggregate_metrics.db", read_only=False)
     try:
         ensure_analytics_schema(agg)
     finally:

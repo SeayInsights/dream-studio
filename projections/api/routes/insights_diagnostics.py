@@ -181,7 +181,11 @@ async def get_attribution_breakouts() -> dict:
     never a 500.
     """
     import sqlite3 as _sqlite3
-    from core.analytics.duckdb_store import AnalyticsStoreMissingError, connect_analytics
+    from core.analytics.duckdb_store import (
+        AnalyticsStoreMissingError,
+        analytics_db_path_for_connection,
+        connect_analytics,
+    )
     from core.config.database import get_connection
     from projections.api.routes.sqlite_schema import object_exists
 
@@ -198,8 +202,10 @@ async def get_attribution_breakouts() -> dict:
         "generated_at": datetime.now().isoformat(),
     }
 
+    sql_conn = get_connection()
     try:
-        duck_conn = connect_analytics(read_only=True)
+        analytics_path = analytics_db_path_for_connection(sql_conn)
+        duck_conn = connect_analytics(analytics_path, read_only=True)
         try:
             # Totals
             totals_row = duck_conn.execute(
@@ -245,34 +251,30 @@ async def get_attribution_breakouts() -> dict:
 
         # Enrich by_project rows with human-readable project names from SQLite.
         # Falls back to None per row if business_projects doesn't exist or lookup fails.
+        # Reuses sql_conn (already open above to resolve analytics_path) rather than
+        # opening a second SQLite connection.
         try:
-            sql_conn = get_connection()
             sql_conn.row_factory = _sqlite3.Row
-            try:
-                if by_project and object_exists(sql_conn, "business_projects"):
-                    project_ids = [row["project_id"] for row in by_project]
-                    placeholders = ",".join("?" * len(project_ids))
-                    name_rows = sql_conn.execute(
-                        f"SELECT project_id, name FROM business_projects"
-                        f" WHERE project_id IN ({placeholders})",
-                        project_ids,
-                    ).fetchall()
-                    name_map: dict[str, str | None] = {
-                        r["project_id"]: r["name"] for r in name_rows
+            if by_project and object_exists(sql_conn, "business_projects"):
+                project_ids = [row["project_id"] for row in by_project]
+                placeholders = ",".join("?" * len(project_ids))
+                name_rows = sql_conn.execute(
+                    f"SELECT project_id, name FROM business_projects"
+                    f" WHERE project_id IN ({placeholders})",
+                    project_ids,
+                ).fetchall()
+                name_map: dict[str, str | None] = {r["project_id"]: r["name"] for r in name_rows}
+                by_project = [
+                    {
+                        "project_id": row["project_id"],
+                        "project_name": name_map.get(row["project_id"]),
+                        "tokens": row["tokens"],
+                        "records": row["records"],
                     }
-                    by_project = [
-                        {
-                            "project_id": row["project_id"],
-                            "project_name": name_map.get(row["project_id"]),
-                            "tokens": row["tokens"],
-                            "records": row["records"],
-                        }
-                        for row in by_project
-                    ]
-                else:
-                    by_project = [{**row, "project_name": None} for row in by_project]
-            finally:
-                sql_conn.close()
+                    for row in by_project
+                ]
+            else:
+                by_project = [{**row, "project_name": None} for row in by_project]
         except Exception:
             by_project = [{**row, "project_name": None} for row in by_project]
 
@@ -293,3 +295,5 @@ async def get_attribution_breakouts() -> dict:
         return _EMPTY
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Error computing attribution breakouts: {exc}")
+    finally:
+        sql_conn.close()
