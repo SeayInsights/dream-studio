@@ -252,6 +252,28 @@ def _collect_hook_file_ops(
     return ops
 
 
+def _prune_empty_ancestors(start: Path, stop_at: Path) -> None:
+    """Remove `start` and now-empty parent directories, stopping before `stop_at`.
+
+    Only removes directories left empty by a skill-file delete op — never touches
+    `stop_at` itself (the shared skills/ root) or anything outside its subtree.
+    """
+    current = start
+    while current != stop_at and stop_at in current.parents:
+        try:
+            next(current.iterdir())
+            return
+        except StopIteration:
+            pass
+        except OSError:
+            return
+        try:
+            current.rmdir()
+        except OSError:
+            return
+        current = current.parent
+
+
 _EXCLUDED_SKILL_DIRS = frozenset({"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"})
 _EXCLUDED_SKILL_SUFFIXES = frozenset({".pyc", ".pyo", ".pyd"})
 
