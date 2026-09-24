@@ -23,6 +23,7 @@ dream-studio/
       analyze/                       analysis engine (ds-analyze)
       domains/                       domain builders (ds-domains)
       data/                          database quality + data engineering (ds-data)
+      infra/                         CI/CD, Kubernetes, and infrastructure as code (ds-infra)
       workflow/                      workflow orchestration (ds-workflow)
       security/                      security analysis (ds-security)
       website/                       website builder (ds-website)
@@ -71,3 +72,4 @@ their installed projection are unchanged. Reviewed, no doc content change needed
 <!-- Last reviewed 2026-09-18 - skill-card contract: packs.yaml gains an `invariants:` list on every one of the 12 packs (what holds across that pack's modes, under the same enforce-or-declare shape canonical/rules.yml uses). New sibling of packs.yaml: canonical/skill_vocabulary.json, the registry of root input tokens the mode dataflow consumes from outside itself. No directory-tree layout change. -->
 <!-- Last reviewed 2026-09-18 - lesson loop: packs.yaml quality pack gains a `groom` mode (canonical/skills/quality/modes/groom/), the terminus that turns promoted lessons into skill-text edits. No directory-tree layout change. -->
 <!-- Last reviewed 2026-09-24 - pack-split (first slice): a new data/ pack (ds-data) added under canonical/skills/, splitting database out of quality and data-engineering out of domains -- neither depended on any other content in its origin pack, each already carried its own dedicated subagent. packs.yaml's quality and domains mode lists lost one entry each; a new data pack block was added. Directory-tree layout change: data/ row added above. -->
+<!-- Last reviewed 2026-09-24 - pack-split (second slice): a new infra/ pack (ds-infra) added under canonical/skills/, splitting devops, kubernetes, and terraform out of domains -- each already carried its own dedicated subagent and no other domains content depended on them. packs.yaml's domains mode list lost three entries; a new infra pack block was added. Directory-tree layout change: infra/ row added above. -->

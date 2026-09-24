@@ -18,7 +18,7 @@ commands, version notes — in a STRUCTURE.md v2.1 5-file layout.
 
 ```
 canonical/agents/devops-engineer.md    ← thin wrapper (~20 lines)
-canonical/skills/domains/modes/devops/ ← actual content
+canonical/skills/infra/modes/devops/   ← actual content
   SKILL.md                             ← patterns, anti-patterns, gotchas, commands
   metadata.yml                         ← skill metadata, tier, token tracking
   gotchas.yml                          ← structured gotchas with severity/category
@@ -47,7 +47,7 @@ Functionally these were skills in agent clothing. The 18.4.2b pilot validated th
 
 When the operator invokes `use devops-engineer to ...` via the Task tool:
 1. Claude Code reads `~/.claude/agents/devops-engineer.md` (the wrapper)
-2. Wrapper instructs: "Read SKILL.md from `~/.claude/skills/ds-domains/modes/devops/SKILL.md`"
+2. Wrapper instructs: "Read SKILL.md from `~/.claude/skills/ds-infra/modes/devops/SKILL.md`"
 3. Subagent reads the full SKILL.md as its operating instructions
 4. Token count reflects the full skill content load (~3-5k tokens per skill)
 
@@ -141,14 +141,14 @@ descriptions are sufficiently distinct (0 pairs at ≥ 0.50 similarity).
 | Agent file | Skill | Pack | Lines (pre-promotion) | Lines (post) |
 |-----------|-------|------|----------------------|--------------|
 | accessibility-expert.md | quality:accessibility | ds-quality | 89 | 18 |
-| devops-engineer.md | domains:devops | ds-domains | 91 | 19 |
-| kubernetes-expert.md | domains:kubernetes | ds-domains | 87 | 18 |
+| devops-engineer.md | infra:devops | ds-infra | 91 | 19 |
+| kubernetes-expert.md | infra:kubernetes | ds-infra | 87 | 18 |
 | research-analyst.md | analyze:research | ds-analyze | 91 | 16 |
 | idea-validator.md | analyze:idea-validation | ds-analyze | 117 | 16 |
 | technical-writer.md | domains:technical-writing | ds-domains | 121 | 16 |
-| terraform-architect.md | domains:terraform | ds-domains | 108 | 16 |
+| terraform-architect.md | infra:terraform | ds-infra | 108 | 16 |
 | mobile-developer.md | domains:mobile | ds-domains | 158 | 18 |
-| data-engineer.md | domains:data-engineering | ds-domains | 266 | 16 |
+| data-engineer.md | data:data-engineering | ds-data | 266 | 16 |
 
 All content marked `status: jit-pending` — will be enriched by Phase 19 based on
 real usage signals.

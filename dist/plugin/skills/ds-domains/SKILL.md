@@ -1,6 +1,6 @@
 ---
 name: ds-domains
-description: 'Stack-specific and domain builders. Use for: game-dev:, saas-build:, mcp-build:, dashboard-dev:, intake:, design:, CI/CD pipeline:, k8s cluster issue:, technical documentation:, Terraform:, iOS:'
+description: 'Stack-specific and domain builders. Use for: game-dev:, saas-build:, mcp-build:, dashboard-dev:, intake:, design:, technical documentation:, iOS:'
 ---
 
 # Domains — Stack-Specific Builders

@@ -3,7 +3,7 @@
 description: >-
   Production Kubernetes operations -- debug CrashLoopBackOff/OOMKill/Pending pods, design resource requests/limits/probes, author Helm charts, advise on scheduling, RBAC, NetworkPolicy, and HPA. Invoke for any k8s cluster issue or workload design question.
 model: sonnet
-skill: ds-domains/modes/kubernetes/SKILL.md
+skill: ds-infra/modes/kubernetes/SKILL.md
 essentials: |
   Key diagnostic shortcuts:
   - Exit code 137 = OOMKill (check before adjusting probes)

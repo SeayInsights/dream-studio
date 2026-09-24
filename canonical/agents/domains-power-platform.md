@@ -16,12 +16,9 @@ You are dispatched for **`domains/power-platform`**, and your domain knowledge b
 
 The other `domains` specialists, so you can hand work back BY NAME rather than attempting it or returning a vague refusal:
 
-- `devops-engineer`
 - `domains-design`
-- `kubernetes-expert`
 - `mobile-developer`
 - `technical-writer`
-- `terraform-architect`
 
 ## What you return
 

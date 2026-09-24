@@ -138,10 +138,10 @@ modes:
   description: Visual design capability — brand tokens, anti-slop rules, visual hierarchy, generative
     art (p5.js), theme application to projects, and ad-creative guidance. Trigger on `design art:`, `design
     poster:`, `canvas:`, `generative art:`, `apply theme:`, `brand:`, `ad creative:`, and...
-- mode: domains/devops
-  skill: domains/modes/devops/SKILL.md
+- mode: infra/devops
+  skill: infra/modes/devops/SKILL.md
   agent: devops-engineer
-  installed_skill: ds-domains/modes/devops/SKILL.md
+  installed_skill: ds-infra/modes/devops/SKILL.md
   dispatched_because: 'isolation: the skill is 6121 bytes, enough that carrying it in a subagent protects
     the caller''s context'
   description: 'Pre-runtime operational concerns: GitHub Actions CI/CD pipeline design, OIDC cloud auth
@@ -172,10 +172,10 @@ modes:
   skill: domains/modes/game-dev/SKILL.md
   no_agent: Nothing dispatches it and the skill is 1092 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: domains/kubernetes
-  skill: domains/modes/kubernetes/SKILL.md
+- mode: infra/kubernetes
+  skill: infra/modes/kubernetes/SKILL.md
   agent: kubernetes-expert
-  installed_skill: ds-domains/modes/kubernetes/SKILL.md
+  installed_skill: ds-infra/modes/kubernetes/SKILL.md
   dispatched_because: 'isolation: the skill is 6033 bytes, enough that carrying it in a subagent protects
     the caller''s context'
   description: 'Production Kubernetes operations: debug CrashLoopBackOff/OOMKill/Pending pods, design
@@ -210,10 +210,10 @@ modes:
     style best practices (active voice, second person, sentence case), and automated linting tools (markdownlint,
     vale, lychee). Includes PR review checklist and... Invoke for: technical documentation, docs PR, Diataxis,
     README, API reference, documentation review'
-- mode: domains/terraform
-  skill: domains/modes/terraform/SKILL.md
+- mode: infra/terraform
+  skill: infra/modes/terraform/SKILL.md
   agent: terraform-architect
-  installed_skill: ds-domains/modes/terraform/SKILL.md
+  installed_skill: ds-infra/modes/terraform/SKILL.md
   dispatched_because: 'isolation: the skill is 8175 bytes, enough that carrying it in a subagent protects
     the caller''s context'
   description: 'Terraform module design, remote state management, multi-environment strategy, import workflow
