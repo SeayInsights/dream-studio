@@ -8,11 +8,11 @@ operator is watching, so this registry ships only read paths: project/work-order
 state, review status, skills, memory, and health. Grow it from real usage, not by
 mirroring the CLI surface wholesale.
 
-WHY PURE FUNCTIONS, NOT SUBPROCESS. Every tool here calls straight into the same
-`core.*` query functions the CLI itself calls (see interfaces/cli/commands/*.py) --
-no `subprocess.run(["ds", ...])`. That keeps this server in the same process, honors
-the same `source_root`/`dream_studio_home` resolution the CLI uses, and avoids a
-second, drifting way to invoke Dream Studio.
+WHY PURE FUNCTIONS, NOT A CHILD PROCESS. Every tool here calls straight into the
+same `core.*` query functions the CLI itself calls (see interfaces/cli/commands/*.py)
+-- never by shelling out to `ds` as a separate process. That keeps this server in
+the same process, honors the same `source_root`/`dream_studio_home` resolution the
+CLI uses, and avoids a second, drifting way to invoke Dream Studio.
 """
 
 from __future__ import annotations
