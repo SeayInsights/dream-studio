@@ -730,3 +730,48 @@ def test_attribution_breakouts_route_reads_its_own_authoritys_store_not_ambient(
     finally:
         DatabaseRuntime.reset_instance()
         os.environ.pop("DREAM_STUDIO_HOME", None)
+
+
+def test_hooks_and_rhythm_routes_degrade_gracefully_when_no_analytics_store_exists(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """All four connect_analytics()-with-no-path sites in hooks.py, and
+    insights_rhythm.py's get_work_rhythm, must return a dashboard-safe empty
+    shape (never a 500) when db_path's own sibling aggregate_metrics.db does
+    not exist at all -- a genuinely fresh install where the aggregation
+    pipeline has never run, not just an empty-but-present store.
+
+    Each of these five sites calls connect_analytics(analytics_path,
+    read_only=True) outside any AnalyticsStoreMissingError handling before
+    this fix; CI caught list_hook_executions/get_hook_performance's sibling
+    (via a different pre-existing test whose own setup happened to always
+    seed a present-but-empty store) but this exercises the missing-entirely
+    case directly, for all five, in one place."""
+    own_dir = tmp_path / "own-authority"
+    own_dir.mkdir()
+    db_path = own_dir / "studio.db"
+    # No aggregate_metrics.db created here at all -- the missing-store case.
+    assert not (own_dir / "aggregate_metrics.db").exists()
+
+    client = _client_for_db(db_path, monkeypatch)
+    try:
+        resp = client.get("/api/v1/hooks/executions")
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["count"] == 0
+
+        resp = client.get("/api/v1/hooks/executions/some-exec-id")
+        assert resp.status_code == 404, resp.text
+
+        resp = client.get("/api/v1/hooks/performance")
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["summary"]["total_executions"] == 0
+
+        resp = client.get("/api/v1/hooks/validation-failures")
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["count"] == 0
+
+        resp = client.get("/api/v1/insights/rhythm")
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["busiest_day_count"] == 0
+    finally:
+        DatabaseRuntime.reset_instance()

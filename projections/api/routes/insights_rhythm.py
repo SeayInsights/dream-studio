@@ -21,16 +21,36 @@ async def get_work_rhythm(days: int = Query(default=30, ge=1, le=365)):
     happens to sit in the ambient DREAM_STUDIO_HOME.
     """
     from collections import defaultdict
-    from core.analytics.duckdb_store import analytics_db_path_for_connection, connect_analytics
+    from core.analytics.duckdb_store import (
+        AnalyticsStoreMissingError,
+        analytics_db_path_for_connection,
+        connect_analytics,
+    )
     from core.config.database import get_connection
     from datetime import timedelta
+
+    day_names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
     sql_conn = get_connection()
     try:
         analytics_path = analytics_db_path_for_connection(sql_conn)
     finally:
         sql_conn.close()
-    conn = connect_analytics(analytics_path, read_only=True)
+    try:
+        conn = connect_analytics(analytics_path, read_only=True)
+    except AnalyticsStoreMissingError:
+        return {
+            "heatmap": [[0] * 24 for _ in range(7)],
+            "day_labels": day_names,
+            "peak_hour": 0,
+            "peak_day": day_names[0],
+            "busiest_day_count": 0,
+            "quietest_day": day_names[0],
+            "quietest_day_count": 0,
+            "completion_by_hour": {},
+            "hour_totals": {},
+            "generated_at": datetime.now().isoformat(),
+        }
 
     try:
         cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
@@ -64,7 +84,6 @@ async def get_work_rhythm(days: int = Query(default=30, ge=1, le=365)):
         peak_hour = max(hour_totals, key=hour_totals.get) if hour_totals else 0
 
         # Peak day
-        day_names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
         day_totals = {d: sum(heatmap[d]) for d in range(7)}
         peak_day_idx = max(day_totals, key=day_totals.get) if day_totals else 0
         quietest_day_idx = min(day_totals, key=day_totals.get) if day_totals else 0

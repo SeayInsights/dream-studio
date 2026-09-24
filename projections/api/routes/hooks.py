@@ -4,7 +4,11 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Path
 
 from core.config.database import get_connection
-from core.analytics.duckdb_store import analytics_db_path_for_connection, connect_analytics
+from core.analytics.duckdb_store import (
+    AnalyticsStoreMissingError,
+    analytics_db_path_for_connection,
+    connect_analytics,
+)
 from projections.api.routes.sqlite_schema import has_columns, object_exists
 
 router = APIRouter()
@@ -121,7 +125,37 @@ async def list_hook_executions(
     sql_conn = get_connection()
     try:
         analytics_path = analytics_db_path_for_connection(sql_conn)
-        conn = connect_analytics(analytics_path, read_only=True)
+        try:
+            conn = connect_analytics(analytics_path, read_only=True)
+        except AnalyticsStoreMissingError:
+            # Analytics store not built yet — fall straight to the SQLite
+            # telemetry fallback, same as a DuckDB query returning 0 rows.
+            fb = _fallback_hook_invocations(sql_conn, hook_name, status, since, limit)
+            if fb:
+                return {
+                    "executions": fb,
+                    "count": len(fb),
+                    "filters": {
+                        "hook_name": hook_name,
+                        "status": status,
+                        "since": since,
+                        "limit": limit,
+                    },
+                    "source_status": {
+                        "classification": "unified source",
+                        "reason": "Analytics store not built yet; using execution_events telemetry fallback.",
+                        "source_tables": ["execution_events"],
+                        "derived_view": True,
+                        "primary_authority": False,
+                    },
+                }
+            return _empty_executions(
+                hook_name=hook_name,
+                status=status,
+                since=since,
+                limit=limit,
+                reason="Analytics store not built yet and no execution_events rows.",
+            )
         try:
             # Build query with optional filters — DuckDB views always exist; no object_exists needed
             query = """
@@ -267,7 +301,11 @@ async def get_hook_execution_details(
         analytics_path = analytics_db_path_for_connection(sql_conn)
     finally:
         sql_conn.close()
-    conn = connect_analytics(analytics_path, read_only=True)
+    try:
+        conn = connect_analytics(analytics_path, read_only=True)
+    except AnalyticsStoreMissingError:
+        # Analytics store not built yet -- this exec_id cannot exist anywhere.
+        raise HTTPException(status_code=404, detail=f"Hook execution {exec_id} not found")
 
     try:
         # DuckDB view: hook_exec_id = event_id (TEXT UUID). Positional row access.
@@ -345,7 +383,13 @@ async def get_hook_performance() -> dict[str, Any]:
     sql_conn = get_connection()
     try:
         analytics_path = analytics_db_path_for_connection(sql_conn)
-        conn = connect_analytics(analytics_path, read_only=True)
+        try:
+            conn = connect_analytics(analytics_path, read_only=True)
+        except AnalyticsStoreMissingError:
+            # Analytics store not built yet -- treat identically to a DuckDB
+            # query that returned 0 rows, which already falls to the SQLite
+            # telemetry fallback below.
+            conn = None
         try:
             rows = conn.execute("""
                 SELECT
@@ -363,7 +407,7 @@ async def get_hook_performance() -> dict[str, Any]:
                 FROM hook_executions
                 GROUP BY COALESCE(NULLIF(hook_name, ''), 'unknown')
                 ORDER BY execution_count DESC, hook_name ASC
-                """).fetchall()
+                """).fetchall() if conn is not None else []
 
             by_hook = {}
             total_executions = 0
@@ -432,7 +476,8 @@ async def get_hook_performance() -> dict[str, Any]:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
         finally:
-            conn.close()
+            if conn is not None:
+                conn.close()
     finally:
         sql_conn.close()
 
@@ -510,7 +555,10 @@ async def list_validation_failures(limit: int = Query(default=50, le=200)) -> di
         analytics_path = analytics_db_path_for_connection(sql_conn)
     finally:
         sql_conn.close()
-    conn = connect_analytics(analytics_path, read_only=True)
+    try:
+        conn = connect_analytics(analytics_path, read_only=True)
+    except AnalyticsStoreMissingError:
+        return {"failures": [], "count": 0, "by_event_type": {}}
     try:
         rows = conn.execute(
             "SELECT event_id, event_type, errors, attempted_at "
