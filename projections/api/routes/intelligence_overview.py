@@ -383,7 +383,9 @@ def get_whats_working() -> list[dict[str, Any]]:
         # own authority.
         duck_conn_wins = None
         try:
-            duck_conn_wins = connect_analytics(analytics_db_path_for_connection(conn), read_only=True)
+            duck_conn_wins = connect_analytics(
+                analytics_db_path_for_connection(conn), read_only=True
+            )
             hook_row = duck_conn_wins.execute("""
                 SELECT
                     COUNT(*) as total,

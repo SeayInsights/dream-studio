@@ -42,9 +42,7 @@ def resolve_collector_paths(db_path: str | None) -> tuple[str, Path | None]:
 
     analytics_path = analytics_db_path_for(db_path)
     resolved_db_path = (
-        str(Path.home() / ".dream-studio" / "state" / "studio.db")
-        if db_path is None
-        else db_path
+        str(Path.home() / ".dream-studio" / "state" / "studio.db") if db_path is None else db_path
     )
     return resolved_db_path, analytics_path
 
