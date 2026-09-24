@@ -45,20 +45,24 @@ def db_path(tmp_path: Path) -> Path:
             " VALUES (?, ?, ?, '', 'pending', 0, ?, ?)",
             (MILESTONE_ID, PROJECT_ID, "First", NOW, NOW),
         )
-        # No-gates WO so close happens cleanly without seeding artifacts.
+        # No-gates WO so close happens cleanly without seeding artifacts. Seeded at
+        # 'pushed' — close accepts only pushed/ci_issues, and every test below that
+        # closes WO_DOCS goes on to close it.
         conn.execute(
             "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, '', 'in_progress', 'documentation', ?, ?)",
+            " VALUES (?, ?, ?, ?, '', 'pushed', 'documentation', ?, ?)",
             (WO_DOCS, PROJECT_ID, MILESTONE_ID, "Docs WO", NOW, NOW),
         )
-        # Gated WOs so failure/force paths are exercised.
+        # Gated WOs so failure/force paths are exercised. Also seeded at 'pushed' so
+        # the gate failure asserted below (design_brief_locked) is the reason close
+        # is refused, not the phase.
         conn.execute(
             "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, NULL, ?, '', 'in_progress', 'ui_component', ?, ?)",
+            " VALUES (?, ?, NULL, ?, '', 'pushed', 'ui_component', ?, ?)",
             (WO_UI, PROJECT_ID, "UI WO", NOW, NOW),
         )
         conn.execute(
@@ -103,6 +107,21 @@ def db_path(tmp_path: Path) -> Path:
         conn.commit()
     finally:
         conn.close()
+    # WO_DOCS sits at 'pushed', past review, so close's lane_review
+    # gate now refuses it as "in review but no review was ever dispatched" unless a
+    # dispatch is on record. Zero assignments -> nothing unanswered, no findings -> the
+    # review reads clean, leaving the no-gates-configured close actually gate-free.
+    from core.work_orders.review_answers import record_dispatch
+
+    record_dispatch(
+        WO_DOCS,
+        sha="0" * 40,
+        image="test-fixture",
+        change_set=[],
+        assignments=[],
+        db_path=target,
+        ownership={},
+    )
     return target
 
 
@@ -314,7 +333,9 @@ def test_check_close_gates_does_not_mutate_status(
         status = conn.execute(
             "SELECT status FROM business_work_orders WHERE work_order_id = ?", (WO_DOCS,)
         ).fetchone()[0]
-    assert status == "in_progress"
+    # WO_DOCS is seeded at 'pushed' (see db_path fixture); this asserts check_close_gates
+    # is a pure preview, not that the status is specifically 'in_progress'.
+    assert status == "pushed"
 
 
 # ── close_work_order ──────────────────────────────────────────────────────────

@@ -173,7 +173,16 @@ def _matches_any(paths: list[str], patterns: Iterable[str]) -> list[str]:
 def _matches(path: str, pattern: str) -> bool:
     normalized = _normalize(path)
     normalized_pattern = _normalize(pattern)
-    return fnmatch.fnmatchcase(normalized, normalized_pattern)
+    if fnmatch.fnmatchcase(normalized, normalized_pattern):
+        return True
+    # fnmatch has no real globstar: a leading "**/" still requires a literal "/"
+    # somewhere in the path, so a pattern meant to match "anywhere, including the
+    # repo root" never matches a root-level file with no directory prefix at all
+    # (PRIVATE_ARTIFACT_PATTERNS' "**/*.db" missed a root-level secrets.db
+    # entirely). Also try the pattern with that leading "**/" stripped.
+    if normalized_pattern.startswith("**/"):
+        return fnmatch.fnmatchcase(normalized, normalized_pattern[3:])
+    return False
 
 
 def _normalize(path: str) -> str:

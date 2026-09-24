@@ -31,7 +31,12 @@ from .close_gates import (
 )
 from .close_shared import _lookup_work_order_and_gates, _require_db
 from .models import TERMINAL_WO_STATUSES, terminal_wo_status_placeholders
-from core.work_orders.task_status import status_for
+from core.work_orders.task_status import (
+    CLOSEABLE_WORK_ORDER_STATUSES,
+    sql_placeholders,
+    status_for,
+    transition_refusal,
+)
 
 # WO-GRADER-ADVERSARIAL: independent review is default-on at close for every WO
 # type except these (no code to review — their deliverable is the document, and
@@ -105,6 +110,12 @@ def check_close_gates(
         _structure_preview = check_structure(work_order_id, db_path=db_path)
         if _structure_preview and not recorded_exception(work_order_id, db_path=db_path):
             failures.append(_render_structure(_structure_preview, work_order_id))
+
+    # The phase, previewed for the same reason: close refuses a work order that has not
+    # reached `pushed` or `ci_issues`, and no --force changes that.
+    _phase = transition_refusal(work_order_id, meta.get("wo_status"), "closed")
+    if _phase:
+        failures.append(_phase)
 
     meta["gate_failures"] = failures
     meta["gates_pass"] = not failures
@@ -358,6 +369,22 @@ def close_work_order(
 
     p_root = planning_root or Path.cwd() / ".planning"
     db_path = _require_db(source_root, dream_studio_home)
+
+    # CLOSED COMES AFTER PUSHED, AND --force DOES NOT CHANGE THAT. A work order closes from
+    # `pushed` (its CI met no issue) or `ci_issues` (the issues were fixed), and from
+    # nowhere else. This used to close from any status, so `in_progress -> closed` was one
+    # command and the review lanes and CI were steps a work order could simply not take.
+    # Force waives GATES -- a judgment about criteria, recorded as gate.bypassed -- and the
+    # phase is not a gate: it is a fact about where the work is. Checked before anything
+    # below writes, so a refused close leaves no boundary stamp or ownership claim behind.
+    with _connect(db_path) as _conn:
+        _row = _conn.execute(
+            "SELECT status FROM business_work_orders WHERE work_order_id = ?", (work_order_id,)
+        ).fetchone()
+    if _row is not None:
+        _refusal = transition_refusal(work_order_id, _row[0], "closed")
+        if _refusal:
+            return {"ok": False, "error": _refusal, "status": _row[0], "phase_refused": True}
 
     # T1: Auto-verify — if the independent_review gate applies and no verdict file
     # exists yet, run verify inline before the gate evaluation so operators don't
@@ -770,6 +797,23 @@ def close_work_order(
 
         gate_failures.extend(check_change_impact_affirmed(conn, work_order_id, db_path))
 
+        # THE LANE REVIEW HOLDS A CLOSE, not only a push. Two review seats found close
+        # passing with an open lane finding: this path read the verify verdict and never
+        # the lane answers, which live under their own instance key. Ordinary gate
+        # failure, so --force bypasses it recorded, and a `lane_review` prefix the
+        # independent_review waivers below do not match.
+        from core.work_orders.review_answers import lane_review_failure
+
+        _lane_failure = lane_review_failure(work_order_id, db_path=db_path)
+        if _lane_failure:
+            gate_failures.append(_lane_failure)
+        # AND THE STATE GOES ON THE RECORD, blocking or not. A forced close of a work order
+        # nobody reviewed was recorded exactly like a close of one reviewed clean (the
+        # bench's receiver's-view seat, round three).
+        from core.work_orders.review_answers import lane_review_state
+
+        _lane_state = lane_review_state(work_order_id, db_path=db_path)
+
         # WO-ESCALATION-LADDER T3: an escalated WO (reopened because the deterministic
         # verifier said NOT FIXED) must re-close through a PASSING independent review.
         # For escalated WOs the independent_review gate is mandatory: the gaps/unreviewable
@@ -859,6 +903,42 @@ def close_work_order(
 
         now = datetime.now(UTC).isoformat()
 
+        # THE PHASE IS HELD, NOT JUST CHECKED. The top of this function refuses a phase
+        # close does not come from, but everything between there and here -- verify can run
+        # for ten minutes -- happened on the strength of that one read, and this write was
+        # unconditional: a `ds work-order block` landing in the window was silently
+        # overwritten with `closed` (receiver's-view lane, 2026-09-23). The write now
+        # carries the condition itself, so SQLite checks and writes as one statement, and
+        # nothing is announced unless it landed.
+        _closeable = CLOSEABLE_WORK_ORDER_STATUSES
+        _landed = conn.execute(
+            "UPDATE business_work_orders"
+            " SET status = ?, closed_at = ?, updated_at = ?, last_updated_at = ?"
+            f" WHERE work_order_id = ? AND status IN ({sql_placeholders(_closeable)})",
+            (
+                status_for("work_order.closed", work_order=True),
+                now,
+                now,
+                now,
+                work_order_id,
+                *_closeable,
+            ),
+        ).rowcount
+        if not _landed:
+            _now_status = conn.execute(
+                "SELECT status FROM business_work_orders WHERE work_order_id = ?",
+                (work_order_id,),
+            ).fetchone()
+            _now_status = _now_status[0] if _now_status else None
+            return {
+                **_bookkeeping_errors,
+                "ok": False,
+                "error": transition_refusal(work_order_id, _now_status, "closed")
+                or f"Work order {work_order_id} changed phase while closing ({_now_status}).",
+                "status": _now_status,
+                "phase_refused": True,
+            }
+
         if force and gate_failures:
             for reason in gate_failures:
                 try:
@@ -898,6 +978,7 @@ def close_work_order(
                 session_id=None,
                 payload={
                     "work_order_id": work_order_id,
+                    "lane_review": _lane_state,
                     "title": title,
                     "project_id": project_id,
                     "forced": force,
@@ -915,13 +996,6 @@ def close_work_order(
             _spool_writer.write_event(envelope.to_dict())
         except Exception:
             pass
-
-        conn.execute(
-            "UPDATE business_work_orders"
-            " SET status = ?, closed_at = ?, updated_at = ?, last_updated_at = ?"
-            " WHERE work_order_id = ?",
-            (status_for("work_order.closed", work_order=True), now, now, now, work_order_id),
-        )
 
         next_wo: dict[str, Any] | None = None
         milestone_complete = False
@@ -958,6 +1032,7 @@ def close_work_order(
         "status": "closed",
         "forced": force,
         "bypassed_gates": gate_failures if force else [],
+        "lane_review": _lane_state,
     }
     # NOT EVALUATED REACHES THE OPERATOR, or it was not recorded at all. `1a212a8`
     # stopped a forced close paying for the acceptance-criteria run it overrides and

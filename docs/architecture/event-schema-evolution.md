@@ -52,7 +52,8 @@ RegistryEntry(
     "work_order.closed",
     _BUSINESS,
     "meaningful-unit",
-    "Work order closed after gate checks passed",
+    "Work order closed from pushed or ci_issues, its gates passed or a forced"
+    " bypass recorded as gate.bypassed",
     payload_required_keys=frozenset({"work_order_id", "title", "project_id", "forced"}),
 )
 ```

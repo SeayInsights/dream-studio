@@ -148,13 +148,60 @@ def remediation_task(
     return out
 
 
+def nodes_already_filed(db_path: Path, work_order_id: str) -> set[str]:
+    """The node ids the work order's OPEN tasks name, so a red run can tell a failure
+    already being worked from a new one.
+
+    Open only: a test whose task is complete and fails again is a regression, not a copy.
+    Read from the criterion AND the description, because a task names only its first few
+    tests in the criterion.
+
+    WHOLE TOKENS, NOT TEXT. This returned the text and the caller asked `node in text`,
+    which is substring containment: a filed `test_x_10` made a new failure in `test_x_1`
+    read as already recorded (boundary-semantics lane, round two) -- the same false
+    reassurance the check was written to stop. A node id contains no whitespace, so the
+    tokens are exactly the ids named.
+    """
+    import sqlite3
+
+    from core.work_orders.task_status import (
+        TASK_ABANDONED_STATUSES,
+        TASK_DONE_STATUSES,
+        sql_placeholders,
+    )
+
+    settled = TASK_DONE_STATUSES + TASK_ABANDONED_STATUSES
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return set()
+    try:
+        rows = conn.execute(
+            "SELECT coalesce(acceptance_criteria, ''), coalesce(description, '')"
+            " FROM business_tasks WHERE work_order_id = ?"
+            f" AND status NOT IN ({sql_placeholders(settled)})",
+            (work_order_id, *settled),
+        ).fetchall()
+    except sqlite3.Error:
+        return set()
+    finally:
+        conn.close()
+    return {token for a, d in rows for token in f"{a} {d}".split()}
+
+
 def work_orders_awaiting_ci(db_path: Path) -> list[dict[str, Any]]:
-    """Work orders at `pushed`: the ones whose fate this run decides.
+    """Work orders at `pushed` or `ci_issues`: the ones whose fate this run decides.
 
     `pushed` is the link between a merge and the work that caused it. It is deliberately
     not terminal, which is what makes this query meaningful -- a work order that had
     already closed on being pushed would be invisible here, and the run that broke it
     would have nothing to attach to.
+
+    `ci_issues` is here because it is the other phase a work order closes from. Its fixes
+    are pushed from inside that phase, and a green main is what says they worked; a
+    watcher that only saw `pushed` would leave every fixed work order at `ci_issues`
+    forever. Each row carries its status, because a red run means something different
+    for each: new for one, already recorded for the other.
     """
     import sqlite3
 
@@ -164,11 +211,13 @@ def work_orders_awaiting_ci(db_path: Path) -> list[dict[str, Any]]:
         return []
     try:
         rows = conn.execute(
-            "SELECT work_order_id, title, project_id FROM business_work_orders"
-            " WHERE status = 'pushed' ORDER BY last_updated_at ASC"
+            "SELECT work_order_id, title, project_id, status FROM business_work_orders"
+            " WHERE status IN ('pushed', 'ci_issues') ORDER BY last_updated_at ASC"
         ).fetchall()
     except sqlite3.Error:
         return []
     finally:
         conn.close()
-    return [{"work_order_id": r[0], "title": r[1], "project_id": r[2]} for r in rows]
+    return [
+        {"work_order_id": r[0], "title": r[1], "project_id": r[2], "status": r[3]} for r in rows
+    ]

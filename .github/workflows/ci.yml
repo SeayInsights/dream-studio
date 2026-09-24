@@ -46,14 +46,23 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
 
+      # Both gates below honor DREAM_STUDIO_CHANGED_FILES as an override that
+      # bypasses git-based diffing entirely (a documented escape hatch -- see
+      # each gate's own --help). Pinned empty so a value set by an earlier step
+      # in this same job (or a self-hosted runner's leftover environment)
+      # cannot silently replace real detection -- the same reasoning
+      # pre-push.yaml's manifest and ci_gate.py's isolated check env already
+      # pin against.
       - name: Contract docs drift
         env:
           DREAM_STUDIO_BASE_REF: origin/${{ github.base_ref || 'main' }}
+          DREAM_STUDIO_CHANGED_FILES: ""
         run: python interfaces/cli/contract_docs_drift_gate.py
 
       - name: Contract Atlas lifecycle
         env:
           DREAM_STUDIO_BASE_REF: origin/${{ github.base_ref || 'main' }}
+          DREAM_STUDIO_CHANGED_FILES: ""
         run: python interfaces/cli/contract_atlas_lifecycle_gate.py
 
       - name: Blast radius gate

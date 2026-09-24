@@ -71,7 +71,9 @@ def _seed(
         "INSERT INTO business_work_orders"
         " (work_order_id, project_id, milestone_id, title, description,"
         "  work_order_type, status, sequence_order, created_at, updated_at, last_updated_at)"
-        " VALUES (?,?,?,?,?,?,'in_progress',1,?,?,?)",
+        # close accepts only pushed/ci_issues; every test in this file seeds a WO
+        # then closes it, and the phase is not what these tests check.
+        " VALUES (?,?,?,?,?,?,'pushed',1,?,?,?)",
         (work_order_id, project_id, milestone_id, "Test WO", "desc", wo_type, NOW, NOW, NOW),
     )
     conn.commit()
@@ -128,6 +130,23 @@ def _seed_project_row(db_path: Path, project_id: str) -> None:
     conn.close()
 
 
+def _dispatch_clean_review(db_path: Path, work_order_id: str) -> None:
+    """A work order past review must have had one, so lane_review_failure demands a review
+    dispatch exist before close — a gate independent of the executable-AC gate this
+    file exercises. Record the minimum: a dispatch with no lanes assigned, so
+    nothing is left unanswered and the gate clears."""
+    from core.work_orders.review_answers import record_dispatch
+
+    record_dispatch(
+        work_order_id,
+        sha="0" * 40,
+        image="test",
+        change_set=[],
+        assignments=[],
+        db_path=db_path,
+    )
+
+
 # ---------------------------------------------------------------------------
 # T2 — close_blocked_when_any_ac_fails
 # ---------------------------------------------------------------------------
@@ -180,7 +199,7 @@ def test_close_blocked_when_any_ac_fails(tmp_path: Path) -> None:
         ac_failures
     ), f"Expected at least one executable_ac failure; failures={result_no_force['failures']}"
 
-    # ── 2. Verify the WO is still in_progress (not closed) ────────────────
+    # ── 2. Verify the WO is still pushed (not closed) ──────────────────────
     conn = sqlite3.connect(str(db_path))
     row = conn.execute(
         "SELECT status FROM business_work_orders WHERE work_order_id = ?",
@@ -188,7 +207,7 @@ def test_close_blocked_when_any_ac_fails(tmp_path: Path) -> None:
     ).fetchone()
     conn.close()
     assert row is not None
-    assert row[0] == "in_progress", f"Expected WO to remain in_progress; got {row[0]}"
+    assert row[0] == "pushed", f"Expected WO to remain pushed; got {row[0]}"
 
     # ── 3. With force=True → must close and record NOT EVALUATED ──────────
     with _patch_db(db_path):
@@ -321,6 +340,7 @@ def test_close_ac_gate_end_to_end(tmp_path: Path) -> None:
             f"TEST-CHECK: {_TRIVIAL_PASS_NODE}"
         ),
     )
+    _dispatch_clean_review(db_path, wo_id_pass)
 
     with _patch_db(db_path):
         from core.work_orders.close import close_work_order

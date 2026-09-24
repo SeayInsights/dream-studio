@@ -131,9 +131,27 @@ python interfaces/cli/contract_atlas_lifecycle_gate.py
 
 The gate reads `core/shared_intelligence/contract_registry.py`, maps changed
 files to contract domains, and fails when required docs for an impacted domain
-are not refreshed in the same change set. CI can provide changed files through
-`DREAM_STUDIO_CHANGED_FILES`, `--changed-file`, or a base ref. Local runs with
-no pending diff pass as an honest empty state.
+are not refreshed in the same change set. A caller can provide changed files
+through `--changed-file` (repeatable) or `--changed-files`
+(newline/semicolon/comma-separated), or through the identically-shaped
+`DREAM_STUDIO_CHANGED_FILES` env var — prefer the flag: the env var is read
+before git or `DREAM_STUDIO_BASE_REF` are even consulted, so a value left
+exported in a shell for an unrelated reason silently replaces detection on
+every run made from it. The pre-push manifest pins it to `""` in the
+`docs-drift` gate's own `env` for exactly this reason (`env` there wins over
+whatever is ambient in the invoking shell — see `core.gates.pre_push.run_gate`).
+
+Without an explicit changed-files source, the gate diffs `DREAM_STUDIO_BASE_REF`
+(or `origin/<GITHUB_BASE_REF>`) triple-dot `HEAD` — the same merge-base diff
+`git diff A...B` always computes. If that base ref cannot be resolved at all
+(no `origin` remote, an unfetched clone, a base branch absent locally), the
+gate does not treat that the same as "zero changes": it enumerates every file
+git tracks at HEAD (`git ls-files`) instead, so a file already committed on
+this branch is not invisible just because there is nothing to diff it
+against. Only once a resolvable base ref genuinely reports zero files does
+the gate fall back further, to staged + working-tree-vs-HEAD + untracked —
+which is also what an ad hoc local run with no base ref configured at all
+sees. Local runs with no pending diff pass as an honest empty state.
 
 If a domain is reviewed and no docs need to change — for example a
 behavior-preserving refactor such as a facade-split that touches a

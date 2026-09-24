@@ -267,6 +267,37 @@ def test_a_read_only_verdict_is_labelled_as_such(db):
             },
         },
     )
+    # A CLEAR LANE REVIEW, so the caveat is the only thing under test. Merge readiness
+    # reads the lane review too (d2d66b2): a work order never reviewed is not ready,
+    # whatever its verify verdict, and this test asserted ready on that basis.
+    from core.work_orders.review_answers import record_answers, record_dispatch
+
+    reviewer = "review-gate-and-test-integrity"
+    issued = record_dispatch(
+        wo_id,
+        sha="f" * 40,
+        image="ds-review:fake",
+        change_set=[],
+        db_path=db,
+        assignments=[{"reviewer": reviewer, "seat": "s", "lanes": ["lane-one"]}],
+        ownership={reviewer: {"lane-one"}},
+    )
+    record_answers(
+        wo_id,
+        reviewer,
+        [
+            {
+                "lane": "lane-one",
+                "verdict": "pass",
+                "reproduction": {"command": "true", "exit_code": 0},
+            }
+        ],
+        db_path=db,
+        available=lambda: (True, ""),
+        verify=lambda image, repro: (True, {"exit_code": repro["exit_code"]}, "ok"),
+        credential=issued["credentials"][reviewer],
+    )
+
     out = merge_readiness(work_order_id=wo_id, db_path=db)
     assert out["state"] == "passed", "the caveat must not be smuggled in as a failure"
     assert out["ready"] is True
@@ -387,6 +418,14 @@ def test_close_surfaces_a_verdict_that_nothing_executed(db, tmp_path):
             },
         },
     )
+    # close accepts only pushed/ci_issues, and force does not change that;
+    # `_wo_with_acs` seeds `in_progress`, and the phase is not what this test checks.
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "UPDATE business_work_orders SET status = 'pushed' WHERE work_order_id = ?", (wo_id,)
+    )
+    conn.commit()
+    conn.close()
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db
     with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
@@ -565,6 +604,14 @@ def test_close_does_not_claim_execution_that_never_happened(db, tmp_path):
             },
         },
     )
+    # close accepts only pushed/ci_issues, and force does not change that;
+    # `_wo_with_acs` seeds `in_progress`, and the phase is not what this test checks.
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "UPDATE business_work_orders SET status = 'pushed' WHERE work_order_id = ?", (wo_id,)
+    )
+    conn.commit()
+    conn.close()
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db
     with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):

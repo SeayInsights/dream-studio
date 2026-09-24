@@ -100,6 +100,8 @@ xfail marker. This decision is about the word, not the window.
 
 from __future__ import annotations
 
+from typing import Any
+
 #: Statuses meaning the task is finished. Order is not significant.
 TASK_DONE_STATUSES: tuple[str, ...] = ("complete", "done")
 
@@ -189,6 +191,88 @@ TASK_STATUS_EVENT: dict[str, str | None] = {
 #: over" reads the same answer.
 TERMINAL_WORK_ORDER_STATUSES: tuple[str, ...] = ("closed", "cancelled", "deleted")
 
+#: WHERE A WORK ORDER MAY GO NEXT -- the one table every lifecycle writer asks.
+#:
+#: The operator's order, 2026-09-23: created -> in_progress -> in_review -> pushed ->
+#: ci_issues -> closed, and ci_issues is the only phase that may be skipped, because a push
+#: may meet no CI issue at all. Nothing else is skipped and nothing steps back. The review
+#: loop lives INSIDE in_review (findings become tasks, the lanes re-review until they
+#: clear) and the fix loop lives inside ci_issues; tasks are worked in any status, so
+#: neither loop needs to leave its phase.
+#:
+#: Before this table each writer checked what it happened to think of: start checked
+#: nothing, advance refused only terminal statuses, close refused nothing its --force could
+#: not wave through. A work order went created -> closed in two commands, which made every
+#: phase between them decorative.
+#:
+#: Three moves sit outside the chain, each recorded as its own event rather than inferred
+#: from a status change: `blocked` is reachable from any open phase and unblock returns to
+#: the phase recorded at block time; reopen takes a closed work order back to in_progress;
+#: cancel and delete end a work order from anywhere.
+WORK_ORDER_TRANSITIONS: dict[str, tuple[str, ...]] = {
+    "created": ("in_progress",),
+    "in_progress": ("in_review",),
+    "in_review": ("pushed",),
+    "pushed": ("ci_issues", "closed"),
+    "ci_issues": ("closed",),
+    "closed": (),
+    "blocked": (),
+    "cancelled": (),
+    "deleted": (),
+}
+
+#: The phases a work order can be blocked from -- and so the phases unblock may return to:
+#: every status the table lets move on. DERIVED, not listed, so the moves that sit outside
+#: the chain read the same vocabulary as the chain itself and cannot drift from it. (The
+#: CHECK in migration 158 has to spell them out; a test holds it to this.)
+BLOCKABLE_WORK_ORDER_STATUSES: tuple[str, ...] = tuple(
+    status for status, moves in WORK_ORDER_TRANSITIONS.items() if moves
+)
+
+#: The phases a work order closes from -- the ones the table lets reach `closed`.
+CLOSEABLE_WORK_ORDER_STATUSES: tuple[str, ...] = tuple(
+    status for status, moves in WORK_ORDER_TRANSITIONS.items() if "closed" in moves
+)
+
+
+def remembers_block_phase(conn: Any) -> bool:
+    """Whether migration 158 has given this authority `blocked_from_status`.
+
+    Unreleased migrations do not auto-apply to a live authority DB, so the column can be
+    absent while the code that uses it is present. The writers and the projection both
+    ask, and ask HERE: two copies of this check would be two answers to one question.
+    """
+    return any(
+        r[1] == "blocked_from_status"
+        for r in conn.execute("PRAGMA table_info(business_work_orders)").fetchall()
+    )
+
+
+def transition_refusal(work_order_id: str, current: str | None, target: str) -> str | None:
+    """Why `current -> target` is not allowed, or None when it is.
+
+    A sentence rather than a boolean, because every caller has to say it and each used to
+    say it differently. It names where the work order may go instead, so the refusal is
+    also the instruction.
+    """
+    allowed = WORK_ORDER_TRANSITIONS.get(current or "", ())
+    if target in allowed:
+        return None
+    if current in TERMINAL_WORK_ORDER_STATUSES:
+        return (
+            f"Work order {work_order_id} is {current}, which is terminal. Reopen it if the"
+            " work is genuinely resuming; that is recorded as work_order.reopened."
+        )
+    if current == "blocked":
+        return f"Work order {work_order_id} is blocked. Unblock it first."
+    nxt = " or ".join(allowed) if allowed else "nowhere"
+    return (
+        f"Work order {work_order_id} is {current} and cannot move to {target}: phases run"
+        " created -> in_progress -> in_review -> pushed -> ci_issues -> closed, only"
+        f" ci_issues may be skipped, and from {current} the next is {nxt}."
+    )
+
+
 #: Event -> the status a replay lands on when a projection handles it.
 #:
 #: THE DIRECTION A PROJECTION NEEDS, and NOT the inverse of the map above. Two events
@@ -201,16 +285,14 @@ TERMINAL_WORK_ORDER_STATUSES: tuple[str, ...] = ("closed", "cancelled", "deleted
 WORK_ORDER_EVENT_STATUS: dict[str, str] = {
     "work_order.created": "created",
     "work_order.started": "in_progress",
+    # THE FALLBACK, NOT THE RULE. Unblock returns to the phase recorded at block time and
+    # says which in its payload (`to_status`); a projection reads that first. This entry is
+    # what an unblocked event from before that payload existed lands on.
     "work_order.unblocked": "in_progress",
     # A THIRD EVENT REACHING `in_progress`, which is why this map is declared rather than
     # inverted from the one above: reopening returns a closed work order to work, and no
     # inverse of status->event could express three events sharing one status.
     "work_order.reopened": "in_progress",
-    # FOUR EVENTS NOW REACH `in_progress`, and the reason the two maps are declared
-    # separately rather than inverted from each other only gets stronger: work returns to
-    # progress when the review lanes send findings back and when a CI failure is picked
-    # up, and both reuse `started` because a fourth spelling of "work is happening" is
-    # exactly the drift this module exists to stop.
     "work_order.review_requested": "in_review",
     "work_order.pushed": "pushed",
     "work_order.ci_failed": "ci_issues",
