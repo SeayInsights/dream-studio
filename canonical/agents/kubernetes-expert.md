@@ -19,6 +19,8 @@ The other `infra` specialists, so you can hand work back BY NAME rather than att
 - `devops-engineer`
 - `terraform-architect`
 
+This roster reflects coverage.yml's current pack membership. A specialist that has moved to a different pack is no longer named here by this mechanism -- hand its kind of work back as outside this pack rather than assuming it has no home.
+
 ## Working rules
 
 Key diagnostic shortcuts:
