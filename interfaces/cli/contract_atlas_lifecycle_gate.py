@@ -72,6 +72,7 @@ def main() -> None:
     reviewed_no_change = _gather_reviewed_no_change(
         cli_domains=args.docs_reviewed_no_change,
         repo_root=REPO_ROOT,
+        base_ref=args.base_ref,
     )
     with tempfile.TemporaryDirectory(prefix="dream-studio-contract-atlas-gate-") as tmp:
         temp_root = Path(tmp)

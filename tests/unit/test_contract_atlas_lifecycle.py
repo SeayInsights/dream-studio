@@ -284,6 +284,39 @@ def test_contract_atlas_lifecycle_gate_accepts_a_base_ref_flag() -> None:
     assert "DREAM_STUDIO_BASE_REF" in help_result.stdout, help_result.stdout
 
 
+def test_contract_atlas_lifecycle_gate_forwards_base_ref_to_the_trailer_scan() -> None:
+    """--base-ref drives _changed_files' git diff, but the call to
+    reviewed_no_change_domains() (which resolves `Docs-Reviewed-No-Change:
+    <domain_id>` commit trailers) did not forward it at all when the flag was
+    first added -- the two calls silently disagreed about which commit range
+    "the diff" means, so a caller who set --base-ref got the trailer scan run
+    over the wrong range. contract_docs_drift_gate.py's own call site already
+    passes base_ref=args.base_ref; this asserts the sibling does too, by
+    reading the AST rather than executing main() (which does real DB/tempdir
+    setup)."""
+    import ast
+
+    src = (REPO_ROOT / "interfaces" / "cli" / "contract_atlas_lifecycle_gate.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(src)
+    call = None
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_gather_reviewed_no_change"
+        ):
+            call = node
+            break
+    assert call is not None, "no call to _gather_reviewed_no_change found"
+    kwarg_names = {kw.arg for kw in call.keywords}
+    assert "base_ref" in kwarg_names, (
+        "_gather_reviewed_no_change is not called with base_ref -- the trailer scan "
+        f"will not honor --base-ref. Keywords passed: {kwarg_names}"
+    )
+
+
 def _db(tmp_path: Path) -> Path:
     return tmp_path / "contract-atlas-lifecycle" / "studio.db"
 
