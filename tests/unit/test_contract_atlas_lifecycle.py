@@ -258,6 +258,7 @@ def test_contract_atlas_lifecycle_gate_help_documents_its_env_vars() -> None:
         cwd=str(REPO_ROOT),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     )
     for env_var in ("DREAM_STUDIO_CHANGED_FILES", "DREAM_STUDIO_DOCS_REVIEWED_NO_CHANGE"):
@@ -278,6 +279,7 @@ def test_contract_atlas_lifecycle_gate_accepts_a_base_ref_flag() -> None:
         cwd=str(REPO_ROOT),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     )
     assert "--base-ref" in help_result.stdout, help_result.stdout
