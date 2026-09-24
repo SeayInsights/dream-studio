@@ -19,7 +19,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-_DOMAIN_LIB = Path(__file__).resolve().parents[2] / "runtime" / "lib" / "domains"
+_DOMAIN_LIB = Path(__file__).resolve().parents[2] / "runtime" / "lib" / "apps"
 if str(_DOMAIN_LIB) not in sys.path:
     sys.path.insert(0, str(_DOMAIN_LIB))
 

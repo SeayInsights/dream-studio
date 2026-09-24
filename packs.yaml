@@ -66,11 +66,9 @@ packs:
     invariants:
       - generated code stays inside the active work order's module boundary
       - a deliverable that leaves the machine stops for the operator first
-    # fullstack and website — Flag 1 fix; technical-writing, mobile — 18.9 Tier 2-3
-    modes: [game-dev, saas-build, mcp-build, dashboard-dev, power-platform, design, technical-writing, mobile]
-    agents: [game, client]
-    hooks: [on-game-validate]
-    rules: [game/ai-code.md, game/data-files.md, game/gameplay-code.md, game/networking-code.md, game/shader-code.md, game/ui-code.md]
+    # fullstack and website — Flag 1 fix; technical-writing — 18.9 Tier 2-3
+    modes: [dashboard-dev, power-platform, design, technical-writing]
+    agents: [client]
     templates: [project-standards/]
 
   meta:
@@ -129,6 +127,18 @@ packs:
       - a deliverable that leaves the machine stops for the operator first
     # split out of domains (devops, kubernetes, terraform) — pack-split, 2026-09-24
     modes: [devops, kubernetes, terraform]
+
+  apps:
+    description: SaaS, mobile, game, and MCP-server builders
+    skill: apps
+    invariants:
+      - generated code stays inside the active work order's module boundary
+      - a deliverable that leaves the machine stops for the operator first
+    # split out of domains (saas-build, mobile, game-dev, mcp-build) — pack-split, 2026-09-24
+    modes: [saas-build, mobile, game-dev, mcp-build]
+    agents: [game]
+    hooks: [on-game-validate]
+    rules: [game/ai-code.md, game/data-files.md, game/gameplay-code.md, game/networking-code.md, game/shader-code.md, game/ui-code.md]
 
   security:
     description: Enterprise security analysis — automated scanning, compliance mapping, mitigation generation, network compatibility, and executive dashboards.

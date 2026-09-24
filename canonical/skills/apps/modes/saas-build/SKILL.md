@@ -1,7 +1,7 @@
 ---
 dream_studio:
-  skill_id: ds-domains
-  pack: domains
+  skill_id: ds-apps
+  pack: apps
   mode: saas-build
   mode_type: build
   inputs: [feature_spec, api_contract, schema_definition, component_requirements]

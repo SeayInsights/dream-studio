@@ -90,7 +90,7 @@ All commands route to `packs/core/agents/engineering.md`.
 | `audit ci:`, `lint repo`, `code metrics` | — |
 
 ### Game Studio
-All commands route to `packs/domains/agents/game.md`.
+All commands route to `packs/apps/agents/game.md`.
 
 | Command | Skills to inject |
 |---|---|

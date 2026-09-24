@@ -25,7 +25,6 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CANONICAL = REPO_ROOT / "canonical" / "skills" / "domains"
-DIST = REPO_ROOT / "dist" / "plugin" / "skills" / "ds-domains"
 # data-engineering split out of domains into its own data pack, 2026-09-24 (pack-split).
 CANONICAL_DATA = REPO_ROOT / "canonical" / "skills" / "data"
 DIST_DATA = REPO_ROOT / "dist" / "plugin" / "skills" / "ds-data"
@@ -33,6 +32,10 @@ DIST_DATA = REPO_ROOT / "dist" / "plugin" / "skills" / "ds-data"
 # (pack-split).
 CANONICAL_INFRA = REPO_ROOT / "canonical" / "skills" / "infra"
 DIST_INFRA = REPO_ROOT / "dist" / "plugin" / "skills" / "ds-infra"
+# saas-build, mobile, game-dev, mcp-build split out of domains into their own apps pack,
+# 2026-09-24 (pack-split).
+CANONICAL_APPS = REPO_ROOT / "canonical" / "skills" / "apps"
+DIST_APPS = REPO_ROOT / "dist" / "plugin" / "skills" / "ds-apps"
 
 # The fabricated pin. It shares its first 32 hex characters with the real v4.1.6 commit
 # (a5ac7e51b41094c92402da3b24376905380afc29) and differs only in the last 8, which is why
@@ -49,10 +52,6 @@ _VERIFIED_PINS = {
     "actions/cache": "55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
     "aws-actions/configure-aws-credentials": "e1253824e5c10ff9df46874f81ed3ec929e19cfd",
 }
-
-
-def _read(rel: str) -> str:
-    return (CANONICAL / rel).read_text(encoding="utf-8")
 
 
 def test_no_action_is_pinned_to_the_fabricated_sha() -> None:
@@ -88,7 +87,7 @@ def test_every_pinned_action_sha_is_one_that_was_resolved_upstream() -> None:
 
 def test_mobile_states_the_current_store_submission_requirements() -> None:
     """Play target API and Apple's SDK minimum were both rejection-causing as written."""
-    text = _read("modes/mobile/SKILL.md")
+    text = (CANONICAL_APPS / "modes" / "mobile" / "SKILL.md").read_text(encoding="utf-8")
     assert "Target API 34 required" not in text, (
         "Play has required API 36 for new apps and updates since 2026-08-31; "
         "API 34 guidance gets a submission rejected."
@@ -175,17 +174,13 @@ def test_devops_does_not_assert_an_artifact_size_limit_that_does_not_exist() -> 
         "mobile/patterns.yml",
     ],
 )
-def test_the_shipped_projection_carries_the_same_corrected_text(rel: str) -> None:
-    """A correction that lands only in canonical is invisible to an installed adapter.
-
-    dist/plugin is built from canonical, so these must not diverge; if they do, someone
-    hand-edited the artifact or skipped the rebuild.
-    """
-    canonical_body = (CANONICAL / rel).read_text(encoding="utf-8")
-    dist_path = DIST / rel
+def test_the_shipped_apps_pack_projection_carries_the_same_corrected_text(rel: str) -> None:
+    """Same as the other packs' projection-parity tests, for the apps pack (saas-build,
+    mobile, game-dev, mcp-build split out of domains, 2026-09-24 -- pack-split)."""
+    canonical_body = (CANONICAL_APPS / rel).read_text(encoding="utf-8")
+    dist_path = DIST_APPS / rel
     assert dist_path.exists(), f"dist/plugin is missing {rel} -- rebuild it from canonical"
     dist_body = dist_path.read_text(encoding="utf-8")
-    # Top-level SKILL.md files gain synthesized frontmatter at build time; the body is verbatim.
     assert canonical_body == dist_body or canonical_body in dist_body, (
         f"dist/plugin copy of {rel} has drifted from canonical -- "
         "rebuild with integrations.marketplace.plugin_dist.build_plugin_dist"

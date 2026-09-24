@@ -168,8 +168,8 @@ modes:
   skill: fullstack/modes/secure/SKILL.md
   no_agent: Nothing dispatches it and the skill is 3482 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: domains/game-dev
-  skill: domains/modes/game-dev/SKILL.md
+- mode: apps/game-dev
+  skill: apps/modes/game-dev/SKILL.md
   no_agent: Nothing dispatches it and the skill is 1092 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
 - mode: infra/kubernetes
@@ -182,22 +182,22 @@ modes:
     resource requests/limits/probes, author Helm charts, advise on scheduling, RBAC, NetworkPolicy, and
     HPA. Invoked via kubernetes-expert subagent (Task tool dispatch). Invoke for: k8s cluster issue, workload
     design, CrashLoopBackOff, OOMKill, Pending pods, resource requests'
-- mode: domains/mcp-build
-  skill: domains/modes/mcp-build/SKILL.md
+- mode: apps/mcp-build
+  skill: apps/modes/mcp-build/SKILL.md
   no_agent: Nothing dispatches it and the skill is 4406 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: domains/mobile
-  skill: domains/modes/mobile/SKILL.md
+- mode: apps/mobile
+  skill: apps/modes/mobile/SKILL.md
   agent: mobile-developer
-  installed_skill: ds-domains/modes/mobile/SKILL.md
+  installed_skill: ds-apps/modes/mobile/SKILL.md
   dispatched_because: 'isolation: the skill is 11149 bytes, enough that carrying it in a subagent protects
     the caller''s context'
   description: 'iOS (Swift/SwiftUI), Android (Kotlin/Compose), React Native, and Flutter — state management,
     native integrations, push notifications, biometric auth, offline-first, store submission, and cross-platform
     architecture decisions. Scope boundary: mobile covers native app... Invoke for: iOS, Android, Swift,
     SwiftUI, Kotlin, Compose'
-- mode: domains/saas-build
-  skill: domains/modes/saas-build/SKILL.md
+- mode: apps/saas-build
+  skill: apps/modes/saas-build/SKILL.md
   no_agent: Nothing dispatches it and the skill is 4294 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
 - mode: domains/technical-writing

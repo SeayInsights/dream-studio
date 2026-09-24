@@ -188,7 +188,7 @@ def _collect_hook_file_ops(
     # Handler packs — all .py files (except __init__.py) for every active pack
     # WO-RT: project ALL packs so every handler path resolves inside the installed runtime.
     # Previously only meta/ was projected; quality/, domains/, core/, security/ were missing.
-    for pack in ("meta", "quality", "domains", "core", "security"):
+    for pack in ("meta", "quality", "apps", "core", "security"):
         pack_src_dir = source_root / "runtime" / "hooks" / pack
         pack_tgt_dir = hooks_dir / "runtime" / "hooks" / pack
         if not pack_src_dir.is_dir():

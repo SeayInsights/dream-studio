@@ -1,7 +1,7 @@
 ---
 dream_studio:
-  skill_id: ds-domains
-  pack: domains
+  skill_id: ds-apps
+  pack: apps
   mode: game-dev
   mode_type: build
   inputs: [game_spec, scene_design, asset_requirements, mechanics]

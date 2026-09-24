@@ -7,7 +7,7 @@ handler's main() so existing code works unchanged.
 
 Handlers (in order):
   1. on-agent-correction (runtime/hooks/quality)
-  2. on-game-validate    (runtime/hooks/domains)
+  2. on-game-validate    (runtime/hooks/apps)
   3. on-security-scan    (runtime/hooks/quality)
   4. on-structure-check  (runtime/hooks/quality)
 """
@@ -49,7 +49,7 @@ HANDLERS = [
         "on-agent-correction",
         PLUGIN_ROOT / "runtime" / "hooks" / "quality" / "on-agent-correction.py",
     ),
-    ("on-game-validate", PLUGIN_ROOT / "runtime" / "hooks" / "domains" / "on-game-validate.py"),
+    ("on-game-validate", PLUGIN_ROOT / "runtime" / "hooks" / "apps" / "on-game-validate.py"),
     ("on-security-scan", PLUGIN_ROOT / "runtime" / "hooks" / "quality" / "on-security-scan.py"),
     ("on-structure-check", PLUGIN_ROOT / "runtime" / "hooks" / "quality" / "on-structure-check.py"),
 ]

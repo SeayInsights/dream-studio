@@ -11,11 +11,11 @@ if str(_PLUGIN_ROOT) not in sys.path:
     sys.path.insert(0, str(_PLUGIN_ROOT))
 
 from control.context import pack as pack_context  # noqa: E402
-from runtime.lib.domains import game_validate_orchestrator  # noqa: E402
+from runtime.lib.apps import game_validate_orchestrator  # noqa: E402
 
 
 def main() -> None:
-    if not pack_context.is_pack_active("domains"):
+    if not pack_context.is_pack_active("apps"):
         return
 
     try:

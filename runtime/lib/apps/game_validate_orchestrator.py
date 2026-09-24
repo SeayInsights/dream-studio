@@ -1,11 +1,12 @@
-"""Game validation orchestrator — moved from packs/domains/domain_lib/ to runtime/lib/domains/."""
+"""Game validation orchestrator — moved from packs/domains/domain_lib/ to runtime/lib/apps/
+(pack-split, 2026-09-24: game-dev moved out of domains into the new apps pack)."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import NamedTuple
 
-from runtime.lib.domains import game_validate
+from runtime.lib.apps import game_validate
 
 
 class ValidationOutput(NamedTuple):
