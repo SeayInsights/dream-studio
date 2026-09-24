@@ -28,13 +28,14 @@ Local invocation: `py -m core.gates.pre_push`.
 | `lint-check` | blocking | flake8 — no new findings beyond pinned baseline | `py interfaces/cli/lint_baseline.py check` |
 | `skill-sync` | blocking | `_ENFORCEMENT_BLOCK` constant has zero `py -m interfaces.cli.ds` refs | `py -m core.gates.skill_sync_source` |
 | `test-suite` | blocking | `tests/evals/` eval suite passes | `py -m pytest tests/evals -q` |
-| `atlas-leak` | blocking | Contract Atlas lifecycle — no unauthorized projection leakage | `py interfaces/cli/contract_atlas_lifecycle_gate.py` |
-| `docs-drift` | advisory | WORKFLOW_RUNTIME.md + HOOK_RUNTIME.md review markers current | `py interfaces/cli/contract_docs_drift_gate.py` |
+| `docs-drift` | blocking | Changed contract domain's required docs refreshed in the same change set | `py interfaces/cli/contract_docs_drift_gate.py` |
 | `migration-risk` | blocking (escalation) | SQL/migration/schema-authority files changed — prints matrix-watch reminder | `py -m core.gates.migration_risk` |
+
+`atlas-leak` (Contract Atlas lifecycle, `contract_atlas_lifecycle_gate.py`) is **CI-only** — it runs blocking in `.github/workflows/ci.yml`'s pr-smoke job, not in pre-push. It was removed from `pre-push.yaml` in the same commit (#752 / db4c23f) that removed `docs-drift`, and is not restored here — see the docs-drift row above for why that gate specifically was worth restoring; the same case has not (yet) been made for atlas-leak.
 
 **Stop-on-first-failure:** First blocking gate failure stops the run. Advisory gates never stop the run.
 
-**Environment:** `DREAM_STUDIO_BASE_REF` defaults to `origin/main`. Override to compare against a different base.
+**Environment:** `DREAM_STUDIO_BASE_REF` defaults to `origin/main`. Override to compare against a different base. `DREAM_STUDIO_CHANGED_FILES` (newline/semicolon/comma-separated paths), if set, bypasses git-based diffing ENTIRELY for `docs-drift` — pre-push pins it empty in the manifest so an unrelated value exported in a developer's own shell cannot silently replace detection.
 
 ---
 

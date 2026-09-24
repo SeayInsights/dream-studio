@@ -80,6 +80,11 @@ def _isolated_check_env() -> dict[str, str]:
     env["GITHUB_ACTIONS"] = env.get("GITHUB_ACTIONS", "true")
     env["HOME"] = str(isolated_home)
     env["USERPROFILE"] = str(isolated_home)
+    # contract-docs-drift honors DREAM_STUDIO_CHANGED_FILES as an override that
+    # bypasses git-based diffing entirely -- see pre-push.yaml's docs-drift env
+    # for the same pin and the reasoning. Runner shells are normally clean, but
+    # this check also runs wherever ci_gate.py is invoked directly.
+    env["DREAM_STUDIO_CHANGED_FILES"] = ""
     return env
 
 
