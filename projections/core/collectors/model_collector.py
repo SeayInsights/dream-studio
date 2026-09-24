@@ -2,25 +2,31 @@
 
 import sqlite3
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any
-from projections.core.collectors.authority_sources import skill_usage_sql, token_usage_sql
+from projections.core.collectors.authority_sources import (
+    resolve_collector_paths,
+    skill_usage_sql,
+    token_usage_sql,
+)
 
 
 class ModelCollector:
     """Collects and aggregates model metrics from current telemetry authority."""
 
-    def __init__(self, db_path: str | None = None):
+    def __init__(self, db_path: str | None = None) -> None:
         """
         Initialize ModelCollector
 
         Args:
-            db_path: Path to studio.db. If None, uses default ~/.dream-studio/state/studio.db
+            db_path: Path to studio.db. If None, uses default ~/.dream-studio/state/studio.db,
+                and the DuckDB analytics store token_usage_sql() reads from is
+                connect_analytics()'s ambient default. If given explicitly, the
+                analytics store used is the aggregate_metrics.db beside *this*
+                db_path — never whatever store sits in the ambient
+                DREAM_STUDIO_HOME (see self._analytics_db_path, set below, and
+                resolve_collector_paths()'s docstring for the shared logic).
         """
-        if db_path is None:
-            self.db_path = str(Path.home() / ".dream-studio" / "state" / "studio.db")
-        else:
-            self.db_path = db_path
+        self.db_path, self._analytics_db_path = resolve_collector_paths(db_path)
 
     def collect(self, days: int = 90) -> dict[str, Any]:
         """
@@ -44,7 +50,7 @@ class ModelCollector:
 
         try:
             skill_sql = skill_usage_sql(conn)
-            token_sql = token_usage_sql(conn)
+            token_sql = token_usage_sql(conn, analytics_db_path=self._analytics_db_path)
 
             # Performance metrics from skill telemetry
             if skill_sql is not None:
@@ -202,7 +208,7 @@ class ModelCollector:
         cutoff_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
         try:
-            token_sql = token_usage_sql(conn)
+            token_sql = token_usage_sql(conn, analytics_db_path=self._analytics_db_path)
             if token_sql is None:
                 return []
 

@@ -22,10 +22,22 @@ def _db(tmp_path: Path) -> Path:
 def analytics_store(tmp_path, monkeypatch):
     """Isolated DuckDB analytics store (WO-DBA-DROP: token_usage_records is a
     view over events_fact now — seed token.consumed events, not the retired
-    SQLite table)."""
+    SQLite table).
+
+    Built at _db(tmp_path)'s own aggregate_metrics.db sibling — the location
+    core.analytics.duckdb_store.analytics_db_path_for_connection(conn) now
+    resolves for the real, file-backed sqlite3.Connection _connect(_db(...))
+    opens, so the store this fixture seeds is the one _token_accounting_rows
+    actually reads. Before this collocation, this fixture instead pointed the
+    AMBIENT duckdb_store.analytics_db_path() resolver at a sibling of
+    tmp_path directly (one directory too high to ever match _db(tmp_path)'s
+    own sibling); that only worked while usage_accounting.py's DuckDB
+    fallback resolved the ambient store unconditionally, the exact
+    cross-authority leak this change closes.
+    """
     from core.analytics import duckdb_store
 
-    db = tmp_path / "aggregate_metrics.db"
+    db = _db(tmp_path).parent / "aggregate_metrics.db"
     monkeypatch.setattr(duckdb_store, "analytics_db_path", lambda: db)
     return db
 

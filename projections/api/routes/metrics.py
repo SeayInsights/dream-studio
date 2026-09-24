@@ -6,6 +6,7 @@ from typing import Any
 from datetime import datetime, timedelta
 
 from core.config.database import get_connection
+from core.analytics.duckdb_store import analytics_db_path_for_connection
 from core.shared_intelligence.usage_accounting import REPORTABLE_COST_VISIBILITIES
 
 from ..models.metrics import (
@@ -59,57 +60,6 @@ def _sum_optional(current: float | None, value: float | None) -> float | None:
 
 def _optional_float(value: Any) -> float | None:
     return None if value is None else float(value)
-
-
-def _build_token_timeline(db_path: str, days: int) -> list[dict[str, Any]]:
-    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
-    conn = get_connection()
-    conn.row_factory = sqlite3.Row
-    try:
-        source_sql = token_usage_sql(conn)
-        if source_sql is None:
-            return []
-        rows = conn.execute(
-            f"""
-            SELECT DATE(recorded_at) as date,
-                   SUM(input_tokens) as input_tokens,
-                   SUM(output_tokens) as output_tokens,
-                   SUM(
-                       CASE
-                           WHEN cost_visibility IN ({_reportable_sql_placeholders()})
-                           THEN estimated_cost
-                           ELSE NULL
-                       END
-                   ) as reportable_cost
-            FROM ({source_sql}) token_usage
-            WHERE recorded_at >= ?
-            GROUP BY DATE(recorded_at)
-            ORDER BY date ASC
-        """,
-            (*REPORTABLE_COST_VISIBILITIES, cutoff),
-        ).fetchall()
-        by_date: dict[str, dict[str, Any]] = {}
-        for r in rows:
-            d = r["date"]
-            inp = r["input_tokens"] or 0
-            out = r["output_tokens"] or 0
-            cost = _optional_float(r["reportable_cost"])
-            if d not in by_date:
-                by_date[d] = {
-                    "date": d,
-                    "input_tokens": 0,
-                    "output_tokens": 0,
-                    "cached_tokens": 0,
-                    "tokens": 0,
-                    "cost_usd": None,
-                }
-            by_date[d]["input_tokens"] += inp
-            by_date[d]["output_tokens"] += out
-            by_date[d]["tokens"] += inp + out
-            by_date[d]["cost_usd"] = _round_optional(_sum_optional(by_date[d]["cost_usd"], cost))
-        return sorted(by_date.values(), key=lambda x: x["date"])
-    finally:
-        conn.close()
 
 
 def _build_success_trend(db_path: str, days: int) -> list[dict[str, Any]]:
@@ -364,7 +314,7 @@ async def get_model_metrics(days: int = Query(default=30, ge=1, le=365)):
         conn = get_connection()
         conn.row_factory = sqlite3.Row
 
-        source_sql = token_usage_sql(conn)
+        source_sql = token_usage_sql(conn, analytics_db_path=analytics_db_path_for_connection(conn))
         rows = (
             conn.execute(
                 f"""

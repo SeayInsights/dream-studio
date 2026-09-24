@@ -8,6 +8,7 @@ subquery shape without falling back to retired raw telemetry sources.
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 # Columns the DuckDB token_usage_records view (core/analytics/duckdb_store.py)
@@ -22,7 +23,33 @@ _GOVERNANCE_DEFAULTS = {
 }
 
 
-def fetch_token_usage_records(since: str | None = None) -> list[dict[str, Any]] | None:
+def resolve_collector_paths(db_path: str | None) -> tuple[str, Path | None]:
+    """Resolve a collector's (studio db_path, analytics db_path) from one raw arg.
+
+    Shared by SessionCollector/TokenCollector/ModelCollector.__init__, which used
+    to each copy-paste this exact two-step resolution independently (a review
+    lane finding: mechanical duplication, not a correctness bug — but exactly
+    the kind of copy that drifts once one class changes and the others don't).
+
+    analytics_db_path is computed from the RAW argument, before the None ->
+    default rewrite below: analytics_db_path_for(None) is already "no explicit
+    authority -> ambient default", so this one call is the whole explicit-vs-
+    ambient decision. db_path itself defaults to ~/.dream-studio/state/studio.db
+    when the caller passes None — the SQLite fallback source every collector
+    reads when its DuckDB read comes up empty.
+    """
+    from core.analytics.duckdb_store import analytics_db_path_for
+
+    analytics_path = analytics_db_path_for(db_path)
+    resolved_db_path = (
+        str(Path.home() / ".dream-studio" / "state" / "studio.db") if db_path is None else db_path
+    )
+    return resolved_db_path, analytics_path
+
+
+def fetch_token_usage_records(
+    since: str | None = None, *, analytics_db_path: Path | None = None
+) -> list[dict[str, Any]] | None:
     """Fetch rows from the DuckDB aggregate_metrics.db token_usage_records view.
 
     WO-DBA-DROP: this is the shared row-fetch helper every token-data chokepoint
@@ -41,6 +68,15 @@ def fetch_token_usage_records(since: str | None = None) -> list[dict[str, Any]] 
     honest-unknown defaults the retired SQLite writer used, so callers keep
     identical downstream semantics.
 
+    analytics_db_path: forwarded to connect_analytics(db_path=...). A caller
+    that holds an explicit authority (a collector built on a non-default
+    studio.db) must pass the analytics store colocated with THAT authority —
+    core.analytics.duckdb_store.analytics_db_path_for() computes it — or this
+    silently reads the ambient DREAM_STUDIO_HOME store instead. None (the
+    default) keeps resolving the ambient store, unchanged for every caller
+    here that doesn't hold a specific authority (routes, usage_accounting,
+    cost_analysis all serve the single running app's own database).
+
     Returns None — never raises — when the analytics store or view is
     unavailable (fresh install, projection runner never ran, duckdb missing).
     Callers must treat None as a harmless empty state, not an error.
@@ -48,7 +84,7 @@ def fetch_token_usage_records(since: str | None = None) -> list[dict[str, Any]] 
     try:
         from core.analytics.duckdb_store import connect_analytics
 
-        conn = connect_analytics(read_only=True)
+        conn = connect_analytics(analytics_db_path, read_only=True)
     except Exception:
         return None
     try:
@@ -107,7 +143,9 @@ _SHADOW_COLUMNS = (
 )
 
 
-def _materialize_duckdb_token_shadow(conn: sqlite3.Connection) -> str | None:
+def _materialize_duckdb_token_shadow(
+    conn: sqlite3.Connection, analytics_db_path: Path | None = None
+) -> str | None:
     """Materialize current DuckDB token rows into a TEMP TABLE on *conn*.
 
     Every existing caller of token_usage_sql() embeds its return value as a
@@ -118,10 +156,13 @@ def _materialize_duckdb_token_shadow(conn: sqlite3.Connection) -> str | None:
     closes) so every caller keeps working with zero changes — only the data
     source moved.
 
+    analytics_db_path is forwarded to fetch_token_usage_records() — see its
+    docstring for why a caller holding an explicit authority must pass it.
+
     Returns None (harmless — callers already treat None as "no data") when the
     analytics store has no rows.
     """
-    rows = fetch_token_usage_records()
+    rows = fetch_token_usage_records(analytics_db_path=analytics_db_path)
     if not rows:
         return None
     shaped = [
@@ -239,12 +280,19 @@ def skill_usage_sql(conn: sqlite3.Connection) -> str | None:
     return None
 
 
-def token_usage_sql(conn: sqlite3.Connection) -> str | None:
+def token_usage_sql(
+    conn: sqlite3.Connection, *, analytics_db_path: Path | None = None
+) -> str | None:
     """Return a dashboard-safe token usage subquery.
 
     WO-DBA-DROP (migration 137): token_usage_records was retired from SQLite —
     the DuckDB aggregate_metrics.db token_usage_records view (derived from
     canonical token.consumed events via events_fact) is the sole source now.
+
+    analytics_db_path is forwarded to the DuckDB branch (branch 2 below) —
+    see fetch_token_usage_records()'s docstring for why a caller holding an
+    explicit authority (a collector built on a non-default studio.db) must
+    pass the analytics store colocated with that authority.
 
     Two branches:
       1. If *conn* still has a real token_usage_records table (a not-yet-
@@ -393,7 +441,7 @@ def token_usage_sql(conn: sqlite3.Connection) -> str | None:
     # reality) — DuckDB is the sole source. Never raises: an unavailable
     # analytics store just means no token data this call.
     try:
-        return _materialize_duckdb_token_shadow(conn)
+        return _materialize_duckdb_token_shadow(conn, analytics_db_path)
     except Exception:
         return None
 

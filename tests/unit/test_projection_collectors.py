@@ -186,6 +186,50 @@ def test_collect_with_custom_days(test_db):
     assert metrics_7d["total_sessions"] == 4  # All except session-5
 
 
+def test_session_collector_ignores_ambient_analytics_store(test_db, tmp_path, monkeypatch):
+    """A collector built on an explicit db_path must read the analytics store
+    beside THAT db_path, never whatever aggregate_metrics.db sits in the
+    ambient DREAM_STUDIO_HOME.
+
+    Reproduces the order-dependence defect directly (test_projection_collectors
+    passing alone but failing with KeyErrors on 'project-a'/'success' when run
+    after other tests): populate the ambient analytics store with a session for
+    a DIFFERENT project, exactly as an earlier test in a full run would given
+    the process-wide DREAM_STUDIO_HOME conftest sets up, then build a
+    SessionCollector on test_db's isolated sqlite path (no aggregate_metrics.db
+    sibling) and show it returns test_db's own rows -- not the ambient store's.
+    Before the fix, _collect_duckdb() read the ambient store unconditionally,
+    found the one ambient row, and returned it instead of ever falling back to
+    test_db's SQLite data.
+    """
+    from core.analytics import duckdb_store
+
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / "ambient-home"))
+
+    conn = duckdb_store.connect_analytics(read_only=False)  # ambient default path
+    try:
+        duckdb_store.ensure_analytics_schema(conn)
+        conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp, outcome, payload)"
+            " VALUES (?, 'system.session.recorded', ?, 'success', ?)",
+            [
+                "ambient-evt-1",
+                (datetime.now() - timedelta(days=1)).isoformat(),
+                json.dumps({"session_id": "ambient-session", "project_id": "ambient-project"}),
+            ],
+        )
+    finally:
+        conn.close()
+
+    collector = SessionCollector(db_path=str(test_db))
+    metrics = collector.collect(days=90)
+
+    assert metrics["total_sessions"] == 4  # test_db's own count, not the ambient store's 1
+    assert metrics["by_project"] == {"project-a": 3, "project-b": 1}
+    assert "ambient-project" not in metrics["by_project"]
+    assert metrics["outcomes"] == {"success": 3, "failed": 1}
+
+
 # SkillCollector tests
 
 

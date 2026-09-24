@@ -16,7 +16,7 @@ import sqlite3
 from datetime import datetime, UTC
 
 from core.config.database import get_connection
-from core.analytics.duckdb_store import connect_analytics
+from core.analytics.duckdb_store import analytics_db_path_for_connection, connect_analytics
 from projections.api.safety import activity_log_filter_clause
 from projections.core.collectors.authority_sources import skill_usage_sql, token_usage_sql
 
@@ -31,7 +31,7 @@ def get_cost_alerts(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     Alert triggered when: repo uses > 50M tokens in 30 days
     """
     cursor = conn.cursor()
-    token_sql = token_usage_sql(conn)
+    token_sql = token_usage_sql(conn, analytics_db_path=analytics_db_path_for_connection(conn))
     if token_sql is None:
         return []
 
@@ -138,12 +138,13 @@ def get_performance_alerts(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     """Detect slow hooks impacting developer experience.
 
     Alert triggered when: avg_duration > 10s in past 7 days.
-    Reads hook_executions from DuckDB (derived from canonical events via events_fact).
-    The conn parameter is unused; kept for API compatibility with get_critical_issues().
+    Reads hook_executions from DuckDB (derived from canonical events via events_fact),
+    scoped to the analytics store colocated with *conn*'s own authority — never
+    whatever aggregate_metrics.db happens to sit in the ambient DREAM_STUDIO_HOME.
     """
     duck_conn = None
     try:
-        duck_conn = connect_analytics(read_only=True)
+        duck_conn = connect_analytics(analytics_db_path_for_connection(conn), read_only=True)
         query = """
             SELECT
                 hook_name,
@@ -248,7 +249,7 @@ def get_health_snapshot() -> dict[str, Any]:
         )
 
         # 2. Cost Status (token usage in past 30 days)
-        token_sql = token_usage_sql(conn)
+        token_sql = token_usage_sql(conn, analytics_db_path=analytics_db_path_for_connection(conn))
         row = cursor.execute(f"""
                 SELECT SUM(input_tokens + output_tokens) as total
                 FROM ({token_sql}) token_usage
@@ -257,10 +258,12 @@ def get_health_snapshot() -> dict[str, Any]:
         tokens_30d = row["total"] if row and row["total"] else 0
         cost_status = "high" if tokens_30d > 100_000_000 else "ok"
 
-        # 3. Performance (avg hook duration in past 7 days) — reads DuckDB hook_executions view
+        # 3. Performance (avg hook duration in past 7 days) — reads DuckDB
+        # hook_executions view, scoped to the analytics store colocated with
+        # this same conn's own authority.
         duck_conn = None
         try:
-            duck_conn = connect_analytics(read_only=True)
+            duck_conn = connect_analytics(analytics_db_path_for_connection(conn), read_only=True)
             hook_row = duck_conn.execute("""
                 SELECT AVG(duration_ms) as avg_duration
                 FROM hook_executions
@@ -375,10 +378,14 @@ def get_whats_working() -> list[dict[str, Any]]:
                 }
             )
 
-        # Win 3: Hook reliability (if very high) — reads DuckDB hook_executions view
+        # Win 3: Hook reliability (if very high) — reads DuckDB hook_executions
+        # view, scoped to the analytics store colocated with this same conn's
+        # own authority.
         duck_conn_wins = None
         try:
-            duck_conn_wins = connect_analytics(read_only=True)
+            duck_conn_wins = connect_analytics(
+                analytics_db_path_for_connection(conn), read_only=True
+            )
             hook_row = duck_conn_wins.execute("""
                 SELECT
                     COUNT(*) as total,

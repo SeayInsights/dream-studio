@@ -9,7 +9,6 @@ the window while SQLite does (events not yet harvested).
 
 import sqlite3
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any
 from projections.api.routes.sqlite_schema import (
     has_columns,
@@ -17,6 +16,7 @@ from projections.api.routes.sqlite_schema import (
     source_status,
     table_columns,
 )
+from projections.core.collectors.authority_sources import resolve_collector_paths
 
 _WEEKDAY_NAMES = [
     "Monday",
@@ -32,19 +32,21 @@ _WEEKDAY_NAMES = [
 class SessionCollector:
     """Collects and aggregates session metrics from the raw_sessions read model"""
 
-    def __init__(self, db_path: str | None = None):
+    def __init__(self, db_path: str | None = None) -> None:
         """
         Initialize SessionCollector
 
         Args:
             db_path: Path to studio.db (SQLite fallback source). If None, uses
-                default ~/.dream-studio/state/studio.db. The DuckDB analytics
-                store is resolved by connect_analytics().
+                default ~/.dream-studio/state/studio.db and the DuckDB
+                analytics store is resolved by connect_analytics()'s ambient
+                default. If given explicitly, the analytics store used is the
+                aggregate_metrics.db that sits beside *this* db_path — never
+                whatever store happens to sit in the ambient DREAM_STUDIO_HOME
+                (see _analytics_db_path below, and resolve_collector_paths()'s
+                docstring for the shared resolution logic).
         """
-        if db_path is None:
-            self.db_path = str(Path.home() / ".dream-studio" / "state" / "studio.db")
-        else:
-            self.db_path = db_path
+        self.db_path, self._analytics_db_path = resolve_collector_paths(db_path)
 
     def collect(self, days: int = 90) -> dict[str, Any]:
         """
@@ -77,7 +79,7 @@ class SessionCollector:
         """Aggregate session metrics from the DuckDB raw_sessions compat view."""
         from core.analytics.duckdb_store import connect_analytics
 
-        conn = connect_analytics(read_only=True)
+        conn = connect_analytics(self._analytics_db_path, read_only=True)
         try:
             total_sessions = conn.execute(
                 "SELECT COUNT(*) FROM raw_sessions WHERE started_at >= ?",
@@ -352,7 +354,7 @@ class SessionCollector:
     def _recent_duckdb(self, limit: int) -> list[dict[str, Any]]:
         from core.analytics.duckdb_store import connect_analytics
 
-        conn = connect_analytics(read_only=True)
+        conn = connect_analytics(self._analytics_db_path, read_only=True)
         try:
             rows = conn.execute(
                 "SELECT session_id, project_id, started_at, ended_at, outcome"

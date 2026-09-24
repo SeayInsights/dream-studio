@@ -496,9 +496,12 @@ def _token_accounting_rows(
 
     # WO-DBA-DROP (migration 137): token_usage_records is no longer a SQLite
     # table in a fresh install — read the DuckDB aggregate_metrics.db view.
+    from core.analytics.duckdb_store import analytics_db_path_for_connection
     from projections.core.collectors.authority_sources import fetch_token_usage_records
 
-    duckdb_rows = fetch_token_usage_records() or []
+    duckdb_rows = (
+        fetch_token_usage_records(analytics_db_path=analytics_db_path_for_connection(conn)) or []
+    )
     filtered = [
         row for row in duckdb_rows if project_id is None or row.get("project_id") == project_id
     ]

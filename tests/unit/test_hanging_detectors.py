@@ -150,6 +150,49 @@ def test_detects_changed_signature_caller(tmp_path: Path) -> None:
     assert "core/unrelated.py" not in flagged, "unrelated module must not be flagged"
 
 
+def test_an_import_alias_to_a_different_symbol_is_not_flagged(tmp_path: Path) -> None:
+    """WO-COLLECTORS false positive: scripts/dashboard_smoke_harness.py imports the
+    UNRELATED core.analytics.duckdb_store.connect_analytics and renames it locally to
+    _connect_analytics, purely coincidentally sharing a name with the
+    _connect_analytics wrapper defined (and changed) in
+    projections/api/routes/analytics.py. _definition_modules only counts `def`s, so
+    a same-named import ALIAS -- which has no `def` at all -- was invisible to the
+    ambiguity check, and the bare-name match wrongly attributed the alias's call to
+    the changed wrapper."""
+    repo = tmp_path
+    # A caller that imports a DIFFERENT origin symbol and aliases it to the same
+    # local name as the changed function -- not a real caller of the changed one.
+    _write(
+        repo / "scripts" / "harness.py",
+        "from core.analytics.duckdb_store import connect_analytics as _connect_analytics\n\n"
+        "def run():\n    return _connect_analytics(read_only=False)\n",
+    )
+    # A genuine caller of the ACTUALLY-changed function, via its own bare name (no
+    # alias) -- must still be flagged.
+    _write(
+        repo / "projections" / "real_caller.py",
+        "from projections.api.routes.analytics import _connect_analytics\n\n"
+        "def run():\n    return _connect_analytics()\n",
+    )
+    diff = (
+        "diff --git a/projections/api/routes/analytics.py b/projections/api/routes/analytics.py\n"
+        "--- a/projections/api/routes/analytics.py\n"
+        "+++ b/projections/api/routes/analytics.py\n"
+        "@@ -24,1 +24,1 @@\n"
+        "-def _connect_analytics():\n"
+        "+def _connect_analytics(analytics_db_path=None):\n"
+    )
+
+    findings = detect_changed_signature_callers(diff, repo_root=repo)
+    flagged = {f["path"] for f in findings}
+    assert (
+        "scripts/harness.py" not in flagged
+    ), f"an import alias to a different origin symbol must not be flagged; got {flagged}"
+    assert (
+        "projections/real_caller.py" in flagged
+    ), f"a genuine un-updated caller of the changed symbol must still be flagged; got {flagged}"
+
+
 def test_detects_unowned_table_write(tmp_path: Path) -> None:
     """#354 class: the diff adds a write to a table another unchanged module also writes."""
     repo = tmp_path

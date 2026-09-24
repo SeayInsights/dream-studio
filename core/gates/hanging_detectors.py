@@ -429,6 +429,25 @@ def _qualified_reference(text: str, module_hint: str, name: str) -> bool:
     )
 
 
+def _aliased_to_a_different_name(text: str, name: str) -> bool:
+    """Does *text* import some OTHER symbol and rebind it locally to *name*,
+    via ``import X as name`` / ``from mod import X as name`` with ``X != name``?
+
+    ``_definition_modules`` catches ambiguity from multiple ``def``s of the
+    same name, but an import alias creates a second, unrelated binding to that
+    name with no ``def`` at all: scripts/dashboard_smoke_harness.py imports
+    the real ``core.analytics.duckdb_store.connect_analytics`` and renames it
+    to the local ``_connect_analytics`` — a bare-name match then wrongly
+    attributed that call to the unrelated ``_connect_analytics`` wrapper
+    defined (and changed) in projections/api/routes/analytics.py, since both
+    happen to share that local name. A file that locally aliases a DIFFERENT
+    origin symbol to this name is not calling the changed one, whichever
+    module actually changed.
+    """
+    m = re.search(r"\b(\w+)\s+as\s+" + re.escape(name) + r"\b", _code_only(text))
+    return bool(m) and m.group(1) != name
+
+
 def detect_changed_signature_callers(
     diff_text: str, *, repo_root: Path | str = REPO_ROOT
 ) -> list[Finding]:
@@ -476,6 +495,11 @@ def detect_changed_signature_callers(
             if _ambiguous.get(name) and not _qualified_reference(
                 text, sig_origin.get(name, ""), name
             ):
+                continue
+            # A LOCAL ALIAS TO A DIFFERENT ORIGIN SYMBOL IS NOT A CALLER OF THIS ONE,
+            # whether or not `name` has more than one `def` in the tree — the ambiguity
+            # here comes from an import, which _definition_modules never sees.
+            if _aliased_to_a_different_name(text, name):
                 continue
             # A PATCH TARGET IS A REAL DEPENDENCY, AND IT LIVES IN A STRING.
             #
