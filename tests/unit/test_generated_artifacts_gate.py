@@ -36,39 +36,55 @@ def test_every_registered_artifact_matches_its_generator():
     assert result["status"] == "pass", result["stale"]
 
 
-def test_a_hand_edited_artifact_is_caught(tmp_path):
+def _hand_edited_copy(tmp_path, monkeypatch):
+    """A repo root holding a hand-edited COPY of the registry, with the gate pointed at it.
+
+    THE REAL FILE IS NEVER WRITTEN. These tests used to append to the tracked
+    canonical/review_lanes.yml and "restore" it with write_text, which on Windows
+    translates newlines: every gate run left the registry rewritten with CRLF, and every
+    contributor had to notice and discard it by hand. A test that edits a tracked file
+    also races any other process reading it.
+    """
+    real = REPO_ROOT / "canonical" / "review_lanes.yml"
+    root = tmp_path / "repo"
+    (root / "canonical").mkdir(parents=True)
+    (root / "scripts").mkdir()
+    (root / "canonical" / "review_lanes.yml").write_bytes(real.read_bytes() + b"\n# a hand edit\n")
+    (root / "scripts" / "seat_lanes_data.py").write_bytes(
+        (REPO_ROOT / "scripts" / "seat_lanes_data.py").read_bytes()
+    )
+    monkeypatch.setattr(gate, "REPO_ROOT", root)
+    monkeypatch.setattr(
+        gate, "ARTIFACTS", tuple(a for a in gate.ARTIFACTS if a[0] == "canonical/review_lanes.yml")
+    )
+    return real, real.read_bytes()
+
+
+def test_a_hand_edited_artifact_is_caught(tmp_path, monkeypatch):
     """THE LOAD-BEARING CASE, and the one that actually happened.
 
     The edit here is appended text, exactly like the hand-edit that removed four
     lanes from review_lanes.yml — a change that looks applied, survives review,
     and is silently discarded the next time anyone runs the generator.
     """
-    path = REPO_ROOT / "canonical" / "review_lanes.yml"
-    original = path.read_text(encoding="utf-8")
-    try:
-        path.write_text(original + "\n# a hand edit\n", encoding="utf-8")
-        result = gate.run()
-        assert result["status"] == "fail"
-        assert any(s["artifact"] == "canonical/review_lanes.yml" for s in result["stale"])
-    finally:
-        path.write_text(original, encoding="utf-8")
-
-    assert gate.run()["status"] == "pass", "the restore must leave the tree clean"
+    real, before = _hand_edited_copy(tmp_path, monkeypatch)
+    result = gate.run()
+    assert result["status"] == "fail"
+    assert any(s["artifact"] == "canonical/review_lanes.yml" for s in result["stale"])
+    assert real.read_bytes() == before, "the test wrote the tracked registry"
 
 
-def test_the_failure_names_the_command_and_says_to_edit_the_generator(tmp_path, capsys):
+def test_the_failure_names_the_command_and_says_to_edit_the_generator(
+    tmp_path, capsys, monkeypatch
+):
     """A refusal that does not say how to satisfy it is a wall — and here the
     obvious fix (edit the file) is the wrong one, so the message has to say so."""
-    path = REPO_ROOT / "canonical" / "review_lanes.yml"
-    original = path.read_text(encoding="utf-8")
-    try:
-        path.write_text(original + "\n# a hand edit\n", encoding="utf-8")
-        assert gate.main([]) == 1
-        err = capsys.readouterr().err
-        assert "py scripts/seat_lanes_data.py" in err
-        assert "EDIT THE GENERATOR" in err
-    finally:
-        path.write_text(original, encoding="utf-8")
+    real, before = _hand_edited_copy(tmp_path, monkeypatch)
+    assert gate.main([]) == 1
+    err = capsys.readouterr().err
+    assert "py scripts/seat_lanes_data.py" in err
+    assert "EDIT THE GENERATOR" in err
+    assert real.read_bytes() == before, "the test wrote the tracked registry"
 
 
 def test_a_check_that_raises_is_a_finding_not_a_pass():
