@@ -29,6 +29,13 @@ avoid:
     context: "Resuming a review from a report with no [FIXED] annotations leads to re-reviewing already-resolved findings and missing net-new issues."
     fix: "When given an audit report to act on, check for [FIXED: sha] markers. If missing, either request an annotated version or scan current file state before acting."
 
+  - id: reproduction-must-be-the-exact-command-run
+    severity: critical
+    discovered: 2026-09-23
+    title: "A recorded reproduction command must be byte-identical to the command last actually run, never retyped or summarized"
+    context: "Across several review-lane rounds, reviewer and referee agents submitted a reproduction whose command didn't match what they'd actually verified — a stale draft, a heredoc bash silently mangled, a base64 blob corrupted in transcription, a method name left over from before a refactor. Each one was only caught by re-running the claimed command fresh and finding it failed or proved nothing, then reconstructing and re-verifying it directly."
+    fix: "Never hand-retype or summarize a reproduction command into the answer file. Capture the exact command as run — copy it, or generate the answer file programmatically from the same variable used to invoke it — and re-run it once more immediately before recording, in the same container, to confirm the exit code still matches the claim."
+
 best_practices:
   - id: two-stage-order
     title: "Review order: spec compliance → code quality (never reversed)"
