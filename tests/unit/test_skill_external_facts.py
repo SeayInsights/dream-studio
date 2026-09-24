@@ -26,6 +26,9 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CANONICAL = REPO_ROOT / "canonical" / "skills" / "domains"
 DIST = REPO_ROOT / "dist" / "plugin" / "skills" / "ds-domains"
+# data-engineering split out of domains into its own data pack, 2026-09-24 (pack-split).
+CANONICAL_DATA = REPO_ROOT / "canonical" / "skills" / "data"
+DIST_DATA = REPO_ROOT / "dist" / "plugin" / "skills" / "ds-data"
 
 # The fabricated pin. It shares its first 32 hex characters with the real v4.1.6 commit
 # (a5ac7e51b41094c92402da3b24376905380afc29) and differs only in the last 8, which is why
@@ -135,10 +138,10 @@ def test_terraform_teaches_native_s3_locking_not_dynamodb() -> None:
 
 def test_data_engineering_snippets_use_apis_that_still_exist() -> None:
     """Each of these fails outright when pasted: removed param, wrong param, invented function."""
-    dag = (CANONICAL / "data" / "pipelines.yml").read_text(encoding="utf-8")
+    dag = (CANONICAL_DATA / "data" / "pipelines.yml").read_text(encoding="utf-8")
     assert "schedule_interval=" not in dag, "Removed in Airflow 3.0; the DAG does not parse."
 
-    skill = _read("modes/data-engineering/SKILL.md")
+    skill = (CANONICAL_DATA / "modes" / "data-engineering" / "SKILL.md").read_text(encoding="utf-8")
     assert (
         "daterange_start =>" not in skill
     ), "Snowflake QUERY_HISTORY takes END_TIME_RANGE_START; daterange_start is not a parameter."
@@ -173,8 +176,6 @@ def test_devops_does_not_assert_an_artifact_size_limit_that_does_not_exist() -> 
         "modes/devops/gotchas.yml",
         "infra/devops.yml",
         "devops/REFERENCES.md",
-        "modes/data-engineering/SKILL.md",
-        "data/pipelines.yml",
     ],
 )
 def test_the_shipped_projection_carries_the_same_corrected_text(rel: str) -> None:
@@ -188,6 +189,26 @@ def test_the_shipped_projection_carries_the_same_corrected_text(rel: str) -> Non
     assert dist_path.exists(), f"dist/plugin is missing {rel} -- rebuild it from canonical"
     dist_body = dist_path.read_text(encoding="utf-8")
     # Top-level SKILL.md files gain synthesized frontmatter at build time; the body is verbatim.
+    assert canonical_body == dist_body or canonical_body in dist_body, (
+        f"dist/plugin copy of {rel} has drifted from canonical -- "
+        "rebuild with integrations.marketplace.plugin_dist.build_plugin_dist"
+    )
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "modes/data-engineering/SKILL.md",
+        "data/pipelines.yml",
+    ],
+)
+def test_the_shipped_data_pack_projection_carries_the_same_corrected_text(rel: str) -> None:
+    """Same as test_the_shipped_projection_carries_the_same_corrected_text, for the data
+    pack (data-engineering split out of domains, 2026-09-24 -- pack-split)."""
+    canonical_body = (CANONICAL_DATA / rel).read_text(encoding="utf-8")
+    dist_path = DIST_DATA / rel
+    assert dist_path.exists(), f"dist/plugin is missing {rel} -- rebuild it from canonical"
+    dist_body = dist_path.read_text(encoding="utf-8")
     assert canonical_body == dist_body or canonical_body in dist_body, (
         f"dist/plugin copy of {rel} has drifted from canonical -- "
         "rebuild with integrations.marketplace.plugin_dist.build_plugin_dist"

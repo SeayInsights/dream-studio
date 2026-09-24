@@ -1,7 +1,7 @@
 """Database build mode — static enforcement on generated SQL and Python DB code.
 
 Implements patterns documented in:
-  canonical/skills/quality/modes/database/build/SKILL.md
+  canonical/skills/data/modes/database/build/SKILL.md
 
 10 static checks applied synchronously. No LLM. No DB connection. File-read only.
 Returns in < 200ms for typical migration or query block.

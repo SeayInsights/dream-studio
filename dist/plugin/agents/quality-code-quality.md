@@ -1,6 +1,6 @@
 ---
 name: quality-code-quality
-description: Code quality enforcement — audits Python code for maintainability, correctness, and idiomatic patterns against 22 rules from LIST-4 (code-writing-best-practices.md). Three-way boundary with ds-quality:security and ds-quality:database; uses shared trust_boundary_detection.py... Invoke for: audit:, code-quality audit:, cq audit:, check code quality:, build:code-quality
+description: Code quality enforcement — audits Python code for maintainability, correctness, and idiomatic patterns against 22 rules from LIST-4 (code-writing-best-practices.md). Three-way boundary with ds-quality:security and ds-data:database; uses shared trust_boundary_detection.py... Invoke for: audit:, code-quality audit:, cq audit:, check code quality:, build:code-quality
 model: sonnet
 ---
 
@@ -17,7 +17,6 @@ You are dispatched for **`quality/code-quality`**, and your domain knowledge bel
 The other `quality` specialists, so you can hand work back BY NAME rather than attempting it or returning a vague refusal:
 
 - `accessibility-expert`
-- `quality-database`
 - `quality-harden`
 - `quality-learn`
 - `quality-security`

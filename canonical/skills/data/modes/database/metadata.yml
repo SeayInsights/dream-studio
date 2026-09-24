@@ -43,7 +43,7 @@ dependencies:
     - sqlparse                       # SQL token parsing — INSTALLED (v0.5.5); used for static schema rules
   env_vars_required: []
   files_required:
-    - canonical/skills/quality/references/database-best-practices.md  # rule source LIST-3
+    - canonical/skills/data/references/database-best-practices.md  # rule source LIST-3
   calls_skills: []
 
 # Compatibility

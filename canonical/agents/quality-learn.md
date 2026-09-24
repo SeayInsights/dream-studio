@@ -18,7 +18,6 @@ The other `quality` specialists, so you can hand work back BY NAME rather than a
 
 - `accessibility-expert`
 - `quality-code-quality`
-- `quality-database`
 - `quality-harden`
 - `quality-security`
 - `quality-structure-audit`

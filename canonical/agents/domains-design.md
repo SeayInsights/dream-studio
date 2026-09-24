@@ -16,7 +16,6 @@ You are dispatched for **`domains/design`**, and your domain knowledge below is 
 
 The other `domains` specialists, so you can hand work back BY NAME rather than attempting it or returning a vague refusal:
 
-- `data-engineer`
 - `devops-engineer`
 - `domains-power-platform`
 - `kubernetes-expert`

@@ -16,7 +16,7 @@ class FileOp:
     """A single planned file operation."""
 
     target: Path
-    op: str  # create | merge_json | prepend_block | copy | skip
+    op: str  # create | merge_json | prepend_block | copy | skip | delete
     backup_required: bool
     source_hash: str
     reason: str

@@ -138,3 +138,102 @@ def test_execute_creates_backup_for_existing_settings(config_root, canonical_roo
     backup_dir = ds_home / "backups" / "claude_code"
     backups = list(backup_dir.rglob("settings.json*.bak")) if backup_dir.exists() else []
     assert len(backups) >= 1
+
+
+def _seed_prior_manifest_with_orphan(config_root, ds_home, orphan_path):
+    """Record `orphan_path` as if a prior install wrote it, then create it on disk.
+
+    Mirrors an operator who installed before a mode moved to a different pack: the
+    manifest remembers the file, and the file is still physically present.
+    """
+    from integrations.manifest import build_manifest, compute_hash, write_manifest
+
+    orphan_path.parent.mkdir(parents=True, exist_ok=True)
+    orphan_path.write_text("STALE PRE-MOVE CONTENT", encoding="utf-8")
+    manifest = build_manifest(
+        tool="claude_code",
+        scope="user",
+        ds_version="0.0.0-test",
+        files=[
+            {
+                "path": str(orphan_path),
+                "operation": "create",
+                "content_hash": compute_hash("STALE PRE-MOVE CONTENT"),
+                "backup_path": None,
+            },
+            {
+                "path": str(config_root / "skills" / "ds-bootstrap" / "SKILL.md"),
+                "operation": "create",
+                "content_hash": compute_hash("# ds-bootstrap advisory skill."),
+                "backup_path": None,
+            },
+        ],
+    )
+    write_manifest("claude_code", manifest, ds_home)
+
+
+def test_plan_prunes_orphaned_skill_file_no_longer_in_canonical(
+    config_root, canonical_root, ds_home
+):
+    orphan = config_root / "skills" / "ds-quality" / "modes" / "database" / "SKILL.md"
+    _seed_prior_manifest_with_orphan(config_root, ds_home, orphan)
+    installer = ClaudeCodeInstaller(
+        config_root, "user", canonical_root=canonical_root, ds_home=ds_home
+    )
+    plan = installer.plan()
+    delete_targets = {str(op.target) for op in plan.ops if op.op == "delete"}
+    assert str(orphan) in delete_targets
+
+
+def test_plan_does_not_prune_a_skill_file_canonical_still_produces(
+    config_root, canonical_root, ds_home
+):
+    orphan = config_root / "skills" / "ds-quality" / "modes" / "database" / "SKILL.md"
+    _seed_prior_manifest_with_orphan(config_root, ds_home, orphan)
+    installer = ClaudeCodeInstaller(
+        config_root, "user", canonical_root=canonical_root, ds_home=ds_home
+    )
+    plan = installer.plan()
+    delete_targets = {str(op.target) for op in plan.ops if op.op == "delete"}
+    bootstrap_skill_md = config_root / "skills" / "ds-bootstrap" / "SKILL.md"
+    assert str(bootstrap_skill_md) not in delete_targets
+
+
+def test_execute_removes_orphaned_skill_file_and_backs_it_up(config_root, canonical_root, ds_home):
+    orphan = config_root / "skills" / "ds-quality" / "modes" / "database" / "SKILL.md"
+    _seed_prior_manifest_with_orphan(config_root, ds_home, orphan)
+    installer = ClaudeCodeInstaller(
+        config_root, "user", canonical_root=canonical_root, ds_home=ds_home
+    )
+    result = installer.install("execute")
+    assert not orphan.exists()
+    assert result["skills"]["files_removed"] == 1
+    backup_dir = ds_home / "backups" / "claude_code"
+    backups = list(backup_dir.rglob("SKILL.md*.bak")) if backup_dir.exists() else []
+    assert any(b.read_text(encoding="utf-8") == "STALE PRE-MOVE CONTENT" for b in backups)
+
+
+def test_execute_prunes_now_empty_orphan_directories(config_root, canonical_root, ds_home):
+    orphan = config_root / "skills" / "ds-quality" / "modes" / "database" / "SKILL.md"
+    _seed_prior_manifest_with_orphan(config_root, ds_home, orphan)
+    installer = ClaudeCodeInstaller(
+        config_root, "user", canonical_root=canonical_root, ds_home=ds_home
+    )
+    installer.install("execute")
+    assert not orphan.parent.exists()
+    assert not (config_root / "skills" / "ds-quality").exists()
+    assert (config_root / "skills").exists()
+
+
+def test_execute_manifest_no_longer_lists_removed_orphan(config_root, canonical_root, ds_home):
+    from integrations.manifest import read_manifest
+
+    orphan = config_root / "skills" / "ds-quality" / "modes" / "database" / "SKILL.md"
+    _seed_prior_manifest_with_orphan(config_root, ds_home, orphan)
+    installer = ClaudeCodeInstaller(
+        config_root, "user", canonical_root=canonical_root, ds_home=ds_home
+    )
+    installer.install("execute")
+    manifest = read_manifest("claude_code", ds_home)
+    paths = {entry["path"] for entry in manifest["files"]}
+    assert str(orphan) not in paths

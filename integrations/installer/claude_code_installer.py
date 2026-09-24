@@ -40,6 +40,7 @@ from .claude_code_fileops import (
     _collect_hook_file_ops,
     _collect_skill_dir_ops,
     _interpolate_hooks_dir,
+    _prune_empty_ancestors,
 )
 from .claude_code_launcher import _first_run_guide, _get_ds_version, _write_global_launcher
 from .claude_code_shared import _REPO_ROOT
@@ -120,13 +121,53 @@ class ClaudeCodeInstaller(InstallerBase):
 
         # 1. Full skill directory sync — every file under canonical/skills/<pack>/
         skills_src_dir = canonical_root / "skills"
+        skill_targets: set[str] = set()
         if skills_src_dir.is_dir():
             for skill_dir in sorted(skills_src_dir.iterdir()):
                 if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").is_file():
                     continue
                 skill_id = _skill_id_from_dir_name(skill_dir.name)
                 target_dir = self.config_root / "skills" / skill_id
-                ops.extend(_collect_skill_dir_ops(skill_dir, target_dir, skill_id, backup_base))
+                skill_ops = _collect_skill_dir_ops(skill_dir, target_dir, skill_id, backup_base)
+                ops.extend(skill_ops)
+                skill_targets.update(str(op.target) for op in skill_ops)
+
+        # 1b. Prune orphaned skill files — a mode moved to a different pack (or removed
+        # outright) otherwise leaves its old installed copy behind forever: the sync above
+        # is additive-only and never revisits a path once written (mission-domain-consequence
+        # finding, wo-pack-split-data round 1). Only prunes paths this installer itself wrote
+        # in a PRIOR install (present in the manifest with a real write operation) that the
+        # current canonical tree no longer produces — never a file it doesn't recognize.
+        existing_manifest = read_manifest("claude_code", self.ds_home)
+        if existing_manifest is not None:
+            skills_root = self.config_root / "skills"
+            for entry in existing_manifest.get("files", []):
+                path_str = entry.get("path", "")
+                if not path_str or entry.get("operation") in ("skip", "delete"):
+                    continue
+                if path_str in skill_targets:
+                    continue
+                target_path = Path(path_str)
+                if skills_root not in target_path.parents:
+                    continue
+                ops.append(
+                    FileOp(
+                        target=target_path,
+                        op="delete",
+                        backup_required=True,
+                        source_hash="",
+                        reason=(
+                            "Remove orphaned skill file no longer produced by canonical "
+                            "(pack reorganized or mode removed)"
+                        ),
+                        safety_notes=(
+                            "This installer wrote this file in a prior install (recorded in "
+                            "the manifest); canonical no longer produces it. Backed up before "
+                            "removal."
+                        ),
+                        backup_path=backup_base,
+                    )
+                )
 
         # 2. CLAUDE.md — spliced between the AUTO-ROUTING markers, never truncated.
         #
@@ -425,6 +466,7 @@ class ClaudeCodeInstaller(InstallerBase):
         skills_files_copied = 0
         skills_files_updated = 0
         skills_files_unchanged = 0
+        skills_files_removed = 0
         workflows_copied = 0
         workflows_updated = 0
         workflows_unchanged = 0
@@ -432,6 +474,23 @@ class ClaudeCodeInstaller(InstallerBase):
 
         for op in file_plan.ops:
             if op.op == "skip":
+                continue
+
+            if op.op == "delete":
+                backup_path: Path | None = None
+                if op.target.exists():
+                    if op.backup_required:
+                        backup_path = backup_before_write(op.target, backup_dir)
+                    op.target.unlink()
+                    _prune_empty_ancestors(op.target.parent, stop_at=self.config_root / "skills")
+                    skills_files_removed += 1
+                files_written.append(
+                    {
+                        "path": str(op.target),
+                        "op": "delete",
+                        "backup_path": str(backup_path) if backup_path else None,
+                    }
+                )
                 continue
 
             target_str = str(op.target)
@@ -580,6 +639,7 @@ class ClaudeCodeInstaller(InstallerBase):
                 "files_copied": skills_files_copied,
                 "files_updated": skills_files_updated,
                 "files_unchanged": skills_files_unchanged,
+                "files_removed": skills_files_removed,
             },
             "workflows": {
                 "copied": workflows_copied,
