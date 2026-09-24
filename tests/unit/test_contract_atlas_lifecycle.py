@@ -244,6 +244,27 @@ def test_contract_atlas_lifecycle_gate_runs_without_live_home_or_db() -> None:
     assert payload["public_private_data_leakage_check"]["status"] == "pass"
 
 
+def test_contract_atlas_lifecycle_gate_help_documents_changed_files_env() -> None:
+    """This gate honors DREAM_STUDIO_CHANGED_FILES the same way
+    contract_docs_drift_gate.py does (a documented override that bypasses
+    git-based diffing entirely), but until now its own --help said nothing
+    about it -- unlike its sibling gate, whose --help fully documents the
+    var. A comment added to .github/workflows/ci.yml pointed an operator at
+    "each gate's own --help" for this; that breadcrumb must actually lead
+    somewhere for both gates, not just one."""
+    result = subprocess.run(
+        [sys.executable, "interfaces/cli/contract_atlas_lifecycle_gate.py", "--help"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "DREAM_STUDIO_CHANGED_FILES" in result.stdout, (
+        "contract_atlas_lifecycle_gate.py --help does not mention "
+        f"DREAM_STUDIO_CHANGED_FILES: {result.stdout}"
+    )
+
+
 def _db(tmp_path: Path) -> Path:
     return tmp_path / "contract-atlas-lifecycle" / "studio.db"
 
