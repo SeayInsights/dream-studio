@@ -24,6 +24,7 @@ from core.shared_intelligence.contract_atlas_lifecycle import (  # noqa: E402
     validate_contract_atlas_lifecycle_manifest,
 )
 from interfaces.cli._gate_review_context import (  # noqa: E402
+    resolve_base_ref,
     reviewed_no_change_domains as _gather_reviewed_no_change,
 )
 
@@ -114,10 +115,7 @@ def _changed_files(args: argparse.Namespace) -> list[str]:
     if files:
         return sorted({item for item in files if item})
 
-    base_ref = args.base_ref or os.environ.get("DREAM_STUDIO_BASE_REF")
-    github_base = os.environ.get("GITHUB_BASE_REF")
-    if github_base and not base_ref:
-        base_ref = f"origin/{github_base}"
+    base_ref = resolve_base_ref(args.base_ref)
     if base_ref:
         diff = _git_changed([base_ref + "...HEAD"])
         if diff:

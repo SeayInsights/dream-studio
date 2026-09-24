@@ -20,6 +20,7 @@ from core.shared_intelligence.contract_registry import (  # noqa: E402
     validate_contract_registry,
 )
 from interfaces.cli._gate_review_context import (  # noqa: E402
+    resolve_base_ref,
     reviewed_no_change_domains as _gather_reviewed_no_change,
 )
 
@@ -46,7 +47,11 @@ def main() -> None:
     parser.add_argument(
         "--base-ref",
         default=None,
-        help="Optional base ref for git diff, for example origin/main.",
+        help=(
+            "Optional base ref for git diff, for example origin/main. Also readable from the "
+            "DREAM_STUDIO_BASE_REF env var, or GITHUB_BASE_REF (prefixed with origin/) when "
+            "neither is set."
+        ),
     )
     parser.add_argument(
         "--docs-reviewed-no-change",
@@ -148,10 +153,7 @@ def _changed_files(args: argparse.Namespace) -> list[str]:
     if explicit:
         return sorted({item for item in explicit if item})
 
-    base_ref = args.base_ref or os.environ.get("DREAM_STUDIO_BASE_REF")
-    github_base = os.environ.get("GITHUB_BASE_REF")
-    if github_base and not base_ref:
-        base_ref = f"origin/{github_base}"
+    base_ref = resolve_base_ref(args.base_ref)
     if base_ref:
         diff = _git_diff_names([base_ref + "...HEAD"])
         if diff is not None:
