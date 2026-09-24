@@ -38,8 +38,8 @@ def resolve_collector_paths(db_path: str | None) -> tuple[str, Path | None]:
     default (DREAM_STUDIO_DB_PATH, else home_dir()/state/studio.db) when the
     caller passes None — the SQLite fallback source every collector reads when
     its DuckDB read comes up empty. Resolving it independently as a hardcoded
-    Path.home() / ".dream-studio" ignored DREAM_STUDIO_HOME the same way the
-    rest of core/ and interfaces/ did before the home-resolver sweep.
+    OS-home-plus-dirname ignored DREAM_STUDIO_HOME the same way the rest of
+    core/ and interfaces/ did before the home-resolver sweep.
     """
     from core.analytics.duckdb_store import analytics_db_path_for
     from core.config.database import _default_db_path
