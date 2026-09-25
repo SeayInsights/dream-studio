@@ -1,7 +1,7 @@
 ---
 dream_studio:
-  skill_id: ds-quality
-  pack: quality
+  skill_id: ds-core
+  pack: core
   mode: coach
   mode_type: analysis
   inputs: [workflow_patterns, session_history, user_intent]

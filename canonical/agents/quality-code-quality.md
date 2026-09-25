@@ -17,7 +17,6 @@ You are dispatched for **`quality/code-quality`**, and your domain knowledge bel
 The other `quality` specialists, so you can hand work back BY NAME rather than attempting it or returning a vague refusal:
 
 - `quality-harden`
-- `quality-learn`
 - `quality-security`
 - `quality-structure-audit`
 - `quality-testing`

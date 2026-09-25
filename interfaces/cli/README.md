@@ -298,7 +298,7 @@ py scripts/validate_client_profile.py clients/acme-corp.yaml
 ### validate_analysts.py
 
 Verifies that every known skill (from `skills/*/metadata.yml`) has analyst coverage
-in `skills/quality/modes/coach/analysts/*.yml`. Used to keep the coach skill complete.
+in `skills/core/modes/coach/analysts/*.yml`. Used to keep the coach skill complete.
 
 **Exit codes:** 0 = all covered, 1 = gaps found.
 

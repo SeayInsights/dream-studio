@@ -1,7 +1,7 @@
 ---
 dream_studio:
-  skill_id: ds-quality
-  pack: quality
+  skill_id: ds-core
+  pack: core
   mode: learn
   mode_type: analysis
   inputs: [debug_log, build_context, patterns, gotchas]

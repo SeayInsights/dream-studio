@@ -176,7 +176,7 @@ description: >
 
 ### JIT Policy
 
-New skills ship with `status: jit-pending`, all `quality_metrics` null. After first real usage, update `times_used`, `avg_token_usage`, and `last_success` via `ds-quality:learn`. Do not fabricate metrics.
+New skills ship with `status: jit-pending`, all `quality_metrics` null. After first real usage, update `times_used`, `avg_token_usage`, and `last_success` via `ds-core:learn`. Do not fabricate metrics.
 
 ---
 

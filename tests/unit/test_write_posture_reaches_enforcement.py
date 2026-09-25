@@ -26,7 +26,7 @@ from runtime.lib import enforcement
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILL_LOAD_HOOK = REPO_ROOT / "runtime" / "hooks" / "meta" / "on-skill-load.py"
-COACH_CARD = REPO_ROOT / "canonical" / "skills" / "quality" / "modes" / "coach" / "SKILL.md"
+COACH_CARD = REPO_ROOT / "canonical" / "skills" / "core" / "modes" / "coach" / "SKILL.md"
 
 
 @pytest.fixture
@@ -86,8 +86,8 @@ def test_on_skill_load_captures_the_posture_off_a_real_card(session_id):
     )
     assert proc.returncode == 0, proc.stderr
 
-    # quality:coach declares read-only; the hook should have carried that through.
-    assert enforcement.active_skill_posture(session_id) == ("quality:coach", "read-only")
+    # core:coach declares read-only; the hook should have carried that through.
+    assert enforcement.active_skill_posture(session_id) == ("core:coach", "read-only")
 
 
 def test_a_non_skill_read_records_nothing(session_id):

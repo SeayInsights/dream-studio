@@ -1,6 +1,6 @@
 ---
 name: ds-domains
-description: 'Stack-specific and domain builders. Use for: dashboard-dev:, intake:, technical documentation:'
+description: 'Stack-specific and domain builders. Use for: dashboard-dev:, intake:'
 ---
 
 # Domains — Stack-Specific Builders
