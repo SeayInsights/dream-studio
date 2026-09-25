@@ -15,7 +15,7 @@ from typing import Any
 
 import yaml
 
-from .rules_scanner_shared import _SKILL_MODES_ROOT, logger
+from .rules_scanner_shared import _skill_dir, logger
 
 
 def _run_skill_specific_checks(
@@ -50,7 +50,7 @@ def _is_handled_by_specific_check(rule_id: str, skill_id: str) -> bool:
 def _check_architecture(scope_path: Path, files: list[Path]) -> list[dict[str, Any]]:
     """arch-004 layer inversion heuristic: central layer importing outer layer."""
     # Load layer map from architecture config
-    config_path = _SKILL_MODES_ROOT / "architecture" / "config.yml"
+    config_path = _skill_dir("architecture") / "config.yml"
     layer_map: dict[str, int] = {}
     if config_path.exists():
         try:

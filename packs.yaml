@@ -47,9 +47,18 @@ packs:
     invariants:
       - a finding names a file and line, or the command that produced it
       - a discovered defect is registered in the authority rather than left in prose
-    modes: [debug, harden, pr-security-scan, structure-audit, groom, audit, security, code-quality, testing, types-deps, backend-api, frontend-ux, architecture, ops, database-compliance, pre-launch]
+    modes: [debug, harden, pr-security-scan, structure-audit, groom, audit, security, code-quality, testing, types-deps, backend-api, frontend-ux, architecture, database-compliance]
     hooks: [on-security-scan, on-quality-score, on-structure-check, on-agent-correction]
     rules: [structure/architecture.md, structure/fsc.md]
+
+  release:
+    description: Release and launch readiness — operational and pre-launch audits
+    skill: release
+    invariants:
+      - a finding names a file and line, or the command that produced it
+      - a discovered defect is registered in the authority rather than left in prose
+    # split out of quality (ops, pre-launch) — pack-split, 2026-09-25
+    modes: [ops, pre-launch]
 
   analyze:
     description: Multi-perspective analysis engine

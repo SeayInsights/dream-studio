@@ -336,8 +336,8 @@ modes:
   description: Capture and promote lessons from builds — record to raw_lessons DB, Director review via
     lesson_queue, promote to memory / skill / agent updates. Trigger on `learn:`, `capture lesson:`, or
     when something notably works or breaks.
-- mode: quality/ops
-  skill: quality/modes/ops/SKILL.md
+- mode: release/ops
+  skill: release/modes/ops/SKILL.md
   no_agent: Nothing dispatches it and the skill is 2862 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
 - mode: website/polish
@@ -348,8 +348,8 @@ modes:
   skill: quality/modes/pr-security-scan/SKILL.md
   no_agent: Nothing dispatches it and the skill is 4195 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: quality/pre-launch
-  skill: quality/modes/pre-launch/SKILL.md
+- mode: release/pre-launch
+  skill: release/modes/pre-launch/SKILL.md
   no_agent: Nothing dispatches it and the skill is 2991 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
 - mode: quality/security

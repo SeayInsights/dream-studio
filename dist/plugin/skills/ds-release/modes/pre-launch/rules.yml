@@ -115,7 +115,7 @@ rules:
       - Limitation of liability
       - Termination conditions
       - Governing law and dispute resolution
-      Template available at: canonical/skills/quality/modes/pre-launch/templates/terms-of-service.md
+      Template available at: canonical/skills/release/modes/pre-launch/templates/terms-of-service.md
 
     action: "report"
 
@@ -198,7 +198,7 @@ rules:
       - User rights (access, deletion, portability)
       - Data retention periods
       - Contact information for privacy requests
-      Template: canonical/skills/quality/modes/pre-launch/templates/privacy-policy.md
+      Template: canonical/skills/release/modes/pre-launch/templates/privacy-policy.md
 
     action: "report"
 
@@ -336,7 +336,7 @@ rules:
       - Conformance level claimed (WCAG 2.1 AA)
       - Known issues and timeline for fixes
       - Contact for accessibility feedback
-      Template: canonical/skills/quality/modes/pre-launch/templates/accessibility-statement.md
+      Template: canonical/skills/release/modes/pre-launch/templates/accessibility-statement.md
 
     action: "report"
 
@@ -383,7 +383,7 @@ rules:
 
     remediation: |
       Create docs/legal/dpa.md or obtain signed DPAs from all data processors (cloud providers, email, analytics).
-      Template: canonical/skills/quality/modes/pre-launch/templates/gdpr-dpa.md
+      Template: canonical/skills/release/modes/pre-launch/templates/gdpr-dpa.md
 
     action: "report"
 
@@ -702,7 +702,7 @@ rules:
       2. Step-by-step deployment commands
       3. Post-deployment verification (health check URLs, smoke tests)
       4. Rollback procedure reference
-      Template: canonical/skills/quality/modes/pre-launch/templates/deployment-runbook.md
+      Template: canonical/skills/release/modes/pre-launch/templates/deployment-runbook.md
 
     cross_references:
       - rule_id: "ops-*"
@@ -782,7 +782,7 @@ rules:
       2. How to revert application (tag revert, container image rollback)
       3. How to rollback database migrations (if applicable)
       4. How to verify rollback succeeded
-      Template: canonical/skills/quality/modes/pre-launch/templates/rollback-procedure.md
+      Template: canonical/skills/release/modes/pre-launch/templates/rollback-procedure.md
 
     action: "report"
 
@@ -979,7 +979,7 @@ rules:
       - Data flows and data subjects affected
       - Risks identified and mitigations applied
       - Sign-off by DPO or privacy lead
-      Template: canonical/skills/quality/modes/pre-launch/templates/privacy-impact-assessment.md
+      Template: canonical/skills/release/modes/pre-launch/templates/privacy-impact-assessment.md
 
     action: "report"
 

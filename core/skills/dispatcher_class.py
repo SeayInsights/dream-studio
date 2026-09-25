@@ -463,8 +463,9 @@ class SkillDispatcher:
             service_type = _infer_service_type(scope_path)
 
         # ── 2. Load escalation map from pre-launch config.yml ─────────────
-        _SKILL_MODES = Path(__file__).parents[2] / "canonical" / "skills" / "quality" / "modes"
-        config_path = _SKILL_MODES / "pre-launch" / "config.yml"
+        from core.skills.audit.rules_scanner_shared import _skill_dir
+
+        config_path = _skill_dir("pre-launch") / "config.yml"
         escalation: dict = {}
         try:
             cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))

@@ -29,8 +29,6 @@ KNOWN_UNREACHABLE = {
     "quality/backend-api",
     "quality/database-compliance",
     "quality/frontend-ux",
-    "quality/ops",
-    "quality/pre-launch",
 }
 
 

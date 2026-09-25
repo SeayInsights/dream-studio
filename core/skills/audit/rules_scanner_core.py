@@ -20,8 +20,8 @@ from .rules_scanner_shared import (
     _BASE_PROMPT_TOKENS,
     _CHARS_PER_TOKEN,
     _LANG_PATTERNS,
-    _SKILL_MODES_ROOT,
     _SKIP_DIRS,
+    _skill_dir,
     LLMPendingItem,
     SkillScanResult,
     logger,
@@ -33,7 +33,7 @@ class RulesScanner:
 
     def __init__(self, skill_id: str) -> None:
         self.skill_id = skill_id
-        self._skill_dir = _SKILL_MODES_ROOT / skill_id
+        self._skill_dir = _skill_dir(skill_id)
         self._rules: list[dict[str, Any]] = []
         self._file_patterns: tuple[str, ...] = ()
         self._loaded = False

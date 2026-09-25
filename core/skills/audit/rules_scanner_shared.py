@@ -13,8 +13,29 @@ from typing import Any
 
 logger = logging.getLogger("core.skills.audit.rules_scanner")
 
-# Canonical skill rules.yml paths
-_SKILL_MODES_ROOT = Path(__file__).parents[3] / "canonical" / "skills" / "quality" / "modes"
+# Canonical skills root -- a skill_id's owning pack is resolved per lookup
+# (_skill_dir below), not hardcoded, because the pack-split campaign keeps
+# moving these skill_ids between packs (ops/pre-launch: quality -> release;
+# architecture/testing/types-deps are quality today and will move too).
+_SKILLS_ROOT = Path(__file__).parents[3] / "canonical" / "skills"
+
+
+def _skill_dir(skill_id: str) -> Path:
+    """The mode directory for *skill_id*, wherever its pack currently is.
+
+    Searches canonical/skills/*/modes/<skill_id> rather than assuming a
+    fixed pack, so a pack-split move doesn't silently stop this scanner
+    from finding the skill's rules.yml/config.yml (found the hard way:
+    ops/pre-launch moved to release and this returned no match until
+    fixed). Falls back to the pre-split quality/modes/<skill_id> location
+    if no pack owns it (keeps existing behavior/error messages for a
+    typo'd or genuinely-missing skill_id).
+    """
+    matches = sorted(_SKILLS_ROOT.glob(f"*/modes/{skill_id}"))
+    if matches:
+        return matches[0]
+    return _SKILLS_ROOT / "quality" / "modes" / skill_id
+
 
 # File patterns per language tag
 _LANG_PATTERNS: dict[str, tuple[str, ...]] = {

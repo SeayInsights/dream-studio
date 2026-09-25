@@ -8,7 +8,7 @@ shutdown, recovery, and deployment artifacts. Read-only — classifies and repor
 ## Invocation
 
 ```
-ds-quality audit: ops <path>
+ds-release audit: ops <path>
 ```
 
 ## Pipeline
