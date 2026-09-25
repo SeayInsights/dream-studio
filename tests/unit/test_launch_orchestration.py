@@ -60,7 +60,7 @@ class TestEscalationConfig:
         import yaml
 
         config_path = (
-            REPO_ROOT / "canonical" / "skills" / "quality" / "modes" / "pre-launch" / "config.yml"
+            REPO_ROOT / "canonical" / "skills" / "release" / "modes" / "pre-launch" / "config.yml"
         )
         cfg = yaml.safe_load(config_path.read_text())
         assert "launch_escalation" in cfg, (
@@ -72,7 +72,7 @@ class TestEscalationConfig:
         import yaml
 
         config_path = (
-            REPO_ROOT / "canonical" / "skills" / "quality" / "modes" / "pre-launch" / "config.yml"
+            REPO_ROOT / "canonical" / "skills" / "release" / "modes" / "pre-launch" / "config.yml"
         )
         cfg = yaml.safe_load(config_path.read_text())
         escalation = cfg["launch_escalation"]
@@ -84,7 +84,7 @@ class TestEscalationConfig:
         import yaml
 
         config_path = (
-            REPO_ROOT / "canonical" / "skills" / "quality" / "modes" / "pre-launch" / "config.yml"
+            REPO_ROOT / "canonical" / "skills" / "release" / "modes" / "pre-launch" / "config.yml"
         )
         cfg = yaml.safe_load(config_path.read_text())
         escalation = cfg["launch_escalation"]

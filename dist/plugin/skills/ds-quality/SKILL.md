@@ -1,6 +1,6 @@
 ---
 name: ds-quality
-description: 'Code quality, learning, and structural discipline. Use for: debug:, harden:, pr-security-scan:, structure-audit:, groom:, audit:, backend-api:, frontend-ux:, architecture:, ops:, database-compliance:, pre-launch:'
+description: 'Code quality, learning, and structural discipline. Use for: debug:, harden:, pr-security-scan:, structure-audit:, groom:, audit:, backend-api:, frontend-ux:, architecture:, database-compliance:'
 ---
 
 # Quality — Code Quality & Learning

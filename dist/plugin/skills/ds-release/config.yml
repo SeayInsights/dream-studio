@@ -1,0 +1,6 @@
+name: release
+model_tier: sonnet
+description: 'Release and launch readiness — operational and pre-launch audits.'
+argument-hint: ops | pre-launch
+user_invocable: true
+args: mode

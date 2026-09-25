@@ -8,7 +8,7 @@ T1 findings produce CLI exit code 1. Read-only — never modifies code.
 ## Invocation
 
 ```
-ds-quality audit: pre-launch <path>
+ds-release audit: pre-launch <path>
 ```
 
 ## Pipeline
