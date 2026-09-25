@@ -5,7 +5,7 @@ skill. Returns skills that have reached the escalation threshold, signalling
 that the skill's SKILL.md or gotchas.yml should be reviewed and updated.
 
 Promotion logic (future implementation):
-- Load promotion-rules.yml from skills/quality/modes/learn/
+- Load promotion-rules.yml from skills/core/modes/learn/
 - Score each draft lesson based on evidence count, confidence, recency
 - Auto-reject lessons matching auto_reject criteria
 - Promote lessons reaching auto_promote_threshold if require_director_review=false
@@ -106,7 +106,7 @@ def _known_skills() -> set[str]:
 # Promotion logic — to be implemented
 # ============================================================================
 # Future implementation will add:
-# - load_promotion_rules() → reads skills/quality/modes/learn/promotion-rules.yml
+# - load_promotion_rules() → reads skills/core/modes/learn/promotion-rules.yml
 # - score_lesson(lesson_file: Path) → float score based on evidence/confidence/recency
 # - should_auto_reject(lesson_data: dict, rules: dict) → bool
 # - promote_lesson(lesson_file: Path, target: str) → moves to gotchas.yml or memory/

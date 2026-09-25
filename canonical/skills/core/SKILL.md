@@ -44,6 +44,8 @@ those modes are safe to run alongside an active work order.
 | handoff | modes/handoff/SKILL.md | handoff: |
 | recap | modes/recap/SKILL.md | recap:, session recap: |
 | explain | modes/explain/SKILL.md | explain:, how does, walk me through, what is this doing, why does |
+| learn | modes/learn/SKILL.md | learn:, capture lesson: |
+| coach | modes/coach/SKILL.md | /coach, workflow coaching: |
 
 ## Shared resources
 

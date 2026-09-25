@@ -30,7 +30,7 @@ quality_metrics:
   last_success: "2026-05-28"
   last_failure: null
 
-# Failure patterns — populated from real usage via ds-quality:learn
+# Failure patterns — populated from real usage via ds-core:learn
 common_failures: []
 
 # Dependencies

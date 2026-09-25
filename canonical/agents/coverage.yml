@@ -200,10 +200,10 @@ modes:
   skill: apps/modes/saas-build/SKILL.md
   no_agent: Nothing dispatches it and the skill is 4294 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: domains/technical-writing
-  skill: domains/modes/technical-writing/SKILL.md
+- mode: core/technical-writing
+  skill: core/modes/technical-writing/SKILL.md
   agent: technical-writer
-  installed_skill: ds-domains/modes/technical-writing/SKILL.md
+  installed_skill: ds-core/modes/technical-writing/SKILL.md
   dispatched_because: 'isolation: the skill is 5551 bytes, enough that carrying it in a subagent protects
     the caller''s context'
   description: 'Plan, write, and review technical documentation using the Diataxis framework (tutorial/how-to/reference/explanation),
@@ -282,8 +282,8 @@ modes:
   skill: quality/modes/backend-api/SKILL.md
   no_agent: Nothing dispatches it and the skill is 2477 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: quality/coach
-  skill: quality/modes/coach/SKILL.md
+- mode: core/coach
+  skill: core/modes/coach/SKILL.md
   no_agent: Classifies operator intent and routes it. Routing is the caller's job by definition.
 - mode: quality/code-quality
   skill: quality/modes/code-quality/SKILL.md
@@ -327,10 +327,10 @@ modes:
   description: Project hardening audit and fix — checks 20 best-practice items (Makefile, pyproject.toml,
     UTC enforcement, Pydantic validation, SECURITY.md, CONTRIBUTING.md, test tooling, audit log, pre-commit,
     etc.) and fills gaps from templates. Trigger on `/harden`, `/harden audit`,...
-- mode: quality/learn
-  skill: quality/modes/learn/SKILL.md
+- mode: core/learn
+  skill: core/modes/learn/SKILL.md
   agent: quality-learn
-  installed_skill: ds-quality/modes/learn/SKILL.md
+  installed_skill: ds-core/modes/learn/SKILL.md
   dispatched_because: 'isolation: the skill is 7675 bytes, enough that carrying it in a subagent protects
     the caller''s context'
   description: Capture and promote lessons from builds — record to raw_lessons DB, Director review via

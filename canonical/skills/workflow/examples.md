@@ -206,7 +206,7 @@ Add an entry to `skills/domains/ingest-log.yml`:
 |-----------|---------------------|
 | GitHub Actions, CI/CD, DevOps | `infra/devops/` |
 | Testing, E2E, unit testing | `domains/testing/` |
-| Technical writing, docs | `domains/documentation/` |
+| Technical writing, docs | `core/documentation/` |
 | Power BI, DAX, M-query | `domains/bi/` or `domains/powerbi/` |
 | UI design systems, CSS, layout | `website/design/` |
 | Data visualization, charts | `domains/data-visualization/` |

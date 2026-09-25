@@ -140,14 +140,14 @@ descriptions are sufficiently distinct (0 pairs at ≥ 0.50 similarity).
 
 | Agent file | Skill | Pack | Lines (pre-promotion) | Lines (post) |
 |-----------|-------|------|----------------------|--------------|
-| accessibility-expert.md | quality:accessibility | ds-quality | 89 | 18 |
+| accessibility-expert.md | website:accessibility | ds-website | 89 | 18 |
 | devops-engineer.md | infra:devops | ds-infra | 91 | 19 |
 | kubernetes-expert.md | infra:kubernetes | ds-infra | 87 | 18 |
 | research-analyst.md | analyze:research | ds-analyze | 91 | 16 |
 | idea-validator.md | analyze:idea-validation | ds-analyze | 117 | 16 |
-| technical-writer.md | domains:technical-writing | ds-domains | 121 | 16 |
+| technical-writer.md | core:technical-writing | ds-core | 121 | 16 |
 | terraform-architect.md | infra:terraform | ds-infra | 108 | 16 |
-| mobile-developer.md | domains:mobile | ds-domains | 158 | 18 |
+| mobile-developer.md | apps:mobile | ds-apps | 158 | 18 |
 | data-engineer.md | data:data-engineering | ds-data | 266 | 16 |
 
 All content marked `status: jit-pending` — will be enriched by Phase 19 based on

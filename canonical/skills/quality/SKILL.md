@@ -17,6 +17,4 @@
 | harden | modes/harden/SKILL.md | /harden, harden audit, harden fix |
 | secure | the ds-fullstack pack's secure mode | secure:, security review:, audit code: |
 | structure-audit | modes/structure-audit/SKILL.md | /structure-audit, audit structure: |
-| learn | modes/learn/SKILL.md | learn:, capture lesson: |
 | groom | modes/groom/SKILL.md | groom:, groom lessons:, apply lessons: |
-| coach | modes/coach/SKILL.md | /coach, workflow coaching: |

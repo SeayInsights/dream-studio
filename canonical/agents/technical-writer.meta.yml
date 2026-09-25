@@ -3,7 +3,7 @@
 description: >-
   Plan, write, and review technical documentation using the Diataxis framework, style best practices, and automated linting tools.
 model: sonnet
-skill: ds-domains/modes/technical-writing/SKILL.md
+skill: ds-core/modes/technical-writing/SKILL.md
 essentials: |
   Apply the correct Diataxis quadrant
   (tutorial / how-to / reference / explanation) before writing anything.

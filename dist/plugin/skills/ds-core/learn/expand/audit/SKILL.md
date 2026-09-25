@@ -1,4 +1,4 @@
-# ds-quality:learn:expand (audit invocation)
+# ds-core:learn:expand (audit invocation)
 
 Trigger: `ds learn expand`
 

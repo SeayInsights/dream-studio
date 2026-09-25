@@ -1,4 +1,4 @@
-# ds-quality:learn:expand
+# ds-core:learn:expand
 
 Phase 19.4 — Guided Expansion with Example Compilation.
 

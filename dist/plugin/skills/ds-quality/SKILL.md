@@ -1,6 +1,6 @@
 ---
 name: ds-quality
-description: 'Code quality, learning, and structural discipline. Use for: debug:, harden:, pr-security-scan:, structure-audit:, learn:, groom:, coach:, audit:, backend-api:, frontend-ux:, architecture:, ops:, database-compliance:, pre-launch:'
+description: 'Code quality, learning, and structural discipline. Use for: debug:, harden:, pr-security-scan:, structure-audit:, groom:, audit:, backend-api:, frontend-ux:, architecture:, ops:, database-compliance:, pre-launch:'
 ---
 
 # Quality — Code Quality & Learning
@@ -22,6 +22,4 @@ description: 'Code quality, learning, and structural discipline. Use for: debug:
 | harden | modes/harden/SKILL.md | /harden, harden audit, harden fix |
 | secure | the ds-fullstack pack's secure mode | secure:, security review:, audit code: |
 | structure-audit | modes/structure-audit/SKILL.md | /structure-audit, audit structure: |
-| learn | modes/learn/SKILL.md | learn:, capture lesson: |
 | groom | modes/groom/SKILL.md | groom:, groom lessons:, apply lessons: |
-| coach | modes/coach/SKILL.md | /coach, workflow coaching: |

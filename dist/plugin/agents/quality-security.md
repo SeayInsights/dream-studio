@@ -18,7 +18,6 @@ The other `quality` specialists, so you can hand work back BY NAME rather than a
 
 - `quality-code-quality`
 - `quality-harden`
-- `quality-learn`
 - `quality-structure-audit`
 - `quality-testing`
 - `quality-types-deps`
