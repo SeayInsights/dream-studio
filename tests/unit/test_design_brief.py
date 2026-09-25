@@ -484,7 +484,7 @@ def test_work_order_start_includes_design_system_section(db_home, tmp_path, monk
     assert content is not None
     assert "## Design System" in content
     assert "tech-minimal" in content
-    assert "canonical/skills/domains/design-systems/tech-minimal/" in content
+    assert "canonical/skills/website/design-systems/tech-minimal/" in content
 
 
 # ── 15. work-order start warns when no brief for UI type ─────────────────────

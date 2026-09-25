@@ -47,7 +47,7 @@ packs:
     invariants:
       - a finding names a file and line, or the command that produced it
       - a discovered defect is registered in the authority rather than left in prose
-    modes: [debug, polish, harden, pr-security-scan, structure-audit, learn, groom, coach, audit, security, accessibility, code-quality, testing, types-deps, backend-api, frontend-ux, architecture, ops, database-compliance, pre-launch]
+    modes: [debug, harden, pr-security-scan, structure-audit, learn, groom, coach, audit, security, code-quality, testing, types-deps, backend-api, frontend-ux, architecture, ops, database-compliance, pre-launch]
     hooks: [on-security-scan, on-quality-score, on-structure-check, on-agent-correction]
     rules: [structure/architecture.md, structure/fsc.md]
 
@@ -67,7 +67,7 @@ packs:
       - generated code stays inside the active work order's module boundary
       - a deliverable that leaves the machine stops for the operator first
     # fullstack and website — Flag 1 fix; technical-writing — 18.9 Tier 2-3
-    modes: [dashboard-dev, power-platform, design, technical-writing]
+    modes: [dashboard-dev, power-platform, technical-writing]
     agents: [client]
     templates: [project-standards/]
 
@@ -150,12 +150,12 @@ packs:
     modes: [scan, dast, binary-scan, mitigate, comply, netcompat, dashboard, review]
 
   website:
-    description: Website build pipeline — discovery through delivery, 9 sub-modes
+    description: Website build pipeline — discovery through delivery, 12 sub-modes
     skill: ds-website
     invariants:
       - a page is built against a locked design brief
       - delivery to a client stops for the operator first
-    modes: [discover, direction, page, prototype, animate, brand, cip, critique, deck]
+    modes: [discover, direction, page, prototype, animate, brand, cip, critique, deck, design, accessibility, polish]
 
   fullstack:
     description: Full-stack build pipeline — frontend, backend, integration, and security

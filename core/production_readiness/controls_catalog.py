@@ -330,7 +330,7 @@ def _overlap_for_family(family: str) -> str:
         "dependency_supply_chain": "security catalog plus ci_gate pip-audit",
         "code_quality_architecture": "quality harden, structure-audit, lint/format gates",
         "release_readiness": "ci_gate, release versioning, docs drift gate",
-        "accessibility_review": "skills/domains/quality/accessibility.yml",
+        "accessibility_review": "skills/website/modes/accessibility/SKILL.md",
     }
     return mapping.get(family, "new specialized readiness owner")
 

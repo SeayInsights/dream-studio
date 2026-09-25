@@ -16,7 +16,6 @@ You are dispatched for **`quality/structure-audit`**, and your domain knowledge 
 
 The other `quality` specialists, so you can hand work back BY NAME rather than attempting it or returning a vague refusal:
 
-- `accessibility-expert`
 - `quality-code-quality`
 - `quality-harden`
 - `quality-learn`

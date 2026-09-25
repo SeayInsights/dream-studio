@@ -192,8 +192,8 @@ _WORKFLOW_BASES: dict[str, dict[str, Any]] = {
         },
     },
     "frontend_design_excellence_workflow": {
-        "workflow_owner": "quality:polish+domains:design",
-        "skill_owner": "ds-quality/polish",
+        "workflow_owner": "website:polish+website:design",
+        "skill_owner": "ds-website/polish",
         "purpose": "Diagnose and improve UX, visual hierarchy, accessibility, responsive behavior, components, and design-to-code fit.",
         "when_to_run": [
             "UI changes",
@@ -236,14 +236,14 @@ _WORKFLOW_BASES: dict[str, dict[str, Any]] = {
         "dashboard_visibility": "Project Details design/readiness and dashboard attention for visual blockers.",
         "contract_atlas_impact": "expert_workflow_system.frontend_design_excellence",
         "privacy_boundary": "Screenshots may expose private data; sanitize before publication.",
-        "existing_owners": ["skills/quality/modes/polish", "skills/domains/modes/design"],
+        "existing_owners": ["skills/website/modes/polish", "skills/website/modes/design"],
         "specialized_skills": list(DESIGN_SPECIALIZED_SKILLS),
         "overlap_status": {
             "decision": "split_existing",
             "overlap_reason": "Polish remains the execution skill; specialized review lenses make results reusable without new monolith.",
             "evidence": [
-                "skills/quality/modes/polish/SKILL.md",
-                "skills/domains/modes/design/SKILL.md",
+                "skills/website/modes/polish/SKILL.md",
+                "skills/website/modes/design/SKILL.md",
             ],
             "validation_requirement": "specialized design skill coverage and score rubric tests",
             "rollback_supersession_plan": "Remove catalog specializations; polish/design skills remain active.",

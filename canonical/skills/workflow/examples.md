@@ -208,7 +208,7 @@ Add an entry to `skills/domains/ingest-log.yml`:
 | Testing, E2E, unit testing | `domains/testing/` |
 | Technical writing, docs | `domains/documentation/` |
 | Power BI, DAX, M-query | `domains/bi/` or `domains/powerbi/` |
-| UI design systems, CSS, layout | `domains/design/` |
+| UI design systems, CSS, layout | `website/design/` |
 | Data visualization, charts | `domains/data-visualization/` |
 | API patterns, backend | `domains/` (create `backend/` if needed) |
 | Security tools, binary analysis | skills/binary-scan or skills/scan SKILL.md directly |
