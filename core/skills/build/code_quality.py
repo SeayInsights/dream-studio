@@ -1,7 +1,7 @@
 """Code-quality build mode — static enforcement on generated Python code.
 
 Implements the audit interface documented in:
-  canonical/skills/quality/modes/code-quality/build/SKILL.md
+  canonical/skills/code-health/modes/code-quality/build/SKILL.md
 
 12 static rules applied synchronously. No LLM calls. No DB connections.
 Returns in < 500ms for typical generated function (100-200 LOC).

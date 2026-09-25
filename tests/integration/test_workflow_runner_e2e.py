@@ -149,7 +149,7 @@ def test_runner_resolves_bare_plan_to_ds_core(tmp_path):
     assert invoked == ["ds-core:plan"]
 
 
-def test_runner_resolves_bare_debug_to_ds_quality(tmp_path):
+def test_runner_resolves_bare_debug_to_ds_code_health(tmp_path):
     yaml_path = _write_wf_yaml(tmp_path, [{"id": "n1", "skill": "debug"}])
     state_dir = _bootstrap_state(tmp_path, "wf-spec-2", yaml_path, ["n1"])
 
@@ -165,7 +165,7 @@ def test_runner_resolves_bare_debug_to_ds_quality(tmp_path):
             runner = WorkflowRunner("wf-spec-2", dry_run=False)
             runner.run()
 
-    assert invoked == ["ds-quality:debug"]
+    assert invoked == ["ds-code-health:debug"]
 
 
 # ── E2E: node failure propagates ─────────────────────────────────────────────

@@ -69,7 +69,7 @@ step, not a semantic call.
 - dep-004/005/006 are deliberately reserved — not implemented here — for security-scan's territory.
 - Reports cross-reference when both may fire on the same PR.
 
-### ds-quality:code-quality (complementary)
+### ds-code-health:code-quality (complementary)
 - code-quality owns: import ordering (Section D: std→third-party→internal→relative)
 - types-deps owns: runtime circular imports (dep-007); type annotation discipline
 - Cross-reference: code-quality M-partial ↔ typ-001 (checker existence vs. checker scope)

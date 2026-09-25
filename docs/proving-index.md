@@ -20,7 +20,7 @@ Last updated: 2026-06-13
 
 ---
 
-## Code Quality (ds-quality:code-quality)
+## Code Quality (ds-code-health:code-quality)
 
 | Ecosystem | Proven? | Proving Repo | PR / Evidence | Date | Summary |
 |-----------|---------|--------------|---------------|------|---------|
@@ -30,7 +30,7 @@ Last updated: 2026-06-13
 
 ---
 
-## Testing (ds-quality:testing)
+## Testing (ds-code-health:testing)
 
 | Ecosystem | Proven? | Proving Repo | PR / Evidence | Date | Summary |
 |-----------|---------|--------------|---------------|------|---------|
@@ -82,7 +82,7 @@ Last updated: 2026-06-13
 
 ---
 
-## Architecture (ds-quality:architecture)
+## Architecture (ds-code-health:architecture)
 
 | Ecosystem | Proven? | Proving Repo | PR / Evidence | Date | Summary |
 |-----------|---------|--------------|---------------|------|---------|

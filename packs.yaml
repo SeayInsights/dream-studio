@@ -47,8 +47,19 @@ packs:
     invariants:
       - a finding names a file and line, or the command that produced it
       - a discovered defect is registered in the authority rather than left in prose
-    modes: [debug, harden, pr-security-scan, structure-audit, groom, audit, security, code-quality, testing, types-deps, backend-api, frontend-ux, architecture, database-compliance]
-    hooks: [on-security-scan, on-quality-score, on-structure-check, on-agent-correction]
+    modes: [harden, pr-security-scan, security, types-deps, backend-api, frontend-ux, database-compliance]
+    hooks: [on-security-scan]
+
+  code-health:
+    description: Code health — quality, architecture, structure, and test discipline
+    skill: code-health
+    invariants:
+      - a finding names a file and line, or the command that produced it
+      - a discovered defect is registered in the authority rather than left in prose
+    # split out of quality (code-quality, architecture, structure-audit, audit, groom, testing,
+    # debug) — pack-split, 2026-09-25
+    modes: [code-quality, architecture, structure-audit, audit, groom, testing, debug]
+    hooks: [on-quality-score, on-structure-check, on-agent-correction]
     rules: [structure/architecture.md, structure/fsc.md]
 
   release:

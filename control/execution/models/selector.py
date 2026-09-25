@@ -196,10 +196,10 @@ def _resolve_skill_md(skill_specifier: str) -> Path | None:
     """Resolve a skill specifier to its SKILL.md path.
 
     Accepts:
-      "ds-quality debug"  → canonical/skills/quality/modes/debug/SKILL.md
-      "ds-core think"     → canonical/skills/core/modes/think/SKILL.md
-      "quality debug"               → canonical/skills/quality/modes/debug/SKILL.md
-      "debug"                       → searches all packs for modes/debug/SKILL.md
+      "ds-code-health debug"  → canonical/skills/code-health/modes/debug/SKILL.md
+      "ds-core think"         → canonical/skills/core/modes/think/SKILL.md
+      "code-health debug"            → canonical/skills/code-health/modes/debug/SKILL.md
+      "debug"                        → searches all packs for modes/debug/SKILL.md
     """
     try:
         root = _plugin_root_cached()

@@ -37,7 +37,12 @@ from control.execution.workflow.state import (  # noqa: E402
 # ── Skill specifier resolution ────────────────────────────────────────────────
 
 # Maps bare mode names to their owning pack. Fully-qualified names (containing
-# ':') bypass this table entirely. Entries reflect packs.yaml modes as of Slice 9.
+# ':') bypass this table entirely. Entries reflect packs.yaml modes as of the
+# pack-split campaign's 7th slice (2026-09-25, ds-code-health) -- this table has
+# no test cross-checking it against packs.yaml, so a pack split silently stales
+# whichever entries it moves; three workflow files (fix-issue.yaml, hotfix.yaml,
+# ui-feature.yaml) were found still using a bare name this table pointed at the
+# wrong pack, confirmed to fail at the skill-load step, not just in test fixtures.
 _BARE_TO_PACK: dict[str, str] = {
     # ds-core
     "think": "ds-core",
@@ -49,15 +54,15 @@ _BARE_TO_PACK: dict[str, str] = {
     "handoff": "ds-core",
     "recap": "ds-core",
     "explain": "ds-core",
+    "learn": "ds-core",
+    "coach": "ds-core",
     # ds-quality
-    "debug": "ds-quality",
-    "polish": "ds-quality",
     "harden": "ds-quality",
     "pr-security-scan": "ds-quality",
-    "structure-audit": "ds-quality",
-    "learn": "ds-quality",
-    "coach": "ds-quality",
-    "audit": "ds-quality",
+    # ds-code-health
+    "debug": "ds-code-health",
+    "structure-audit": "ds-code-health",
+    "audit": "ds-code-health",
     # ds-security
     "dast": "ds-security",
     "binary-scan": "ds-security",
@@ -69,13 +74,16 @@ _BARE_TO_PACK: dict[str, str] = {
     "domain-re": "ds-analyze",
     "repo": "ds-analyze",
     "intelligence": "ds-analyze",
+    # ds-apps
+    "game-dev": "ds-apps",
+    "saas-build": "ds-apps",
+    "mcp-build": "ds-apps",
     # ds-domains
-    "game-dev": "ds-domains",
-    "saas-build": "ds-domains",
-    "mcp-build": "ds-domains",
     "dashboard-dev": "ds-domains",
     "power-platform": "ds-domains",
-    "design": "ds-domains",
+    # ds-website
+    "design": "ds-website",
+    "polish": "ds-website",
     # ds-project
     # ds-setup
     "wizard": "ds-setup",

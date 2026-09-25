@@ -24,8 +24,6 @@ from core.skills.reachability import SKILLS_DIR, routes, unreachable
 #: while a name says which mode, and fixing one is deleting a line. A new unreachable
 #: mode fails this test carrying its own id.
 KNOWN_UNREACHABLE = {
-    "quality/architecture",
-    "quality/audit",
     "quality/backend-api",
     "quality/database-compliance",
     "quality/frontend-ux",

@@ -80,7 +80,8 @@ Existing skills and gates are canonical when they already work:
 
 - security review maps to the 47 enterprise controls.
 - quality secure remains OWASP/STRIDE process guidance.
-- quality harden and structure-audit map to code quality and architecture.
+- quality harden and code-health structure-audit map to code-health's code-quality
+  and architecture modes.
 - `ci_gate.py`, lint baseline, docs drift, and pip-audit map to release and
   supply-chain readiness.
 - lightweight GitHub PR smoke maps to remote confidence, while local
@@ -239,3 +240,5 @@ unavailable until a targeted or full applicable review supplies evidence.
 <!-- Last reviewed 2026-07-15 — WO-SCHEMALEAN (wire readiness_events): core/production_readiness/controls.py::production_readiness_dashboard_summary was permanently returning "unavailable" — it read production_readiness_assessment_runs, which migration 112 dropped, so its early-return always fired. Repointed it to reconstruct the summary from the readiness_events spine (assessment.started event body → status/confidence/health_score/readiness_score/missing_evidence/blocking_factors; child control_result.recorded events → controls + control_summary counts), the same spine `ds analytics-ingest` already writes via core/analytics_ingestion.py::_readiness_rows. No response-shape change (same keys: readiness_score/health_score/control_summary/controls/findings/…); source_tables now names readiness_events. The retired normalized findings/remediation/compliance tables are not in the spine, so those lists are honestly empty (blocking_factors + missing_evidence carry the equivalent signal on the score dicts). Activates the production-readiness dashboard section that was dead since migration 112. -->
 
 <!-- Last reviewed 2026-07-15 — WO-SCHEMALEAN (migration 147): capability_route_records dropped (dead shared-intelligence table). No secure-production-readiness-gate behavior/contract change. -->
+
+<!-- Reviewed 2026-09-25 — PR #821, pack-split (7th slice, ds-code-health): core/production_readiness/controls_catalog.py's structure-audit evidence path updated from canonical/skills/quality/modes/structure-audit/SKILL.md to canonical/skills/code-health/modes/structure-audit/SKILL.md (structure-audit moved packs); this doc's own "quality harden and structure-audit map to..." line corrected the same way. No control, decision, evidence-requirement, or authority-boundary change — only which pack the mapped skill lives in. -->

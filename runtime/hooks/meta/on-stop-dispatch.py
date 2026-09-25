@@ -45,7 +45,7 @@ from core.config import paths  # noqa: E402
 HANDLERS: list[tuple[str, Path]] = [
     ("on-session-end", PLUGIN_ROOT / "runtime" / "hooks" / "meta" / "on-session-end.py"),
     ("on-stop-handoff", PLUGIN_ROOT / "runtime" / "hooks" / "core" / "on-stop-handoff.py"),
-    ("on-quality-score", PLUGIN_ROOT / "runtime" / "hooks" / "quality" / "on-quality-score.py"),
+    ("on-quality-score", PLUGIN_ROOT / "runtime" / "hooks" / "code-health" / "on-quality-score.py"),
     ("on-skill-telemetry", PLUGIN_ROOT / "runtime" / "hooks" / "meta" / "on-skill-telemetry.py"),
     ("on-milestone-end", PLUGIN_ROOT / "runtime" / "hooks" / "core" / "on-milestone-end.py"),
     ("on-token-log", PLUGIN_ROOT / "runtime" / "hooks" / "meta" / "on-token-log.py"),

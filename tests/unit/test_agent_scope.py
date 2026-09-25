@@ -47,14 +47,22 @@ def test_the_scope_names_the_mode_that_dispatches_the_agent():
 
 
 def test_the_scope_names_the_siblings_to_hand_work_to():
-    """What makes "handed back by name" followable."""
-    rows = _rows()
-    quality = [r for r in rows if r["mode"].startswith("quality/")]
-    assert len(quality) >= 5, "expected several quality specialists"
+    """What makes "handed back by name" followable.
 
-    row = quality[0]
+    Picks whichever pack currently has the most agent-carrying modes, rather than a
+    hardcoded pack name -- the pack-split campaign (2026-09) repeatedly moved agents
+    between packs, and a fixed name/threshold pinned to "quality" broke every time
+    that pack's own share of same-pack specialists shrank."""
+    rows = _rows()
+    by_pack: dict[str, list] = {}
+    for r in rows:
+        by_pack.setdefault(r["mode"].split("/")[0], []).append(r)
+    pack, group = max(by_pack.items(), key=lambda item: len(item[1]))
+    assert len(group) >= 2, f"expected at least two same-pack specialists, largest is {pack}"
+
+    row = group[0]
     scope = derived_scope(row, rows)
-    for sibling in quality[1:]:
+    for sibling in group[1:]:
         assert f"`{sibling['agent']}`" in scope, (
             f"{row['agent']} is not told about {sibling['agent']}, so it cannot hand"
             " work back by name"

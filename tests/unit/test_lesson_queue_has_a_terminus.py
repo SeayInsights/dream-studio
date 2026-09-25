@@ -52,15 +52,15 @@ def test_a_lesson_starts_as_a_draft(authority):
 
 def test_promote_does_not_claim_arrival(authority):
     """Promotion records intent. It is not evidence the skill text changed."""
-    promote_lesson("L-TERMINUS", "ds-quality:debug", db_path=authority)
+    promote_lesson("L-TERMINUS", "ds-code-health:debug", db_path=authority)
     row = _row(authority)
     assert row["status"] == "promoted"
     assert row["status"] != "applied"
 
 
 def test_apply_records_arrival_and_where_it_landed(authority):
-    promote_lesson("L-TERMINUS", "ds-quality:debug", db_path=authority)
-    landed = "canonical/skills/quality/modes/debug/gotchas.yml@abc1234"
+    promote_lesson("L-TERMINUS", "ds-code-health:debug", db_path=authority)
+    landed = "canonical/skills/code-health/modes/debug/gotchas.yml@abc1234"
     assert apply_lesson("L-TERMINUS", landed, db_path=authority)
     row = _row(authority)
     assert row["status"] == "applied"
@@ -71,7 +71,7 @@ def test_apply_records_arrival_and_where_it_landed(authority):
 def test_applied_lessons_are_filterable(authority):
     """The queue can tell a landed lesson from a pending one, which is the whole point."""
     assert insert_lesson("L-STILL-OPEN", "review", "not yet read", db_path=authority)
-    promote_lesson("L-TERMINUS", "ds-quality:debug", db_path=authority)
+    promote_lesson("L-TERMINUS", "ds-code-health:debug", db_path=authority)
     apply_lesson("L-TERMINUS", "gotchas.yml@abc1234", db_path=authority)
 
     applied = get_lessons(status="applied", db_path=authority)
@@ -92,12 +92,12 @@ def test_apply_is_reachable_from_the_cli():
 
 def test_groom_mode_is_registered_and_routable():
     packs = yaml.safe_load((REPO_ROOT / "packs.yaml").read_text(encoding="utf-8"))["packs"]
-    assert "groom" in packs["quality"]["modes"]
+    assert "groom" in packs["code-health"]["modes"]
 
-    card_path = REPO_ROOT / "canonical/skills/quality/modes/groom/SKILL.md"
+    card_path = REPO_ROOT / "canonical/skills/code-health/modes/groom/SKILL.md"
     assert card_path.is_file()
 
-    router = (REPO_ROOT / "canonical/skills/quality/SKILL.md").read_text(encoding="utf-8")
+    router = (REPO_ROOT / "canonical/skills/code-health/SKILL.md").read_text(encoding="utf-8")
     assert "modes/groom/SKILL.md" in router, "groom is registered but the router cannot reach it"
 
 
@@ -105,5 +105,5 @@ def test_groom_stops_for_the_operator():
     """A mode that edits the text steering every later session does not self-merge."""
     from core.gates.skill_card import _all_cards
 
-    card = next(c for pack, mode, _, c in _all_cards() if (pack, mode) == ("quality", "groom"))
+    card = next(c for pack, mode, _, c in _all_cards() if (pack, mode) == ("code-health", "groom"))
     assert card["write_posture"] == "hitl"

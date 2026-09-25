@@ -98,13 +98,13 @@ _WORKFLOW_BASES: dict[str, dict[str, Any]] = {
         "dashboard_visibility": "Project Details quality and release-readiness signals.",
         "contract_atlas_impact": "expert_workflow_system.code_quality_architecture",
         "privacy_boundary": "No private source snippets in public exports unless source is public.",
-        "existing_owners": ["skills/core/modes/review", "skills/quality/modes/structure-audit"],
+        "existing_owners": ["skills/core/modes/review", "skills/code-health/modes/structure-audit"],
         "overlap_status": {
             "decision": "strengthen_existing",
             "overlap_reason": "Review and structure-audit already cover correctness and architecture shape.",
             "evidence": [
                 "skills/core/modes/review/SKILL.md",
-                "skills/quality/modes/structure-audit",
+                "skills/code-health/modes/structure-audit",
             ],
             "validation_requirement": "catalog scorecard test plus release-gate coverage",
             "rollback_supersession_plan": "Revert catalog mapping; review modes remain unchanged.",
@@ -333,14 +333,14 @@ _WORKFLOW_BASES: dict[str, dict[str, Any]] = {
         "contract_atlas_impact": "expert_workflow_system.performance_efficiency",
         "privacy_boundary": "Do not publish private traces or provider billing credentials.",
         "existing_owners": [
-            "skills/quality/modes/debug/references/performance-issues.md",
+            "skills/code-health/modes/debug/references/performance-issues.md",
             "core/shared_intelligence/usage_accounting.py",
         ],
         "overlap_status": {
             "decision": "strengthen_existing",
             "overlap_reason": "Debug references cover performance diagnosis; usage accounting covers adapter efficiency.",
             "evidence": [
-                "skills/quality/modes/debug/references/performance-issues.md",
+                "skills/code-health/modes/debug/references/performance-issues.md",
                 "core/shared_intelligence/usage_accounting.py",
             ],
             "validation_requirement": "performance score rubric and usage-accounting policy tests",
@@ -416,11 +416,11 @@ _WORKFLOW_BASES: dict[str, dict[str, Any]] = {
         "dashboard_visibility": "Debug findings, validation failures, and remediation Work Orders.",
         "contract_atlas_impact": "expert_workflow_system.root_cause_debugging",
         "privacy_boundary": "Logs may contain private data; redact before public export.",
-        "existing_owners": ["skills/quality/modes/debug/SKILL.md"],
+        "existing_owners": ["skills/code-health/modes/debug/SKILL.md"],
         "overlap_status": {
             "decision": "keep_existing",
             "overlap_reason": "Debug skill already implements disciplined hypothesis testing.",
-            "evidence": ["skills/quality/modes/debug/SKILL.md"],
+            "evidence": ["skills/code-health/modes/debug/SKILL.md"],
             "validation_requirement": "catalog maps existing debug behavior without duplicate skill",
             "rollback_supersession_plan": "No supersession; keep debug mode as canonical owner.",
             "dashboard_project_health_impact": "Unresolved root cause affects health and release readiness.",

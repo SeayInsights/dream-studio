@@ -181,7 +181,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--to",
         required=True,
         metavar="REF",
-        help="Where it landed, e.g. canonical/skills/quality/modes/debug/gotchas.yml@<sha>.",
+        help="Where it landed, e.g. canonical/skills/code-health/modes/debug/gotchas.yml@<sha>.",
     )
     p_apply.set_defaults(func=cmd_apply)
 
