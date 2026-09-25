@@ -25,9 +25,7 @@ def _real_hook_pack_dirs() -> set[str]:
     which hold no .py handlers and are not pack names.
     """
     return {
-        entry.name
-        for entry in HOOKS_ROOT.iterdir()
-        if entry.is_dir() and any(entry.glob("*.py"))
+        entry.name for entry in HOOKS_ROOT.iterdir() if entry.is_dir() and any(entry.glob("*.py"))
     }
 
 
@@ -64,9 +62,7 @@ def test_runtime_preflight_hook_packs_covers_every_hook_owning_pack():
 
     real = _real_hook_pack_dirs()
     missing = real - set(HOOK_PACKS)
-    assert (
-        not missing
-    ), f"runtime preflight would report handlers under {missing} as missing"
+    assert not missing, f"runtime preflight would report handlers under {missing} as missing"
 
 
 def test_setup_diagnostics_expected_subdirs_covers_every_hook_owning_pack():
