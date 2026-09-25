@@ -16,7 +16,7 @@ Skills live under `canonical/skills/<pack>/modes/<mode>/`. Each skill is a direc
 | Pattern | Example | When to use |
 |---|---|---|
 | **Audit-mode skill** | `quality/security` | Skill invoked directly via `ds skill invoke` or as part of build/audit orchestration. Has rules to enforce, runs static + LLM passes, produces tiered findings reports. |
-| **Subagent-target skill** | `quality/accessibility` | Skill invoked via Task tool subagent dispatch. Content-driven (patterns, checklists, examples); applied in context of the subagent's task. No separate audit/build modes. |
+| **Subagent-target skill** | `website/accessibility` | Skill invoked via Task tool subagent dispatch. Content-driven (patterns, checklists, examples); applied in context of the subagent's task. No separate audit/build modes. |
 
 Both patterns share the same 5-file minimum. The audit-mode pattern extends it.
 

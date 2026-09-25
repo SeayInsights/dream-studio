@@ -18,6 +18,8 @@ Read `skills/website/gotchas.yml` before every invocation. It contains known fai
 | `prototype app:` | prototype mode |
 | `pitch deck:` | deck mode |
 | `animate:` | animate mode |
+| `design art:`, `canvas:`, `generative art:` | design mode |
+| `polish ui:`, `critique design:`, `make it premium:` | polish mode |
 
 ---
 
@@ -68,6 +70,9 @@ If violations are found, fix them before presenting to the user. This rule is no
 | animate | `animate:`, `animation:`, `hero animation:` | `modes/animate/SKILL.md` | CSS/JS animations for hero, transitions, scroll |
 | cip | `cip:`, `brand package:`, `identity package:` | `modes/cip/SKILL.md` | Complete identity package: logo, colors, typography, usage |
 | critique | `critique:`, `review design:`, `score:` | `modes/critique/SKILL.md` | 5-dimension design score + prioritized fix list |
+| design | `design art:`, `design poster:`, `canvas:`, `generative art:`, `brand:` (outside a pipeline), `ad creative:` | `modes/design/SKILL.md` | Visual design capability — design systems, brand tokens, generative art, ad creative |
+| accessibility | dispatched via the `accessibility-expert` subagent, not a keyword trigger | `modes/accessibility/SKILL.md` | WCAG 2.2 Level AA audit and remediation |
+| polish | `polish ui:`, `critique design:`, `redesign:`, `make it premium:` | `modes/polish/SKILL.md` | UI critique + fixes against design intent |
 
 ---
 
@@ -77,12 +82,12 @@ These files are maintained by the `design` mode and are REUSED here — do not d
 
 | File | Contents |
 |---|---|
-| `../design/references/font-pairings.md` | 75 curated font pairings |
-| `../design/references/anti-patterns.md` | 99 UX anti-patterns |
-| `../design/references/token-architecture.md` | 3-layer W3C DTCG token system |
-| `../design/references/design-philosophies.md` | 20 design philosophy schools |
-| `../design/references/semantic-colors.md` | 30+ semantic color tokens |
-| `../design/references/component-composition.md` | 14 composition patterns |
+| `modes/design/references/font-pairings.md` | 75 curated font pairings |
+| `modes/design/references/anti-patterns.md` | 99 UX anti-patterns |
+| `modes/design/references/token-architecture.md` | 3-layer W3C DTCG token system |
+| `modes/design/references/design-philosophies.md` | 20 design philosophy schools |
+| `modes/design/references/semantic-colors.md` | 30+ semantic color tokens |
+| `modes/design/references/component-composition.md` | 14 composition patterns |
 
 ---
 
@@ -117,14 +122,22 @@ These files are maintained by the `design` mode and are REUSED here — do not d
 
 ---
 
-## Integration with Existing Design Mode
+## Integration with the design Sub-mode
 
-When a trigger keyword overlaps between `website` and `design` modes (e.g., `brand:`):
+`design` is a sibling sub-mode in this pack (`modes/design/SKILL.md`), not a separate
+pack — it moved here from `domains` because its own subject (design systems, brand
+assets, generative art) is website/visual work, but it keeps its own independent
+identity and dispatch, the same way `page`, `deck`, and the other build stages do.
 
-- **In a website pipeline context** (prior discover/direction output exists in session) → route to `modes/brand/SKILL.md` (this mode)
-- **Outside a website pipeline** (standalone brand/visual work) → route to `design` mode
+When a trigger keyword overlaps between the `website` pipeline stages and `design`
+(e.g., `brand:`):
 
-The `design` mode handles: design systems, brand assets, visual artifacts, standalone UI components.
-The `website` mode handles: end-to-end website creation pipelines with full lifecycle orchestration.
+- **In a website pipeline context** (prior discover/direction output exists in session) → route to
+  the pipeline stage's own `modes/<mode>/SKILL.md` (`brand`, `critique`, etc.)
+- **Outside a website pipeline** (standalone brand/visual work) → route to `modes/design/SKILL.md`
 
-These modes are peers, not substitutes.
+`design` handles: design systems, brand assets, visual artifacts, standalone UI components,
+generative art. `website`'s pipeline stages handle: end-to-end website creation with full
+lifecycle orchestration (discovery through delivery).
+
+These are sub-modes of one pack, not substitutes for each other.

@@ -138,7 +138,7 @@ def write_work_order_context(
                 "## Design System",
                 "",
                 f"System: {_ds}",
-                f"Reference: canonical/skills/domains/design-systems/{_ds}/",
+                f"Reference: canonical/skills/website/design-systems/{_ds}/",
                 "",
                 "Apply the principles from this design system to all UI output in this"
                 " work order. Do not deviate from the system's token definitions.",

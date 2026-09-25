@@ -14,7 +14,6 @@
 | Mode | File | Keywords |
 |---|---|---|
 | debug | modes/debug/SKILL.md | debug:, diagnose: |
-| polish | modes/polish/SKILL.md | polish ui:, critique design:, redesign:, make it premium: |
 | harden | modes/harden/SKILL.md | /harden, harden audit, harden fix |
 | secure | the ds-fullstack pack's secure mode | secure:, security review:, audit code: |
 | structure-audit | modes/structure-audit/SKILL.md | /structure-audit, audit structure: |

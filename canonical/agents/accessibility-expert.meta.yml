@@ -3,7 +3,7 @@
 description: >-
   Audit and remediate WCAG 2.2 accessibility issues in web interfaces using automated tools and manual testing procedures.
 model: sonnet
-skill: ds-quality/modes/accessibility/SKILL.md
+skill: ds-website/modes/accessibility/SKILL.md
 essentials: |
   Apply its remediation priority
   framework (Critical → High → Medium → Low) when classifying findings.

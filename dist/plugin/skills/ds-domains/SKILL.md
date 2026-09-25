@@ -1,6 +1,6 @@
 ---
 name: ds-domains
-description: 'Stack-specific and domain builders. Use for: dashboard-dev:, intake:, design:, technical documentation:'
+description: 'Stack-specific and domain builders. Use for: dashboard-dev:, intake:, technical documentation:'
 ---
 
 # Domains — Stack-Specific Builders
@@ -20,9 +20,6 @@ description: 'Stack-specific and domain builders. Use for: dashboard-dev:, intak
 |---|---|---|
 | dashboard-dev | modes/dashboard-dev/SKILL.md | dashboard:, feed contract:, Tauri: |
 | power-platform | modes/power-platform/SKILL.md | intake:, sow:, build powerbi:, optimize dax:, build flow:, build app: |
-| design | modes/design/SKILL.md | design art:, design poster:, canvas:, brand:, ad creative: |
-| website | modes/website/SKILL.md | website:, build website:, landing page:, build page:, prototype app:, pitch deck:, animate:, build site: |
-| fullstack | modes/fullstack/SKILL.md | fullstack:, build fullstack:, fullstack frontend:, fullstack backend:, fullstack integrate:, fullstack secure:, full-stack:, full stack: |
 
 ## Shared resources
 

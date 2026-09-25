@@ -1,7 +1,7 @@
 ---
 dream_studio:
-  skill_id: ds-domains
-  pack: domains
+  skill_id: ds-website
+  pack: website
   mode: design
   mode_type: build
   inputs: [design_intent, brand_guidelines, content, target_audience]
@@ -83,7 +83,7 @@ This table will power automated design system selection when curated presets are
 
 ## External References
 
-The following extracted pattern files are available in `skills/domains/modes/design/references/`:
+The following extracted pattern files are available in `skills/website/modes/design/references/`:
 
 1. **[priority-matrix.md](references/priority-matrix.md)** - 10-level priority system for design decisions (P0 Critical → P9 Future Vision)
 2. **[font-pairings.md](references/font-pairings.md)** - 75 curated font pairings with search utility (`search-font-pairings.py`)

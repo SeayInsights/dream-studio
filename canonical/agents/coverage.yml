@@ -129,10 +129,10 @@ modes:
     (Airflow/Dagster), CDC patterns, schema migrations, and data quality contracts. Covers BigQuery, Snowflake,
     and Redshift warehouse-specific optimizations. Scope boundary:... Invoke for: dbt, BigQuery, Snowflake,
     Redshift, Airflow DAG, Dagster asset'
-- mode: domains/design
-  skill: domains/modes/design/SKILL.md
+- mode: website/design
+  skill: website/modes/design/SKILL.md
   agent: domains-design
-  installed_skill: ds-domains/modes/design/SKILL.md
+  installed_skill: ds-website/modes/design/SKILL.md
   dispatched_because: 'isolation: the skill is 6558 bytes, enough that carrying it in a subagent protects
     the caller''s context'
   description: Visual design capability — brand tokens, anti-slop rules, visual hierarchy, generative
@@ -260,10 +260,10 @@ modes:
   skill: website/modes/prototype/SKILL.md
   no_agent: Nothing dispatches it and the skill is 4937 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: quality/accessibility
-  skill: quality/modes/accessibility/SKILL.md
+- mode: website/accessibility
+  skill: website/modes/accessibility/SKILL.md
   agent: accessibility-expert
-  installed_skill: ds-quality/modes/accessibility/SKILL.md
+  installed_skill: ds-website/modes/accessibility/SKILL.md
   dispatched_because: 'isolation: the skill is 5174 bytes, enough that carrying it in a subagent protects
     the caller''s context'
   description: 'WCAG 2.2 Level AA audit and remediation for web interfaces. Covers automated tools (axe-core,
@@ -340,8 +340,8 @@ modes:
   skill: quality/modes/ops/SKILL.md
   no_agent: Nothing dispatches it and the skill is 2862 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: quality/polish
-  skill: quality/modes/polish/SKILL.md
+- mode: website/polish
+  skill: website/modes/polish/SKILL.md
   no_agent: Nothing dispatches it and the skill is 4136 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
 - mode: quality/pr-security-scan

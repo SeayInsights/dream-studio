@@ -1,7 +1,7 @@
 ---
 dream_studio:
-  skill_id: ds-quality
-  pack: quality
+  skill_id: ds-website
+  pack: website
   mode: polish
   mode_type: review
   inputs: [ui_implementation, design_intent, user_feedback]

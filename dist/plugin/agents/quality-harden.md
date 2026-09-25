@@ -16,7 +16,6 @@ You are dispatched for **`quality/harden`**, and your domain knowledge below is 
 
 The other `quality` specialists, so you can hand work back BY NAME rather than attempting it or returning a vague refusal:
 
-- `accessibility-expert`
 - `quality-code-quality`
 - `quality-learn`
 - `quality-security`

@@ -40,7 +40,7 @@ avoid:
     severity: medium
     discovered: 2026-05-02
     title: "Never duplicate references that exist in the design mode"
-    context: "Font pairings, anti-patterns, token architecture, design philosophies, semantic colors, and component composition already exist in skills/domains/modes/design/references/. Duplicating them creates drift."
+    context: "Font pairings, anti-patterns, token architecture, design philosophies, semantic colors, and component composition already exist in skills/website/modes/design/references/. Duplicating them creates drift."
     fix: "Always reference existing design mode files by path. Only create NEW reference files for content not in the design mode."
 
 best_practices:

@@ -55,7 +55,7 @@ current expert catalog mostly strengthens existing owners:
 | `code_quality_architecture_workflow` | `quality:review+structure-audit` | `strengthen_existing` |
 | `root_cause_debugging_workflow` | `quality:debug` | `keep_existing` |
 | `performance_efficiency_workflow` | `quality:debug/performance` | `strengthen_existing` |
-| `frontend_design_excellence_workflow` | `quality:polish+domains:design` | `split_existing` |
+| `frontend_design_excellence_workflow` | `website:polish+website:design` | `split_existing` |
 | `seo_content_growth_workflow` | `domains:website/content` | `strengthen_existing` |
 | `documentation_quality_workflow` | `docs:quality` | `strengthen_existing` |
 | `data_modeling_authority_workflow` | `core:sqlite_authority` | `strengthen_existing` |
@@ -105,7 +105,7 @@ implementation skill.
 ## Design Workflow
 
 Frontend design excellence is not one monolithic skill. It maps existing
-`quality:polish` and `domains:design` behavior into specialized review lenses:
+`website:polish` and `website:design` behavior into specialized review lenses:
 
 - `product_ux_review`
 - `information_architecture_review`
