@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-from interfaces.cli.setup_hooks import SETTINGS_JSON
+from interfaces.cli.setup_hooks import SETTINGS_JSON, SYNC_HOOK_PACKS
 from interfaces.cli.setup_shared import HOOKS_JSON, REPO_ROOT, REQUIREMENTS, StepResult, VENV_DIR
 from interfaces.cli.setup_steps import step_python_version
 
@@ -75,7 +75,7 @@ def _projection_completeness_report() -> dict:
     """Return DS hook projection health without writing anything."""
     projection_root = REPO_ROOT / ".claude" / "hooks" / "runtime" / "hooks"
     plugin_root_path = REPO_ROOT / ".claude" / "hooks" / ".plugin-root"
-    expected_subdirs = ("meta", "quality", "domains", "core")
+    expected_subdirs = SYNC_HOOK_PACKS
 
     present = [s for s in expected_subdirs if (projection_root / s).is_dir()]
     missing = [s for s in expected_subdirs if s not in present]

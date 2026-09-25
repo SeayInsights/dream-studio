@@ -224,7 +224,7 @@ tier rather than leaving it to guesswork.
 
 ### on-edit-dispatch (PostToolUse Edit|Write)
 1. `on-agent-correction` — runtime/hooks/quality
-2. `on-game-validate` — runtime/hooks/domains
+2. `on-game-validate` — runtime/hooks/apps
 3. `on-security-scan` — runtime/hooks/quality
 4. `on-structure-check` — runtime/hooks/quality
 

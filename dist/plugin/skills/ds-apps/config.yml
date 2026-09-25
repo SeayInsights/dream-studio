@@ -1,0 +1,6 @@
+name: apps
+model_tier: sonnet
+description: 'SaaS, mobile, game, and MCP-server builders.'
+argument-hint: saas-build | mobile | game-dev | mcp-build
+user_invocable: true
+args: mode

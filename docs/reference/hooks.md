@@ -86,7 +86,7 @@ Complete catalog of all 31+ hook handlers across 4 packs.
 | Slug | Pack | Purpose |
 |------|------|---------|
 | `on-agent-correction` | quality | Logs director corrections. Parses newest correction from `director-corrections.md`, appends to `corrections.log`. Drafts lessons when patterns repeat 3+ times. |
-| `on-game-validate` | domains | Validates game project files (Godot/Blender constraints). Advisory only — emits stderr warning, never blocks. |
+| `on-game-validate` | apps | Validates game project files (Godot/Blender constraints). Advisory only — emits stderr warning, never blocks. |
 | `on-security-scan` | quality | Lightweight security pattern check on new file content. Scans for high-signal anti-patterns. Advisory only — never blocks. |
 | `on-structure-check` | quality | Nudges when source files placed outside standard dirs (`.py`/`.ts`/`.js` should live in `src/`, `lib/`, `hooks/`, `app/`, or `tests/`). Advisory only. |
 

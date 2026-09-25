@@ -326,7 +326,7 @@ _MAY_SPELL_THE_HOME = {
     ): "stdlib-only by design (this file must not import DREAM STUDIO -- see its own"
     " docstring); reads DS_HOME, which --home sets for exactly this reader"
     " (interfaces/cli/ds.py home_variables())",
-    ("runtime/lib/domains/game_validate.py", 'if ".dream-studio" in normalized:'): "path test",
+    ("runtime/lib/apps/game_validate.py", 'if ".dream-studio" in normalized:'): "path test",
     (
         "scripts/runtime_state_hash_guard.py",
         'state = home / ".dream-studio" / "state"',

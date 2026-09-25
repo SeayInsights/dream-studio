@@ -108,7 +108,7 @@ def test_a_thin_skill_is_declared_out_with_its_measurement():
     for being small must say how small, so the decision can be re-checked when the skill
     grows rather than inherited as folklore."""
     declared = {str(r["mode"]): r for r in declared_modes()}
-    reason = declared["domains/game-dev"]["no_agent"]
+    reason = declared["apps/game-dev"]["no_agent"]
     assert "1092 bytes" in reason, f"the refusal does not carry its measurement: {reason}"
     assert "inline" in reason
 

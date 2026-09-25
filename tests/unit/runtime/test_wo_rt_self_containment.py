@@ -94,7 +94,7 @@ def test_get_source_root_returns_none_when_missing(tmp_path: Path) -> None:
 
 
 def test_installer_projects_all_packs(tmp_path: Path) -> None:
-    """_collect_hook_file_ops projects meta, quality, domains, core (and security if present)."""
+    """_collect_hook_file_ops projects meta, quality, apps, core (and security if present)."""
     repo_root = Path(__file__).resolve().parents[3]
     hooks_dir = tmp_path / "hooks"
     hooks_dir.mkdir()
@@ -121,7 +121,7 @@ def test_installer_projects_all_packs(tmp_path: Path) -> None:
         except ValueError:
             pass
 
-    for required_pack in ("meta", "quality", "domains", "core"):
+    for required_pack in ("meta", "quality", "apps", "core"):
         if (repo_root / "runtime" / "hooks" / required_pack).is_dir():
             assert (
                 required_pack in packs_with_handlers

@@ -1,7 +1,7 @@
 ---
 dream_studio:
-  skill_id: ds-domains
-  pack: domains
+  skill_id: ds-apps
+  pack: apps
   mode: mcp-build
   mode_type: build
   inputs: [mcp_spec, tool_definitions, resource_schemas, server_requirements]

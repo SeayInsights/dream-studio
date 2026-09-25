@@ -37,3 +37,19 @@ class TestIsPackActive:
     def test_config_read_error_fails_open(self) -> None:
         with patch("core.config.state.read_config", side_effect=OSError("no config")):
             assert pack_context.is_pack_active("any") is True
+
+    def test_split_pack_active_when_old_name_still_listed(self) -> None:
+        """A user who narrowed active_packs to "domains" before the apps
+        pack split (PR #817) must not lose game validation on update."""
+        with patch(
+            "core.config.state.read_config",
+            return_value={"active_packs": ["domains"]},
+        ):
+            assert pack_context.is_pack_active("apps") is True
+
+    def test_split_pack_inactive_when_neither_name_listed(self) -> None:
+        with patch(
+            "core.config.state.read_config",
+            return_value={"active_packs": ["meta"]},
+        ):
+            assert pack_context.is_pack_active("apps") is False
