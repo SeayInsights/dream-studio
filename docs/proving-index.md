@@ -8,7 +8,7 @@ Last updated: 2026-06-13
 
 ---
 
-## Security (ds-quality:security)
+## Security (ds-security:review, audit/build sub-modes)
 
 | Ecosystem | Proven? | Proving Repo | PR / Evidence | Date | Summary |
 |-----------|---------|--------------|---------------|------|---------|
@@ -103,7 +103,7 @@ Last updated: 2026-06-13
 
 ---
 
-## Database Compliance (ds-quality:database-compliance)
+## Database Compliance (ds-security:comply, privacy sub-mode)
 
 | Ecosystem | Proven? | Proving Repo | PR / Evidence | Date | Summary |
 |-----------|---------|--------------|---------------|------|---------|

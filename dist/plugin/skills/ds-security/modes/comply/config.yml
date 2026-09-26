@@ -1,9 +1,11 @@
 name: comply
 model_tier: opus
 description: Map findings to SOC 2, NIST CSF, OWASP ASVS controls. Identify coverage
-  gaps. Generate audit-ready evidence. Trigger on comply:, compliance map, audit evidence.
+  gaps. Generate audit-ready evidence. Audit this repo's own data-handling code for
+  GDPR/HIPAA/CCPA compliance. Trigger on comply:, compliance map, audit evidence,
+  compliance audit:, gdpr audit:, privacy audit:, dbc audit:.
 user_invocable: true
 args: mode
-argument-hint: '[map | gaps | evidence] [--client <name>]'
-pack: quality
+argument-hint: '[map | gaps | evidence | privacy] [--client <name>]'
+pack: security
 chain_suggests: []

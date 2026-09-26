@@ -129,7 +129,7 @@ class TestSuppression:
 
     def test_security_skill_suppressed(self, suppressed_globs):
         """Security skill directory is suppressed (contains injection patterns as docs)."""
-        assert is_suppressed("canonical/skills/quality/modes/security/rules.yml", suppressed_globs)
+        assert is_suppressed("canonical/skills/security/modes/review/rules.yml", suppressed_globs)
 
     def test_tests_dir_suppressed(self, suppressed_globs):
         """tests/ directory is suppressed (fixtures may contain positive examples)."""

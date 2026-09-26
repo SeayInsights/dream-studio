@@ -29,18 +29,28 @@ See the full anchor list for tier definitions and the complete catalog of applic
 ## Before you start
 Read `gotchas.yml` in this directory before every invocation.
 
+## Mode dispatch
+
+`map`, `gaps`, and `evidence` are described inline below (see `examples.md` for their detailed
+steps). `privacy` is a separate sub-mode with its own directory:
+
+1. If the mode argument is `privacy`, read `privacy/SKILL.md` completely and follow it instead of
+   the rest of this file.
+2. Otherwise, follow `map`/`gaps`/`evidence` below.
+
 ## Trigger
-`comply:`, `compliance map`, `audit evidence`, `/comply`
+`comply:`, `compliance map`, `audit evidence`, `/comply`, `compliance audit:`, `gdpr audit:`, `privacy audit:`, `dbc audit:`
 
 ## Purpose
-Map security scan findings to compliance framework controls, identify controls with no automated scan coverage, and generate audit-ready evidence documents. This skill bridges the gap between raw Semgrep findings and the compliance frameworks clients must satisfy — SOC 2 Type II, NIST CSF, OWASP ASVS, and CWE Top 25.
+Map security scan findings to compliance framework controls, identify controls with no automated scan coverage, and generate audit-ready evidence documents. This skill bridges the gap between raw Semgrep findings and the compliance frameworks clients must satisfy — SOC 2 Type II, NIST CSF, OWASP ASVS, and CWE Top 25. It also audits this repository's OWN data-handling code and schema directly for regulatory compliance (`privacy`), independent of any client scan.
 
-This skill never modifies findings. It reads, cross-references, and reports. All writes go to `~/.dream-studio/security/datasets/{client}/`.
+This skill never modifies findings. `map`/`gaps`/`evidence` read, cross-reference, and report; all their writes go to `~/.dream-studio/security/datasets/{client}/`. `privacy` is read-only against the local repo — see `privacy/SKILL.md`.
 
 ## Modes
 - `map` — Map all ingested findings to the compliance frameworks configured in the client profile. Reads findings from `~/.dream-studio/security/scans/{client}/`. Cross-references against mapping definitions in `templates/security/compliance/`. Writes to `~/.dream-studio/security/datasets/{client}/compliance.csv`.
 - `gaps` — Identify controls with no automated scan coverage. Shows which framework controls have zero findings mapped to them — i.e., compliance obligations the current scanner configuration cannot satisfy.
 - `evidence` — Generate an audit-ready evidence document (markdown). Per control: control ID, description, scan evidence, finding count, and remediation status.
+- `privacy` — Audit THIS repo's own data-handling code and schema for GDPR (default), HIPAA, CCPA, or COPPA compliance: PII classification, retention, right to erasure/access, consent, data minimization. No `--client` or SARIF input required. See `privacy/SKILL.md`. This is a detector, not a mapper — it does not (yet) plug into `map`/`gaps`/`evidence`'s control-mapping engine, since no GDPR/HIPAA mapping template exists there and its findings carry no CWE/OWASP ids.
 
 ---
 

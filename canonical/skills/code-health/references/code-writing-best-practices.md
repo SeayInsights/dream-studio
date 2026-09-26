@@ -8,7 +8,7 @@
 
 This document covers sections A, B, C, D, E, F, G, H, I, L, M-partial, N of the master LIST 4. The following sections are deliberately excluded:
 
-- **Section J (Security in code)** — covered by ds-quality:security (18.4.1). Code-quality rules cross-reference sec-* rules rather than duplicate.
+- **Section J (Security in code)** — covered by ds-security:review (18.4.1). Code-quality rules cross-reference sec-* rules rather than duplicate.
 - **Section K (Dependencies)** — deferred to ds-quality:types-dependencies (18.5.2).
 - **Section M (Tooling & CI)** — mostly deferred to ds-release:ops (18.6.3). Only "type checker automated" lands here as code-quality-adjacent.
 - **Section O (Frontend-specific)** — covered by ds-website:accessibility (18.4.2b) and ds-quality:frontend-ux (18.6.1, future).
@@ -209,7 +209,7 @@ When a code-quality finding touches these areas, cross-reference rather than dup
 
 | Section | Topic | Owning Skill |
 |---------|-------|--------------|
-| J | Security in code | ds-quality:security (18.4.1) — sec-001 through sec-024 |
+| J | Security in code | ds-security:review (18.4.1) — sec-001 through sec-024 |
 | K | Dependencies | ds-quality:types-dependencies (18.5.2, future) |
 | M (most) | Tooling & CI | ds-release:ops (18.6.3, future) |
 | O | Frontend-specific | ds-website:accessibility (18.4.2b) + ds-quality:frontend-ux (18.6.1, future) |

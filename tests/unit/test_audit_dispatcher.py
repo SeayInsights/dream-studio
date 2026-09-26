@@ -210,6 +210,40 @@ class TestSkillDispatcherAudit:
             len(dbc_findings) == 0
         ), f"Expected 0 dbc findings on dream-studio-clean (no PII), got {len(dbc_findings)}"
 
+    def test_audit_dbc_rules_yml_actually_resolves(self):
+        """The test above can't tell "correctly auto-skipped" from "rules.yml went missing
+        after a pack-split move" -- both produce 0 findings. database-compliance's rules.yml
+        moved to security/modes/comply/privacy/ (nested under an existing sibling mode, not a
+        fresh top-level canonical/skills/<pack>/modes/database-compliance/), which
+        _skill_dir()'s glob alone cannot find -- confirm the explicit alias resolves it and
+        the file is real, not just present-but-empty."""
+        from core.skills.audit.rules_scanner_shared import _skill_dir
+
+        rules_path = _skill_dir("database-compliance") / "rules.yml"
+        assert rules_path.is_file(), f"database-compliance's rules.yml not found at {rules_path}"
+
+        import yaml
+
+        rules = yaml.safe_load(rules_path.read_text(encoding="utf-8"))["rules"]
+        assert len(rules) == 12, f"expected 12 database-compliance rules, found {len(rules)}"
+
+    def test_security_skill_id_rules_yml_actually_resolves(self):
+        """ "security" is a different way the same class of bug can bite: not nested deeper,
+        but the mode DIRECTORY renamed out from under a skill_id that stayed the same
+        (quality:security merged into security:review). Dormant today -- the audit
+        dispatcher routes "security" to a separate hardcoded Python scanner, never through
+        _skill_dir() -- but the alias is registered so this stays true if that hybrid
+        dispatch ever changes."""
+        from core.skills.audit.rules_scanner_shared import _skill_dir
+
+        rules_path = _skill_dir("security") / "rules.yml"
+        assert rules_path.is_file(), f"security's rules.yml not found at {rules_path}"
+
+        import yaml
+
+        rules = yaml.safe_load(rules_path.read_text(encoding="utf-8"))["rules"]
+        assert len(rules) == 22, f"expected 22 security rules, found {len(rules)}"
+
     def test_audit_pl009_fires_no_tags_on_dream_studio_clean(self):
         """pl-009 fires with 'no tags' finding when the repo has no release tags.
 

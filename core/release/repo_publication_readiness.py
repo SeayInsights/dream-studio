@@ -320,7 +320,7 @@ def _skip_secret_scan_path(path: str) -> bool:
     return (
         path.startswith("templates/security/")
         or path.startswith("docs/security")
-        or path.startswith("canonical/skills/quality/modes/security/")
+        or path.startswith("canonical/skills/security/modes/review/")
     )
 
 

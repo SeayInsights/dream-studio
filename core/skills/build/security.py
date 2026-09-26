@@ -1,7 +1,7 @@
 """Security build mode — static enforcement on generated Python code.
 
 Implements patterns documented in:
-  canonical/skills/quality/modes/security/build/SKILL.md
+  canonical/skills/security/modes/review/build/SKILL.md
 
 6 static patterns applied synchronously. No LLM. No DB. No subprocess.
 Returns in < 200ms for typical generated function.

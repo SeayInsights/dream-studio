@@ -42,7 +42,7 @@ Would handle: cq-M-partial (type checker automated), type narrowing checks.
 
 ## Skill Boundary Partners
 
-### ds-quality:security (complementary, not dependency)
+### ds-security:review (complementary, not dependency)
 Cross-references: cq-016 ↔ sec-003; cq-006/cq-015 ↔ sec-013 (indirectly).
 
 ### ds-data:database (complementary, not dependency)

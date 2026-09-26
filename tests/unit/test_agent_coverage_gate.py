@@ -84,7 +84,7 @@ def test_the_audit_fan_out_all_have_specialists():
     for mode in (
         "code-health/code-quality",
         "data/database",
-        "quality/security",
+        "security/review",
         "code-health/testing",
         "quality/types-deps",
     ):

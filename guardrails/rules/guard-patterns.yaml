@@ -7,7 +7,7 @@
 #
 # Suppressed paths (globally, never scan these):
 #   guardrails/**                   — guard's own source (recursive would be wrong)
-#   canonical/skills/quality/modes/security/**  — security rules documenting patterns
+#   canonical/skills/security/modes/review/**  — security rules documenting patterns
 #   tests/**                        — test fixtures (may contain positive examples)
 #   docs/**                         — documentation may quote patterns legitimately
 #   node_modules/**                 — vendored
@@ -30,7 +30,7 @@
 
 suppressed_paths:
   - "guardrails/**"
-  - "canonical/skills/quality/modes/security/**"
+  - "canonical/skills/security/modes/review/**"
   - "tests/**"
   - "docs/**"
   - "node_modules/**"

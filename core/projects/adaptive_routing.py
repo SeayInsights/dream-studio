@@ -16,7 +16,21 @@ from __future__ import annotations
 
 from typing import Any
 
-_PACK = "ds-quality"
+# Every mode this module recommends, mapped to its CURRENT owning pack. The
+# pack-split campaign has moved several of these since this module was
+# written (it originally hardcoded "ds-quality" for all of them); a mode
+# missing here is a bug in this map, not a fallback case, so recommend_dispatches
+# raises rather than guessing.
+_MODE_PACK: dict[str, str] = {
+    "backend-api": "ds-quality",
+    "frontend-ux": "ds-quality",
+    "database": "ds-data",
+    "comply": "ds-security",
+    "testing": "ds-code-health",
+    "architecture": "ds-code-health",
+    "ops": "ds-release",
+    "pre-launch": "ds-release",
+}
 
 
 def recommend_dispatches(stack_data: dict[str, Any] | None) -> list[dict[str, str]]:
@@ -37,7 +51,7 @@ def recommend_dispatches(stack_data: dict[str, Any] | None) -> list[dict[str, st
         if mode in seen:
             return
         seen.add(mode)
-        out.append({"pack": _PACK, "mode": mode, "reason": reason})
+        out.append({"pack": _MODE_PACK[mode], "mode": mode, "reason": reason})
 
     if stack_data.get("web_framework"):
         add("backend-api", f"detected {stack_data['web_framework']} web/API framework")
@@ -48,7 +62,15 @@ def recommend_dispatches(stack_data: dict[str, Any] | None) -> list[dict[str, st
     if stack_data.get("has_pii_schema") or stack_data.get("compliance_hints"):
         hints = stack_data.get("compliance_hints") or []
         detail = ", ".join(hints) if hints else "PII-suggestive schema"
-        add("database-compliance", f"detected compliance signals: {detail}")
+        # database-compliance was folded into comply's `privacy` sub-mode in the
+        # pack-split campaign's security merge -- "database-compliance" is no
+        # longer an invocable mode name on its own, so the reason names the real
+        # invocation (`ds-security:comply privacy`) rather than pointing at a
+        # dead target the way `mode: "database-compliance"` would have.
+        add(
+            "comply",
+            f"detected compliance signals: {detail} -- invoke ds-security:comply privacy",
+        )
     if stack_data.get("test_framework"):
         add("testing", f"detected {stack_data['test_framework']} test framework")
     if stack_data.get("architecture_framework") or stack_data.get("monorepo_type"):

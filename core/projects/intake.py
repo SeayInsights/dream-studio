@@ -7,7 +7,7 @@ Implements the four steps that precede security scanning:
   4. persist_security_findings()   — write findings to findings
 
 And the execution dispatch:
-  5. run_read_only_security_scan() — invoke ds-quality:security audit safely
+  5. run_read_only_security_scan() — invoke ds-security:review audit safely
 
 All execution functions require an approved execution context from
 external_validation.approve_read_only_execution() — no execution without

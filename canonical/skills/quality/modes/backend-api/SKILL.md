@@ -35,7 +35,7 @@ Rules are defined in `rules.yml` in this directory.
 
 **Backend-API owns:** HTTP endpoint quality — validation, error handling, authentication patterns, rate limiting, CORS, idempotency, status codes, response shape.
 
-**Security (ds-quality:security) owns:** Attack-surface risk analysis — injection risk (sec-003), credential exposure (sec-001), CSRF attack surface (sec-004), session identity risk (sec-015).
+**Security (ds-security:review) owns:** Attack-surface risk analysis — injection risk (sec-003), credential exposure (sec-001), CSRF attack surface (sec-004), session identity risk (sec-015).
 
 **Cross-references:**
 - `api-001` (HTTP input validation) ↔ `sec-003` (injection risk): api-001 fires on missing schema validators; sec-003 fires on injection risk from unvalidated input.

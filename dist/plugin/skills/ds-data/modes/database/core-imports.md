@@ -27,14 +27,14 @@
 
 ## Skill Boundary Cross-References
 
-### ds-quality:security (complementary skill)
+### ds-security:review (complementary skill)
 **Not a dependency — a boundary partner.**
 Rules that cross-reference:
 - `db-009` ↔ `sec-002`: f-string SQL (design) ↔ parameterized queries (injection). Both may fire on the same code with different remediation context.
 - `db-020` ↔ `sec-013`: PII column design ↔ PII in runtime logs. Different layers, complementary.
 - `db-016/017/018` ↔ `sec-023` (future 18.4.3): backup strategy ↔ backup encryption. Documented split.
 
-**Do NOT call ds-quality:security from this skill.** They run independently. Cross-references are text notes, not runtime invocations.
+**Do NOT call ds-security:review from this skill.** They run independently. Cross-references are text notes, not runtime invocations.
 
 ## Maintenance Notes
 

@@ -16,7 +16,7 @@
 # Structure:
 #   cross_references:
 #     - rule_id: <str>         # e.g. "sec-003"
-#       skill: <str>           # e.g. "ds-quality:security"
+#       skill: <str>           # e.g. "ds-security:review"
 #       reason: <str>          # why this cross-reference exists
 #       surface_co_located: <bool>  # true = render findings together in report
 #
@@ -727,7 +727,7 @@ rules:
 
     cross_references:
       - rule_id: "sec-003"
-        skill: "ds-quality:security"
+        skill: "ds-security:review"
         reason: "External entry points are excluded from this rule; sec-003 owns validation at HTTP/RPC/IPC boundaries from the security angle."
         surface_co_located: false
 
@@ -737,7 +737,7 @@ rules:
       - "Function accepting optional objects and dereferencing them without None check"
 
     remediation:
-      summary: "Add precondition checks at the top of functions where invalid input would cause incorrect behavior (not just crashes). Raises or explicit error returns preferred over silent wrong behavior. Note: external entry point validation is owned by ds-quality:security (sec-003)."
+      summary: "Add precondition checks at the top of functions where invalid input would cause incorrect behavior (not just crashes). Raises or explicit error returns preferred over silent wrong behavior. Note: external entry point validation is owned by ds-security:review (sec-003)."
       guide_ref: "canonical/skills/code-health/references/code-writing-best-practices.md#f-error-handling"
 
     suppressions:

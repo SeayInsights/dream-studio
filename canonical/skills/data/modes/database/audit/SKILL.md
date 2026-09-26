@@ -169,7 +169,7 @@ Same as security audit:
 - **Why this is a finding:** {explanation}
 - **Remediation:** {rule.remediation.summary}
 - **Reference:** {rule.remediation.guide_ref}
-{if cross-ref security rule: "**Cross-reference:** {sec-NNN} in ds-quality:security covers the security angle of this finding."}
+{if cross-ref security rule: "**Cross-reference:** {sec-NNN} in ds-security:review covers the security angle of this finding."}
 
 ## High / Medium / Low Findings
 {same structure, condensed for lower severities}

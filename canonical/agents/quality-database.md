@@ -73,7 +73,7 @@ Rule source list: `canonical/skills/data/references/database-best-practices.md` 
 
 ## Skill Boundary
 
-This skill is complementary to `ds-quality:security`. Cross-references apply:
+This skill is complementary to `ds-security:review`. Cross-references apply:
 - `sec-002` (parameterized queries, SQLi risk) ↔ `db-009` (f-string SQL, design anti-pattern)
 - `sec-013` (PII in logs, runtime) ↔ `db-020` (PII in wrong schema columns, design)
 - Backup encryption → `sec-023` (security skill 18.4.3). Strategy/ops → `db-016/017/018` (this skill).

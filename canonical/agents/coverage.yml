@@ -291,7 +291,7 @@ modes:
   installed_skill: ds-code-health/modes/code-quality/SKILL.md
   dispatched_because: 'fan-out: several modes share a trigger, so one operator word convenes them together'
   description: 'Code quality enforcement — audits Python code for maintainability, correctness, and idiomatic
-    patterns against 22 rules from LIST-4 (code-writing-best-practices.md). Three-way boundary with ds-quality:security
+    patterns against 22 rules from LIST-4 (code-writing-best-practices.md). Three-way boundary with ds-security:review
     and ds-data:database; uses shared trust_boundary_detection.py... Invoke for: audit:, code-quality
     audit:, cq audit:, check code quality:, build:code-quality'
 - mode: data/database
@@ -303,10 +303,6 @@ modes:
     and backup strategy against 22 rules from LIST-3 (database best practices). Two modes: audit (codebase
     scan with --changed/--full-repo/--sample scope) and build (static pre-generation... Invoke for: audit:,
     database audit:, check schema:, check migrations:, db audit:, build:database'
-- mode: quality/database-compliance
-  skill: quality/modes/database-compliance/SKILL.md
-  no_agent: Nothing dispatches it and the skill is 2370 bytes -- under the 5000-byte isolation threshold,
-    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
 - mode: code-health/debug
   skill: code-health/modes/debug/SKILL.md
   no_agent: Nothing dispatches it and the skill is 4834 bytes -- under the 5000-byte isolation threshold,
@@ -352,15 +348,6 @@ modes:
   skill: release/modes/pre-launch/SKILL.md
   no_agent: Nothing dispatches it and the skill is 2991 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: quality/security
-  skill: quality/modes/security/SKILL.md
-  agent: quality-security
-  installed_skill: ds-quality/modes/security/SKILL.md
-  dispatched_because: 'fan-out: several modes share a trigger, so one operator word convenes them together'
-  description: 'Build-time security enforcement — audits code against 22 security rules using static analysis
-    + LLM semantic pass. Two modes: audit (retrospective codebase scan with --changed/--full-repo/--sample
-    scope) and build (pre-generation static enforcement). Degrades gracefully when... Invoke for: audit:,
-    security audit:, check security:, check codebase security:, build:security, enforce security:'
 - mode: code-health/structure-audit
   skill: code-health/modes/structure-audit/SKILL.md
   agent: quality-structure-audit
@@ -392,7 +379,10 @@ modes:
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
 - mode: security/comply
   skill: security/modes/comply/SKILL.md
-  no_agent: Maps existing findings onto a compliance framework for reporting.
+  no_agent: Maps existing client findings onto a compliance framework for reporting (map/gaps/evidence),
+    or audits this repo's own data-handling code for GDPR/HIPAA/CCPA compliance (privacy, moved from
+    quality/database-compliance in the pack-split campaign). Neither flow is dispatched by another
+    trigger, so there's no fan-out to convene.
 - mode: security/dashboard
   skill: security/modes/dashboard/SKILL.md
   no_agent: Renders collected findings for display. It formats what the scanners produced.
@@ -412,9 +402,14 @@ modes:
   skill: security/modes/review/SKILL.md
   agent: security-review
   installed_skill: ds-security/modes/review/SKILL.md
-  dispatched_because: 'isolation: the skill is 6368 bytes, enough that carrying it in a subagent protects
-    the caller''s context'
-  description: Security Review — Code-Level Vulnerability Analysis
+  dispatched_because: 'fan-out: several modes share a trigger, so one operator word convenes them together'
+  description: 'Code-level security review in three sub-modes. diff: freeform LLM review of a PR/diff
+    for high-confidence, newly-introduced exploitable vulnerabilities (opus, HIGH/MEDIUM only). audit:
+    rule-based codebase scan against 22 codified security rules using static analysis + LLM semantic
+    pass (--changed/--full-repo/--sample scope), merged from quality:security in the pack-split
+    campaign. build: pre-generation static enforcement gate, blocks on critical/high findings. Invoke
+    for: review:, security review:, audit:, security audit:, check security:, check codebase security:,
+    build:security, enforce security:'
 - mode: security/scan
   skill: security/modes/scan/SKILL.md
   no_agent: Orchestrates the other security modes and assembles their findings; its specialists are those

@@ -91,8 +91,10 @@ def acquire_project(
     project_id: str = intake_result["project_id"]
     stack_result = detect_and_persist_stack(project_id, target)
 
-    # WO-BROWNFIELD-ADAPTIVE: recommend the ds-quality modes that fit the detected
-    # stack (backend-api / frontend-ux / database / ops / ... ) so the brownfield
+    # WO-BROWNFIELD-ADAPTIVE: recommend the modes that fit the detected stack
+    # (backend-api/frontend-ux stay in ds-quality; database is ds-data;
+    # database-compliance is ds-security; testing/architecture are
+    # ds-code-health; ops/pre-launch are ds-release) so the brownfield
     # pipeline routes to relevant audits instead of a generic prompt.
     from core.projects.adaptive_routing import recommend_dispatches
 
