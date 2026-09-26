@@ -60,6 +60,6 @@ description: >
   iOS (Swift/SwiftUI), Android (Kotlin/Compose), React Native, and Flutter — state management,
   native integrations, push notifications, biometric auth, offline-first, store submission,
   and cross-platform architecture decisions. Scope boundary: mobile covers native app
-  development across all four platforms; frontend-ux covers web/browser interfaces (React,
-  Next.js). Different platforms, not overlapping. Invoked via mobile-developer subagent
-  (Task tool dispatch).
+  development across all four platforms; ds-fullstack:frontend's audit sub-mode covers
+  web/browser interfaces (React, Next.js). Different platforms, not overlapping. Invoked via
+  mobile-developer subagent (Task tool dispatch).

@@ -244,6 +244,37 @@ class TestSkillDispatcherAudit:
         rules = yaml.safe_load(rules_path.read_text(encoding="utf-8"))["rules"]
         assert len(rules) == 22, f"expected 22 security rules, found {len(rules)}"
 
+    def test_audit_backend_api_rules_yml_actually_resolves(self):
+        """backend-api's rules.yml moved to fullstack/modes/backend/ (nested under an
+        existing sibling mode, not a fresh top-level canonical/skills/<pack>/modes/
+        backend-api/) in the pack-split campaign's fullstack merge -- same class of bug as
+        database-compliance: a silent 0-findings result would look identical to "correctly
+        found nothing on this repo". Confirm the explicit alias resolves it and the file is
+        real, not just present-but-empty."""
+        from core.skills.audit.rules_scanner_shared import _skill_dir
+
+        rules_path = _skill_dir("backend-api") / "rules.yml"
+        assert rules_path.is_file(), f"backend-api's rules.yml not found at {rules_path}"
+
+        import yaml
+
+        rules = yaml.safe_load(rules_path.read_text(encoding="utf-8"))["rules"]
+        assert len(rules) == 12, f"expected 12 backend-api rules, found {len(rules)}"
+
+    def test_audit_frontend_ux_rules_yml_actually_resolves(self):
+        """frontend-ux's rules.yml moved to fullstack/modes/frontend/ in the same merge --
+        see test_audit_backend_api_rules_yml_actually_resolves for why this needs its own
+        assertion rather than trusting a 0-findings scan result."""
+        from core.skills.audit.rules_scanner_shared import _skill_dir
+
+        rules_path = _skill_dir("frontend-ux") / "rules.yml"
+        assert rules_path.is_file(), f"frontend-ux's rules.yml not found at {rules_path}"
+
+        import yaml
+
+        rules = yaml.safe_load(rules_path.read_text(encoding="utf-8"))["rules"]
+        assert len(rules) == 10, f"expected 10 frontend-ux rules, found {len(rules)}"
+
     def test_audit_pl009_fires_no_tags_on_dream_studio_clean(self):
         """pl-009 fires with 'no tags' finding when the repo has no release tags.
 

@@ -1,5 +1,5 @@
 ---
-pack: domains
+pack: fullstack
 mode: fullstack/integrate
 mode_type: build
 model_preference: sonnet

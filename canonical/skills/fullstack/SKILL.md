@@ -4,8 +4,8 @@
 
 | Argument | Sub-mode | SKILL.md |
 |---|---|---|
-| `frontend` | Frontend build | `modes/frontend/SKILL.md` |
-| `backend` | Backend build | `modes/backend/SKILL.md` |
+| `frontend` | Frontend build + audit | `modes/frontend/SKILL.md` |
+| `backend` | Backend build + audit | `modes/backend/SKILL.md` |
 | `integrate` | Integration verify | `modes/integrate/SKILL.md` |
 | `secure` | Security sweep | `modes/secure/SKILL.md` |
 | `spec` | Spec first | Write API contract before any code |

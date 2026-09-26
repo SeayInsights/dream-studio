@@ -18,5 +18,5 @@ Agent file reduced to thin wrapper (~20 lines).
 
 **Platform boundary documented:**
 - mobile = native app development (iOS/Android/React Native/Flutter)
-- frontend-ux = web/browser interfaces (React, Next.js)
+- ds-fullstack:frontend's audit sub-mode = web/browser interfaces (React, Next.js)
 Different platforms entirely — not overlapping.

@@ -33,7 +33,7 @@ Rules defined in `rules.yml`. 13 Phase 1 rules.
 
 ## Deferred Rules (not owned by this skill)
 
-**Rate limiting:** owned by `sec-016` (security skill) and `api-005` (backend-api skill). Adding a third rule would create duplicate findings on the same code. Both existing rules fire from different angles (security hardening vs API design). Ops does not add a rate-limiting rule.
+**Rate limiting:** owned by `sec-016` (security skill) and `api-005` (fullstack:backend audit sub-mode). Adding a third rule would create duplicate findings on the same code. Both existing rules fire from different angles (security hardening vs API design). Ops does not add a rate-limiting rule.
 
 **Backup strategy:** owned by `db-016`, `db-017`, `db-018` (database skill). Database skill owns the full backup triad (scheduled + restore-tested + RTO/RPO documented).
 

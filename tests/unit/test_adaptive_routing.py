@@ -25,15 +25,23 @@ def test_web_and_frontend_and_db_map_to_modes():
         }
     )
     modes = _modes(recs)
-    assert "backend-api" in modes
-    assert "frontend-ux" in modes
+    # backend-api/frontend-ux were folded into fullstack:backend/frontend's `audit`
+    # sub-modes in the pack-split campaign's fullstack merge -- neither is an
+    # invocable mode name on its own any more, so the recommendation must name the
+    # real modes (backend, frontend) rather than dead targets.
+    assert "backend" in modes
+    assert "backend-api" not in modes
+    assert "frontend" in modes
+    assert "frontend-ux" not in modes
     assert "database" in modes
     # Every recommendation carries a reason and its mode's ACTUAL current pack --
     # not a single hardcoded pack for all of them (the pack-split campaign has
     # moved several of these modes since this test was first written).
     by_mode = {r["mode"]: r for r in recs}
-    assert by_mode["backend-api"]["pack"] == "ds-quality"
-    assert by_mode["frontend-ux"]["pack"] == "ds-quality"
+    assert by_mode["backend"]["pack"] == "ds-fullstack"
+    assert "audit" in by_mode["backend"]["reason"]
+    assert by_mode["frontend"]["pack"] == "ds-fullstack"
+    assert "audit" in by_mode["frontend"]["reason"]
     assert by_mode["database"]["pack"] == "ds-data"
     assert all(r["reason"] for r in recs)
 
@@ -71,5 +79,5 @@ def test_recommendations_are_deduped_and_stable():
     stack = {"web_framework": "django-rest", "architecture_framework": "nestjs"}
     recs = recommend_dispatches(stack)
     modes = _modes(recs)
-    assert modes == ["backend-api", "architecture"]
+    assert modes == ["backend", "architecture"]
     assert len(modes) == len(set(modes))

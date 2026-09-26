@@ -129,7 +129,7 @@ descriptions are sufficiently distinct (0 pairs at ≥ 0.50 similarity).
 
 | Pair | Distinction |
 |------|------------|
-| mobile ↔ frontend-ux | mobile=native iOS/Android/RN/Flutter; frontend-ux=web/browser |
+| mobile ↔ fullstack:frontend (audit) | mobile=native iOS/Android/RN/Flutter; fullstack:frontend audit=web/browser |
 | data-engineering ↔ database | data-engineering=pipelines+warehouse; database=application schema integrity |
 | research ↔ idea-validation | research=evidence gathering with source hierarchy; idea-validation=fatal flaw stress-testing |
 | technical-writing ↔ (none) | No close neighbors in current skill set |

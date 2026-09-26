@@ -62,7 +62,7 @@ Last updated: 2026-06-13
 
 ---
 
-## Backend-API (ds-quality:backend-api)
+## Backend-API (ds-fullstack:backend, audit sub-mode)
 
 | Ecosystem | Proven? | Proving Repo | PR / Evidence | Date | Summary |
 |-----------|---------|--------------|---------------|------|---------|
@@ -73,7 +73,7 @@ Last updated: 2026-06-13
 
 ---
 
-## Frontend-UX (ds-quality:frontend-ux)
+## Frontend-UX (ds-fullstack:frontend, audit sub-mode)
 
 | Ecosystem | Proven? | Proving Repo | PR / Evidence | Date | Summary |
 |-----------|---------|--------------|---------------|------|---------|

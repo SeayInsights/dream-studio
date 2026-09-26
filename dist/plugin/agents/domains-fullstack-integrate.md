@@ -37,7 +37,7 @@ decide that the work is finished.
 Inlined at build time, so it is present whether or not you go and read anything.
 
 ---
-pack: domains
+pack: fullstack
 mode: fullstack/integrate
 mode_type: build
 model_preference: sonnet

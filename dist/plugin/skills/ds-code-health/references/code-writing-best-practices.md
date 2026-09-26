@@ -11,8 +11,8 @@ This document covers sections A, B, C, D, E, F, G, H, I, L, M-partial, N of the 
 - **Section J (Security in code)** — covered by ds-security:review (18.4.1). Code-quality rules cross-reference sec-* rules rather than duplicate.
 - **Section K (Dependencies)** — deferred to ds-quality:types-dependencies (18.5.2).
 - **Section M (Tooling & CI)** — mostly deferred to ds-release:ops (18.6.3). Only "type checker automated" lands here as code-quality-adjacent.
-- **Section O (Frontend-specific)** — covered by ds-website:accessibility (18.4.2b) and ds-quality:frontend-ux (18.6.1, future).
-- **Section P (Backend/API-specific)** — deferred to ds-quality:backend-api (18.5.3, future).
+- **Section O (Frontend-specific)** — covered by ds-website:accessibility (18.4.2b) and ds-fullstack:frontend audit sub-mode (18.6.1).
+- **Section P (Backend/API-specific)** — covered by ds-fullstack:backend audit sub-mode (18.5.3).
 
 When code-quality rules touch concepts in deferred sections, they cross-reference the owning skill rather than re-implement.
 
@@ -212,7 +212,7 @@ When a code-quality finding touches these areas, cross-reference rather than dup
 | J | Security in code | ds-security:review (18.4.1) — sec-001 through sec-024 |
 | K | Dependencies | ds-quality:types-dependencies (18.5.2, future) |
 | M (most) | Tooling & CI | ds-release:ops (18.6.3, future) |
-| O | Frontend-specific | ds-website:accessibility (18.4.2b) + ds-quality:frontend-ux (18.6.1, future) |
-| P | Backend/API-specific | ds-quality:backend-api (18.5.3, future) |
+| O | Frontend-specific | ds-website:accessibility (18.4.2b) + ds-fullstack:frontend audit sub-mode (18.6.1) |
+| P | Backend/API-specific | ds-fullstack:backend audit sub-mode (18.5.3) |
 
 When future skills ship, code-quality rules that cross-reference them are reviewed for whether they should remain as cross-references or migrate entirely.
