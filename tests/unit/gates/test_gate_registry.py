@@ -165,7 +165,7 @@ def test_a_gate_env_override_still_forces_subprocess():
     result = run_gate(
         {
             "id": "agent-coverage",
-            "command": ["py", "-m", "core.gates.agent_coverage"],
+            "command": [sys.executable, "-m", "core.gates.agent_coverage"],
             "env": {"SOME_VAR": "1"},
         },
         repo_root=REPO_ROOT,
