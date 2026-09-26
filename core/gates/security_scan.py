@@ -277,6 +277,12 @@ def run(base_ref: str | None = None, repo_root: Path = REPO_ROOT) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """D18 note: before this parameter existed, ``main()`` took no arguments at all and
+    silently ignored anything the caller passed. argparse now refuses an unrecognized
+    flag (exit 2) instead -- intentional, not a regression: the manifest never passes
+    one, and failing loudly on a genuinely unknown argument is strictly safer than the
+    old silent-ignore, which is the same reasoning already governing every other
+    ``--repo-root``-bearing gate in this file's own family."""
     parser = argparse.ArgumentParser(
         description="Scan this change set's files for security anti-patterns."
     )
