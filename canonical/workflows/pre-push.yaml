@@ -348,7 +348,31 @@ gates:
     command: [py, -m, core.gates.fail_open_probe]
     fail_hint: >
       Wrap the named database call in its own try/except so a probe that cannot
-      run contributes nothing instead of answering for its siblings.
+      run contributes nothing instead of answering for its siblings. If that new
+      guard swallows the error silently (no log, no re-raise), fail-open-census
+      may flag it on the very next push -- that is not the tooling contradicting
+      itself, it is a second, broader question (does ANY handler let an error
+      pass silently) catching a new instance of its own class; log the failure
+      or regenerate that gate's baseline once you've reviewed it.
+
+  - id: fail-open-census
+    tier: blocking
+    description: >
+      Ratcheted census (H30) of the broader fail-open shape fail-open-probe does
+      not cover: a bare `except: pass`, or an except handler whose last statement
+      returns a falsy sentinel (None, bare return, False, 0, "", [], {}, ()). 831
+      existing sites are pinned as tracked debt in
+      runtime/config/release-gates/fail-open-baseline.txt; this gate fails only
+      on a NEW site beyond that baseline, the same ratchet lint-baseline.py
+      already uses for flake8. Most existing sites are legitimate (a missing
+      optional file IS legitimately "return None") — the ratchet exists so the
+      count cannot silently grow, not to demand every one be rewritten today.
+    command: [py, -m, core.gates.fail_open_census]
+    fail_hint: >
+      A new bare `except: pass` or falsy-return handler was added in product
+      code. Log it, re-raise it, or return a signal the caller can act on. If
+      it is deliberate and reviewed, regenerate the baseline:
+      py -m core.gates.fail_open_census --write-baseline
 
   - id: test-isolation
     tier: blocking
