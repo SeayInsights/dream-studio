@@ -34,13 +34,14 @@ New project analysis | ongoing health monitoring | pre-ship quality gate
 ## Workflow
 
 ### 1. Validate path & check engine
-Extract path (default: `.`), verify it exists. Import `analyze.engine.analyze_project` (fail if missing).
+Extract path (default: `.`), verify it exists. Import `control.analysis.engine.analyze_project` (fail if missing).
 
 ### 2. Determine mode
 **Full** (default) | **Quick** (`--quick` → targeted) | **Incremental** (`--incremental`, requires git)
 
 ### 3. Run & display
 ```python
+from control.analysis.engine import analyze_project
 result = analyze_project(path=Path("<path>"), run_type="full")  # or "targeted", "incremental"
 ```
 Display: health score + interpretation, stack, findings, PRD path, dashboard link.  
