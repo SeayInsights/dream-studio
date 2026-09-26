@@ -26,7 +26,7 @@ use std::io::Read;
 
 fn env() -> Option<enforce::Env> {
     // Shared with the queue writer -- see ds_enqueue::dream_studio_home's doc
-    // comment for why DREAM_STUDIO_HOME must be checked before DS_HOME, not
+    // comment for why DS_HOME must be checked before DREAM_STUDIO_HOME, not
     // the other way around (a round-4 review finding on this exact function).
     let home = ds_enqueue::dream_studio_home()?;
     Some(enforce::Env {
