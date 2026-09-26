@@ -277,7 +277,7 @@ class OnboardingCompiler:
 
     def _load_skill_description(self, skill_id: str) -> str:
         """Optionally read the skill's SKILL.md for additional context."""
-        # skill_id like "ds-quality:security" → canonical/skills/quality/modes/security/SKILL.md
+        # skill_id like "ds-security:review" → canonical/skills/security/modes/review/SKILL.md
         try:
             parts = skill_id.replace("ds-", "").split(":")
             if len(parts) >= 2:

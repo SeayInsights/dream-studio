@@ -3,8 +3,8 @@ name: security-baseline
 # Automated security baseline (R4). Runs on a schedule (independent of any skill
 # invocation) so credential exposure is caught continuously, not only when someone runs a
 # scan by hand. The native full-history secret scanner (core/gates/secret_scan.py) is the
-# headless security check; on-demand deep scans stay in the ds-security / quality:security
-# skills. Results are uploaded as durable artifacts. Also dispatchable on demand.
+# headless security check; on-demand deep scans stay in the ds-security:review
+# (audit sub-mode) skill. Results are uploaded as durable artifacts. Also dispatchable on demand.
 on:
   schedule:
     - cron: "0 6 * * 1" # every Monday 06:00 UTC

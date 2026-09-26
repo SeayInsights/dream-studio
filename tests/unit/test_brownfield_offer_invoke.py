@@ -51,7 +51,7 @@ def test_web_db_project_aggregates_findings_into_readiness_and_scope():
     assert report["findings"] == _web_db_findings()
     assert report["severity_counts"] == {"critical": 1, "high": 1, "medium": 1}
     assert "ds-quality:backend-api" in report["audits"]
-    assert "ds-quality:database" in report["audits"]
+    assert "ds-data:database" in report["audits"]
 
     # Stabilization scope reflects those findings, ordered highest-severity first.
     scope = result["stabilization_scope"]

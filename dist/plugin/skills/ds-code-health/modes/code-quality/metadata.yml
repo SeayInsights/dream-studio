@@ -66,7 +66,7 @@ triggers:
 description: >
   Code quality enforcement — audits Python code for maintainability, correctness,
   and idiomatic patterns against 22 rules from LIST-4 (code-writing-best-practices.md).
-  Three-way boundary with ds-quality:security and ds-data:database; uses shared
+  Three-way boundary with ds-security:review and ds-data:database; uses shared
   trust_boundary_detection.py for external entry point recognition. Two modes: audit
   (codebase scan) and build (static enforcement for generated code). Section G (Testing)
   deferred to ds-code-health:testing (18.5.1). Token budgets are estimates; Batch 7 measures.

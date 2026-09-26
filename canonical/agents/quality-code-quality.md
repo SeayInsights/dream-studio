@@ -1,6 +1,6 @@
 ---
 name: quality-code-quality
-description: Code quality enforcement — audits Python code for maintainability, correctness, and idiomatic patterns against 22 rules from LIST-4 (code-writing-best-practices.md). Three-way boundary with ds-quality:security and ds-data:database; uses shared trust_boundary_detection.py... Invoke for: audit:, code-quality audit:, cq audit:, check code quality:, build:code-quality
+description: Code quality enforcement — audits Python code for maintainability, correctness, and idiomatic patterns against 22 rules from LIST-4 (code-writing-best-practices.md). Three-way boundary with ds-security:review and ds-data:database; uses shared trust_boundary_detection.py... Invoke for: audit:, code-quality audit:, cq audit:, check code quality:, build:code-quality
 model: sonnet
 ---
 
@@ -75,7 +75,7 @@ Rules are defined in `rules.yml` in this directory. Both modes read from the sam
 
 ## Three-Way Skill Boundary
 
-This skill is complementary to `ds-quality:security` and `ds-data:database`.
+This skill is complementary to `ds-security:review` and `ds-data:database`.
 
 - **Security** owns: adversarial misuse, breach risk, injection vectors (sec-001 through sec-025)
 - **Database** owns: schema design, query patterns, migration safety (db-001 through db-022)

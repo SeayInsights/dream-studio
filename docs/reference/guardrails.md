@@ -109,7 +109,7 @@ _All security rules are in advisory/pilot mode as of 2026-05-13._
 - Jailbreak keywords
 
 **Suppressed paths** (never scanned):
-`guardrails/*`, `tests/*`, `docs/*`, `node_modules/*`, `.venv/*`, `vendor/*`, `__pycache__/*`, `.git/*`, `dist/*`, `build/*`, `.next/*`, `canonical/skills/quality/modes/security/**`
+`guardrails/*`, `tests/*`, `docs/*`, `node_modules/*`, `.venv/*`, `vendor/*`, `__pycache__/*`, `.git/*`, `dist/*`, `build/*`, `.next/*`, `canonical/skills/security/modes/review/**`
 
 ---
 

@@ -1,9 +1,9 @@
 # Required fields
 name: comply
-version: 1.0.0
-pack: quality
+version: 1.1.0
+pack: security
 created_at: 2026-04-28
-updated_at: 2026-04-28
+updated_at: 2026-09-26
 
 # Evolution tracking
 origin: imported
@@ -47,5 +47,12 @@ compatibility:
 # Discovery
 tags: [workflow]
 category: workflow
-triggers: []
-description: "Map findings to SOC 2, NIST CSF, OWASP ASVS controls. Identify coverage gaps. Generate audit-ready evidence. Trigger on comply:, compliance map, audit evidence."
+triggers:
+  - "comply:"
+  - "compliance map"
+  - "audit evidence"
+  - "compliance audit:"
+  - "gdpr audit:"
+  - "privacy audit:"
+  - "dbc audit:"
+description: "Map client scan findings to SOC 2, NIST CSF, OWASP ASVS controls (map/gaps/evidence); audit this repo's own data-handling code and schema for GDPR/HIPAA/CCPA compliance (privacy). Trigger on comply:, compliance map, audit evidence, compliance audit:, gdpr audit:, privacy audit:, dbc audit:."

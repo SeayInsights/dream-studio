@@ -3,7 +3,7 @@
 Used by:
   - ds-code-health:code-quality (18.4.3): cq-016 validate-at-internal-boundaries
     excludes external entry points — those are sec-003/sec-007's domain
-  - ds-quality:security (18.4.1): sec-003 may consult this to identify
+  - ds-security:review (18.4.1): sec-003 may consult this to identify
     external entry points for priority classification
 
 Convention established in 18.4.3 as the first canonical skill shared utility.

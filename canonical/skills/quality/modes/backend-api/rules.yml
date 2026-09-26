@@ -82,7 +82,7 @@ rules:
 
     cross_references:
       - rule: "sec-003"
-        skill: "ds-quality:security"
+        skill: "ds-security:review"
         note: "sec-003 fires on injection risk from unvalidated input; api-001 fires on missing schema validation at HTTP boundary. Both may fire on the same handler. api-001 is the quality angle (structure); sec-003 is the security angle (exploitability)."
         surface_co_located: true
 
@@ -156,7 +156,7 @@ rules:
 
     cross_references:
       - rule: "sec-013"
-        skill: "ds-quality:security"
+        skill: "ds-security:review"
         note: "sec-013 fires on PII in runtime output; api-002 fires on structural error-response hygiene. Complementary: api-002 is the design quality angle, sec-013 is the data-privacy angle."
         surface_co_located: false
 
@@ -221,7 +221,7 @@ rules:
 
     cross_references:
       - rule: "sec-004"
-        skill: "ds-quality:security"
+        skill: "ds-security:review"
         note: "sec-004 owns the CSRF attack-surface risk analysis; api-003 detects CSRF protection at the HTTP layer. api-003 is the detection angle, sec-004 is the exploitability angle."
         surface_co_located: true
 
@@ -298,7 +298,7 @@ rules:
 
     cross_references:
       - rule: "sec-015"
-        skill: "ds-quality:security"
+        skill: "ds-security:review"
         note: "sec-015 owns session/identity risk; api-004 detects missing authentication at the route level. api-004 is the quality/structural angle, sec-015 is the security risk angle."
         surface_co_located: true
 
@@ -422,7 +422,7 @@ rules:
 
     cross_references:
       - rule: "sec-015"
-        skill: "ds-quality:security"
+        skill: "ds-security:review"
         note: "sec-015 owns privilege escalation risk; api-006 detects missing authorization at the handler level. Complementary angles."
         surface_co_located: false
 

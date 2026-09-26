@@ -19,18 +19,47 @@ logger = logging.getLogger("core.skills.audit.rules_scanner")
 # architecture/testing/types-deps are quality today and will move too).
 _SKILLS_ROOT = Path(__file__).parents[3] / "canonical" / "skills"
 
+# The glob below only matches canonical/skills/*/modes/<skill_id> -- one level
+# deep, and assumes the skill_id IS the mode directory name. Two ways that
+# assumption breaks, both needing an explicit entry here or the glob finds
+# nothing, the fallback path doesn't exist either, and this scanner silently
+# returns 0 findings with only a log warning:
+#   - nested: the skill_id's rules.yml moved under an existing sibling mode
+#     rather than to a fresh top-level <pack>/modes/<skill_id> (found the
+#     hard way: database-compliance -> security/comply/privacy).
+#   - renamed: the mode directory no longer matches the skill_id string at
+#     all (quality:security merged into security:review -- "security" the
+#     skill_id is unchanged in the Python/DB/telemetry layer, but the mode
+#     directory is now named "review"). Currently DORMANT for "security"
+#     specifically -- SkillDispatcher.audit() routes it to a separate
+#     hardcoded Python scanner (core/skills/build/security.py's
+#     scan_security) instead of through this module, so nothing calls
+#     _skill_dir("security") today -- but that hybrid dispatch is ad hoc and
+#     could change, so the entry is added preemptively rather than waiting
+#     for it to go from dormant to a real silent-zero-findings regression.
+_NESTED_SKILL_DIRS: dict[str, str] = {
+    "database-compliance": "security/modes/comply/privacy",
+    "security": "security/modes/review",
+}
+
 
 def _skill_dir(skill_id: str) -> Path:
     """The mode directory for *skill_id*, wherever its pack currently is.
 
-    Searches canonical/skills/*/modes/<skill_id> rather than assuming a
-    fixed pack, so a pack-split move doesn't silently stop this scanner
-    from finding the skill's rules.yml/config.yml (found the hard way:
-    ops/pre-launch moved to release and this returned no match until
-    fixed). Falls back to the pre-split quality/modes/<skill_id> location
-    if no pack owns it (keeps existing behavior/error messages for a
-    typo'd or genuinely-missing skill_id).
+    Checks _NESTED_SKILL_DIRS first for a skill_id whose rules.yml moved
+    under an existing sibling mode rather than to a fresh top-level
+    <pack>/modes/<skill_id>. Otherwise searches canonical/skills/*/modes/
+    <skill_id> rather than assuming a fixed pack, so a pack-split move
+    doesn't silently stop this scanner from finding the skill's
+    rules.yml/config.yml (found the hard way: ops/pre-launch moved to
+    release and this returned no match until fixed). Falls back to the
+    pre-split quality/modes/<skill_id> location if no pack owns it (keeps
+    existing behavior/error messages for a typo'd or genuinely-missing
+    skill_id).
     """
+    nested = _NESTED_SKILL_DIRS.get(skill_id)
+    if nested:
+        return _SKILLS_ROOT / nested
     matches = sorted(_SKILLS_ROOT.glob(f"*/modes/{skill_id}"))
     if matches:
         return matches[0]

@@ -32,7 +32,7 @@ Rules are defined in `rules.yml` in this directory. Both modes read from the sam
 
 ## Three-Way Skill Boundary
 
-This skill is complementary to `ds-quality:security` and `ds-data:database`.
+This skill is complementary to `ds-security:review` and `ds-data:database`.
 
 - **Security** owns: adversarial misuse, breach risk, injection vectors (sec-001 through sec-025)
 - **Database** owns: schema design, query patterns, migration safety (db-001 through db-022)

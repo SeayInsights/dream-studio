@@ -5,7 +5,7 @@
 # Source authority:
 #   LIST-3 = canonical/skills/data/references/database-best-practices.md (sections A-M)
 #
-# Skill boundary with ds-quality:security:
+# Skill boundary with ds-security:review:
 #   Security owns: parameterized queries (sec-002, inject risk), encryption at rest (sec-009),
 #     encryption in transit (sec-010), PII in runtime logs (sec-013), backup encryption (sec-023 future)
 #   Database owns: schema design, query patterns, migration safety, backup strategy/ops
@@ -19,7 +19,7 @@
 #
 # Schema extension note (18.4.2):
 #   This skill introduces 'config_section' as a new detection.llm.context_scope value
-#   beyond what ds-quality:security uses. It extracts the relevant config block from
+#   beyond what ds-security:review uses. It extracts the relevant config block from
 #   config files (connection pool settings, WAL mode, backup config) rather than
 #   the full file. Other skills may adopt this value; it is an upward-compatible
 #   extension to the shared rules schema.
@@ -415,7 +415,7 @@ rules:
         notes: |
           Preferred static: semgrep on f-string SQL patterns. Current state: LLM fallback active. Cross-reference with sec-002 (injection risk angle): this rule fires on the design anti-pattern; sec-002 fires on the injection risk. Both may fire on the same code.
           CROSS-REFERENCE: db-009 owns the QUERY DESIGN angle (f-string SQL is a structural anti-pattern).
-          sec-002 (ds-quality:security) owns the INJECTION RISK angle (exploit surface, severity: critical).
+          sec-002 (ds-security:review) owns the INJECTION RISK angle (exploit surface, severity: critical).
           Both rules may fire on the same code. db-009 is medium severity (design smell);
           sec-002 is critical (security risk). Reports note the sibling rule.
           Do NOT suppress db-009 because sec-002 fired — both angles matter.
@@ -437,7 +437,7 @@ rules:
 
     cross_references:
       - rule_id: "sec-002"
-        skill: "ds-quality:security"
+        skill: "ds-security:review"
         reason: "sec-002 fires on the same f-string SQL from the injection-risk angle; db-009 fires from the design-quality angle. Both may fire on the same line. Security catches the exploit; database catches the anti-pattern."
         surface_co_located: true
 
@@ -782,7 +782,7 @@ rules:
       - "SQLite database with no sqlite3.backup() call or scheduled file copy"
 
     remediation:
-      summary: "Configure automated backups: SQLite on-prem → scheduled file copy + WAL archiving via sqlite3.backup(); Postgres/RDS → enable point-in-time recovery, configure retention in IaC; D1 → automatic daily backups managed by platform (no action needed); MongoDB Atlas → enable automated backup. Note: backup encryption is a separate concern owned by ds-quality:security (sec-023 future)."
+      summary: "Configure automated backups: SQLite on-prem → scheduled file copy + WAL archiving via sqlite3.backup(); Postgres/RDS → enable point-in-time recovery, configure retention in IaC; D1 → automatic daily backups managed by platform (no action needed); MongoDB Atlas → enable automated backup. Note: backup encryption is a separate concern owned by ds-security:review (sec-023 future)."
       guide_ref: "canonical/skills/data/references/database-best-practices.md#f-backups--disaster-recovery"
 
     suppressions:
@@ -969,7 +969,7 @@ rules:
 
     cross_references:
       - rule_id: "sec-013"
-        skill: "ds-quality:security"
+        skill: "ds-security:review"
         reason: "sec-013 owns runtime PII leaks (logs, URLs, error messages). db-020 owns schema-level PII classification (wrong column design). Different layers — schema design vs. runtime behavior."
         surface_co_located: false
 

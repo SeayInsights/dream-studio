@@ -19,10 +19,10 @@ description: 'Enterprise security analysis — automated scanning, compliance ma
 | Mode | File | Keywords |
 |---|---|---|
 | scan | modes/scan/SKILL.md | scan:, scan org:, run security scan: |
-| review | modes/review/SKILL.md | review:, security review:, review PR:, code review:, pre-commit security: |
+| review | modes/review/SKILL.md | review:, security review:, review PR:, code review:, pre-commit security:, audit:, security audit:, check security:, check codebase security:, build:security, enforce security:, security check before generate: |
 | dast | modes/dast/SKILL.md | dast:, web scan:, pen test web: |
 | binary-scan | modes/binary-scan/SKILL.md | binary-scan:, scan binary:, analyze exe: |
 | mitigate | modes/mitigate/SKILL.md | mitigate:, how to fix findings:, generate mitigations: |
-| comply | modes/comply/SKILL.md | comply:, compliance map:, SOC 2:, NIST:, audit evidence: |
+| comply | modes/comply/SKILL.md | comply:, compliance map:, SOC 2:, NIST:, audit evidence:, compliance audit:, gdpr audit:, privacy audit:, dbc audit: |
 | netcompat | modes/netcompat/SKILL.md | netcompat:, Zscaler check:, proxy compatibility: |
 | dashboard | modes/dashboard/SKILL.md | security dashboard:, export dataset: |

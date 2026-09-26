@@ -25,7 +25,6 @@ from core.skills.reachability import SKILLS_DIR, routes, unreachable
 #: mode fails this test carrying its own id.
 KNOWN_UNREACHABLE = {
     "quality/backend-api",
-    "quality/database-compliance",
     "quality/frontend-ux",
 }
 

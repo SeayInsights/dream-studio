@@ -70,5 +70,5 @@ description: >
   and backup strategy against 22 rules from LIST-3 (database best practices). Two modes:
   audit (codebase scan with --changed/--full-repo/--sample scope) and build (static
   pre-generation enforcement for migrations/queries/schema). Skill boundary with
-  ds-quality:security: this skill owns design quality; security owns exploit risk.
+  ds-security:review: this skill owns design quality; security owns exploit risk.
   Token budgets are estimates; Batch 7 of 18.4.2 will update with measured values.

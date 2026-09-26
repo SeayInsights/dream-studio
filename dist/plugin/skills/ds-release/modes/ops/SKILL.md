@@ -19,7 +19,7 @@ patterns (logging imports, signal handlers, health routes, Dockerfile stages). L
 confirmation for semantic rules (config validation, retry discipline, correlation IDs).
 Never fixes — classifies and reports only.
 
-**Automated security baseline (R4):** the credential-exposure baseline is automated — the scheduled `security-baseline` workflow runs the native secret scanner (`core/gates/secret_scan.py`) on a cron. This `ops` audit and `quality:security` are for on-demand deep review, not the baseline. See `docs/operations/lint-format-baseline-policy.md`.
+**Automated security baseline (R4):** the credential-exposure baseline is automated — the scheduled `security-baseline` workflow runs the native secret scanner (`core/gates/secret_scan.py`) on a cron. This `ops` audit and `security:review audit` are for on-demand deep review, not the baseline. See `docs/operations/lint-format-baseline-policy.md`.
 
 ## Source Authority
 
