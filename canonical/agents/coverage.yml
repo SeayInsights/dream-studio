@@ -151,13 +151,13 @@ modes:
     gate'
 - mode: fullstack/backend
   skill: fullstack/modes/backend/SKILL.md
-  no_agent: 'Nothing dispatches it and the router is 3567 bytes -- under the 5000-byte isolation
+  no_agent: 'Nothing dispatches it and the router is 3963 bytes -- under the 5000-byte isolation
     threshold, so the agent wrapper would rival the knowledge it carries. Merged the quality:backend-api
     audit engine in as a build/audit sub-mode split (pack-split campaign, 2026-09-26); the skill that
     owns the flow reads the router and its chosen sub-mode inline.'
 - mode: fullstack/frontend
   skill: fullstack/modes/frontend/SKILL.md
-  no_agent: 'Nothing dispatches it and the router is 3067 bytes -- under the 5000-byte isolation
+  no_agent: 'Nothing dispatches it and the router is 3435 bytes -- under the 5000-byte isolation
     threshold, so the agent wrapper would rival the knowledge it carries. Merged the quality:frontend-ux
     audit engine in as a build/audit sub-mode split (pack-split campaign, 2026-09-26); the skill that
     owns the flow reads the router and its chosen sub-mode inline.'

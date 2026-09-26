@@ -1,3 +1,18 @@
+---
+dream_studio:
+  skill_id: ds-fullstack
+  pack: fullstack
+  mode: backend
+  mode_type: build
+  inputs: [api_contract, stack_context, feature_spec]
+  outputs: [api_routes, db_schema, auth_config, env_template, api_contract]
+  capabilities_required: [Read, Write, Edit, Grep, Bash]
+  model_preference: sonnet
+  estimated_duration: 1-4hrs
+  write_posture: independent
+  lifecycle: published
+---
+
 # Backend — Stack-Agnostic API Builder + Quality Audit
 
 ## Mode dispatch
