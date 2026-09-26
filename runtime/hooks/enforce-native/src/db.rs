@@ -184,3 +184,161 @@ pub fn next_created_work_order(authority_db: &Path, project_id: &str) -> Option<
 
     row.map(|(work_order_id, title)| NextWorkOrder { work_order_id, title })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    /// A real, on-disk SQLite authority with the same tables and columns
+    /// `runtime/lib/enforcement.py` queries -- these functions are read-only
+    /// SQL against those tables, so a fake `Connection` or a mocked trait
+    /// would not exercise the actual predicates. `connect_ro` opens the file
+    /// SQLITE_OPEN_READ_ONLY, so it must already exist and be populated
+    /// before these functions ever see it.
+    fn fixture_db(schema_and_data: &str) -> (tempfile::TempDir, PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("studio.db");
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE business_projects (project_id TEXT, name TEXT, status TEXT, project_path TEXT);
+             CREATE TABLE business_work_orders (work_order_id TEXT, title TEXT, description TEXT, project_id TEXT, status TEXT, started_at TEXT, milestone_id TEXT, sequence_order INTEGER, created_at TEXT);
+             CREATE TABLE business_milestones (milestone_id TEXT, order_index INTEGER);
+             CREATE TABLE work_order_dependencies (work_order_id TEXT, depends_on_id TEXT);",
+        )
+        .unwrap();
+        conn.execute_batch(schema_and_data).unwrap();
+        drop(conn);
+        (dir, db_path)
+    }
+
+    fn project_dir(base: &std::path::Path, name: &str) -> PathBuf {
+        let p = base.join(name);
+        std::fs::create_dir_all(&p).unwrap();
+        p
+    }
+
+    #[test]
+    fn match_registered_project_prefers_active_over_paused() {
+        let root_dir = tempfile::tempdir().unwrap();
+        let active_root = project_dir(root_dir.path(), "active-proj");
+        let (fixture_dir, db_path) = fixture_db(&format!(
+            "INSERT INTO business_projects VALUES ('p-active', 'Active', 'active', '{root}');
+             INSERT INTO business_projects VALUES ('p-paused', 'Paused', 'paused', '{root}');",
+            root = active_root.to_string_lossy().replace('\\', "\\\\"),
+        ));
+        let file = active_root.join("f.py");
+        let project = match_registered_project(&db_path, &file).expect("a project matches");
+        assert_eq!(project.project_id, "p-active", "active wins over paused for the same root");
+        drop(fixture_dir);
+    }
+
+    #[test]
+    fn match_registered_project_prefers_the_longest_matching_root() {
+        let root_dir = tempfile::tempdir().unwrap();
+        let outer = project_dir(root_dir.path(), "outer");
+        let inner = project_dir(&outer, "inner");
+        let (fixture_dir, db_path) = fixture_db(&format!(
+            "INSERT INTO business_projects VALUES ('p-outer', 'Outer', 'active', '{outer}');
+             INSERT INTO business_projects VALUES ('p-inner', 'Inner', 'active', '{inner}');",
+            outer = outer.to_string_lossy().replace('\\', "\\\\"),
+            inner = inner.to_string_lossy().replace('\\', "\\\\"),
+        ));
+        let file = inner.join("f.py");
+        let project = match_registered_project(&db_path, &file).expect("a project matches");
+        assert_eq!(project.project_id, "p-inner", "the nested project wins over its parent");
+        drop(fixture_dir);
+    }
+
+    #[test]
+    fn match_registered_project_none_when_no_project_contains_the_path() {
+        let root_dir = tempfile::tempdir().unwrap();
+        let proj = project_dir(root_dir.path(), "proj");
+        let elsewhere = project_dir(root_dir.path(), "elsewhere");
+        let (fixture_dir, db_path) = fixture_db(&format!(
+            "INSERT INTO business_projects VALUES ('p1', 'P1', 'active', '{proj}');",
+            proj = proj.to_string_lossy().replace('\\', "\\\\"),
+        ));
+        assert!(match_registered_project(&db_path, &elsewhere.join("f.py")).is_none());
+        drop(fixture_dir);
+    }
+
+    #[test]
+    fn in_progress_work_order_attributes_by_module_boundary_over_recency() {
+        let root_dir = tempfile::tempdir().unwrap();
+        let proj = project_dir(root_dir.path(), "proj");
+        std::fs::create_dir_all(proj.join("core")).unwrap();
+        let (fixture_dir, db_path) = fixture_db(
+            "INSERT INTO business_work_orders VALUES ('wo-recent', 'Recent', 'Module boundary: interfaces.', 'p1', 'in_progress', '2026-01-02T00:00:00Z', NULL, NULL, '2026-01-02T00:00:00Z');
+             INSERT INTO business_work_orders VALUES ('wo-boundary', 'Boundary', 'Module boundary: core.', 'p1', 'in_progress', '2026-01-01T00:00:00Z', NULL, NULL, '2026-01-01T00:00:00Z');",
+        );
+        let file = proj.join("core").join("x.py");
+        let wo = in_progress_work_order(&db_path, "p1", Some((&file, &proj))).expect("a WO matches");
+        assert_eq!(wo.work_order_id, "wo-boundary", "boundary match wins over the more recently started WO");
+        assert_eq!(wo.attribution, "module_boundary");
+        drop(fixture_dir);
+    }
+
+    #[test]
+    fn in_progress_work_order_falls_back_to_most_recently_started() {
+        let root_dir = tempfile::tempdir().unwrap();
+        let proj = project_dir(root_dir.path(), "proj");
+        let (fixture_dir, db_path) = fixture_db(
+            "INSERT INTO business_work_orders VALUES ('wo-old', 'Old', '', 'p1', 'in_progress', '2026-01-01T00:00:00Z', NULL, NULL, '2026-01-01T00:00:00Z');
+             INSERT INTO business_work_orders VALUES ('wo-new', 'New', '', 'p1', 'in_progress', '2026-01-02T00:00:00Z', NULL, NULL, '2026-01-02T00:00:00Z');",
+        );
+        let file = proj.join("x.py");
+        let wo = in_progress_work_order(&db_path, "p1", Some((&file, &proj))).expect("a WO matches");
+        assert_eq!(wo.work_order_id, "wo-new", "no declared boundary anywhere -- falls back to recency");
+        assert_eq!(wo.attribution, "most_recently_started");
+        drop(fixture_dir);
+    }
+
+    #[test]
+    fn in_progress_work_order_none_when_nothing_in_progress() {
+        let (fixture_dir, db_path) = fixture_db(
+            "INSERT INTO business_work_orders VALUES ('wo1', 'T', '', 'p1', 'created', NULL, NULL, NULL, '2026-01-01T00:00:00Z');",
+        );
+        assert!(in_progress_work_order(&db_path, "p1", None).is_none());
+        drop(fixture_dir);
+    }
+
+    #[test]
+    fn next_created_work_order_excludes_one_blocked_on_an_open_dependency() {
+        let (fixture_dir, db_path) = fixture_db(
+            "INSERT INTO business_work_orders VALUES ('wo-dep', 'Dep', '', 'p1', 'created', NULL, NULL, 1, '2026-01-01T00:00:00Z');
+             INSERT INTO business_work_orders VALUES ('wo-blocked', 'Blocked', '', 'p1', 'created', NULL, NULL, 0, '2026-01-01T00:00:00Z');
+             INSERT INTO work_order_dependencies VALUES ('wo-blocked', 'wo-dep');",
+        );
+        let next = next_created_work_order(&db_path, "p1").expect("a startable WO exists");
+        assert_eq!(next.work_order_id, "wo-dep", "the WO blocked on an unclosed dependency is excluded");
+        drop(fixture_dir);
+    }
+
+    #[test]
+    fn next_created_work_order_degrades_gracefully_without_the_dependency_table() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("studio.db");
+        let conn = Connection::open(&db_path).unwrap();
+        // No work_order_dependencies table at all -- an older authority.
+        conn.execute_batch(
+            "CREATE TABLE business_projects (project_id TEXT, name TEXT, status TEXT, project_path TEXT);
+             CREATE TABLE business_work_orders (work_order_id TEXT, title TEXT, description TEXT, project_id TEXT, status TEXT, started_at TEXT, milestone_id TEXT, sequence_order INTEGER, created_at TEXT);
+             CREATE TABLE business_milestones (milestone_id TEXT, order_index INTEGER);
+             INSERT INTO business_work_orders VALUES ('wo1', 'T', '', 'p1', 'created', NULL, NULL, NULL, '2026-01-01T00:00:00Z');",
+        )
+        .unwrap();
+        drop(conn);
+        let next = next_created_work_order(&db_path, "p1").expect("degrades to the unrefined query");
+        assert_eq!(next.work_order_id, "wo1");
+    }
+
+    #[test]
+    fn next_created_work_order_none_when_nothing_is_created() {
+        let (fixture_dir, db_path) = fixture_db(
+            "INSERT INTO business_work_orders VALUES ('wo1', 'T', '', 'p1', 'in_progress', '2026-01-01T00:00:00Z', NULL, NULL, '2026-01-01T00:00:00Z');",
+        );
+        assert!(next_created_work_order(&db_path, "p1").is_none());
+        drop(fixture_dir);
+    }
+}

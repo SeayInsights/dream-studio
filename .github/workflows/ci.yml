@@ -91,6 +91,26 @@ jobs:
       - name: Dashboard truth gate
         run: python -m interfaces.cli.ds doctor dashboard-truth
 
+      # The native hooks (runtime/hooks/enqueue-native, runtime/hooks/enforce-native)
+      # are optional -- gitignored binaries, Python fallback when absent -- so a
+      # Python-only CI run never builds or exercises their actual compiled behavior.
+      # Before this step, NEITHER crate had ANY CI coverage; a compile break or a
+      # test regression in either would go unnoticed until someone happened to run
+      # `cargo test` locally. Runs on every platform pr-smoke already covers, since
+      # a Rust bug here is exactly the kind of thing that is fine on one OS and
+      # broken on another (the whole reason this hook is native at all is a
+      # per-platform interpreter-start cost).
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            runtime/hooks/enqueue-native
+            runtime/hooks/enforce-native
+      - name: Native hook crates (cargo test)
+        run: |
+          cargo test --manifest-path runtime/hooks/enqueue-native/Cargo.toml
+          cargo test --manifest-path runtime/hooks/enforce-native/Cargo.toml
+
       # Format and lint run in the pre-push gate only. They used to run there AND
       # here AND in full-ci -- three runs, one answer, and this copy burns a full
       # 3-platform round trip to tell you to run `black .`. One home per check.

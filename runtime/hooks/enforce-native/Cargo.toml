@@ -36,6 +36,12 @@ time = { version = "0.3", features = ["formatting"] }
 # that by string-scanning is how a port quietly narrows what it detects.
 regex = "1"
 
+[dev-dependencies]
+# db.rs's tests need a real, on-disk SQLite file (rusqlite's read-only OpenFlags
+# refuses to open one that isn't there yet) -- a temp directory per test, not
+# a shared fixture path, so tests can run concurrently without colliding.
+tempfile = "3"
+
 [profile.release]
 opt-level = "z"
 lto = true
