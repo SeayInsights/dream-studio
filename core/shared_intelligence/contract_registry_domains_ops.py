@@ -109,6 +109,13 @@ _CONTRACT_DOMAINS_OPS: tuple[dict[str, Any], ...] = (
             "docs/operations/repo-publication-privacy.md",
             "docs/operations/external-project-validation-pipeline.md",
             "docs/operations/docker-module-profiles.md",
+            # Added (PR #826 round-4 finding): both describe what pr-smoke actually
+            # runs and call its 3-platform matrix "the sole merge authorization" --
+            # a .github/workflows/** change (this domain's own first source_pattern)
+            # can make either one stale with no mechanical check catching it, which
+            # is exactly what happened to both when a cargo-test step was added.
+            "docs/reference/gates.md",
+            "docs/operations/lightweight-github-ci-strategy.md",
         ],
         "docs_refs": [
             "README.md",
@@ -121,6 +128,8 @@ _CONTRACT_DOMAINS_OPS: tuple[dict[str, Any], ...] = (
             "docs/operations/repo-publication-privacy.md",
             "docs/operations/external-project-validation-pipeline.md",
             "docs/operations/docker-module-profiles.md",
+            "docs/reference/gates.md",
+            "docs/operations/lightweight-github-ci-strategy.md",
             # README.md removed (O1): release-gate / lint-baseline changes don't affect README
             # content. Phase 18.4 stamps confirmed "No README content change required." README
             # accuracy is a release-boundary judgment (reviewed by a human at release/publication

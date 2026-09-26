@@ -91,6 +91,47 @@ jobs:
       - name: Dashboard truth gate
         run: python -m interfaces.cli.ds doctor dashboard-truth
 
+      # The native hooks (runtime/hooks/enqueue-native, runtime/hooks/enforce-native)
+      # are optional -- gitignored binaries, Python fallback when absent -- so a
+      # Python-only CI run never builds or exercises their actual compiled behavior.
+      # Before this was added, NEITHER crate had ANY CI coverage; a compile break or
+      # a test regression in either would go unnoticed until someone happened to run
+      # `cargo test` locally.
+      #
+      # GATED BY PATH, DELIBERATELY. `pr-smoke`'s three OS jobs are this repo's
+      # required merge status checks (docs/reference/gates.md). An earlier version
+      # of this step ran unconditionally -- a round-4 review finding on the PR that
+      # added it caught that this made a working Rust toolchain + passing
+      # `cargo test` a hard requirement for EVERY PR, including ones that never
+      # touch Rust, coupling their mergeability to an unrelated toolchain's health
+      # (a flaky download, a cache miss). Skipping the step entirely when nothing
+      # it covers changed keeps the coverage without that coupling -- a skipped
+      # step does not fail the job.
+      - name: Detect native hook crate changes
+        id: rust-changed
+        shell: bash
+        env:
+          BASE_REF: origin/${{ github.base_ref || 'main' }}
+        run: |
+          if git diff --name-only "$BASE_REF...HEAD" | grep -qE '^runtime/hooks/(enqueue|enforce)-native/|^\.github/workflows/ci\.yml$'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.rust-changed.outputs.changed == 'true'
+      - uses: Swatinem/rust-cache@v2
+        if: steps.rust-changed.outputs.changed == 'true'
+        with:
+          workspaces: |
+            runtime/hooks/enqueue-native
+            runtime/hooks/enforce-native
+      - name: Native hook crates (cargo test)
+        if: steps.rust-changed.outputs.changed == 'true'
+        run: |
+          cargo test --manifest-path runtime/hooks/enqueue-native/Cargo.toml
+          cargo test --manifest-path runtime/hooks/enforce-native/Cargo.toml
+
       # Format and lint run in the pre-push gate only. They used to run there AND
       # here AND in full-ci -- three runs, one answer, and this copy burns a full
       # 3-platform round trip to tell you to run `black .`. One home per check.

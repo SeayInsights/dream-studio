@@ -47,15 +47,93 @@ Finding = dict[str, Any]
 # --- diff parsing -----------------------------------------------------------
 
 
-def _parse_diff(diff_text: str) -> list[dict[str, Any]]:
+def _strip_rust_cfg_test(lines: list[str]) -> list[str]:
+    """Drop everything from a `#[cfg(test)]` line onward, in `lines` itself.
+
+    The FALLBACK strip: it only sees what's IN `lines` (a diff's flat added-
+    or removed-line list), so it only catches the marker when the marker
+    itself was added or removed in this same diff -- true whenever a `.rs`
+    file is wholly new (every line is "added", including its own
+    `#[cfg(test)]`), which is why this was enough when it was written. Used
+    directly for `removed` (no on-disk copy of the OLD file is available to
+    do better) and as the fallback for `added` when `_rust_cfg_test_boundary`
+    has nothing to read (see `_strip_rust_added_lines`).
+    """
+    for i, line in enumerate(lines):
+        if "#[cfg(test)]" in line:
+            return lines[:i]
+    return lines
+
+
+def _rust_cfg_test_boundary(repo_root: Path, path: str) -> int | None:
+    """1-indexed line number of the first `#[cfg(test)]` in `path`'s CURRENT
+    on-disk text under `repo_root`, or `None` if it can't be read.
+
+    An INCREMENTAL edit to an already-existing `.rs` file can add a new test
+    fixture whose diff hunk carries the file's `#[cfg(test)]`/`mod tests {`
+    lines as UNCHANGED CONTEXT, not as `+` lines -- invisible to
+    `_strip_rust_cfg_test`'s diff-only view, which then never truncates and
+    lets the fixture's own INSERT/UPDATE read as a new production write
+    again (the exact false positive this module exists to prevent). This
+    gate always runs against a real checkout of the diff's own head commit,
+    so the on-disk file already IS the diff's new-file state and is
+    authoritative for where the test module actually starts, regardless of
+    which lines the diff happened to mark as context versus added.
+    """
+    try:
+        text = (repo_root / path).read_text(encoding="utf-8")
+    except OSError:
+        return None
+    for i, line in enumerate(text.splitlines(), start=1):
+        if "#[cfg(test)]" in line:
+            return i
+    return None
+
+
+def _strip_rust_added_lines(
+    added: list[str], added_lineno: list[int], repo_root: Path, path: str
+) -> list[str]:
+    """Drop `added` lines at or after the file's `#[cfg(test)]` boundary.
+
+    Position-based when the on-disk file is available (real gate runs): a
+    line's OWN new-file line number decides whether it's inside the test
+    module, so an addition deep inside an already-existing `mod tests {}`
+    block is caught even though the marker itself is unchanged context. A
+    negative `lineno` means "no hunk header was seen for this line" (a
+    malformed diff) and is always `< boundary`, so it's kept -- unknown
+    position fails toward over-inclusion (still flagged), the same safe
+    direction as the plain fallback below.
+
+    Falls back to `_strip_rust_cfg_test`'s diff-only scan when the file
+    can't be read (e.g. deleted, or -- as in this module's own unit tests --
+    a diff constructed without a matching on-disk fixture); that keeps this
+    module's existing wholly-new-file behaviour unchanged.
+    """
+    boundary = _rust_cfg_test_boundary(repo_root, path)
+    if boundary is None:
+        return _strip_rust_cfg_test(added)
+    return [line for line, lineno in zip(added, added_lineno) if lineno < boundary]
+
+
+_HUNK_HEADER_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+
+
+def _parse_diff(diff_text: str, *, repo_root: Path | str = REPO_ROOT) -> list[dict[str, Any]]:
     """Parse a unified git diff into per-file {path, added[], removed[]} records."""
+    root = Path(repo_root)
     files: list[dict[str, Any]] = []
+    added_linenos: list[list[int]] = []
     cur: dict[str, Any] | None = None
+    cur_added_lineno: list[int] = []
+    new_lineno: int | None = None
     for line in diff_text.splitlines():
         if line.startswith("diff --git"):
             if cur is not None:
                 files.append(cur)
+                added_linenos.append(cur_added_lineno)
             cur = {"path": None, "added": [], "removed": []}
+            cur_added_lineno = []
+            new_lineno = None
             # Fallback path from the "diff --git a/x b/x" header.
             parts = line.split(" b/", 1)
             if len(parts) == 2:
@@ -65,15 +143,40 @@ def _parse_diff(diff_text: str) -> list[dict[str, Any]]:
                 cur["path"] = line.removeprefix("+++ b/").strip()
         elif line.startswith("+++") or line.startswith("---"):
             continue
-        elif line.startswith("+"):
-            if cur is not None:
-                cur["added"].append(line[1:])
-        elif line.startswith("-"):
-            if cur is not None:
-                cur["removed"].append(line[1:])
+        else:
+            hunk = _HUNK_HEADER_RE.match(line)
+            if hunk is not None:
+                new_lineno = int(hunk.group(1))
+            elif line.startswith("+"):
+                if cur is not None:
+                    cur["added"].append(line[1:])
+                    cur_added_lineno.append(new_lineno if new_lineno is not None else -1)
+                if new_lineno is not None:
+                    new_lineno += 1
+            elif line.startswith("-"):
+                if cur is not None:
+                    cur["removed"].append(line[1:])
+                # Old-file-only line -- the new-file counter does not advance.
+            elif new_lineno is not None:
+                # A context line, unchanged in both old and new file: it still
+                # occupies a position in the NEW file, so the counter that
+                # tracks new-file line numbers advances even though nothing is
+                # recorded as added or removed. Lines before any hunk header
+                # (index/mode/similarity headers) leave new_lineno at None and
+                # are correctly ignored here.
+                new_lineno += 1
     if cur is not None:
         files.append(cur)
-    return [f for f in files if f.get("path")]
+        added_linenos.append(cur_added_lineno)
+    result = [f for f in files if f.get("path")]
+    result_lineno = [ln for f, ln in zip(files, added_linenos) if f.get("path")]
+    for f, added_lineno in zip(result, result_lineno):
+        if _normalize(f["path"]).endswith(".rs"):
+            f["added"] = _strip_rust_added_lines(
+                f["added"], added_lineno, root, _normalize(f["path"])
+            )
+            f["removed"] = _strip_rust_cfg_test(f["removed"])
+    return result
 
 
 def _normalize(path: str) -> str:
@@ -168,7 +271,7 @@ def detect_stale_removed_symbol_tests(
     diff_text: str, *, repo_root: Path | str = REPO_ROOT
 ) -> list[Finding]:
     root = Path(repo_root)
-    files = _parse_diff(diff_text)
+    files = _parse_diff(diff_text, repo_root=root)
     changed_paths = {_normalize(f["path"]) for f in files}
     removed_attr: set[str] = set()
     removed_def: set[str] = set()
@@ -452,7 +555,7 @@ def detect_changed_signature_callers(
     diff_text: str, *, repo_root: Path | str = REPO_ROOT
 ) -> list[Finding]:
     root = Path(repo_root)
-    files = _parse_diff(diff_text)
+    files = _parse_diff(diff_text, repo_root=root)
     changed_paths = {_normalize(f["path"]) for f in files}
 
     changed_sigs: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {}
@@ -582,7 +685,7 @@ def detect_unowned_table_writes(
     diff_text: str, *, repo_root: Path | str = REPO_ROOT
 ) -> list[Finding]:
     root = Path(repo_root)
-    files = _parse_diff(diff_text)
+    files = _parse_diff(diff_text, repo_root=root)
 
     # A facade-split / refactor RELOCATES a write from one file to another within
     # the same diff: the table's write is removed from file A and added to a new
@@ -641,7 +744,7 @@ def detect_migration_file_db_duplication(
 ) -> list[Finding]:
     """A migration CREATE TABLE for a table an unchanged migration already creates."""
     root = Path(repo_root)
-    files = _parse_diff(diff_text)
+    files = _parse_diff(diff_text, repo_root=root)
     findings: list[Finding] = []
     migrations_dir = root / "core" / "event_store" / "migrations"
     for f in files:
