@@ -5,7 +5,7 @@ avoid:
   - id: run-without-engine
     pattern: Invoking intelligence mode before Wave 2-4 complete
     why: Engine modules won't be available and analysis will fail
-    instead: Check for analyze.engine import before proceeding
+    instead: Check for control.analysis.engine import before proceeding
     severity: critical
 
   - id: large-codebase-full-context
@@ -23,7 +23,7 @@ avoid:
 # Best PRACTICES
 best_practices:
   - id: check-engine-availability
-    practice: Verify analyze.engine imports before analysis
+    practice: Verify control.analysis.engine imports before analysis
     benefit: Graceful error handling if platform not installed
     when: Always, at workflow step 3
 
@@ -64,7 +64,7 @@ edge_cases:
 limitations:
   - limitation: Stack detection limited to Next.js, Astro, Python
     impact: Other stacks fall back to generic adapter with reduced rule coverage
-    workaround: Extend analyze/stacks/ with new adapters
+    workaround: Extend control/analysis/stacks/ with new adapters
     planned_fix: Wave 6 - add more adapters based on usage telemetry
 
   - limitation: Research phase is a stub (static compatibility notes)
