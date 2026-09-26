@@ -235,9 +235,15 @@ def main(argv: list[str] | None = None) -> int:
     result = compare_to_baseline(sites, baseline)
 
     if result["status"] != "pass":
+        resolved_note = (
+            f" ({result['resolved_count']} other site(s) resolved since baseline in the"
+            " same run)"
+            if result["resolved_count"]
+            else ""
+        )
         print(
             f"fail-open-census: FAILED - {result['new_count']} new fail-open site(s) beyond"
-            f" the {result['baseline_count']}-site baseline.",
+            f" the {result['baseline_count']}-site baseline{resolved_note}.",
             file=sys.stderr,
         )
         for site in result["new_sites"]:

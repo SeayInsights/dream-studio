@@ -355,7 +355,7 @@ gates:
     description: >
       Ratcheted census (H30) of the broader fail-open shape fail-open-probe does
       not cover: a bare `except: pass`, or an except handler whose last statement
-      returns a falsy sentinel (None, bare return, False, 0, "", [], {}, ()). 832
+      returns a falsy sentinel (None, bare return, False, 0, "", [], {}, ()). 831
       existing sites are pinned as tracked debt in
       runtime/config/release-gates/fail-open-baseline.txt; this gate fails only
       on a NEW site beyond that baseline, the same ratchet lint-baseline.py

@@ -182,6 +182,22 @@ def test_main_fails_on_a_repo_root_with_no_baseline(tmp_path):
     assert exit_code == 1
 
 
+def test_main_reports_resolved_count_even_when_failing(tmp_path, capsys):
+    """Round-1 review finding: compare_to_baseline() always computes resolved_count, but
+    main()'s FAILED branch never printed it -- a run with both a new site AND a resolved
+    site in the same commit silently dropped the resolved half of the story."""
+    baseline_path = tmp_path / "baseline.txt"
+    baseline_path.write_text("core/gone.py|5|bare-except-pass\n", encoding="utf-8")
+    tree = _tree(tmp_path, _FALSY_RETURN_NONE)  # a genuinely NEW site, not in the baseline
+
+    exit_code = fail_open_census.main(["--repo-root", str(tree), "--baseline", str(baseline_path)])
+
+    assert exit_code == 1
+    stderr = capsys.readouterr().err
+    assert "resolved" in stderr.lower()
+    assert "1" in stderr
+
+
 def test_main_passes_once_the_site_is_baselined(tmp_path):
     tree = _tree(tmp_path, _BARE_EXCEPT_PASS)
     baseline_path = tmp_path / "baseline.txt"
