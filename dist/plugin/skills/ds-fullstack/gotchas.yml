@@ -18,7 +18,7 @@ avoid:
   - id: duplicate-website-logic
     severity: high
     discovered: 2026-05-02
-    title: "Frontend mode must delegate to domains:website, never duplicate its pipeline logic"
+    title: "Frontend mode must delegate to website:, never duplicate its pipeline logic"
     context: "If frontend mode re-implements website skill logic (responsive design, build pipeline, deployment patterns), you create maintenance burden and divergence. Changes to website patterns won't propagate to frontend builds."
     fix: "Frontend SKILL.md should invoke website skill, not copy its steps. Frontend mode handles API integration; layout/styling/build comes from website domain."
 
@@ -27,7 +27,7 @@ avoid:
     discovered: 2026-05-02
     title: "Cloudflare preset must delegate to saas-build mode, not re-implement Workers patterns"
     context: "When cloudflare preset is selected, backend should delegate to saas-build mode. If backend re-implements Workers patterns (bindings, KV, migrations), you duplicate logic and miss saas-build optimizations."
-    fix: "Cloudflare preset explicitly invokes domains:saas-build. Backend mode never implements Workers-specific patterns directly."
+    fix: "Cloudflare preset explicitly invokes apps:saas-build. Backend mode never implements Workers-specific patterns directly."
 
 best_practices:
   - id: contract-first
