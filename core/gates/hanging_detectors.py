@@ -47,6 +47,30 @@ Finding = dict[str, Any]
 # --- diff parsing -----------------------------------------------------------
 
 
+def _strip_rust_cfg_test(lines: list[str]) -> list[str]:
+    """Drop everything from a `#[cfg(test)]` line onward.
+
+    These detectors were built entirely for Python, where a unit test always
+    lives in a SEPARATE `tests/*.py` file `_is_test_path` already excludes.
+    Rust's own convention puts unit tests INLINE, in a `#[cfg(test)] mod
+    tests { ... }` block at the end of the same production source file --
+    invisible to a path-based test/non-test split. Without this, a test
+    fixture's own `INSERT INTO ...` (building a throwaway SQLite DB to test a
+    read-only query against) reads to this module exactly like a new
+    production write, and the fix is not to make the fixture's SQL look
+    different -- it needs to say what it means -- but to make this scanner as
+    Rust-aware as it already is Python-aware. Truncating at the first match
+    is conservative-by-construction across every `.rs` file in this repo,
+    which puts its `#[cfg(test)]` module last; a file that legitimately has
+    real code AFTER its test module would need a smarter split, but none
+    does today.
+    """
+    for i, line in enumerate(lines):
+        if "#[cfg(test)]" in line:
+            return lines[:i]
+    return lines
+
+
 def _parse_diff(diff_text: str) -> list[dict[str, Any]]:
     """Parse a unified git diff into per-file {path, added[], removed[]} records."""
     files: list[dict[str, Any]] = []
@@ -73,7 +97,12 @@ def _parse_diff(diff_text: str) -> list[dict[str, Any]]:
                 cur["removed"].append(line[1:])
     if cur is not None:
         files.append(cur)
-    return [f for f in files if f.get("path")]
+    result = [f for f in files if f.get("path")]
+    for f in result:
+        if _normalize(f["path"]).endswith(".rs"):
+            f["added"] = _strip_rust_cfg_test(f["added"])
+            f["removed"] = _strip_rust_cfg_test(f["removed"])
+    return result
 
 
 def _normalize(path: str) -> str:

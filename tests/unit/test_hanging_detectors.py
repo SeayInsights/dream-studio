@@ -387,6 +387,65 @@ def test_unowned_table_write_skips_migration_ddl_and_one_time_tooling(tmp_path: 
     ), f"one-time migration script must not be flagged as an unowned writer; got {findings_migrate}"
 
 
+def test_unowned_table_write_ignores_a_rust_cfg_test_fixture(tmp_path: Path) -> None:
+    """PR #826 false positive: db.rs's own #[cfg(test)] fixture literally builds a
+    throwaway SQLite DB with `INSERT INTO work_order_dependencies ...` to test a
+    READ-ONLY query against -- this module was built entirely for Python, where a
+    unit test always lives in a separate tests/*.py file _is_test_path already
+    excludes, so it read Rust's inline #[cfg(test)] fixture exactly like a new
+    production write."""
+    repo = tmp_path
+    _write(
+        repo / "core" / "work_orders" / "ordering.py",
+        'def bump():\n    conn.execute("INSERT INTO work_order_dependencies (a) VALUES (1)")\n',
+    )
+    diff = (
+        "diff --git a/runtime/hooks/enforce-native/src/db.rs b/runtime/hooks/enforce-native/src/db.rs\n"
+        "--- a/runtime/hooks/enforce-native/src/db.rs\n"
+        "+++ b/runtime/hooks/enforce-native/src/db.rs\n"
+        "@@ -1,1 +1,6 @@\n"
+        "+pub fn next_created_work_order() {}\n"
+        "+#[cfg(test)]\n"
+        "+mod tests {\n"
+        "+    fn fixture() {\n"
+        "+        let sql = \"INSERT INTO work_order_dependencies VALUES ('a', 'b');\";\n"
+        "+    }\n"
+        "+}\n"
+    )
+    findings = detect_unowned_table_writes(diff, repo_root=repo)
+    assert all(
+        f["symbol"] != "work_order_dependencies" for f in findings
+    ), f"a #[cfg(test)] fixture's own INSERT must not read as a new production write; got {findings}"
+
+
+def test_unowned_table_write_still_catches_a_real_rust_write_before_cfg_test(
+    tmp_path: Path,
+) -> None:
+    """The #[cfg(test)] strip must not blind this detector to a REAL write placed
+    earlier in the same Rust file -- only content AT OR AFTER the marker is dropped."""
+    repo = tmp_path
+    _write(
+        repo / "core" / "work_orders" / "ordering.py",
+        'def bump():\n    conn.execute("INSERT INTO work_order_dependencies (a) VALUES (1)")\n',
+    )
+    diff = (
+        "diff --git a/runtime/hooks/enforce-native/src/db.rs b/runtime/hooks/enforce-native/src/db.rs\n"
+        "--- a/runtime/hooks/enforce-native/src/db.rs\n"
+        "+++ b/runtime/hooks/enforce-native/src/db.rs\n"
+        "@@ -1,1 +1,5 @@\n"
+        "+pub fn write_something(conn: &Connection) {\n"
+        '+    conn.execute("INSERT INTO work_order_dependencies (a,b) VALUES (?, ?)", []);\n'
+        "+}\n"
+        "+#[cfg(test)]\n"
+        "+mod tests {}\n"
+    )
+    findings = detect_unowned_table_writes(diff, repo_root=repo)
+    by_symbol = {f["symbol"]: f for f in findings}
+    assert (
+        "work_order_dependencies" in by_symbol
+    ), f"a real write BEFORE the #[cfg(test)] marker must still be caught; got {findings}"
+
+
 def test_a_symbol_named_only_in_prose_is_not_a_caller(tmp_path: Path) -> None:
     """A MENTION IS NOT A CALLER, and this blocked a real PR on two comments.
 
