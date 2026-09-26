@@ -228,11 +228,11 @@ def _update_vocabulary() -> int:
     return 0
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Validate Dream Studio skill mode cards.")
     parser.add_argument("--all", action="store_true", help="audit every card, not the diff")
     parser.add_argument("--update", action="store_true", help="re-seed the root-input registry")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.update:
         return _update_vocabulary()

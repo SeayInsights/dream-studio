@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from core.gates import registry as _registry
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = REPO_ROOT / "canonical" / "workflows" / "pre-push.yaml"
 
@@ -87,7 +89,16 @@ def run_gate(
     repo_root: Path,
     timeout_seconds: int = 600,
 ) -> GateResult:
-    """Run a single gate as a subprocess and return its result."""
+    """Run a single gate and return its result.
+
+    C12: a gate this repository owns (not a third-party tool, and only when running
+    against this repository's own checkout — see core/gates/registry.py) runs IN-PROCESS
+    by importing its module and calling its own main() directly, rather than paying a
+    fresh interpreter's startup cost for a check that is itself single-digit
+    milliseconds. Gate env overrides are a real behavior difference the in-process path
+    cannot honor (they would leak into this process for every gate after), so a gate
+    declaring one always runs as a subprocess regardless of registry eligibility.
+    """
     gate_id = str(gate.get("id") or "<unnamed>")
     tier = str(gate.get("tier") or "blocking")
     command = gate.get("command") or []
@@ -101,8 +112,26 @@ def run_gate(
             fail_hint="Gate has no `command:` defined in manifest.",
         )
 
-    # Merge gate-level env overrides into the current process environment.
     gate_env = gate.get("env") or {}
+    if not gate_env:
+        start = time.monotonic()
+        in_process = _registry.run_in_process(gate_id, command, repo_root=repo_root)
+        if in_process is not None:
+            exit_code, stdout, stderr = in_process
+            duration = time.monotonic() - start
+            return GateResult(
+                gate_id=gate_id,
+                passed=exit_code == 0,
+                exit_code=exit_code,
+                duration_seconds=duration,
+                tier=tier,
+                fail_hint=str(gate.get("fail_hint") or ""),
+                warn_hint=str(gate.get("warn_hint") or ""),
+                stdout_tail=_tail(stdout),
+                stderr_tail=_tail(stderr),
+            )
+
+    # Merge gate-level env overrides into the current process environment.
     run_env = {**__import__("os").environ, **{str(k): str(v) for k, v in gate_env.items()}}
 
     start = time.monotonic()

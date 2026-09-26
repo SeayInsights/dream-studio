@@ -14,8 +14,10 @@ on_failure: stop
 # Classification rule: correctness / safety / authority-integrity → blocking
 #                      hygiene / drift / informational              → advisory
 #
-# Each gate is run via subprocess by core/gates/pre_push.py.
-# Exit code 0 = pass, non-zero = fail. cwd is the repo root.
+# Each gate is run by core/gates/pre_push.py -- in-process by importing the gate's own
+# module when it is code this repo owns and repo_root is this repo (core/gates/registry.py,
+# C12), subprocess otherwise (black, pytest, a foreign repo_root, or a gate declaring env:).
+# Exit code 0 = pass, non-zero = fail. cwd (subprocess) / repo_root (in-process) is the repo root.
 # Order matters — cheapest gates first so a failure halts the slow ones.
 gates:
   - id: lane-review

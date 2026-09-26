@@ -41,6 +41,7 @@ WHAT IS DELIBERATELY NOT BANNED.
 
 from __future__ import annotations
 
+import argparse
 import ast
 import json
 import sys
@@ -192,8 +193,19 @@ def run(repo_root: Path = REPO_ROOT) -> dict:
     }
 
 
-def main() -> int:
-    result = run()
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Scan for a fixture-lifetime stdlib instance-method patch."
+    )
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help="Scan THIS tree instead of the repo this gate module lives in (D18).",
+    )
+    args = parser.parse_args(argv)
+    repo_root = Path(args.repo_root).resolve() if args.repo_root else REPO_ROOT
+
+    result = run(repo_root=repo_root)
     if result["status"] != "pass":
         print(json.dumps(result, indent=2, sort_keys=True))
         print(

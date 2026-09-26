@@ -38,6 +38,7 @@ from control.analysis.security_patterns import (
     parsed_findings,
     scan_for_patterns,
 )
+from core.gates import security_scan
 from core.gates.security_scan import changed_scannable_files, offenders_in_text
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -779,3 +780,54 @@ def test_the_two_real_template_files_stay_exempted():
         raw = findings_with_lines(content, rel)
         assert raw, f"{rel} produced no findings at all; the scanner is not looking"
         assert offenders_in_text(content, rel) == [], rel
+
+
+def _git_repo_with_untracked_file(tmp_path: Path, rel: str, source: str) -> Path:
+    """A real git checkout, not just a directory -- ``changed_scannable_files`` shells out
+    to ``git ls-files``/``git diff``, which errors outside a repository and would make a
+    repo_root that "just isn't DS's own tree" indistinguishable from one where the plumbing
+    silently fell back to DS's own tree and found nothing there either."""
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "test"], cwd=tmp_path, check=True)
+    target = tmp_path / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(source, encoding="utf-8")
+    return tmp_path
+
+
+def test_repo_root_scans_the_tree_it_is_given_not_this_one(tmp_path):
+    """D18: a foreign checkout's own finding must surface when repo_root points at it, and
+    it must not exist in this repository (or the test proves nothing about which tree was
+    actually scanned)."""
+    rel = "app/danger.py"
+    source = "import subprocess\nsubprocess.run(cmd, shell=True)\n"
+    other_repo = _git_repo_with_untracked_file(tmp_path, rel, source)
+    assert not (security_scan.REPO_ROOT / rel).exists()
+
+    result = security_scan.run(base_ref="HEAD", repo_root=other_repo)
+
+    assert rel in result["files_checked"], result
+    assert result["status"] == "fail", result
+    assert any(o["file"] == rel for o in result["offenders"]), result
+
+
+def test_repo_root_defaults_to_this_repository():
+    """Calling with no repo_root at all must still behave exactly as before this parameter
+    existed -- the default keeps pointing at the module's own tree."""
+    result = security_scan.run(base_ref="origin/main")
+    assert result["files_checked"] == changed_scannable_files("origin/main")
+
+
+def test_cli_flag_threads_repo_root_through_main(tmp_path, capsys):
+    """The ``--repo-root`` flag (D18), exercised end to end through ``main()``, not just the
+    underlying function -- a flag argparse drops silently is invisible to every test above."""
+    rel = "app/danger.py"
+    source = "import subprocess\nsubprocess.run(cmd, shell=True)\n"
+    other_repo = _git_repo_with_untracked_file(tmp_path, rel, source)
+
+    exit_code = security_scan.main(["--repo-root", str(other_repo)])
+
+    assert exit_code == 1
+    out = capsys.readouterr().out
+    assert rel in out
