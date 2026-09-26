@@ -44,6 +44,7 @@ off.
 
 from __future__ import annotations
 
+import argparse
 import ast
 import json
 import os
@@ -65,12 +66,16 @@ _EXEMPTION = re.compile(r"#\s*security-scan:\s*(?P<reason>\S.*)")
 _MIN_REASON_CHARS = 20
 
 
-def changed_scannable_files(base_ref: str | None = None) -> list[str]:
+def changed_scannable_files(base_ref: str | None = None, repo_root: Path = REPO_ROOT) -> list[str]:
     """Files this change set touches that the scanner accepts.
 
     Untracked files are included: ``git diff`` never reports one, and a brand-new file is
     exactly the case a security gate most needs to see. The ``gitignore-phantom`` gate was
     written after that same blind spot.
+
+    ``repo_root`` defaults to this repository (D18): the gate's own tests, and a future
+    ``--repo-root`` caller, need it to scan a DIFFERENT tree without touching a module-level
+    constant every other call site still reads.
     """
     base = base_ref or os.environ.get("DREAM_STUDIO_BASE_REF") or "origin/main"
     paths: set[str] = set()
@@ -83,7 +88,7 @@ def changed_scannable_files(base_ref: str | None = None) -> list[str]:
         try:
             proc = subprocess.run(  # noqa: S603 - fixed argv, no shell
                 argv,
-                cwd=str(REPO_ROOT),
+                cwd=str(repo_root),
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
@@ -96,7 +101,7 @@ def changed_scannable_files(base_ref: str | None = None) -> list[str]:
             continue
         for line in (proc.stdout or "").splitlines():
             name = line.strip().replace("\\", "/")
-            if name and should_scan(name, include_tests=True) and (REPO_ROOT / name).is_file():
+            if name and should_scan(name, include_tests=True) and (repo_root / name).is_file():
                 paths.add(name)
     return sorted(paths)
 
@@ -250,20 +255,20 @@ def offenders_in_text(content: str, rel: str) -> list[dict]:
     return offenders
 
 
-def _offenders_in(rel: str) -> list[dict]:
+def _offenders_in(rel: str, repo_root: Path = REPO_ROOT) -> list[dict]:
     try:
-        content = (REPO_ROOT / rel).read_text(encoding="utf-8")
+        content = (repo_root / rel).read_text(encoding="utf-8")
     except OSError:
         return []
     return offenders_in_text(content, rel)
 
 
-def run(base_ref: str | None = None) -> dict:
+def run(base_ref: str | None = None, repo_root: Path = REPO_ROOT) -> dict:
     """Scan the files this change set touches."""
-    files = changed_scannable_files(base_ref)
+    files = changed_scannable_files(base_ref, repo_root)
     offenders: list[dict] = []
     for rel in files:
-        offenders.extend(_offenders_in(rel))
+        offenders.extend(_offenders_in(rel, repo_root))
     return {
         "status": "fail" if offenders else "pass",
         "files_checked": files,
@@ -271,8 +276,19 @@ def run(base_ref: str | None = None) -> dict:
     }
 
 
-def main() -> int:
-    result = run()
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Scan this change set's files for security anti-patterns."
+    )
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help="Scan THIS tree instead of the repo this gate module lives in (D18).",
+    )
+    args = parser.parse_args(argv)
+    repo_root = Path(args.repo_root).resolve() if args.repo_root else REPO_ROOT
+
+    result = run(repo_root=repo_root)
     if result["status"] != "pass":
         print(json.dumps(result, indent=2, sort_keys=True))
         print(

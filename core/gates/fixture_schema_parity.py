@@ -28,6 +28,7 @@ and ``ds_files`` living in ``files.db`` is not a defect in a ``studio.db`` schem
 
 from __future__ import annotations
 
+import argparse
 import ast
 import json
 import re
@@ -252,8 +253,19 @@ def run(repo_root: Path = REPO_ROOT, schema: dict[str, set[str]] | None = None) 
     }
 
 
-def main() -> int:
-    result = run()
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Check test fixtures against Dream Studio's real authority schema."
+    )
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help="Scan THIS tree's test fixtures instead of this gate module's own repo (D18).",
+    )
+    args = parser.parse_args(argv)
+    repo_root = Path(args.repo_root).resolve() if args.repo_root else REPO_ROOT
+
+    result = run(repo_root=repo_root)
     if result["status"] != "pass":
         print(json.dumps(result, indent=2, sort_keys=True))
         print(

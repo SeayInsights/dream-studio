@@ -25,7 +25,7 @@ from interfaces.cli._gate_review_context import (  # noqa: E402
 )
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--changed-file",
@@ -63,7 +63,7 @@ def main() -> None:
             "`Docs-Reviewed-No-Change: <domain_id>` commit trailers in the diff range."
         ),
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     changed_files = _changed_files(args)
     reviewed_no_change = _gather_reviewed_no_change(
