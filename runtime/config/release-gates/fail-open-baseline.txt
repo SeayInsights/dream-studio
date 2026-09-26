@@ -309,6 +309,7 @@ core/gates/fail_open_probe.py|137|falsy-return
 core/gates/fixture_schema_parity.py|145|falsy-return
 core/gates/fixture_schema_parity.py|184|falsy-return
 core/gates/generated_artifacts.py|248|falsy-return
+core/gates/hanging_detectors.py|85|falsy-return
 core/gates/instruction_commands.py|147|falsy-return
 core/gates/merge_readiness.py|250|falsy-return
 core/gates/merge_readiness.py|266|falsy-return

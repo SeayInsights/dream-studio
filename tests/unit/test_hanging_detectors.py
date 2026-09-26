@@ -446,6 +446,71 @@ def test_unowned_table_write_still_catches_a_real_rust_write_before_cfg_test(
     ), f"a real write BEFORE the #[cfg(test)] marker must still be caught; got {findings}"
 
 
+def test_unowned_table_write_ignores_an_incremental_edit_inside_an_existing_test_module(
+    tmp_path: Path,
+) -> None:
+    """Round-6 review finding on PR #826: `_strip_rust_cfg_test` only worked
+    because db.rs was WHOLLY NEW in that diff, so its `#[cfg(test)]` marker was
+    itself an added line. An ordinary INCREMENTAL edit to an already-existing
+    .rs file -- adding a new fixture inside a pre-existing `mod tests {}` block
+    -- carries `#[cfg(test)]`/`mod tests {` as UNCHANGED CONTEXT, invisible to a
+    diff-only scan of added lines, and reopens the exact false positive the
+    first fix closed. This reproduces that shape: the diff's hunk shows the new
+    fixture's INSERT as an added line with real context around it (not a
+    wholly-new file), and the repo has the on-disk `.rs` file this gate must
+    read to find the marker's true position."""
+    repo = tmp_path
+    _write(
+        repo / "other_writer.py",
+        'def bump():\n    conn.execute("INSERT INTO fake_table (a) VALUES (99)")\n',
+    )
+    _write(
+        repo / "fakemod.rs",
+        "fn production_write() {\n"
+        "    // nothing\n"
+        "}\n"
+        "\n"
+        "#[cfg(test)]\n"
+        "mod tests {\n"
+        "    #[test]\n"
+        "    fn old_fixture() {\n"
+        '        let _sql = "INSERT INTO fake_table (a) VALUES (1)";\n'
+        "    }\n"
+        "\n"
+        "    #[test]\n"
+        "    fn new_fixture() {\n"
+        '        let _sql = "INSERT INTO fake_table (a) VALUES (2)";\n'
+        "    }\n"
+        "}\n",
+    )
+    diff = (
+        "diff --git a/fakemod.rs b/fakemod.rs\n"
+        "--- a/fakemod.rs\n"
+        "+++ b/fakemod.rs\n"
+        "@@ -1,11 +1,16 @@\n"
+        " fn production_write() {\n"
+        "     // nothing\n"
+        " }\n"
+        " \n"
+        " #[cfg(test)]\n"
+        " mod tests {\n"
+        "     #[test]\n"
+        "     fn old_fixture() {\n"
+        '         let _sql = "INSERT INTO fake_table (a) VALUES (1)";\n'
+        "     }\n"
+        "+\n"
+        "+    #[test]\n"
+        "+    fn new_fixture() {\n"
+        '+        let _sql = "INSERT INTO fake_table (a) VALUES (2)";\n'
+        "+    }\n"
+        " }\n"
+    )
+    findings = detect_unowned_table_writes(diff, repo_root=repo)
+    assert all(
+        f["symbol"] != "fake_table" for f in findings
+    ), f"a new fixture added inside an EXISTING test module must not read as a new production write; got {findings}"
+
+
 def test_a_symbol_named_only_in_prose_is_not_a_caller(tmp_path: Path) -> None:
     """A MENTION IS NOT A CALLER, and this blocked a real PR on two comments.
 
