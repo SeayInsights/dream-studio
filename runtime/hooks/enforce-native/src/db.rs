@@ -236,7 +236,13 @@ mod tests {
              INSERT INTO business_projects VALUES ('p-paused', 'Paused', 'paused', '{root}');",
             root = active_root.to_string_lossy().replace('\\', "\\\\"),
         ));
-        let file = active_root.join("f.py");
+        // Production always resolves the candidate path (see enforce.rs) before
+        // calling this function; an unresolved path here diverges from the
+        // resolved `root` on any platform where the tempdir's own path crosses a
+        // symlink (macOS's /tmp -> /private/tmp) or a similar canonicalization
+        // quirk (observed on Windows CI too) -- `is_under` then compares an
+        // unresolved candidate against a resolved root and never matches.
+        let file = paths::resolve_weak(&active_root.join("f.py").to_string_lossy()).unwrap();
         let project = match_registered_project(&db_path, &file).expect("a project matches");
         assert_eq!(project.project_id, "p-active", "active wins over paused for the same root");
         drop(fixture_dir);
@@ -253,7 +259,7 @@ mod tests {
             outer = outer.to_string_lossy().replace('\\', "\\\\"),
             inner = inner.to_string_lossy().replace('\\', "\\\\"),
         ));
-        let file = inner.join("f.py");
+        let file = paths::resolve_weak(&inner.join("f.py").to_string_lossy()).unwrap();
         let project = match_registered_project(&db_path, &file).expect("a project matches");
         assert_eq!(project.project_id, "p-inner", "the nested project wins over its parent");
         drop(fixture_dir);
@@ -268,7 +274,8 @@ mod tests {
             "INSERT INTO business_projects VALUES ('p1', 'P1', 'active', '{proj}');",
             proj = proj.to_string_lossy().replace('\\', "\\\\"),
         ));
-        assert!(match_registered_project(&db_path, &elsewhere.join("f.py")).is_none());
+        let file = paths::resolve_weak(&elsewhere.join("f.py").to_string_lossy()).unwrap();
+        assert!(match_registered_project(&db_path, &file).is_none());
         drop(fixture_dir);
     }
 
@@ -281,8 +288,9 @@ mod tests {
             "INSERT INTO business_work_orders VALUES ('wo-recent', 'Recent', 'Module boundary: interfaces.', 'p1', 'in_progress', '2026-01-02T00:00:00Z', NULL, NULL, '2026-01-02T00:00:00Z');
              INSERT INTO business_work_orders VALUES ('wo-boundary', 'Boundary', 'Module boundary: core.', 'p1', 'in_progress', '2026-01-01T00:00:00Z', NULL, NULL, '2026-01-01T00:00:00Z');",
         );
-        let file = proj.join("core").join("x.py");
-        let wo = in_progress_work_order(&db_path, "p1", Some((&file, &proj))).expect("a WO matches");
+        let file = paths::resolve_weak(&proj.join("core").join("x.py").to_string_lossy()).unwrap();
+        let proj_root = paths::resolve_weak(&proj.to_string_lossy()).unwrap();
+        let wo = in_progress_work_order(&db_path, "p1", Some((&file, &proj_root))).expect("a WO matches");
         assert_eq!(wo.work_order_id, "wo-boundary", "boundary match wins over the more recently started WO");
         assert_eq!(wo.attribution, "module_boundary");
         drop(fixture_dir);
@@ -296,8 +304,9 @@ mod tests {
             "INSERT INTO business_work_orders VALUES ('wo-old', 'Old', '', 'p1', 'in_progress', '2026-01-01T00:00:00Z', NULL, NULL, '2026-01-01T00:00:00Z');
              INSERT INTO business_work_orders VALUES ('wo-new', 'New', '', 'p1', 'in_progress', '2026-01-02T00:00:00Z', NULL, NULL, '2026-01-02T00:00:00Z');",
         );
-        let file = proj.join("x.py");
-        let wo = in_progress_work_order(&db_path, "p1", Some((&file, &proj))).expect("a WO matches");
+        let file = paths::resolve_weak(&proj.join("x.py").to_string_lossy()).unwrap();
+        let proj_root = paths::resolve_weak(&proj.to_string_lossy()).unwrap();
+        let wo = in_progress_work_order(&db_path, "p1", Some((&file, &proj_root))).expect("a WO matches");
         assert_eq!(wo.work_order_id, "wo-new", "no declared boundary anywhere -- falls back to recency");
         assert_eq!(wo.attribution, "most_recently_started");
         assert!(
