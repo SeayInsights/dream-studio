@@ -69,11 +69,11 @@ Dream Studio's data architecture is organized into three distinct stores with ex
 ## Data Flow Example: Skill Invocation
 
 ```
-User invokes ds-quality:debug
+User invokes ds-code-health:debug
     │
     ▼
 Skill emits skill.invoked event
-    │   CanonicalEventEnvelope(event_type="skill.invoked", trace={skill_specifier: "quality:debug"})
+    │   CanonicalEventEnvelope(event_type="skill.invoked", trace={skill_specifier: "code-health:debug"})
     │   write_envelopes([envelope])
     │
     ▼

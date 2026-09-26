@@ -33,15 +33,15 @@ def test_resolve_specifier_bare_review():
 
 
 def test_resolve_specifier_bare_debug():
-    assert resolve_specifier("debug") == "ds-quality:debug"
+    assert resolve_specifier("debug") == "ds-code-health:debug"
 
 
 def test_resolve_specifier_bare_audit():
-    assert resolve_specifier("audit") == "ds-quality:audit"
+    assert resolve_specifier("audit") == "ds-code-health:audit"
 
 
 def test_resolve_specifier_already_qualified():
-    assert resolve_specifier("ds-quality:debug") == "ds-quality:debug"
+    assert resolve_specifier("ds-code-health:debug") == "ds-code-health:debug"
 
 
 def test_resolve_specifier_already_qualified_with_prefix():

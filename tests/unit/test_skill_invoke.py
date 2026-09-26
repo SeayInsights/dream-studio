@@ -154,7 +154,7 @@ def test_skill_list_shows_all_packs_and_modes(capsys):
     specifiers = {s["specifier"] for s in out["skills"]}
     assert "core:build" in specifiers
     assert "security:scan" in specifiers
-    assert "quality:debug" in specifiers
+    assert "code-health:debug" in specifiers
     assert len(out["skills"]) > 10
 
 

@@ -270,13 +270,13 @@ modes:
     Lighthouse), keyboard audit, screen reader testing (NVDA, VoiceOver), visual audit, and a four-tier
     remediation priority framework. Invoked via accessibility-expert subagent (Task... Invoke for: accessibility
     audit, wcag check, a11y review, screen reader, keyboard navigation'
-- mode: quality/architecture
-  skill: quality/modes/architecture/SKILL.md
+- mode: code-health/architecture
+  skill: code-health/modes/architecture/SKILL.md
   no_agent: Nothing dispatches it and the skill is 2635 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: quality/audit
-  skill: quality/modes/audit/SKILL.md
-  no_agent: 'The router for the audit: fan-out. Its specialists are quality/code-quality, database, security,
+- mode: code-health/audit
+  skill: code-health/modes/audit/SKILL.md
+  no_agent: 'The router for the audit: fan-out. Its specialists are code-health/code-quality, database, security,
     testing and types-deps, each of which has its own agent.'
 - mode: quality/backend-api
   skill: quality/modes/backend-api/SKILL.md
@@ -285,10 +285,10 @@ modes:
 - mode: core/coach
   skill: core/modes/coach/SKILL.md
   no_agent: Classifies operator intent and routes it. Routing is the caller's job by definition.
-- mode: quality/code-quality
-  skill: quality/modes/code-quality/SKILL.md
+- mode: code-health/code-quality
+  skill: code-health/modes/code-quality/SKILL.md
   agent: quality-code-quality
-  installed_skill: ds-quality/modes/code-quality/SKILL.md
+  installed_skill: ds-code-health/modes/code-quality/SKILL.md
   dispatched_because: 'fan-out: several modes share a trigger, so one operator word convenes them together'
   description: 'Code quality enforcement — audits Python code for maintainability, correctness, and idiomatic
     patterns against 22 rules from LIST-4 (code-writing-best-practices.md). Three-way boundary with ds-quality:security
@@ -307,16 +307,16 @@ modes:
   skill: quality/modes/database-compliance/SKILL.md
   no_agent: Nothing dispatches it and the skill is 2370 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: quality/debug
-  skill: quality/modes/debug/SKILL.md
+- mode: code-health/debug
+  skill: code-health/modes/debug/SKILL.md
   no_agent: Nothing dispatches it and the skill is 4834 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
 - mode: quality/frontend-ux
   skill: quality/modes/frontend-ux/SKILL.md
   no_agent: Nothing dispatches it and the skill is 1716 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: quality/groom
-  skill: quality/modes/groom/SKILL.md
+- mode: code-health/groom
+  skill: code-health/modes/groom/SKILL.md
   no_agent: Triages the lesson queue and opens pull requests against the repository.
 - mode: quality/harden
   skill: quality/modes/harden/SKILL.md
@@ -361,17 +361,17 @@ modes:
     + LLM semantic pass. Two modes: audit (retrospective codebase scan with --changed/--full-repo/--sample
     scope) and build (pre-generation static enforcement). Degrades gracefully when... Invoke for: audit:,
     security audit:, check security:, check codebase security:, build:security, enforce security:'
-- mode: quality/structure-audit
-  skill: quality/modes/structure-audit/SKILL.md
+- mode: code-health/structure-audit
+  skill: code-health/modes/structure-audit/SKILL.md
   agent: quality-structure-audit
-  installed_skill: ds-quality/modes/structure-audit/SKILL.md
+  installed_skill: ds-code-health/modes/structure-audit/SKILL.md
   dispatched_because: 'isolation: the skill is 5794 bytes, enough that carrying it in a subagent protects
     the caller''s context'
   description: No description
-- mode: quality/testing
-  skill: quality/modes/testing/SKILL.md
+- mode: code-health/testing
+  skill: code-health/modes/testing/SKILL.md
   agent: quality-testing
-  installed_skill: ds-quality/modes/testing/SKILL.md
+  installed_skill: ds-code-health/modes/testing/SKILL.md
   dispatched_because: 'fan-out: several modes share a trigger, so one operator word convenes them together'
   description: 'Test quality enforcement — audits test files against 15 rules covering coverage existence
     (via coverage.py), determinism, isolation, structure (AAA), assertion quality, naming, mocking location,

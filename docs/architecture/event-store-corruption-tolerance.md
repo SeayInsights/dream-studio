@@ -86,7 +86,7 @@ context, this decision should be revisited:
 
 ## Suppression Pattern
 
-The `ds-quality:code-quality` rule `cq-006` (no silent failures) correctly
+The `ds-code-health:code-quality` rule `cq-006` (no silent failures) correctly
 identifies these `except: pass` sites as code quality findings. The inline
 suppression pattern applied at each site is:
 
@@ -101,6 +101,6 @@ suppression comment and its rationale.
 
 ## Related
 
-- `ds-quality:code-quality` rule `cq-006` (no silent failures)
+- `ds-code-health:code-quality` rule `cq-006` (no silent failures)
 - `core/event_store/studio_db.py` — 3 JSON parsing suppression sites
 - `18.4.3-followup-3` — inline suppression application to studio_db.py

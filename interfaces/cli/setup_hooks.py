@@ -32,8 +32,8 @@ SETTINGS_JSON = Path.home() / ".claude" / "settings.json"
 # tests/unit/test_hook_pack_projection_consistency.py, which computes the
 # real set from the filesystem — a pack split that moves a hook (like the
 # apps pack's on-game-validate) without updating all three fails that test.
-SYNC_HOOK_PACKS = ("quality", "apps", "core", "meta")
-UNINSTALL_HOOK_PACKS = ("quality", "apps", "core")
+SYNC_HOOK_PACKS = ("quality", "code-health", "apps", "core", "meta")
+UNINSTALL_HOOK_PACKS = ("quality", "code-health", "apps", "core")
 
 
 # ---------------------------------------------------------------------------

@@ -6,10 +6,10 @@ each handler sequentially. Reads stdin once and re-injects it before each
 handler's main() so existing code works unchanged.
 
 Handlers (in order):
-  1. on-agent-correction (runtime/hooks/quality)
+  1. on-agent-correction (runtime/hooks/code-health)
   2. on-game-validate    (runtime/hooks/apps)
   3. on-security-scan    (runtime/hooks/quality)
-  4. on-structure-check  (runtime/hooks/quality)
+  4. on-structure-check  (runtime/hooks/code-health)
 """
 
 from __future__ import annotations
@@ -47,11 +47,14 @@ from core.config import paths  # noqa: E402
 HANDLERS = [
     (
         "on-agent-correction",
-        PLUGIN_ROOT / "runtime" / "hooks" / "quality" / "on-agent-correction.py",
+        PLUGIN_ROOT / "runtime" / "hooks" / "code-health" / "on-agent-correction.py",
     ),
     ("on-game-validate", PLUGIN_ROOT / "runtime" / "hooks" / "apps" / "on-game-validate.py"),
     ("on-security-scan", PLUGIN_ROOT / "runtime" / "hooks" / "quality" / "on-security-scan.py"),
-    ("on-structure-check", PLUGIN_ROOT / "runtime" / "hooks" / "quality" / "on-structure-check.py"),
+    (
+        "on-structure-check",
+        PLUGIN_ROOT / "runtime" / "hooks" / "code-health" / "on-structure-check.py",
+    ),
 ]
 
 STATE_DIR = paths.state_dir()

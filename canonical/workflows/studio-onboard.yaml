@@ -1035,7 +1035,7 @@ nodes:
       CHECK 10 — Critical skill directories exist
       Check all paths exist:
         ~/.claude/skills/ds-core/modes/build/SKILL.md
-        ~/.claude/skills/ds-quality/modes/debug/SKILL.md
+        ~/.claude/skills/ds-code-health/modes/debug/SKILL.md
       Pass: all exist
       Fail: any missing — note which
 

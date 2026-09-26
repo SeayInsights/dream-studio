@@ -1,0 +1,6 @@
+name: code-health
+model_tier: sonnet
+description: 'Code health — quality, architecture, structure, and test discipline: code-quality, architecture, structure-audit, audit, groom, testing, debug.'
+argument-hint: code-quality | architecture | structure-audit | audit | groom | testing | debug
+user_invocable: true
+args: mode

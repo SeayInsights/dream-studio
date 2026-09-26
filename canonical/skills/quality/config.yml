@@ -1,7 +1,7 @@
 name: quality
 model_tier: sonnet
-description: 'Code quality: debug, polish, harden, secure, structure-audit, learn,
-  coach.'
-argument-hint: debug | polish | harden | secure | structure-audit | learn | coach
+description: 'Code quality, learning, and structural discipline: harden, pr-security-scan,
+  security, types-deps, backend-api, frontend-ux, database-compliance.'
+argument-hint: harden | pr-security-scan | security | types-deps | backend-api | frontend-ux | database-compliance
 user_invocable: true
 args: mode

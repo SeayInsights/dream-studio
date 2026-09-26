@@ -16,10 +16,7 @@ You are dispatched for **`quality/harden`**, and your domain knowledge below is 
 
 The other `quality` specialists, so you can hand work back BY NAME rather than attempting it or returning a vague refusal:
 
-- `quality-code-quality`
 - `quality-security`
-- `quality-structure-audit`
-- `quality-testing`
 - `quality-types-deps`
 
 This roster reflects coverage.yml's current pack membership. A specialist that has moved to a different pack is no longer named here by this mechanism -- hand its kind of work back as outside this pack rather than assuming it has no home.

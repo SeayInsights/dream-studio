@@ -52,9 +52,9 @@ current expert catalog mostly strengthens existing owners:
 | Workflow | Canonical owner | Decision |
 | --- | --- | --- |
 | `intentional_implementation_workflow` | `core:build` | `strengthen_existing` |
-| `code_quality_architecture_workflow` | `quality:review+structure-audit` | `strengthen_existing` |
-| `root_cause_debugging_workflow` | `quality:debug` | `keep_existing` |
-| `performance_efficiency_workflow` | `quality:debug/performance` | `strengthen_existing` |
+| `code_quality_architecture_workflow` | `core:review+code-health:structure-audit` | `strengthen_existing` |
+| `root_cause_debugging_workflow` | `code-health:debug` | `keep_existing` |
+| `performance_efficiency_workflow` | `code-health:debug/performance` | `strengthen_existing` |
 | `frontend_design_excellence_workflow` | `website:polish+website:design` | `split_existing` |
 | `seo_content_growth_workflow` | `domains:website/content` | `strengthen_existing` |
 | `documentation_quality_workflow` | `docs:quality` | `strengthen_existing` |
@@ -179,3 +179,6 @@ authority.
 <!-- Reviewed 2026-07-05 — WO 6d978483 (PEP 585/604 modernization [2/2]): source files in this domain received mechanical type-annotation modernization only (PEP 585 builtin generics, PEP 604 unions, datetime.UTC) via ruff UP safe autofixes. No contract, behavior, schema, routing, API-shape, or CLI-surface change — reviewed, no doc content change needed. -->
 
 <!-- Last reviewed 2026-07-15 — WO-SCHEMALEAN (migration 147): capability_route_records dropped. No expert-workflow-system behavior change — touched only via a shared-intelligence source file in this domain's glob. -->
+
+<!-- Reviewed 2026-09-25 — PR #821, pack-split (7th slice, ds-code-health): core/shared_intelligence/expert_workflows_bases.py's existing_owners/evidence fields for the structure-audit and debug-performance catalog entries pointed at their pre-split canonical/skills/quality/modes/... path, updated to canonical/skills/code-health/modes/.... The three-row table above (code_quality_architecture_workflow, root_cause_debugging_workflow, performance_efficiency_workflow) is corrected the same way. No catalog decision, overlap_status, or workflow behavior changed — only which pack the owning skill lives in. -->
+

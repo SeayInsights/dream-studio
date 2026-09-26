@@ -15,7 +15,7 @@ python .github/scripts/validate-skills.py
 
 **Validate specific files:**
 ```bash
-python .github/scripts/validate-skills.py skills/core/SKILL.md skills/quality/modes/debug/SKILL.md
+python .github/scripts/validate-skills.py skills/core/SKILL.md skills/code-health/modes/debug/SKILL.md
 ```
 
 ### Validation Checks

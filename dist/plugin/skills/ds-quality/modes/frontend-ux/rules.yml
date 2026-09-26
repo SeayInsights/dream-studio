@@ -535,7 +535,7 @@ rules:
 
     cross_references:
       - rule: "cq-002"
-        skill: "ds-quality:code-quality"
+        skill: "ds-code-health:code-quality"
         note: "cq-002 fires on long functions universally; ux-007 fires on oversized React components specifically for reuse and single-concern design. Dual-angle: cq-002 is the structural quality angle; ux-007 is the component design angle."
         surface_co_located: true
 

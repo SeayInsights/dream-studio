@@ -13,8 +13,5 @@
 
 | Mode | File | Keywords |
 |---|---|---|
-| debug | modes/debug/SKILL.md | debug:, diagnose: |
 | harden | modes/harden/SKILL.md | /harden, harden audit, harden fix |
 | secure | the ds-fullstack pack's secure mode | secure:, security review:, audit code: |
-| structure-audit | modes/structure-audit/SKILL.md | /structure-audit, audit structure: |
-| groom | modes/groom/SKILL.md | groom:, groom lessons:, apply lessons: |

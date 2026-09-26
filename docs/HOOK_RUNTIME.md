@@ -213,7 +213,7 @@ tier rather than leaving it to guesswork.
 ### on-stop-dispatch (Stop)
 1. `on-session-end` — runtime/hooks/meta
 2. `on-stop-handoff` — runtime/hooks/core
-3. `on-quality-score` — runtime/hooks/quality
+3. `on-quality-score` — runtime/hooks/code-health
 4. `on-skill-telemetry` — runtime/hooks/meta
 5. `on-milestone-end` — runtime/hooks/core
 6. `on-token-log` — runtime/hooks/meta
@@ -223,10 +223,10 @@ tier rather than leaving it to guesswork.
 10. `on-memory-ingest` — runtime/hooks/meta (18.4.5: batch-syncs reg_gotchas/raw_lessons/corrections/decisions into memory_entries; 300s cooldown; writes ~/.dream-studio/state/memory-ingest-last-run.json; emits memory.ingested canonical event)
 
 ### on-edit-dispatch (PostToolUse Edit|Write)
-1. `on-agent-correction` — runtime/hooks/quality
+1. `on-agent-correction` — runtime/hooks/code-health
 2. `on-game-validate` — runtime/hooks/apps
 3. `on-security-scan` — runtime/hooks/quality
-4. `on-structure-check` — runtime/hooks/quality
+4. `on-structure-check` — runtime/hooks/code-health
 
 ## Handlers NOT Invoked by hooks.json or Dispatchers
 

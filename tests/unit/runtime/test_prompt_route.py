@@ -43,7 +43,7 @@ def test_matches_known_triggers_to_the_right_skill():
     entries = route._load_trigger_map(REPO)
 
     m = route._match("debug: my test keeps failing", entries)
-    assert m is not None and m[1] == "ds-quality", m
+    assert m is not None and m[1] == "ds-code-health", m
 
     # `resume:` reaches a COMMAND, not a skill. The ds-project pack was dissolved --
     # every operation it narrated was already a `ds project ...` command -- and the

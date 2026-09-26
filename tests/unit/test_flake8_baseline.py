@@ -1,4 +1,4 @@
-"""Tests for canonical/skills/quality/shared/flake8_baseline.py
+"""Tests for canonical/skills/code-health/shared/flake8_baseline.py
 
 Verifies:
 - load_flake8_baseline() parses the standard flake8 output format
@@ -10,15 +10,17 @@ Verifies:
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 
 import pytest
 
-from canonical.skills.quality.shared.flake8_baseline import (
-    BASELINE_ANNOTATION,
-    is_baselined,
-    load_flake8_baseline,
-)
+# code-health is a hyphenated pack directory name, so it cannot appear in a normal
+# dotted `from ... import` statement (Python identifiers disallow "-").
+_flake8_baseline = importlib.import_module("canonical.skills.code-health.shared.flake8_baseline")
+BASELINE_ANNOTATION = _flake8_baseline.BASELINE_ANNOTATION
+is_baselined = _flake8_baseline.is_baselined
+load_flake8_baseline = _flake8_baseline.load_flake8_baseline
 
 
 @pytest.fixture

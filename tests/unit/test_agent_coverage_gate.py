@@ -82,10 +82,10 @@ def test_the_audit_fan_out_all_have_specialists():
     and it is the clearest case for an agent anywhere in this repository."""
     declared = {str(r["mode"]): r for r in declared_modes()}
     for mode in (
-        "quality/code-quality",
+        "code-health/code-quality",
         "data/database",
         "quality/security",
-        "quality/testing",
+        "code-health/testing",
         "quality/types-deps",
     ):
         assert mode in declared, f"{mode} is not declared at all"
@@ -96,11 +96,11 @@ def test_the_audit_fan_out_all_have_specialists():
 
 
 def test_the_audit_router_itself_has_no_agent():
-    """`quality/audit` routes `audit:` to the five above. A router has no question of its
+    """`code-health/audit` routes `audit:` to the five above. A router has no question of its
     own, and an agent here would be a dispatcher nested inside its own dispatch."""
     declared = {str(r["mode"]): r for r in declared_modes()}
-    assert not declared["quality/audit"].get("agent")
-    assert "router" in declared["quality/audit"]["no_agent"].lower()
+    assert not declared["code-health/audit"].get("agent")
+    assert "router" in declared["code-health/audit"]["no_agent"].lower()
 
 
 def test_a_thin_skill_is_declared_out_with_its_measurement():

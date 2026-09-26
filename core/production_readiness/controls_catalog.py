@@ -149,7 +149,7 @@ OVERLAP_DECISIONS: tuple[dict[str, Any], ...] = (
         "proposed_canonical_owner": "code_quality_architecture",
         "overlap_reason": "Structure audit covers unowned files and architecture boundary risk.",
         "decision": "map_existing_skill_to_control",
-        "evidence": ["skills/quality/modes/structure-audit/SKILL.md"],
+        "evidence": ["skills/code-health/modes/structure-audit/SKILL.md"],
         "validation_requirement": "Architecture controls expose evidence requirements and manual review states.",
         "rollback_supersession_plan": "Mapping can be reverted without changing structure-audit behavior.",
         "dashboard_project_health_impact": "Boundary violations become readiness blockers only with evidence.",
