@@ -146,11 +146,20 @@ pub fn in_progress_work_order(
 
     let (work_order_id, title, description) = rows[0].clone();
     Some(WorkOrder {
-        work_order_id: work_order_id.clone(),
+        work_order_id,
         title,
         description,
         attribution: "most_recently_started",
-        claimants: vec![work_order_id],
+        // EMPTY, deliberately -- matching Python's `_as_dict`, which does not set a
+        // "claimants" key at all in this branch (only the boundary-match branch
+        // does). `on-edit-enforce.py` then passes `wo.get("claimants")` (`None`
+        // here) to `record_edit`, whose OWN fallback computes `[work_order_id]`.
+        // A round-4 review finding caught an earlier version of this function
+        // pre-computing that same fallback here instead, which produced an
+        // identical final value but made `session::record_edit`'s ported fallback
+        // branch unreachable from this crate's one production call site -- dead
+        // code wearing the shape of a real branch.
+        claimants: Vec::new(),
     })
 }
 
@@ -291,6 +300,11 @@ mod tests {
         let wo = in_progress_work_order(&db_path, "p1", Some((&file, &proj))).expect("a WO matches");
         assert_eq!(wo.work_order_id, "wo-new", "no declared boundary anywhere -- falls back to recency");
         assert_eq!(wo.attribution, "most_recently_started");
+        assert!(
+            wo.claimants.is_empty(),
+            "matches Python's _as_dict: no claimants key in the recency-fallback branch -- \
+             record_edit's own fallback (not this function) fills it in from work_order_id"
+        );
         drop(fixture_dir);
     }
 

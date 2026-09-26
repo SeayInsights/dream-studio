@@ -226,6 +226,27 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// `db::in_progress_work_order`'s recency-fallback branch deliberately
+    /// leaves `claimants` empty (matching Python's `_as_dict`, which sets no
+    /// "claimants" key there at all) -- THIS function is where the fallback to
+    /// `[work_order_id]` actually happens, matching Python's `record_edit`. A
+    /// round-4 review finding caught an earlier version of `db.rs` pre-computing
+    /// that fallback itself, which made this exact branch unreachable from the
+    /// crate's one production call site; the fix moved the computation back here
+    /// but nothing asserted this branch's OUTPUT, only that it ran without
+    /// panicking -- this closes that.
+    #[test]
+    fn record_edit_falls_back_to_work_order_id_when_claimants_is_empty() {
+        let dir = tmp_dir("record-edit-fallback");
+        record_edit(&dir, "s1", "/repo/core/x.py", true, "proj1", Some("wo1"), &[], None);
+        let data = load_session(&dir, "s1").unwrap();
+        let edits = data.get("source_edits").unwrap().as_array().unwrap();
+        let claimants: Vec<&str> =
+            edits[0].get("claimants").unwrap().as_array().unwrap().iter().map(|v| v.as_str().unwrap()).collect();
+        assert_eq!(claimants, vec!["wo1"], "empty claimants + a work_order_id falls back to [work_order_id]");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn record_edit_caps_bucket_at_500() {
         let dir = tmp_dir("record-edit-cap");
