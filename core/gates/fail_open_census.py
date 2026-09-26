@@ -106,6 +106,43 @@ def _is_falsy_return_handler(handler: ast.ExceptHandler) -> bool:
     return isinstance(last, ast.Return) and _is_falsy_literal(last.value)
 
 
+#: Dunder methods where a falsy return or a silent catch IS the correct, idiomatic
+#: implementation of the protocol -- the return value is the complete intentional signal,
+#: not a place where "log it or re-raise it" makes sense. `__exit__` returning False/None
+#: means "do not suppress this exception" (the common, correct case); `__eq__`/`__ne__`
+#: returning False on an incomparable type is the idiomatic NotImplemented-adjacent
+#: pattern used throughout the stdlib; `__del__` swallowing during interpreter teardown is
+#: a standard defensive pattern (exceptions there are typically suppressed by the
+#: interpreter anyway, and logging is often unsafe at that point). Confirmed by a review
+#: finding with a real fixture: without this exemption, a brand-new, entirely correct
+#: implementation of any of these trips the gate for a reason that has nothing to do with
+#: an actual fail-open hazard.
+_EXEMPT_ENCLOSING_DUNDERS = frozenset({"__exit__", "__eq__", "__ne__", "__del__"})
+
+
+class _HandlerCollector(ast.NodeVisitor):
+    """Every ExceptHandler in a module, paired with its nearest enclosing function's name
+    (None at module level) -- needed because ``ast.walk`` has no notion of "inside which
+    function", and a dunder-method exemption has to know that."""
+
+    def __init__(self) -> None:
+        self.func_stack: list[str] = []
+        self.found: list[tuple[ast.ExceptHandler, str | None]] = []
+
+    def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        self.func_stack.append(node.name)
+        self.generic_visit(node)
+        self.func_stack.pop()
+
+    visit_FunctionDef = _visit_function
+    visit_AsyncFunctionDef = _visit_function
+
+    def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
+        enclosing = self.func_stack[-1] if self.func_stack else None
+        self.found.append((node, enclosing))
+        self.generic_visit(node)
+
+
 def _sites_in(path: Path, repo_root: Path) -> list[FailOpenSite]:
     try:
         content = path.read_text(encoding="utf-8")
@@ -121,9 +158,12 @@ def _sites_in(path: Path, repo_root: Path) -> list[FailOpenSite]:
     except ValueError:
         rel = str(path)
 
+    collector = _HandlerCollector()
+    collector.visit(tree)
+
     sites: list[FailOpenSite] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.ExceptHandler):
+    for node, enclosing in collector.found:
+        if enclosing in _EXEMPT_ENCLOSING_DUNDERS:
             continue
         if _is_bare_except_pass(node):
             sites.append(FailOpenSite(rel, node.lineno, "bare-except-pass"))

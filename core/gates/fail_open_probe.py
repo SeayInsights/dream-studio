@@ -220,7 +220,11 @@ def main() -> int:
         print(
             f"\nfail-open-probe: FAILED - {len(result['offenders'])} unguarded database call(s)"
             " inside a fail-open function. Each can disable its check while reporting"
-            " success.",
+            " success. Wrap it in its own try/except -- if that guard swallows the error"
+            " silently (no log, no re-raise), fail-open-census may flag it on the next"
+            " push. That is not a contradiction: it is a second, broader question (does"
+            " ANY handler let an error pass silently) catching a new instance of its own"
+            " class.",
             file=sys.stderr,
         )
         return 1

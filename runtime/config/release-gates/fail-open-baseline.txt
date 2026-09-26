@@ -303,8 +303,8 @@ core/gates/bypass_event.py|40|bare-except-pass
 core/gates/change_impact.py|67|falsy-return
 core/gates/deterministic_evidence.py|314|falsy-return
 core/gates/deterministic_evidence.py|808|falsy-return
-core/gates/fail_open_census.py|112|falsy-return
-core/gates/fail_open_census.py|116|falsy-return
+core/gates/fail_open_census.py|149|falsy-return
+core/gates/fail_open_census.py|153|falsy-return
 core/gates/fail_open_probe.py|137|falsy-return
 core/gates/fixture_schema_parity.py|145|falsy-return
 core/gates/fixture_schema_parity.py|184|falsy-return

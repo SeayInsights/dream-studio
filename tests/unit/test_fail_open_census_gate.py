@@ -209,6 +209,64 @@ def test_main_passes_once_the_site_is_baselined(tmp_path):
     assert check_exit == 0
 
 
+def test_exit_returning_false_is_not_flagged(tmp_path):
+    """__exit__ returning False means 'do not suppress this exception' -- the correct,
+    idiomatic context-manager protocol, not a fail-open hazard."""
+    source = """
+class Guarded:
+    def __exit__(self, exc_type, exc, tb):
+        try:
+            cleanup()
+        except SpecificError:
+            return False
+"""
+    assert scan(_tree(tmp_path, source)) == []
+
+
+def test_del_swallowing_is_not_flagged(tmp_path):
+    """A bare pass in __del__ during interpreter teardown is a standard defensive
+    pattern -- exceptions there are typically suppressed by the interpreter anyway."""
+    source = """
+class Resource:
+    def __del__(self):
+        try:
+            self.handle.close()
+        except Exception:
+            pass
+"""
+    assert scan(_tree(tmp_path, source)) == []
+
+
+def test_eq_returning_false_on_incomparable_type_is_not_flagged(tmp_path):
+    """The idiomatic way to signal 'not equal to an incompatible type', mirrored by
+    NotImplemented-style patterns throughout the stdlib."""
+    source = """
+class Point:
+    def __eq__(self, other):
+        try:
+            return self.x == other.x
+        except AttributeError:
+            return False
+"""
+    assert scan(_tree(tmp_path, source)) == []
+
+
+def test_a_same_shaped_handler_in_an_ordinary_function_is_still_flagged(tmp_path):
+    """The dunder exemption is narrow and name-based -- it must not become a blanket
+    exemption for this handler shape everywhere."""
+    source = """
+class Point:
+    def compare(self, other):
+        try:
+            return self.x == other.x
+        except AttributeError:
+            return False
+"""
+    sites = scan(_tree(tmp_path, source))
+    assert len(sites) == 1
+    assert sites[0].shape == "falsy-return"
+
+
 def test_the_real_repository_has_no_new_sites_beyond_its_own_baseline():
     """Pinned regression: this repo's own baseline must stay current. A new fail-open
     site added anywhere in product code without updating the baseline fails this test
