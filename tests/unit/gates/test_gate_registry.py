@@ -123,12 +123,37 @@ def test_in_process_matches_subprocess_for_a_real_cheap_gate():
     assert in_process_stdout.strip() == (subprocess_result.stdout or "").strip()
 
 
-def test_run_gate_uses_the_registry_for_a_real_manifest_style_entry():
-    """End to end through pre_push.run_gate(), the way the manifest actually calls it."""
+def test_run_gate_uses_the_registry_for_a_real_manifest_style_entry(monkeypatch):
+    """End to end through pre_push.run_gate(), the way the manifest actually calls it.
+
+    Round-1 review finding: the original version of this test only checked the gate's
+    OWN output, which the subprocess fallback reproduces identically for a currently-
+    passing gate -- it never proved the registry path was actually taken, so disabling
+    the registry entirely left this test green. Spies on registry.run_in_process itself
+    to confirm it was called and returned non-None, not just that the final verdict
+    happens to match what subprocess would also have produced.
+    """
+    import core.gates.pre_push as pre_push_module
+
+    calls: list[tuple[str, list[str]]] = []
+    real_run_in_process = registry.run_in_process
+
+    def _spy(gate_id, command, *, repo_root):
+        result = real_run_in_process(gate_id, command, repo_root=repo_root)
+        calls.append((gate_id, command, result is not None))
+        return result
+
+    monkeypatch.setattr(pre_push_module._registry, "run_in_process", _spy)
+
     result = run_gate(
         {"id": "agent-coverage", "command": ["py", "-m", "core.gates.agent_coverage"]},
         repo_root=REPO_ROOT,
     )
+
+    assert len(calls) == 1, "run_gate did not consult the registry at all"
+    gate_id, command, took_in_process_path = calls[0]
+    assert gate_id == "agent-coverage"
+    assert took_in_process_path, "the registry was consulted but declined, so this ran subprocess"
     assert result.passed is True
     assert "mode(s)" in result.stdout_tail
 
@@ -200,6 +225,29 @@ def test_an_unimportable_module_falls_back_to_subprocess():
     result = registry.run_in_process(
         "nonexistent",
         ["py", "-m", "core.gates.this_module_does_not_exist"],
+        repo_root=REPO_ROOT,
+    )
+    assert result is None
+
+
+def test_a_module_that_raises_at_import_time_falls_back_rather_than_crashing(monkeypatch):
+    """Round-1 review finding: only ImportError was caught around the import step, so a
+    module raising ANYTHING ELSE while being imported (a real bug in its top-level code,
+    not a missing dependency) propagated uncaught through pre_push.run_gate() and crashed
+    the whole pre-push run instead of falling back to subprocess for just that gate."""
+    import importlib
+
+    def _boom(name, *a, **kw):
+        if name == "core.gates._fake_broken_at_import":
+            raise ValueError("synthetic import-time crash, not an ImportError")
+        return _real_import_module(name, *a, **kw)
+
+    _real_import_module = importlib.import_module
+    monkeypatch.setattr(registry.importlib, "import_module", _boom)
+
+    result = registry.run_in_process(
+        "fake-gate",
+        ["py", "-m", "core.gates._fake_broken_at_import"],
         repo_root=REPO_ROOT,
     )
     assert result is None

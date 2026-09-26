@@ -88,7 +88,11 @@ def importable_main(gate_id: str, command: list[str]):
         return None
     try:
         module = importlib.import_module(module_name)
-    except ImportError:
+    except Exception:  # noqa: BLE001 - a broken module (ImportError, SyntaxError, an
+        # import-time exception raised by the module's own top-level code) means this
+        # registry cannot confidently run it in-process. Falling back to subprocess is
+        # still safe and still correct here: subprocess.run isolates whatever is wrong
+        # with the module into that child's own non-zero exit code instead of it.
         return None
     main_fn = getattr(module, "main", None)
     if main_fn is None or not callable(main_fn):
@@ -108,24 +112,30 @@ def run_in_process(
     """
     if repo_root.resolve() != REPO_ROOT:
         return None
-    main_fn = importable_main(gate_id, command)
-    if main_fn is None:
-        return None
-
-    argv = argv_after_module(command)
-    accepts_argv = len(inspect.signature(main_fn).parameters) > 0
-    if argv and not accepts_argv:
-        return None
 
     stdout_buf = io.StringIO()
     stderr_buf = io.StringIO()
     try:
+        main_fn = importable_main(gate_id, command)
+        if main_fn is None:
+            return None
+
+        argv = argv_after_module(command)
+        accepts_argv = len(inspect.signature(main_fn).parameters) > 0
+        if argv and not accepts_argv:
+            return None
+
         with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
             result = main_fn(argv) if accepts_argv else main_fn()
         exit_code = result if isinstance(result, int) else 0
     except SystemExit as exc:
         exit_code = exc.code if isinstance(exc.code, int) else (1 if exc.code else 0)
-    except Exception as exc:  # noqa: BLE001 - a crashing gate must fail the push, not the runner
+    except Exception as exc:  # noqa: BLE001 - ANYTHING going wrong resolving or running this
+        # gate in-process (not just the main() call itself -- module resolution, signature
+        # inspection, all of it) must fail the push, never crash the runner. See
+        # importable_main's own broad except for why import-time failures return None
+        # (subprocess fallback) instead of reaching here; this is the second layer, for
+        # whatever that first one does not catch.
         stderr_buf.write(
             f"\n[gate-registry] {gate_id} raised {type(exc).__name__} while running"
             f" in-process: {exc}"
