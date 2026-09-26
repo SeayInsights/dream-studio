@@ -682,7 +682,7 @@ interfaces/cli/resume_from_handoff.py|88|falsy-return
 interfaces/cli/session_analytics.py|100|falsy-return
 interfaces/cli/session_analytics.py|108|falsy-return
 interfaces/cli/setup_diagnostics.py|100|bare-except-pass
-interfaces/cli/setup_hooks.py|140|falsy-return
+interfaces/cli/setup_hooks.py|177|falsy-return
 interfaces/cli/setup_steps.py|160|bare-except-pass
 interfaces/cli/setup_steps.py|171|bare-except-pass
 interfaces/cli/spec_risk_check.py|127|falsy-return

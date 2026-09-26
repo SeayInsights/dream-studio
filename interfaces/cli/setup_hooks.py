@@ -73,6 +73,9 @@ def resolve_hook_command(command: str) -> str:
     native = _native_enqueue_command(command)
     if native is not None:
         return native
+    native = _native_enforce_command(command)
+    if native is not None:
+        return native
 
     prefix = "python "
     if not command.startswith(prefix):
@@ -122,6 +125,40 @@ def _native_enqueue_command(command: str) -> str | None:
             event = candidate
             break
     return f'"{exe.as_posix()}" {event}'.strip()
+
+
+#: Built by `cargo build --release` in runtime/hooks/enforce-native. Optional, same
+#: fallback contract as NATIVE_ENQUEUE_BIN: absent -> the Python hook is installed
+#: and enforcement still works, just paying the interpreter-start cost every edit.
+NATIVE_ENFORCE_BIN = "ds-enforce.exe" if sys.platform == "win32" else "ds-enforce"
+
+
+def _native_enforce_path() -> Path | None:
+    exe = (
+        REPO_ROOT
+        / "runtime"
+        / "hooks"
+        / "enforce-native"
+        / "target"
+        / "release"
+        / NATIVE_ENFORCE_BIN
+    )
+    return exe if exe.is_file() else None
+
+
+def _native_enforce_command(command: str) -> str | None:
+    """Swap the Python on-edit-enforce bootstrap for the compiled binary, if built.
+
+    Unlike ds-enqueue, ds-enforce takes no argv -- it reads the PreToolUse payload
+    from stdin and DS_ENFORCE/DS_HOME from the environment, same as the Python hook
+    it replaces -- so the swap is the bare quoted executable path.
+    """
+    if "on-edit-enforce.py" not in command:
+        return None
+    exe = _native_enforce_path()
+    if exe is None:
+        return None
+    return f'"{exe.as_posix()}"'
 
 
 #: Interpreter file names this module recognizes. A hook whose first token is one of these
@@ -180,6 +217,8 @@ def hook_identity(command: str) -> str:
     # form and the compiled form as two different hooks and register BOTH, which
     # is the duplicate-registration bug this function exists to prevent.
     tail = tail.replace(NATIVE_ENQUEUE_BIN, "enqueue.py")
+    # Same reasoning for the native enforcer: it IS on-edit-enforce.py.
+    tail = tail.replace(NATIVE_ENFORCE_BIN, "on-edit-enforce.py")
     scripts = _SCRIPT_RE.findall(tail)
     if scripts:
         event = _EVENT_RE.search(tail)
