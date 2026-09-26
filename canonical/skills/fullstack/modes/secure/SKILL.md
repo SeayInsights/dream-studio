@@ -1,5 +1,5 @@
 ---
-pack: domains
+pack: fullstack
 mode: fullstack/secure
 mode_type: review
 model_preference: sonnet

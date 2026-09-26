@@ -9,8 +9,8 @@ description: 'Full-stack build pipeline — frontend, backend, integration, and 
 
 | Argument | Sub-mode | SKILL.md |
 |---|---|---|
-| `frontend` | Frontend build | `modes/frontend/SKILL.md` |
-| `backend` | Backend build | `modes/backend/SKILL.md` |
+| `frontend` | Frontend build + audit | `modes/frontend/SKILL.md` |
+| `backend` | Backend build + audit | `modes/backend/SKILL.md` |
 | `integrate` | Integration verify | `modes/integrate/SKILL.md` |
 | `secure` | Security sweep | `modes/secure/SKILL.md` |
 | `spec` | Spec first | Write API contract before any code |
@@ -80,6 +80,6 @@ DON'T delete or overwrite without re-running spec first.
 DON'T start coding before the api-contract exists.
 DON'T run frontend and backend in parallel without a locked contract.
 DON'T skip integrate and go straight to secure.
-DON'T duplicate domains:website or domains:saas-build logic — delegate.
+DON'T duplicate website: or apps:saas-build logic — delegate.
 DON'T hardcode stack assumptions — auto-detect every invocation.
 DON'T declare the pipeline complete without running secure.

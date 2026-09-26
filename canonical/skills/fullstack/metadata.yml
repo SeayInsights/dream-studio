@@ -1,8 +1,8 @@
 name: fullstack
-pack: domains
+pack: fullstack
 mode: fullstack
-version: 1.0.0
-description: Full-stack orchestrator — coordinates frontend (website pipeline) and backend (stack-agnostic) with shared API contracts
+version: 1.1.0
+description: Full-stack orchestrator — coordinates frontend (website pipeline) and backend (stack-agnostic) with shared API contracts; frontend and backend each also carry a component/endpoint quality audit sub-mode (merged from quality:frontend-ux and quality:backend-api, pack-split campaign 2026-09-26)
 triggers:
   - "fullstack:"
   - "build fullstack:"
@@ -12,6 +12,12 @@ triggers:
   - "fullstack secure:"
   - "full-stack:"
   - "full stack:"
+  - "api audit:"
+  - "check api:"
+  - "backend audit:"
+  - "ux audit:"
+  - "frontend audit:"
+  - "a11y check:"
 dependencies:
   - website
   - saas-build
@@ -23,3 +29,5 @@ capabilities:
   - backend_scaffolding
   - integration_verification
   - fullstack_security_review
+  - backend_api_quality_audit
+  - frontend_ux_quality_audit

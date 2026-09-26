@@ -151,12 +151,16 @@ modes:
     gate'
 - mode: fullstack/backend
   skill: fullstack/modes/backend/SKILL.md
-  no_agent: Nothing dispatches it and the skill is 4604 bytes -- under the 5000-byte isolation threshold,
-    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+  no_agent: 'Nothing dispatches it and the router is 3963 bytes -- under the 5000-byte isolation
+    threshold, so the agent wrapper would rival the knowledge it carries. Merged the quality:backend-api
+    audit engine in as a build/audit sub-mode split (pack-split campaign, 2026-09-26); the skill that
+    owns the flow reads the router and its chosen sub-mode inline.'
 - mode: fullstack/frontend
   skill: fullstack/modes/frontend/SKILL.md
-  no_agent: Nothing dispatches it and the skill is 4290 bytes -- under the 5000-byte isolation threshold,
-    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
+  no_agent: 'Nothing dispatches it and the router is 3435 bytes -- under the 5000-byte isolation
+    threshold, so the agent wrapper would rival the knowledge it carries. Merged the quality:frontend-ux
+    audit engine in as a build/audit sub-mode split (pack-split campaign, 2026-09-26); the skill that
+    owns the flow reads the router and its chosen sub-mode inline.'
 - mode: fullstack/integrate
   skill: fullstack/modes/integrate/SKILL.md
   agent: domains-fullstack-integrate
@@ -278,10 +282,6 @@ modes:
   skill: code-health/modes/audit/SKILL.md
   no_agent: 'The router for the audit: fan-out. Its specialists are code-health/code-quality, database, security,
     testing and types-deps, each of which has its own agent.'
-- mode: quality/backend-api
-  skill: quality/modes/backend-api/SKILL.md
-  no_agent: Nothing dispatches it and the skill is 2477 bytes -- under the 5000-byte isolation threshold,
-    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
 - mode: core/coach
   skill: core/modes/coach/SKILL.md
   no_agent: Classifies operator intent and routes it. Routing is the caller's job by definition.
@@ -306,10 +306,6 @@ modes:
 - mode: code-health/debug
   skill: code-health/modes/debug/SKILL.md
   no_agent: Nothing dispatches it and the skill is 4834 bytes -- under the 5000-byte isolation threshold,
-    so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
-- mode: quality/frontend-ux
-  skill: quality/modes/frontend-ux/SKILL.md
-  no_agent: Nothing dispatches it and the skill is 1716 bytes -- under the 5000-byte isolation threshold,
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
 - mode: code-health/groom
   skill: code-health/modes/groom/SKILL.md

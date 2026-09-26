@@ -38,10 +38,10 @@ def _web_db_findings() -> list[dict[str, object]]:
 
 
 def test_web_db_project_aggregates_findings_into_readiness_and_scope():
-    # A web+db project routes to backend-api + database audits (WO-BROWNFIELD-ADAPTIVE).
+    # A web+db project routes to backend + database audits (WO-BROWNFIELD-ADAPTIVE).
     dispatches = recommend_dispatches({"web_framework": "fastapi", "database_type": "postgres"})
     modes = [d["mode"] for d in dispatches]
-    assert "backend-api" in modes and "database" in modes
+    assert "backend" in modes and "database" in modes
 
     result = aggregate_findings(_web_db_findings(), dispatches)
     report = result["readiness_report"]
@@ -50,7 +50,7 @@ def test_web_db_project_aggregates_findings_into_readiness_and_scope():
     assert report["finding_count"] == 3
     assert report["findings"] == _web_db_findings()
     assert report["severity_counts"] == {"critical": 1, "high": 1, "medium": 1}
-    assert "ds-quality:backend-api" in report["audits"]
+    assert "ds-fullstack:backend" in report["audits"]
     assert "ds-data:database" in report["audits"]
 
     # Stabilization scope reflects those findings, ordered highest-severity first.

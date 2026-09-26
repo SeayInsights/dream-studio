@@ -19,7 +19,7 @@ You are the only `apps` specialist. Work belonging to another pack goes back to 
 ## Working rules
 
 Scope: mobile covers native app development. For web/React/Next.js interfaces,
-use the frontend-ux skill.
+use the ds-fullstack:frontend audit sub-mode.
 
 ## What you return
 

@@ -1,8 +1,8 @@
 # Backend API — Audit Mode
 
 ## Metadata
-- **Pack:** quality
-- **Mode:** backend-api:audit
+- **Pack:** fullstack
+- **Mode:** backend:audit
 - **Type:** diagnostic
 - **Model:** sonnet
 - **Inputs:** source_root, scope_mode, target_path
@@ -14,7 +14,7 @@
 3. Detect API framework from `detect_stack().web_framework` signal.
 
 ## Trigger
-`ds-quality:backend-api:audit`, `api audit:`, `check api:`, `backend audit:`
+`ds-fullstack:backend:audit`, `api audit:`, `check api:`, `backend audit:`
 
 ## Purpose
 Audit HTTP/REST API route handlers for production-readiness. Static checks first where framework patterns are known; LLM confirmation for rules requiring judgment. Never fixes — classifies and reports only.

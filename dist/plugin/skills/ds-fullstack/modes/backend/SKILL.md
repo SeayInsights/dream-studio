@@ -13,102 +13,77 @@ dream_studio:
   lifecycle: published
 ---
 
-# Backend — Stack-Agnostic API Builder
+# Backend — Stack-Agnostic API Builder + Quality Audit
 
-## Stack Auto-Detection (check in this order)
+## Mode dispatch
 
-| Signal File | Detected Stack | Action |
-|---|---|---|
-| `wrangler.toml` | Cloudflare Workers | Delegate entirely to `domains:saas-build` |
-| `package.json` contains `express`, `fastify`, or `hono` | Node.js | Use Node preset |
-| `requirements.txt` or `pyproject.toml` contains `fastapi`, `flask`, or `django` | Python | Use Python preset |
-| `serverless.yml` or `sam-template.yaml` | AWS Serverless | Use serverless preset |
-| None of the above + project files exist | Unknown | Ask user before proceeding |
-| No project files at all (greenfield) | — | Recommend Cloudflare Workers; ask user to confirm |
+1. Parse the mode from the argument (first word). Default to `build` when the input looks
+   like a build/scaffold request and no mode is named explicitly.
+2. If no mode is given and the input doesn't obviously match one, list the two below and ask.
+3. Read `<mode>/SKILL.md` completely before executing.
+4. If `gotchas.yml` exists in this directory, read it before executing (shared across both
+   modes).
+5. Follow the mode's instructions exactly.
 
-DO auto-detect stack from project files before asking.
-DON'T guess when signals conflict (e.g., `wrangler.toml` + `requirements.txt`) — ask the user.
-DO delegate entirely to `domains:saas-build` for Cloudflare Workers — do not duplicate its patterns here.
-DON'T re-implement Workers auth, CORS, or D1 patterns that `saas-build` already handles.
+| Mode | File | Keywords |
+|------|------|---------|
+| build | build/SKILL.md | (default — invoked as `fullstack backend`) |
+| audit | audit/SKILL.md | audit:, api audit:, check api:, backend audit: |
 
----
+## Which mode
 
-## Build Steps
+Two different questions, not two names for the same thing:
 
-### Step 1 — Stack Detection
-Run detection table above. Confirm with user if ambiguous or greenfield.
+- **`build`** — "Generate the backend for this API contract." Stack-agnostic scaffolder:
+  routes, DB schema, auth config, env template, for whatever framework the project detects
+  (Node/Express/Fastify/Hono, Python/FastAPI/Flask/Django, AWS Serverless, or Cloudflare
+  Workers via `apps:saas-build`).
+- **`audit`** — "Does this codebase's existing API meet the 12-rule HTTP endpoint quality
+  baseline?" Retrospective scan: input validation, error handling, auth/authz enforcement,
+  rate limiting, CORS, idempotency, pagination, versioning, status codes, response shape.
+  Static detection where possible, LLM confirmation for judgment-dependent rules.
+  Classifies and reports only — never fixes.
 
-### Step 2 — API Contract
-Check the docstore for `api-contract.json` (`ds files read "api-contract.json"`).
-- **Present** → read it; this is the source of truth for every route shape.
-- **Missing** → author one from user requirements (`ds files write "api-contract.json" --category planning`) before writing any code.
+## Source Authority
 
-DO generate the API contract if one doesn't exist — never build blind.
-DON'T modify an existing contract without flagging the change: state the diff and get confirmation before proceeding.
+`audit` reads `rules.yml` in this directory (12 rules). `build` has no rule file — its
+patterns live in `build/SKILL.md` and `../../references/stack-presets.md`.
 
-Contract schema:
-```json
-{
-  "version": "1",
-  "endpoints": [
-    {
-      "method": "POST",
-      "path": "/api/resource",
-      "request": { "field": "type" },
-      "response": { "field": "type" },
-      "auth": "bearer | none | session",
-      "errors": ["400 validation", "401 unauthorized"]
-    }
-  ]
-}
-```
+## Supported Frameworks (audit)
 
-### Step 3 — Generate Backend Artifacts
-Produce all four output types for the detected stack:
+**Python:** FastAPI, Flask, Django REST Framework
+**TypeScript/JavaScript:** Next.js API routes, Express, Fastify, Hono
+**Go:** Gin, Echo, Chi, net/http
+**Rust:** Axum, Actix-web
 
-| Artifact | Description |
-|---|---|
-| API routes | Route handlers matching every endpoint in the contract |
-| Database schema | Migrations or DDL for all data models |
-| Auth config | JWT / session / OAuth setup matching the contract's `auth` field |
-| Env template | `.env.example` with all required keys (no values) |
+**Unsupported frameworks:** LLM-only fallback applies (no static detection). Rules still
+fire via semantic analysis.
 
-DO validate every request body at the API boundary — trust nothing from the client.
-DO return error shapes matching the contract's `errors` array exactly.
-DON'T implement endpoints not in the contract without updating the contract first.
-DON'T store secrets in code — env vars or secret managers only.
-DON'T hardcode framework versions — use latest stable at time of build.
+## Skill Boundary (audit)
 
-### Step 4 — Stack Preset Patterns
-Use `../../references/stack-presets.md` for framework-specific patterns (routers, ORMs, auth libraries, test utilities).
+**Backend audit owns:** HTTP endpoint quality — validation, error handling, authentication
+patterns, rate limiting, CORS, idempotency, status codes, response shape.
 
-| Stack | Router | ORM / DB layer | Auth |
-|---|---|---|---|
-| Node / Express | Express Router | Prisma or Drizzle | passport.js or jose |
-| Node / Fastify | Fastify routes | Drizzle | @fastify/jwt |
-| Node / Hono | Hono router | Drizzle or D1 | hono/jwt |
-| Python / FastAPI | APIRouter | SQLAlchemy or SQLModel | python-jose or authlib |
-| Python / Flask | Blueprints | SQLAlchemy | Flask-JWT-Extended |
-| Python / Django | urls.py + views | Django ORM | djangorestframework-simplejwt |
-| AWS Serverless | Lambda handlers | DynamoDB or RDS via SDK | Cognito or custom authorizer |
+**Security (`ds-security:review`) owns:** Attack-surface risk analysis — injection risk
+(sec-003), credential exposure (sec-001), CSRF attack surface (sec-004), session identity
+risk (sec-015).
 
----
+**Cross-references:**
+- `api-001` (HTTP input validation) ↔ `sec-003` (injection risk): api-001 fires on missing
+  schema validators; sec-003 fires on injection risk from unvalidated input.
+- `api-002` (error shape) ↔ `sec-013` (PII in runtime output): api-002 fires on leaked stack
+  traces; sec-013 fires on PII in logs/errors.
+- `api-003` (CSRF on state-changing routes) ↔ `sec-004` (CSRF protection): api-003 detects
+  missing CSRF at HTTP layer; sec-004 owns attack-surface analysis.
+- `api-004` (auth enforcement) ↔ `sec-015` (session/identity risk): api-004 detects
+  unprotected routes; sec-015 owns auth bypass exploitability.
+- `api-006` (authorization checks) ↔ `sec-015` (authorization): api-006 detects missing
+  AuthZ; sec-015 owns privilege escalation risk.
 
-## Security Baseline (all stacks)
+## Integration with Other Fullstack Modes
 
-DO parameterize all queries — no string-concatenated SQL.
-DO check auth before processing the request body on every protected route.
-DO set `Access-Control-Allow-Origin` to a specific origin in production, never `*`.
-DON'T log PII — log failed auth attempts by IP only.
+**Pipeline:** `spec → (frontend || backend) → integrate → secure`. `build` is the pipeline's
+backend stage. `audit` is a standalone, on-demand check — not part of that pipeline; run it
+against an existing backend at any time.
 
----
-
-## Outputs Checklist
-
-Before handing off to `fullstack integrate`:
-
-- [ ] Route file for every endpoint in the contract
-- [ ] Migration or DDL file for every data model
-- [ ] Auth middleware wired to all protected routes
-- [ ] `.env.example` with all required keys documented
-- [ ] Contract updated if new endpoints were added during build
+See `../../SKILL.md` for the orchestrator's full mode routing and auto-detection.

@@ -17,6 +17,6 @@ languages_supported_phase1:
   - rust
 rules_phase1: 13
 deferred_rules:
-  - rate_limiting  # → sec-016 (security skill) + api-005 (backend-api skill)
+  - rate_limiting  # → sec-016 (security skill) + api-005 (fullstack:backend audit sub-mode)
   - backup_strategy  # → db-016/017/018 (database skill)
   - cve_gate  # → dep-001 (types-deps skill)

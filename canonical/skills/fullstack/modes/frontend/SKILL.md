@@ -13,93 +13,68 @@ dream_studio:
   lifecycle: published
 ---
 
-# Fullstack: Frontend — Website Delegate
+# Frontend — Website Delegate + Component Quality Audit
 
-## Trigger Keywords
+## Mode dispatch
 
-| Keyword | Action |
-|---|---|
-| `fullstack frontend` | Build UI with API contract awareness |
-| `fullstack front` | Same as above |
-| `fullstack ui` | Same as above |
+1. Parse the mode from the argument (first word). Default to `build` when the input looks
+   like a build request and no mode is named explicitly.
+2. If no mode is given and the input doesn't obviously match one, list the two below and ask.
+3. Read `<mode>/SKILL.md` completely before executing.
+4. If `gotchas.yml` exists in this directory, read it before executing (shared across both
+   modes).
+5. Follow the mode's instructions exactly.
 
----
+| Mode | File | Keywords |
+|------|------|---------|
+| build | build/SKILL.md | (default — invoked as `fullstack frontend`, `fullstack front`, `fullstack ui`) |
+| audit | audit/SKILL.md | audit:, ux audit:, frontend audit:, a11y check: |
 
-## Decision Table
+## Which mode
 
-| Condition | Action |
-|---|---|
-| `api-contract.json` docstore artifact exists | Read it, extract endpoint list, pass to page step |
-| `api-contract.json` docstore artifact missing | Proceed without it — frontend works standalone |
-| User gives a specific website sub-mode | Invoke `domains:website` with that sub-mode |
-| No sub-mode specified | Invoke `domains:website` with auto-detect |
-| Stack is React SPA | Route to `domains:saas-build` instead of `domains:website` |
-| Stack is Astro or vanilla HTML | Route to `domains:website` page mode |
+Two different questions, not two names for the same thing:
 
----
+- **`build`** — "Build the UI for this API contract." Delegates all design and build work to
+  `website:`, injecting endpoint awareness (fetch calls matching the contract's method/path)
+  into the page step.
+- **`audit`** — "Does this codebase's existing React/Next.js UI meet the component quality
+  baseline?" Retrospective scan of components for accessibility, performance patterns,
+  component design, and React hooks correctness. Static detection where patterns are known;
+  LLM confirmation for rules requiring semantic judgment. Classifies and reports only —
+  never fixes.
 
-## Execution Steps
+## Source Authority
 
-1. **Check for API contract**
-   - Read `api-contract.json` from the docstore (`ds files read "api-contract.json"`)
-   - If present: read it and extract every `{ method, path, auth, request, response }` entry
-   - If missing: note it and continue — do not block
+`audit` reads `rules.yml` in this directory (10 Phase 1 rules, React/Next.js). `build` has
+no rule file — its patterns live in `build/SKILL.md` and the delegated `website:` pipeline.
 
-2. **Invoke `domains:website`**
-   - Delegate all design and build work to the `domains:website` pipeline
-   - The user's stated intent determines which website sub-mode runs (page, prototype, deck, animate, etc.)
-   - Do not replicate website pipeline logic here
+## Supported Frameworks (audit, Phase 1)
 
-3. **Inject endpoint awareness into the page step**
-   - Before the page sub-mode generates HTML, provide the extracted endpoint list
-   - Every `fetch()` call in generated HTML must use the exact `method` and `path` from the contract
-   - Base URL must come from an environment variable — not hardcoded
-   - Every fetch needs loading, success, and error UI states
+**React + Next.js:** Full support (10 rules)
+**React standalone (Vite, CRA):** 9/10 rules (ux-008 skips — Next.js Image specific)
+**Vue, Svelte, Angular:** 5/10 rules (a11y rules ux-001–005 + ux-010; hooks/React-specific
+rules skip)
 
-4. **Post-build**
-   - Run the anti-slop linter on every HTML artifact (inherited from `website:`): `py canonical/skills/website/scripts/lint-artifact.py <artifact.html>` from the repository root. Exit 2 means a critical violation and blocks delivery.
-   - If integration is the next step, confirm fetch call paths match backend routes exactly
+## Skill Boundary (audit)
 
----
+**Frontend audit owns:** JSX component quality — a11y attributes, keyboard accessibility,
+focus management, React hooks correctness, component structure, i18n gaps.
 
-## DO / DON'T Rules
+**Accessibility mode (`ds-website:accessibility`)** owns: manual WCAG 2.2 audit, screen
+reader testing, user flow validation. Complementary — not duplicate.
 
-DO delegate all design and build work to `domains:website`.
-DON'T duplicate website pipeline logic (discover, direction, brand, page, prototype, deck, animate, cip, critique) in this file.
+**Mobile (`ds-apps:mobile`)** owns: native iOS/Android/React Native/Flutter interfaces —
+different platform, not overlapping.
 
-DO read the `api-contract.json` docstore artifact (`ds files read "api-contract.json"`) before building pages if it exists.
-DON'T fail or block when the API contract is missing — frontend can work standalone.
+**Cross-references:**
+- `ux-007` ↔ `cq-002` (component LOC vs universal function LOC — dual-angle, `ds-code-health:code-quality`)
+- `ux-010` (client-side i18n gaps): no existing rule covers this
+- `ux-015` (form validation feedback, Phase 2) ↔ `api-001` (server-side validation, sibling `backend:audit`)
 
-DO pass the full endpoint list to the page-building step so every fetch call is contract-accurate.
-DON'T hardcode API base URLs — use `import.meta.env.PUBLIC_API_URL`, `process.env.API_URL`, or equivalent env-var patterns.
+## Integration with Other Fullstack Modes
 
-DO use the exact `method` and `path` from the contract in every fetch call.
-DON'T invent endpoint shapes during build — if the contract is missing a needed endpoint, stop and update the contract via `fullstack spec` first.
+**Pipeline:** `spec → (frontend || backend) → integrate → secure`. `build` is the pipeline's
+frontend stage. `audit` is a standalone, on-demand check — not part of that pipeline; run it
+against an existing frontend at any time.
 
-DO include loading, success, and error UI states for every fetch call.
-DON'T skip error state UI — silent failures are a UX bug and a security risk.
-
-DO match request body field names to the contract exactly (case-sensitive).
-DON'T silently rename fields between the contract and the fetch call.
-
----
-
-## Endpoint Injection Format
-
-When passing endpoint context to the page step, structure it as:
-
-```
-API endpoints available:
-- POST /api/resource   auth: bearer   body: { field: type }   response: { field: type }
-- GET  /api/resource   auth: none     response: { items: array }
-```
-
-Pass this block in the prompt context for the page sub-mode invocation.
-
----
-
-## Anti-Patterns
-
-DON'T start page builds without checking for the API contract first.
-DON'T hardcode `http://localhost:3000` or any absolute URL in fetch calls.
-DON'T call `fullstack backend` or `fullstack integrate` from this sub-mode — those are sibling modes under the fullstack orchestrator.
+See `../../SKILL.md` for the orchestrator's full mode routing and auto-detection.

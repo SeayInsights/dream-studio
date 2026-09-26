@@ -1,8 +1,8 @@
 # Frontend-UX — Audit Mode
 
 ## Metadata
-- **Pack:** quality
-- **Mode:** frontend-ux:audit
+- **Pack:** fullstack
+- **Mode:** frontend:audit
 - **Type:** diagnostic
 - **Model:** sonnet
 - **Inputs:** source_root, scope_mode, target_path
@@ -14,7 +14,7 @@
 3. Detect frontend framework from `detect_stack().frontend_framework`.
 
 ## Trigger
-`ds-quality:frontend-ux:audit`, `ux audit:`, `frontend audit:`, `a11y check:`
+`ds-fullstack:frontend:audit`, `ux audit:`, `frontend audit:`, `a11y check:`
 
 ## Step 1 — Detect Framework and File Scope
 

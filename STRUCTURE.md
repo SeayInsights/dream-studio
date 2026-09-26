@@ -98,3 +98,29 @@ existed. This is the first of two content-merge slices (quality:security -> secu
 the second, tracked separately); see [[project-security-fullstack-merge-scope]] in the operator's
 memory for the full scoping analysis behind both. -->
 
+<!-- Reviewed 2026-09-26 - pack-split (ninth slice, final): quality's `backend-api` and
+`frontend-ux` audit engines merged into the EXISTING fullstack pack's `backend` and `frontend`
+modes as new `audit` sub-modes (canonical/skills/fullstack/modes/{backend,frontend}/audit/
+{SKILL.md,rules.yml}), rather than a directory move -- another content merge, not a relocation,
+since backend/frontend already had independent content (pure stack-agnostic/website-delegate
+builders, zero audit concept) that backend-api/frontend-ux's rule engines (12 and 10 rules) do
+not overlap with. Each mode's previously-flat build content moved verbatim to a new build/
+sub-mode, and a new thin router SKILL.md (matching the code-health/security sub-mode-router
+pattern) dispatches build (default) vs audit. `core/skills/audit/rules_scanner_shared.py`'s
+`_NESTED_SKILL_DIRS` gained two more aliases for the same reason database-compliance needed
+one (regression-guard tests added: test_audit_backend_api_rules_yml_actually_resolves,
+test_audit_frontend_ux_rules_yml_actually_resolves, both mutation-verified). Both source modes
+were also unreachable by trigger phrase before this merge (no `triggers:` in metadata.yml, never
+named in quality's own SKILL.md table) -- reachable now through fullstack's own routing table
+and an expanded trigger list in its pack-level metadata.yml. `core/projects/adaptive_routing.py`'s
+`_MODE_PACK` recommends the real invocable mode (`backend`/`frontend`) with the audit sub-mode
+named in the reason, the same fix the comply/privacy merge needed for its own dead-mode-name
+risk. Two pre-existing stale `pack: domains` frontmatter fields (fullstack's own secure/SKILL.md,
+integrate/SKILL.md) and two pre-existing stale `domains:website`/`domains:saas-build` routing
+references inside frontend's build content (left over from the website and apps pack splits)
+were fixed while touching this neighborhood. No directory-tree layout change -- fullstack/
+already existed. This is the second of the two content-merge slices noted above, and the final
+slice of the pack-split campaign that began by splitting database/data-engineering into a new
+data/ pack (first slice, 2026-09-24); quality (21 modes) and domains (12 modes) are now both
+fully decomposed into single-concern packs. -->
+

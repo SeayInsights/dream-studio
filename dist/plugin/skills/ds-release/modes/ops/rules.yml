@@ -8,7 +8,7 @@
 #
 #   Rate limiting:
 #     → sec-016 (security skill): rate limiting and brute-force protection
-#     → api-005 (backend-api skill): rate limiting on high-traffic/auth endpoints
+#     → api-005 (fullstack:backend audit sub-mode): rate limiting on high-traffic/auth endpoints
 #     Both fire from different angles; a third ops rule would produce duplicate findings.
 #
 #   Backup strategy:

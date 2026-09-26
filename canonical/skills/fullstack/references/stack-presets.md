@@ -37,7 +37,7 @@ export default app
 const { results } = await env.DB.prepare('SELECT * FROM items WHERE id = ?').bind(id).all()
 ```
 
-**Delegation:** Invoke `domains:saas-build` for full Cloudflare implementation.
+**Delegation:** Invoke `apps:saas-build` for full Cloudflare implementation.
 
 ---
 
@@ -152,7 +152,7 @@ public/
 
 **DB access:** None — use mock data or localStorage.
 
-**Delegation:** Use `domains:website` for prototypes needing visual polish.
+**Delegation:** Use `website:` for prototypes needing visual polish.
 
 ---
 
@@ -169,5 +169,5 @@ public/
 
 - DO detect stack from project files before asking (check `wrangler.toml`, `package.json`, `requirements.txt`, `serverless.yml`)
 - DON'T pick a stack when signals conflict — ask the user
-- DO delegate Cloudflare implementations to `domains:saas-build`
+- DO delegate Cloudflare implementations to `apps:saas-build`
 - DON'T version-lock dependencies in presets (let projects pin their own versions)

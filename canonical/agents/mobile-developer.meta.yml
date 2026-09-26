@@ -6,4 +6,4 @@ model: sonnet
 skill: ds-apps/modes/mobile/SKILL.md
 essentials: |
   Scope: mobile covers native app development. For web/React/Next.js interfaces,
-  use the frontend-ux skill.
+  use the ds-fullstack:frontend audit sub-mode.

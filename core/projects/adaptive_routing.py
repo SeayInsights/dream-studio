@@ -22,8 +22,8 @@ from typing import Any
 # missing here is a bug in this map, not a fallback case, so recommend_dispatches
 # raises rather than guessing.
 _MODE_PACK: dict[str, str] = {
-    "backend-api": "ds-quality",
-    "frontend-ux": "ds-quality",
+    "backend": "ds-fullstack",
+    "frontend": "ds-fullstack",
     "database": "ds-data",
     "comply": "ds-security",
     "testing": "ds-code-health",
@@ -54,9 +54,19 @@ def recommend_dispatches(stack_data: dict[str, Any] | None) -> list[dict[str, st
         out.append({"pack": _MODE_PACK[mode], "mode": mode, "reason": reason})
 
     if stack_data.get("web_framework"):
-        add("backend-api", f"detected {stack_data['web_framework']} web/API framework")
+        # backend-api was folded into fullstack:backend's `audit` sub-mode in the
+        # pack-split campaign's fullstack merge -- "backend-api" is no longer an
+        # invocable mode name on its own, so the reason names the real invocation
+        # rather than pointing at a dead target.
+        add(
+            "backend",
+            f"detected {stack_data['web_framework']} web/API framework -- invoke ds-fullstack:backend audit",
+        )
     if stack_data.get("frontend_framework"):
-        add("frontend-ux", f"detected {stack_data['frontend_framework']} frontend framework")
+        add(
+            "frontend",
+            f"detected {stack_data['frontend_framework']} frontend framework -- invoke ds-fullstack:frontend audit",
+        )
     if stack_data.get("database_type"):
         add("database", f"detected {stack_data['database_type']} database")
     if stack_data.get("has_pii_schema") or stack_data.get("compliance_hints"):

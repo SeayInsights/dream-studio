@@ -23,10 +23,7 @@ from core.skills.reachability import SKILLS_DIR, routes, unreachable
 #: Pinned by NAME, not count: a count that moved would say only "something changed",
 #: while a name says which mode, and fixing one is deleting a line. A new unreachable
 #: mode fails this test carrying its own id.
-KNOWN_UNREACHABLE = {
-    "quality/backend-api",
-    "quality/frontend-ux",
-}
+KNOWN_UNREACHABLE: set[str] = set()
 
 
 def test_the_documented_trigger_section_is_read():

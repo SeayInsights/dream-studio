@@ -120,7 +120,7 @@ rules:
         note: "cq-002 measures individual function LOC (≤50 lines). arch-001 measures class aggregate (LOC + method count). A class where all functions pass cq-002 can still fail arch-001 (20 methods × 50 lines = 1000 LOC total)."
         surface_co_located: true
       - rule_id: "ux-007"
-        skill: "frontend-ux"
+        skill: "ds-fullstack:frontend"
         relationship: "dual_angle"
         note: "ux-007 flags oversized React components via reuse heuristic (LLM judges intent). arch-001 flags via LOC/method count (structural). Same component, different audit axes."
         surface_co_located: false

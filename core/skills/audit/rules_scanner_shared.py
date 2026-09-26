@@ -40,6 +40,8 @@ _SKILLS_ROOT = Path(__file__).parents[3] / "canonical" / "skills"
 _NESTED_SKILL_DIRS: dict[str, str] = {
     "database-compliance": "security/modes/comply/privacy",
     "security": "security/modes/review",
+    "backend-api": "fullstack/modes/backend",
+    "frontend-ux": "fullstack/modes/frontend",
 }
 
 
