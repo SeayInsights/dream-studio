@@ -31,7 +31,7 @@ common_failures: []
 
 # Dependencies
 dependencies:
-  core_modules: [analyze.engine, analyze.discovery, analyze.audit, analyze.bugs, analyze.synthesis]
+  core_modules: [control.analysis.engine, control.analysis.discovery, control.analysis.audit, control.analysis.bugs, control.analysis.synthesis]
   tools_required: [python, git]
   env_vars_required: []
   files_required: [~/.dream-studio/state/studio.db]
