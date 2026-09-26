@@ -124,6 +124,20 @@ every error path (broken DB disables enforcement, never editing) and honor
 repo-import fallback. Gate tests: `tests/unit/test_enforce_sqlite_hooks.py`,
 `tests/integration/test_enforcement_tiers.py`.
 
+`on-edit-enforce` also has a complete native port, `runtime/hooks/enforce-native`
+(binary `ds-enforce`), same fallback contract as the native PostToolUse enqueuer
+(`runtime/hooks/enqueue-native`, binary `ds-enqueue`): optional,
+`cargo build --release` produces it, `interfaces/cli/setup_hooks.py::resolve_hook_command`
+prefers it over the Python bootstrap when present and falls back to Python otherwise
+(`hook_identity` treats the two spellings as one hook so the installer never registers
+both). It reads the authority via `rusqlite` (bundled SQLite, no system dependency),
+writes session state and `hookq.jsonl` itself (`runtime/hooks/enqueue-native`'s
+path/framing helpers, now a small library the enforce crate links rather than a fourth
+hand-copy), and is checked against the same table `tests/unit/test_enforce_decision_parity.py`
+pins for the pure decision functions. No fail-open, tier, or dispatch semantics differ
+between the two implementations — only the language and the removed Python interpreter
+startup cost.
+
 ### Graduated enforcement tiers (WO-ENFORCE-TIERS)
 
 Enforcement is **not** binary. A team that did not build the substrate should not
@@ -467,3 +481,4 @@ hook registration, dispatcher wiring, ordering, or the fail-open guarantee. -->
 
 <!-- Reviewed 2026-09-26 -- feat/gate-import-registry, round-2 fix: no hook runtime behavior change -- this fix is entirely inside core/gates/registry.py's gate-execution mechanism (pre-push, not the PreToolUse/Stop hook chain this file documents). Touched only because canonical/workflows/pre-push.yaml's header comment was corrected in the same commit, which this domain's source_patterns also match. -->
 <!-- Reviewed 2026-09-26 -- feat/fail-open-census (H30): ONE new BLOCKING pre-push gate, `fail-open-census`, broadening the fail-open defect class `fail-open-probe` (2026-09-07, above) already guards. That gate catches ONE shape: a function-level permissive handler with an unguarded probe inside it. Two broader, more common shapes carry the same risk and were unguarded by anything: a bare `except: pass` (the error is caught and discarded -- nothing logged, nothing re-raised, nothing tells the caller), and an except handler whose last statement returns a falsy sentinel (None, bare return, False, 0, "", [], {}, ()) -- the caller cannot tell "legitimately found nothing" from "broke and nobody noticed", because both render identically. Measured 2026-09-21: 484 bare-except-pass + 258 falsy-return sites in product code (742 total); re-measured today at 831 combined sites once the AST walk's own precise definition was applied to the current tree. Neither count is realistically zero-able in one pass -- most existing sites are legitimate on inspection (a missing optional config file IS legitimately "return None") -- so this is a RATCHET exactly like lint_baseline.py's flake8 baseline: every site present when the baseline was written is tracked debt, not a release blocker, and the gate fails only on growth. Regenerate the baseline after fixing (or deliberately accepting) a new site: `py -m core.gates.fail_open_census --write-baseline`. No hook registration, dispatch order, PROTECTED_PATHS, handler-chain, tier semantics, or fail-open POLICY change -- this is a new detector for an old policy, not a new policy. -->
+<!-- Reviewed 2026-09-26 -- feat/enforce-native-full-port (C11): `runtime/hooks/enforce-native` (scaffolded, undeployed, in #752) is now a complete drop-in port of `on-edit-enforce.py` -- candidate extraction (file_path/notebook_path/path, or Bash/PowerShell write-target regexes ported verbatim, five patterns not the bare `>`/`>>` a scaffold-era draft of decision.rs had), classify_path's fourth `exempt` kind (missing from that draft too), the authority reads (match_registered_project/in_progress_work_order/next_created_work_order) via `rusqlite` against the SAME tables and predicates, session-file recording, and the tier ladder including the `authority_source_edit` observe-only downgrade. `interfaces/cli/setup_hooks.py` gains `_native_enforce_command`/`_native_enforce_path`/`NATIVE_ENFORCE_BIN`, mirroring the existing `_native_enqueue_*` trio exactly (optional binary, Python fallback, `hook_identity` treats both spellings as one hook). `runtime/hooks/enqueue-native` gained a `lib.rs` (queue_path/escape_json/append_line) so the enforce crate links the tested queue-writer instead of a fourth hand-copy of it -- `ds-enqueue`'s own CLI behavior and its existing tests are unchanged, verified by running them before and after the split. No hook registration, dispatch order, tier semantics, or fail-open POLICY change -- same decision, same fallback contract, a second language. -->

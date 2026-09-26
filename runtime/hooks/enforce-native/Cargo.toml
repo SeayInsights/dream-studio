@@ -7,8 +7,34 @@ description = "PreToolUse edit enforcement. Decides allow/deny before every Edit
 # rusqlite reads the authority; `bundled` compiles SQLite in so the binary does not
 # depend on a system library being present and the right version -- a hook that
 # cannot load is a hook that silently stops enforcing.
+#
+# ds-enqueue is the already-shipped native telemetry writer (runtime/hooks/enqueue-native);
+# this hook's own record_edit/record_observation/record_bypass/log_hook_execution append to
+# the SAME queue file the SAME way, so it links that crate rather than re-deriving the path
+# convention and JSON framing a second time.
+#
+# serde/serde_json parse the PreToolUse stdin payload and this hook's own session JSON
+# file. `ds-enqueue` deliberately has NO dependencies (it runs on every tool call); this
+# hook runs only on Edit/Write/MultiEdit/Bash, and hand-rolling a JSON parser for untrusted
+# stdin is a worse trade at that frequency.
+#
+# dunce strips the `\\?\` verbatim prefix Windows' canonicalize adds, so a resolved path
+# matches what Python's Path.resolve() would print (and what the authority DB stores).
 [dependencies]
 rusqlite = { version = "0.32", features = ["bundled"] }
+ds-enqueue = { path = "../enqueue-native" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dunce = "1"
+# RFC 3339 "now" timestamps for the session file and the telemetry queue.
+# Hand-rolling civil-calendar math for this is the wrong trade: it is a well
+# known source of subtle bugs (leap years, epoch edge cases) that a small,
+# widely-used crate has already gotten right.
+time = { version = "0.3", features = ["formatting"] }
+# extract_write_targets ports enforcement.py's five-pattern regex scan
+# (indicators + redirect/tee/PowerShell target capture) verbatim; hand-rolling
+# that by string-scanning is how a port quietly narrows what it detects.
+regex = "1"
 
 [profile.release]
 opt-level = "z"

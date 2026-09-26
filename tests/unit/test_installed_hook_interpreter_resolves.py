@@ -95,6 +95,26 @@ def test_the_enqueue_hook_prefers_the_native_binary_when_one_is_built():
             assert native.name in resolved, "a built binary must be preferred"
 
 
+def test_the_enforce_hook_prefers_the_native_binary_when_one_is_built():
+    """Mirrors the enqueue test above: both states are correct, so neither is assumed.
+
+    The binary is gitignored, so a fresh checkout and every CI runner has only the
+    Python enforce hook -- the fallback is the common case and must keep working.
+    """
+    from interfaces.cli.setup_hooks import _native_enforce_path
+
+    enforce_commands = [c for c in _template_commands() if "on-edit-enforce.py" in c]
+    assert enforce_commands, "no on-edit-enforce hook in the template — this guards nothing"
+
+    native = _native_enforce_path()
+    for command in enforce_commands:
+        resolved = resolve_hook_command(command)
+        if native is None:
+            assert "on-edit-enforce.py" in resolved, "with no binary it must fall back to Python"
+        else:
+            assert native.name in resolved, "a built binary must be preferred"
+
+
 def test_an_already_resolved_command_is_left_alone():
     """A re-run must not rewrite an operator's own absolute-path edit."""
     for already in ('"C:/Python312/python.exe" -c "x"', "py script.py", "/usr/bin/python3 -c 'x'"):
@@ -147,6 +167,18 @@ def test_the_two_spellings_of_one_hook_have_one_identity():
     resolved = resolve_hook_command(bare)
     assert resolved != bare, "the fixture needs the two forms to differ"
     assert setup_hooks.hook_identity(bare) == setup_hooks.hook_identity(resolved)
+
+
+def test_the_enforce_hooks_two_spellings_have_one_identity():
+    """Same defect class as the enqueue hook: a built binary and the Python bootstrap
+    it replaces must not be seen as two different hooks and both registered."""
+    template = next(c for c in _template_commands() if "on-edit-enforce.py" in c)
+    resolved = resolve_hook_command(template)
+    from interfaces.cli.setup_hooks import _native_enforce_path
+
+    if _native_enforce_path() is not None:
+        assert resolved != template, "the fixture needs the two forms to differ"
+    assert setup_hooks.hook_identity(template) == setup_hooks.hook_identity(resolved)
 
 
 def test_a_hook_that_is_not_python_is_compared_whole():
