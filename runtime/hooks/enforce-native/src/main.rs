@@ -23,20 +23,12 @@ mod queue;
 mod session;
 
 use std::io::Read;
-use std::path::PathBuf;
-
-fn ds_home() -> Option<PathBuf> {
-    match std::env::var("DS_HOME") {
-        Ok(h) if !h.is_empty() => Some(PathBuf::from(h)),
-        _ => {
-            let base = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).ok()?;
-            Some(PathBuf::from(base).join(".dream-studio"))
-        }
-    }
-}
 
 fn env() -> Option<enforce::Env> {
-    let home = ds_home()?;
+    // Shared with the queue writer -- see ds_enqueue::dream_studio_home's doc
+    // comment for why DREAM_STUDIO_HOME must be checked before DS_HOME, not
+    // the other way around (a round-4 review finding on this exact function).
+    let home = ds_enqueue::dream_studio_home()?;
     Some(enforce::Env {
         authority_db: home.join("state").join("studio.db"),
         session_dir: home.join("state").join("enforce"),

@@ -12,11 +12,22 @@
 //! to the one case it exists to catch most: a new product-source file with
 //! no work order yet.
 //!
-//! `~user` (another account's home) is deliberately NOT expanded. Python's own
-//! `ntpath.expanduser` does not expand it either (only POSIX's does, via a
-//! `pwd` lookup Windows has no equivalent for), and every path this hook ever
-//! sees is the operator's own file, never another account's -- so the one
-//! platform where the two implementations could disagree never exercises it.
+//! `~user` (another account's home): Windows and POSIX Python disagree on this,
+//! and this function follows each platform's own real behavior rather than one
+//! answer for both. `ntpath.expanduser` (Windows) is a PURE STRING heuristic --
+//! it substitutes the requested username for the current one in `USERPROFILE`
+//! and always succeeds, never checking the name is real. A round-4 review
+//! finding caught this file's own earlier claim that Windows had "no pwd
+//! equivalent" and so never expands `~user` -- false, verified against real
+//! CPython (`Lib/ntpath.py`) and live execution: `ntpath.expanduser('~foo/x')`
+//! returns an absolute, unrelated path, while the un-expanded version this
+//! function used to produce stayed relative to the CWD instead -- a real,
+//! reachable parity break for a hook that classifies and attributes paths.
+//! `posixpath.expanduser` (POSIX) instead does a real `pwd.getpwnam(name)`
+//! lookup and leaves the string untouched when no such system user exists --
+//! matched here by leaving it untouched unconditionally, which agrees with
+//! Python for every case this hook actually sees (nobody's edited file names a
+//! second real system account's home).
 
 use std::env;
 use std::path::{Component, Path, PathBuf};
@@ -25,13 +36,35 @@ fn home_dir() -> Option<PathBuf> {
     env::var_os("USERPROFILE").or_else(|| env::var_os("HOME")).map(PathBuf::from)
 }
 
+#[cfg(windows)]
 fn expand_user(path: &str) -> PathBuf {
-    if let Some(rest) = path.strip_prefix('~') {
-        if rest.is_empty() || rest.starts_with('/') || rest.starts_with('\\') {
-            if let Some(home) = home_dir() {
-                let rest = rest.trim_start_matches(['/', '\\']);
-                return if rest.is_empty() { home } else { home.join(rest) };
-            }
+    let Some(rest) = path.strip_prefix('~') else { return PathBuf::from(path) };
+    if rest.is_empty() || rest.starts_with('/') || rest.starts_with('\\') {
+        let Some(home) = home_dir() else { return PathBuf::from(path) };
+        let stripped = rest.trim_start_matches(['/', '\\']);
+        return if stripped.is_empty() { home } else { home.join(stripped) };
+    }
+    // `~user` or `~user/...`: ntpath replaces the username segment of
+    // USERPROFILE (its own last path component) with the requested one, then
+    // appends whatever followed the token EXACTLY as written -- not through
+    // `Path::join`, which would normalize its separator instead of preserving
+    // the caller's own (verified: `~foo/x` stays `foo/x`, `~foo\x` stays `foo\x`).
+    let Some(home) = home_dir() else { return PathBuf::from(path) };
+    let Some(parent) = home.parent() else { return PathBuf::from(path) };
+    let split_at = rest.find(['/', '\\']).unwrap_or(rest.len());
+    let (userhead, remainder) = rest.split_at(split_at);
+    let mut result = parent.join(userhead).into_os_string();
+    result.push(remainder);
+    PathBuf::from(result)
+}
+
+#[cfg(not(windows))]
+fn expand_user(path: &str) -> PathBuf {
+    let Some(rest) = path.strip_prefix('~') else { return PathBuf::from(path) };
+    if rest.is_empty() || rest.starts_with('/') || rest.starts_with('\\') {
+        if let Some(home) = home_dir() {
+            let stripped = rest.trim_start_matches(['/', '\\']);
+            return if stripped.is_empty() { home } else { home.join(stripped) };
         }
     }
     PathBuf::from(path)
@@ -133,6 +166,39 @@ pub fn relative_posix(resolved: &Path, root: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Verified against real CPython first: `ntpath.expanduser('~foo/file.py')`
+    /// == `'C:\\Users\\foo/file.py'` (the OWN username segment of USERPROFILE
+    /// replaced, the rest of the string carried through with its OWN separator
+    /// untouched, not normalized). A round-4 review finding caught this file's
+    /// earlier claim that Windows had no `~user` equivalent to expand.
+    #[cfg(windows)]
+    #[test]
+    fn tilde_user_matches_ntpath_exactly() {
+        let home = home_dir().expect("USERPROFILE must be set to run this test");
+        let parent = home.parent().expect("USERPROFILE has a parent").to_path_buf();
+
+        assert_eq!(expand_user("~foo"), parent.join("foo"));
+        assert_eq!(expand_user("~foo/file.py"), {
+            let mut p = parent.join("foo").into_os_string();
+            p.push("/file.py");
+            PathBuf::from(p)
+        });
+        assert_eq!(expand_user("~foo\\file.py"), {
+            let mut p = parent.join("foo").into_os_string();
+            p.push("\\file.py");
+            PathBuf::from(p)
+        });
+        assert_eq!(expand_user("~foo/"), {
+            let mut p = parent.join("foo").into_os_string();
+            p.push("/");
+            PathBuf::from(p)
+        });
+        // Bare ~ and ~/... are unaffected by this change -- still the caller's
+        // own home, exactly as before.
+        assert_eq!(expand_user("~"), home);
+        assert_eq!(expand_user("~/file.py"), home.join("file.py"));
+    }
 
     #[test]
     fn resolves_a_file_that_does_not_exist_yet() {
