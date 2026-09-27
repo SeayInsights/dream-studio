@@ -114,17 +114,21 @@ DASHBOARD REFRESHED: {client}
 
 ## Mode: `template`
 
-Copy the Power BI template and generate a connection-info README for this client.
+No `.pbit` file ships with this repo — only `templates/security/powerbi/dashboard-spec.md`,
+a markdown specification (data model, DAX measures, page layouts, M-query source
+configuration) that a human follows in Power BI Desktop to build the real `.pbit`.
+This mode hands off that spec plus the connection details needed to wire it to a
+client's dataset; it does not produce a binary template itself.
 
 ### Orchestration Steps
 
 1. Check that the dataset directory exists: `~/.dream-studio/security/datasets/{client}/`
-2. Copy the Power BI template to `~/Downloads/enterprise-security-{client}.pbit`
+2. Point the user at `templates/security/powerbi/dashboard-spec.md`.
 3. Generate a connection README at `~/Downloads/enterprise-security-{client}-README.txt` containing:
    - Dataset directory path (absolute)
    - CSV file list with column descriptions
-   - Data model relationship instructions for Power BI Desktop
-   - Parameter setup instructions (client name, dataset path)
+   - Data model relationship instructions for Power BI Desktop (below)
+   - Parameter setup instructions (`ClientName`, `Enterprise`, `DatasetPath`, `RulePrefix` — see dashboard-spec.md's Parameters table)
 
 ### Data Model Relationships (for Power BI)
 
@@ -141,10 +145,11 @@ Document these relationships in the README:
 ### Output
 
 ```
-TEMPLATE EXPORTED: {client}
-  Power BI template: ~/Downloads/enterprise-security-{client}.pbit
+TEMPLATE SPEC HANDED OFF: {client}
+  Power BI spec:     templates/security/powerbi/dashboard-spec.md
   Connection README: ~/Downloads/enterprise-security-{client}-README.txt
   Dataset path:      ~/.dream-studio/security/datasets/{client}/
+  Next step:         open Power BI Desktop, follow the spec, build the .pbit by hand
 ```
 
 ---
