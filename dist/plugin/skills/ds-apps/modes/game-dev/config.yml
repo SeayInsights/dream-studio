@@ -4,5 +4,5 @@ description: Godot 4 consolidated patterns — 2D/3D player controllers, scene h
   CSG blockouts, Blender→GLB pipeline with QA gates, two-tier automated/manual QA,
   and game design scaffolding. Trigger on any game build, review, QA, design, or asset-pipeline
   command.
-pack: domains
+pack: apps
 chain_suggests: []

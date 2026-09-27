@@ -5,7 +5,7 @@ description: Per-finding fix recommendations with code before/after, verificatio
 user_invocable: true
 args: mode
 argument-hint: '[findings | single | export] [--client <name>]'
-pack: quality
+pack: security
 chain_suggests:
 - condition: always
   next: build

@@ -4,5 +4,5 @@ description: 'Capture and promote lessons from builds — record to raw_lessons 
   Director review via lesson_queue, promote to memory / skill / agent updates.
   Trigger on `learn:`, `capture lesson:`, or `learn: harvest` for cross-project batch
   extraction.'
-pack: quality
+pack: core
 chain_suggests: []

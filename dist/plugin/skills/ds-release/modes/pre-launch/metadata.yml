@@ -1,6 +1,6 @@
 skill_id: pre-launch
 skill_name: Pre-Launch Readiness
-pack: quality
+pack: release
 mode: pre-launch
 skill_description: |
   Audits services for launch readiness: legal documents, release documentation,

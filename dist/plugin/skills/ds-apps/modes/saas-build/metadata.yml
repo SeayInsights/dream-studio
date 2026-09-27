@@ -1,7 +1,7 @@
 # Required fields
 name: saas-build
 version: 1.0.0
-pack: domains
+pack: apps
 created_at: 2026-04-28
 updated_at: 2026-04-28
 

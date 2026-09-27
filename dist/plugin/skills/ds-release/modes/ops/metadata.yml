@@ -1,6 +1,6 @@
 skill_id: ops
 skill_name: Operational Quality
-pack: quality
+pack: release
 mode: ops
 skill_description: |
   Audits services for operational readiness: structured logging, health/metrics
