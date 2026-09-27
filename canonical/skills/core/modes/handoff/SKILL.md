@@ -18,6 +18,9 @@ dream_studio:
 ## Before you start
 Read `gotchas.yml` in this directory before every invocation.
 
+## Imports
+- ../../approach-capture.md — approach/outcome capture for the Improvement Loop
+
 ## Trigger
 `handoff:`, auto-triggered by `on-context-threshold` at compact threshold, or when session is ending with work in progress
 
@@ -138,11 +141,17 @@ The JSON handoff enables programmatic resume:
 No re-reading conversation history. No orientation. Immediate productive work.
 
 ## Approach Capture
-Before writing the handoff files (step 6):
 
-1. **Record approaches** — For each skill invoked this session, add an entry to the `approaches_taken` array in the JSON output. Record: skill ID, approach description, outcome (success/failure/partial/correction), and why it worked or didn't.
-2. **Persist to DB (when supported)** — If a maintained Dream Studio persistence interface is available, capture each approach through it. If unavailable, keep the approaches in the handoff JSON.
-3. **On resume** — When starting from a handoff, use the maintained approach-history interface if present. If unavailable, read the handoff JSON only.
+**See:** ../../approach-capture.md — what gets recorded and how it's persisted
+
+Handoff-specific timing and shape:
+
+1. **Before writing the handoff files (step 6)** — record each entry into the
+   `approaches_taken` array in the JSON output, per approach-capture.md's fields.
+2. **On resume** — when starting from a handoff, use the maintained
+   approach-history interface if present. If unavailable, read the
+   `approaches_taken` array from the handoff JSON only — this mode is
+   mid-work/resumable, so the JSON must be self-sufficient without it.
 
 ## Context pressure triggers
 When context is growing large:
