@@ -2,6 +2,6 @@ name: domains
 model_tier: sonnet
 description: 'Stack-specific builders: game, SaaS, MCP server, dashboard, power-platform,
   design.'
-argument-hint: game-dev | saas-build | mcp-build | dashboard-dev | power-platform | design
+argument-hint: dashboard-dev | power-platform
 user_invocable: true
 args: mode

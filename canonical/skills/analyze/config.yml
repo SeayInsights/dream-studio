@@ -1,6 +1,6 @@
 name: analyze
 model_tier: sonnet
 description: Multi-perspective analysis engine and domain-specific evaluation.
-argument-hint: multi | domain-re
+argument-hint: multi | domain-re | repo | intelligence | idea-validation | research
 user_invocable: true
 args: mode

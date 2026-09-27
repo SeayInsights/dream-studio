@@ -90,9 +90,12 @@ If no findings: `✓ Code-quality static check passed.`
 ## Self-Audit Entry Point
 
 ```python
-# Callable by 18.8.1 build orchestration:
-# from canonical.skills.quality.modes.code_quality.build.audit import audit_generated_python
-# findings = audit_generated_python(generated_code, context)
+# Callable by 18.8.1 build orchestration. code-health is a hyphenated pack
+# name, so import it with importlib rather than a normal dotted
+# `from ... import` statement (see ../audit/SKILL.md's Step 2):
+# import importlib
+# _build = importlib.import_module("canonical.skills.code-health.modes.code-quality.build.audit")
+# findings = _build.audit_generated_python(generated_code, context)
 ```
 
 18.8.1 wires invocation. This file documents the interface. Code-quality does NOT call itself — the orchestrator calls code-quality.

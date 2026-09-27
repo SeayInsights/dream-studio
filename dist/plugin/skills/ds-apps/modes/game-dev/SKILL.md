@@ -26,7 +26,7 @@ Any game build, review, QA, design, or asset pipeline command.
 - **Autoload singletons** for shared managers (ResourceLedger, SettlementManager, FactionManager, etc.)
 - **game_state.gd** as single source of truth for serialization
 - **godot-mcp** over shell-mcp. **blender-mcp** over shell-mcp.
-- Structure: `scenes/ Â· scripts/ Â· assets/ Â· tests/ Â· design/`
+- Structure: `scenes/ · scripts/ · assets/ · tests/ · design/`
 
 ## Detailed Reference
 

@@ -44,7 +44,3 @@ Orchestrate binary and executable security analysis against binary targets defin
 ## Detailed Reference
 
 See `examples.md` in this directory for detailed steps, schemas, templates, and integration points.
-
-## Detailed Reference
-
-See `examples.md` in this directory for detailed steps, schemas, templates, and integration points.
