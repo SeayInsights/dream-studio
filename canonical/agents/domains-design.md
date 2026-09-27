@@ -160,9 +160,9 @@ See `examples.md` for mode examples and detailed workflows.
 
 ## Integration Points
 
-- **Discovery → Font Pairings:** Use `search-font-pairings.py` to match mood/typography dimensions
+- **Discovery → Font Pairings:** Read `references/font-pairings.md` and grep it for the mood/typography dimensions you need — there is no search script (see "Search Utilities" above)
 - **Token Architecture:** 3-layer structure (base → semantic → component) from `token-architecture.md`
-- **Anti-Pattern Validation:** Run anti-pattern search before finalizing output
+- **Anti-Pattern Validation:** Read `references/anti-patterns.md` and grep it for the relevant pattern before finalizing output — there is no search script (see "Search Utilities" above)
 - **Priority Matrix:** P0-P2 (MVP) → P3-P5 (staged) → P6-P9 (enhancements)
 
 See `examples.md` for detailed integration workflows.
