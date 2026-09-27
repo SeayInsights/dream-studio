@@ -1,5 +1,19 @@
 # Review Mode — Changelog
 
+## [2.1.1] — 2026-09-27
+
+### Fixed
+- `audit/SKILL.md` Step 5's operator-level `../suppressions.yml` check read as
+  unconditional, but no `suppressions.yml` template has ever shipped anywhere in
+  this repo (unlike the rule-level `suppressions` in `rules.yml`, which are real and
+  populated). Reworded the step to say so plainly and to treat a missing file as a
+  silent no-op rather than an error — consistent with this mode's own `jit-pending`
+  status below (functional but not yet validated on a real codebase). Sibling audit
+  skills (`code-health:code-quality`, `code-health:testing`, `data:database`) already
+  phrase this same check as conditional ("if exists"); this mode's copy did not,
+  and was the one actually caught referencing a nonexistent file. Not fabricating a
+  template with no real backing.
+
 ## [2.1.0] — 2026-09-27
 
 ### Changed

@@ -144,7 +144,7 @@ Code ({context_scope} from {filename}):
 For each finding:
 1. Check `rule.suppressions[*].path_glob` — if file path matches, remove finding, increment suppressed count
 2. Scan file content within ±3 lines of finding location for `rule.suppressions[*].inline_comment` text — if found, suppress
-3. Check `../suppressions.yml` (operator-level) for matching rule_id + path pattern. Check `expires` field — if date is past, ignore the suppression entry and log: `⚠ Suppression entry for {rule_id} in suppressions.yml expired {date} — treating as active finding`
+3. Check `../suppressions.yml` (operator-level) **if it exists** for matching rule_id + path pattern. Check `expires` field — if date is past, ignore the suppression entry and log: `⚠ Suppression entry for {rule_id} in suppressions.yml expired {date} — treating as active finding`. No `suppressions.yml` template ships with this repo yet — the schema above (rule_id + path pattern + `expires`) is the intended design, separate from the per-rule `suppressions` already in `rules.yml`, but no install has had one created and validated against a real codebase. Until one exists, this step is a no-op: skip it silently rather than treating a missing file as an error.
 
 ---
 
