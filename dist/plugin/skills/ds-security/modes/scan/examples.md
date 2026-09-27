@@ -2,7 +2,7 @@
 
 Extracted from SKILL.md to reduce context injection size. The `setup`, `ingest`, and `status`
 mode step-by-step instructions live in `SKILL.md` itself; this file covers the output schema,
-generated-file locations, and anti-patterns.
+where generated files land, and anti-patterns.
 
 ## Output Schema
 
