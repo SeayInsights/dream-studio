@@ -1,3 +1,10 @@
+## Output Contract
+
+This mode is reference knowledge, not a producer of a separate artifact: it informs the
+mobile (SwiftUI/Compose/React Native/Flutter) code written directly in the user's project,
+plus any store-submission guidance given inline. There is no report, score, or file this
+mode writes on its own.
+
 ## Patterns
 
 **SwiftUI state management** -- Use @State for local value types, @Observable (iOS 17+) or @ObservableObject for shared models, @Binding to pass writable state down, @EnvironmentObject for app-wide singletons only. Never reach up into parent state.

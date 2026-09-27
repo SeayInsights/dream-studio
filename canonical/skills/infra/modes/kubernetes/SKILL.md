@@ -1,3 +1,9 @@
+## Output Contract
+
+This mode is reference knowledge, not a producer of a separate artifact: it informs the
+Kubernetes manifests, Helm charts, and cluster configuration written directly into the
+project. There is no separate report this mode writes on its own.
+
 ## Patterns
 
 - **Resource requests and limits on every container** -- requests are used by the scheduler; limits are enforced at runtime. Missing limits allow memory leaks to OOMKill neighbors.

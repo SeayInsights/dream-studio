@@ -34,6 +34,12 @@ decide that the work is finished.
 
 Inlined at build time, so it is present whether or not you go and read anything.
 
+## Output Contract
+
+This mode is reference knowledge, not a producer of a separate artifact: it informs the
+CI/CD workflow YAML, Dockerfile, and deployment configuration written directly into the
+project. There is no separate report this mode writes on its own.
+
 ## Patterns
 
 - **Reusable workflows (workflow_call)**: extract shared CI logic into a central repo; callers pass inputs and secrets. Single change propagates to all consumers.

@@ -17,6 +17,11 @@ See the full anchor list for tier definitions and the complete catalog of applic
 - **Type:** analysis
 - **Model:** opus (complex security reasoning required)
 
+## Output Contract
+
+`# Vuln N` findings blocks (severity High/Medium only, confidence ≥8/10): category, file:line,
+description, exploit scenario, recommendation. No fixes are applied — findings only.
+
 ## Trigger
 
 Use `ds-security review` when:

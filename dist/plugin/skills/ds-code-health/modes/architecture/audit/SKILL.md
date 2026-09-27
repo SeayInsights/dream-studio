@@ -35,6 +35,11 @@ ds-code-health audit: architecture <path>
 
 6. **Report** — findings table with: rule_id, severity, file_path, line, excerpt, explanation
 
+## Output Contract
+
+A findings table: `rule_id`, `severity`, `file_path`, `line`, `excerpt`, `explanation`,
+`finding_hash` (see below). Read-only — no code is modified.
+
 ## Finding Hash
 
 | Rule category | Hash input |

@@ -1,5 +1,12 @@
 # Workflow — YAML Pipeline Orchestration
 
+## Output Contract
+
+Workflow execution state: a workflow key on initialize, then per-step `ready:`/`paused:
+(gate: ...)`/`waiting:`/`done` status from `next`, driving which nodes execute or which gate
+is awaiting Director approval. No separate report file — the state lives in the maintained
+runner, keyed by the workflow key.
+
 ## Before you start
 Read `gotchas.yml` in this directory before every invocation.
 

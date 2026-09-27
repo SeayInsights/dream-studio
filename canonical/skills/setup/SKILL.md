@@ -1,5 +1,12 @@
 # Setup — First-Run Experience & Tool Management
 
+## Output Contract
+
+`wizard`: a capability table (tool/status/what it unlocks) plus guided-install results,
+written to `.dream-studio/setup-prefs.json`. `status`: a read-only capability/status table,
+no writes. `jit`: an install/skip/never-ask-again result for one named tool, written to the
+same prefs file.
+
 ## Mode dispatch
 
 0. **Progressive disclosure check:** Before dispatching to a mode, apply the portable skill contract. If a current calibration interface is available in this checkout, use it; otherwise rely on the mode table below. If a mode is locked, show the unlock message and stop.
