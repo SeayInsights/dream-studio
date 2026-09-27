@@ -1,0 +1,172 @@
+version: 1.0
+
+# Things to AVOID
+avoid:
+  - id: bare-name-import-of-hyphenated-file
+    pattern: >
+      from repo_analyzer import analyze_repositories (or any bare-name import
+      of repo-analyzer.py)
+    why: >
+      repo-analyzer.py's filename has a hyphen, which is not a valid Python
+      identifier -- no sys.path arrangement makes `import repo_analyzer` or
+      `from repo_analyzer import X` resolve to this file. analyze-repos.py
+      shipped with exactly this bare-name import and crashed immediately on
+      every invocation with ModuleNotFoundError: No module named
+      'repo_analyzer' (fixed in #829).
+    instead: >
+      Load it by file path: importlib.util.spec_from_file_location
+      ("repo_analyzer", <path-to-repo-analyzer.py>), module_from_spec(spec),
+      then spec.loader.exec_module(module). See repo-analyzer.py's own
+      docstring and analyze-repos.py's top-of-file import for the working
+      pattern.
+    severity: critical
+
+  - id: repo-root-parent-hop-off-by-one
+    pattern: >
+      Deriving the dream-studio repo root from Path(__file__) with the wrong
+      number of .parent hops
+    why: >
+      repo-analyzer.py lives 4 levels under the repo root
+      (canonical/skills/analyze/repo-analyzer.py) and analyze-repos.py lives 5
+      levels under it (canonical/skills/analyze/modes/repo/analyze-repos.py).
+      Getting the hop count wrong doesn't crash loudly -- it silently lands on
+      the wrong directory. repo-analyzer.py's own sys.path insert landed one
+      level short, at canonical/ instead of the repo root, breaking
+      `import shared`; analyze-repos.py's landed at canonical/skills instead
+      of the repo root, breaking `from repo_analyzer import ...` in the other
+      direction. Both shipped broken and were only caught by running the CLI
+      end to end (fixed in #829).
+    instead: >
+      After changing a file's directory depth, or adding a new .parent hop,
+      print the resulting path (or assert it looks right) and run the script
+      for real -- don't trust the arithmetic by inspection alone.
+    severity: critical
+
+  - id: bare-except-hides-wrong-import-path
+    pattern: >
+      try: from skills.analyze.domains import DomainAnalyzerRegistry / except
+      ImportError: DOMAIN_SUPPORT = False
+    why: >
+      `skills.analyze.domains` names a top-level `skills` package this repo
+      has never had -- the real path is canonical.skills.analyze.domains. The
+      bare except ImportError swallowed that typo and just set DOMAIN_SUPPORT
+      = False; every domain-specific analysis silently degraded to "Domain
+      support not available" with no traceback, for as long as this shipped
+      (fixed in #829). A wrong import inside a broad except is invisible; the
+      same wrong import without the except would have been a one-line fix on
+      first run.
+    instead: >
+      Use the real dotted path (canonical.skills.analyze.domains), and keep
+      any surrounding except narrow enough that an unrelated ImportError
+      elsewhere in the chain doesn't get misattributed to "domain support
+      isn't installed."
+    severity: high
+
+  - id: duplicate-module-identity-via-side-effect-sys-path
+    pattern: >
+      Importing DomainAnalyzerRegistry via a bare `from domains.registry
+      import DomainAnalyzerRegistry` in a file that also (directly or
+      transitively) imports it via canonical.skills.analyze.domains
+    why: >
+      `domains.registry` only resolves at all because loading
+      repo-analyzer.py first (via the importlib fix above) has the side
+      effect of putting canonical/skills/analyze/ on sys.path -- that's
+      registry.py's own internal sys.path insert for core/base_analyzer.py.
+      That makes `domains.registry` and
+      `canonical.skills.analyze.domains.registry` two DIFFERENT module
+      objects for the same file on disk, so analyze-repos.py's --auto-detect
+      path was calling auto_detect_domain() on a SEPARATE
+      DomainAnalyzerRegistry with its own independently-populated
+      _analyzers dict -- not the one repo-analyzer.py's own domain-specific
+      analysis uses. Found in #829's own review round, one bug of the exact
+      same class as the import path fix that PR was already making.
+    instead: >
+      Import a shared singleton/registry via one canonical dotted path
+      everywhere it is used in the same process. When two import routes
+      could plausibly reach the same file, verify with an `is` identity
+      check rather than assuming they're the same object.
+    severity: high
+
+  - id: broad-substring-marker-matching-on-large-repos
+    pattern: >
+      Calling DomainAnalyzerRegistry.auto_detect_domain() against a large,
+      general-purpose repo root and trusting the winning domain without
+      inspecting domain_scores
+    why: >
+      Marker matching uses repo_path.rglob(f"**/*{marker}*") -- a recursive
+      SUBSTRING match against every file name under repo_path, not a targeted
+      check for real domain content. On a large monorepo, common words used
+      as finance markers (budget, tax, ledger, invoice) turn up somewhere by
+      coincidence. Verified directly while fixing this file's own sibling
+      test: pointing auto_detect_domain at the correctly-computed dream-studio
+      repo root (see repo-root-parent-hop-off-by-one above) returns
+      'finance', not 'general', even though dream-studio is not a
+      finance-domain repo -- the older, uncorrected version of that same test
+      only "passed" because its off-by-one repo_path bug scoped the scan down
+      to canonical/, which happens not to trip the finance markers.
+    instead: >
+      Pass verbose=True and inspect domain_scores before trusting
+      --auto-detect's answer on anything larger than a small, single-purpose
+      repo. Treat a low winning score as inconclusive, not authoritative.
+    severity: medium
+
+# Best PRACTICES
+best_practices:
+  - id: verify-cli-end-to-end-not-just-import
+    practice: >
+      After changing sys.path or import statements in repo-analyzer.py or
+      analyze-repos.py, actually run both entry points from the repo root
+      (py canonical/skills/analyze/repo-analyzer.py <path> --format json and
+      py canonical/skills/analyze/modes/repo/analyze-repos.py <path> --format
+      json), including --list-domains and --auto-detect, rather than trusting
+      that the import merely doesn't raise.
+    benefit: >
+      The bare except ImportError around the domain-registry import means a
+      broken import path produces no visible error at all -- only a
+      silently-disabled capability. Only an end-to-end run surfaces that
+      domain support never actually loaded.
+    when: Any change to this file's or analyze-repos.py's import/sys.path setup
+
+  - id: vendor-the-dependencies-this-skill-actually-ships-with
+    practice: >
+      Keep repo_analysis/ (the general pattern-analysis engine) vendored as a
+      sibling of repo-analyzer.py inside canonical/skills/analyze/, not at the
+      dream-studio repo root.
+    benefit: >
+      dist/plugin only publishes canonical/skills/** and canonical/agents/**
+      verbatim -- a dependency living at the repo root (this was previously
+      shared/repo_analysis) never reaches an installed Dream Studio even
+      after every import path inside it is fixed. This was PR #829's own
+      disclosed, deliberate gap, closed one commit later in #832.
+    when: Adding any new internal import this skill depends on
+
+# Edge CASES handled
+edge_cases:
+  - case: canonical.skills.analyze.domains import fails (missing, moved, or run outside a full checkout)
+    handling: >
+      DOMAIN_SUPPORT is set to False and a [WARN] is printed once at import
+      time; general SKILL.md pattern analysis still runs normally. --domain
+      and --auto-detect print "Domain support not available" instead of
+      crashing.
+    limitation: >
+      This same fallback previously masked the #829 bare-except bug for an
+      unknown period -- a silently-disabled capability looks identical, from
+      the CLI's output alone, to a deliberately-absent one. Don't read
+      "Domain support not available" as expected/normal without checking why.
+
+# Known LIMITATIONS
+limitations:
+  - limitation: >
+      Domain-specific analysis (canonical.skills.analyze.domains) still needs
+      the full dream-studio repo-root package tree on sys.path -- it is not
+      vendored the same self-contained way repo_analysis/ was in #832.
+    impact: >
+      An installed Dream Studio (dist/plugin only, no repo root) can run
+      general SKILL.md pattern analysis standalone, but --domain and
+      --auto-detect degrade to "Domain support not available" outside a full
+      source checkout.
+    workaround: Run domain-specific analysis from a full dream-studio checkout.
+    planned_fix: Not scheduled -- disclosed, accepted gap from #832.
+
+# DEPRECATIONS
+deprecated: []
