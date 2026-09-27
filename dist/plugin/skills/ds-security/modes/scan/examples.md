@@ -1,72 +1,8 @@
 # scan — Detailed Reference
 
-Extracted from SKILL.md to reduce context injection size.
-
-  "ingested_at": "{ISO-8601}"
-}
-```
-
-5. Parse SARIF to extract finding counts: iterate `runs[].results[]`, group by `level` (error=critical/high, warning=medium, note=low).
-
-#### Step I4: Present Summary
-
-Show:
-1. Storage path where results were saved.
-2. Finding counts table: Critical / High / Medium / Low / Note.
-3. "Run `scan status --client {client}` to see full coverage, or `secure: pr-review` to triage findings."
-
----
-
-### Mode: `status`
-
-#### Step T0: Parse Arguments
-
-Extract from user input:
-- `--client <name>` — required.
-
-#### Step T1: Load Client Profile
-
-1. Read `~/.dream-studio/clients/{client}.yaml`.
-2. Collect repo list: `scan.priority_repos` minus `scan.exclude_repos`. If `priority_repos` is empty, note that — coverage report will only reflect repos with ingested results.
-
-#### Step T2: Inventory Scan Store
-
-1. List all directories under `~/.dream-studio/security/scans/{client}/`.
-2. For each repo directory found:
-   - Find the most recent `{date}/` subdirectory.
-   - Read `scan-meta.json` if present.
-   - Determine staleness: if most recent scan date is >7 days ago, mark **STALE**.
-3. For repos in `priority_repos` with no directory under `scans/{client}/`: mark **NO RESULTS**.
-
-#### Step T3: Check Workflow Presence
-
-For each repo in `priority_repos`:
-1. Run `gh api repos/{github_org}/{repo}/contents/.github/workflows/security-scan.yml --silent` to check if the workflow file is committed.
-2. If not found (404): mark **NO SCANNER**.
-
-#### Step T4: Render Coverage Report
-
-Output as a markdown table:
-
-```
-# Scan Coverage — {client} ({date})
-
-| Repo | Scanner | Last Scan | Age | Critical | High | Status |
-|------|---------|-----------|-----|----------|------|--------|
-| repo-a | ✓ | 2026-04-20 | 2d | 0 | 1 | CURRENT |
-| repo-b | ✓ | 2026-04-10 | 12d | 2 | 3 | STALE |
-| repo-c | ✗ | — | — | — | — | NO SCANNER |
-| repo-d | ✓ | — | — | — | — | NO RESULTS |
-
-**Summary:** {N} repos total | {N} current | {N} stale | {N} no scanner | {N} no results
-
-**Action items:**
-- STALE repos: run `scan ingest --client {client} --repo {repo}` after next workflow run
-- NO SCANNER repos: run `scan setup --client {client} --repo {repo}` to generate workflow
-- NO RESULTS repos: workflow exists but no results ingested yet — trigger a run and ingest
-```
-
----
+Extracted from SKILL.md to reduce context injection size. The `setup`, `ingest`, and `status`
+mode step-by-step instructions live in `SKILL.md` itself; this file covers the output schema,
+where generated files land, and anti-patterns.
 
 ## Output Schema
 

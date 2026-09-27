@@ -1,5 +1,15 @@
 # security-dashboard — Changelog
 
+## [1.1.0] - 2026-09-27
+
+### Fixed
+- `template` mode's own instructions (in both `SKILL.md` and `examples.md`) claimed a
+  Power BI `.pbit` file gets copied to `~/Downloads/`. No `.pbit` ever shipped with
+  this repo — only `templates/security/powerbi/dashboard-spec.md`, a markdown spec.
+  Rewrote `template` mode to accurately describe what it delivers today: the spec
+  plus a connection README, with building the actual `.pbit` in Power BI Desktop
+  left as an explicit human step.
+
 ## [1.0.0] - 2026-04-28
 
 ### Added

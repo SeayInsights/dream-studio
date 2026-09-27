@@ -1,5 +1,18 @@
 # scan — Changelog
 
+## [1.1.0] - 2026-09-27
+
+### Fixed
+- `SKILL.md`'s Step I3 `scan-meta.json` example was truncated mid-JSON by a botched
+  extraction to `examples.md` (an unclosed code fence spliced directly into
+  `## Detailed Reference`). The extraction also silently dropped Step I4 (`Present
+  Summary`) and the entire `status` mode's step-by-step instructions (Steps T0-T4),
+  even though `status` is one of the three modes advertised in `SKILL.md`'s own
+  `## Modes` list. Restored the complete JSON example and moved the `status` mode's
+  real instructions back into `SKILL.md`, matching how `setup` and `ingest` are
+  already fully self-contained there. `examples.md` now holds only what it always
+  should have: the output schema, generated-file locations, and anti-patterns.
+
 ## [1.0.0] - 2026-04-28
 
 ### Added

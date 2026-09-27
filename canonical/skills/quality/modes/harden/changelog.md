@@ -1,5 +1,18 @@
 # harden — Changelog
 
+## [1.1.1] - 2026-09-27
+
+### Fixed
+- Phase 2's Tier 1 file copy instructions pointed at `templates/project-standards/`
+  "in the dream-studio repo" — a directory that does not exist at that path. The
+  real location, verified against the working tree, is
+  `packs/domains/templates/project-standards/` (9 files: README.md, Makefile,
+  pyproject.toml, .coveragerc, SECURITY.md, CONTRIBUTING.md,
+  .pre-commit-config.yaml, requirements.txt, requirements-dev.txt). Confirmed
+  `context-template.md` (Phase 1's memory-system stub) is a separate file that
+  already lives alongside this skill (`templates/context-template.md`, not the
+  project-standards directory) and was not confused with the Tier 1 file list.
+
 ## [1.1.0] - 2026-08-04
 
 ### Added

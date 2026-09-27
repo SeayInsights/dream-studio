@@ -1,5 +1,14 @@
 # Database Skill Changelog
 
+## Suppressions.yml claim fixed — 2026-09-27
+
+`audit/SKILL.md` Step 5's `../suppressions.yml` (operator-level) check read as
+unconditional. No such template ships anywhere in this repo. Reworded to
+"if it exists" and to treat a missing file as a no-op — this skill says "Same as
+security audit" for suppressions handling, and `security:review:audit` was fixed
+the same way in the same round (caught by that PR's own review-lane finding, which
+also caught that the fix's changelog had wrongly claimed this file already did it).
+
 ## Cross-DB Port — 2026-06-01
 
 Cross-database port. All 22 rules extended with universal detection notes.

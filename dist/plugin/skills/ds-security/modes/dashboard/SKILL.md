@@ -29,7 +29,7 @@ This skill never modifies scan results or client code. It reads from upstream sk
 ## Modes
 - `generate` — Run the full ETL pipeline from scratch. Parses all scan results, scores, maps, mitigates, and exports the complete dataset.
 - `refresh` — Re-run ETL with latest scan data. Preserves trends history (appends to trends.csv instead of overwriting). Use after new scans are ingested via `scan:ingest`.
-- `template` — Copy the Power BI template (.pbit) to `~/Downloads/` with a connection-info README showing the dataset path for this client.
+- `template` — Hand off the Power BI dashboard spec (`templates/security/powerbi/dashboard-spec.md`) and a connection-info README showing the dataset path for this client. No `.pbit` file ships with this repo today; a human builds the actual `.pbit` in Power BI Desktop by following the spec.
 
 ---
 
@@ -69,13 +69,28 @@ Before running `generate`, these must exist:
 - `~/.dream-studio/security/scans/{client}/` — at least one repo with scan results
 - `~/.dream-studio/clients/{client}.yaml` — valid client profile
 
+## Mode: `template`
+
+**This delivers a spec, not a binary template.** No `.pbit` file ships anywhere in
+this repo — only `templates/security/powerbi/dashboard-spec.md`, a markdown
+specification of the dashboard's data model, DAX measures, page layouts, and M-query
+data source configuration. Building the real `.pbit` from that spec is a manual step
+in Power BI Desktop; this skill does not automate it.
+
+### Steps
+1. Check that the dataset directory exists: `~/.dream-studio/security/datasets/{client}/`
+2. Point the user at `templates/security/powerbi/dashboard-spec.md` and the dataset path.
+3. Generate a connection-info README summarizing the CSV files and how to wire the
+   spec's parameters (`ClientName`, `Enterprise`, `DatasetPath`, `RulePrefix`) to
+   this client's data.
+
 ## Anti-Patterns
 
 - **Do NOT run scans from this skill.** Scanning is `ds-security scan`'s responsibility. This skill only reads existing scan results.
 - **Do NOT modify scan SARIF/JSON files.** The ETL pipeline is read-only over scan data.
 - **Do NOT hardcode client names.** Always parameterize from `--client` argument.
 - **Do NOT skip the validation step.** If scans directory is empty, abort with a clear message directing the user to run `scan:ingest` first.
-- **Do NOT write the Power BI .pbit file to the project directory.** Always write to `~/Downloads/` per the file output rule.
+- **Do NOT claim a `.pbit` file was produced.** `template` mode hands off the markdown spec and a connection README to `~/Downloads/`; it does not generate or copy a binary Power BI template, because none exists in this repo.
 - **Do NOT overwrite trends.csv entirely.** The export script preserves history automatically — only the current date's row is replaced.
 
 ---
