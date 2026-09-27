@@ -75,3 +75,45 @@ X critical, Y high, Z medium, W low
 
 **PASS** — 0 critical, 0 high findings.
 **FAIL** — N critical and/or N high findings must be resolved before merge.
+
+---
+
+## Skill Boundary
+
+**Fullstack `secure` owns:** cross-boundary checks specific to the frontend+backend pair this
+pipeline just built — auth flow traced end-to-end against the `api-contract.json` docstore
+artifact (login → token issuance → storage → protected request → server-side validation),
+CORS between the actual frontend origin and the actual backend allowlist, and CSP headers for
+the frontend that was just generated. It is a **mandatory pipeline stage gate**
+(`spec → (frontend || backend) → integrate → secure → ship`) — `fullstack`'s own anti-patterns
+say "DON'T declare the pipeline complete without running secure." It is not an on-demand
+entry point the way the two skills below are; it only runs, and only makes sense, once both
+sides of one contract exist.
+
+**`ds-security:review` owns:** general-purpose code security review, invoked directly rather
+than as a pipeline stage, over arbitrary code with no `api-contract.json` involved:
+- `diff` — "is this PR's new code exploitable?" Freeform LLM judgment over a git diff only,
+  high-confidence (≥8/10) findings, new lines only, no tool execution, opus.
+- `audit` — "does the whole codebase meet the 22-rule security baseline?" Rule-based: static
+  tools (gitleaks, bandit, semgrep, pip-audit) plus an LLM pass per rule, any repo, any time.
+- `build` — "does this about-to-be-generated snippet violate a build-blocking rule?"
+  Synchronous, static-pattern-only, blocks generation on critical/high findings.
+
+**`ds-quality:pr-security-scan` owns:** a separate, general-purpose parallel-subagent review —
+one analyst per OWASP category or STRIDE threat — triggered on any PR touching auth, payments,
+user data, or API endpoints, codebase-agnostic and independent of any fullstack pipeline state.
+It produces its own SHIP/BLOCKED verdict from the diff and architecture description alone.
+
+**Why there's no overlap despite similar-sounding checks:** `security:review:audit` and
+`ds-quality:pr-security-scan` both cover CORS, CSP, and auth-enforcement categories in the
+abstract — but neither reads `api-contract.json` or reasons about one specific frontend/backend
+pair produced by one pipeline run. `secure` narrows the same categories (CORS, CSP, auth flow)
+to that one contract's actual origin, actual token type, and actual protected-route list. A PR
+touching auth mid-fullstack-pipeline can legitimately trigger both `secure` (because the
+pipeline requires it before `ship`) and `pr-security-scan` (because the diff matches its
+trigger) without either being redundant: `secure` verifies the contract was honored;
+`pr-security-scan` reviews the diff on its own terms.
+
+**Integration with Other Fullstack Modes:** `spec → (frontend || backend) → integrate →
+secure → ship`. `secure` is the pipeline's final gate before ship — never skip it. See
+`../../SKILL.md` for the orchestrator's full mode routing and auto-detection.

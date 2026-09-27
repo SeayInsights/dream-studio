@@ -46,18 +46,31 @@ Check the docstore for `api-contract.json` (`ds files read "api-contract.json"`)
 DO generate the API contract if one doesn't exist — never build blind.
 DON'T modify an existing contract without flagging the change: state the diff and get confirmation before proceeding.
 
-Contract schema:
+Contract schema (see `../../../templates/api-contract.md` for the full field reference):
 ```json
 {
-  "version": "1",
+  "version": "1.0",
+  "base_url": "/api",
+  "auth": {
+    "type": "jwt | session | api-key | none",
+    "token_header": "Authorization",
+    "token_prefix": "Bearer"
+  },
   "endpoints": [
     {
-      "method": "POST",
       "path": "/api/resource",
-      "request": { "field": "type" },
-      "response": { "field": "type" },
-      "auth": "bearer | none | session",
-      "errors": ["400 validation", "401 unauthorized"]
+      "method": "POST",
+      "description": "Create a resource",
+      "auth_required": true,
+      "request": {
+        "query": null,
+        "body": { "field": "type" }
+      },
+      "response": {
+        "201": { "field": "type" },
+        "400": { "error": "string" },
+        "401": { "error": "string" }
+      }
     }
   ]
 }
@@ -74,7 +87,7 @@ Produce all four output types for the detected stack:
 | Env template | `.env.example` with all required keys (no values) |
 
 DO validate every request body at the API boundary — trust nothing from the client.
-DO return error shapes matching the contract's `errors` array exactly.
+DO return response shapes matching the contract's per-endpoint `response` object exactly, for every documented status code.
 DON'T implement endpoints not in the contract without updating the contract first.
 DON'T store secrets in code — env vars or secret managers only.
 DON'T hardcode framework versions — use latest stable at time of build.
