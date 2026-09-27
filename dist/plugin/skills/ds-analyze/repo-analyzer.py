@@ -9,27 +9,37 @@ Supports domain-specific analysis (design, career, finance, real estate) and
 general SKILL.md pattern analysis.
 
 Usage:
-    from skills.analyze.repo_analyzer import analyze_repositories
+    Run directly (CLI):
+        py repo-analyzer.py /path/to/repo1 --format markdown
 
-    # Domain-specific analysis
-    result = analyze_repositories(['/path/to/repo1'], domain='design')
+    Or import -- this file's hyphenated name is not a valid Python module name,
+    so a normal `import`/`from X import Y` cannot reach it; load it by path:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("repo_analyzer", "repo-analyzer.py")
+        repo_analyzer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(repo_analyzer)
 
-    # General SKILL.md pattern analysis (backward compatible)
-    result = analyze_repositories(['/path/to/repo1'])
+        # Domain-specific analysis
+        result = repo_analyzer.analyze_repositories(['/path/to/repo1'], domain='design')
+
+        # General SKILL.md pattern analysis (backward compatible)
+        result = repo_analyzer.analyze_repositories(['/path/to/repo1'])
 """
 
 import sys
 from pathlib import Path
 
-# Add parent directory to path to import shared modules
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+# Add the dream-studio repo root to path to import shared modules -- this file
+# lives at <repo_root>/canonical/skills/analyze/repo-analyzer.py, four levels
+# down from repo_root.
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from shared.repo_analysis.analyzer import RepoAnalyzer
 from shared.repo_analysis.formatters import json_formatter, markdown_formatter
 
 # Import domain registry
 try:
-    from skills.analyze.domains import DomainAnalyzerRegistry
+    from canonical.skills.analyze.domains import DomainAnalyzerRegistry
 
     DOMAIN_SUPPORT = True
 except ImportError:
