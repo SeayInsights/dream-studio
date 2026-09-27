@@ -19,7 +19,7 @@ dream_studio:
 Read `gotchas.yml` in this directory before every invocation.
 
 ## Trigger
-`/analyze <mode> <input>`, `analyze:`, or invoked by other skills (e.g., career-evaluate)
+`/analyze <mode> <input>`, `analyze:`, or invoked by other modes in this pack — e.g. `repo` mode's own documented handoff to `evaluate-strategy` (see modes/repo/SKILL.md's "Integration with multi mode")
 
 ## Purpose
 Spawn specialized analyst subagents in parallel, each evaluating the same input from a different perspective. Collect structured signals, compute mechanical scores, detect disagreements, and synthesize into a decision memo.
@@ -37,7 +37,7 @@ Inspired by multi-agent hedge fund architectures, adapted for career offers, cli
 
 ## Next in Pipeline
 - Standalone: presents decision memo directly to user
-- After career-evaluate: appends quantitative analysis to qualitative report
+- After `repo` mode: receives repo mode's quantitative pattern-adoption data and synthesizes it into a strategic decision memo via `evaluate-strategy` (see modes/repo/SKILL.md's "Integration with multi mode")
 - Before a decision: user reviews memo, then acts
 
 ---
