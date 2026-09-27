@@ -1,0 +1,451 @@
+{
+  "_comment": "E19 systemic eval-discovery registry. Every canonical/skills/**/SKILL.md file must have an entry here (enforce-or-declare, same convention as agent_coverage.py/rule_enforcement.py): status is one of 'no_output' (router/reference/exempt -- genuinely produces nothing of its own to test), 'covered' (a real behavioral test exercises its declared output; covered_by lists the test file(s)), or 'gap' (a real declared output exists with no verified test yet -- tracked debt, not a release blocker, same ratchet core/gates/fail_open_census.py uses for its baseline). core/gates/skill_eval_coverage_census.py enforces every SKILL.md has an entry and that every 'covered' entry's test file(s) actually exist; a NEW skill file with no entry at all is what fails the gate. Re-seed additions with `py -m core.gates.skill_eval_coverage_census --update` after adding a skill.",
+  "skills": {
+    "analyze/SKILL.md": {
+      "reason": "pack/mode-family router; delegates to modes/<mode>/SKILL.md, no capability of its own",
+      "status": "no_output"
+    },
+    "analyze/modes/domain-re/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "analyze/modes/idea-validation/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "analyze/modes/intelligence/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "analyze/modes/multi/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "analyze/modes/repo/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "analyze/modes/research/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "apps/SKILL.md": {
+      "reason": "pack/mode-family router; delegates to modes/<mode>/SKILL.md, no capability of its own",
+      "status": "no_output"
+    },
+    "apps/modes/game-dev/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "apps/modes/mcp-build/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "apps/modes/mobile/SKILL.md": {
+      "reason": "pure reference knowledge (patterns/anti-patterns/gotchas/commands); informs code written elsewhere, no separate artifact",
+      "status": "no_output"
+    },
+    "apps/modes/saas-build/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "code-health/SKILL.md": {
+      "reason": "pack/mode-family router; delegates to modes/<mode>/SKILL.md, no capability of its own",
+      "status": "no_output"
+    },
+    "code-health/modes/architecture/SKILL.md": {
+      "reason": "pack/mode-family router; delegates to modes/<mode>/SKILL.md, no capability of its own",
+      "status": "no_output"
+    },
+    "code-health/modes/architecture/audit/SKILL.md": {
+      "claim": "detect_stack().architecture_framework / .monorepo_type",
+      "covered_by": [
+        "tests/evals/test_skill_output_contracts_at_scale.py"
+      ],
+      "status": "covered"
+    },
+    "code-health/modes/audit/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "code-health/modes/code-quality/SKILL.md": {
+      "reason": "pack/mode-family router; delegates to modes/<mode>/SKILL.md, no capability of its own",
+      "status": "no_output"
+    },
+    "code-health/modes/code-quality/audit/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "code-health/modes/code-quality/build/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "code-health/modes/debug/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "code-health/modes/groom/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "code-health/modes/structure-audit/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "code-health/modes/testing/SKILL.md": {
+      "reason": "pack/mode-family router; delegates to modes/<mode>/SKILL.md, no capability of its own",
+      "status": "no_output"
+    },
+    "code-health/modes/testing/audit/SKILL.md": {
+      "claim": "detect_stack().test_framework",
+      "covered_by": [
+        "tests/evals/test_skill_output_contracts_at_scale.py"
+      ],
+      "status": "covered"
+    },
+    "code-health/modes/testing/build/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "core/SKILL.md": {
+      "reason": "pack/mode-family router; delegates to modes/<mode>/SKILL.md, no capability of its own",
+      "status": "no_output"
+    },
+    "core/learn/expand/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "core/learn/expand/audit/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "core/modes/build/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "core/modes/coach/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "core/modes/explain/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "core/modes/handoff/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "core/modes/learn/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "core/modes/plan/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "core/modes/recap/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "core/modes/review/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "core/modes/ship/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "core/modes/technical-writing/SKILL.md": {
+      "reason": "pure reference knowledge; informs docs content written elsewhere, no separate artifact",
+      "status": "no_output"
+    },
+    "core/modes/think/SKILL.md": {
+      "claim": "ds files write \"specs/<topic>/spec.md\" and \"adr/ADR-NNNN-*.md\"",
+      "covered_by": [
+        "tests/evals/test_skill_output_contracts_at_scale.py"
+      ],
+      "status": "covered"
+    },
+    "core/modes/verify/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "data/SKILL.md": {
+      "reason": "pack/mode-family router; delegates to modes/<mode>/SKILL.md, no capability of its own",
+      "status": "no_output"
+    },
+    "data/modes/data-engineering/SKILL.md": {
+      "reason": "pure reference knowledge; informs dbt/pipeline code written elsewhere, no separate artifact",
+      "status": "no_output"
+    },
+    "data/modes/database/SKILL.md": {
+      "reason": "pack/mode-family router; delegates to modes/<mode>/SKILL.md, no capability of its own",
+      "status": "no_output"
+    },
+    "data/modes/database/audit/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "data/modes/database/build/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "domains/SKILL.md": {
+      "reason": "pack/mode-family router; delegates to modes/<mode>/SKILL.md, no capability of its own",
+      "status": "no_output"
+    },
+    "domains/modes/dashboard-dev/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "domains/modes/power-platform/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "ds-bootstrap/SKILL.md": {
+      "reason": "passive context only, not a dispatched skill (its own doc says so explicitly)",
+      "status": "no_output"
+    },
+    "fullstack/SKILL.md": {
+      "claim": "ds files write \"api-contract.json\" (inline Spec Mode)",
+      "covered_by": [
+        "tests/evals/test_skill_output_contracts_at_scale.py"
+      ],
+      "status": "covered"
+    },
+    "fullstack/modes/backend/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "fullstack/modes/backend/audit/SKILL.md": {
+      "claim": "detect_stack().web_framework",
+      "covered_by": [
+        "tests/evals/test_skill_output_contracts_at_scale.py"
+      ],
+      "status": "covered"
+    },
+    "fullstack/modes/backend/build/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "fullstack/modes/frontend/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "fullstack/modes/frontend/audit/SKILL.md": {
+      "claim": "detect_stack().frontend_framework",
+      "covered_by": [
+        "tests/evals/test_skill_output_contracts_at_scale.py"
+      ],
+      "status": "covered"
+    },
+    "fullstack/modes/frontend/build/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "fullstack/modes/integrate/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "fullstack/modes/secure/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "infra/SKILL.md": {
+      "reason": "pack/mode-family router; delegates to modes/<mode>/SKILL.md, no capability of its own",
+      "status": "no_output"
+    },
+    "infra/modes/devops/SKILL.md": {
+      "reason": "pure reference knowledge; informs CI/CD config written elsewhere, no separate artifact",
+      "status": "no_output"
+    },
+    "infra/modes/kubernetes/SKILL.md": {
+      "reason": "pure reference knowledge; informs k8s manifests written elsewhere, no separate artifact",
+      "status": "no_output"
+    },
+    "infra/modes/terraform/SKILL.md": {
+      "reason": "pure reference knowledge; informs Terraform config written elsewhere, no separate artifact",
+      "status": "no_output"
+    },
+    "quality/SKILL.md": {
+      "reason": "pack/mode-family router; delegates to modes/<mode>/SKILL.md, no capability of its own",
+      "status": "no_output"
+    },
+    "quality/modes/harden/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "quality/modes/pr-security-scan/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "quality/modes/types-deps/SKILL.md": {
+      "reason": "pack/mode-family router; delegates to modes/<mode>/SKILL.md, no capability of its own",
+      "status": "no_output"
+    },
+    "quality/modes/types-deps/audit/SKILL.md": {
+      "claim": "detect_stack() stack-general dispatch",
+      "covered_by": [
+        "tests/evals/test_skill_output_contracts_at_scale.py"
+      ],
+      "status": "covered"
+    },
+    "quality/modes/types-deps/build/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "release/SKILL.md": {
+      "reason": "pack/mode-family router; delegates to modes/<mode>/SKILL.md, no capability of its own",
+      "status": "no_output"
+    },
+    "release/modes/ops/SKILL.md": {
+      "reason": "pack/mode-family router; delegates to modes/<mode>/SKILL.md, no capability of its own",
+      "status": "no_output"
+    },
+    "release/modes/ops/audit/SKILL.md": {
+      "claim": "detect_stack().has_dockerfile / .has_docker_compose / .has_k8s_manifest / .is_service",
+      "covered_by": [
+        "tests/evals/test_skill_output_contracts_at_scale.py"
+      ],
+      "status": "covered"
+    },
+    "release/modes/pre-launch/SKILL.md": {
+      "reason": "pack/mode-family router; delegates to modes/<mode>/SKILL.md, no capability of its own",
+      "status": "no_output"
+    },
+    "release/modes/pre-launch/audit/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "security/SKILL.md": {
+      "reason": "pack/mode-family router; delegates to modes/<mode>/SKILL.md, no capability of its own",
+      "status": "no_output"
+    },
+    "security/modes/binary-scan/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "security/modes/comply/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "security/modes/comply/privacy/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "security/modes/dashboard/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "security/modes/dast/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "security/modes/mitigate/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "security/modes/netcompat/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "security/modes/review/SKILL.md": {
+      "reason": "pack/mode-family router; delegates to modes/<mode>/SKILL.md, no capability of its own",
+      "status": "no_output"
+    },
+    "security/modes/review/audit/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "security/modes/review/build/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "security/modes/review/diff/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "security/modes/scan/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "setup/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "setup/modes/jit/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "setup/modes/status/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "setup/modes/wizard/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "website/SKILL.md": {
+      "reason": "pack/mode-family router; delegates to modes/<mode>/SKILL.md, no capability of its own",
+      "status": "no_output"
+    },
+    "website/modes/accessibility/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "website/modes/animate/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "website/modes/brand/SKILL.md": {
+      "claim": "scripts/generate-tokens.py DTCG token JSON + CSS",
+      "covered_by": [
+        "tests/evals/test_skill_output_contracts_at_scale.py"
+      ],
+      "status": "covered"
+    },
+    "website/modes/cip/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "website/modes/critique/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "website/modes/deck/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "website/modes/design/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "website/modes/direction/SKILL.md": {
+      "claim": "ds files write \"direction-lock.json\"",
+      "covered_by": [
+        "tests/evals/test_skill_output_contracts_at_scale.py"
+      ],
+      "status": "covered"
+    },
+    "website/modes/discover/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "website/modes/page/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "website/modes/polish/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "website/modes/prototype/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "workflow/SKILL.md": {
+      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    }
+  }
+}
