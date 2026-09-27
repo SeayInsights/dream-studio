@@ -19,7 +19,7 @@ dream_studio:
 Read `gotchas.yml` in this directory before every invocation.
 
 ## Trigger
-`build feature:`, `build api:`, `build page:`, `build component:`, `build schema:`, `build artifact:`, `deploy:`, `review fullstack:`, `typescript:`, `build astro:`, `build supabase:`, CRO commands, SEO commands, analytics commands
+`build feature:`, `build api:`, `build page:`, `build component:`, `build schema:`, `build artifact:`, `deploy:`, `review fullstack:`, `typescript:`, `build astro:`, CRO commands, SEO commands, analytics commands
 
 ## Stack
 - **Frontend**: React 19, React Router 7
@@ -81,30 +81,6 @@ export async function up(db: Kysely<any>): Promise<void> {
 - Push to GitHub only — CI handles deploys
 - Environment variables: set in Cloudflare dashboard, never in code
 - Preview deployments: PR branches get preview URLs automatically
-
-## Environment Detection {#env-detection}
-
-Run `shared/version-detection.sh` to detect versions, then use appropriate syntax based on installed versions.
-
-### Python Feature Gates
-
-| Feature | Min Version | Fallback |
-|---------|-------------|----------|
-| Structural pattern matching (match/case) | 3.10 | if/elif chains |
-| Union types (X \| Y) | 3.10 | Union[X, Y] from typing |
-| Async with statement groups | 3.9 | Sequential async with |
-| Dictionary merge operator (\|\|=) | 3.9 | dict.update() |
-| Type hints in standard collections | 3.9 | from typing import List, Dict |
-| Walrus operator (:=) | 3.8 | Regular assignment |
-
-### Node Feature Gates
-
-| Feature | Min Version | Fallback |
-|---------|-------------|----------|
-| Top-level await | 14.8 | Async IIFE wrapper |
-| Nullish coalescing (??) | 14.0 | \|\| operator with null checks |
-| Optional chaining (?.) | 14.0 | Manual null checks |
-| Private class fields (#field) | 12.0 | WeakMap or naming convention |
 
 ## Depth Status
 JIT-pending — examples and gotchas will be added from the first real SaaS feature build that uses this skill.
