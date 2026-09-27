@@ -122,6 +122,29 @@ See `examples.md` for detailed Mode A/B/C workflows and extraction examples.
 4. **When in doubt:** Default to `tech-minimal` for technical products, `editorial-modern` for content-heavy sites.
 5. **Mixing systems:** Do NOT blend systems within a single project. Pick one, commit, then customize within that system's constraints.
 
+**Relationship to `direction`'s philosophy schools:**
+This 5-preset taxonomy and the `direction` mode's 20-school taxonomy
+(`references/design-philosophies.md`) both describe the same underlying decision — a
+visual style choice — in two different vocabularies, and neither file cross-references
+the other's labels. They are not equivalent systems: `direction` locks an OKLch palette
+and font pairing to one named school as the pipeline's mandatory second stage; this
+mode's presets are a lighter-weight bundle (tokens, components, templates) for
+standalone design-system/theme work. If a project runs both — for example, `direction`
+locks a school, then this mode is invoked later for an ad or component — reconcile the
+labels explicitly rather than assuming they already agree. As a rough, non-equivalence
+compass:
+
+| This mode's preset | Nearest `direction` school(s) |
+|---|---|
+| `tech-minimal` | Information Architects, Takram |
+| `editorial-modern` | Müller-Brockmann, Build |
+| `brutalist-bold` | Experimental Jetset, Sagmeister & Walsh |
+| `playful-rounded` | Resn |
+| `executive-clean` | Pentagram, Fathom |
+
+Treat this table as a starting point for reconciliation, not a lookup that replaces
+judgment.
+
 **Integration with Phase 3:**
 This table will power automated design system selection when curated presets are integrated in Phase 3. Each system name maps to a preset bundle (tokens, components, templates).
 
@@ -160,9 +183,9 @@ See `examples.md` for mode examples and detailed workflows.
 
 ## Integration Points
 
-- **Discovery → Font Pairings:** Use `search-font-pairings.py` to match mood/typography dimensions
+- **Discovery → Font Pairings:** Read `references/font-pairings.md` and grep it for the mood/typography dimensions you need — there is no search script (see "Search Utilities" above)
 - **Token Architecture:** 3-layer structure (base → semantic → component) from `token-architecture.md`
-- **Anti-Pattern Validation:** Run anti-pattern search before finalizing output
+- **Anti-Pattern Validation:** Read `references/anti-patterns.md` and grep it for the relevant pattern before finalizing output — there is no search script (see "Search Utilities" above)
 - **Priority Matrix:** P0-P2 (MVP) → P3-P5 (staged) → P6-P9 (enhancements)
 
 See `examples.md` for detailed integration workflows.

@@ -24,6 +24,12 @@ Read `gotchas.yml` in this directory before every invocation.
 ## Purpose
 Single decision tree replacing individual layout, typography, color, animation, copy, responsive, and edge case skills. One invocation, not fifteen.
 
+**Not the pipeline's own gate:** `critique` (opus, read-only, scored against the
+direction lock) is the website pipeline's own post-build quality gate — see
+`../../SKILL.md`'s Pipeline Enforcement Rules. This mode is the general-purpose
+critique-and-fix tool: it applies fixes directly and works on any UI, whether or
+not it came out of that pipeline.
+
 ## Checklists
 Domain-specific validation checklists live in `checklists/`:
 - `web-design.yml` — 8-dimension UI evaluation (typography, color, layout, spacing, images, shadows, accessibility, visual hierarchy)

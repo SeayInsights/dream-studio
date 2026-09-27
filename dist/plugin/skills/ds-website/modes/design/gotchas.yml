@@ -1,16 +1,42 @@
+# Design Mode — Gotchas
+# Seeded 2026-09-27 from a skill-fleet audit: the search-font-pairings.py /
+# search-anti-patterns.py dead-script bug (see this mode's own SKILL.md,
+# "Search Utilities" and "Integration Points" sections) plus two other issues
+# verified by reading this mode's SKILL.md directly. Remaining empty
+# categories are JIT: populate only from a real invocation or audit finding,
+# never speculative entries.
 version: 1.0
 
 # Things to AVOID
-avoid: []
+avoid:
+  - id: trust-nonexistent-search-scripts
+    severity: medium
+    discovered: 2026-09-27
+    title: "Never try to run search-font-pairings.py or search-anti-patterns.py"
+    context: "This mode's own SKILL.md named both scripts, including (until this fix) a still-live instruction in its Integration Points section, but neither file has ever existed in this repo. Any instruction to run one could only ever fail."
+    fix: "Read references/font-pairings.md or references/anti-patterns.md directly and grep them for the term you need — there is no search utility for either reference."
+
+  - id: blend-design-system-presets
+    severity: medium
+    discovered: 2026-09-27
+    title: "Never blend two design-system presets within one project"
+    context: "The Design System Selection table's own Selection Guidance (point 5) forbids mixing tech-minimal/editorial-modern/brutalist-bold/playful-rounded/executive-clean within a single project, but nothing enforces this mechanically — it is easy to drift mid-build."
+    fix: "Pick one preset up front, commit, and customize only within that system's own constraints."
 
 # Best PRACTICES
 best_practices: []
 
 # Edge CASES handled
-edge_cases: []
+edge_cases:
+  - id: design-vs-direction-taxonomy-mismatch
+    title: "design's 5 presets and direction's 20 philosophy schools don't auto-reconcile"
+    context: "A project that runs both direction (locks one of 20 philosophy schools) and design (picks one of 5 presets) can end up with two differently-labeled, unreconciled outputs for what is really one visual-style decision. See this mode's SKILL.md Design System Selection section for the rough reconciliation table."
 
 # Known LIMITATIONS
-limitations: []
+limitations:
+  - id: brand-asset-protocol-incomplete
+    title: "Brand Asset Protocol's \"5-step workflow\" lists zero steps"
+    context: "The Brand Asset Protocol section promises a 5-step workflow but the section under it contains no steps before jumping to Design System Selection. Do not rely on it; fall back to the Fact Verification First process and ask the user directly for brand assets/guidelines."
 
 # DEPRECATIONS
 deprecated: []

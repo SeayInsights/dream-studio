@@ -1,7 +1,20 @@
+# Polish Mode — Gotchas
+# Seeded 2026-09-27 from a skill-fleet audit: the critique-vs-polish trigger
+# ambiguity (see website/SKILL.md's Pipeline Enforcement Rules and this
+# mode's own Purpose section) plus one checklist-listing gap, both verified
+# by reading the mode's own files. Remaining empty categories are JIT:
+# populate only from a real invocation or audit finding, never speculative
+# entries.
 version: 1.0
 
 # Things to AVOID
-avoid: []
+avoid:
+  - id: confuse-polish-with-critique
+    severity: medium
+    discovered: 2026-09-27
+    title: "Don't treat polish as the pipeline's own auto-trigger post-build gate"
+    context: "This mode's own Trigger line claims it auto-triggers after build page:/build component:, while the pack root's Pipeline Enforcement Rule 4 separately recommends critique for that same moment. They are not the same step: critique is the pipeline's own read-only, opus-scored quality gate tied to the direction lock; polish is the general-purpose critique+fix tool, usable inside or outside a fresh pipeline run."
+    fix: "Inside a fresh website pipeline run, run critique first — it's the gate. Reach for polish when you want fixes applied directly, not just a score, or when there is no direction lock to score against."
 
 # Best PRACTICES
 best_practices: []
@@ -10,7 +23,10 @@ best_practices: []
 edge_cases: []
 
 # Known LIMITATIONS
-limitations: []
+limitations:
+  - id: checklists-list-incomplete
+    title: "The Checklists section's file list is not exhaustive"
+    context: "checklists/design-anti-patterns.yml exists and is loaded inline by the Color fix step in Step 2, but it is not listed alongside web-design.yml/fluent-design-compliance.yml/material-design-compliance.yml/data-viz-accessibility.yml at the top of the Checklists section."
 
 # DEPRECATIONS
 deprecated: []
