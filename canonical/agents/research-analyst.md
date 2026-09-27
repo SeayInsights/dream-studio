@@ -46,6 +46,27 @@ decide that the work is finished.
 
 Inlined at build time, so it is present whether or not you go and read anything.
 
+---
+dream_studio:
+  skill_id: ds-analyze
+  pack: analyze
+  mode: research
+  mode_type: analysis
+  inputs: [question, market_context]
+  outputs: [triangulated_findings, assumption_inventory, bias_flags, steel_manned_opposition]
+  capabilities_required: [Read, Agent]
+  model_preference: sonnet
+  estimated_duration: 20-40min
+  write_posture: read-only
+  lifecycle: published
+name: research
+description: Structured research with source-hierarchy triangulation, anti-sycophancy disconfirming-evidence-first protocol, and a bias check before delivering findings
+triggers: ["market research", "competitive analysis", "evidence gathering", "structured research", "source triangulation"]
+model_tier: sonnet
+---
+
+# Analyze — Research
+
 ## Patterns / Approach
 
 **Source Hierarchy**
