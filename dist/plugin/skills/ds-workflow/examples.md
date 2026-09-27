@@ -2,23 +2,29 @@
 
 Extracted from SKILL.md to reduce context injection size.
 
-  ```
-  <maintained-runner> eval <key> "<gate-condition>"
-  ```
-  If true → continue. If false → fall back to pause behavior.
+**None of this is driven through a `next`/`eval`/`update`/`pause` command loop** —
+`ds workflow` has no such subcommands (see SKILL.md's "The real command surface").
+`ds workflow advance`/`run` compute the ready wave, auto-skip condition-false
+nodes, dispatch each ready node, and record its status themselves. What follows
+here is what happens on the node's content once it has been dispatched to you —
+not a CLI sequence you drive by hand.
 
-- **`pause` with `requires`** → check artifacts exist (screenshots in `.verify/`, test output). If all present → continue. If missing → pause.
+**Gates declared in a workflow's `gates:` section (`type: pause`, `requires: [...]`,
+etc.) are schema only** — parsed and validated for existence, never read by
+`advance`/`run`. There is no engine behavior to describe here: if a node names a
+gate, treat that as an instruction to yourself to stop and ask the Director before
+doing the node's work, because nothing else will stop for it.
 
-**3c. Run the node**
+**3c. Do the node's work**
 
-Mark running:
-```
-<maintained-runner> update <key> <node-id> running
-```
+By the time a node is in a wave `advance` reported, its status is already one of
+`completed`/`blocked`/`unverified` (or `skipped`/`failed`) — set by the runner
+itself as part of dispatching it. There is no `update ... running` call for you to
+make; the runner already recorded that transition.
 
 **Skill node:**
 1. Read `skills/<skill-name>/SKILL.md`
-2. Resolve `input` field: for `{{node-id.output}}`, read the output from the maintained workflow runner's status command or from your memory of prior node results.
+2. Resolve `input` field: for `{{node-id.output}}`, read the output via `ds workflow status <key>` (a 60-character preview) or from your memory of prior node results.
 3. Spawn agent via Task tool with: skill content + `director-preferences.md` + resolved input
 4. Set `model` from node. Use `agent` field for persona if set.
 5. `context: fresh` (default) → new agent via Task tool. Pass ONLY the node's input + skill content + config — do NOT paste prior nodes' full output into the prompt. If the new agent needs a prior node's verdict, include just the verdict string, not the full response. `context: inherit` → execute in the current session (all prior context visible).
@@ -27,7 +33,7 @@ Mark running:
 **Command node:**
 1. The `command` text is the full prompt
 2. `context: fresh` → spawn as new agent via Task tool (isolated context). `context: inherit` → current session.
-3. **Output contract:** The agent's final line of output MUST be one of the standard verdicts (see Output Contract below). Include this instruction in the agent's prompt.
+3. **Output contract:** The agent's final line of output MUST be one of the standard verdicts (see Output Contract below). Include this instruction in the agent's prompt. Know before you do this that the runner itself never reads that line — see the Output Contract section below for why a verdict can only ever be checked through a node's own `completion_check`, never through `{{this-node.output}}`.
 
 **Specialist node** (`type: specialist` in workflow YAML):
 
@@ -46,11 +52,12 @@ Dispatch (agent present):
 - Record output and verdict per standard node protocol (3d)
 
 Graceful failure (agent NOT installed):
-- Do NOT fail the workflow silently
-- Pause the workflow through the maintained runner with reason `agent-not-installed`.
+- Do NOT fail the workflow silently, and do NOT call `ds workflow advance`/`run`
+  again until this is resolved — there is no `pause` command to record the reason
+  mechanically, so saying it plainly to the Director is the only record there is.
 - Surface the install command to Director:
   `cp <plugin-root>/<persona_md_path> ~/.claude/agents/<basename>`
-- Print: "Specialist '<name>' not installed. Install it, then run `workflow resume`."
+- Print: "Specialist '<name>' not installed. Install it, then re-run `ds workflow advance <key>`."
 
 YAML syntax for a specialist node:
   - id: infra-audit
@@ -73,37 +80,53 @@ After the agent returns, verify the file exists. If not, write the agent's respo
 
 **3d. Record result**
 
-Extract the verdict from the agent's output (last non-empty line). If the verdict doesn't match a known value, treat as `UNKNOWN` and pause for Director review.
+There is no `update` command — you cannot write a verdict onto the node record
+yourself. Extract the verdict from the agent's output (last non-empty line)
+for your own tracking and for anything downstream that reads it from your
+summary, but know that `{{this-node.output}}` inside a later `condition:` will
+never see it (see Output Contract below). If the verdict doesn't match a known
+value, treat it as `UNKNOWN` and stop for Director review rather than continuing.
 
-```
-<maintained-runner> update <key> <node-id> completed --output "<verdict>: <summary>" --duration <seconds>
-```
-
-Or on failure:
-```
-<maintained-runner> update <key> <node-id> failed --output "FAILED: <error>"
-```
-
-On failure: retry up to 3 times (or node's `retry` value). Upgrade model each retry (haiku→sonnet→opus). After exhaustion → pause workflow, escalate to Director.
+On failure: there is no engine-enforced retry (`retry:` is validated, not
+enforced — see SKILL.md Step 3). If you choose to retry the work yourself, do so
+and note the attempt count; after exhausting the node's declared `retry.max` (or
+3 attempts if none is declared), stop and escalate to the Director instead of
+continuing the workflow.
 
 ---
 
 ## Output Contract
 
-Every workflow node — skill or command — must end its output with a **verdict line**. This is what conditions (`{{node.output}} == BLOCKED`) match against. The verdict is the first word of the `--output` value stored in state.
+Every workflow node — skill or command — should still end its own output with a
+**verdict line** (`PASSED`, `BLOCKED`, `FAILED`, ...) for a human or a later node's
+`input: "{{this-node.output}}"` reference to read. But be clear about what that
+buys you: `{{node.output}} == BLOCKED` is real condition syntax (`_evaluate` in
+`control/execution/workflow/engine.py` supports `== != > < >= <=` with
+colon-delimited prefix matching, so `BLOCKED: 2 critical findings` matches
+`== BLOCKED`), **and it is real for a node that emitted a value through
+`resolve_templates`/state (a `command:` node's own recorded field, or another
+node's declared output) — but `advance`/`run` never write an agent's verdict into
+`node.output`.** They dispatch a node by loading its skill/command text into
+`output`; the shipped `execute-work-orders.yaml` documents the same finding after
+trying the opposite: "`_invoke_skill` LOADS a skill and returns its SKILL.md text
+... the agent that would print the token reads the runner's output out of band."
+So a `condition:` can safely reference an **upstream** node whose YAML gave it a
+literal, already-resolved field, but it cannot reliably branch on a verdict an
+agent prints during dispatched work — that agent's stdout goes to you, not into
+state. If a real gate is needed, declare a `completion_check` that reads the
+effect independently (a git ref, an authority query, a stored artifact) instead of
+trying to match on `{{node.output}}`.
 
-**Standard verdicts:**
+**Standard verdicts (for your own tracking and for the Director, not for the engine):**
 
 | Verdict | Meaning | Next action |
 |---------|---------|-------------|
 | `PASSED` | Node completed successfully, no issues | Continue to dependents |
-| `BLOCKED` | Critical/high issues found that must be fixed | Trigger fix node or pause |
-| `FAILED` | Node could not complete its work | Retry or escalate |
+| `BLOCKED` | Critical/high issues found that must be fixed | Fix, or stop and ask |
+| `FAILED` | Node could not complete its work | Redo the work, or escalate |
 | `SKIPPED` | Node was not applicable (condition false) | Continue, treat as non-blocking |
 | `VERIFIED` | Evidence-based confirmation (verify skill) | Continue to ship |
-| `UNKNOWN` | Agent didn't produce a clear verdict | Pause for Director review |
-
-**How conditions match:** `{{node.output}} == BLOCKED` checks if the stored output equals `BLOCKED` OR starts with `BLOCKED:` (colon-delimited prefix). So `BLOCKED: 2 critical findings` matches `== BLOCKED`. This is symmetric — the shorter string is always treated as a potential prefix of the longer string. Always store as `VERDICT: detail`.
+| `UNKNOWN` | Agent didn't produce a clear verdict | Stop for Director review |
 
 **Prompt injection for command nodes:** When writing `command:` blocks in workflow YAML, always end the prompt with:
 ```
@@ -111,50 +134,30 @@ Your final output line MUST be exactly one of: PASSED, BLOCKED, FAILED.
 Format: VERDICT: one-line summary of what you found.
 ```
 
-This prevents ambiguous outputs that break condition evaluation.
+This keeps your own record unambiguous even though the runner itself never reads it.
 
-**3e. Loop** — after recording, call `next` again. Repeat from 3a until `next` returns `done`.
+**3e. Loop** — after doing the node's work, call `ds workflow advance <key>` again. Repeat from 3a until it reports no nodes ready and `ds workflow status <key>` shows the workflow done.
 
 #### Step 4 — Complete
 
-When `next` returns `done`, run the maintained workflow runner's status command to print the final summary. Then trigger `ds-core recap`.
-
----
-
-### `workflow status`
-
-```
-<maintained-runner> status [<key>]
-```
-Print the output. If no key given, shows all workflows.
-
-### `workflow resume`
-
-Works for both gate pauses and session recovery (fresh session picking up a prior workflow):
-
-1. Run the maintained workflow runner's status command to find the workflow key and current state.
-2. If paused at a gate, resume it through the maintained runner.
-3. Ask the maintained runner for the next ready nodes.
-4. Continue the execution loop from Step 3 of the `workflow:` protocol
-
-You do NOT need the original session context. The state file + YAML have everything: which nodes ran, what they output, what's next. The `next` command does the graph math.
-
-### `workflow abort`
-
-```
-<maintained-runner> abort <key>
-```
+When `ds workflow status <key>` (or the final line from `ds workflow run <key>`) shows the workflow `completed`, trigger `ds-core recap`.
 
 ---
 
 ## Error Handling
 
-**Node failure:** Retry up to 3× with model upgrade. After exhaustion → `update <key> <node-id> failed`, pause workflow, tell Director.
+**Node failure:** `ds workflow` does not retry automatically — `retry:` is
+validated as well-formed but never enforced by the runner. If you choose to redo
+the work yourself, track the attempt count against the node's declared
+`retry.max` (default: treat 3 attempts as the ceiling if none is declared); after
+exhausting it, stop and escalate to the Director rather than continuing. There is
+no `update` command to reset a failed or blocked node back to `pending`, so a
+node that comes back `blocked` or `failed` stays that way for the rest of the run.
 
 **Dependency failure by trigger rule:**
-- `all_success` → skip the dependent node
-- `all_done` → run it anyway
-- `one_success` → run if any dep succeeded
+- `all_success` → dependent stays un-ready forever (a `failed`/`blocked` dep never satisfies it)
+- `all_done` → dependent becomes ready once the dep reaches any terminal status (`completed`/`failed`/`skipped`/`unverified`)
+- `one_success` → dependent becomes ready once any dep is `completed`
 
 ---
 
