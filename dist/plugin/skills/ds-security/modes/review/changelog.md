@@ -1,5 +1,22 @@
 # Review Mode — Changelog
 
+## [2.1.0] — 2026-09-27
+
+### Changed
+- `quality:pr-security-scan` absorbed as a fourth sub-mode, `panel`, alongside `diff`/`audit`/
+  `build` — a skill-fleet audit found it doing the same job as this skill (severity-tagged
+  findings + ship/blocked verdict from a diff/PR) via a genuinely different mechanism (parallel
+  OWASP/STRIDE analyst subagents, any-reject synthesis, rather than a single freeform pass or a
+  fixed rule engine). Moved its `SKILL.md`, `modes.yml`, `analysts/*.yml` (14 files), and
+  `gotchas.yml` from `canonical/skills/quality/modes/pr-security-scan/` to
+  `panel/` under this mode; its own `config.yml`/`metadata.yml`/`changelog.md` were folded into
+  this mode's own (this file, `../config.yml`, `../metadata.yml`) rather than duplicated.
+- Quality's `SKILL.md`'s `secure:`/`security review:` redirect, which pointed at the unrelated
+  `ds-fullstack:secure` pipeline-security-sweep mode, now points at `panel` with panel's own
+  trigger keywords (`secure:`, `/secure`, `review architecture:`, `threat model:`).
+- See `core-imports.md`'s "2026-09-27 — `panel` absorbed from `quality:pr-security-scan`" for
+  the full rationale.
+
 ## [2.0.0] — 2026-09-26
 
 ### Changed

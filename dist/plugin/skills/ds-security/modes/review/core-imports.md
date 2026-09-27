@@ -53,3 +53,28 @@ Each sub-mode keeps its own thresholds, model tier, and output format (see `conf
 `diff:` section and `../SKILL.md`'s "Which sub-mode" table) — do not average or unify them; a
 reviewer choosing the wrong sub-mode for the question being asked is the actual failure mode
 this boundary exists to prevent, not "the modes disagree".
+
+### 2026-09-27 — `panel` absorbed from `quality:pr-security-scan`
+
+A skill-fleet audit found `quality/modes/pr-security-scan/SKILL.md` doing substantially the
+same job as this skill (a diff/PR in, a severity-tagged findings table with a ship/blocked
+verdict out) — an incomplete instance of the same 2026-09-26 cleanup, left behind in a
+different pack. Unlike `audit`/`build`, its mechanism is not a rule engine: it dispatches
+fresh, independent analyst subagents in parallel (one per OWASP category or STRIDE threat) and
+synthesizes their signals with an any-reject rule. That is a fourth genuinely different
+mechanism, not a fourth name for one of the first three, so it was absorbed as a new sub-mode,
+`panel`, rather than folded into `diff`:
+
+- **`panel`** = "what does a parallel panel of OWASP/STRIDE analyst subagents find, with a
+  binary ship verdict?" Fresh subagent per analyst seat (14 seats across three argument modes:
+  `pr-review`, `architecture-review`, `dependency-audit`), any-reject synthesis, opus for
+  `architecture-review` synthesis. Its `modes.yml` + `analysts/*.yml` are its own source
+  authority — not `rules.yml`, which `audit`/`build` share.
+
+The root cause of the drift, per the same audit: quality's own top-level `SKILL.md` dispatch
+table never routed to `pr-security-scan` at all (only two of its three real modes were
+listed), and its `secure:`/`security review:` redirect pointed at the wrong pack
+(`ds-fullstack`'s unrelated `secure` mode — a pipeline-scoped security sweep, not a
+general-purpose review) while contradicting `pr-security-scan`'s own claimed trigger
+keywords. Quality's `SKILL.md` now redirects `secure:`/`/secure`/`review architecture:`/
+`threat model:` to this skill's `panel` sub-mode.

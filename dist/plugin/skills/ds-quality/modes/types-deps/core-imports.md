@@ -63,7 +63,9 @@ step, not a semantic call.
 
 ## Skill Boundary Partners
 
-### ds-quality:pr-security-scan:dependency-audit (complementary, reserves dep-004/005/006)
+### ds-security:review panel:dependency-audit (complementary, reserves dep-004/005/006)
+- Moved from `ds-quality:pr-security-scan:dependency-audit`, 2026-09-27 — merged into
+  `security:review` as its `panel` sub-mode. skill_id in cross-references below updated to match.
 - security-scan owns: CVE findings (vulnerabilities), version pinning on PR diffs, unused packages
 - types-deps owns: CVE gate enforcement status (dep-001), dev lock (dep-002), license gate (dep-003)
 - dep-004/005/006 are deliberately reserved — not implemented here — for security-scan's territory.

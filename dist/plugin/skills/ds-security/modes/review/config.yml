@@ -1,8 +1,9 @@
 name: review
 model_tier: sonnet
 description: "Code-level security review: diff (freeform PR/pre-commit vulnerability review),
-  audit (rule-based codebase compliance scan), build (pre-generation enforcement gate)"
-argument-hint: "diff | audit | build"
+  audit (rule-based codebase compliance scan), build (pre-generation enforcement gate), panel
+  (parallel OWASP/STRIDE analyst subagent review)"
+argument-hint: "diff | audit | build | panel"
 user_invocable: true
 args: mode
 
@@ -47,6 +48,13 @@ diff:
   min_confidence_for_finding: 0.8   # on a 0-10 scale in diff/SKILL.md: >= 8/10
   severity_scale: [HIGH, MEDIUM]    # not the 5-tier critical/high/medium/low/info scale below
 
+# panel sub-mode has its own signal scale (5-point strong-accept..strong-reject, mapped to
+# CRITICAL/HIGH/MEDIUM/LOW/CLEAN) and any-reject synthesis strategy -- see panel/modes.yml and
+# panel/examples.md's "Signal Scale" section. Not comparable to diff's or audit/build's scales.
+panel:
+  signal_scale: [strong-accept, accept, neutral, reject, strong-reject]
+  synthesis_strategy: any-reject   # one reject/strong-reject from any analyst blocks ship
+
 behavior:
   # Cache LLM results by (rule_id, sha256(file_content)) to avoid re-evaluating unchanged files
   llm_cache_enabled: true
@@ -65,3 +73,6 @@ models:
   # diff sub-mode requires opus (complex data-flow tracing, multi-step attack path analysis,
   # nuanced false-positive filtering) -- see diff/SKILL.md's "Model Selection" section.
   diff: opus
+  # panel sub-mode: analyst subagents run haiku/sonnet per panel/analysts/*.yml; the
+  # architecture-review synthesis pass requires opus -- see panel/SKILL.md's Metadata section.
+  panel: opus

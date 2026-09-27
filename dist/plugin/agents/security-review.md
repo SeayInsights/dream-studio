@@ -46,11 +46,12 @@ Inlined at build time, so it is present whether or not you go and read anything.
 
 1. Parse the sub-mode from the argument (first word). Default to `diff` when the input looks
    like a PR/diff review request and no sub-mode is named explicitly.
-2. If no sub-mode is given and the input doesn't obviously match one, list the three below and
+2. If no sub-mode is given and the input doesn't obviously match one, list the four below and
    ask.
 3. Read `<sub-mode>/SKILL.md` completely before executing.
-4. If `gotchas.yml` in this directory exists, read it before executing (shared across all three
-   sub-modes).
+4. If `gotchas.yml` in this directory exists, read it before executing (a shared baseline
+   across all four sub-modes). `panel` additionally carries its own populated `gotchas.yml` in
+   `panel/` — read both for that sub-mode.
 5. Follow the sub-mode's instructions exactly as written.
 
 | Sub-mode | File | Keywords |
@@ -58,10 +59,11 @@ Inlined at build time, so it is present whether or not you go and read anything.
 | diff | diff/SKILL.md | review:, security review:, review PR:, pre-commit security: |
 | audit | audit/SKILL.md | audit:, security audit:, check security:, check codebase security: |
 | build | build/SKILL.md | build:security, enforce security:, security check before generate: |
+| panel | panel/SKILL.md | secure:, /secure, review architecture:, threat model: |
 
 ## Which sub-mode
 
-These are three genuinely different mechanisms, not three names for the same check — pick
+These are four genuinely different mechanisms, not four names for the same check — pick
 based on the question being asked, not habit:
 
 - **`diff`** — "Is this PR's new code exploitable?" Freeform LLM judgment over a git diff only.
@@ -75,19 +77,30 @@ based on the question being asked, not habit:
 - **`build`** — "Does this about-to-be-generated snippet violate a build-blocking rule?"
   Synchronous, static-pattern-only (no LLM, no subprocess), sonnet. Blocks generation on
   critical/high; warns on medium.
+- **`panel`** — "What does a parallel panel of OWASP/STRIDE analyst subagents find, with a
+  binary ship verdict?" Dispatches fresh, independent analyst subagents in parallel — one per
+  OWASP category for a diff (`pr-review`), one per STRIDE threat for an architecture
+  description (`architecture-review`), or a dedicated CVE analyst for a dependency manifest
+  (`dependency-audit`) — and synthesizes their signals with an any-reject rule (one HIGH or
+  CRITICAL from any analyst = BLOCKED; never a weighted average). Opus synthesis for
+  `architecture-review`, mechanical verdict otherwise. Merged in from `quality:pr-security-scan`
+  (2026-09-27 skill-fleet audit) because it duplicated this skill's purpose while using a
+  genuinely different mechanism — see `core-imports.md`.
 
 Each sub-mode's exclusions, precedents, and confidence policy apply ONLY to that sub-mode —
 `diff`'s 18 hard-exclusions (rate limiting, audit logging, hardening measures, outdated
-libraries, timing attacks, and 13 more) do not suppress `audit`'s rule-level suppressions or
-vice versa. See `core-imports.md`'s "Maintenance Notes" for the full boundary rationale and why
-these were kept as sub-modes of one skill rather than three separate skills.
+libraries, timing attacks, and 13 more) do not suppress `audit`'s rule-level suppressions, and
+`panel`'s any-reject analyst synthesis is its own strategy, independent of the other three.
+See `core-imports.md`'s "Maintenance Notes" for the full boundary rationale and why these were
+kept as sub-modes of one skill rather than separate skills.
 
 ## Applicable regulatory anchors
 
-This skill (all three sub-modes) addresses requirements from the following sections of
-[`regulatory-anchors.md`](../../references/regulatory-anchors.md) — `diff` primarily draws on
-L/M/C/O, `audit`/`build` primarily on J/L/N; see each sub-mode's own SKILL.md for which specific
-anchors drive which specific rules:
+This skill (all four sub-modes) addresses requirements from the following sections of
+[`regulatory-anchors.md`](../../references/regulatory-anchors.md) — `diff` and `panel`
+primarily draw on L/M/C/O, `audit`/`build` primarily on J/L/N (`panel`'s `dependency-audit`
+argument mode also touches J); see each sub-mode's own SKILL.md for which specific anchors
+drive which specific rules:
 
 - 🟠 [J. Software supply chain & secure SDLC](../../references/regulatory-anchors.md#j-software-supply-chain--secure-sdlc)
 - 🟠 [L. Application security standards](../../references/regulatory-anchors.md#l-application-security-standards)
@@ -102,7 +115,11 @@ See the full anchor list for tier definitions and the complete catalog of applic
 
 `audit` and `build` both read `rules.yml` in this directory (22 rules; rules with
 `action.build_mode: null` are audit-only). `diff` has no rule file — its methodology lives
-entirely in `diff/SKILL.md` and its three reference docs under `../references/`.
+entirely in `diff/SKILL.md` and its three reference docs under `../references/`. `panel` has
+its own `panel/modes.yml` (three argument modes: `pr-review`, `architecture-review`,
+`dependency-audit`) and `panel/analysts/*.yml` (14 analyst seats) — a different source
+authority from `rules.yml`, because its mechanism is per-analyst-subagent rather than
+per-rule.
 
 ## Automated baseline (R4)
 
@@ -122,6 +139,9 @@ semantic passes over a chosen scope), *not* for the baseline. See
 reporting.
 
 `audit`/`build` are a separate, in-repo concern — not part of that client-facing pipeline.
+`panel` sits alongside `diff` in that pipeline (it also reviews a PR/diff, or an architecture
+description, or a dependency manifest) and suggests the same `mitigate`/`verify` next steps on
+its findings.
 
 See `references/examples.md` for mode interactions and handoff patterns.
 
@@ -133,4 +153,5 @@ files — see `diff/SKILL.md` for the full mechanism:
 - `.dream/security/false-positives.txt` — exclude findings that don't apply
 - `.dream/security/custom-categories.txt` — add organization-specific vulnerability categories
 
-These do not affect `audit`/`build`, which use rule-level `suppressions` in `rules.yml` instead.
+These do not affect `audit`/`build`, which use rule-level `suppressions` in `rules.yml` instead,
+nor `panel`, which has no suppression mechanism of its own.

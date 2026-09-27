@@ -6,7 +6,7 @@
 #   typ-* = type safety rules (Section M-types of best-practices)
 #   dep-* = dependency health rules (Section K of best-practices)
 #   dep-007 (not dep-004) — reserving dep-004/005/006 for rules
-#   owned by pr-security-scan:dependency-audit (CVE findings, pinning, unused)
+#   owned by security:review panel:dependency-audit (CVE findings, pinning, unused)
 #
 # Candidate/confirm rules: typ-002, dep-007.
 #   typ-002: static clears obvious boundary Any; LLM confirms interior leakage
@@ -527,7 +527,7 @@ rules:
           3. If no CVE tool found in CI at all → critical "No CVE gate configured."
           4. If CVE tool found with continue-on-error → proceed to dynamic stage.
           5. If CVE tool found, blocking (no continue-on-error) → pass on the enforcement check.
-             (CVE findings, if any, are reported by pr-security-scan:dependency-audit.)
+             (CVE findings, if any, are reported by security:review panel:dependency-audit.)
 
           FOR TYPESCRIPT/JAVASCRIPT (npm/yarn projects):
           1. Check for package.json (required for npm audit).
