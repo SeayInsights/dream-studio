@@ -13,7 +13,7 @@
 
 | Mode | File | Keywords |
 |---|---|---|
-| saas-build | modes/saas-build/SKILL.md | build feature:, build api:, build page:, build supabase: |
+| saas-build | modes/saas-build/SKILL.md | build feature:, build api:, build page: |
 | mobile | modes/mobile/SKILL.md | iOS, Android, Swift, SwiftUI, Kotlin, Compose, React Native, Flutter |
 | game-dev | modes/game-dev/SKILL.md | game:, game build:, game review:, game QA: |
 | mcp-build | modes/mcp-build/SKILL.md | build mcp:, new mcp:, extend mcp: |
