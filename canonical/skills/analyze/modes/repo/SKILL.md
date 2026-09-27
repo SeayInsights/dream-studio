@@ -139,9 +139,12 @@ py ../../repo-analyzer.py <repo1> <repo2> --compare --verbose
 
 **Programmatic usage:**
 ```python
-from skills.analyze.repo_analyzer import extract_patterns_for_enhancement
+import importlib.util
+spec = importlib.util.spec_from_file_location("repo_analyzer", "repo-analyzer.py")
+repo_analyzer = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(repo_analyzer)
 
-result = extract_patterns_for_enhancement(
+result = repo_analyzer.extract_patterns_for_enhancement(
     source_repos=['/path/to/source1', '/path/to/source2'],
     target_repo='/path/to/target',
     min_adoption_threshold=0.5,

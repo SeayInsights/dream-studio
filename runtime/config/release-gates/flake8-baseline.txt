@@ -21,9 +21,8 @@ canonical/skills/analyze/domains/finance.py:25:1: E402 module level import not a
 canonical/skills/analyze/domains/finance.py:585:29: F541 f-string is missing placeholders
 canonical/skills/analyze/domains/real_estate.py:25:1: E402 module level import not at top of file
 canonical/skills/analyze/domains/registry.py:15:1: E402 module level import not at top of file
-canonical/skills/analyze/modes/repo/analyze-repos.py:34:1: E402 module level import not at top of file
-canonical/skills/analyze/repo-analyzer.py:27:1: E402 module level import not at top of file
-canonical/skills/analyze/repo-analyzer.py:28:1: E402 module level import not at top of file
+canonical/skills/analyze/repo-analyzer.py:37:1: E402 module level import not at top of file
+canonical/skills/analyze/repo-analyzer.py:38:1: E402 module level import not at top of file
 canonical/skills/analyze/test_analyzer.py:10:1: E402 module level import not at top of file
 canonical/skills/analyze/test_analyzer.py:11:1: E402 module level import not at top of file
 canonical/skills/analyze/test_analyzer.py:45:7: F541 f-string is missing placeholders

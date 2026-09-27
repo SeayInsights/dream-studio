@@ -20,18 +20,20 @@ import sys
 import subprocess
 import tempfile
 import shutil
+import importlib.util
 from pathlib import Path
 import argparse
 
-# Add parent directories to path for imports
-repo_root = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(repo_root))
-
-# Import from relative path
-repo_analyzer_path = repo_root / "skills" / "analyze"
-sys.path.insert(0, str(repo_analyzer_path))
-
-from repo_analyzer import analyze_repositories
+# repo-analyzer.py's hyphenated filename is not a valid Python module name, so
+# a normal `from repo_analyzer import ...` cannot reach it however sys.path is
+# set up -- load it by file path instead. It's the sibling
+# analyze/repo-analyzer.py, three directories up from this file
+# (modes/repo/ -> modes/ -> analyze/).
+_analyzer_path = Path(__file__).parent.parent.parent / "repo-analyzer.py"
+_spec = importlib.util.spec_from_file_location("repo_analyzer", _analyzer_path)
+_repo_analyzer = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_repo_analyzer)
+analyze_repositories = _repo_analyzer.analyze_repositories
 
 
 def is_github_url(input_str: str) -> bool:
