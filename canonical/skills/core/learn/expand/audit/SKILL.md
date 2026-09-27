@@ -6,6 +6,12 @@ Lists ds_user_extensions rows with status='proposed' and classified as
 personalization that have no compiled content yet. Operator selects rows
 to compile, reviews output, then accepts or rejects.
 
+## Output Contract
+
+A review list of pending `ds_user_extensions` rows (originating friction signal, proposed
+override, compiled_from evidence) with an accept/reject prompt per row. `accept` writes
+compiled content to `ds_user_extensions.content`; `reject` removes the proposed row.
+
 ## What the operator sees
 
 For each pending extension:

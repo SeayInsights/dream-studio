@@ -1,3 +1,9 @@
+## Output Contract
+
+This mode is reference knowledge, not a producer of a separate artifact: it informs the
+Terraform modules and state configuration written directly into the project. There is no
+separate report this mode writes on its own.
+
 ## Patterns
 
 - **Remote state with native locking**: S3 with `use_lockfile = true` (AWS, Terraform >= 1.11) or GCS (GCP). DynamoDB locking still works but `dynamodb_table` was deprecated in 1.11 (Feb 2025) in favour of S3-native locking -- don't add one to a new backend. State must be versioned (S3 versioning enabled) for rollback. `encrypt = true` in backend config.

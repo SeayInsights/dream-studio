@@ -53,6 +53,12 @@ Inlined at build time, so it is present whether or not you go and read anything.
 
 # Accessibility Expert — WCAG 2.2 Audit and Remediation
 
+## Output Contract
+
+A WCAG 2.2 Level AA audit: findings from the automated/keyboard/screen-reader/visual
+checklists below, classified by the remediation priority framework (critical/high/medium/
+low), plus remediation guidance per finding.
+
 ## Patterns
 
 - Use semantic HTML before ARIA. Native elements carry implicit roles, keyboard behavior, and focus management.

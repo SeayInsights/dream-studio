@@ -45,6 +45,12 @@ decide that the work is finished.
 
 Inlined at build time, so it is present whether or not you go and read anything.
 
+## Output Contract
+
+This mode is reference knowledge, not a producer of a separate artifact: it informs the
+dbt models, schema.yml contracts, and pipeline configuration written directly into the
+project. There is no separate report this mode writes on its own.
+
 ## Patterns
 
 ### dbt layered architecture

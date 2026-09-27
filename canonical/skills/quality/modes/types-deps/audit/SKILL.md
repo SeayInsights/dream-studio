@@ -1,5 +1,12 @@
 # Types-Deps — Audit Mode
 
+## Output Contract
+
+A "Types & Dependencies Audit" report: a rule-status summary table (typ-001..typ-004,
+dep-001/002/003/007), findings grouped by severity (critical/high/medium), and a
+false-positive audit for the two LLM-confirmed rules (typ-002, dep-007). Read-only —
+classifies and reports only, never fixes.
+
 ## Scope variants
 
 Three scope modes (same pattern as testing skill):

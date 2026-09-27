@@ -5,6 +5,12 @@
 Automated operational readiness scan. 13 rules covering logging, health/metrics, config,
 shutdown, recovery, and deployment artifacts. Read-only — classifies and reports only.
 
+## Output Contract
+
+A findings report covering the 13 operational-readiness rules (logging, health/metrics,
+config validation, shutdown, retry/timeout, deployment artifacts), classified by severity.
+Read-only — classifies and reports only, never fixes.
+
 ## Invocation
 
 ```

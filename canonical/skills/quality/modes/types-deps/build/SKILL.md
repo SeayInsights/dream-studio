@@ -1,5 +1,11 @@
 # Types-Deps — Build Mode
 
+## Output Contract
+
+Type-annotated code changes to the target function/module, plus structured guidance text
+for dependency-hygiene resolution (CVE gate, lock files, license gate). No CI config, lock
+files, or type-checker configuration is generated directly — see the "does NOT" list below.
+
 ## What This Mode Does
 
 Provides structured guidance for two build-time activities:

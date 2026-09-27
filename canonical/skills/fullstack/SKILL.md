@@ -11,6 +11,14 @@
 | `spec` | Spec first | Write API contract before any code |
 | (none) | Auto-detect | Infer from project state (see below) |
 
+## Output Contract
+
+Most work is delegated to the sub-mode named in the routing table below — see each
+sub-mode's own SKILL.md for its output. This file's own, undelegated capability is
+`api-contract.json` (Spec Mode, inline): the docstore artifact frontend/backend/
+integrate/secure all read as the single source of truth for the interface, written via
+`ds files write "api-contract.json"`.
+
 ## Before You Start
 
 Read `gotchas.yml` in this directory before every invocation.

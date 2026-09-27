@@ -45,6 +45,13 @@ decide that the work is finished.
 
 Inlined at build time, so it is present whether or not you go and read anything.
 
+## Output Contract
+
+This mode is reference knowledge, not a producer of a separate artifact: it informs the
+documentation content written directly into the project's docs (README, guides, reference
+pages) and the review checklist applied to docs PRs. There is no separate report this mode
+writes on its own.
+
 ## Patterns
 
 - Apply the Diataxis quadrant that matches the reader's goal before writing a single word.
