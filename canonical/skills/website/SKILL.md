@@ -120,6 +120,16 @@ These files are maintained by the `design` mode and are REUSED here — do not d
 3. **Anti-slop lint before delivery** — every HTML artifact must pass `scripts/lint-artifact.py` with zero violations before presenting to the user.
 4. **Critique is recommended** after any build mode but is not blocking. Prompt the user: "Run `critique:` to score and get a fix list?"
 
+**Critique vs. polish** — these are two different modes, not the same step under two
+names. `critique` (`modes/critique/SKILL.md`) is this pipeline's own quality gate:
+read-only, opus, scored against the direction lock from Rule 2. It is what Rule 4
+above means by "recommended after any build mode." `polish` (`modes/polish/SKILL.md`)
+is a separate, general-purpose critique-and-fix tool: it edits code directly, does not
+require a direction lock, and is equally usable on UI that never went through this
+pipeline at all. Inside a fresh pipeline run, run `critique` first per Rule 4; reach
+for `polish` when you want the fixes applied, not just a score, or when there is no
+direction lock to score against.
+
 ---
 
 ## Integration with the design Sub-mode
