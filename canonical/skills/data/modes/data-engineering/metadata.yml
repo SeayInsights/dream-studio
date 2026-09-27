@@ -1,6 +1,6 @@
 name: data-engineering
 version: 1.0.0
-pack: domains
+pack: data
 created_at: 2026-06-03
 updated_at: 2026-06-03
 

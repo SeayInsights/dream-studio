@@ -47,7 +47,3 @@ Unlike `scan` (which generates configs for CI execution only), `dast:run` CAN ex
 ## Detailed Reference
 
 See `examples.md` in this directory for detailed steps, schemas, templates, and integration points.
-
-## Detailed Reference
-
-See `examples.md` in this directory for detailed steps, schemas, templates, and integration points.

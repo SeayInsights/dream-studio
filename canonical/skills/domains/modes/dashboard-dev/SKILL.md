@@ -30,7 +30,7 @@ Read `gotchas.yml` in this directory before every invocation.
 - **Multi-panel** — dashboard, activity feed, session status, build history, health pulse
 
 ## Feed contract
-Location: `%APPDATA%/Claude/<plugin-name>-feed.json` (Windows) Â· `~/.config/Claude/<plugin-name>-feed.json` (Linux) Â· `~/Library/Application Support/Claude/<plugin-name>-feed.json` (macOS)
+Location: `%APPDATA%/Claude/<plugin-name>-feed.json` (Windows) · `~/.config/Claude/<plugin-name>-feed.json` (Linux) · `~/Library/Application Support/Claude/<plugin-name>-feed.json` (macOS)
 
 ```json
 {

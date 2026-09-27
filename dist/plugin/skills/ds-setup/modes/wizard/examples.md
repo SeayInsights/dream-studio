@@ -129,9 +129,9 @@ After successful folder creation, save paths to `.dream-studio/setup-prefs.json`
 
 This allows other dream-studio skills to reference these paths programmatically.
 
-### Step 2 — Detect all 6 tools
+### Step 2 — Detect every registered tool
 
-Run `detectTool(toolName)` for each of the 6 tools in `tool-registry.yml` (gh, firecrawl, playwright, npm, python, node):
+Run `detectTool(toolName)` for every tool key `tool-registry.yml` currently defines. Read the registry at run time for that list rather than hardcoding one here — that's exactly how this step drifted before (a hardcoded "6 tools" survived four tools being added to the registry with nothing routing to them):
 
 1. Run the platform-appropriate detect command (e.g., `where gh` on Windows).
 2. If the command succeeds (exit code 0), the tool is present — also run the `version_command` to capture the version string.
@@ -218,11 +218,11 @@ Before Step 3, load `.dream-studio/setup-prefs.json` via `loadPreference()` and 
 
 ```
 ─────────────────────────────────────────
-Resuming wizard — <N> of 6 tools already configured
+Resuming wizard — <N> of <M> tools already configured
 ─────────────────────────────────────────
 ```
 
-Where `<N>` = the number of entries in `completed_tools`.
+Where `<N>` = the number of entries in `completed_tools`, and `<M>` = the total number of tool keys currently in `tool-registry.yml`.
 
 - If `_wizard_progress` is absent or `wizard_interrupted` is `false`, this is a fresh run — no banner, no tools to skip.
 
@@ -312,7 +312,7 @@ This write happens synchronously before presenting the next tool's prompt. `wiza
 
 ### Step 6 — Save state to setup-prefs.json
 
-After all prompts are complete (or if all tools were already installed), call `savePreference()` to write the final state for all 6 tools to `.dream-studio/setup-prefs.json`. This is the completion save — it merges any partial state written during Step 5c with the remaining tools and marks the wizard run as complete.
+After all prompts are complete (or if all tools were already installed), call `savePreference()` to write the final state for every tool in the registry to `.dream-studio/setup-prefs.json`. This is the completion save — it merges any partial state written during Step 5c with the remaining tools and marks the wizard run as complete.
 
 The saved state object must include, for each tool:
 ```json

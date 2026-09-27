@@ -7,39 +7,15 @@ mode writes on its own.
 
 ## Patterns
 
-**SwiftUI state management** -- Use @State for local value types, @Observable (iOS 17+) or @ObservableObject for shared models, @Binding to pass writable state down, @EnvironmentObject for app-wide singletons only. Never reach up into parent state.
-
-**Compose state hoisting** -- Stateless composables receive (state, onEvent) pairs. Screen-level state lives in ViewModel + StateFlow. Use remember{} for ephemeral UI state; collectAsStateWithLifecycle() to consume flows safely.
-
-**React Native New Architecture (JSI)** -- Old bridge serializes all calls to JSON asynchronously. JSI gives JS a direct C++ reference, enabling synchronous native calls. Use TurboModules for performance-critical native code. Reanimated 3 and Gesture Handler v2 already run on JSI.
-
-**Flutter widget lifecycle** -- initState (setup, subscriptions) -> build (pure, no side effects) -> dispose (cancel subscriptions). Never perform async work or API calls inside build().
-
-**Deep linking** -- iOS requires AASA file at /.well-known/apple-app-site-association (HTTPS, no redirect). Android requires assetlinks.json + autoVerify=true intent-filter. Both must be verified before App Store / Play Store submission.
-
-**Push notification permissions** -- Show a custom pre-prompt before the OS dialog on iOS. On Android 13+ (API 33), request POST_NOTIFICATIONS explicitly. Sync FCM/APNs token to backend immediately after grant.
-
-**Background tasks** -- iOS: BGProcessingTask (minutes, deferred) or BGAppRefreshTask (~30s). Android: WorkManager with Constraints. React Native: Headless JS. Flutter: workmanager plugin. Never rely on silent push for critical background work.
-
-**Secure storage** -- Keychain (iOS) or EncryptedSharedPreferences + Android Keystore (Android). react-native-keychain in RN. flutter_secure_storage in Flutter. Never AsyncStorage, UserDefaults, or SharedPreferences for secrets.
-
-**Biometric auth** -- LocalAuthentication (iOS), androidx.biometric (Android; back-compat to API 23, wrapping the API 28+ native BiometricPrompt). Always check capability, provide PIN fallback, never transmit biometric data. Store secret in Keychain/Keystore; biometrics only unlock access.
-
-**Offline-first** -- Write to local DB first, sync in background. Core Data / SwiftData (iOS), Room + WorkManager (Android), WatermelonDB or expo-sqlite (RN). Define conflict resolution strategy (last-write-wins vs server-authority) before building sync.
+SwiftUI state management · Compose state hoisting · React Native New Architecture (JSI) · Flutter widget lifecycle · deep linking · push notification permissions · background tasks · secure storage · biometric auth · offline-first
 
 ## Anti-Patterns
 
-**AsyncStorage for tokens (RN)** -- Unencrypted, readable from device backup. Use react-native-keychain.
+AsyncStorage for tokens (RN) · blocking the iOS main thread · Swift closure retain cycles · useEffect as event handler (RN) · ignoring the Android back stack · side effects in Flutter build()
 
-**Blocking the iOS main thread** -- Network, JSON decode, or file I/O on main thread causes frame drops and watchdog kills. Use async/await or DispatchQueue.global() and MainActor for UI updates.
+## Detailed Reference
 
-**Swift closure retain cycles** -- Capturing self strongly in stored closures creates leaks. Always use [weak self] in closures that outlive their function scope. Verify with Instruments Allocations.
-
-**useEffect as event handler (RN)** -- Leads to infinite loops, stale closures, race conditions. Derive values from state; use event handlers for user actions; reserve useEffect for external synchronization only.
-
-**Ignoring Android back stack** -- Not handling Back button correctly accumulates ghost Activities. Use Navigation component and proper FLAG_ACTIVITY_* flags for task management.
-
-**Side effects in Flutter build()** -- build() fires many times per second. Network calls, subscriptions, or analytics in build() cause duplicates and undefined behavior. Move all side effects to initState() or state management callbacks.
+See `../../mobile/patterns.yml` in this pack for the full description and a real code example for every pattern and anti-pattern named above (this file used to duplicate that content inline; the two had already started to drift).
 
 ## Gotchas
 

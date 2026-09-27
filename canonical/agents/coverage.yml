@@ -280,8 +280,11 @@ modes:
     so the agent wrapper would rival the knowledge it carries. The skill that owns the flow reads it inline.
 - mode: code-health/audit
   skill: code-health/modes/audit/SKILL.md
-  no_agent: 'The router for the audit: fan-out. Its specialists are code-health/code-quality, database, security,
-    testing and types-deps, each of which has its own agent.'
+  no_agent: 'Not the audit: fan-out router (that dispatch lives in each pack''s own root
+    SKILL.md) -- this mode is a self-referential build-health/consolidation auditor,
+    triggered by audit:health or audit:consolidate, producing a health_report and
+    consolidation_report on Dream Studio''s own tree. A meta-audit of the repo does not
+    need its own dispatched specialist.'
 - mode: core/coach
   skill: core/modes/coach/SKILL.md
   no_agent: Classifies operator intent and routes it. Routing is the caller's job by definition.

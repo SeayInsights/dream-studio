@@ -1,5 +1,5 @@
 name: website
-pack: domains
+pack: website
 mode: website
 version: 1.0.0
 description: End-to-end website design pipeline — discovery, direction, brand, prototype, page, deck, animate, critique

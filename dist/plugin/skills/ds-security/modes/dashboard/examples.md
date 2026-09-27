@@ -162,7 +162,7 @@ TEMPLATE EXPORTED: {client}
 | severity | string | critical / high / medium / low |
 | cvss | float | Estimated CVSS score |
 | business_impact | string | Impact level from client data classification |
-| risk_score | float | Composite risk score (CVSS Ã— business impact weight) |
+| risk_score | float | Composite risk score (CVSS × business impact weight) |
 | owasp | string | OWASP Top 10 category |
 | cwe | string | CWE identifier |
 | status | string | open / resolved / suppressed |
@@ -251,12 +251,12 @@ TEMPLATE EXPORTED: {client}
 ## Org Score Formula
 
 ```
-org_score = 100 - (weighted_penalty_sum / ceiling) Ã— 100
+org_score = 100 - (weighted_penalty_sum / ceiling) × 100
 ```
 
 Where:
-- `weighted_penalty_sum` = Î£ (severity_weight for each finding)
-- `ceiling` = total_findings Ã— max(severity_weights)
+- `weighted_penalty_sum` = Σ (severity_weight for each finding)
+- `ceiling` = total_findings × max(severity_weights)
 - Default weights: `{ critical: 10, high: 4, medium: 1, low: 0.25 }`
 - Clamped to 0-100
 

@@ -1,6 +1,6 @@
 name: devops
 version: 1.0.0
-pack: domains
+pack: infra
 created_at: 2026-06-03
 updated_at: 2026-06-03
 

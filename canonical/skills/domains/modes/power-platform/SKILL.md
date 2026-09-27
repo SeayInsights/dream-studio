@@ -96,7 +96,7 @@ Before writing or editing any TMDL, DAX, or M-query — complete every item:
 
 ## Power BI Version Detection {#powerbi-versions}
 
-Before using advanced Power BI features, detect the client's Power BI Desktop version using `shared/version-detection.sh`. Use fallbacks for features unavailable in older versions.
+Before using advanced Power BI features, detect the client's Power BI Desktop version using `version-detection.sh` (in this directory). Use fallbacks for features unavailable in older versions.
 
 ### Feature Gates
 
@@ -112,7 +112,7 @@ Before using advanced Power BI features, detect the client's Power BI Desktop ve
 
 ### Usage
 
-Run `shared/version-detection.sh` to check Power BI version. If the detected version is below the minimum for a feature, use the fallback approach.
+Run `version-detection.sh` (in this directory) to check Power BI version. If the detected version is below the minimum for a feature, use the fallback approach.
 
 **Reference:** See [Power BI release history](https://learn.microsoft.com/en-us/power-bi/fundamentals/desktop-latest-update-archive) for complete feature timeline.
 

@@ -149,8 +149,8 @@ Score: {weighted score}/10
 3. {specific action}
 
 ## Rules Reference
-- FSC: `packs/quality/rules/structure/fsc.md`
-- Architecture: `packs/quality/rules/structure/architecture.md`
+- FSC: `packs/code-health/rules/structure/fsc.md`
+- Architecture: `packs/code-health/rules/structure/architecture.md`
 ```
 
 ### Step 6 — Write the report

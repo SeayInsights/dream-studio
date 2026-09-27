@@ -5,5 +5,5 @@ description: Zscaler/proxy compatibility analysis — detect cert pinning, custo
 user_invocable: true
 args: mode
 argument-hint: '[analyze | report | rules] [--client <name>]'
-pack: quality
+pack: security
 chain_suggests: []
