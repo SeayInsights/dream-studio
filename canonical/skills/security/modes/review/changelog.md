@@ -9,9 +9,12 @@
   populated). Reworded the step to say so plainly and to treat a missing file as a
   silent no-op rather than an error — consistent with this mode's own `jit-pending`
   status below (functional but not yet validated on a real codebase). Sibling audit
-  skills (`code-health:code-quality`, `code-health:testing`, `data:database`) already
-  phrase this same check as conditional ("if exists"); this mode's copy did not,
-  and was the one actually caught referencing a nonexistent file. Not fabricating a
+  skills `code-health:code-quality` and `code-health:testing` already phrase this
+  same check as conditional ("if exists"); this mode's copy did not, and neither did
+  `data:database`'s (which says outright "Same as security audit") — a review-lane
+  finding caught that this entry originally claimed all three siblings already had
+  the guard, which was false for `data:database`. Fixed that copy too rather than
+  leave one sibling still making the same false claim. Not fabricating a
   template with no real backing.
 
 ## [2.1.0] — 2026-09-27

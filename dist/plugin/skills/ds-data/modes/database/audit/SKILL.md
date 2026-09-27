@@ -139,7 +139,7 @@ Code ({context_scope} from {filename}):
 Same as security audit:
 1. Check `rule.suppressions[*].path_glob`
 2. Scan ±3 lines for `rule.suppressions[*].inline_comment`
-3. Check `../suppressions.yml` (operator-level) with expiry check
+3. Check `../suppressions.yml` (operator-level) **if it exists** with expiry check — no template ships with this repo yet, so treat a missing file as a no-op, not an error
 
 ---
 
