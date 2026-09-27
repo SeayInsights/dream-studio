@@ -17,10 +17,19 @@ Phase 5.5A — Workflow Runtime Reliability audit and classification.
 |-----------|------|------|
 | Workflow templates | `workflows/*.yaml` | Declarative DAG definitions |
 | Engine (pure logic) | `control/execution/workflow/engine.py` | File locking, template resolution, condition evaluation, ready-node computation |
-| State CLI | `control/execution/workflow/state.py` | State read/write, start/update/pause/resume/abort/next |
+| State CLI | `control/execution/workflow/state.py` | State read/write, own CLI: start/update/pause/resume/abort/next/eval (`py -m control.execution.workflow.state <cmd>`) |
+| Runner | `control/execution/workflow/runner.py` | `WorkflowRunner` — computes the ready wave and dispatches each node's skill/command content; does not execute it |
+| Workflow CLI | `interfaces/cli/ds_workflow.py` | **The only workflow surface reachable from `ds`** — `ds workflow {start,status,list,advance,run}`. It wires `start`/`status` into the State CLI above and `advance`/`run` into the Runner; it never calls the State CLI's `update`/`pause`/`resume`/`abort`/`next`/`eval` |
 | Validator | `control/execution/workflow/validate.py` | YAML parsing, cycle detection, field validation |
 | Cost estimator | `control/execution/workflow/cost.py` | Token cost estimation |
 | Registry | `control/execution/workflow/registry.py` | Workflow metadata enrichment |
+
+**`canonical/skills/workflow/SKILL.md` is the accurate description of what an agent can
+actually drive via `ds workflow`.** The rest of this document — written before the Runner
+and `ds_workflow.py` existed — describes the State CLI's own richer verb set
+(`update`/`pause`/`resume`/`abort`/`next`/`eval`), which is real Python you can run
+directly with `py -m control.execution.workflow.state <cmd>`, but is not part of the `ds
+workflow` surface and is not what following the skill gets you.
 
 ### Runtime Integration
 
@@ -125,13 +134,19 @@ Docker, inspect secrets, mutate external projects, or execute remediation.
 
 ## Gate / Pause / Resume Behavior
 
-**Status: Fully implemented.**
+**Status: Fully implemented in the State CLI's own commands — not reachable via `ds
+workflow`.**
 
 - `cmd_pause(key, node_id, gate_name)` — sets workflow status to "paused", records gate in gates_pending
 - `cmd_resume(key)` — pops gate from gates_pending, moves to gates_passed, sets status to "running"
 - `cmd_next` — reports paused state with gate name
 - Gates are validated against the `gates:` section in YAML
 - No timeout on gate pauses (manual resume required)
+
+`ds workflow advance`/`run` (the Runner) never call any of the three commands above and
+never read a node's `gate:` field — a gate is validated to exist and otherwise ignored on
+that path. An agent driving a workflow through `ds workflow` gets no automatic pause at a
+gate; see `canonical/skills/workflow/SKILL.md`'s "Gates are not enforced" section.
 
 ## Dashboard Dependency Assessment
 

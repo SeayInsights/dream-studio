@@ -151,14 +151,23 @@ If a FAIL in Quality Checks or an acceptable risk in Known Limitations would nor
 
 ## Post-ship archive
 
-After a successful deploy, archive the spec to prevent .planning/specs/ from accumulating indefinitely:
+After a successful deploy, record that the spec shipped — zero-disk, the same
+"`.planning/` disk writes are denied" direction `plan`/`think` already enforce
+for this same `specs/<topic>/` family of documents:
 
-1. Copy `templates/archive-stamp-template.md` to `.planning/specs/<topic>/archive-stamp.md`
-2. Fill in: status (shipped), shipped_date, merge_sha, pr_url, summary
-3. Move the entire `.planning/specs/<topic>/` folder to `.planning/archive/<topic>/`
-4. Commit: `chore: archive <topic> spec post-ship`
+1. Read `templates/archive-stamp-template.md` in this skill directory (a skill
+   asset, not project state — it stays a repo file, nothing to fetch from the
+   docstore).
+2. Fill in: status (shipped), shipped_date, merge_sha, pr_url, summary.
+3. Author the filled-in stamp to the docstore: `ds files write "specs/<topic>/archive-stamp.md" --category planning`
 
-This keeps .planning/specs/ clean — only in-progress specs live there.
+This is the same `specs/<topic>/` logical-name family `plan` writes `spec.md`
+and `design.md` under (`ds files write "specs/<topic>/spec.md" --category planning`),
+so `ds files list --category planning` shows a topic's whole lifecycle — spec,
+design, archive-stamp — in one place. There is no separate archive folder and no
+move step: the docstore already versions by name, so `specs/<topic>/spec.md`
+stays readable via `ds files read` after `archive-stamp.md` is written alongside
+it; the stamp's presence is what marks the topic shipped.
 
 ## pr-smoke green is merge authorization, not proof main is green {#post-merge-ci}
 

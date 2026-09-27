@@ -56,6 +56,7 @@ Core shared modules available to all modes (and other packs):
 - `orchestration.md` — subagent spawning, model selection, review loops
 - `traceability.md` — TR-ID validation, traceability file structure
 - `repo-map.md` — repository structure mapping
+- `approach-capture.md` — approach/outcome capture for the Improvement Loop (handoff, recap)
 
 ## Tool Recommendations System
 

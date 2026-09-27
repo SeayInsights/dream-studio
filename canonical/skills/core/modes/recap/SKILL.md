@@ -18,6 +18,9 @@ dream_studio:
 ## Before you start
 Read `gotchas.yml` in this directory before every invocation.
 
+## Imports
+- ../../approach-capture.md — approach/outcome capture for the Improvement Loop
+
 ## Trigger
 `recap:`, `session recap:`, or auto-triggered after substantive builds
 
@@ -80,10 +83,19 @@ Session: [session context if available]
 ```
 
 ## Approach Capture
-After writing the recap (step 6) and before auto-draft (step 7):
 
-1. **Query prior approaches** — Use the maintained approach-history interface if available for each skill used this session. Surface patterns when present.
-2. **Capture this session's approaches** — For each skill invoked this session, record approach, outcome, context, and rationale in the recap and in the maintained persistence interface if available. Focus on:
+**See:** ../../approach-capture.md — what gets recorded and how it's persisted
+
+Recap-specific timing and filter, since this mode runs post-completion rather
+than mid-work:
+
+1. **Query prior approaches, first** — after writing the recap (step 6) and
+   before auto-draft (step 7), use the maintained approach-history interface if
+   available for each skill used this session. Surface patterns when present —
+   recap is the read side of the loop handoff only writes into.
+2. **Capture this session's approaches, filtered** — record each entry (per
+   approach-capture.md's fields) in the recap and in the maintained persistence
+   interface if available, but only for what's worth surfacing across sessions:
    - Corrections (Director overrode your approach)
    - Surprising outcomes (unexpected success or failure)
    - Notable approaches (parallel dispatch, specific debug strategy, etc.)

@@ -3,7 +3,7 @@ status: shipped
 shipped_date: YYYY-MM-DD
 merge_sha: "abc1234"
 pr_url: "https://github.com/owner/repo/pull/N"
-spec_path: ".planning/specs/[topic]/"
+spec_path: "specs/[topic]/spec.md"
 ---
 
 # Archive: [Feature Name]
@@ -17,9 +17,9 @@ spec_path: ".planning/specs/[topic]/"
 
 [1-2 sentences describing what shipped and what problem it solved]
 
-## Spec Location (archived)
+## Spec Location
 
-Original spec: `.planning/archive/[topic]/spec.md`
+Docstore: `specs/[topic]/spec.md` — read with `ds files read "specs/[topic]/spec.md"`
 
 ---
 
