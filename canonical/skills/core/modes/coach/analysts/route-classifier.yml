@@ -56,8 +56,8 @@ known_skills:
     description: UI quality improvement
 
   - skill: secure
-    triggers: ["secure:", "check security", "review architecture", "security audit"]
-    description: Security review (OWASP + STRIDE)
+    triggers: ["secure:", "/secure", "review architecture:", "threat model:"]
+    description: Security review (OWASP + STRIDE parallel analyst panel — security:review panel sub-mode)
 
   - skill: harden
     triggers: ["/harden", "harden audit", "project setup", "best practices audit"]
