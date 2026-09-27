@@ -105,23 +105,31 @@ Validate that each path exists and is a directory.
 
 ### 3. Invoke repo analysis
 
+**All commands below assume cwd = the dream-studio repo root** (the directory
+containing `canonical/`). Both entry points resolve their own imports by file
+path regardless of cwd, but the paths shown here are repo-root-relative so
+the two forms below never disagree about where to run from — verified by
+running both directly from the repo root:
+`py canonical/skills/analyze/modes/repo/analyze-repos.py canonical/skills/analyze --format json`
+and `py canonical/skills/analyze/repo-analyzer.py canonical/skills/analyze --format json`.
+
 **Recommended: Use the automated wrapper** (handles GitHub URLs and local paths):
 
 ```bash
 # Single repo (GitHub URL or local path)
-py modes/repo/analyze-repos.py <repo-url-or-path> --format markdown --verbose
+py canonical/skills/analyze/modes/repo/analyze-repos.py <repo-url-or-path> --format markdown --verbose
 
 # Compare multiple repos (mix of URLs and local paths)
-py modes/repo/analyze-repos.py <repo1> <repo2> <repo3> --compare --verbose
+py canonical/skills/analyze/modes/repo/analyze-repos.py <repo1> <repo2> <repo3> --compare --verbose
 
 # Examples - General Analysis
-py modes/repo/analyze-repos.py https://github.com/user/repo --verbose
-py modes/repo/analyze-repos.py /path/to/repo1 /path/to/repo2 --compare
+py canonical/skills/analyze/modes/repo/analyze-repos.py https://github.com/user/repo --verbose
+py canonical/skills/analyze/modes/repo/analyze-repos.py /path/to/repo1 /path/to/repo2 --compare
 
 # Examples - Domain-Specific Analysis
-py modes/repo/analyze-repos.py https://github.com/user/design-repo --domain design --verbose
-py modes/repo/analyze-repos.py repo1/ repo2/ repo3/ --domain career --compare
-py modes/repo/analyze-repos.py /path/to/repo --auto-detect --verbose
+py canonical/skills/analyze/modes/repo/analyze-repos.py https://github.com/user/design-repo --domain design --verbose
+py canonical/skills/analyze/modes/repo/analyze-repos.py repo1/ repo2/ repo3/ --domain career --compare
+py canonical/skills/analyze/modes/repo/analyze-repos.py /path/to/repo --auto-detect --verbose
 ```
 
 The wrapper automatically:
@@ -130,17 +138,19 @@ The wrapper automatically:
 - Invokes the repo-analyzer
 - Cleans up temp files on completion
 
-**Alternative: Direct analyzer usage** (for local paths only):
+**Alternative: Direct analyzer usage** (for local paths only, same cwd = repo root):
 
-```python
-py ../../repo-analyzer.py <repo-path> --format markdown --verbose
-py ../../repo-analyzer.py <repo1> <repo2> --compare --verbose
+```bash
+py canonical/skills/analyze/repo-analyzer.py <repo-path> --format markdown --verbose
+py canonical/skills/analyze/repo-analyzer.py <repo1> <repo2> --compare --verbose
 ```
 
-**Programmatic usage:**
+**Programmatic usage** (path also relative to the repo root):
 ```python
 import importlib.util
-spec = importlib.util.spec_from_file_location("repo_analyzer", "repo-analyzer.py")
+spec = importlib.util.spec_from_file_location(
+    "repo_analyzer", "canonical/skills/analyze/repo-analyzer.py"
+)
 repo_analyzer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(repo_analyzer)
 
