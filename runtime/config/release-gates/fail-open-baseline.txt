@@ -108,11 +108,11 @@ control/execution/workflow/engine.py|48|bare-except-pass
 control/execution/workflow/engine.py|60|bare-except-pass
 control/execution/workflow/engine.py|72|bare-except-pass
 control/execution/workflow/registry.py|41|bare-except-pass
-control/execution/workflow/runner.py|1144|falsy-return
-control/execution/workflow/runner.py|1204|bare-except-pass
-control/execution/workflow/runner.py|1258|bare-except-pass
-control/execution/workflow/runner.py|139|falsy-return
-control/execution/workflow/runner.py|883|bare-except-pass
+control/execution/workflow/runner.py|1143|falsy-return
+control/execution/workflow/runner.py|1203|bare-except-pass
+control/execution/workflow/runner.py|1257|bare-except-pass
+control/execution/workflow/runner.py|138|falsy-return
+control/execution/workflow/runner.py|882|bare-except-pass
 control/execution/workflow/state_commands.py|118|bare-except-pass
 control/execution/workflow/state_commands.py|277|bare-except-pass
 control/execution/workflow/state_telemetry.py|124|falsy-return
