@@ -2,7 +2,14 @@
 """
 Repository Analysis Integration for Analyze Pack
 
-Integrates shared/repo-analysis utility with dream-studio analyze pack.
+Uses the repo_analysis package vendored alongside this file (previously
+shared/repo_analysis at the dream-studio repo root -- moved here 2026-09-27
+so this skill ships self-contained: dist/plugin publishes canonical/skills/**
+verbatim but never shared/, so the general-analysis capability silently
+could not work in an installed Dream Studio even after its import paths were
+fixed. repo_analysis has no internal dream-studio dependency beyond PyYAML,
+matching this same skill's domains/ analyzers, which already vendor their
+own local core/base_analyzer.py for the identical reason).
 Enables multi-perspective analysis of repository patterns and organizational structures.
 
 Supports domain-specific analysis (design, career, finance, real estate) and
@@ -29,13 +36,19 @@ Usage:
 import sys
 from pathlib import Path
 
-# Add the dream-studio repo root to path to import shared modules -- this file
-# lives at <repo_root>/canonical/skills/analyze/repo-analyzer.py, four levels
-# down from repo_root.
+# repo_analysis is vendored as a sibling of this file (canonical/skills/analyze/
+# repo_analysis/) -- add this file's own directory to sys.path to import it as
+# a plain top-level package, the same convention domains/registry.py already
+# uses for canonical/skills/analyze/core/.
+sys.path.insert(0, str(Path(__file__).parent))
+
+# The dream-studio repo root is ALSO needed, separately, for the domain
+# registry import below (canonical.skills.analyze.domains) -- this file lives
+# at <repo_root>/canonical/skills/analyze/repo-analyzer.py, four levels down.
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from shared.repo_analysis.analyzer import RepoAnalyzer
-from shared.repo_analysis.formatters import json_formatter, markdown_formatter
+from repo_analysis.analyzer import RepoAnalyzer
+from repo_analysis.formatters import json_formatter, markdown_formatter
 
 # Import domain registry
 try:
