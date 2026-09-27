@@ -376,7 +376,7 @@ Each pack is a single skill with multiple modes. Invoke via `Skill(skill="ds-<pa
 | Skill ID | Pack | Description |
 |----------|------|-------------|
 | `ds-core` | Build lifecycle | think, plan, build, review, verify, ship, handoff, recap, explain |
-| `ds-quality` | Code quality | debug, polish, harden, pr-security-scan, structure-audit, learn, coach, audit |
+| `ds-quality` | Code quality | debug, polish, harden, structure-audit, learn, coach, audit |
 | `ds-career` | Career pipeline | ops, scan, evaluate, apply, track, pdf |
 | `ds-analyze` | Analysis engine | multi, domain-re, repo, intelligence |
 | `ds-domains` | Domain builders | game-dev, saas-build, mcp-build, dashboard-dev, power-platform, design |

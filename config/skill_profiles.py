@@ -17,7 +17,7 @@ PRECEDENCE, highest first:
      a matrix should not fan out across tiers. Mirrors ``DS_GRADER_STUB``.
   2. an explicit ``override`` argument (a caller that already knows what it wants)
   3. the per-mode env var ``DS_SKILL_MODEL_<PACK>_<MODE>`` (non-alphanumerics become
-     underscores, so quality:pr-security-scan reads DS_SKILL_MODEL_QUALITY_PR_SECURITY_SCAN)
+     underscores, so security:review reads DS_SKILL_MODEL_SECURITY_REVIEW)
   4. a per-specifier or ``default`` entry in the JSON file at ``DS_SKILL_MODEL_CONFIG``
   5. the mode's ``config.yml`` ``model_tier``
   6. the card's ``model_preference``
@@ -64,7 +64,7 @@ class UnknownSkillModelTier(ValueError):
 def mode_env_var(specifier: str) -> str:
     """The per-mode override variable name for ``pack:mode``.
 
-    ``quality:pr-security-scan`` -> ``DS_SKILL_MODEL_QUALITY_PR_SECURITY_SCAN``.
+    ``security:review`` -> ``DS_SKILL_MODEL_SECURITY_REVIEW``.
     """
     normalized = _NON_ALNUM.sub("_", specifier.upper()).strip("_")
     return _MODE_ENV_PREFIX + normalized

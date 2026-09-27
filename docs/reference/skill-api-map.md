@@ -67,7 +67,6 @@ why, is stated in `canonical/rules.yml`.
 | types-deps | Claude Code conversation | skill.invoked → spool | — |
 | audit | Claude Code conversation | skill.invoked → spool | reg_gotchas |
 | pre-launch | `py core/gates/pre_push.py` + Claude Code | gate.pre_push.failed → spool | reg_gotchas |
-| pr-security-scan | Claude Code + `gh pr diff` | skill.invoked → spool | reg_gotchas |
 
 ---
 

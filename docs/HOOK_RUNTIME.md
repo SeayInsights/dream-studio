@@ -193,7 +193,7 @@ tier a skill mode asks for. Resolved by `config/skill_profiles.py`
    fan out across three tiers).
 2. an explicit `override` argument from a caller that already knows what it wants.
 3. the per-mode env override `DS_SKILL_MODEL_<PACK>_<MODE>`, punctuation normalised to
-   underscores — `quality:pr-security-scan` reads `DS_SKILL_MODEL_QUALITY_PR_SECURITY_SCAN`.
+   underscores — `security:review` reads `DS_SKILL_MODEL_SECURITY_REVIEW`.
 4. a per-specifier (or `default`) entry in the JSON file at `DS_SKILL_MODEL_CONFIG`.
 5. the mode's `config.yml` `model_tier`.
 6. the mode card's `model_preference` in `SKILL.md` frontmatter.
