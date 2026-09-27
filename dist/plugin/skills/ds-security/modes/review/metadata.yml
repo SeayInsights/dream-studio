@@ -1,9 +1,9 @@
 # Required fields
 name: review
-version: 2.0.0
+version: 2.1.0
 pack: security
 created_at: 2026-05-27
-updated_at: 2026-09-26
+updated_at: 2026-09-27
 
 # Evolution tracking
 origin: new
@@ -42,6 +42,8 @@ dependencies:
     - gitleaks                      # sec-001 — NOT installed; LLM fallback active
     - bandit                        # sec-005, sec-021 — NOT installed; LLM fallback active
     - semgrep                       # sec-002, sec-013 — NOT installed; LLM fallback active
+  # panel sub-mode only: dispatches analyst subagents via the Agent tool (Read, Grep, Agent) —
+  # no external tool dependency of its own; see panel/modes.yml + panel/analysts/*.yml
   env_vars_required: []
   files_required:
     - ds-security/references/regulatory-anchors.md  # regulatory framework reference
@@ -56,7 +58,8 @@ compatibility:
   platforms: [windows, macos, linux]
 
 # Discovery
-tags: [security, review, audit, enforcement, rules, static-analysis, build-time, diff-review]
+tags: [security, review, audit, enforcement, rules, static-analysis, build-time, diff-review,
+       owasp, stride, parallel-analysts]
 category: security
 triggers:
   # diff sub-mode (freeform PR/pre-commit vulnerability review)
@@ -73,11 +76,19 @@ triggers:
   - "build:security"
   - "enforce security:"
   - "security check before generate:"
+  # panel sub-mode (parallel OWASP/STRIDE analyst subagent review)
+  - "secure:"
+  - "/secure"
+  - "review architecture:"
+  - "threat model:"
 description: >
-  Code-level security review, in three sub-modes. diff: freeform LLM review of a PR/diff for
+  Code-level security review, in four sub-modes. diff: freeform LLM review of a PR/diff for
   high-confidence, newly-introduced exploitable vulnerabilities (3-phase methodology, opus,
   ≥8/10 confidence, HIGH/MEDIUM only). audit: rule-based codebase scan against 22 codified
   security rules using static analysis + LLM semantic pass (--changed/--full-repo/--sample
   scope). build: pre-generation static enforcement gate, blocks on critical/high findings.
-  audit and build degrade gracefully when static analyzers are not installed. Token budgets
-  for audit/build are estimates; Batch 7 of 18.4.1 measured real values on this repo.
+  panel: parallel OWASP/STRIDE analyst subagent review (pr-review/architecture-review/
+  dependency-audit argument modes) with any-reject synthesis and a binary ship/blocked verdict
+  — absorbed from quality:pr-security-scan (2026-09-27 skill-fleet audit). audit and build
+  degrade gracefully when static analyzers are not installed. Token budgets for audit/build are
+  estimates; Batch 7 of 18.4.1 measured real values on this repo.

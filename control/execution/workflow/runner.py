@@ -58,7 +58,6 @@ _BARE_TO_PACK: dict[str, str] = {
     "coach": "ds-core",
     # ds-quality
     "harden": "ds-quality",
-    "pr-security-scan": "ds-quality",
     # ds-code-health
     "debug": "ds-code-health",
     "structure-audit": "ds-code-health",

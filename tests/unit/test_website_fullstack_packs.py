@@ -131,17 +131,25 @@ def test_setup_jit_resolves_to_correct_skill_md():
 # ── PREREQ C: quality:secure rename + fullstack:integrate depth ───────────────
 
 
-def test_quality_pr_security_scan_resolves_correctly():
-    expected = REPO_ROOT / "canonical/skills/quality/modes/pr-security-scan/SKILL.md"
-    assert _skill_md("quality", "pr-security-scan") == expected
-    assert expected.is_file()
-
-
 def test_quality_secure_directory_removed():
     removed = REPO_ROOT / "canonical/skills/quality/modes/secure"
     assert (
         not removed.exists()
     ), "quality/modes/secure/ must not exist after rename to pr-security-scan"
+
+
+def test_quality_pr_security_scan_directory_removed():
+    """pr-security-scan moved again, 2026-09-27: quality:secure -> quality:pr-security-scan
+    (this file's original rename) -> security:review's `panel` sub-mode (this move)."""
+    removed = REPO_ROOT / "canonical/skills/quality/modes/pr-security-scan"
+    assert (
+        not removed.exists()
+    ), "quality/modes/pr-security-scan/ must not exist after the merge into security:review"
+
+
+def test_security_review_panel_resolves_correctly():
+    expected = REPO_ROOT / "canonical/skills/security/modes/review/panel/SKILL.md"
+    assert expected.is_file()
 
 
 def test_fullstack_integrate_skill_md_at_least_120_lines():
@@ -164,11 +172,37 @@ def test_fullstack_integrate_contains_schema_migration_section():
     assert "Schema Migration" in content or "schema migration" in content.lower()
 
 
-def test_packs_yaml_quality_modes_contains_pr_security_scan():
-    data = _load_packs()
-    assert "pr-security-scan" in data["packs"]["quality"]["modes"]
-
-
 def test_packs_yaml_quality_modes_does_not_contain_secure():
     data = _load_packs()
     assert "secure" not in data["packs"]["quality"]["modes"]
+
+
+def test_packs_yaml_quality_modes_does_not_contain_pr_security_scan():
+    """pr-security-scan moved out of quality entirely, 2026-09-27 -- merged into
+    security:review's `panel` sub-mode."""
+    data = _load_packs()
+    assert "pr-security-scan" not in data["packs"]["quality"]["modes"]
+
+
+def test_packs_yaml_check_is_mutation_sensitive(tmp_path):
+    """Mutation guard for the test above: prove it can actually go red, not just pass
+    vacuously. Reconstructs the pre-move packs.yaml shape in a temp copy (never touching
+    the real file) and confirms the same assertion the real test makes would have caught
+    it -- so a reviewer reverting this PR's packs.yaml edit sees this guard fail, not a
+    check that always passes regardless of content."""
+    original = PACKS_YAML.read_text(encoding="utf-8")
+    mutated_text = original.replace(
+        "modes: [harden, types-deps]", "modes: [harden, pr-security-scan, types-deps]"
+    )
+    assert mutated_text != original, (
+        "the replacement did not match anything in packs.yaml -- the real test's fixture "
+        "assumption (quality's modes line reads 'modes: [harden, types-deps]') is stale, "
+        "so this guard cannot prove the real test is sensitive to the defect"
+    )
+    mutated_path = tmp_path / "packs.yaml"
+    mutated_path.write_text(mutated_text, encoding="utf-8")
+    mutated_data = yaml.safe_load(mutated_path.read_text(encoding="utf-8"))
+    assert "pr-security-scan" in mutated_data["packs"]["quality"]["modes"], (
+        "reintroducing pr-security-scan into quality's modes line did not reproduce the "
+        "defect the real test guards against"
+    )

@@ -34,8 +34,9 @@ hygiene, and type-checker configuration scope. This is distinct from:
 
 **Section K-deps — dependency health**: declaration, lock files, CVE-gate enforcement, license
 compatibility, and Python circular-import avoidance. This is distinct from:
-- **`pr-security-scan:dependency-audit`** — which owns CVE *scan results* (the actual
-  vulnerabilities found), version pinning correctness on PRs, and unused packages on PRs.
+- **`security:review panel:dependency-audit`** (moved from `quality:pr-security-scan`,
+  2026-09-27) — which owns CVE *scan results* (the actual vulnerabilities found), version
+  pinning correctness on PRs, and unused packages on PRs.
   types-deps owns the *enforcement-gap finding* (dep-001: CVE gate runs non-blocking), dev-lock
   hygiene, license gate absence, and circular imports.
 - **`ds-security` pack** — which owns client-facing security scanning. types-deps is about the

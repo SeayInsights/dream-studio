@@ -21,9 +21,6 @@ class TestGetModelForSkill:
     def test_opus_skill_think(self) -> None:
         assert get_model_for_skill("ds-core think") == "opus"
 
-    def test_opus_skill_pr_security_scan(self) -> None:
-        assert get_model_for_skill("ds-quality pr-security-scan") == "opus"
-
     def test_opus_skill_binary_scan(self) -> None:
         assert get_model_for_skill("ds-security binary-scan") == "opus"
 

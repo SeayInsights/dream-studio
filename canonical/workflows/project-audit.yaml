@@ -19,7 +19,7 @@ nodes:
     timeout_seconds: 600
 
   - id: secure
-    skill: pr-security-scan
+    skill: security:review
     model: sonnet
     context: fresh
     timeout_seconds: 600

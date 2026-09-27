@@ -4,7 +4,7 @@
 
 A Dream Studio skill is a structured instruction set for an AI tool that encodes a specific development practice. Skills are not scripts — they are context packets that tell the AI model what to do, what constraints to respect, what gates to check, and what outputs to produce.
 
-Skills are organized into packs. Each pack is a top-level routing unit with multiple modes. The `ds-core` pack has modes like `think`, `plan`, `build`, and `ship`. The `ds-quality` pack has modes like `debug`, `pr-security-scan`, and `audit`. Invoking a skill means invoking a pack with a specific mode arg.
+Skills are organized into packs. Each pack is a top-level routing unit with multiple modes. The `ds-core` pack has modes like `think`, `plan`, `build`, and `ship`. The `ds-quality` pack has modes like `harden` and `types-deps`. Invoking a skill means invoking a pack with a specific mode arg.
 
 ---
 
@@ -28,7 +28,7 @@ Pack keys match the keys in `packs.yaml`. Mode names match the entries in the `m
 
 **Naming rules:**
 - Pack keys: lowercase, hyphen-separated (e.g., `ds-project`, `quality`)
-- Mode names: lowercase, hyphen-separated (e.g., `pr-security-scan`, `game-dev`)
+- Mode names: lowercase, hyphen-separated (e.g., `binary-scan`, `game-dev`)
 - File names: `SKILL.md` (uppercase), `config.yml` (lowercase)
 
 ---
@@ -125,10 +125,10 @@ If you are adding an entirely new pack (not a mode to an existing pack), also ad
 Every skill must work in two invocation modes:
 
 ### Interactive mode
-The user invokes the skill from Claude Code chat: `Skill(skill="ds-quality", args="pr-security-scan")`. The skill reads context from the active work order (loaded by `ds work-order start`), executes, and writes output to `.planning/`.
+The user invokes the skill from Claude Code chat: `Skill(skill="ds-quality", args="harden")`. The skill reads context from the active work order (loaded by `ds work-order start`), executes, and writes output to `.planning/`.
 
 ### CLI mode
-The skill is invoked from the CLI: `ds skill invoke quality:pr-security-scan --work-order <id>`. The CLI loads the work order context, passes it to the skill, and the skill executes identically to interactive mode.
+The skill is invoked from the CLI: `ds skill invoke quality:harden --work-order <id>`. The CLI loads the work order context, passes it to the skill, and the skill executes identically to interactive mode.
 
 **Contract requirements:**
 1. The skill must read `context.md` from `.planning/<work_order_id>/` if available

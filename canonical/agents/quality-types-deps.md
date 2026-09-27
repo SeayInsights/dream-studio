@@ -101,7 +101,7 @@ pyproject.toml. The enforcement gap finding reports *this project's* actual cove
 - Code structure concerns (one-concept-per-file, file size, etc.)
 - Whether a type checker is installed at all (M-partial: "type checker automated")
 
-**pr-security-scan:dependency-audit owns:**
+**security:review panel:dependency-audit owns (moved from quality:pr-security-scan, 2026-09-27):**
 - Actual CVE findings (the specific vulnerabilities discovered in deps)
 - Version pinning correctness on PR diffs
 - Unused packages on PR diffs
@@ -121,7 +121,7 @@ pyproject.toml. The enforcement gap finding reports *this project's* actual cove
   types-deps fires if checker exists but doesn't cover all source.
 - `dep-007` (circular imports) ↔ `cq-D-import-order` (ordering): ordering is code-quality;
   runtime cycles are types-deps.
-- `dep-001` (CVE gate) ↔ `pr-security-scan:dependency-audit` (CVE findings): security-scan
+- `dep-001` (CVE gate) ↔ `security:review panel:dependency-audit` (CVE findings): security-scan
   owns the vulnerabilities; types-deps owns whether the gate actually blocks them.
 
 ## Cross-Language Support (Phase 1: TypeScript)

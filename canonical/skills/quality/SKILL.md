@@ -14,4 +14,5 @@
 | Mode | File | Keywords |
 |---|---|---|
 | harden | modes/harden/SKILL.md | /harden, harden audit, harden fix |
-| secure | the ds-fullstack pack's secure mode | secure:, security review:, audit code: |
+| types-deps | modes/types-deps/SKILL.md | audit:, types audit:, deps audit:, dependency audit:, type safety:, annotation coverage:, build:types-deps |
+| secure | the ds-security pack's review skill, `panel` sub-mode | secure:, /secure, review architecture:, threat model: |

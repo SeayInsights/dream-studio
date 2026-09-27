@@ -124,3 +124,17 @@ slice of the pack-split campaign that began by splitting database/data-engineeri
 data/ pack (first slice, 2026-09-24); quality (21 modes) and domains (12 modes) are now both
 fully decomposed into single-concern packs. -->
 
+<!-- Reviewed 2026-09-27 - content merge: quality's `pr-security-scan` mode (parallel OWASP/STRIDE
+analyst-subagent security review) merged into the EXISTING security pack's `review` mode as a
+fourth sub-mode, `panel` (canonical/skills/security/modes/review/panel/{SKILL.md,modes.yml,
+analysts/*.yml,gotchas.yml,examples.md}), alongside its existing diff/audit/build sub-modes --
+another content merge, not a relocation, matching the quality:security -> security:review
+precedent from the eighth/ninth slices above: audit/build are a rule engine, diff is a single
+freeform pass, and panel is a third genuinely different mechanism (parallel analyst subagents,
+any-reject synthesis) rather than a fourth name for one of the first three. Its own config.yml/
+metadata.yml/changelog.md had no per-submode analog among diff/audit/build (none of those three
+carry their own either) so their content was folded into review's shared files instead of
+duplicated. packs.yaml's quality mode list lost one entry (pr-security-scan); security's mode
+list is unchanged (panel sits under the existing `review` entry, same as diff/audit/build).
+No directory-tree layout change -- security/ already existed. -->
+

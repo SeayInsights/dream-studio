@@ -19,7 +19,7 @@ from config.skill_profiles import (
     resolve_skill_model,
 )
 
-SPEC = "quality:pr-security-scan"
+SPEC = "security:review"
 
 
 @pytest.fixture(autouse=True)
@@ -99,7 +99,7 @@ def test_a_typo_on_a_card_is_refused_rather_than_silently_defaulted():
 
 
 def test_the_env_var_name_normalises_punctuation():
-    assert mode_env_var("quality:pr-security-scan") == "DS_SKILL_MODEL_QUALITY_PR_SECURITY_SCAN"
+    assert mode_env_var("security:review") == "DS_SKILL_MODEL_SECURITY_REVIEW"
     assert mode_env_var("core:think") == "DS_SKILL_MODEL_CORE_THINK"
 
 

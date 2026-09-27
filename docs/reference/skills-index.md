@@ -13,7 +13,7 @@ Complete reference for all packs, modes, and routing triggers.
 | Pack | Skill ID | Modes | Mode Count |
 |------|----------|-------|-----------|
 | **core** | `ds-core` | think, plan, build, review, verify, ship, handoff, recap, explain | 9 |
-| **quality** | `ds-quality` | debug, polish, harden, pr-security-scan, structure-audit, learn, coach, audit, security, accessibility, database, code-quality, testing, types-deps, backend-api, frontend-ux, architecture, ops, database-compliance, pre-launch | 20 |
+| **quality** | `ds-quality` | debug, polish, harden, structure-audit, learn, coach, audit, security, accessibility, database, code-quality, testing, types-deps, backend-api, frontend-ux, architecture, ops, database-compliance, pre-launch | 19 |
 | **analyze** | `ds-analyze` | multi, domain-re, repo, intelligence, research, idea-validation | 6 |
 | **domains** | `ds-domains` | game-dev, saas-build, mcp-build, dashboard-dev, power-platform, design, fullstack, website, devops, kubernetes, technical-writing, terraform, mobile, data-engineering | 14 |
 | **workflow** | `ds-workflow` | _(orchestration infrastructure — no discrete modes)_ | — |
@@ -53,7 +53,6 @@ Triggers appear in user messages to auto-route to the correct pack and mode.
 | `debug:`, `diagnose:` | debug |
 | `polish:` | polish |
 | `harden:` | harden |
-| `pr-security-scan:` | pr-security-scan |
 | `structure-audit:` | structure-audit |
 | `learn:` | learn |
 | `coach:` | coach |

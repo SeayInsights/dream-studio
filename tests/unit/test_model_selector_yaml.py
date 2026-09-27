@@ -171,10 +171,6 @@ class TestGetModelForSkillFromConfigYml:
         """core explain → config.yml should declare haiku."""
         assert get_model_for_skill("ds-core explain") == "haiku"
 
-    def test_pr_security_scan_reads_opus_from_config_yml(self) -> None:
-        """quality pr-security-scan → config.yml should declare opus."""
-        assert get_model_for_skill("ds-quality pr-security-scan") == "opus"
-
     def test_binary_scan_reads_opus_from_config_yml(self) -> None:
         """security binary-scan → config.yml should declare opus."""
         assert get_model_for_skill("ds-security binary-scan") == "opus"

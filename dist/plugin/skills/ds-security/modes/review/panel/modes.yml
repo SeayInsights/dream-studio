@@ -1,4 +1,4 @@
-# Secure Skill — Mode Configuration
+# Panel Sub-mode — Argument Mode Configuration (security:review panel)
 # Each mode defines which analysts run, dispatch order, and synthesis strategy.
 # any-reject strategy: one reject/strong-reject blocks ship regardless of other signals.
 

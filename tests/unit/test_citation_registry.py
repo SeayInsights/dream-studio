@@ -251,7 +251,8 @@ def test_claim_guards_are_wired_to_a_real_owner():
 
 
 def test_every_owasp_top10_category_has_an_analyst_seat():
-    """pr-security-scan advertises an OWASP scan, so every category in the current
+    """security:review's panel sub-mode (formerly quality:pr-security-scan, moved
+    2026-09-27) advertises an OWASP scan, so every category in the current
     edition needs a seat that names it -- either a dedicated analyst or a STRIDE
     analyst whose perspective declares it covers that category.
 
@@ -268,7 +269,7 @@ def test_every_owasp_top10_category_has_an_analyst_seat():
     }
     assert len(current) == 10, f"expected 10 Top 10 categories registered, found {len(current)}"
 
-    analysts = CANONICAL / "skills/quality/modes/pr-security-scan/analysts"
+    analysts = CANONICAL / "skills/security/modes/review/panel/analysts"
     seats = "\n".join(p.read_text(encoding="utf-8") for p in sorted(analysts.glob("*.yml")))
 
     orphans = [
@@ -286,7 +287,7 @@ def test_every_owasp_top10_category_has_an_analyst_seat():
 def test_registered_analysts_exist_on_disk():
     """A mode listing an analyst file that does not exist fails at dispatch time,
     in the middle of a security scan."""
-    base = CANONICAL / "skills/quality/modes/pr-security-scan"
+    base = CANONICAL / "skills/security/modes/review/panel"
     modes = yaml.safe_load((base / "modes.yml").read_text(encoding="utf-8"))
     missing = []
     for mode, cfg in modes.items():

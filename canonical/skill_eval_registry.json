@@ -275,10 +275,6 @@
       "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
       "status": "gap"
     },
-    "quality/modes/pr-security-scan/SKILL.md": {
-      "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
-      "status": "gap"
-    },
     "quality/modes/types-deps/SKILL.md": {
       "reason": "pack/mode-family router; delegates to modes/<mode>/SKILL.md, no capability of its own",
       "status": "no_output"
@@ -363,6 +359,10 @@
     },
     "security/modes/review/diff/SKILL.md": {
       "reason": "not yet audited for real eval coverage (E19 systemic-discovery pass, 2026-09-27) -- a declared output exists but no test has been verified against it yet",
+      "status": "gap"
+    },
+    "security/modes/review/panel/SKILL.md": {
+      "reason": "moved from quality/modes/pr-security-scan/SKILL.md (merged in as review's 4th sub-mode, 2026-09-27) -- carried the same gap status forward: a declared output (severity-tagged findings + ship verdict) exists but no verified test covers the parallel-analyst mechanism yet",
       "status": "gap"
     },
     "security/modes/scan/SKILL.md": {
