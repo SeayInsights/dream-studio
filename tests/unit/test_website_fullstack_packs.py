@@ -182,3 +182,27 @@ def test_packs_yaml_quality_modes_does_not_contain_pr_security_scan():
     security:review's `panel` sub-mode."""
     data = _load_packs()
     assert "pr-security-scan" not in data["packs"]["quality"]["modes"]
+
+
+def test_packs_yaml_check_is_mutation_sensitive(tmp_path):
+    """Mutation guard for the test above: prove it can actually go red, not just pass
+    vacuously. Reconstructs the pre-move packs.yaml shape in a temp copy (never touching
+    the real file) and confirms the same assertion the real test makes would have caught
+    it -- so a reviewer reverting this PR's packs.yaml edit sees this guard fail, not a
+    check that always passes regardless of content."""
+    original = PACKS_YAML.read_text(encoding="utf-8")
+    mutated_text = original.replace(
+        "modes: [harden, types-deps]", "modes: [harden, pr-security-scan, types-deps]"
+    )
+    assert mutated_text != original, (
+        "the replacement did not match anything in packs.yaml -- the real test's fixture "
+        "assumption (quality's modes line reads 'modes: [harden, types-deps]') is stale, "
+        "so this guard cannot prove the real test is sensitive to the defect"
+    )
+    mutated_path = tmp_path / "packs.yaml"
+    mutated_path.write_text(mutated_text, encoding="utf-8")
+    mutated_data = yaml.safe_load(mutated_path.read_text(encoding="utf-8"))
+    assert "pr-security-scan" in mutated_data["packs"]["quality"]["modes"], (
+        "reintroducing pr-security-scan into quality's modes line did not reproduce the "
+        "defect the real test guards against"
+    )
