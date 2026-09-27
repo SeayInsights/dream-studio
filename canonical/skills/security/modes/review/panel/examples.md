@@ -1,4 +1,4 @@
-# secure — Detailed Reference
+# panel — Detailed Reference
 
 Extracted from SKILL.md to reduce context injection size.
 
@@ -52,9 +52,9 @@ If mode is missing: default to `pr-review`. If input is absent: ask — "Paste t
 
 ### Step 1: Validation Gate (BP1)
 
-1. Read `skills/secure/modes.yml`. Confirm the requested mode exists.
+1. Read `modes.yml` in this directory. Confirm the requested mode exists.
 2. Get the analyst list for this mode (or `quick_analysts` if `--quick`).
-3. For each analyst, confirm `skills/secure/analysts/{name}.yml` exists.
+3. For each analyst, confirm `analysts/{name}.yml` exists in this directory.
 4. Read each analyst YAML. Verify required fields: `name`, `perspective`, `weight`, `model`, `prompt_template`.
 5. If ANY file is missing or field absent: **stop** with specific error.
 6. If mode `status` is `experimental`: warn — "Mode `{mode}` is experimental." Continue without waiting.

@@ -2,6 +2,10 @@
 # JIT enrichment policy: this file populates from first real usage.
 # Do NOT add speculative entries. See STRUCTURE.md v2.1.
 # Enrich after Batch 7 (first real audit on dream-studio-clean).
+#
+# panel/ has its OWN populated gotchas.yml (moved with it from quality:pr-security-scan) --
+# read both files when running panel. This file stays the shared JIT-pending baseline for
+# diff/audit/build.
 
 avoid: []
 
