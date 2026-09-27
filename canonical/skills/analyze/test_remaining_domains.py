@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Test career, finance, and real estate analyzers"""
+"""Tests for the career, finance, and real-estate domain analyzers."""
 
 import sys
 from pathlib import Path
+
+import pytest
 
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -11,91 +13,33 @@ from domains.career import CareerSkillAnalyzer
 from domains.finance import FinanceSkillAnalyzer
 from domains.real_estate import RealEstateSkillAnalyzer
 
-print("=" * 80)
-print("TESTING REMAINING DOMAIN ANALYZERS")
-print("=" * 80)
+# Use the analyze skill's own directory as the test subject -- these analyzers
+# only need a repo_path that exists and is a directory; a low/uninteresting
+# score is expected and is not what's under test here.
+TEST_PATH = Path(__file__).parent
+TEST_NAME = "analyze-skill"
 
-# Test directory (use analyze directory itself as test subject)
-test_path = Path(__file__).parent
-test_name = "analyze-skill"
+ANALYZER_CLASSES = [CareerSkillAnalyzer, FinanceSkillAnalyzer, RealEstateSkillAnalyzer]
 
-# Test Career
-print("\n" + "=" * 80)
-print("1. CAREER SKILL ANALYZER")
-print("=" * 80)
 
-career = CareerSkillAnalyzer(test_path, test_name)
-print(f"Domain: {career.get_domain_name()}")
-print(f"Capabilities: {len(career.get_capabilities())}")
-print(f"\nWeights (should sum to 1.0):")
-total_weight = sum(CareerSkillAnalyzer.WEIGHTS.values())
-print(f"  Total: {total_weight:.2f}")
-for cap, weight in list(CareerSkillAnalyzer.WEIGHTS.items())[:5]:
-    print(f"  {cap}: {weight:.2f}")
+@pytest.mark.parametrize("analyzer_class", ANALYZER_CLASSES)
+def test_weights_sum_to_one(analyzer_class):
+    total_weight = sum(analyzer_class.WEIGHTS.values())
+    assert total_weight == pytest.approx(1.0)
 
-print(f"\nRunning analysis...")
-scores = career.score_repository()
-print(f"\nOverall Score: {scores['overall_score']}/10.0")
-print(f"Top 3 capabilities:")
-sorted_caps = sorted(
-    [(cap, scores[cap]) for cap in career.get_capabilities()], key=lambda x: x[1], reverse=True
-)
-for cap, score in sorted_caps[:3]:
-    print(f"  {cap}: {score}/10.0")
 
-# Test Finance
-print("\n" + "=" * 80)
-print("2. FINANCE SKILL ANALYZER")
-print("=" * 80)
+@pytest.mark.parametrize("analyzer_class", ANALYZER_CLASSES)
+def test_capability_count_matches_weight_count(analyzer_class):
+    analyzer = analyzer_class(TEST_PATH, TEST_NAME)
+    assert len(analyzer.get_capabilities()) == len(analyzer_class.WEIGHTS)
 
-finance = FinanceSkillAnalyzer(test_path, test_name)
-print(f"Domain: {finance.get_domain_name()}")
-print(f"Capabilities: {len(finance.get_capabilities())}")
-print(f"\nWeights (should sum to 1.0):")
-total_weight = sum(FinanceSkillAnalyzer.WEIGHTS.values())
-print(f"  Total: {total_weight:.2f}")
-for cap, weight in list(FinanceSkillAnalyzer.WEIGHTS.items())[:5]:
-    print(f"  {cap}: {weight:.2f}")
 
-print(f"\nRunning analysis...")
-scores = finance.score_repository()
-print(f"\nOverall Score: {scores['overall_score']}/10.0")
-print(f"Top 3 capabilities:")
-sorted_caps = sorted(
-    [(cap, scores[cap]) for cap in finance.get_capabilities()], key=lambda x: x[1], reverse=True
-)
-for cap, score in sorted_caps[:3]:
-    print(f"  {cap}: {score}/10.0")
+@pytest.mark.parametrize("analyzer_class", ANALYZER_CLASSES)
+def test_score_repository_returns_bounded_scores(analyzer_class):
+    analyzer = analyzer_class(TEST_PATH, TEST_NAME)
+    scores = analyzer.score_repository()
 
-# Test Real Estate
-print("\n" + "=" * 80)
-print("3. REAL ESTATE SKILL ANALYZER")
-print("=" * 80)
-
-real_estate = RealEstateSkillAnalyzer(test_path, test_name)
-print(f"Domain: {real_estate.get_domain_name()}")
-print(f"Capabilities: {len(real_estate.get_capabilities())}")
-print(f"\nWeights (should sum to 1.0):")
-total_weight = sum(RealEstateSkillAnalyzer.WEIGHTS.values())
-print(f"  Total: {total_weight:.2f}")
-for cap, weight in list(RealEstateSkillAnalyzer.WEIGHTS.items())[:5]:
-    print(f"  {cap}: {weight:.2f}")
-
-print(f"\nRunning analysis...")
-scores = real_estate.score_repository()
-print(f"\nOverall Score: {scores['overall_score']}/10.0")
-print(f"Top 3 capabilities:")
-sorted_caps = sorted(
-    [(cap, scores[cap]) for cap in real_estate.get_capabilities()], key=lambda x: x[1], reverse=True
-)
-for cap, score in sorted_caps[:3]:
-    print(f"  {cap}: {score}/10.0")
-
-print("\n" + "=" * 80)
-print("ALL TESTS COMPLETE")
-print("=" * 80)
-print("\nVerification:")
-print("- All analyzers have 10 capabilities")
-print("- All weights sum to 1.0")
-print("- All score_repository() methods work correctly")
-print("- Ready for production use")
+    assert 0.0 <= scores["overall_score"] <= 10.0
+    for capability in analyzer.get_capabilities():
+        assert capability in scores
+        assert 0.0 <= scores[capability] <= 10.0
