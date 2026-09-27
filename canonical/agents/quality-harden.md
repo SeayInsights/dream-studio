@@ -125,7 +125,7 @@ After the Explore subagent returns:
 
 ### Tier 1 structural files (items 1, 2, 3, 6, 7, 11, 13, 19)
 
-For each missing structural file, copy from `templates/project-standards/` in the dream-studio repo:
+For each missing structural file, copy from `packs/domains/templates/project-standards/` in the dream-studio repo:
 - `README.md` → project root (replace `{project-name}`, `{owner}`, `{repo}` placeholders; then fill sections from actual project)
 - `Makefile` → project root (parameterize Python command if needed)
 - `pyproject.toml` → project root
