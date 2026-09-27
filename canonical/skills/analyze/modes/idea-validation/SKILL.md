@@ -1,3 +1,24 @@
+---
+dream_studio:
+  skill_id: ds-analyze
+  pack: analyze
+  mode: idea-validation
+  mode_type: analysis
+  inputs: [decision_input, market_context]
+  outputs: [fatal_flaw_analysis, assumption_inventory, market_reality_check, competitive_moat_analysis, go_no_go_verdict]
+  capabilities_required: [Read, Agent]
+  model_preference: sonnet
+  estimated_duration: 15-30min
+  write_posture: read-only
+  lifecycle: published
+name: idea-validation
+description: Stress-tests business/product ideas by hunting for fatal flaws, mapping assumptions, and demanding evidence before rendering a Go/No-Go verdict
+triggers: ["validate idea", "stress-test", "fatal flaw", "product idea", "feature idea", "go no-go"]
+model_tier: sonnet
+---
+
+# Analyze — Idea Validation
+
 ## Patterns / Approach
 
 This agent does NOT validate ideas. It stress-tests them.

@@ -1,16 +1,131 @@
 version: 1.0
 
 # Things to AVOID
-avoid: []
+avoid:
+  - id: softening-skeptic-findings
+    pattern: >
+      Rephrasing the skeptic analyst's "reject" or an unresolved fatal-flaw
+      finding as something like "proceed with caution" while synthesizing the
+      decision memo
+    why: >
+      The skeptic persona exists specifically to counter diplomatic softening
+      -- real estate decisions involve real money, and a softened "reject"
+      costs it. Rewriting the skeptic's verdict during synthesis defeats the
+      reason a forensic-skeptic analyst was spawned in the first place (see
+      SKILL.md's own Anti-patterns section).
+    instead: >
+      Preserve the skeptic's verdict language verbatim in the synthesized
+      memo. Let the diplomat analyst -- a separate persona -- handle
+      stakeholder framing; don't let the synthesis step do it instead.
+    severity: critical
+
+  - id: skip-credit-check-for-established-tenant
+    pattern: >
+      Skipping credit-check mode, or defaulting to --quick (diplomat-only),
+      because the tenant is a well-known or "established" company
+    why: >
+      The most elaborate lease frauds and financial collapses in commercial
+      real estate come from established-looking companies, not obscure ones.
+      "Established" is reputation, not evidence of current creditworthiness.
+    instead: >
+      Run credit-check mode (skeptic lens only, no diplomatic softening)
+      regardless of tenant reputation.
+    severity: high
+
+  - id: treat-neutral-signal-as-approval
+    pattern: Reading an analyst's "neutral" signal as tacit approval to proceed
+    why: >
+      Neutral means insufficient data to make a call, not that the deal is
+      safe. Treating it as a pass silently converts a data gap into a
+      recommendation.
+    instead: >
+      Treat neutral the same as an unresolved fatal-flaw candidate: a
+      trigger to gather more evidence before the Go/No-Go step, not a green
+      light.
+    severity: high
+
+  - id: trust-analyst-benchmark-figures-unverified
+    pattern: >
+      Acting on a specific number an analyst cites (e.g. "$28.50/sf vs.
+      $24/sf market") without checking it against current market data
+    why: >
+      All three analysts reason qualitatively from training-data knowledge,
+      which can be stale or imprecise -- this skill has no calculator
+      integration and does not compute figures itself (see SKILL.md's own
+      Limitations section).
+    instead: >
+      When a specific number materially affects the decision, verify it
+      against current market data, or against the vp-real-estate calculator
+      suite this skill's Limitations section names as the computation layer.
+    severity: high
+
+  - id: accept-vague-key-factors
+    pattern: '"rent is above market" (or similarly vague statements) accepted as an analyst finding'
+    why: >
+      A vague claim with no supporting figures or offsetting terms is not a
+      finding an institutional-grade decision can be based on.
+    instead: >
+      Require the specific figures and context, e.g. "$28.50/sf vs. $24/sf
+      market median = 18.75% premium with no offsetting TI" (SKILL.md's own
+      example of a real finding vs. a non-finding).
+    severity: medium
 
 # Best PRACTICES
-best_practices: []
+best_practices:
+  - id: disclose-not-advice
+    practice: >
+      Always carry the regulatory disclaimer with any output: these analysts
+      provide analytical frameworks and institutional-grade reasoning, not
+      legal, accounting, or investment advice, and every output must be
+      validated by qualified professionals.
+    benefit: >
+      Keeps the "institutional-grade reasoning" framing honest about what
+      this skill is (a judgment layer over qualitative signals) versus what
+      it is not (a licensed opinion or a source of verified numbers).
+    when: Every invocation's output, not only when a user asks about it.
+
+  - id: pair-with-calculator-suite-for-quantitative-decisions
+    practice: >
+      For decisions where verified numbers matter (effective rent NPV, IFRS
+      16 schedules, option valuation, tenant credit scoring), pair this
+      skill with the vp-real-estate calculator suite named in SKILL.md's
+      Limitations section rather than relying on analyst-cited figures alone.
+    benefit: >
+      This skill is the judgment layer; the calculator suite is the
+      computation layer -- neither substitutes for the other.
+    when: >
+      renewal-economics and credit-check modes especially, where one
+      miscalculated figure can flip the recommendation.
 
 # Edge CASES handled
-edge_cases: []
+edge_cases:
+  - case: --quick flag used on a complex or high-stakes deal
+    handling: >
+      --quick runs the diplomat only (fast, routine analysis) -- by design,
+      the default analyst for routine work.
+    limitation: >
+      The skeptic's forensic rigor and the strategist's negotiation
+      psychology and career-reality checks are both skipped entirely.
+      --quick is documented as being for routine analysis; using it on a
+      complex or high-stakes deal trades away the two analysts most likely
+      to catch a problem.
 
 # Known LIMITATIONS
-limitations: []
+limitations:
+  - limitation: >
+      No calculator integration -- analysts reason about numbers
+      qualitatively rather than computing them (SKILL.md's own Limitations
+      section).
+    impact: >
+      Cited figures (rent premiums, NPV comparisons, credit metrics) can be
+      stale or imprecise since they come from training-data knowledge, not a
+      live computation.
+    workaround: >
+      Verify any decision-driving number against current market data or the
+      vp-real-estate calculator suite before acting on it.
+    planned_fix: >
+      Not scheduled -- disclosed, by-design split between this skill's
+      judgment layer and an external calculation layer.
 
 # DEPRECATIONS
 deprecated: []

@@ -25,23 +25,11 @@ canonical/skills/analyze/repo-analyzer.py:50:1: E402 module level import not at 
 canonical/skills/analyze/repo-analyzer.py:51:1: E402 module level import not at top of file
 canonical/skills/analyze/repo_analysis/analyzer.py:368:19: F541 f-string is missing placeholders
 canonical/skills/analyze/repo_analysis/analyzer.py:372:19: F541 f-string is missing placeholders
-canonical/skills/analyze/test_analyzer.py:10:1: E402 module level import not at top of file
-canonical/skills/analyze/test_analyzer.py:11:1: E402 module level import not at top of file
-canonical/skills/analyze/test_analyzer.py:45:7: F541 f-string is missing placeholders
-canonical/skills/analyze/test_analyzer.py:69:7: F541 f-string is missing placeholders
+canonical/skills/analyze/test_analyzer.py:16:1: E402 module level import not at top of file
 canonical/skills/analyze/test_domains.py:10:1: E402 module level import not at top of file
-canonical/skills/analyze/test_remaining_domains.py:10:1: E402 module level import not at top of file
-canonical/skills/analyze/test_remaining_domains.py:11:1: E402 module level import not at top of file
 canonical/skills/analyze/test_remaining_domains.py:12:1: E402 module level import not at top of file
-canonical/skills/analyze/test_remaining_domains.py:30:7: F541 f-string is missing placeholders
-canonical/skills/analyze/test_remaining_domains.py:36:7: F541 f-string is missing placeholders
-canonical/skills/analyze/test_remaining_domains.py:39:7: F541 f-string is missing placeholders
-canonical/skills/analyze/test_remaining_domains.py:54:7: F541 f-string is missing placeholders
-canonical/skills/analyze/test_remaining_domains.py:60:7: F541 f-string is missing placeholders
-canonical/skills/analyze/test_remaining_domains.py:63:7: F541 f-string is missing placeholders
-canonical/skills/analyze/test_remaining_domains.py:78:7: F541 f-string is missing placeholders
-canonical/skills/analyze/test_remaining_domains.py:84:7: F541 f-string is missing placeholders
-canonical/skills/analyze/test_remaining_domains.py:87:7: F541 f-string is missing placeholders
+canonical/skills/analyze/test_remaining_domains.py:13:1: E402 module level import not at top of file
+canonical/skills/analyze/test_remaining_domains.py:14:1: E402 module level import not at top of file
 canonical/skills/website/scripts/brand-compliance.py:57:5: E741 ambiguous variable name 'l'
 canonical/skills/website/scripts/generate-tokens.py:108:11: E741 ambiguous variable name 'l'
 canonical/skills/website/scripts/generate-tokens.py:27:31: E203 whitespace before ':'
