@@ -131,17 +131,25 @@ def test_setup_jit_resolves_to_correct_skill_md():
 # ── PREREQ C: quality:secure rename + fullstack:integrate depth ───────────────
 
 
-def test_quality_pr_security_scan_resolves_correctly():
-    expected = REPO_ROOT / "canonical/skills/quality/modes/pr-security-scan/SKILL.md"
-    assert _skill_md("quality", "pr-security-scan") == expected
-    assert expected.is_file()
-
-
 def test_quality_secure_directory_removed():
     removed = REPO_ROOT / "canonical/skills/quality/modes/secure"
     assert (
         not removed.exists()
     ), "quality/modes/secure/ must not exist after rename to pr-security-scan"
+
+
+def test_quality_pr_security_scan_directory_removed():
+    """pr-security-scan moved again, 2026-09-27: quality:secure -> quality:pr-security-scan
+    (this file's original rename) -> security:review's `panel` sub-mode (this move)."""
+    removed = REPO_ROOT / "canonical/skills/quality/modes/pr-security-scan"
+    assert (
+        not removed.exists()
+    ), "quality/modes/pr-security-scan/ must not exist after the merge into security:review"
+
+
+def test_security_review_panel_resolves_correctly():
+    expected = REPO_ROOT / "canonical/skills/security/modes/review/panel/SKILL.md"
+    assert expected.is_file()
 
 
 def test_fullstack_integrate_skill_md_at_least_120_lines():
@@ -164,11 +172,13 @@ def test_fullstack_integrate_contains_schema_migration_section():
     assert "Schema Migration" in content or "schema migration" in content.lower()
 
 
-def test_packs_yaml_quality_modes_contains_pr_security_scan():
-    data = _load_packs()
-    assert "pr-security-scan" in data["packs"]["quality"]["modes"]
-
-
 def test_packs_yaml_quality_modes_does_not_contain_secure():
     data = _load_packs()
     assert "secure" not in data["packs"]["quality"]["modes"]
+
+
+def test_packs_yaml_quality_modes_does_not_contain_pr_security_scan():
+    """pr-security-scan moved out of quality entirely, 2026-09-27 -- merged into
+    security:review's `panel` sub-mode."""
+    data = _load_packs()
+    assert "pr-security-scan" not in data["packs"]["quality"]["modes"]
