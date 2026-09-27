@@ -21,8 +21,10 @@ canonical/skills/analyze/domains/finance.py:25:1: E402 module level import not a
 canonical/skills/analyze/domains/finance.py:585:29: F541 f-string is missing placeholders
 canonical/skills/analyze/domains/real_estate.py:25:1: E402 module level import not at top of file
 canonical/skills/analyze/domains/registry.py:15:1: E402 module level import not at top of file
-canonical/skills/analyze/repo-analyzer.py:37:1: E402 module level import not at top of file
-canonical/skills/analyze/repo-analyzer.py:38:1: E402 module level import not at top of file
+canonical/skills/analyze/repo-analyzer.py:50:1: E402 module level import not at top of file
+canonical/skills/analyze/repo-analyzer.py:51:1: E402 module level import not at top of file
+canonical/skills/analyze/repo_analysis/analyzer.py:368:19: F541 f-string is missing placeholders
+canonical/skills/analyze/repo_analysis/analyzer.py:372:19: F541 f-string is missing placeholders
 canonical/skills/analyze/test_analyzer.py:10:1: E402 module level import not at top of file
 canonical/skills/analyze/test_analyzer.py:11:1: E402 module level import not at top of file
 canonical/skills/analyze/test_analyzer.py:45:7: F541 f-string is missing placeholders
@@ -132,8 +134,6 @@ runtime/hooks/meta/on-skill-telemetry.py:33:1: E402 module level import not at t
 runtime/hooks/meta/on-token-log.py:32:1: E402 module level import not at top of file
 runtime/hooks/meta/on-token-log.py:33:1: E402 module level import not at top of file
 runtime/hooks/meta/on-token-log.py:34:1: E402 module level import not at top of file
-shared/repo_analysis/analyzer.py:368:19: F541 f-string is missing placeholders
-shared/repo_analysis/analyzer.py:372:19: F541 f-string is missing placeholders
 spool/ingestor.py:13:1: E402 module level import not at top of file
 spool/ingestor.py:14:1: E402 module level import not at top of file
 tests/integration/test_daily_learning_pipeline.py:60:28: E741 ambiguous variable name 'l'
