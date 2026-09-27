@@ -161,7 +161,7 @@ def test_workflow_skill_specifiers_are_valid():
         "plan",
         "verify",
         "dashboard",
-        "pr-security-scan",
+        "security:review",
         "review",
         "build",
         "think",

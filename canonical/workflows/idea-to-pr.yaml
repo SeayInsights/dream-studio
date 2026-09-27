@@ -53,7 +53,7 @@ nodes:
     agent: engineering
 
   - id: review-security
-    skill: pr-security-scan
+    skill: security:review
     depends_on: [build]
     model: sonnet
     context: fresh
@@ -128,7 +128,7 @@ nodes:
     input: "{{synthesize.output}}"
 
   - id: triage-security
-    skill: pr-security-scan
+    skill: security:review
     depends_on: [synthesize]
     condition: "{{synthesize.security_signal}} == blocked or {{synthesize.security_signal}} == strong_reject"
     model: sonnet
