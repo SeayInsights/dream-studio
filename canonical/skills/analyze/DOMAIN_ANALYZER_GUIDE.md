@@ -61,7 +61,11 @@ py repo-analyzer.py /path/repo1 /path/repo2 --domain design --compare
 ### Python API
 
 ```python
-from skills.analyze.repo_analyzer import analyze_repositories
+import importlib.util
+spec = importlib.util.spec_from_file_location("repo_analyzer", "repo-analyzer.py")
+repo_analyzer = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(repo_analyzer)
+analyze_repositories = repo_analyzer.analyze_repositories
 
 # Domain-specific analysis
 result = analyze_repositories(
@@ -85,7 +89,7 @@ result = analyze_repositories(
 ### Using Registry Directly
 
 ```python
-from domains.registry import DomainAnalyzerRegistry
+from canonical.skills.analyze.domains.registry import DomainAnalyzerRegistry
 from pathlib import Path
 
 # Auto-detect domain
@@ -378,7 +382,7 @@ def _register_builtin_analyzers():
 ### Step 3: Test
 
 ```python
-from domains.registry import DomainAnalyzerRegistry
+from canonical.skills.analyze.domains.registry import DomainAnalyzerRegistry
 
 analyzer = DomainAnalyzerRegistry.get_analyzer(
     'new_domain',
@@ -418,8 +422,12 @@ py repo-analyzer.py \
 
 ```python
 from pathlib import Path
-from skills.analyze.repo_analyzer import analyze_repositories
-from domains.registry import DomainAnalyzerRegistry
+import importlib.util
+spec = importlib.util.spec_from_file_location("repo_analyzer", "repo-analyzer.py")
+repo_analyzer = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(repo_analyzer)
+analyze_repositories = repo_analyzer.analyze_repositories
+from canonical.skills.analyze.domains.registry import DomainAnalyzerRegistry
 
 repo_path = Path('~/repos/mystery-repo')
 
@@ -476,7 +484,7 @@ py test_domains.py
 Make sure the domain is registered:
 
 ```python
-from domains.registry import DomainAnalyzerRegistry
+from canonical.skills.analyze.domains.registry import DomainAnalyzerRegistry
 print(DomainAnalyzerRegistry.list_domains())
 ```
 
@@ -488,7 +496,7 @@ Check the module path and imports:
 
 ```python
 # Verify import works
-from domains.design import DesignSkillAnalyzer
+from canonical.skills.analyze.domains.design import DesignSkillAnalyzer
 ```
 
 ### Low scores on expected capabilities

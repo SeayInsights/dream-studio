@@ -189,7 +189,14 @@ Examples:
         # Auto-detect domain if requested
         domain = args.domain
         if args.auto_detect and len(repo_paths) == 1:
-            from domains.registry import DomainAnalyzerRegistry
+            # Not `from domains.registry import ...` -- that bare name only
+            # resolves as a side effect of registry.py's OWN sys.path insert
+            # (canonical/skills/analyze/ landing on sys.path once
+            # repo-analyzer.py above has already been loaded), and it creates
+            # a SEPARATE module identity from canonical.skills.analyze.domains
+            # -- a different DomainAnalyzerRegistry class object than the one
+            # repo-analyzer.py's own domain-specific analysis path uses.
+            from canonical.skills.analyze.domains import DomainAnalyzerRegistry
             from pathlib import Path
 
             detected = DomainAnalyzerRegistry.auto_detect_domain(
