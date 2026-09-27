@@ -34,9 +34,9 @@ Determine OS from environment context:
 
 Refer to each tool's `detect_command` in `tool-registry.yml` for the exact command per platform.
 
-### Step 2 — Run detectTool() for each of the 6 tools
+### Step 2 — Run detectTool() for every tool in the registry
 
-For every tool in `tool-registry.yml` (gh, firecrawl, playwright, npm, python, node), call `detectTool(toolName)` from `setup.md` in the ds-core pack:
+Read the tool list FROM `tool-registry.yml` itself at run time — do not hardcode a tool count or name list here, which is exactly how this step drifted before (a hardcoded "6 tools" survived four tools being added to the registry with nothing routing to them). For every tool key the registry currently defines, call `detectTool(toolName)` from `setup.md` in the ds-core pack:
 
 1. Run the platform-appropriate detect command (e.g., `where gh` on Windows).
 2. If the command succeeds (exit code 0), the tool is present — also run the `version_command` to capture the version string.

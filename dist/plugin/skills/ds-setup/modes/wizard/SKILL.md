@@ -28,7 +28,7 @@ dream_studio:
 
 1. **Detect platform** (Step 1) — identify Windows/Mac/Linux for platform-specific commands
 2. **Create folder structure** (Step 1b) — create builds/, claude_mcp/, shared/ folders with READMEs
-3. **Detect tools** (Step 2) — run detection for all 6 tools in tool-registry.yml
+3. **Detect tools** (Step 2) — run detection for every tool defined in tool-registry.yml (read the registry for the current list; do not hardcode a count)
 4. **Auth checks** (Step 2b) — verify Firecrawl API key and gh CLI auth for installed tools
 5. **Check resume state** (Step 2c) — load _wizard_progress to skip already-completed tools
 6. **Identify tools needing action** (Step 3) — partition into installed vs. needs-action
