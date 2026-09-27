@@ -119,6 +119,26 @@ gates:
     command: [py, -m, pytest, tests/evals, -q]
     fail_hint: "Eval failures block push — fix the failing eval before retry."
 
+  - id: skill-eval-coverage-census
+    tier: advisory
+    description: >
+      E19 systemic eval-discovery census. Every canonical/skills/**/SKILL.md
+      file must have an entry in canonical/skill_eval_registry.json —
+      no_output (router/reference/exempt), covered (names a real test file),
+      or gap (a real output exists with no verified test yet — tracked debt,
+      not a blocker, same ratchet fail-open-census uses for its baseline). A
+      manual, one-time audit (2026-09-26/27) found 104 skills with only 4,
+      then 17, then 33 having any output declared or tested; nothing would
+      have caught the 105th skill someone adds next month shipping silently
+      undeclared. Advisory: a documentation/coverage gap is hygiene, not a
+      correctness or authority-integrity defect.
+    command: [py, -m, core.gates.skill_eval_coverage_census]
+    warn_hint: >
+      A skill file has no registry entry, or a covered_by entry's test file
+      no longer exists. Add a canonical/skill_eval_registry.json entry
+      (status: no_output/covered/gap, each with a 20+ character reason) for
+      the named skill.
+
   - id: pin-tests
     tier: blocking
     description: >
