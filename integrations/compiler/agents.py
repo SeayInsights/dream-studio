@@ -78,6 +78,15 @@ COVERAGE = AGENTS_DIR / "coverage.yml"
 #: A mode with no override runs on this. Judgement about a domain, not search.
 DEFAULT_MODEL = "sonnet"
 
+#: Aliases the Claude Code harness resolves to a current model, plus `inherit` (take the
+#: caller's). A concrete `claude-*` id is also legal but pins one generation, so a caller
+#: checking a declared model against this set should also accept anything `claude-`-
+#: prefixed rather than only these four. Shared by every place that declares or validates
+#: a per-agent model -- this compiler's own `.meta.yml` overlay and
+#: `core/gates/review_lane_registry.py`'s per-seat `model:` -- so the legal set is one
+#: fact, not a copy that can quietly narrow or widen in only one of them.
+ALLOWED_MODEL_ALIASES = frozenset({"haiku", "sonnet", "opus", "inherit"})
+
 
 def _coverage() -> list[dict[str, Any]]:
     """Every mode that declares an agent, from canonical/agents/coverage.yml.

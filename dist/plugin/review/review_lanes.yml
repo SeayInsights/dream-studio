@@ -31,6 +31,7 @@ version: 2
 lanes:
   - id: the-other-half-enforced-by-nothing
     seat: "Gate and test integrity"
+    model: sonnet
     question: >-
       Two sites decide the same question. Does the second consult every predicate the first does,
       or a subset of them?
@@ -67,6 +68,7 @@ lanes:
     eval: tests/evals/test_review_lane_predicate_parity.py
   - id: a-contract-that-names-one-of-two-mechanisms
     seat: "Claim integrity"
+    model: sonnet
     question: >-
       The code says mechanisms X and Y make this claim true. Does the contract document name both,
       or only the one that was there first?
@@ -105,6 +107,7 @@ lanes:
       real ADR lands.
   - id: an-unenumerated-behaviour-change
     seat: "Claim integrity"
+    model: sonnet
     question: >-
       What does a caller see differently after this change, and does the change say so?
     signature: >-
@@ -129,6 +132,7 @@ lanes:
     eval: tests/evals/test_review_lane_behaviour_change_enumerated.py
   - id: a-produced-value-with-no-reader
     seat: "Boundary semantics"
+    model: sonnet
     question: >-
       A value is produced and honestly computed. Does anything actually read it, and when nothing
       does, what does the default say in its place?
@@ -166,6 +170,7 @@ lanes:
     eval: tests/evals/test_review_lane_value_reaches_a_reader.py
   - id: a-status-the-far-end-does-not-handle
     seat: "Boundary semantics"
+    model: sonnet
     question: >-
       The producer's vocabulary has more members than the consumer has branches. What does the
       consumer render for the member it does not know?
@@ -200,6 +205,7 @@ lanes:
     eval: tests/evals/test_review_lane_status_survives_translation.py
   - id: a-test-that-cannot-fail
     seat: "Gate and test integrity"
+    model: sonnet
     question: >-
       This test is green. Show me it going red — what does it look like when the thing it guards
       is broken?
@@ -237,6 +243,7 @@ lanes:
     eval: tests/evals/test_review_lane_a_test_that_cannot_fail.py
   - id: a-channel-outside-the-accounting
     seat: "Boundary semantics"
+    model: sonnet
     question: >-
       What is the full capability surface of the thing being guarded, independent of what the
       guard says about itself?
@@ -285,6 +292,7 @@ lanes:
     eval: tests/evals/test_review_lane_the_surface_outside_the_rules.py
   - id: chair-and-verdict-owner
     seat: "Chair and verdict owner"
+    model: sonnet
     question: >-
       What is the single merge recommendation here, and is every finding's severity calibrated
       against it rather than stated in isolation?
@@ -306,6 +314,7 @@ lanes:
       convene() returns a finding set worth grading.
   - id: evidence-referee
     seat: "Finding integrity"
+    model: sonnet
     question: >-
       Which SHA and which command prove this claim, and does reverting the fix actually turn the
       check red?
@@ -326,6 +335,7 @@ lanes:
       each finding -- which is this seat's own first deliverable.
   - id: reviewer-s-reviewer
     seat: "Finding integrity"
+    model: sonnet
     question: >-
       Does every finding still hold against current HEAD, and which ones should be withdrawn?
     signature: >-
@@ -346,6 +356,7 @@ lanes:
       be replayed at HEAD.
   - id: authz-and-identity
     seat: "Access and reach"
+    model: sonnet
     question: >-
       Which principal is this, what may it do, and what happens to the sessions that already exist
       when that answer changes?
@@ -370,6 +381,7 @@ lanes:
       code paths.
   - id: secrets-and-data-at-rest
     seat: "Access and reach"
+    model: sonnet
     question: >-
       Where does this secret come to rest, who can read it there, and what rotates it?
     signature: >-
@@ -398,6 +410,7 @@ lanes:
       security-scan gate.
   - id: supply-chain-and-provenance
     seat: "Publication and provenance"
+    model: sonnet
     question: >-
       What exactly is being installed and published here, and does the identity signing it match
       the identity that built it?
@@ -431,6 +444,7 @@ lanes:
       could become a detector over lockfiles and action refs without waiting for the rest.
   - id: cloud-iam-and-iac
     seat: "Access and reach"
+    model: sonnet
     question: >-
       Which external identity can assume this role, and what can it reach once it has?
     signature: >-
@@ -460,6 +474,7 @@ lanes:
       refuse.
   - id: gitops-and-rollout-safety
     seat: "Irreversible operations"
+    model: sonnet
     question: >-
       What is the blast radius when this reconciles automatically, and what does prune remove that
       nobody listed?
@@ -487,6 +502,7 @@ lanes:
       manifests today, so this seat is registered for projects that do rather than for this one.
   - id: release-and-version-model
     seat: "Publication and provenance"
+    model: sonnet
     question: >-
       Does the version this produces mean what the ecosystem consuming it thinks it means?
     signature: >-
@@ -514,6 +530,7 @@ lanes:
       The released-version sentinel is already guarded by its own migration gate.
   - id: data-and-migration
     seat: "Irreversible operations"
+    model: sonnet
     question: >-
       Does this migration go forward and back, and does the schema still hold every invariant
       afterwards?
@@ -540,6 +557,7 @@ lanes:
       somewhere to be asked.
   - id: design-system-conformance
     seat: "Interface conformance"
+    model: sonnet
     question: >-
       Does this component take the promotion path, and does the styling actually reach the
       browser?
@@ -565,6 +583,7 @@ lanes:
       sites. Registered for the projects the round table is called from, not for this one.
   - id: accessibility
     seat: "Interface conformance"
+    model: sonnet
     question: >-
       Can this be operated without a mouse, and does every control have a name a screen reader
       will say?
@@ -593,6 +612,7 @@ lanes:
       reviewer, one stack -- is the reason to register the seat rather than a reason to skip it.
   - id: frontend-behavior-and-payload
     seat: "Interface conformance"
+    model: sonnet
     question: >-
       Does this control do what it looks like it does, and what did it cost to download?
     signature: >-
@@ -619,6 +639,7 @@ lanes:
       tree is asked the question, which is the reason the table was made portable.
   - id: cli-and-operator-ergonomics
     seat: "The receiver's view"
+    model: sonnet
     question: >-
       Can an operator run this from a clean box using only what the docs say?
     signature: >-
@@ -644,6 +665,7 @@ lanes:
       here and simply is not built. This is the strongest detector candidate on the bench.
   - id: agent-and-plugin-runtime
     seat: "The receiver's view"
+    model: sonnet
     question: >-
       What does this cap or namespace do to the model rather than to the operator?
     signature: >-
@@ -669,6 +691,7 @@ lanes:
       surface.
   - id: mission-domain-consequence
     seat: "The receiver's view"
+    model: sonnet
     question: >-
       Weighted by mission effect rather than code severity, what is the worst thing this change
       permits?
@@ -696,6 +719,7 @@ lanes:
       mechanism.
   - id: governance-canon-and-board
     seat: "Claim integrity"
+    model: sonnet
     question: >-
       Does this contradict another document that is also in force?
     signature: >-
@@ -719,6 +743,7 @@ lanes:
       gates.
   - id: docs-style-and-attribution
     seat: "The receiver's view"
+    model: sonnet
     question: >-
       Does anything shipping here carry a name, a path, or a trailer that should not leave this
       machine?
@@ -754,6 +779,7 @@ lanes:
     detector: py -m core.gates.shipped_artifact_hygiene
   - id: code-quality-and-structure
     seat: "Gate and test integrity"
+    model: sonnet
     question: >-
       Is this reachable, is it duplicated, and does it sit on the right side of a module boundary?
     signature: >-

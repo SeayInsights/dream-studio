@@ -131,7 +131,12 @@ def test_the_table_stops_at_its_own_budget(monkeypatch):
         lambda command, repo_root=None: pytest.fail("budget was not honoured"),
     )
 
-    report = convene(run_detectors=True)
+    # ALL SEATS, NOT THE SCOPE-NARROWED SET. Scope selection is relative to whatever this
+    # process's own change set happens to be at test time -- a real diff that touches no
+    # docs/*.md file scopes out the registry's one detector lane (Docs, style, and
+    # attribution), and this test's premise (a detector lane exists to skip for budget)
+    # would then be false for a reason that has nothing to do with the budget.
+    report = convene(run_detectors=True, all_seats=True)
 
     assert report["status"] == "fail"
     # DERIVED, NOT TRANSCRIBED. This read `== 3`, which is the number of detector lanes
@@ -516,7 +521,9 @@ def test_a_real_finding_still_reports_found(monkeypatch):
         "_run_detector",
         lambda command, repo_root=None: (False, "found something real"),
     )
-    rendered = round_table._render(convene(run_detectors=True))
+    # See test_the_table_stops_at_its_own_budget: all_seats=True keeps this independent of
+    # whatever this process's own change set happens to be at test time.
+    rendered = round_table._render(convene(run_detectors=True, all_seats=True))
     assert "[FOUND]" in rendered
     assert "found something" in rendered
     assert "[UNRUN]" not in rendered, rendered

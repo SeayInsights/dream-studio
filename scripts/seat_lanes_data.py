@@ -676,6 +676,53 @@ SCOPES: dict[str, tuple[str, ...]] = {
 }
 
 
+# ── Per-seat model ────────────────────────────────────────────────────────────
+#
+# KEYED BY THE FINAL SEAT, unlike STANDARDS and SCOPES above. Those are lane-level facts
+# that stay with the raw declaration even after a merge, because each lane keeps its own
+# standards and scope. A model is not a lane-level fact: one seat compiles to one reviewer
+# agent (`integrations/compiler/reviewers.py`), so there is exactly one model per FINAL
+# seat, and keying this by the raw pre-merge name would raise the question of which of a
+# merged seat's several declarations gets to answer it.
+#
+# `integrations/compiler/reviewers.py` used to answer that question the other way: every
+# seat got `model: sonnet`, written once in the compiler rather than read from anywhere.
+# That is a side channel -- the fact "this seat reasons on sonnet" existed only as a string
+# literal in code that builds agents, not as a property of the seat itself, so it could not
+# be looked up, diffed against the registry, or set per seat without editing the compiler.
+# This table is where that fact actually lives now; the compiler reads it instead.
+DEFAULT_MODEL = "sonnet"
+
+SEAT_MODELS: dict[str, str] = {
+    "Chair and verdict owner": DEFAULT_MODEL,
+    "Access and reach": DEFAULT_MODEL,
+    "Publication and provenance": DEFAULT_MODEL,
+    "Irreversible operations": DEFAULT_MODEL,
+    "Gate and test integrity": DEFAULT_MODEL,
+    "The receiver's view": DEFAULT_MODEL,
+    "Boundary semantics": DEFAULT_MODEL,
+    "Claim integrity": DEFAULT_MODEL,
+    "Interface conformance": DEFAULT_MODEL,
+    "Finding integrity": DEFAULT_MODEL,
+}
+
+
+def _model_for(declared_seat: str) -> str:
+    """The model the seat holding this lane's compiled reviewer runs on.
+
+    Takes the DECLARED (pre-merge) seat, same as `_block()`'s other lookups, and applies
+    the same merge before reading `SEAT_MODELS` -- a lane declared under a raw name that
+    later merged into another seat runs its reviewer on that seat's model, not a model
+    nobody set for a name nothing compiles under any more.
+
+    Falls back to `DEFAULT_MODEL` for a final seat not yet listed above, rather than
+    raising: a new seat that forgets to declare one ships on the safe default and
+    `review_lane_registry` is where an operator learns a row is missing, not a traceback
+    from the render.
+    """
+    return SEAT_MODELS.get(_seat_name(declared_seat), DEFAULT_MODEL)
+
+
 # ── The eleven lanes that already existed, carried over VERBATIM ─────────────
 #
 # The rename was meant to be only a rename. Regenerating these from fresh prose destroyed the
@@ -1311,7 +1358,11 @@ def _block(lane_id: str, seat: str, spec) -> str:
     lane keeps its own even when several lanes answer under one merged name -- pooling them
     would give a lane standards it never named and a scope it never claimed."""
     question, signature, precedent, measurement, enforcement = spec
-    lines = [f"  - id: {lane_id}", f"    seat: {json.dumps(_seat_name(seat))}"]
+    lines = [
+        f"  - id: {lane_id}",
+        f"    seat: {json.dumps(_seat_name(seat))}",
+        f"    model: {_model_for(seat)}",
+    ]
     for key, value in (
         ("question", question),
         ("signature", signature),

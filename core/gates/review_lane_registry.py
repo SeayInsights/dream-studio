@@ -36,6 +36,8 @@ from pathlib import Path
 
 import yaml
 
+from integrations.compiler.agents import ALLOWED_MODEL_ALIASES
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 REGISTRY = REPO_ROOT / "canonical" / "review_lanes.yml"
@@ -231,6 +233,19 @@ def run() -> dict:
                 f"{lane_id}: seat {seat!r} is not one of {sorted(_SEATS)}. A lane is held by"
                 " a seat that says what it watches, not by whoever happened to find it --"
                 " these arrived carrying real reviewer handles and a name describes nothing."
+            )
+
+        model = str(lane.get("model") or "").strip()
+        if not model:
+            errors.append(
+                f"{lane_id}: declares no `model`. The seat's compiled reviewer would fall"
+                " back to whatever the compiler defaults to, unstated here -- which is the"
+                " side channel this field exists to close."
+            )
+        elif model not in ALLOWED_MODEL_ALIASES and not model.startswith("claude-"):
+            errors.append(
+                f"{lane_id}: model {model!r} is neither an alias"
+                f" ({sorted(ALLOWED_MODEL_ALIASES)}) nor a concrete claude-* id."
             )
 
         for field in _REQUIRED_PROSE:
