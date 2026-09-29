@@ -171,6 +171,31 @@ def seat_names() -> list[str]:
     return sorted(_load_seats())
 
 
+def _model_for_seat(seat: str, lanes: list[dict[str, Any]]) -> str:
+    """The model this seat's compiled reviewer runs on.
+
+    Read from the registry -- `scripts/seat_lanes_data.py`'s `SEAT_MODELS`, rendered onto
+    every lane -- rather than a literal in this compiler. One seat compiles to one
+    reviewer, so its lanes must agree on the model; `core/gates/review_lane_registry.py`
+    already requires every lane to carry a legal one, and disagreement within one seat
+    would mean the registry was hand-edited out of step with its generator. Raising here
+    rather than silently picking one is the same choice `seat()` makes for a duplicate
+    lane id: a compiler that guessed would hide exactly the drift this field exists to
+    surface.
+    """
+    models = {str(lane.get("model", "")).strip() for lane in lanes}
+    if len(models) > 1:
+        raise ValueError(
+            f"seat {seat!r} has lanes disagreeing on model: {sorted(models)}. One seat"
+            " compiles to one reviewer agent, so it can only run on one model -- the"
+            " registry and its generator (scripts/seat_lanes_data.py) have drifted."
+        )
+    (model,) = models
+    if not model:
+        raise ValueError(f"seat {seat!r} declares no model on any of its lanes")
+    return model
+
+
 def _describe(seat: str, lanes: list[dict[str, Any]]) -> str:
     """The routing description. Always in context, so it stays one line.
 
@@ -191,9 +216,11 @@ def build_reviewer(seat: str, lanes: list[dict[str, Any]]) -> str:
         "---",
         f"name: {_slug(seat)}",
         f"description: {_describe(seat, lanes)}",
-        # Judgment, not search: every lane here asks the reader to reason about a change
-        # set against a signature. The repository's routing rule puts that on sonnet.
-        "model: sonnet",
+        # Read from the registry, not written here -- see _model_for_seat. This used to be
+        # a literal "model: sonnet" for every seat regardless: a side channel, since the
+        # fact lived only in this compiler and could not be looked up, diffed, or set per
+        # seat without editing code that builds agents.
+        f"model: {_model_for_seat(seat, lanes)}",
         "---",
         "",
         BANNER.format(seat=seat),
