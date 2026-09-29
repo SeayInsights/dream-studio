@@ -179,11 +179,10 @@ def dispatch(
             result = installer.install(mode)
 
             # The round table's compiled reviewers, for a tool that can host them --
-            # gemini_cli and cursor, verified 2026-09 (see integrations/targets/
+            # codex, gemini_cli and cursor, verified 2026-09 (see integrations/targets/
             # registry.py). Additive to the AGENTS.md install above, not a replacement:
-            # a tool with no declared specialist_agent_format (windsurf, aider) or a
-            # different one (codex's TOML, not yet wired) simply gets AGENTS.md alone,
-            # same as before this capability existed.
+            # a tool with no declared specialist_agent_format (windsurf, aider) simply
+            # gets AGENTS.md alone, same as before this capability existed.
             spec = get_target_spec(tool_id)
             if spec.specialist_agent_format == "md_frontmatter":
                 from integrations.installer.specialist_agents_target import (
@@ -192,6 +191,13 @@ def dispatch(
 
                 specialist_installer = SpecialistAgentsInstaller(tool_id, project_root=Path.cwd())
                 result["specialist_agents"] = specialist_installer.install(mode)
+            elif spec.specialist_agent_format == "toml":
+                from integrations.installer.specialist_agents_codex_target import (
+                    CodexAgentsInstaller,
+                )
+
+                codex_installer = CodexAgentsInstaller(project_root=Path.cwd())
+                result["specialist_agents"] = codex_installer.install(mode)
 
             return _print(
                 {
