@@ -115,3 +115,54 @@ class TestCodexAgentsInstaller:
         with pytest.raises(ValueError, match="unknown"):
             CodexAgentsInstaller(project_root=tmp_path, home=tmp_path, agents=["Not A Real Seat"])
         assert not (tmp_path / ".codex").exists()
+
+
+# --------------------------------------------------------------------------
+# A project's own seat installs alongside Dream Studio's bench
+# --------------------------------------------------------------------------
+
+_PROJECT_LANE_YAML = """
+mode: add
+lanes:
+  - id: a-project-specific-lane
+    seat: PCI Scope
+    question: >
+      Does this change touch anything in the cardholder data environment?
+    signature: >
+      A file under payments/ or checkout/ changed with no PCI reviewer sign-off noted
+      in the PR body.
+    precedent: >
+      Filed after an internal audit found three merged PRs touching payment capture
+      with no compliance review recorded anywhere.
+    measurement: >
+      No automatable predicate exists for "touches CDE" without a maintained
+      file-ownership map, so this is judgment rather than a detector.
+    model: sonnet
+    judgment: true
+    why: >
+      No maintained CDE file-ownership map exists yet to turn this into a detector.
+"""
+
+
+class TestCodexAgentsInstallerProjectSeats:
+    def test_an_unfiltered_install_includes_the_project_root_s_own_seat(self, tmp_path):
+        (tmp_path / ".ds-review-lanes.yml").write_text(_PROJECT_LANE_YAML, encoding="utf-8")
+
+        installer = CodexAgentsInstaller(project_root=tmp_path, home=tmp_path)
+        result = installer.install("execute")
+
+        assert "review-pci-scope.toml" in result["written"]
+        written = (installer.target_dir / "review-pci-scope.toml").read_text(encoding="utf-8")
+        assert tomllib.loads(written)["name"] == "review-pci-scope"
+
+    def test_a_project_root_with_no_marker_installs_only_the_ds_bench(self, tmp_path):
+        installer = CodexAgentsInstaller(project_root=tmp_path, home=tmp_path)
+        result = installer.install("execute")
+        assert set(result["written"]) == {f"{f.stem}.toml" for f in reviewer_files()}
+
+    def test_agents_subset_can_name_a_project_seat_explicitly(self, tmp_path):
+        (tmp_path / ".ds-review-lanes.yml").write_text(_PROJECT_LANE_YAML, encoding="utf-8")
+
+        installer = CodexAgentsInstaller(project_root=tmp_path, home=tmp_path, agents=["PCI Scope"])
+        result = installer.install("execute")
+        assert result["written"] == ["review-pci-scope.toml"]

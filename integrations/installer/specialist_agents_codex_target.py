@@ -17,7 +17,11 @@ import re
 from pathlib import Path
 from typing import Any, Literal
 
-from integrations.compiler.reviewers import resolve_agent_names, reviewer_files
+from integrations.compiler.reviewers import (
+    project_reviewer_files,
+    resolve_agent_names,
+    reviewer_files,
+)
 from integrations.targets.registry import (
     get_target_spec,
     specialist_agents_target_path,
@@ -122,7 +126,10 @@ class CodexAgentsInstaller:
         self.target_dir = specialist_agents_target_path(
             "codex", project_root=self.project_root, home=self.home
         )
-        self._files = resolve_agent_names(agents) if agents is not None else reviewer_files()
+        if agents is not None:
+            self._files = resolve_agent_names(agents, repo_root=self.project_root)
+        else:
+            self._files = reviewer_files() + project_reviewer_files(self.project_root)
 
     def plan(self) -> dict[str, Any]:
         """Delegates to install() -- see SpecialistAgentsInstaller.plan() for why."""

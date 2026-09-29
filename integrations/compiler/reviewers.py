@@ -145,7 +145,42 @@ def reviewer_files() -> list[Path]:
     return sorted(AGENTS_DIR.glob(f"{PREFIX}*.md"))
 
 
-def resolve_agent_names(requested: list[str]) -> list[Path]:
+def _project_seats(repo_root: Path) -> dict[str, Path]:
+    """seat name -> cached reviewer Path, for every seat *repo_root*'s own
+    `.ds-review-lanes.yml` marker names -- empty when there's no marker. The per-seat
+    cache write goes through `_ensure_project_reviewer_cached`, so a caller that only
+    wants to know what's installable (this function) still leaves a fresh, installable
+    file behind for each name it returns."""
+    from core.gates import review_lane_registry
+    from core.work_orders import project_review_lanes
+
+    marker = project_review_lanes.marker_path(repo_root)
+    if not marker.is_file():
+        return {}
+    loaded = project_review_lanes.load_and_validate(
+        repo_root, reserved_seats=review_lane_registry.SEATS
+    )
+    if loaded is None:  # pragma: no cover -- marker.is_file() just confirmed True above
+        return {}
+    _mode, lanes = loaded
+    out: dict[str, Path] = {}
+    for seat in group_by_seat(lanes):
+        cached = _ensure_project_reviewer_cached(seat, repo_root)
+        if cached is not None:
+            out[seat] = cached
+    return out
+
+
+def project_reviewer_files(repo_root: Path) -> list[Path]:
+    """Every seat compiled from *repo_root*'s own `.ds-review-lanes.yml` marker, cached
+    and ready to install -- empty when *repo_root* has no marker. Mirrors
+    `reviewer_files()`'s DS-bench glob for a project's own bench, so an installer that
+    wants "every reviewer this tree can install" composes the two lists rather than
+    special-casing project seats."""
+    return [path for _seat, path in sorted(_project_seats(repo_root).items())]
+
+
+def resolve_agent_names(requested: list[str], *, repo_root: Path | None = None) -> list[Path]:
     """The compiled reviewer files named by *requested*, in the order given.
 
     Each entry may be a seat name ("Finding integrity", matching `seat_names()`
@@ -155,17 +190,29 @@ def resolve_agent_names(requested: list[str]) -> list[Path]:
     prose or the slug from a file already on disk, and forcing a translation between
     them onto the caller is how a correct request gets typed wrong.
 
+    *repo_root*, when given, also makes that tree's own project seats (see
+    `project_reviewer_files`) resolvable by name or slug, the same as Dream Studio's
+    own bench -- so `--agents` can name a project's seat explicitly rather than only
+    ever getting it via the unfiltered "install everything" path.
+
     Raises naming every entry that resolved to nothing, with the seat names and slugs
     actually available, rather than silently installing fewer files than asked for --
     the same failure shape `reviewer_for_seat` and `_lanes` both refuse elsewhere in
     this bench.
     """
     by_slug = {f.stem: f for f in reviewer_files()}
+    project_seats = _project_seats(repo_root) if repo_root is not None else {}
+    for path in project_seats.values():
+        by_slug[path.stem] = path
+
     resolved: list[Path] = []
     unknown: list[str] = []
     for name in requested:
-        slug = _slug(name) if name in seat_names() else name
-        path = by_slug.get(slug)
+        if name in project_seats:
+            path = project_seats[name]
+        else:
+            slug = _slug(name) if name in seat_names() else name
+            path = by_slug.get(slug)
         if path is None:
             unknown.append(name)
         elif path not in resolved:
@@ -173,7 +220,7 @@ def resolve_agent_names(requested: list[str]) -> list[Path]:
     if unknown:
         raise ValueError(
             f"unknown agent(s)/seat(s): {unknown}. Valid slugs: {sorted(by_slug)}."
-            f" Valid seat names: {seat_names()}"
+            f" Valid seat names: {seat_names() + sorted(project_seats)}"
         )
     return resolved
 

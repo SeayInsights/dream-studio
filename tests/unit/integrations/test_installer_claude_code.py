@@ -237,3 +237,97 @@ def test_execute_manifest_no_longer_lists_removed_orphan(config_root, canonical_
     manifest = read_manifest("claude_code", ds_home)
     paths = {entry["path"] for entry in manifest["files"]}
     assert str(orphan) not in paths
+
+
+# --------------------------------------------------------------------------
+# A project's own round-table seat, via git_repo_root
+# --------------------------------------------------------------------------
+
+_PROJECT_LANE_YAML = """
+mode: add
+lanes:
+  - id: a-project-specific-lane
+    seat: PCI Scope
+    question: >
+      Does this change touch anything in the cardholder data environment?
+    signature: >
+      A file under payments/ or checkout/ changed with no PCI reviewer sign-off noted
+      in the PR body.
+    precedent: >
+      Filed after an internal audit found three merged PRs touching payment capture
+      with no compliance review recorded anywhere.
+    measurement: >
+      No automatable predicate exists for "touches CDE" without a maintained
+      file-ownership map, so this is judgment rather than a detector.
+    model: sonnet
+    judgment: true
+    why: >
+      No maintained CDE file-ownership map exists yet to turn this into a detector.
+"""
+
+
+@pytest.fixture
+def project_with_marker(tmp_path):
+    root = tmp_path / "a-project"
+    root.mkdir()
+    (root / ".ds-review-lanes.yml").write_text(_PROJECT_LANE_YAML, encoding="utf-8")
+    return root
+
+
+def test_plan_includes_a_project_seat_when_git_repo_root_has_a_marker(
+    config_root, canonical_root, ds_home, project_with_marker
+):
+    installer = ClaudeCodeInstaller(
+        config_root,
+        "user",
+        canonical_root=canonical_root,
+        ds_home=ds_home,
+        git_repo_root=project_with_marker,
+    )
+    plan = installer.plan()
+    ops = {op.target.name: op for op in plan.ops}
+    assert "review-pci-scope.md" in ops
+    assert ops["review-pci-scope.md"].op == "create"
+    assert ops["review-pci-scope.md"].target == config_root / "agents" / "review-pci-scope.md"
+
+
+def test_plan_has_no_project_seat_without_git_repo_root(config_root, canonical_root, ds_home):
+    installer = ClaudeCodeInstaller(
+        config_root, "user", canonical_root=canonical_root, ds_home=ds_home
+    )
+    plan = installer.plan()
+    ops = {op.target.name: op for op in plan.ops}
+    assert "review-pci-scope.md" not in ops
+
+
+def test_plan_has_no_project_seat_when_git_repo_root_has_no_marker(
+    config_root, canonical_root, ds_home, tmp_path
+):
+    bare_root = tmp_path / "no-marker-here"
+    bare_root.mkdir()
+    installer = ClaudeCodeInstaller(
+        config_root,
+        "user",
+        canonical_root=canonical_root,
+        ds_home=ds_home,
+        git_repo_root=bare_root,
+    )
+    plan = installer.plan()
+    ops = {op.target.name: op for op in plan.ops}
+    assert "review-pci-scope.md" not in ops
+
+
+def test_execute_writes_the_project_seat_into_the_agents_dir(
+    config_root, canonical_root, ds_home, project_with_marker
+):
+    installer = ClaudeCodeInstaller(
+        config_root,
+        "user",
+        canonical_root=canonical_root,
+        ds_home=ds_home,
+        git_repo_root=project_with_marker,
+    )
+    installer.install("execute")
+    written = config_root / "agents" / "review-pci-scope.md"
+    assert written.is_file()
+    assert "name: review-pci-scope" in written.read_text(encoding="utf-8")
