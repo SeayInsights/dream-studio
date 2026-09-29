@@ -22,7 +22,11 @@ import re
 from pathlib import Path
 from typing import Any, Literal
 
-from integrations.compiler.reviewers import resolve_agent_names, reviewer_files
+from integrations.compiler.reviewers import (
+    project_reviewer_files,
+    resolve_agent_names,
+    reviewer_files,
+)
 from integrations.targets.registry import (
     get_target_spec,
     specialist_agents_target_path,
@@ -61,10 +65,11 @@ class SpecialistAgentsInstaller:
     ) -> None:
         """*agents*, if given, installs only that subset (each entry a seat name or an
         agent slug -- see `resolve_agent_names`) rather than every compiled reviewer.
-        Without it, this tool gets all nine; installing a different subset onto a
-        second tool is what makes a genuinely mixed roster (nine seats on Claude, one
-        on Codex) reachable, rather than every target getting the whole bench or
-        nothing.
+        Without it, this tool gets all nine plus *project_root*'s own seats, if it has
+        a `.ds-review-lanes.yml` marker (see `project_reviewer_files`); installing a
+        different subset onto a second tool is what makes a genuinely mixed roster
+        (nine seats on Claude, one on Codex) reachable, rather than every target
+        getting the whole bench or nothing.
         """
         spec = get_target_spec(tool_id)
         if spec.specialist_agent_format != "md_frontmatter":
@@ -79,7 +84,10 @@ class SpecialistAgentsInstaller:
         self.target_dir = specialist_agents_target_path(
             tool_id, project_root=self.project_root, home=self.home
         )
-        self._files = resolve_agent_names(agents) if agents is not None else reviewer_files()
+        if agents is not None:
+            self._files = resolve_agent_names(agents, repo_root=self.project_root)
+        else:
+            self._files = reviewer_files() + project_reviewer_files(self.project_root)
 
     def plan(self) -> dict[str, Any]:
         """Dry-run description of what install would do. Delegates to install() rather

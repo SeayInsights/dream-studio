@@ -5,6 +5,11 @@ one on another) reachable through `ds integrate install <tool> --agents ...` ins
 every target getting the whole bench or nothing -- the gap an operator hit directly
 after the per-tool model work shipped: installing codex and gemini_cli both gave all
 nine reviewers to each, with no way to split them.
+
+Every call here omits `repo_root` on purpose: this file is Dream Studio's own bench
+only. A project's own seat becoming resolvable too (same function, `repo_root` given)
+has its own tests alongside the installers that consume it -- see
+test_specialist_agents_install.py and test_specialist_agents_codex_install.py.
 """
 
 from __future__ import annotations

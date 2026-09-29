@@ -282,6 +282,94 @@ def test_a_project_with_no_registry_raises_rather_than_reporting_a_clean_table(t
         convene(run_detectors=False, repo_root=tmp_path)
 
 
+# ── project-local lanes (core.work_orders.project_review_lanes) ────────────
+
+
+PROJECT_LANE_YAML = """
+mode: add
+lanes:
+  - id: a-project-specific-lane
+    seat: PCI Scope
+    question: >
+      Does this change touch anything in the cardholder data environment?
+    signature: >
+      A file under payments/ or checkout/ changed with no PCI reviewer sign-off noted
+      in the PR body.
+    precedent: >
+      Filed after an internal audit found three merged PRs touching payment capture
+      with no compliance review recorded anywhere.
+    measurement: >
+      No automatable predicate exists for "touches CDE" without a maintained
+      file-ownership map, so this is judgment rather than a detector.
+    model: sonnet
+    judgment: true
+    why: >
+      No maintained CDE file-ownership map exists yet to turn this into a detector.
+"""
+
+
+def test_a_marker_only_project_gets_ds_bench_plus_its_own_lane(tmp_path):
+    """The point of this feature: a tree with NO full registry of its own, only the
+    marker, gets Dream Studio's own bench as the base, extended by its own lane -- not
+    replaced by it, and not refused for lack of a full registry of its own."""
+    (tmp_path / ".ds-review-lanes.yml").write_text(PROJECT_LANE_YAML, encoding="utf-8")
+
+    report = convene(run_detectors=False, repo_root=tmp_path)
+    seated = {seat["lane"] for seat in report["lanes"]}
+
+    assert "a-project-specific-lane" in seated
+    # Dream Studio's own bench is still there underneath it -- this is ADD, not REPLACE.
+    assert _lane_ids() <= seated
+
+
+def test_marker_mode_replace_on_a_marker_only_project_uses_only_its_own_lanes(tmp_path):
+    (tmp_path / ".ds-review-lanes.yml").write_text(
+        PROJECT_LANE_YAML.replace("mode: add", "mode: replace"), encoding="utf-8"
+    )
+
+    report = convene(run_detectors=False, repo_root=tmp_path)
+    seated = {seat["lane"] for seat in report["lanes"]}
+
+    assert seated == {"a-project-specific-lane"}
+
+
+def test_marker_layers_onto_a_projects_own_full_registry(tmp_path):
+    """A tree with BOTH its own full registry (see test_the_table_convenes_against_
+    another_repo above) AND a marker gets both, additively -- the marker is not limited
+    to the marker-only case."""
+    foreign = _foreign_project(tmp_path, FOREIGN_LANE)
+    (foreign / ".ds-review-lanes.yml").write_text(PROJECT_LANE_YAML, encoding="utf-8")
+
+    report = convene(run_detectors=False, repo_root=foreign)
+    seated = {seat["lane"] for seat in report["lanes"]}
+
+    assert seated == {"a-lane-that-exists-only-over-there", "a-project-specific-lane"}
+
+
+def test_a_malformed_marker_raises_naming_the_problem_rather_than_falling_back_silently(
+    tmp_path,
+):
+    """A present-but-broken marker must not silently fall back to Dream Studio's own
+    bench as if nothing were written -- see project_review_lanes.load_and_validate's own
+    docstring for why that would be the wrong direction to fail in."""
+    (tmp_path / ".ds-review-lanes.yml").write_text("mode: not-a-real-mode\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="not-a-real-mode"):
+        convene(run_detectors=False, repo_root=tmp_path)
+
+
+def test_a_marker_with_no_registry_anywhere_still_raises(tmp_path, monkeypatch):
+    """Guards the guard: even with a marker present, if Dream Studio's own bench cannot
+    be found either (both this call's own root AND the convener's own source tree lack a
+    registry), this must raise -- not silently convene only the project's own lane as if
+    that were the whole story."""
+    (tmp_path / ".ds-review-lanes.yml").write_text(PROJECT_LANE_YAML, encoding="utf-8")
+    monkeypatch.setattr(round_table, "REPO_ROOT", tmp_path / "nonexistent-ds-root")
+
+    with pytest.raises(FileNotFoundError, match="no review-lane registry"):
+        convene(run_detectors=False, repo_root=tmp_path)
+
+
 def test_a_detector_that_cannot_be_retargeted_is_unclean_not_clean(tmp_path, monkeypatch):
     """THE FAIL-CLOSED PROPERTY, and the reason the whole feature is safe.
 

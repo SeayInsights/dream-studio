@@ -153,3 +153,78 @@ def test_installer_refuses_a_tool_with_a_different_specialist_format(tmp_path):
 def test_installer_refuses_a_tool_with_no_specialist_capability(tmp_path):
     with pytest.raises(ValueError, match="not 'md_frontmatter'"):
         SpecialistAgentsInstaller("aider", project_root=tmp_path, home=tmp_path)
+
+
+# --------------------------------------------------------------------------
+# A project's own seat installs alongside Dream Studio's bench
+# --------------------------------------------------------------------------
+
+_PROJECT_LANE_YAML = """
+mode: add
+lanes:
+  - id: a-project-specific-lane
+    seat: PCI Scope
+    question: >
+      Does this change touch anything in the cardholder data environment?
+    signature: >
+      A file under payments/ or checkout/ changed with no PCI reviewer sign-off noted
+      in the PR body.
+    precedent: >
+      Filed after an internal audit found three merged PRs touching payment capture
+      with no compliance review recorded anywhere.
+    measurement: >
+      No automatable predicate exists for "touches CDE" without a maintained
+      file-ownership map, so this is judgment rather than a detector.
+    model: sonnet
+    judgment: true
+    why: >
+      No maintained CDE file-ownership map exists yet to turn this into a detector.
+"""
+
+
+@pytest.mark.parametrize("tool_id", MD_FRONTMATTER_TOOLS)
+def test_an_unfiltered_install_includes_the_project_root_s_own_seat(tool_id, tmp_path):
+    (tmp_path / ".ds-review-lanes.yml").write_text(_PROJECT_LANE_YAML, encoding="utf-8")
+
+    installer = SpecialistAgentsInstaller(tool_id, project_root=tmp_path, home=tmp_path)
+    result = installer.install("execute")
+
+    assert "review-pci-scope.md" in result["written"]
+    assert set(result["written"]) == {f.name for f in reviewer_files()} | {"review-pci-scope.md"}
+
+
+@pytest.mark.parametrize("tool_id", MD_FRONTMATTER_TOOLS)
+def test_a_project_root_with_no_marker_installs_only_the_ds_bench(tool_id, tmp_path):
+    """The composition is additive, not automatic-everywhere: a project_root with no
+    marker installs exactly what it always did, nothing more."""
+    installer = SpecialistAgentsInstaller(tool_id, project_root=tmp_path, home=tmp_path)
+    result = installer.install("execute")
+
+    assert set(result["written"]) == {f.name for f in reviewer_files()}
+
+
+@pytest.mark.parametrize("tool_id", MD_FRONTMATTER_TOOLS)
+def test_agents_subset_can_name_a_project_seat_explicitly(tool_id, tmp_path):
+    (tmp_path / ".ds-review-lanes.yml").write_text(_PROJECT_LANE_YAML, encoding="utf-8")
+
+    installer = SpecialistAgentsInstaller(
+        tool_id, project_root=tmp_path, home=tmp_path, agents=["PCI Scope"]
+    )
+    result = installer.install("execute")
+
+    assert result["written"] == ["review-pci-scope.md"]
+
+
+@pytest.mark.parametrize("tool_id", MD_FRONTMATTER_TOOLS)
+def test_an_explicit_ds_only_subset_does_not_pull_in_a_project_seat(tool_id, tmp_path):
+    """An explicit --agents list is a complete request, not DS-bench-plus-whatever-else
+    the project happens to have -- a marker present alongside the subset must not widen
+    it silently."""
+    (tmp_path / ".ds-review-lanes.yml").write_text(_PROJECT_LANE_YAML, encoding="utf-8")
+
+    installer = SpecialistAgentsInstaller(
+        tool_id, project_root=tmp_path, home=tmp_path, agents=["Finding integrity"]
+    )
+    result = installer.install("execute")
+
+    assert result["written"] == ["review-finding-integrity.md"]

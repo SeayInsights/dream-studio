@@ -269,7 +269,8 @@ def lane_ownership(repo_root: Path | None = None) -> dict[Any, set[str]]:
     owned: dict[Any, set[str]] = {}
     for lane in _lanes(repo_root):
         seat = str(lane.get("seat", ""))
-        owned.setdefault(_owner_key(reviewer_for_seat(seat), seat), set()).add(str(lane.get("id")))
+        reviewer = reviewer_for_seat(seat, repo_root=repo_root)
+        owned.setdefault(_owner_key(reviewer, seat), set()).add(str(lane.get("id")))
     return owned
 
 

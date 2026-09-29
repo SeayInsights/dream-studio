@@ -17,6 +17,7 @@ from integrations.compiler.claude_code import (
     compile_pack,
     merge_claude_md,
 )
+from integrations.compiler.reviewers import project_reviewer_files
 from integrations.installer.base import FileOp, FileOpPlan, InstallerBase, RefusalError
 from integrations.installer.file_ops import atomic_copy, atomic_write, backup_before_write
 from integrations.manifest import (
@@ -323,6 +324,27 @@ class ClaudeCodeInstaller(InstallerBase):
                         source_hash=compute_hash(content),
                         source_content=content,
                         reason=f"Install {agent_file.stem} agent profile for Claude Code",
+                        safety_notes="Creates parent directories as needed.",
+                        backup_path=backup_base if target.exists() else None,
+                    )
+                )
+
+        # 5b. A project's own round-table seats — the same target directory as step 5's
+        # canonical bench, sourced from git_repo_root's `.ds-review-lanes.yml` instead
+        # of canonical/agents/. Empty (and a no-op) whenever git_repo_root is unset or
+        # has no marker; see `integrations.compiler.reviewers.project_reviewer_files`.
+        if self.git_repo_root is not None:
+            for project_file in project_reviewer_files(self.git_repo_root):
+                content = project_file.read_text(encoding="utf-8")
+                target = self.config_root / "agents" / project_file.name
+                ops.append(
+                    FileOp(
+                        target=target,
+                        op="create",
+                        backup_required=target.exists(),
+                        source_hash=compute_hash(content),
+                        source_content=content,
+                        reason=f"Install {project_file.stem} project reviewer for Claude Code",
                         safety_notes="Creates parent directories as needed.",
                         backup_path=backup_base if target.exists() else None,
                     )

@@ -205,3 +205,131 @@ def test_a_seat_with_no_compiled_reviewer_names_nothing():
     from integrations.compiler.reviewers import reviewer_for_seat
 
     assert reviewer_for_seat("A Seat That Does Not Exist") is None
+
+
+# --------------------------------------------------------------------------
+# A project's own seat (core.work_orders.project_review_lanes) gets named too
+# --------------------------------------------------------------------------
+#
+# Installing a project's compiled seat onto a tool does not by itself let convene()
+# name a reviewer for it: reviewer_for_seat() only ever checked Dream Studio's own
+# AGENTS_DIR. Without this, a project's own seat sat in `unreviewed` forever, next to
+# the chair -- a seat with a real compiled agent, reported as if it had none.
+
+_PROJECT_LANE_YAML = """
+mode: add
+lanes:
+  - id: a-project-specific-lane
+    seat: PCI Scope
+    question: >
+      Does this change touch anything in the cardholder data environment?
+    signature: >
+      A file under payments/ or checkout/ changed with no PCI reviewer sign-off noted
+      in the PR body.
+    precedent: >
+      Filed after an internal audit found three merged PRs touching payment capture
+      with no compliance review recorded anywhere.
+    measurement: >
+      No automatable predicate exists for "touches CDE" without a maintained
+      file-ownership map, so this is judgment rather than a detector.
+    model: sonnet
+    judgment: true
+    why: >
+      No maintained CDE file-ownership map exists yet to turn this into a detector.
+"""
+
+
+def _write_project_marker(tmp_path, body: str = _PROJECT_LANE_YAML):
+    (tmp_path / ".ds-review-lanes.yml").write_text(body, encoding="utf-8")
+
+
+def test_a_projects_own_seat_is_named_with_repo_root(tmp_path):
+    from integrations.compiler.reviewers import _slug, reviewer_for_seat
+
+    _write_project_marker(tmp_path)
+
+    assert reviewer_for_seat("PCI Scope", repo_root=tmp_path) == _slug("PCI Scope")
+
+
+def test_without_repo_root_a_projects_own_seat_is_still_unnamed(tmp_path):
+    """The parameter is opt-in. A caller that does not pass repo_root gets today's exact
+    behavior -- no project seat reachable, same as before this feature existed."""
+    from integrations.compiler.reviewers import reviewer_for_seat
+
+    _write_project_marker(tmp_path)
+
+    assert reviewer_for_seat("PCI Scope") is None
+
+
+def test_a_projects_own_seat_is_rendered_into_a_local_cache(tmp_path):
+    from integrations.compiler.reviewers import (
+        _PROJECT_REVIEWER_CACHE,
+        _slug,
+        build_reviewer,
+        group_by_seat,
+        reviewer_for_seat,
+    )
+    from core.work_orders.project_review_lanes import load_and_validate
+
+    _write_project_marker(tmp_path)
+    reviewer_for_seat("PCI Scope", repo_root=tmp_path)
+
+    cache_path = Path(tmp_path).joinpath(*_PROJECT_REVIEWER_CACHE, f"{_slug('PCI Scope')}.md")
+    assert cache_path.is_file()
+
+    _mode, lanes = load_and_validate(tmp_path)
+    expected = build_reviewer("PCI Scope", group_by_seat(lanes)["PCI Scope"])
+    assert cache_path.read_text(encoding="utf-8") == expected
+
+
+def test_the_cache_regenerates_when_the_marker_s_content_changes(tmp_path):
+    from integrations.compiler.reviewers import _PROJECT_REVIEWER_CACHE, _slug, reviewer_for_seat
+
+    _write_project_marker(tmp_path)
+    reviewer_for_seat("PCI Scope", repo_root=tmp_path)
+    cache_path = Path(tmp_path).joinpath(*_PROJECT_REVIEWER_CACHE, f"{_slug('PCI Scope')}.md")
+    first = cache_path.read_text(encoding="utf-8")
+
+    _write_project_marker(tmp_path, _PROJECT_LANE_YAML.replace("model: sonnet", "model: opus"))
+    reviewer_for_seat("PCI Scope", repo_root=tmp_path)
+    second = cache_path.read_text(encoding="utf-8")
+
+    assert first != second
+    assert "model: opus" in second
+
+
+def test_one_of_dream_studios_own_seats_never_touches_the_project_cache(tmp_path):
+    """The short-circuit: a seat AGENTS_DIR already answers must never fall through to
+    the project-cache path, even with a marker present and repo_root given."""
+    from integrations.compiler.reviewers import _PROJECT_REVIEWER_CACHE, reviewer_for_seat
+
+    _write_project_marker(tmp_path)
+    reviewer_for_seat("Finding integrity", repo_root=tmp_path)  # a real Dream Studio seat
+
+    assert not (Path(tmp_path) / _PROJECT_REVIEWER_CACHE[0]).exists()
+
+
+def test_a_repo_root_with_no_marker_names_nothing_for_an_unknown_seat(tmp_path):
+    from integrations.compiler.reviewers import reviewer_for_seat
+
+    assert reviewer_for_seat("Not A Real Seat At All", repo_root=tmp_path) is None
+
+
+def test_convene_names_a_real_reviewer_for_a_projects_own_seat(tmp_path):
+    """The end-to-end proof: convene() against a marker'd project returns a reviewer
+    slug for the project's own lane, and assignments() files it as a real assignment --
+    not under `unreviewed`, next to the chair, which is where it sat before this."""
+    from core.gates.round_table import assignments, convene
+
+    _write_project_marker(tmp_path)
+
+    report = convene(run_detectors=False, repo_root=tmp_path)
+    entry = next(s for s in report["lanes"] if s["lane"] == "a-project-specific-lane")
+    assert entry["reviewer"], "the project's own seat was named nothing"
+
+    grouped = assignments(report)
+    reviewers = {a["reviewer"] for a in grouped if a["reviewer"]}
+    assert entry["reviewer"] in reviewers
+
+    unreviewed_seats = {a["seat"] for a in grouped if not a["reviewer"]}
+    assert "PCI Scope" not in unreviewed_seats
