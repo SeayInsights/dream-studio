@@ -50,8 +50,10 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
             " agent slug, e.g. review-finding-integrity), instead of all nine. Lets a"
             " genuinely mixed roster -- nine seats on one tool, one on another -- be"
             " installed as two separate calls, since each call still installs every"
-            " tool's own DIFFERENT subset onto that one target. Ignored for tools with"
-            " no specialist_agent_format (only AGENTS.md is installed there anyway)."
+            " tool's own DIFFERENT subset onto that one target. Every other agent"
+            " profile a tool installs (Dream Studio's domain specialists, on"
+            " claude_code; AGENTS.md, on a tool with no specialist_agent_format) is"
+            " unaffected -- this only ever narrows the reviewer seats."
         ),
     )
     install_mode_group = integrate_install.add_mutually_exclusive_group()
@@ -256,6 +258,7 @@ def dispatch(
             ds_home=ds_home,
             git_repo_root=git_repo_root,
             skip_hook_install=_skip_hook,
+            agents=agents,
         )
         result = installer.install(mode)
         return _print(

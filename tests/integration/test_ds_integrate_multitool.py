@@ -95,6 +95,36 @@ def test_install_agents_subset_dry_run_reports_the_files_via_the_real_cli(tmp_pa
     assert not (tmp_path / ".gemini").exists()
 
 
+def test_install_agents_subset_on_claude_code_via_the_real_cli(tmp_path, monkeypatch):
+    """claude_code's reviewers are installed by a separate, older path
+    (ClaudeCodeInstaller) than codex/gemini_cli/cursor's -- --agents narrowed those
+    three but silently did nothing here, so claude_code still got all nine regardless
+    of the flag. --scope project keeps this test's writes inside tmp_path/.claude,
+    never the operator's real ~/.claude/ (see detect_claude_code's scope_override)."""
+    from interfaces.cli.ds import main as ds_main
+
+    monkeypatch.chdir(tmp_path)
+    rc = ds_main(
+        [
+            "integrate",
+            "install",
+            "claude_code",
+            "--scope",
+            "project",
+            "--agents",
+            "Finding integrity",
+            "--execute",
+        ]
+    )
+    assert rc == 0
+    agents_dir = tmp_path / ".claude" / "agents"
+    reviewer_names = {p.name for p in agents_dir.glob("review-*.md")}
+    assert reviewer_names == {"review-finding-integrity.md"}
+    # Domain specialists are a different bench --agents has never covered; at least
+    # one must still be present, proving the subset didn't silently narrow those too.
+    assert any(not p.name.startswith("review-") for p in agents_dir.glob("*.md"))
+
+
 def test_end_to_end(tmp_path, monkeypatch):
     """Dry-run writes nothing; execute writes; every project-scoped tool lands AGENTS.md."""
     from interfaces.cli.ds import main as ds_main

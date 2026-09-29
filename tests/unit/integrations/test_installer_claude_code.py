@@ -265,12 +265,40 @@ lanes:
       No maintained CDE file-ownership map exists yet to turn this into a detector.
 """
 
+_TWO_PROJECT_SEATS_YAML = _PROJECT_LANE_YAML + """
+  - id: a-second-project-specific-lane
+    seat: Data Residency
+    question: >
+      Does this change move data across a declared residency boundary?
+    signature: >
+      A file under export/ or replication/ changed with no residency reviewer
+      sign-off noted in the PR body.
+    precedent: >
+      Filed after a cross-region replication change shipped with no residency
+      review recorded anywhere.
+    measurement: >
+      No automatable predicate exists for "crosses a residency boundary" without a
+      maintained region map, so this is judgment rather than a detector.
+    model: sonnet
+    judgment: true
+    why: >
+      No maintained region map exists yet to turn this into a detector.
+"""
+
 
 @pytest.fixture
 def project_with_marker(tmp_path):
     root = tmp_path / "a-project"
     root.mkdir()
     (root / ".ds-review-lanes.yml").write_text(_PROJECT_LANE_YAML, encoding="utf-8")
+    return root
+
+
+@pytest.fixture
+def project_with_two_seats(tmp_path):
+    root = tmp_path / "a-project-with-two-seats"
+    root.mkdir()
+    (root / ".ds-review-lanes.yml").write_text(_TWO_PROJECT_SEATS_YAML, encoding="utf-8")
     return root
 
 
@@ -331,3 +359,92 @@ def test_execute_writes_the_project_seat_into_the_agents_dir(
     written = config_root / "agents" / "review-pci-scope.md"
     assert written.is_file()
     assert "name: review-pci-scope" in written.read_text(encoding="utf-8")
+
+
+# --------------------------------------------------------------------------
+# --agents on claude_code itself
+# --------------------------------------------------------------------------
+#
+# The subset flag was wired into SpecialistAgentsInstaller and CodexAgentsInstaller
+# (the codex/gemini_cli/cursor path) but never into ClaudeCodeInstaller, a separate,
+# older installer that globs canonical/agents/ with no filter at all -- so
+# `ds integrate install claude_code --agents "one seat"` still installed all nine
+# reviewers regardless. Caught by an operator diffing --agents' real behavior across
+# tools (codex correctly narrowed; claude_code silently didn't).
+#
+# canonical_root is omitted here (real repo canonical/agents/), not the bare-bones
+# fixture the tests above use, because there is nothing to filter otherwise -- this
+# still writes only into config_root=tmp_path, never into a real ~/.claude/.
+
+
+def test_agents_subset_installs_only_that_reviewer_on_claude_code(config_root, ds_home):
+    installer = ClaudeCodeInstaller(
+        config_root, "user", ds_home=ds_home, agents=["Finding integrity"]
+    )
+    plan = installer.plan()
+    reviewer_names = {op.target.name for op in plan.ops if op.target.name.startswith("review-")}
+    assert reviewer_names == {"review-finding-integrity.md"}
+
+
+def test_agents_subset_leaves_domain_specialists_untouched_on_claude_code(config_root, ds_home):
+    """--agents has only ever meant "the round table's reviewers" -- Dream Studio's
+    domain specialists (accessibility-expert.md and friends) are a different bench
+    with no subset concept, and must keep installing in full."""
+    installer_full = ClaudeCodeInstaller(config_root, "user", ds_home=ds_home)
+    full_plan = installer_full.plan()
+    domain_specialist_names = {
+        op.target.name
+        for op in full_plan.ops
+        if "agents" in op.target.parts and not op.target.name.startswith("review-")
+    }
+    assert domain_specialist_names, "fixture guard: no domain specialists found to compare against"
+
+    installer_subset = ClaudeCodeInstaller(
+        config_root, "user", ds_home=ds_home, agents=["Finding integrity"]
+    )
+    subset_plan = installer_subset.plan()
+    subset_domain_names = {
+        op.target.name
+        for op in subset_plan.ops
+        if "agents" in op.target.parts and not op.target.name.startswith("review-")
+    }
+    assert subset_domain_names == domain_specialist_names
+
+
+def test_agents_subset_can_also_name_a_project_seat_on_claude_code(
+    config_root, canonical_root, ds_home, project_with_marker
+):
+    installer = ClaudeCodeInstaller(
+        config_root,
+        "user",
+        canonical_root=canonical_root,
+        ds_home=ds_home,
+        git_repo_root=project_with_marker,
+        agents=["PCI Scope"],
+    )
+    plan = installer.plan()
+    reviewer_names = {op.target.name for op in plan.ops if op.target.name.startswith("review-")}
+    assert reviewer_names == {"review-pci-scope.md"}
+
+
+def test_agents_subset_with_an_unknown_name_raises_at_construction(config_root, ds_home):
+    with pytest.raises(ValueError, match="unknown"):
+        ClaudeCodeInstaller(config_root, "user", ds_home=ds_home, agents=["Not A Real Seat"])
+
+
+def test_agents_subset_excludes_a_project_s_other_seat(
+    config_root, canonical_root, ds_home, project_with_two_seats
+):
+    """Two project seats exist; naming one must not pull in the other -- the case a
+    single-project-seat fixture can't distinguish from "the filter did nothing"."""
+    installer = ClaudeCodeInstaller(
+        config_root,
+        "user",
+        canonical_root=canonical_root,
+        ds_home=ds_home,
+        git_repo_root=project_with_two_seats,
+        agents=["PCI Scope"],
+    )
+    plan = installer.plan()
+    reviewer_names = {op.target.name for op in plan.ops if op.target.name.startswith("review-")}
+    assert reviewer_names == {"review-pci-scope.md"}
