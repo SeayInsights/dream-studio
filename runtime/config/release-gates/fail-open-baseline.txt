@@ -621,7 +621,7 @@ interfaces/cli/build_adapters.py|95|falsy-return
 interfaces/cli/cli_utils.py|60|bare-except-pass
 interfaces/cli/commands/diagnostics.py|72|bare-except-pass
 interfaces/cli/commands/diagnostics.py|90|bare-except-pass
-interfaces/cli/commands/integrate.py|225|bare-except-pass
+interfaces/cli/commands/integrate.py|231|bare-except-pass
 interfaces/cli/commands/prd.py|63|falsy-return
 interfaces/cli/commands/project.py|969|bare-except-pass
 interfaces/cli/commands/prove.py|198|bare-except-pass
