@@ -41,6 +41,7 @@ def test_the_compiled_agent_carries_its_seat_s_registry_model(seat):
 
     lanes = _seats()[seat]
     expected = _model_for_seat(seat, lanes)
+    # No repo_root: every seat here is Dream Studio's own, so AGENTS_DIR always answers.
     body = (AGENTS_DIR / f"{reviewer_for_seat(seat)}.md").read_text(encoding="utf-8")
     assert f"\nmodel: {expected}\n" in body, f"{seat}: compiled agent does not carry {expected!r}"
 
