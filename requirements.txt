@@ -23,20 +23,17 @@ uvicorn>=0.23,<1.0
 httpx>=0.24
 python-multipart>=0.0.6
 
-# click / mcp CVEs (PYSEC-2026-2132; CVE-2026-52870 / -52869 / -59950) canNOT be floored:
-# semgrep (dev) pins click~=8.1.8 (caps <8.2) and mcp==1.23.3 (exact), so any floor forces pip
-# to backtrack semgrep to a source-only build with no Windows wheel ("Semgrep does not support
-# Windows yet") — it broke the Windows dev install. Same constraint class as the PyJWT note
-# below. These are dev-only transitive CVEs (via semgrep/fastmcp) and remain flagged by
-# pip-audit until semgrep relaxes its pins; the pip-audit security-gate suppression is handled
-# with the Full-CI recovery in WO ac814dc3 (coupled with the migration release), not here, to
-# keep this change off the release_publication_gate docs surface. WO-DEP-CVE-BUMP (7f9085e7).
+# RESOLVED 2026-09-29 (see requirements-dev.txt's semgrep>=1.130 comment for the fix and
+# verification). This used to document that semgrep (dev) pinned click~=8.1.8 and
+# mcp==1.23.3 exactly, so flooring either forced pip to backtrack semgrep to a source-only
+# build with no Windows wheel. That was true of semgrep's OLD releases, not a permanent
+# constraint: raising semgrep's own floor to 1.130 moved it onto a release line that no
+# longer caps click or pyjwt this way and resolves a CVE-fixed mcp on its own. Left here,
+# historical, so a reader who remembers this note does not go looking for a cap that no
+# longer exists.
 
 # regex: pinned to satisfy dateparser>=1.4.0 transitive requirement
 regex>=2024.9.11
-
-# PyJWT: semgrep pins pyjwt[crypto]~=2.12.0 (caps at <2.13), so we cannot pin higher.
-# pip_audit CVEs in 2.12.x are a known false-positive — upgrade when semgrep relaxes its pin.
 
 # LLM safety scanners: giskard, rebuff, llm-guard
 # Real libraries not yet evaluated for Python 3.12 compatibility.

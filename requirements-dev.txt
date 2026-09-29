@@ -15,12 +15,20 @@ pre-commit>=3.0
 pytest-asyncio>=0.23
 # Security scanning tools (ds-quality:security static passes — brownfield slice 18.x)
 bandit>=1.7
-semgrep>=1.60
-
-# mcp: CANNOT floor past CVE-2026-52870 / -52869 / -59950 (fixed in 1.28.1). semgrep caps mcp
-# at an older release (==1.23.3), so `mcp>=1.28.1` forces pip to backtrack semgrep down to a
-# source-only version with no Windows wheel ("Semgrep does not support Windows yet") — it broke
-# the Windows pr-smoke install. Same constraint class as the PyJWT note in requirements.txt. The
-# 3 mcp CVEs are dev-only (transitive via semgrep/fastmcp) and remain flagged by pip-audit; the
-# security-gate suppression is handled with the Full-CI recovery in WO ac814dc3, not here.
-# Revisit when semgrep relaxes its mcp pin. WO-DEP-CVE-BUMP (7f9085e7).
+# FLOOR RAISED 1.60 -> 1.130 (2026-09-29): not a CVE fix by itself, a pip-resolver fix. With
+# an open floor this loose against a package with semgrep's release history, pip's backtracking
+# resolver does not reliably pick the newest candidate first -- it walked backward through 30+
+# older semgrep releases hunting for a combination that satisfied every other pin in this file
+# simultaneously, and landed on 1.111.0, a source-only release with no Windows wheel at all
+# ("Semgrep does not support Windows yet"), breaking the Windows pr-smoke install even though
+# the newest release resolves cleanly on its own. Reproduced in a clean venv (no pre-installed
+# packages masking the resolution) before this fix, confirmed resolved after: `semgrep>=1.130`
+# resolves straight to the current release with no backtracking.
+#
+# THE MCP/CLICK/PYJWT CAPS THIS COMMENT USED TO DESCRIBE NO LONGER APPLY. Semgrep's own pins
+# moved on since they were written -- the current release resolves mcp==1.29.0 (past the
+# CVE-2026-52870/-52869/-59950 fix in 1.28.1) and no longer caps click or pyjwt below the
+# versions requirements.txt already wants. `pip-audit --strict` against the raised floor:
+# "No known vulnerabilities found". The PyJWT note in requirements.txt describing the old cap
+# is stale for the same reason and should be read as historical, not current.
+semgrep>=1.130
