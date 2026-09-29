@@ -17,7 +17,7 @@ from integrations.compiler.claude_code import (
     compile_pack,
     merge_claude_md,
 )
-from integrations.compiler.reviewers import project_reviewer_files
+from integrations.compiler.reviewers import PREFIX, project_reviewer_files, resolve_agent_names
 from integrations.installer.base import FileOp, FileOpPlan, InstallerBase, RefusalError
 from integrations.installer.file_ops import atomic_copy, atomic_write, backup_before_write
 from integrations.manifest import (
@@ -97,13 +97,29 @@ class ClaudeCodeInstaller(InstallerBase):
         ds_home: Path | None = None,
         git_repo_root: Path | None = None,
         skip_hook_install: bool = False,
+        agents: list[str] | None = None,
     ):
+        """*agents*, if given, narrows which of the round table's `review-*.md`
+        reviewers land in step 5/5b below to that subset (seat name or slug -- see
+        `resolve_agent_names`) -- the same parameter `SpecialistAgentsInstaller` and
+        `CodexAgentsInstaller` already take, wired here too so a mixed roster (nine
+        seats on Claude, one on Codex) is reachable on THIS tool as well, not just
+        the other three. Every other agent profile under canonical/agents/ (Dream
+        Studio's ~45 domain specialists) is unaffected -- this flag has only ever
+        meant "the round table's reviewers", never the whole bench.
+        """
         self.config_root = config_root
         self.scope = scope
         self.canonical_root = canonical_root
         self.ds_home = ds_home
         self.git_repo_root = git_repo_root
         self.skip_hook_install = skip_hook_install
+        self.agents = agents
+        self._allowed_reviewer_names: frozenset[str] | None = (
+            frozenset(p.name for p in resolve_agent_names(agents, repo_root=git_repo_root))
+            if agents is not None
+            else None
+        )
 
     def _get_source_root(self) -> Path:
         """Resolve source root (repo root) for VERSION and canonical/ lookups."""
@@ -313,6 +329,16 @@ class ClaudeCodeInstaller(InstallerBase):
             for agent_file in sorted(agents_src_dir.rglob("*.md")):
                 if agent_file.name == "README.md":
                     continue
+                # --agents narrows the round table's OWN reviewers only (the
+                # `review-` prefix) -- Dream Studio's ~45 domain specialists are a
+                # different thing this flag has never covered, so they always
+                # install regardless of the subset.
+                if (
+                    self._allowed_reviewer_names is not None
+                    and agent_file.name.startswith(PREFIX)
+                    and agent_file.name not in self._allowed_reviewer_names
+                ):
+                    continue
                 rel = agent_file.relative_to(agents_src_dir)
                 content = agent_file.read_text(encoding="utf-8")
                 target = self.config_root / "agents" / rel
@@ -335,6 +361,11 @@ class ClaudeCodeInstaller(InstallerBase):
         # has no marker; see `integrations.compiler.reviewers.project_reviewer_files`.
         if self.git_repo_root is not None:
             for project_file in project_reviewer_files(self.git_repo_root):
+                if (
+                    self._allowed_reviewer_names is not None
+                    and project_file.name not in self._allowed_reviewer_names
+                ):
+                    continue
                 content = project_file.read_text(encoding="utf-8")
                 target = self.config_root / "agents" / project_file.name
                 ops.append(
