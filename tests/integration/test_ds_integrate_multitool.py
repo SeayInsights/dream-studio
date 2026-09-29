@@ -42,6 +42,59 @@ def test_detect_all_includes_new_targets():
         assert expected in ids, f"detect_all missing {expected}"
 
 
+def test_install_agents_subset_via_the_real_cli(tmp_path, monkeypatch):
+    """The actual gap an operator hit right after per-seat model shipped: installing
+    codex and gemini_cli each gave all nine reviewers to both, with no way to split a
+    mixed roster (some seats on one tool, some on another) between them. --agents is
+    the fix; this proves it end to end through the real argv parser, not just the
+    installer classes directly.
+
+    codex only (project-scoped, safely isolated by chdir alone) -- cursor's user scope
+    needs home= too, which the CLI does not expose a test hook for, so it stays out of
+    CLI-level integration tests the same way test_end_to_end above already excludes it.
+    """
+    from interfaces.cli.ds import main as ds_main
+
+    monkeypatch.chdir(tmp_path)
+    rc = ds_main(
+        [
+            "integrate",
+            "install",
+            "codex",
+            "--agents",
+            "Finding integrity, review-boundary-semantics",
+            "--execute",
+        ]
+    )
+    assert rc == 0
+    written = {p.name for p in (tmp_path / ".codex" / "agents").iterdir()}
+    assert written == {"review-finding-integrity.toml", "review-boundary-semantics.toml"}
+
+
+def test_install_agents_subset_dry_run_reports_the_files_via_the_real_cli(tmp_path, monkeypatch):
+    import json
+
+    from interfaces.cli.ds import main as ds_main
+
+    monkeypatch.chdir(tmp_path)
+    # Capture stdout the same way the other CLI tests in this module rely on _print's
+    # side effect being observable -- via the real files it does or doesn't write,
+    # except a dry-run writes nothing, so this one reads the JSON _print emits instead.
+    import io
+    from contextlib import redirect_stdout
+
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = ds_main(
+            ["integrate", "install", "gemini_cli", "--agents", "Finding integrity", "--dry-run"]
+        )
+    assert rc == 0
+    payload = json.loads(buf.getvalue())
+    assert payload["specialist_agents"]["files"] == ["review-finding-integrity.md"]
+    assert payload["specialist_agents"]["written"] == []
+    assert not (tmp_path / ".gemini").exists()
+
+
 def test_end_to_end(tmp_path, monkeypatch):
     """Dry-run writes nothing; execute writes; every project-scoped tool lands AGENTS.md."""
     from interfaces.cli.ds import main as ds_main
