@@ -392,6 +392,11 @@ def convene(
     started = monotonic()
     lanes = _lanes(repo_root)
     _change_root = change_root if change_root is not None else repo_root
+    # The same root _lanes() resolved the marker against (registry_for's own
+    # `root = repo_root or REPO_ROOT` convention) -- a project's cached seat reviewer
+    # lives beside the marker that declared it, not beside the change set under review,
+    # which can be a different tree (see convene()'s own docstring on the two roots).
+    _registry_root = repo_root or REPO_ROOT
 
     selected_by_scope = False
     if not all_seats and seat is None and lane_id is None:
@@ -479,7 +484,7 @@ def convene(
         # arrangement canonical/agents/README.md already describes.
         from integrations.compiler.reviewers import reviewer_for_seat
 
-        entry["reviewer"] = reviewer_for_seat(entry["seat"])
+        entry["reviewer"] = reviewer_for_seat(entry["seat"], repo_root=_registry_root)
         seats.append(entry)
 
     detectors = [s for s in seats if s["kind"] == "detector"]
