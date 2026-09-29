@@ -196,9 +196,9 @@ def test_a_duplicate_title_is_refused():
     # The seat was renamed when the bench merged 29 seats into 22
     # (feat/lane-determinism). Asserted against the live roster rather than a
     # transcribed string, so the next merge cannot break this for a rename.
-    from core.gates.review_lane_registry import _SEATS
+    from core.gates.review_lane_registry import SEATS
 
-    assert verdict["refusals"][0]["seat"] in _SEATS, verdict["refusals"][0]["seat"]
+    assert verdict["refusals"][0]["seat"] in SEATS, verdict["refusals"][0]["seat"]
     assert verdict["refusals"][0]["seat"] != _WARDEN, "a duplicate title is not the Warden's lane"
 
 

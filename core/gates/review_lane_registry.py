@@ -123,7 +123,11 @@ _ENFORCEMENT_KEYS = ("detector", "eval", "judgment")
 #: The pre-merge names are kept. `RESEATED` in scripts/seat_lanes_data.py is frozen history
 #: and still carries lanes under the seats that found them, so removing a name here would
 #: refuse a record of what actually happened.
-_SEATS = frozenset(
+#:
+#: PUBLIC (not `_SEATS`), because `core.work_orders.project_review_lanes` also needs this
+#: exact set -- a project's own custom seat must not collide with one of these, and a
+#: second copy of the set drifting from this one would let a collision through silently.
+SEATS = frozenset(
     {
         "Access and reach",
         "Gate and test integrity",
@@ -206,17 +210,23 @@ def _detector_runnable(command: str) -> str | None:
     return None
 
 
-def run() -> dict:
-    lanes, load_error = _load()
-    if load_error:
-        return {"status": "fail", "lane_count": 0, "errors": [load_error]}
+def validate_lanes(lanes: list[dict], *, closed_seats: frozenset[str] | None) -> list[str]:
+    """Every check a lane must pass, independent of which file it came from.
 
+    `closed_seats=None` skips the seat-membership check. This registry's own lanes are
+    held by a fixed vocabulary (`closed_seats=SEATS`, below) because these arrived
+    carrying real reviewer handles and a name describes nothing -- but a caller outside
+    that closed set (`core.work_orders.project_review_lanes`, for a project's own custom
+    seat) checks seat identity a different way: collision against the reserved set,
+    not membership in it. Passing `SEATS` here reproduces this gate's historic
+    behavior exactly; this function is a refactor of `run()`'s own former loop body,
+    not a new set of rules.
+
+    Duplicate lane ids are checked across the WHOLE list passed in -- call this once
+    with every lane meant to be validated together, not once per lane, or a lane and
+    its own duplicate in two separate calls would never meet.
+    """
     errors: list[str] = []
-    counts = {"detector": 0, "eval": 0, "judgment": 0}
-
-    if not lanes:
-        errors.append(f"{REGISTRY} declares no lanes at all")
-
     seen: set[str] = set()
     for lane in lanes:
         lane_id = str(lane.get("id") or "").strip()
@@ -227,13 +237,15 @@ def run() -> dict:
             errors.append(f"{lane_id}: declared twice")
         seen.add(lane_id)
 
-        seat = str(lane.get("seat") or "").strip()
-        if seat not in _SEATS:
-            errors.append(
-                f"{lane_id}: seat {seat!r} is not one of {sorted(_SEATS)}. A lane is held by"
-                " a seat that says what it watches, not by whoever happened to find it --"
-                " these arrived carrying real reviewer handles and a name describes nothing."
-            )
+        if closed_seats is not None:
+            seat = str(lane.get("seat") or "").strip()
+            if seat not in closed_seats:
+                errors.append(
+                    f"{lane_id}: seat {seat!r} is not one of {sorted(closed_seats)}. A lane is"
+                    " held by a seat that says what it watches, not by whoever happened to"
+                    " find it -- these arrived carrying real reviewer handles and a name"
+                    " describes nothing."
+                )
 
         model = str(lane.get("model") or "").strip()
         if not model:
@@ -272,7 +284,6 @@ def run() -> dict:
             continue
 
         key = present[0]
-        counts[key] += 1
 
         if key == "detector":
             problem = _detector_runnable(str(lane.get("detector") or ""))
@@ -333,6 +344,24 @@ def run() -> dict:
                     f" in at least {_MIN_PROSE_CHARS} characters, so someone can later"
                     " close it."
                 )
+    return errors
+
+
+def run() -> dict:
+    lanes, load_error = _load()
+    if load_error:
+        return {"status": "fail", "lane_count": 0, "errors": [load_error]}
+
+    if not lanes:
+        errors = [f"{REGISTRY} declares no lanes at all"]
+    else:
+        errors = validate_lanes(lanes, closed_seats=SEATS)
+
+    counts = {"detector": 0, "eval": 0, "judgment": 0}
+    for lane in lanes:
+        present = [key for key in _ENFORCEMENT_KEYS if key in lane]
+        if len(present) == 1:
+            counts[present[0]] += 1
 
     return {
         "status": "fail" if errors else "pass",
