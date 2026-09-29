@@ -259,9 +259,12 @@ def dispatch(
             all_seats=args.all_seats,
             paths=paths,
         )
-    except (KeyError, FileNotFoundError) as exc:
+    except (KeyError, FileNotFoundError, ValueError) as exc:
         # NAMED, NOT SWALLOWED. A typo that convened nothing would print an empty table
-        # and exit 0 -- a clean review of everything.
+        # and exit 0 -- a clean review of everything. ValueError added alongside the
+        # other two: a present-but-invalid `.ds-review-lanes.yml` marker
+        # (core.work_orders.project_review_lanes) raises the same way, and deserves the
+        # same clean CLI message rather than an uncaught traceback.
         print(f"ds review: {exc}".replace('"', ""), file=sys.stderr)
         return 2
 

@@ -87,6 +87,9 @@ _SELF = frozenset(
         # edit here changes what a recorded review means.
         "core/work_orders/review_answers.py",
         "core/gates/lane_sandbox.py",
+        # How a project's own lanes merge into this table is part of the table's
+        # definition too -- the marker-gated merge in _lanes() reads this module.
+        "core/work_orders/project_review_lanes.py",
     }
 )
 
@@ -115,24 +118,84 @@ def _seat_width(report: dict) -> int:
 _TABLE_BUDGET_S = 900.0
 
 
+def _load_lane_list(registry: Path) -> list[dict]:
+    """One registry file's lanes, raising if it parses to zero.
+
+    A PRESENT-BUT-EMPTY REGISTRY WAS THE ONE PATH WITH NO GUARD, and an independent
+    reviewer walked straight through it: convene() returned `status: pass`, zero
+    lanes, and "0 detector lane(s) clean" -- a clean review that asked nothing.
+    The missing-file case already raises in `_lanes()`; the malformed-file case
+    reported success. Both are the same thing, so both raise.
+    """
+    data = yaml.safe_load(registry.read_text(encoding="utf-8"))
+    lanes = [lane for lane in (data or {}).get("lanes", []) if isinstance(lane, dict)]
+    if not lanes:
+        raise ValueError(
+            f"the review-lane registry at {registry} parsed to zero lanes. A convening with"
+            " no lanes is not a clean review -- it is a review that asked nothing, and"
+            " reporting it as a pass is the failure every lane here exists to refuse."
+        )
+    return lanes
+
+
 def _lanes(repo_root: Path | None = None) -> list[dict]:
+    """The lanes to convene: the tree's own registry, optionally extended by its own
+    `.ds-review-lanes.yml` marker (`core.work_orders.project_review_lanes`).
+
+    THE MARKER IS THE OPT-IN, not the absence of a full registry. A tree with neither a
+    full registry of its own NOR a marker keeps today's loud failure exactly -- a bare
+    `--repo` pointed at an unrelated directory must still refuse rather than silently
+    start reporting Dream Studio's own bench as if it knew something about that
+    directory. Only a REAL marker file makes falling back to Dream Studio's own bench as
+    a base meaningful, because only then has the tree explicitly asked to extend it.
+
+    `mode: add` (the marker's own default) appends the tree's own lanes onto the base;
+    `mode: replace` discards the base and uses only the tree's own -- same two modes
+    `core.work_orders.review_rules`'s `.ds-review-rules.md` already established for
+    review rules, applied here to lanes instead of prose.
+    """
+    from core.gates import review_lane_registry
+    from core.work_orders import project_review_lanes
+
+    effective_root = repo_root or REPO_ROOT
     registry = registry_for(repo_root)
-    if not registry.is_file():
+    marker = project_review_lanes.marker_path(effective_root)
+
+    if registry.is_file():
+        base_lanes = _load_lane_list(registry)
+    elif marker.is_file():
+        ds_registry = registry_for(None)
+        if not ds_registry.is_file():
+            raise FileNotFoundError(f"no review-lane registry at {ds_registry} either")
+        base_lanes = _load_lane_list(ds_registry)
+    else:
         raise FileNotFoundError(
             f"no review-lane registry at {registry}. A convening with no lanes is not a"
             " clean review -- it is a review that asked nothing, so this raises rather than"
             " reporting an empty table."
         )
-    data = yaml.safe_load(registry.read_text(encoding="utf-8"))
-    lanes = [lane for lane in (data or {}).get("lanes", []) if isinstance(lane, dict)]
+
+    if marker.is_file():
+        # None only when the marker is absent (see project_review_lanes.load_and_validate's
+        # own docstring); already confirmed present above, so this always unpacks.
+        mode, project_lanes = project_review_lanes.load_and_validate(
+            effective_root, reserved_seats=review_lane_registry.SEATS
+        )
+        lanes = (
+            project_lanes
+            if mode == project_review_lanes.MODE_REPLACE
+            else [*base_lanes, *project_lanes]
+        )
+    else:
+        lanes = base_lanes
+
     if not lanes:
-        # A PRESENT-BUT-EMPTY REGISTRY WAS THE ONE PATH WITH NO GUARD, and an independent
-        # reviewer walked straight through it: convene() returned `status: pass`, zero
-        # lanes, and "0 detector lane(s) clean" -- a clean review that asked nothing.
-        # The missing-file case already raised; the malformed-file case reported success.
-        # Both are the same thing, so both raise.
+        # Defensive, not load-bearing today: both _load_lane_list and load_and_validate
+        # already refuse an empty lane list at their own source, so every reachable path
+        # above already guarantees this. Kept as a backstop against a future change to
+        # either of those loosening its own guarantee silently.
         raise ValueError(
-            f"the review-lane registry at {registry} parsed to zero lanes. A convening with"
+            f"the merged review-lane list for {effective_root} is empty. A convening with"
             " no lanes is not a clean review -- it is a review that asked nothing, and"
             " reporting it as a pass is the failure every lane here exists to refuse."
         )
@@ -696,10 +759,13 @@ def main(argv: list[str] | None = None) -> int:
             lane_id=args.lane_id,
             all_seats=args.all_seats,
         )
-    except (KeyError, FileNotFoundError) as exc:
+    except (KeyError, FileNotFoundError, ValueError) as exc:
         # NAMED, NOT SWALLOWED. A typo that convened nothing would print an empty table and
         # exit 0 -- a clean review of everything, which is the substitution every lane here
-        # exists to refuse.
+        # exists to refuse. ValueError added alongside the other two: a present-but-invalid
+        # `.ds-review-lanes.yml` marker (core.work_orders.project_review_lanes) raises the
+        # same way an empty registry already did, and deserves the same clean CLI message
+        # rather than an uncaught traceback.
         print(f"round-table: {exc}".replace('"', ""), file=sys.stderr)
         return 2
     print(json.dumps(report, indent=2, sort_keys=True) if args.json else _render(report))
