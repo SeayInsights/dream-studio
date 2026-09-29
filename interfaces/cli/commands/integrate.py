@@ -41,6 +41,19 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
     )
     integrate_install.add_argument("tool", choices=list(_SUPPORTED_TOOLS))
     integrate_install.add_argument("--scope", choices=["user", "project"], default=None)
+    integrate_install.add_argument(
+        "--agents",
+        default=None,
+        help=(
+            "Install only this comma-separated subset of the round table's reviewers"
+            " onto this tool (each entry a seat name, e.g. 'Finding integrity', or an"
+            " agent slug, e.g. review-finding-integrity), instead of all nine. Lets a"
+            " genuinely mixed roster -- nine seats on one tool, one on another -- be"
+            " installed as two separate calls, since each call still installs every"
+            " tool's own DIFFERENT subset onto that one target. Ignored for tools with"
+            " no specialist_agent_format (only AGENTS.md is installed there anyway)."
+        ),
+    )
     install_mode_group = integrate_install.add_mutually_exclusive_group()
     install_mode_group.add_argument(
         "--dry-run", action="store_true", default=False, help="Simulate; writes nothing"
@@ -163,6 +176,8 @@ def dispatch(
             )
 
         mode = "dry_run" if dry_run else "execute"
+        agents_arg = getattr(args, "agents", None)
+        agents = [a.strip() for a in agents_arg.split(",") if a.strip()] if agents_arg else None
 
         # Phase 20: native-AGENTS.md tools use the generic installer (AGENTS.md only,
         # no hooks/skills). Claude Code keeps its dedicated installer below.
@@ -182,21 +197,25 @@ def dispatch(
             # codex, gemini_cli and cursor, verified 2026-09 (see integrations/targets/
             # registry.py). Additive to the AGENTS.md install above, not a replacement:
             # a tool with no declared specialist_agent_format (windsurf, aider) simply
-            # gets AGENTS.md alone, same as before this capability existed.
+            # gets AGENTS.md alone, same as before this capability existed. --agents
+            # narrows which of the nine land here; see resolve_agent_names for how an
+            # entry is matched.
             spec = get_target_spec(tool_id)
             if spec.specialist_agent_format == "md_frontmatter":
                 from integrations.installer.specialist_agents_target import (
                     SpecialistAgentsInstaller,
                 )
 
-                specialist_installer = SpecialistAgentsInstaller(tool_id, project_root=Path.cwd())
+                specialist_installer = SpecialistAgentsInstaller(
+                    tool_id, project_root=Path.cwd(), agents=agents
+                )
                 result["specialist_agents"] = specialist_installer.install(mode)
             elif spec.specialist_agent_format == "toml":
                 from integrations.installer.specialist_agents_codex_target import (
                     CodexAgentsInstaller,
                 )
 
-                codex_installer = CodexAgentsInstaller(project_root=Path.cwd())
+                codex_installer = CodexAgentsInstaller(project_root=Path.cwd(), agents=agents)
                 result["specialist_agents"] = codex_installer.install(mode)
 
             return _print(

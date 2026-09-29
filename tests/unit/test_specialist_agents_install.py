@@ -78,6 +78,48 @@ def test_installer_rejects_dry_run_without_writing(tool_id, tmp_path):
 
 
 @pytest.mark.parametrize("tool_id", MD_FRONTMATTER_TOOLS)
+def test_dry_run_still_reports_which_files_it_would_write(tool_id, tmp_path):
+    """A dry-run that reports only written: [] answers "did anything happen" (no) but
+    not "what would happen" -- the actual question a dry-run exists to answer, and the
+    one an operator ran --dry-run to get. Caught directly after this installer shipped:
+    the real CLI's --dry-run gave a target_dir and an empty list, nothing else."""
+    installer = SpecialistAgentsInstaller(tool_id, project_root=tmp_path, home=tmp_path)
+    result = installer.install("dry_run")
+    assert set(result["files"]) == {f.name for f in reviewer_files()}
+
+
+@pytest.mark.parametrize("tool_id", MD_FRONTMATTER_TOOLS)
+def test_agents_subset_installs_only_the_requested_reviewers(tool_id, tmp_path):
+    installer = SpecialistAgentsInstaller(
+        tool_id,
+        project_root=tmp_path,
+        home=tmp_path,
+        agents=["Finding integrity", "review-boundary-semantics"],
+    )
+    result = installer.install("execute")
+    assert set(result["written"]) == {
+        "review-finding-integrity.md",
+        "review-boundary-semantics.md",
+    }
+    written_files = {p.name for p in installer.target_dir.iterdir()}
+    assert written_files == {"review-finding-integrity.md", "review-boundary-semantics.md"}
+    all_files = {f.name for f in reviewer_files()}
+    assert len(all_files) > 2, "subset test is meaningless if the full bench isn't bigger"
+
+
+@pytest.mark.parametrize("tool_id", MD_FRONTMATTER_TOOLS)
+def test_agents_subset_with_an_unknown_name_raises_before_writing_anything(tool_id, tmp_path):
+    with pytest.raises(ValueError, match="unknown"):
+        SpecialistAgentsInstaller(
+            tool_id, project_root=tmp_path, home=tmp_path, agents=["Not A Real Seat"]
+        )
+    # The installer must not have gotten far enough to create the target directory --
+    # an unknown name is refused at construction, before any file operation.
+    assert not (tmp_path / ".gemini").exists()
+    assert not (tmp_path / ".cursor").exists()
+
+
+@pytest.mark.parametrize("tool_id", MD_FRONTMATTER_TOOLS)
 def test_installer_writes_every_reviewer_with_its_model_translated(tool_id, tmp_path):
     # See the comment on test_installer_rejects_dry_run_without_writing: home=tmp_path
     # is required for every tool here, not just the ones whose scope currently needs it.

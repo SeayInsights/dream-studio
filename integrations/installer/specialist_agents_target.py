@@ -22,7 +22,7 @@ import re
 from pathlib import Path
 from typing import Any, Literal
 
-from integrations.compiler.reviewers import AGENTS_DIR, PREFIX
+from integrations.compiler.reviewers import resolve_agent_names, reviewer_files
 from integrations.targets.registry import (
     get_target_spec,
     specialist_agents_target_path,
@@ -30,12 +30,6 @@ from integrations.targets.registry import (
 )
 
 _MODEL_LINE_RE = re.compile(r"^model: (.+)$", re.MULTILINE)
-
-
-def reviewer_files() -> list[Path]:
-    """Every compiled reviewer, in the order `sorted()` gives -- not install order,
-    just a stable one so a dry-run plan and a real install name files the same way."""
-    return sorted(AGENTS_DIR.glob(f"{PREFIX}*.md"))
 
 
 def translate_reviewer_body(body: str, tool_id: str) -> str:
@@ -63,7 +57,15 @@ class SpecialistAgentsInstaller:
         *,
         project_root: Path,
         home: Path | None = None,
+        agents: list[str] | None = None,
     ) -> None:
+        """*agents*, if given, installs only that subset (each entry a seat name or an
+        agent slug -- see `resolve_agent_names`) rather than every compiled reviewer.
+        Without it, this tool gets all nine; installing a different subset onto a
+        second tool is what makes a genuinely mixed roster (nine seats on Claude, one
+        on Codex) reachable, rather than every target getting the whole bench or
+        nothing.
+        """
         spec = get_target_spec(tool_id)
         if spec.specialist_agent_format != "md_frontmatter":
             raise ValueError(
@@ -77,27 +79,31 @@ class SpecialistAgentsInstaller:
         self.target_dir = specialist_agents_target_path(
             tool_id, project_root=self.project_root, home=self.home
         )
+        self._files = resolve_agent_names(agents) if agents is not None else reviewer_files()
 
     def plan(self) -> dict[str, Any]:
-        """Dry-run description of what install would do."""
-        return {
-            "tool_id": self.tool_id,
-            "target_dir": str(self.target_dir),
-            "files": [f.name for f in reviewer_files()],
-        }
+        """Dry-run description of what install would do. Delegates to install() rather
+        than keeping a second copy of "which files, which target" -- see the same
+        choice made the same way in install() itself."""
+        return self.install("dry_run")
 
     def install(self, mode: Literal["dry_run", "execute"]) -> dict[str, Any]:
-        files = reviewer_files()
         result: dict[str, Any] = {
             "tool_id": self.tool_id,
             "mode": mode,
             "target_dir": str(self.target_dir),
+            # ALWAYS POPULATED, dry_run included. A dry-run that reports only
+            # written: [] tells a caller nothing beyond "nothing happened, which is
+            # what dry-run means" -- it does not answer the actual question a dry-run
+            # exists to answer, "what WOULD happen". `files` is that answer; `written`
+            # stays the record of what this call actually did.
+            "files": [f.name for f in self._files],
             "written": [],
         }
         if mode != "execute":
             return result
         self.target_dir.mkdir(parents=True, exist_ok=True)
-        for src in files:
+        for src in self._files:
             translated = translate_reviewer_body(src.read_text(encoding="utf-8"), self.tool_id)
             (self.target_dir / src.name).write_text(translated, encoding="utf-8")
             result["written"].append(src.name)

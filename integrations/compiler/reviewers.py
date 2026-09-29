@@ -132,6 +132,52 @@ def _slug(seat: str) -> str:
     return f"{PREFIX}{out}"
 
 
+def reviewer_files() -> list[Path]:
+    """Every compiled reviewer, in the order `sorted()` gives -- not install order,
+    just a stable one so a dry-run plan and a real install name files the same way.
+
+    THE ONE PLACE THIS GLOB LIVES. It used to be defined twice -- once in each
+    per-format install module (`specialist_agents_target.py`'s md_frontmatter
+    installer, `specialist_agents_codex_target.py`'s TOML one) -- which is the same
+    "two sites deciding one fact" shape the round table's own first lane exists to
+    catch, found here on the module that compiles the very thing those two glob for.
+    """
+    return sorted(AGENTS_DIR.glob(f"{PREFIX}*.md"))
+
+
+def resolve_agent_names(requested: list[str]) -> list[Path]:
+    """The compiled reviewer files named by *requested*, in the order given.
+
+    Each entry may be a seat name ("Finding integrity", matching `seat_names()`
+    exactly) or an agent slug/filename stem ("review-finding-integrity", matching a
+    real file directly) -- an operator installing a subset reasons in whichever of
+    the two they have in front of them, the seat name from the round table's own
+    prose or the slug from a file already on disk, and forcing a translation between
+    them onto the caller is how a correct request gets typed wrong.
+
+    Raises naming every entry that resolved to nothing, with the seat names and slugs
+    actually available, rather than silently installing fewer files than asked for --
+    the same failure shape `reviewer_for_seat` and `_lanes` both refuse elsewhere in
+    this bench.
+    """
+    by_slug = {f.stem: f for f in reviewer_files()}
+    resolved: list[Path] = []
+    unknown: list[str] = []
+    for name in requested:
+        slug = _slug(name) if name in seat_names() else name
+        path = by_slug.get(slug)
+        if path is None:
+            unknown.append(name)
+        elif path not in resolved:
+            resolved.append(path)
+    if unknown:
+        raise ValueError(
+            f"unknown agent(s)/seat(s): {unknown}. Valid slugs: {sorted(by_slug)}."
+            f" Valid seat names: {seat_names()}"
+        )
+    return resolved
+
+
 def reviewer_for_seat(seat: str) -> str | None:
     """The agent name that answers this seat, or None when the seat has no compiled agent.
 

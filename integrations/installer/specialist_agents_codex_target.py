@@ -17,7 +17,7 @@ import re
 from pathlib import Path
 from typing import Any, Literal
 
-from integrations.compiler.reviewers import AGENTS_DIR, PREFIX
+from integrations.compiler.reviewers import resolve_agent_names, reviewer_files
 from integrations.targets.registry import (
     get_target_spec,
     specialist_agents_target_path,
@@ -26,10 +26,6 @@ from integrations.targets.registry import (
 
 _FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n\n?(.*)\Z", re.S)
 _MODEL_LINE_RE = re.compile(r"^model: (.+)$", re.MULTILINE)
-
-
-def reviewer_files() -> list[Path]:
-    return sorted(AGENTS_DIR.glob(f"{PREFIX}*.md"))
 
 
 def _split_frontmatter(text: str) -> tuple[dict[str, str], str]:
@@ -105,7 +101,16 @@ def codex_toml_for_reviewer(body: str) -> str:
 class CodexAgentsInstaller:
     """Install every compiled reviewer onto Codex CLI, as TOML."""
 
-    def __init__(self, *, project_root: Path, home: Path | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        project_root: Path,
+        home: Path | None = None,
+        agents: list[str] | None = None,
+    ) -> None:
+        """*agents*, if given, installs only that subset -- see
+        `SpecialistAgentsInstaller`'s docstring for the same parameter; this is its
+        TOML-format sibling, and the reasoning is identical."""
         spec = get_target_spec("codex")
         if spec.specialist_agent_format != "toml":
             raise ValueError(
@@ -117,26 +122,26 @@ class CodexAgentsInstaller:
         self.target_dir = specialist_agents_target_path(
             "codex", project_root=self.project_root, home=self.home
         )
+        self._files = resolve_agent_names(agents) if agents is not None else reviewer_files()
 
     def plan(self) -> dict[str, Any]:
-        return {
-            "tool_id": "codex",
-            "target_dir": str(self.target_dir),
-            "files": [f"{f.stem}.toml" for f in reviewer_files()],
-        }
+        """Delegates to install() -- see SpecialistAgentsInstaller.plan() for why."""
+        return self.install("dry_run")
 
     def install(self, mode: Literal["dry_run", "execute"]) -> dict[str, Any]:
-        files = reviewer_files()
         result: dict[str, Any] = {
             "tool_id": "codex",
             "mode": mode,
             "target_dir": str(self.target_dir),
+            # ALWAYS POPULATED -- see SpecialistAgentsInstaller.install() for why a
+            # dry-run reporting only written: [] does not answer what a dry-run is for.
+            "files": [f"{f.stem}.toml" for f in self._files],
             "written": [],
         }
         if mode != "execute":
             return result
         self.target_dir.mkdir(parents=True, exist_ok=True)
-        for src in files:
+        for src in self._files:
             toml_text = codex_toml_for_reviewer(src.read_text(encoding="utf-8"))
             out_name = f"{src.stem}.toml"
             (self.target_dir / out_name).write_text(toml_text, encoding="utf-8")

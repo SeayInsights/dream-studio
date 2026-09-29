@@ -97,3 +97,21 @@ class TestCodexAgentsInstaller:
             parsed = tomllib.loads(written)
             _, instructions = _split_frontmatter(src.read_text(encoding="utf-8"))
             assert parsed["developer_instructions"] == instructions
+
+    def test_dry_run_still_reports_which_files_it_would_write(self, tmp_path):
+        installer = CodexAgentsInstaller(project_root=tmp_path, home=tmp_path)
+        result = installer.install("dry_run")
+        assert set(result["files"]) == {f"{f.stem}.toml" for f in reviewer_files()}
+
+    def test_agents_subset_installs_only_the_requested_reviewer(self, tmp_path):
+        installer = CodexAgentsInstaller(
+            project_root=tmp_path, home=tmp_path, agents=["Finding integrity"]
+        )
+        result = installer.install("execute")
+        assert result["written"] == ["review-finding-integrity.toml"]
+        assert {p.name for p in installer.target_dir.iterdir()} == {"review-finding-integrity.toml"}
+
+    def test_agents_subset_with_an_unknown_name_raises_before_writing_anything(self, tmp_path):
+        with pytest.raises(ValueError, match="unknown"):
+            CodexAgentsInstaller(project_root=tmp_path, home=tmp_path, agents=["Not A Real Seat"])
+        assert not (tmp_path / ".codex").exists()
