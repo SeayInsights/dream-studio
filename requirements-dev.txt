@@ -25,10 +25,16 @@ bandit>=1.7
 # packages masking the resolution) before this fix, confirmed resolved after: `semgrep>=1.130`
 # resolves straight to the current release with no backtracking.
 #
-# THE MCP/CLICK/PYJWT CAPS THIS COMMENT USED TO DESCRIBE NO LONGER APPLY. Semgrep's own pins
+# THE MCP/CLICK CAPS THIS COMMENT USED TO DESCRIBE NO LONGER APPLY. Semgrep's own pins
 # moved on since they were written -- the current release resolves mcp==1.29.0 (past the
-# CVE-2026-52870/-52869/-59950 fix in 1.28.1) and no longer caps click or pyjwt below the
-# versions requirements.txt already wants. `pip-audit --strict` against the raised floor:
-# "No known vulnerabilities found". The PyJWT note in requirements.txt describing the old cap
-# is stale for the same reason and should be read as historical, not current.
+# CVE-2026-52870/-52869/-59950 fix in 1.28.1) and no longer caps click below the version
+# requirements.txt already wants. `pip-audit --strict` against the raised floor at the
+# time: "No known vulnerabilities found".
+#
+# PYJWT IS DIFFERENT: as of 2026-09-30, semgrep's current release (1.178.0) still
+# hard-pins pyjwt~=2.13.0, and every semgrep release from 1.130.0 up has pinned it the
+# same way -- no floor raise here helps the way it helped click. pyjwt 2.13.0 has since
+# gained 12 CVEs (fixed 2.14.0/2.15.0); see requirements.txt's own pyjwt note and
+# interfaces/cli/ci_gate.py's _ACCEPTED_DEV_CVES for the full account and why it is
+# suppressed as dev-only rather than floored.
 semgrep>=1.130
