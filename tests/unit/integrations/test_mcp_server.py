@@ -432,6 +432,56 @@ def test_review_dispatch_works_for_the_root_identity_too(bootstrapped_home, monk
     assert payload["dispatched_by"] == "operator"
 
 
+# ── ds_review_run (capability-gated) ────────────────────────────────────────
+#
+# run_review_command itself is exercised for real (Docker faked) in
+# test_review_answers.py -- these are about the MCP wiring: the capability gate
+# (review:run, deliberately separate from review:dispatch/review:record) and the
+# response carrying run_by.
+
+
+def test_review_run_denies_an_identity_without_the_capability(bootstrapped_home):
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_review_run",
+                "arguments": {"work_order_id": "wo-real", "command": "echo hi"},
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="dispatcher-only", capabilities=frozenset({"review:dispatch"})),
+    )
+    assert resp["error"]["code"] == -32001
+
+
+def test_review_run_succeeds_and_carries_run_by(bootstrapped_home, monkeypatch):
+    import core.work_orders.review_answers as ra_mod
+
+    fake_result = {"command": "echo hi", "exit_code": 0, "timed_out": False, "output_tail": "hi\n"}
+    monkeypatch.setattr(ra_mod, "run_review_command", lambda *a, **k: dict(fake_result))
+
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_review_run",
+                "arguments": {"work_order_id": "wo-real", "command": "echo hi"},
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="fulcrum", capabilities=frozenset({"review:run"})),
+    )
+    assert resp["result"]["isError"] is False
+    payload = json.loads(resp["result"]["content"][0]["text"])
+    assert payload["run_by"] == "fulcrum"
+    assert payload["exit_code"] == 0
+
+
 # ── auth ─────────────────────────────────────────────────────────────────────
 
 
