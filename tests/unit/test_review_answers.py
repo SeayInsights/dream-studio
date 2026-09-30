@@ -197,6 +197,44 @@ def test_dispatch_review_round_is_a_new_round_on_a_second_call(db, monkeypatch):
             assert second["credentials"][first_reviewer] != first["credentials"][first_reviewer]
 
 
+# ── run_review_command: the orchestration ds_review_run (MCP) reuses ───────────
+
+
+def test_run_review_command_raises_when_no_dispatch_is_recorded(db):
+    with pytest.raises(ValueError, match="no dispatch recorded"):
+        ra.run_review_command(WO_ID, "echo hi", db_path=db)
+
+
+def test_run_review_command_raises_when_docker_is_unavailable(db, monkeypatch):
+    from core.gates import lane_sandbox
+
+    _dispatch(db)
+    monkeypatch.setattr(lane_sandbox, "docker_available", lambda: (False, "docker not found"))
+    with pytest.raises(RuntimeError, match="docker not found"):
+        ra.run_review_command(WO_ID, "echo hi", db_path=db)
+
+
+def test_run_review_command_runs_in_the_dispatched_image(db, monkeypatch):
+    from core.gates import lane_sandbox
+
+    _dispatch(db)
+    monkeypatch.setattr(lane_sandbox, "docker_available", _up)
+    captured = {}
+
+    def _fake_run_in_lane(image, command, **kwargs):
+        captured["image"] = image
+        captured["command"] = command
+        return {"command": command, "exit_code": 0, "timed_out": False, "output_tail": "ok"}
+
+    monkeypatch.setattr(lane_sandbox, "run_in_lane", _fake_run_in_lane)
+
+    result = ra.run_review_command(WO_ID, "python -m pytest -q", db_path=db)
+
+    assert captured["image"] == IMAGE
+    assert captured["command"] == "python -m pytest -q"
+    assert result["exit_code"] == 0
+
+
 # ── shape: the contract's own refusals ──────────────────────────────────────
 
 
