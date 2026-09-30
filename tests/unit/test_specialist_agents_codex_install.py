@@ -166,3 +166,23 @@ class TestCodexAgentsInstallerProjectSeats:
         installer = CodexAgentsInstaller(project_root=tmp_path, home=tmp_path, agents=["PCI Scope"])
         result = installer.install("execute")
         assert result["written"] == ["review-pci-scope.toml"]
+
+
+class TestCodexAgentsInstallerScope:
+    def test_scope_user_installs_under_codex_home_not_the_project(self, tmp_path):
+        project = tmp_path / "proj"
+        project.mkdir()
+        home = tmp_path / "home"
+        home.mkdir()
+
+        installer = CodexAgentsInstaller(project_root=project, home=home, scope="user")
+        installer.install("execute")
+
+        assert installer.target_dir == (home / ".codex" / "agents").resolve()
+        assert not (project / ".codex").exists()
+
+    def test_scope_omitted_still_installs_under_the_project(self, tmp_path):
+        project = tmp_path / "proj"
+        home = tmp_path / "home"
+        installer = CodexAgentsInstaller(project_root=project, home=home)
+        assert installer.target_dir == (project / ".codex" / "agents").resolve()

@@ -57,6 +57,23 @@ class TargetSpec:
     agents_md_relpath: str
     supports_hooks: bool = False
     supports_mcp: bool = False
+    #: None (the default) means only `scope` is reachable -- an operator passing
+    #: `--scope` with the other value gets a clear refusal (see resolve_scope) rather
+    #: than the request being silently honored against the wrong location, which is
+    #: exactly the bug this field exists to close: `--scope user` on a tool whose
+    #: TargetSpec only ever declared "project" was accepted by the CLI's shared
+    #: argparse choices and then dropped on the floor, several layers downstream,
+    #: with no error and no effect. Set this only once BOTH scopes are verified against
+    #: that tool's own real docs, the same discipline `specialist_agent_format` above
+    #: already holds to.
+    supported_scopes: frozenset[Scope] | None = None
+    #: agents_md_relpath's own shape does not always carry over to the other scope --
+    #: Codex's is "AGENTS.md" at the project root but ".codex/AGENTS.md" under home,
+    #: not the same relpath against a different base. Required together with "user" in
+    #: supported_scopes when scope itself is "project" (see __post_init__); a tool
+    #: whose two scopes DO share one relpath shape can still set this explicitly, but
+    #: never needs to.
+    user_agents_md_relpath: str | None = None
     #: None (the default) means this tool has no specialist-subagent primitive Dream
     #: Studio targets -- not "not yet gotten to it", a declared fact. See the module
     #: docstring for which tools have actually been verified either way.
@@ -72,6 +89,22 @@ class TargetSpec:
     model_alias_map: dict[CanonicalModelAlias, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if self.supported_scopes is not None:
+            if self.scope not in self.supported_scopes:
+                raise ValueError(
+                    f"{self.tool_id}: scope {self.scope!r} (the default) is not a"
+                    f" member of its own supported_scopes {sorted(self.supported_scopes)}"
+                )
+            if (
+                "user" in self.supported_scopes
+                and self.scope != "user"
+                and not self.user_agents_md_relpath
+            ):
+                raise ValueError(
+                    f"{self.tool_id}: declares 'user' in supported_scopes but no"
+                    " user_agents_md_relpath -- agents_md_relpath's shape is not"
+                    " assumed to carry over to the other scope unverified"
+                )
         if self.specialist_agent_format is None:
             return
         if not self.specialist_agents_relpath:
@@ -97,6 +130,16 @@ TARGET_SPECS: dict[str, TargetSpec] = {
         scope="project",
         agents_md_relpath="AGENTS.md",
         supports_mcp=True,
+        # Verified against Codex's own customization docs, 2026-09: CODEX_HOME
+        # (defaults ~/.codex) carries a personal AGENTS.md read before the project's
+        # own -- "user" scope is real, not just accepted-and-dropped by the shared
+        # --scope flag. specialist_agents_relpath needs no user-scope override: the
+        # SAME relative path (.codex/agents) is read from CODEX_HOME for personal
+        # subagents and from the project root for project-shared ones -- only
+        # agents_md's own shape differs by scope (bare "AGENTS.md" at the project
+        # root vs nested ".codex/AGENTS.md" under CODEX_HOME).
+        supported_scopes=frozenset({"project", "user"}),
+        user_agents_md_relpath=".codex/AGENTS.md",
         specialist_agent_format="toml",
         specialist_agents_relpath=".codex/agents",
         # Verified against codex's own subagents/model docs, 2026-09: three real, distinct
@@ -185,16 +228,46 @@ def get_target_spec(tool_id: str) -> TargetSpec:
         ) from exc
 
 
+def resolve_scope(spec: TargetSpec, requested: str | None) -> str:
+    """*requested* (an operator's `--scope`), validated against what *spec* actually
+    supports -- or *spec*'s own default when *requested* is None.
+
+    Raises ValueError naming the tool and what it does support for a scope outside
+    that set, rather than the request being silently honored against the wrong
+    location several layers downstream with no error and no effect -- the exact shape
+    of the bug this function exists to close (`--scope user` accepted by the CLI's
+    shared argparse choices for every tool, dropped on the floor for every tool whose
+    TargetSpec had not yet declared it supported).
+    """
+    if requested is None:
+        return spec.scope
+    allowed = spec.supported_scopes or frozenset({spec.scope})
+    if requested not in allowed:
+        raise ValueError(
+            f"{spec.tool_id} does not support --scope {requested!r};"
+            f" supported: {sorted(allowed)}"
+        )
+    return requested
+
+
 def agents_md_target_path(
     tool_id: str,
     *,
     project_root: Path,
     home: Path | None = None,
+    scope: str | None = None,
 ) -> Path:
-    """Resolve the absolute path where this tool's AGENTS.md belongs."""
+    """Resolve the absolute path where this tool's AGENTS.md belongs.
+
+    *scope*, when given, overrides the tool's own default (`resolve_scope`) -- raises
+    if the tool does not support it.
+    """
     spec = get_target_spec(tool_id)
-    base = project_root if spec.scope == "project" else (home or Path.home())
-    return (Path(base) / spec.agents_md_relpath).resolve()
+    resolved = resolve_scope(spec, scope)
+    if resolved == "project":
+        return (Path(project_root) / spec.agents_md_relpath).resolve()
+    relpath = spec.user_agents_md_relpath or spec.agents_md_relpath
+    return (Path(home or Path.home()) / relpath).resolve()
 
 
 def specialist_agents_target_path(
@@ -202,13 +275,15 @@ def specialist_agents_target_path(
     *,
     project_root: Path,
     home: Path | None = None,
+    scope: str | None = None,
 ) -> Path:
     """Resolve where this tool's compiled specialist agents belong.
 
     Raises KeyError (via get_target_spec, for an unknown tool_id) or ValueError for a
     known tool that declares no specialist_agent_format -- there is no path to resolve
     for a capability the tool does not have, and returning one anyway would let a caller
-    write files nothing reads.
+    write files nothing reads. *scope*, when given, overrides the tool's own default
+    the same way `agents_md_target_path` does.
     """
     spec = get_target_spec(tool_id)
     if spec.specialist_agent_format is None:
@@ -216,7 +291,8 @@ def specialist_agents_target_path(
             f"{tool_id}: declares no specialist_agent_format -- this tool has no"
             " compiled-specialist-agent target to resolve a path for"
         )
-    base = project_root if spec.scope == "project" else (home or Path.home())
+    resolved = resolve_scope(spec, scope)
+    base = project_root if resolved == "project" else (home or Path.home())
     return (Path(base) / spec.specialist_agents_relpath).resolve()
 
 
