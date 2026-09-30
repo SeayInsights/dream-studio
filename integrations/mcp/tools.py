@@ -1,12 +1,18 @@
-"""The curated MCP tool registry — read-only projections over Dream Studio authority.
+"""The curated MCP tool registry — projections over Dream Studio authority, read-only
+today, capability-gated where a future tool mutates it.
 
 WHY CURATED, NOT THE WHOLE CLI. `ds` exposes commands with no confirmation step by
 design (an operator at a terminal is the confirmation) -- `uninstall --purge-state`,
 migration execution, `review --record`, anything that mutates SQLite authority or the
 filesystem. An MCP client calling this server over the network is not a terminal an
-operator is watching, so this registry ships only read paths: project/work-order
+operator is watching, so every tool below ships a read path only: project/work-order
 state, review status, skills, memory, and health. Grow it from real usage, not by
 mirroring the CLI surface wholesale.
+
+A tool that mutates authority state does not get a free pass into this list just
+because it declares a `required_capability` -- see `Tool.required_capability` below
+and `integrations.mcp.auth.KNOWN_CAPABILITIES`. Declaring a capability is necessary,
+never sufficient; it still needs the same deliberate review every tool here gets.
 
 WHY PURE FUNCTIONS, NOT A CHILD PROCESS. Every tool here calls straight into the
 same `core.*` query functions the CLI itself calls (see interfaces/cli/commands/*.py)
@@ -30,6 +36,13 @@ class Tool:
     description: str
     input_schema: dict[str, Any]
     handler: Callable[..., Any]
+    #: None (every tool below, today) means read-only: reachable by the root token or
+    #: any authenticated named client, regardless of that client's own granted
+    #: capabilities -- capabilities only ever gate a tool that declares one. A non-None
+    #: value must be a member of integrations.mcp.auth.KNOWN_CAPABILITIES (enforced by
+    #: a standing test in test_mcp_server.py, not at construction here, to keep this
+    #: module free of an auth.py import it otherwise wouldn't need).
+    required_capability: str | None = None
 
 
 def _project_list(*, status_filter: str = "active", dream_studio_home: Path | None = None) -> Any:

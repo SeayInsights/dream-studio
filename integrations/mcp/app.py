@@ -39,9 +39,10 @@ def build_app(*, dream_studio_home: Path | None = None) -> FastAPI:
 
     @app.post(MCP_PATH)
     async def mcp_endpoint(request: Request):
-        if not auth.verify_bearer(
+        identity = auth.authenticate(
             request.headers.get("authorization"), dream_studio_home=dream_studio_home
-        ):
+        )
+        if identity is None:
             return JSONResponse(
                 status_code=401,
                 content={"error": "missing or invalid bearer token"},
@@ -58,7 +59,7 @@ def build_app(*, dream_studio_home: Path | None = None) -> FastAPI:
                     "error": {"code": -32700, "message": "parse error"},
                 },
             )
-        response = handle_message(message, dream_studio_home=dream_studio_home)
+        response = handle_message(message, dream_studio_home=dream_studio_home, identity=identity)
         if response is None:
             # A notification: the transport-level answer is "accepted, no body".
             return JSONResponse(status_code=202, content=None)
