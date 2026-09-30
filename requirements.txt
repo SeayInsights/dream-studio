@@ -23,14 +23,21 @@ uvicorn>=0.23,<1.0
 httpx>=0.24
 python-multipart>=0.0.6
 
-# RESOLVED 2026-09-29 (see requirements-dev.txt's semgrep>=1.130 comment for the fix and
-# verification). This used to document that semgrep (dev) pinned click~=8.1.8 and
-# mcp==1.23.3 exactly, so flooring either forced pip to backtrack semgrep to a source-only
-# build with no Windows wheel. That was true of semgrep's OLD releases, not a permanent
-# constraint: raising semgrep's own floor to 1.130 moved it onto a release line that no
-# longer caps click or pyjwt this way and resolves a CVE-fixed mcp on its own. Left here,
-# historical, so a reader who remembers this note does not go looking for a cap that no
-# longer exists.
+# RESOLVED 2026-09-29 for click/mcp (see requirements-dev.txt's semgrep>=1.130 comment
+# for the fix and verification). This used to document that semgrep (dev) pinned
+# click~=8.1.8 and mcp==1.23.3 exactly, so flooring either forced pip to backtrack
+# semgrep to a source-only build with no Windows wheel. That was true of semgrep's OLD
+# releases, not a permanent constraint: raising semgrep's own floor to 1.130 moved it
+# onto a release line that no longer caps click and resolves a CVE-fixed mcp on its own.
+#
+# STILL TRUE FOR PYJWT, as of 2026-09-30: every semgrep release from 1.130.0 through the
+# current 1.178.0 hard-pins pyjwt~=2.13.0, and pyjwt has since gained 12 CVEs against
+# that exact version (fixed in 2.14.0/2.15.0, which the pin excludes -- pyjwt has no
+# 2.13.x point release). Flooring pyjwt>=2.14.0 here does not coexist with that pin; pip
+# backtracks semgrep to 1.156.0 instead, reintroducing the click/mcp CVEs this comment
+# describes above. Suppressed as a dev-only transitive CVE in
+# interfaces/cli/ci_gate.py's _ACCEPTED_DEV_CVES (that comment has the full account) --
+# revisit when semgrep relaxes the pyjwt pin the way it already relaxed click's.
 
 # regex: pinned to satisfy dateparser>=1.4.0 transitive requirement
 regex>=2024.9.11

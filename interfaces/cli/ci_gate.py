@@ -29,11 +29,37 @@ _PYTHON = sys.executable
 # them forces pip to backtrack semgrep to a source-only build with no Windows
 # wheel and breaks the install. Not production dependencies. Revisit when semgrep
 # relaxes its pins; see requirements-dev.txt / requirements.txt for the rationale.
+#
+# The 12 pyjwt CVEs below are the same shape, not the same fix: semgrep>=1.130
+# (the floor #848 raised to fix the Windows resolver backtrack) resolves to
+# 1.178.0 on PyPI as of 2026-09-30, and every semgrep release from 1.130.0
+# through 1.178.0 pins pyjwt~=2.13.0 -- no release relaxes it. pyjwt has no
+# 2.13.x point release, so that pin admits only the vulnerable 2.13.0. Eleven
+# of the twelve fix in 2.14.0; the twelfth (CVE-2026-101918, disclosed after
+# the other eleven were found) fixes in 2.15.0 -- both excluded by the same
+# pin. Confirmed in a clean venv: floor-ing pyjwt>=2.14.0 directly does
+# not coexist with semgrep's pin -- pip backtracks semgrep to 1.156.0 instead,
+# which drops mcp back to 1.23.3 and click back to 8.1.8, silently
+# reintroducing the four CVEs immediately above. Zero production imports of the
+# third-party `mcp` package anywhere in this repo (grepped) -- reachable only
+# through semgrep's own dev-time linting, same as the rest of this list.
 _ACCEPTED_DEV_CVES = (
     "CVE-2026-52870",  # mcp (fixed 1.27.2) — via semgrep
     "CVE-2026-52869",  # mcp (fixed 1.27.2) — via semgrep
     "CVE-2026-59950",  # mcp (fixed 1.28.1) — via semgrep
     "PYSEC-2026-2132",  # click (fixed 8.3.3) — via semgrep
+    "CVE-2026-101917",  # pyjwt (fixed 2.14.0) — via semgrep
+    "CVE-2026-102265",  # pyjwt (fixed 2.14.0) — via semgrep
+    "CVE-2026-102266",  # pyjwt (fixed 2.14.0) — via semgrep
+    "CVE-2026-102267",  # pyjwt (fixed 2.14.0) — via semgrep
+    "CVE-2026-102268",  # pyjwt (fixed 2.14.0) — via semgrep
+    "CVE-2026-102269",  # pyjwt (fixed 2.14.0) — via semgrep
+    "CVE-2026-102270",  # pyjwt (fixed 2.14.0) — via semgrep
+    "CVE-2026-102271",  # pyjwt (fixed 2.14.0) — via semgrep
+    "CVE-2026-102272",  # pyjwt (fixed 2.14.0) — via semgrep
+    "CVE-2026-102273",  # pyjwt (fixed 2.14.0) — via semgrep
+    "CVE-2026-102274",  # pyjwt (fixed 2.14.0) — via semgrep
+    "CVE-2026-101918",  # pyjwt (fixed 2.15.0) — via semgrep; disclosed after the other 11
 )
 
 _PIP_AUDIT_IGNORES = [arg for cve in _ACCEPTED_DEV_CVES for arg in ("--ignore-vuln", cve)]
