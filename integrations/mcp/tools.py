@@ -131,6 +131,28 @@ def _review_findings(*, work_order_id: str, dream_studio_home: Path | None = Non
     return {"open_findings": open_findings(work_order_id, db_path=paths.sqlite_path)}
 
 
+def _review_dispatch(
+    *,
+    work_order_id: str,
+    identity: Identity,
+    dream_studio_home: Path | None = None,
+) -> Any:
+    from core.installed_runtime import resolve_installed_runtime_paths
+    from core.work_orders.review_answers import dispatch_review_round
+
+    paths = resolve_installed_runtime_paths(
+        source_root=REPO_ROOT, dream_studio_home=dream_studio_home
+    )
+    doc = dispatch_review_round(work_order_id, repo_root=REPO_ROOT, db_path=paths.sqlite_path)
+    # NOT PERSISTED -- dispatch_review_round's own stored artifact carries no actor
+    # field (it predates that concept; see mutations.py's trace.mcp_client for the
+    # established shape, not yet extended here). This is visible only in the response
+    # handed back to whichever identity called this tool -- the same "once, to the
+    # caller" reach every other value in this dict already has.
+    doc["dispatched_by"] = identity.name
+    return doc
+
+
 def _work_order_task_start(
     *,
     work_order_id: str,
@@ -331,6 +353,25 @@ TOOLS: list[Tool] = [
             "required": ["work_order_id"],
         },
         handler=_review_findings,
+    ),
+    Tool(
+        name="ds_review_dispatch",
+        description=(
+            "Convene the round table against HEAD, build the lane's Docker image, and "
+            "record a new dispatch round -- issuing every named reviewer a one-time "
+            "credential, returned once in this call's own response. Requires "
+            "review:dispatch. The calling identity becomes the round's chair: it is "
+            "the only identity that ever sees these credentials, and MUST NOT also "
+            "hold review:record (refused at client-provisioning time, not here -- see "
+            "integrations.mcp.auth.add_client)."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {"work_order_id": {"type": "string"}},
+            "required": ["work_order_id"],
+        },
+        handler=_review_dispatch,
+        required_capability="review:dispatch",
     ),
     Tool(
         name="ds_skill_list",
