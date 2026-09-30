@@ -716,12 +716,17 @@ rules:
       Every check result now records WHO ran it (session, adapter, host, pid), so an
       author-run suite is no longer indistinguishable from an independent runner's report
       in the stored artifact. Nothing yet COMPARES that runner against the author, because
-      the authority records no author for a task -- mark_task_done emits task.completed
-      with session_id=None. So the substrate can say who ran a check and cannot yet say it
-      was someone else. Closing this needs author identity on authority writes, tracked as
-      WO fb7375d9. The previous claim that no check inside the repo could observe this was
-      wrong in its reason: it could not be observed because the identity was never written
-      down, not because observing it is impossible.
+      the authority still records no author for most task mutations -- mark_task_done and
+      start_task emit their events with session_id=None exactly as before (that field
+      correlates to a real raw_sessions row and a caller identity, MCP or otherwise, is not
+      that). The one narrow exception: a task started or completed through the MCP server's
+      work_order:task_mutate tools now carries the calling client's name in the event's
+      trace.mcp_client -- real identity, but only for that one entry point, and nothing
+      reads it yet to compare against an author. A CLI/terminal-originated mutation still
+      carries none. Closing this for real needs author identity on every authority write,
+      tracked as WO fb7375d9. The previous claim that no check inside the repo could
+      observe this was wrong in its reason: it could not be observed because the identity
+      was never written down, not because observing it is impossible.
 
   - id: grader-retries-until-one-clean-verdict
     statement: >
