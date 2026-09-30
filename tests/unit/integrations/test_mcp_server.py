@@ -104,7 +104,14 @@ def test_non_jsonrpc_message_is_invalid_request():
 def test_every_tool_handler_reports_an_exception_as_isError_not_a_raise():
     """A handler that raises (bad SQLite path, missing authority, whatever) must
     become an isError tool result over the wire, never propagate out of the RPC
-    layer -- a network client cannot see a Python traceback."""
+    layer -- a network client cannot see a Python traceback.
+
+    The root identity is passed on every call so a capability-gated tool's own
+    permission check (a JSON-RPC-level `error`, not a tool result -- see
+    test_capability_gated_tool_denies_an_identity_without_it) never masks what this
+    test actually checks: the HANDLER's own behavior once it's reached.
+    """
+    root = auth.Identity(name="operator", capabilities=None)
     for tool in TOOLS:
         required = [
             name
@@ -119,7 +126,8 @@ def test_every_tool_handler_reports_an_exception_as_isError_not_a_raise():
                 "id": 99,
                 "method": "tools/call",
                 "params": {"name": tool.name, "arguments": {}},
-            }
+            },
+            identity=root,
         )
         assert "result" in resp, f"{tool.name} raised out of handle_message: {resp}"
         if required:
@@ -206,6 +214,148 @@ def test_tools_call_surfaces_the_unknown_work_order_as_isError(bootstrapped_home
     )
     assert resp["result"]["isError"] is True
     assert "no work order" in resp["result"]["content"][0]["text"]
+
+
+# ── work-order task mutations (capability-gated) ────────────────────────────
+
+
+@pytest.fixture
+def bootstrapped_home_with_task(bootstrapped_home):
+    """bootstrapped_home's work order, plus one real task on it."""
+    import sqlite3
+
+    from core.installed_runtime import resolve_installed_runtime_paths
+
+    db_path = resolve_installed_runtime_paths(dream_studio_home=bootstrapped_home).sqlite_path
+    now = "2026-01-01T00:00:00+00:00"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO business_tasks (task_id, work_order_id, project_id, title, "
+        "description, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        ("task-real", "wo-real", "proj-1", "t", "d", "created", now, now),
+    )
+    conn.commit()
+    conn.close()
+    return bootstrapped_home
+
+
+def _mcp_client_identity(name="fulcrum", capabilities=("work_order:task_mutate",)):
+    return auth.Identity(name=name, capabilities=frozenset(capabilities))
+
+
+def test_task_start_denies_an_identity_without_the_capability(bootstrapped_home_with_task):
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_work_order_task_start",
+                "arguments": {"work_order_id": "wo-real", "task_id": "task-real"},
+            },
+        },
+        dream_studio_home=bootstrapped_home_with_task,
+        identity=auth.Identity(name="reader-only", capabilities=frozenset({"review:run"})),
+    )
+    assert resp["error"]["code"] == -32001
+
+
+def test_task_start_succeeds_for_an_identity_with_the_capability(bootstrapped_home_with_task):
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_work_order_task_start",
+                "arguments": {"work_order_id": "wo-real", "task_id": "task-real"},
+            },
+        },
+        dream_studio_home=bootstrapped_home_with_task,
+        identity=_mcp_client_identity(),
+    )
+    assert resp["result"]["isError"] is False
+    payload = json.loads(resp["result"]["content"][0]["text"])
+    assert payload["status"] == "in_progress"
+
+
+def test_task_start_attributes_the_emitted_event_to_the_calling_client(
+    bootstrapped_home_with_task, monkeypatch
+):
+    captured = []
+    import spool.writer as _writer
+
+    monkeypatch.setattr(
+        _writer, "write_event", lambda envelope, root=None: captured.append(envelope)
+    )
+    handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_work_order_task_start",
+                "arguments": {"work_order_id": "wo-real", "task_id": "task-real"},
+            },
+        },
+        dream_studio_home=bootstrapped_home_with_task,
+        identity=_mcp_client_identity(name="fulcrum"),
+    )
+    assert len(captured) == 1
+    assert captured[0]["trace"]["mcp_client"] == "fulcrum"
+
+
+def test_task_done_succeeds_for_an_identity_with_the_capability(bootstrapped_home_with_task):
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_work_order_task_done",
+                "arguments": {"work_order_id": "wo-real", "task_id": "task-real"},
+            },
+        },
+        dream_studio_home=bootstrapped_home_with_task,
+        identity=_mcp_client_identity(),
+    )
+    assert resp["result"]["isError"] is False
+    payload = json.loads(resp["result"]["content"][0]["text"])
+    assert payload["ok"] is True
+
+
+def test_task_done_denies_an_identity_without_the_capability(bootstrapped_home_with_task):
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_work_order_task_done",
+                "arguments": {"work_order_id": "wo-real", "task_id": "task-real"},
+            },
+        },
+        dream_studio_home=bootstrapped_home_with_task,
+        identity=auth.Identity(name="reader-only", capabilities=frozenset({"review:run"})),
+    )
+    assert resp["error"]["code"] == -32001
+
+
+def test_task_mutations_work_for_the_root_identity_too(bootstrapped_home_with_task):
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_work_order_task_start",
+                "arguments": {"work_order_id": "wo-real", "task_id": "task-real"},
+            },
+        },
+        dream_studio_home=bootstrapped_home_with_task,
+        identity=auth.Identity(name="operator", capabilities=None),
+    )
+    assert resp["result"]["isError"] is False
 
 
 # ── auth ─────────────────────────────────────────────────────────────────────
@@ -450,13 +600,6 @@ def test_every_declared_capability_is_a_known_one():
             assert tool.required_capability in auth.KNOWN_CAPABILITIES
 
 
-def test_every_current_tool_is_still_read_only():
-    """This PR adds the capability mechanism but wires it to nothing yet -- every
-    tool in the real registry must still declare no capability at all."""
-    for tool in TOOLS:
-        assert tool.required_capability is None, f"{tool.name} unexpectedly capability-gated"
-
-
 # ── HTTP transport ───────────────────────────────────────────────────────────
 
 
@@ -534,9 +677,12 @@ def test_mcp_endpoint_rejects_malformed_json_body(client):
 # ── no destructive tool sneaks into the curated set ─────────────────────────
 
 
-def test_no_tool_name_suggests_a_write_or_destructive_action():
-    """A cheap standing guard, not a substitute for reading tools.py: a tool named
-    like a mutation is exactly the kind of thing this registry is scoped to exclude."""
+def test_no_read_only_tool_name_suggests_a_write_or_destructive_action():
+    """A cheap standing guard, not a substitute for reading tools.py: a tool that
+    claims to be read-only (required_capability=None) but is named like a mutation is
+    exactly the kind of thing this registry is scoped to exclude. A tool that DOES
+    declare a capability is deliberately a mutation -- reviewed via that declaration,
+    not by this substring check (see test_every_declared_capability_is_a_known_one)."""
     forbidden_substrings = (
         "delete",
         "purge",
@@ -552,9 +698,25 @@ def test_no_tool_name_suggests_a_write_or_destructive_action():
         "rotate",
     )
     for tool in TOOLS:
+        if tool.required_capability is not None:
+            continue
         lowered = tool.name.lower()
         hits = [w for w in forbidden_substrings if w in lowered]
         assert not hits, f"{tool.name} looks like a write/destructive tool: {hits}"
+
+
+def test_every_capability_gated_tool_name_is_forthright_about_it():
+    """The flip side of the guard above: a tool that DOES mutate state must not be
+    named to look read-only -- required_capability is the enforcement mechanism, but
+    the name is what a human skimming tools/list sees first."""
+    mutation_hints = ("start", "done", "close", "dispatch", "run", "record", "mutate")
+    for tool in TOOLS:
+        if tool.required_capability is None:
+            continue
+        lowered = tool.name.lower()
+        assert any(
+            hint in lowered for hint in mutation_hints
+        ), f"{tool.name} is capability-gated but its name gives no hint it mutates state"
 
 
 # ── the token is never disclosed by `ds mcp serve` ──────────────────────────

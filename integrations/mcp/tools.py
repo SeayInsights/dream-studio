@@ -5,7 +5,7 @@ WHY CURATED, NOT THE WHOLE CLI. `ds` exposes commands with no confirmation step 
 design (an operator at a terminal is the confirmation) -- `uninstall --purge-state`,
 migration execution, `review --record`, anything that mutates SQLite authority or the
 filesystem. An MCP client calling this server over the network is not a terminal an
-operator is watching, so every tool below ships a read path only: project/work-order
+operator is watching, so most tools below ship a read path only: project/work-order
 state, review status, skills, memory, and health. Grow it from real usage, not by
 mirroring the CLI surface wholesale.
 
@@ -27,6 +27,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from .auth import Identity
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -36,12 +38,12 @@ class Tool:
     description: str
     input_schema: dict[str, Any]
     handler: Callable[..., Any]
-    #: None (every tool below, today) means read-only: reachable by the root token or
-    #: any authenticated named client, regardless of that client's own granted
+    #: None (most tools below) means read-only: reachable by the root token or any
+    #: authenticated named client, regardless of that client's own granted
     #: capabilities -- capabilities only ever gate a tool that declares one. A non-None
     #: value must be a member of integrations.mcp.auth.KNOWN_CAPABILITIES (enforced by
-    #: a standing test in test_mcp_server.py, not at construction here, to keep this
-    #: module free of an auth.py import it otherwise wouldn't need).
+    #: a standing test in test_mcp_server.py, not at construction here -- this dataclass
+    #: has no reason to validate against that set itself).
     required_capability: str | None = None
 
 
@@ -127,6 +129,42 @@ def _review_findings(*, work_order_id: str, dream_studio_home: Path | None = Non
     )
     _require_work_order(work_order_id, paths.sqlite_path)
     return {"open_findings": open_findings(work_order_id, db_path=paths.sqlite_path)}
+
+
+def _work_order_task_start(
+    *,
+    work_order_id: str,
+    task_id: str,
+    identity: Identity,
+    dream_studio_home: Path | None = None,
+) -> Any:
+    from core.work_orders.mutations import start_task
+
+    return start_task(
+        work_order_id=work_order_id,
+        task_id=task_id,
+        source_root=REPO_ROOT,
+        dream_studio_home=dream_studio_home,
+        actor=identity.name,
+    )
+
+
+def _work_order_task_done(
+    *,
+    work_order_id: str,
+    task_id: str,
+    identity: Identity,
+    dream_studio_home: Path | None = None,
+) -> Any:
+    from core.work_orders.mutations import mark_task_done
+
+    return mark_task_done(
+        work_order_id=work_order_id,
+        task_id=task_id,
+        source_root=REPO_ROOT,
+        dream_studio_home=dream_studio_home,
+        actor=identity.name,
+    )
 
 
 def _skill_list(*, pack_filter: str | None = None, dream_studio_home: Path | None = None) -> Any:
@@ -235,6 +273,41 @@ TOOLS: list[Tool] = [
             "required": ["work_order_id"],
         },
         handler=_work_order_tasks,
+    ),
+    Tool(
+        name="ds_work_order_task_start",
+        description=(
+            "Move a task from created to in_progress. A claim, not a lock -- starting "
+            "an already-started task is not an error. Requires work_order:task_mutate. "
+            "The calling client's name is recorded on the emitted event's trace."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "work_order_id": {"type": "string"},
+                "task_id": {"type": "string"},
+            },
+            "required": ["work_order_id", "task_id"],
+        },
+        handler=_work_order_task_start,
+        required_capability="work_order:task_mutate",
+    ),
+    Tool(
+        name="ds_work_order_task_done",
+        description=(
+            "Mark a task complete. Requires work_order:task_mutate. The calling "
+            "client's name is recorded on the emitted event's trace."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "work_order_id": {"type": "string"},
+                "task_id": {"type": "string"},
+            },
+            "required": ["work_order_id", "task_id"],
+        },
+        handler=_work_order_task_done,
+        required_capability="work_order:task_mutate",
     ),
     Tool(
         name="ds_review_status",

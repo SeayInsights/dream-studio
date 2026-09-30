@@ -45,6 +45,7 @@ def start_task(
     task_id: str,
     source_root: Path,
     dream_studio_home: Path | None = None,
+    actor: str | None = None,
 ) -> dict[str, Any]:
     """Move a task from ``created`` to ``in_progress``.
 
@@ -63,6 +64,14 @@ def start_task(
     Starting an already-started task is not an error -- it returns ``already: True`` and
     changes nothing. A mutation that raised there would make a retry after a lost response
     worse than the lost response.
+
+    ``actor``, when given, is an MCP client's name (see integrations.mcp.tools) -- NOT a
+    session_id. session_id correlates an event to a real row in raw_sessions (token
+    capture, friction-signal harvesting, handoff tracking); an MCP client name is not
+    that and must never be written there. It lands in the emitted event's
+    ``trace.mcp_client`` instead, a free-form key nothing else reads yet. A terminal/CLI
+    caller passes nothing, and the key is simply absent -- matching this repo's existing
+    "operator at a terminal" trust model rather than inventing a synthetic actor for it.
     """
     db_path = _require_db(source_root, dream_studio_home)
     now = datetime.now(UTC).isoformat()
@@ -121,6 +130,7 @@ def start_task(
                 "work_order_id": work_order_id,
                 "task_id": task_id,
                 "attribution_status": "fully_attributed",
+                **({"mcp_client": actor} if actor else {}),
             },
         ).to_dict()
         _spool_writer.write_event(_envelope)
@@ -148,7 +158,11 @@ def mark_task_done(
     source_root: Path,
     dream_studio_home: Path | None = None,
     planning_root: Path | None = None,
+    actor: str | None = None,
 ) -> dict[str, Any]:
+    """``actor``, when given, is an MCP client's name -- see ``start_task``'s docstring
+    for why this is not ``session_id``. Lands in the emitted event's
+    ``trace.mcp_client``; absent for a terminal/CLI caller."""
     db_path = _require_db(source_root, dream_studio_home)
     with _connect(db_path) as conn:
         task_row = conn.execute(
@@ -226,6 +240,7 @@ def mark_task_done(
                 "work_order_id": work_order_id,
                 "task_id": task_id,
                 "attribution_status": "fully_attributed",
+                **({"mcp_client": actor} if actor else {}),
             },
         ).to_dict()
         completed_event_id = _envelope.get("event_id")
