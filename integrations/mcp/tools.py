@@ -153,6 +153,24 @@ def _review_dispatch(
     return doc
 
 
+def _review_run(
+    *,
+    work_order_id: str,
+    command: str,
+    identity: Identity,
+    dream_studio_home: Path | None = None,
+) -> Any:
+    from core.installed_runtime import resolve_installed_runtime_paths
+    from core.work_orders.review_answers import run_review_command
+
+    paths = resolve_installed_runtime_paths(
+        source_root=REPO_ROOT, dream_studio_home=dream_studio_home
+    )
+    result = run_review_command(work_order_id, command, db_path=paths.sqlite_path)
+    result["run_by"] = identity.name
+    return result
+
+
 def _work_order_task_start(
     *,
     work_order_id: str,
@@ -372,6 +390,30 @@ TOOLS: list[Tool] = [
         },
         handler=_review_dispatch,
         required_capability="review:dispatch",
+    ),
+    Tool(
+        name="ds_review_run",
+        description=(
+            "Run one shell command in the dispatched lane's Docker container (network "
+            "isolated, no host mounts, built from the reviewed commit) and return its "
+            "exit code and output. Requires review:run. UNCREDENTIALED: unlike "
+            "ds_review_record, this does not check which reviewer is asking -- it is "
+            "scoped only to 'a dispatch exists for this work order', not to being one "
+            "of its named reviewers, so a client holding this capability can run "
+            "commands against every dispatched work order at once. Weigh that "
+            "independently when deciding who gets it; it is not lessened by the "
+            "dispatch/record mutual-exclusion rule, which this capability sits outside."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "work_order_id": {"type": "string"},
+                "command": {"type": "string"},
+            },
+            "required": ["work_order_id", "command"],
+        },
+        handler=_review_run,
+        required_capability="review:run",
     ),
     Tool(
         name="ds_skill_list",

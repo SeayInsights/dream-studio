@@ -297,6 +297,41 @@ def dispatch_review_round(
     )
 
 
+def run_review_command(
+    work_order_id: str, command: str, *, db_path: Path | None = None
+) -> dict[str, Any]:
+    """Run one shell command in the dispatched lane's Docker container -- the same
+    sequence `ds review --run` runs from a terminal, and what a reviewer uses to
+    produce the reproduction a `pass`/`finding` must carry (`core.gates.lane_sandbox`).
+
+    Raises ValueError when no dispatch has been recorded for this work order (nothing
+    to run a command against -- dispatch a round first) and RuntimeError when Docker
+    is unavailable.
+
+    UNCREDENTIALED ON PURPOSE TO NAME IT: unlike `record_answers` ("the recording
+    door"), this does not check who is asking -- any caller who can reach this at all
+    can run any command in the lane, scoped only to "a dispatch exists for this work
+    order", not to being one of its named reviewers. The lane itself is what bounds
+    the blast radius (`--network none`, `--rm`, nothing mounted, built from the commit
+    not the working tree -- see `lane_sandbox`'s own docstring), not an identity
+    check here. An MCP capability grants a caller this power over EVERY dispatched
+    work order at once; that is a real, independent risk to weigh on its own terms
+    when deciding who gets `review:run`, not a lesser one because it isn't credentialed
+    the way dispatch/record are.
+    """
+    from core.gates import lane_sandbox
+
+    dispatch = read_dispatch(work_order_id, db_path=db_path)
+    if dispatch is None:
+        raise ValueError(
+            f"no dispatch recorded for {work_order_id!r}; dispatch a review round first"
+        )
+    ok, why_not = lane_sandbox.docker_available()
+    if not ok:
+        raise RuntimeError(why_not)
+    return lane_sandbox.run_in_lane(str(dispatch["image"]), command)
+
+
 def lane_ownership(repo_root: Path | None = None) -> dict[Any, set[str]]:
     """Which lanes each reviewer owns, from the registry: lane -> seat -> reviewer.
 
