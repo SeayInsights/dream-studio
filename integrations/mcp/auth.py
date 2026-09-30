@@ -49,6 +49,8 @@ KNOWN_CAPABILITIES = frozenset(
     {
         "work_order:task_mutate",
         "work_order:close",
+        "work_order:create",
+        "project:create",
         "review:dispatch",
         "review:run",
         "review:record",

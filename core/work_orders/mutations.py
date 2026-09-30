@@ -950,8 +950,13 @@ def create_work_order(
     module_boundary: str | list[str] | None = None,
     source_root: Path,
     dream_studio_home: Path | None = None,
+    actor: str | None = None,
 ) -> dict[str, Any]:
     """Emit a work_order.created event; WorkOrderProjection materializes the row.
+
+    ``actor``, when given, is an MCP client's name -- see ``start_task``'s docstring
+    for why this is not ``session_id``. Lands in the emitted event's
+    ``trace.mcp_client``; absent for a terminal/CLI caller.
 
     ``module_boundary`` is the paths this work order owns, and passing it is how edit
     attribution stops guessing. The boundary is read back by
@@ -1091,6 +1096,7 @@ def create_work_order(
                     "milestone_id": milestone_id,
                     "work_order_id": work_order_id,
                     "attribution_status": "fully_attributed",
+                    **({"mcp_client": actor} if actor else {}),
                 },
             ).to_dict()
         )
