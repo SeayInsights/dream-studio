@@ -243,6 +243,37 @@ def _mcp_client_identity(name="fulcrum", capabilities=("work_order:task_mutate",
     return auth.Identity(name=name, capabilities=frozenset(capabilities))
 
 
+@pytest.fixture
+def dispatched(bootstrapped_home):
+    """bootstrapped_home's work order, with a real dispatch round recorded against
+    this repo's own registry -- review-finding-integrity really does own
+    evidence-referee, so record_dispatch's ownership check passes for real, not via a
+    fake ownership map. Returns (home, reviewer, credential)."""
+    from core.installed_runtime import resolve_installed_runtime_paths
+    from core.work_orders.review_answers import record_dispatch
+
+    db_path = resolve_installed_runtime_paths(dream_studio_home=bootstrapped_home).sqlite_path
+    doc = record_dispatch(
+        "wo-real",
+        sha="a" * 40,
+        image="ds-review:fake",
+        change_set=["x.py"],
+        assignments=[
+            {
+                "reviewer": "review-finding-integrity",
+                "seat": "Finding integrity",
+                "lanes": ["evidence-referee"],
+            }
+        ],
+        db_path=db_path,
+    )
+    return (
+        bootstrapped_home,
+        "review-finding-integrity",
+        doc["credentials"]["review-finding-integrity"],
+    )
+
+
 def test_task_start_denies_an_identity_without_the_capability(bootstrapped_home_with_task):
     resp = handle_message(
         {
@@ -480,6 +511,99 @@ def test_review_run_succeeds_and_carries_run_by(bootstrapped_home, monkeypatch):
     payload = json.loads(resp["result"]["content"][0]["text"])
     assert payload["run_by"] == "fulcrum"
     assert payload["exit_code"] == 0
+
+
+# ── ds_review_record (capability-gated) ─────────────────────────────────────
+#
+# record_answers is Dream Studio's own long-established recording door, fully
+# exercised for real in test_review_answers.py -- these are about the MCP wiring:
+# the capability gate (review:record) and the response carrying recorded_by. The
+# credential check itself is record_answers' own -- proven here by one negative
+# case (wrong credential refused) and one degenerate positive case (an empty
+# answers list, so no Docker reproduction is needed to prove the door was reached).
+
+
+def test_review_record_denies_an_identity_without_the_capability(dispatched):
+    home, reviewer, credential = dispatched
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_review_record",
+                "arguments": {
+                    "work_order_id": "wo-real",
+                    "reviewer": reviewer,
+                    "credential": credential,
+                    "answers": [],
+                },
+            },
+        },
+        dream_studio_home=home,
+        identity=auth.Identity(name="runner-only", capabilities=frozenset({"review:run"})),
+    )
+    assert resp["error"]["code"] == -32001
+
+
+def test_review_record_refuses_the_wrong_credential(dispatched):
+    home, reviewer, _credential = dispatched
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_review_record",
+                "arguments": {
+                    "work_order_id": "wo-real",
+                    "reviewer": reviewer,
+                    "credential": "not-the-real-one",
+                    "answers": [],
+                },
+            },
+        },
+        dream_studio_home=home,
+        identity=auth.Identity(name="fulcrum", capabilities=frozenset({"review:record"})),
+    )
+    assert resp["result"]["isError"] is False
+    payload = json.loads(resp["result"]["content"][0]["text"])
+    assert "does not carry the credential" in payload["refused_submission"]
+
+
+def test_review_record_reaches_the_door_and_carries_recorded_by(dispatched, monkeypatch):
+    """Docker's availability is faked here -- record_answers checks it unconditionally,
+    even for an empty answers list with nothing to verify, and this test's point is
+    proving the credential passed, not this machine's own Docker state."""
+    from core.gates import lane_sandbox
+
+    monkeypatch.setattr(lane_sandbox, "docker_available", lambda: (True, "ok"))
+
+    home, reviewer, credential = dispatched
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_review_record",
+                "arguments": {
+                    "work_order_id": "wo-real",
+                    "reviewer": reviewer,
+                    "credential": credential,
+                    "answers": [],
+                },
+            },
+        },
+        dream_studio_home=home,
+        identity=auth.Identity(name="fulcrum", capabilities=frozenset({"review:record"})),
+    )
+    assert resp["result"]["isError"] is False
+    payload = json.loads(resp["result"]["content"][0]["text"])
+    # The credential passed -- an empty answers list reaches the door and completes
+    # (nothing to verify), rather than being refused for the credential.
+    assert "refused_submission" not in payload
+    assert payload["recorded_by"] == "fulcrum"
 
 
 # ── auth ─────────────────────────────────────────────────────────────────────

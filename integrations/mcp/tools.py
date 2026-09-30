@@ -171,6 +171,42 @@ def _review_run(
     return result
 
 
+def _review_record(
+    *,
+    work_order_id: str,
+    reviewer: str,
+    credential: str,
+    answers: list[dict[str, Any]],
+    identity: Identity,
+    dream_studio_home: Path | None = None,
+) -> Any:
+    """The recording door. `identity` is the MCP caller's own identity (what
+    `review:record` gates); `reviewer`/`credential` are a SEPARATE, narrower claim --
+    which named reviewer this submission is FOR, proved by record_answers' own
+    per-reviewer credential check. An MCP client holding review:record can call this
+    for any reviewer whose credential it happens to hold; it does not receive
+    credentials it was never given (only ds_review_dispatch's caller ever sees
+    those) -- the mutual-exclusion rule in the contract is what keeps the two
+    separate identities apart.
+    """
+    from core.installed_runtime import resolve_installed_runtime_paths
+    from core.work_orders.review_answers import record_answers
+
+    paths = resolve_installed_runtime_paths(
+        source_root=REPO_ROOT, dream_studio_home=dream_studio_home
+    )
+    result = record_answers(
+        work_order_id,
+        reviewer,
+        answers,
+        db_path=paths.sqlite_path,
+        project_root=REPO_ROOT,
+        credential=credential,
+    )
+    result["recorded_by"] = identity.name
+    return result
+
+
 def _work_order_task_start(
     *,
     work_order_id: str,
@@ -414,6 +450,62 @@ TOOLS: list[Tool] = [
         },
         handler=_review_run,
         required_capability="review:run",
+    ),
+    Tool(
+        name="ds_review_record",
+        description=(
+            "The recording door: submit one reviewer's answers for the current "
+            "dispatch round. Every pass/finding must carry a reproduction (command + "
+            "exit code); this re-runs it in a fresh container before accepting "
+            "anything -- a reproduction that does not reproduce is refused, and "
+            "Docker being unavailable refuses the whole submission. Requires "
+            "review:record and the CREDENTIAL issued to `reviewer` at dispatch time "
+            "(a separate, narrower check from the review:record capability itself: "
+            "the capability says this MCP identity may call this tool at all, the "
+            "credential says which specific reviewer the submission is FOR). MUST NOT "
+            "be held by a client that also has review:dispatch (refused at "
+            "client-provisioning time -- see integrations.mcp.auth.add_client)."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "work_order_id": {"type": "string"},
+                "reviewer": {"type": "string"},
+                "credential": {
+                    "type": "string",
+                    "description": "The credential issued to this reviewer by ds_review_dispatch.",
+                },
+                "answers": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "lane": {"type": "string"},
+                            "verdict": {
+                                "type": "string",
+                                "enum": ["pass", "finding", "cannot-tell"],
+                            },
+                            "reproduction": {
+                                "type": "object",
+                                "properties": {
+                                    "command": {"type": "string"},
+                                    "exit_code": {"type": "integer"},
+                                },
+                            },
+                            "evidence": {"type": "string"},
+                            "why": {"type": "string"},
+                            "check": {"type": "string"},
+                            "declare": {"type": "string"},
+                            "resolves_with": {"type": "string"},
+                        },
+                        "required": ["lane", "verdict"],
+                    },
+                },
+            },
+            "required": ["work_order_id", "reviewer", "credential", "answers"],
+        },
+        handler=_review_record,
+        required_capability="review:record",
     ),
     Tool(
         name="ds_skill_list",
