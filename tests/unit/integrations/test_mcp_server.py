@@ -232,20 +232,21 @@ def test_rotate_token_changes_the_value(mcp_home):
     assert auth.read_token(dream_studio_home=mcp_home) == second
 
 
-def test_verify_bearer_accepts_the_current_token(mcp_home):
+def test_authenticate_accepts_the_current_root_token(mcp_home):
     token, _ = auth.ensure_token(dream_studio_home=mcp_home)
-    assert auth.verify_bearer(f"Bearer {token}", dream_studio_home=mcp_home) is True
+    identity = auth.authenticate(f"Bearer {token}", dream_studio_home=mcp_home)
+    assert identity == auth.Identity(name="operator", capabilities=None)
 
 
-def test_verify_bearer_rejects_wrong_or_missing_token(mcp_home):
+def test_authenticate_rejects_wrong_or_missing_token(mcp_home):
     auth.ensure_token(dream_studio_home=mcp_home)
-    assert auth.verify_bearer("Bearer wrong", dream_studio_home=mcp_home) is False
-    assert auth.verify_bearer(None, dream_studio_home=mcp_home) is False
-    assert auth.verify_bearer("not-even-bearer-shaped", dream_studio_home=mcp_home) is False
+    assert auth.authenticate("Bearer wrong", dream_studio_home=mcp_home) is None
+    assert auth.authenticate(None, dream_studio_home=mcp_home) is None
+    assert auth.authenticate("not-even-bearer-shaped", dream_studio_home=mcp_home) is None
 
 
-def test_verify_bearer_rejects_when_no_token_was_ever_generated(mcp_home):
-    assert auth.verify_bearer("Bearer anything", dream_studio_home=mcp_home) is False
+def test_authenticate_rejects_when_no_token_was_ever_generated(mcp_home):
+    assert auth.authenticate("Bearer anything", dream_studio_home=mcp_home) is None
 
 
 def test_token_file_has_restrictive_permissions_on_posix(mcp_home):
@@ -258,6 +259,202 @@ def test_token_file_has_restrictive_permissions_on_posix(mcp_home):
     if sys.platform != "win32":
         mode = stat.S_IMODE(path.stat().st_mode)
         assert mode == 0o600, f"token file mode is {oct(mode)}, expected 0o600"
+
+
+# ── named, capability-scoped clients ────────────────────────────────────────
+
+
+def test_add_client_round_trips_through_authenticate(mcp_home):
+    token = auth.add_client(
+        "fulcrum", capabilities=["work_order:task_mutate"], dream_studio_home=mcp_home
+    )
+    identity = auth.authenticate(f"Bearer {token}", dream_studio_home=mcp_home)
+    assert identity == auth.Identity(
+        name="fulcrum", capabilities=frozenset({"work_order:task_mutate"})
+    )
+
+
+def test_add_client_rejects_an_unknown_capability(mcp_home):
+    with pytest.raises(ValueError, match="unknown capability"):
+        auth.add_client("x", capabilities=["not:a:real:capability"], dream_studio_home=mcp_home)
+
+
+def test_add_client_rejects_empty_capabilities(mcp_home):
+    with pytest.raises(ValueError, match="non-empty"):
+        auth.add_client("x", capabilities=[], dream_studio_home=mcp_home)
+
+
+def test_add_client_rejects_dispatch_and_record_together(mcp_home):
+    """The chair/reviewer collapse: one identity must never be able to both mint
+    every reviewer's credential (dispatch) and spend one (record)."""
+    with pytest.raises(ValueError, match="cannot hold both"):
+        auth.add_client(
+            "chair-and-reviewer",
+            capabilities=["review:dispatch", "review:record"],
+            dream_studio_home=mcp_home,
+        )
+
+
+def test_add_client_allows_dispatch_and_run_together(mcp_home):
+    """run consumes no reviewer credential -- only dispatch+record is refused."""
+    token = auth.add_client(
+        "dispatcher-and-runner",
+        capabilities=["review:dispatch", "review:run"],
+        dream_studio_home=mcp_home,
+    )
+    assert token
+
+
+def test_add_client_refuses_a_duplicate_name(mcp_home):
+    auth.add_client("x", capabilities=["review:run"], dream_studio_home=mcp_home)
+    with pytest.raises(ValueError, match="already exists"):
+        auth.add_client("x", capabilities=["review:run"], dream_studio_home=mcp_home)
+
+
+def test_list_clients_never_exposes_the_token_hash(mcp_home):
+    auth.add_client("x", capabilities=["review:run"], dream_studio_home=mcp_home)
+    clients = auth.list_clients(dream_studio_home=mcp_home)
+    assert clients["x"]["capabilities"] == ["review:run"]
+    assert "token_hash" not in clients["x"]
+
+
+def test_revoke_client_removes_access(mcp_home):
+    token = auth.add_client("x", capabilities=["review:run"], dream_studio_home=mcp_home)
+    auth.revoke_client("x", dream_studio_home=mcp_home)
+    assert auth.authenticate(f"Bearer {token}", dream_studio_home=mcp_home) is None
+    assert "x" not in auth.list_clients(dream_studio_home=mcp_home)
+
+
+def test_revoke_client_raises_on_an_unknown_name(mcp_home):
+    with pytest.raises(ValueError, match="no such client"):
+        auth.revoke_client("does-not-exist", dream_studio_home=mcp_home)
+
+
+def test_rotate_client_issues_a_new_token_same_capabilities(mcp_home):
+    old_token = auth.add_client("x", capabilities=["review:run"], dream_studio_home=mcp_home)
+    new_token = auth.rotate_client("x", dream_studio_home=mcp_home)
+    assert new_token != old_token
+    assert auth.authenticate(f"Bearer {old_token}", dream_studio_home=mcp_home) is None
+    identity = auth.authenticate(f"Bearer {new_token}", dream_studio_home=mcp_home)
+    assert identity == auth.Identity(name="x", capabilities=frozenset({"review:run"}))
+
+
+def test_rotate_client_raises_on_an_unknown_name(mcp_home):
+    with pytest.raises(ValueError, match="no such client"):
+        auth.rotate_client("does-not-exist", dream_studio_home=mcp_home)
+
+
+def test_rotate_token_does_not_wipe_provisioned_clients(mcp_home):
+    """The bug the pressure-test caught: rotate_token used to overwrite the whole
+    file with a fresh two-key dict, silently deleting every client. Guards the fix,
+    not just the current behavior -- see rotate_token's own docstring."""
+    client_token = auth.add_client("x", capabilities=["review:run"], dream_studio_home=mcp_home)
+    auth.rotate_token(dream_studio_home=mcp_home)
+    identity = auth.authenticate(f"Bearer {client_token}", dream_studio_home=mcp_home)
+    assert identity == auth.Identity(name="x", capabilities=frozenset({"review:run"}))
+
+
+def test_ensure_token_does_not_wipe_provisioned_clients(mcp_home):
+    auth.add_client("x", capabilities=["review:run"], dream_studio_home=mcp_home)
+    auth.ensure_token(dream_studio_home=mcp_home)  # a no-op write path (token exists)
+    assert "x" in auth.list_clients(dream_studio_home=mcp_home)
+
+
+def test_a_v1_token_file_with_no_clients_key_loads_cleanly(mcp_home):
+    """An existing installed user's token file predates the clients key entirely."""
+    import json as _json
+
+    mcp_home.joinpath("state").mkdir(parents=True)
+    (mcp_home / "state" / "mcp-token.json").write_text(
+        _json.dumps({"schema_version": 1, "token": "legacy-token-value"}), encoding="utf-8"
+    )
+    identity = auth.authenticate("Bearer legacy-token-value", dream_studio_home=mcp_home)
+    assert identity == auth.Identity(name="operator", capabilities=None)
+    assert auth.list_clients(dream_studio_home=mcp_home) == {}
+
+
+# ── capability enforcement in the JSON-RPC layer ────────────────────────────
+
+
+def _fake_capability_gated_tool(name="ds_fake_mutation", capability="review:dispatch"):
+    from integrations.mcp.tools import Tool
+
+    return Tool(
+        name=name,
+        description="test-only",
+        input_schema={"type": "object", "properties": {}},
+        handler=lambda **kwargs: {"called_with": sorted(kwargs)},
+        required_capability=capability,
+    )
+
+
+def test_capability_gated_tool_denies_an_identity_without_it(monkeypatch):
+    from integrations.mcp import server as server_mod
+
+    tool = _fake_capability_gated_tool()
+    monkeypatch.setitem(server_mod.TOOLS_BY_NAME, tool.name, tool)
+    identity = auth.Identity(name="x", capabilities=frozenset({"review:run"}))
+    resp = handle_message(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool.name}},
+        identity=identity,
+    )
+    assert resp["error"]["code"] == -32001
+    assert "review:dispatch" in resp["error"]["message"]
+
+
+def test_capability_gated_tool_allows_an_identity_with_it(monkeypatch):
+    from integrations.mcp import server as server_mod
+
+    tool = _fake_capability_gated_tool()
+    monkeypatch.setitem(server_mod.TOOLS_BY_NAME, tool.name, tool)
+    identity = auth.Identity(name="x", capabilities=frozenset({"review:dispatch"}))
+    resp = handle_message(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool.name}},
+        identity=identity,
+    )
+    assert resp["result"]["isError"] is False
+
+
+def test_capability_gated_tool_allows_the_root_identity(monkeypatch):
+    from integrations.mcp import server as server_mod
+
+    tool = _fake_capability_gated_tool()
+    monkeypatch.setitem(server_mod.TOOLS_BY_NAME, tool.name, tool)
+    identity = auth.Identity(name="operator", capabilities=None)
+    resp = handle_message(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool.name}},
+        identity=identity,
+    )
+    assert resp["result"]["isError"] is False
+
+
+def test_capability_gated_tool_denies_a_missing_identity_rather_than_defaulting_open(monkeypatch):
+    """identity=None (a direct/internal call with no auth attached) must fail closed
+    on a capability-gated tool, not be treated as trusted."""
+    from integrations.mcp import server as server_mod
+
+    tool = _fake_capability_gated_tool()
+    monkeypatch.setitem(server_mod.TOOLS_BY_NAME, tool.name, tool)
+    resp = handle_message(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool.name}}
+    )
+    assert resp["error"]["code"] == -32001
+
+
+def test_every_declared_capability_is_a_known_one():
+    """A typo in a future Tool(required_capability=...) would silently create an
+    unenforceable gate -- KNOWN_CAPABILITIES is the one place that string is allowed
+    to come from."""
+    for tool in TOOLS:
+        if tool.required_capability is not None:
+            assert tool.required_capability in auth.KNOWN_CAPABILITIES
+
+
+def test_every_current_tool_is_still_read_only():
+    """This PR adds the capability mechanism but wires it to nothing yet -- every
+    tool in the real registry must still declare no capability at all."""
+    for tool in TOOLS:
+        assert tool.required_capability is None, f"{tool.name} unexpectedly capability-gated"
 
 
 # ── HTTP transport ───────────────────────────────────────────────────────────
@@ -401,3 +598,58 @@ def test_serve_still_warns_on_non_localhost_bind(mcp_home, monkeypatch, capsys):
     err = _serve_stderr(mcp_home, monkeypatch, capsys, host="0.0.0.0")
     assert "0.0.0.0" in err
     assert "WARNING" in err
+
+
+# ── `ds mcp client` CLI, end to end ─────────────────────────────────────────
+
+
+def _client_dispatch(mcp_home, subcommand, **kwargs):
+    import argparse
+
+    from interfaces.cli.commands import mcp as mcp_cmd
+
+    args = argparse.Namespace(mcp_command="client", mcp_client_command=subcommand, **kwargs)
+    mcp_cmd.dispatch(args, source_root=mcp_home, dream_studio_home=mcp_home)
+
+
+def test_cli_client_add_issues_a_token_that_authenticates(mcp_home, capsys):
+    _client_dispatch(mcp_home, "add", name="fulcrum", capabilities="review:run")
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    identity = auth.authenticate(f"Bearer {payload['token']}", dream_studio_home=mcp_home)
+    assert identity == auth.Identity(name="fulcrum", capabilities=frozenset({"review:run"}))
+
+
+def test_cli_client_add_reports_a_validation_error_without_raising(mcp_home, capsys):
+    _client_dispatch(mcp_home, "add", name="x", capabilities="not:real")
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert "unknown capability" in payload["error"]
+
+
+def test_cli_client_list_reports_every_client(mcp_home, capsys):
+    _client_dispatch(mcp_home, "add", name="a", capabilities="review:run")
+    capsys.readouterr()
+    _client_dispatch(mcp_home, "list")
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["clients"]["a"]["capabilities"] == ["review:run"]
+
+
+def test_cli_client_revoke_removes_access(mcp_home, capsys):
+    _client_dispatch(mcp_home, "add", name="a", capabilities="review:run")
+    token = json.loads(capsys.readouterr().out)["token"]
+    _client_dispatch(mcp_home, "revoke", name="a")
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert auth.authenticate(f"Bearer {token}", dream_studio_home=mcp_home) is None
+
+
+def test_cli_client_rotate_replaces_the_token(mcp_home, capsys):
+    _client_dispatch(mcp_home, "add", name="a", capabilities="review:run")
+    old_token = json.loads(capsys.readouterr().out)["token"]
+    _client_dispatch(mcp_home, "rotate", name="a")
+    new_token = json.loads(capsys.readouterr().out)["token"]
+    assert new_token != old_token
+    assert auth.authenticate(f"Bearer {old_token}", dream_studio_home=mcp_home) is None
+    assert auth.authenticate(f"Bearer {new_token}", dream_studio_home=mcp_home) is not None

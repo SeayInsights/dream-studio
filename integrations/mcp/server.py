@@ -16,6 +16,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .auth import Identity
 from .tools import TOOLS, TOOLS_BY_NAME
 
 PROTOCOL_VERSION = "2026-03-26"
@@ -71,7 +72,11 @@ def _handle_tools_list(request_id: Any, _params: dict[str, Any]) -> dict[str, An
 
 
 def _handle_tools_call(
-    request_id: Any, params: dict[str, Any], *, dream_studio_home: Path | None
+    request_id: Any,
+    params: dict[str, Any],
+    *,
+    dream_studio_home: Path | None,
+    identity: Identity | None = None,
 ) -> dict[str, Any]:
     name = params.get("name")
     if not isinstance(name, str) or name not in TOOLS_BY_NAME:
@@ -80,8 +85,22 @@ def _handle_tools_call(
     arguments = params.get("arguments") or {}
     if not isinstance(arguments, dict):
         return _error(request_id, -32602, "arguments must be an object")
+    if tool.required_capability is not None:
+        # identity=None fails closed here (a direct/internal caller that never
+        # authenticated), same as an identity whose capabilities don't include this
+        # one. capabilities=None is the root-token sentinel -- always satisfied.
+        allowed = identity is not None and (
+            identity.capabilities is None or tool.required_capability in identity.capabilities
+        )
+        if not allowed:
+            return _error(
+                request_id, -32001, f"forbidden: missing capability {tool.required_capability!r}"
+            )
+    kwargs: dict[str, Any] = {"dream_studio_home": dream_studio_home, **arguments}
+    if tool.required_capability is not None:
+        kwargs["identity"] = identity
     try:
-        payload = tool.handler(dream_studio_home=dream_studio_home, **arguments)
+        payload = tool.handler(**kwargs)
     except TypeError as exc:
         # A caller sent an argument the handler's signature does not accept, or
         # omitted one it requires -- a client-input error (invalid params), not a
@@ -119,9 +138,18 @@ _METHODS = {
 
 
 def handle_message(
-    message: dict[str, Any], *, dream_studio_home: Path | None = None
+    message: dict[str, Any],
+    *,
+    dream_studio_home: Path | None = None,
+    identity: Identity | None = None,
 ) -> dict[str, Any] | None:
-    """Handle one parsed JSON-RPC message. Returns None for a notification (no id)."""
+    """Handle one parsed JSON-RPC message. Returns None for a notification (no id).
+
+    `identity` is None for a direct/internal call (every test in this repo that calls
+    `handle_message` without going through `app.py`'s HTTP auth) -- harmless today
+    since no tool declares `required_capability`, and fails a future capability-gated
+    tool closed rather than defaulting it open.
+    """
     if not isinstance(message, dict) or message.get("jsonrpc") != "2.0":
         return _error(
             message.get("id") if isinstance(message, dict) else None, -32600, "invalid request"
@@ -140,7 +168,9 @@ def handle_message(
         return None  # any other notification: no response is ever sent
 
     if method == "tools/call":
-        return _handle_tools_call(request_id, params, dream_studio_home=dream_studio_home)
+        return _handle_tools_call(
+            request_id, params, dream_studio_home=dream_studio_home, identity=identity
+        )
     handler = _METHODS.get(method)
     if handler is None:
         return _error(request_id, -32601, f"method not found: {method!r}")
