@@ -111,10 +111,14 @@ class CodexAgentsInstaller:
         project_root: Path,
         home: Path | None = None,
         agents: list[str] | None = None,
+        scope: str | None = None,
     ) -> None:
         """*agents*, if given, installs only that subset -- see
         `SpecialistAgentsInstaller`'s docstring for the same parameter; this is its
-        TOML-format sibling, and the reasoning is identical."""
+        TOML-format sibling, and the reasoning is identical. *scope*, if given,
+        overrides codex's default scope ("project") -- codex also supports "user"
+        (CODEX_HOME, ~/.codex by default), verified against its own customization
+        docs, 2026-09."""
         spec = get_target_spec("codex")
         if spec.specialist_agent_format != "toml":
             raise ValueError(
@@ -124,7 +128,7 @@ class CodexAgentsInstaller:
         self.project_root = Path(project_root)
         self.home = Path(home) if home is not None else Path.home()
         self.target_dir = specialist_agents_target_path(
-            "codex", project_root=self.project_root, home=self.home
+            "codex", project_root=self.project_root, home=self.home, scope=scope
         )
         if agents is not None:
             self._files = resolve_agent_names(agents, repo_root=self.project_root)

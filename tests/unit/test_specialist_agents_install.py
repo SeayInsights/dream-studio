@@ -228,3 +228,13 @@ def test_an_explicit_ds_only_subset_does_not_pull_in_a_project_seat(tool_id, tmp
     result = installer.install("execute")
 
     assert result["written"] == ["review-finding-integrity.md"]
+
+
+@pytest.mark.parametrize("tool_id", MD_FRONTMATTER_TOOLS)
+def test_an_unsupported_scope_override_is_refused_not_silently_dropped(tool_id, tmp_path):
+    """Neither gemini_cli nor cursor has been verified to support the other scope --
+    --scope must raise for them, not silently install at the tool's fixed default the
+    way it used to before TargetSpec.supported_scopes existed."""
+    other_scope = "user" if tool_id == "gemini_cli" else "project"
+    with pytest.raises(ValueError, match="does not support"):
+        SpecialistAgentsInstaller(tool_id, project_root=tmp_path, home=tmp_path, scope=other_scope)

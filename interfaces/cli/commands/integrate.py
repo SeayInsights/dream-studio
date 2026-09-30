@@ -192,6 +192,7 @@ def dispatch(
                 tool_id,
                 project_root=Path.cwd(),
                 canonical_root=canonical_root,
+                scope=scope,
             )
             result = installer.install(mode)
 
@@ -209,7 +210,7 @@ def dispatch(
                 )
 
                 specialist_installer = SpecialistAgentsInstaller(
-                    tool_id, project_root=Path.cwd(), agents=agents
+                    tool_id, project_root=Path.cwd(), agents=agents, scope=scope
                 )
                 result["specialist_agents"] = specialist_installer.install(mode)
             elif spec.specialist_agent_format == "toml":
@@ -217,7 +218,9 @@ def dispatch(
                     CodexAgentsInstaller,
                 )
 
-                codex_installer = CodexAgentsInstaller(project_root=Path.cwd(), agents=agents)
+                codex_installer = CodexAgentsInstaller(
+                    project_root=Path.cwd(), agents=agents, scope=scope
+                )
                 result["specialist_agents"] = codex_installer.install(mode)
 
             return _print(

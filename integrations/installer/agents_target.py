@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from integrations.compiler.agents_md import build_agents_md
-from integrations.targets.registry import agents_md_target_path, get_target_spec
+from integrations.targets.registry import agents_md_target_path, get_target_spec, resolve_scope
 
 
 class AgentsTargetInstaller:
@@ -25,14 +25,19 @@ class AgentsTargetInstaller:
         project_root: Path,
         home: Path | None = None,
         canonical_root: Path | None = None,
+        scope: str | None = None,
     ) -> None:
+        """*scope*, if given, overrides this tool's default (`TargetSpec.scope`) --
+        raises ValueError (via `agents_md_target_path`) if the tool does not support
+        it. None keeps today's exact behavior: the tool's own declared default."""
         self.spec = get_target_spec(tool_id)
         self.tool_id = tool_id
         self.project_root = Path(project_root)
         self.home = Path(home) if home is not None else Path.home()
         self.canonical_root = canonical_root
+        self.scope = resolve_scope(self.spec, scope)
         self.target_path = agents_md_target_path(
-            tool_id, project_root=self.project_root, home=self.home
+            tool_id, project_root=self.project_root, home=self.home, scope=scope
         )
 
     def _content(self) -> str:
@@ -45,7 +50,7 @@ class AgentsTargetInstaller:
         return {
             "tool_id": self.tool_id,
             "display_name": self.spec.display_name,
-            "scope": self.spec.scope,
+            "scope": self.scope,
             "agents_md_path": str(self.target_path),
             "installs_hooks": self.spec.supports_hooks,
             "mcp_supported": self.spec.supports_mcp,

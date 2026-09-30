@@ -62,6 +62,7 @@ class SpecialistAgentsInstaller:
         project_root: Path,
         home: Path | None = None,
         agents: list[str] | None = None,
+        scope: str | None = None,
     ) -> None:
         """*agents*, if given, installs only that subset (each entry a seat name or an
         agent slug -- see `resolve_agent_names`) rather than every compiled reviewer.
@@ -70,6 +71,9 @@ class SpecialistAgentsInstaller:
         different subset onto a second tool is what makes a genuinely mixed roster
         (nine seats on Claude, one on Codex) reachable, rather than every target
         getting the whole bench or nothing.
+
+        *scope*, if given, overrides this tool's default scope -- raises if the tool
+        does not support it (see `integrations.targets.registry.resolve_scope`).
         """
         spec = get_target_spec(tool_id)
         if spec.specialist_agent_format != "md_frontmatter":
@@ -82,7 +86,7 @@ class SpecialistAgentsInstaller:
         self.project_root = Path(project_root)
         self.home = Path(home) if home is not None else Path.home()
         self.target_dir = specialist_agents_target_path(
-            tool_id, project_root=self.project_root, home=self.home
+            tool_id, project_root=self.project_root, home=self.home, scope=scope
         )
         if agents is not None:
             self._files = resolve_agent_names(agents, repo_root=self.project_root)

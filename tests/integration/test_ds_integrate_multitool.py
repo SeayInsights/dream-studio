@@ -95,6 +95,51 @@ def test_install_agents_subset_dry_run_reports_the_files_via_the_real_cli(tmp_pa
     assert not (tmp_path / ".gemini").exists()
 
 
+def test_install_scope_user_via_the_real_cli_reaches_the_installer(tmp_path, monkeypatch):
+    """--scope user must not be silently dropped for codex -- proven by mocking the
+    installer construction itself (never touching the real ~/.codex/) rather than
+    exercising the write, since no safe home= override exists through this CLI
+    surface (see the comment on the --agents test below for the same limit on
+    cursor's user scope)."""
+    from unittest.mock import MagicMock, patch
+
+    from interfaces.cli.ds import main as ds_main
+
+    monkeypatch.chdir(tmp_path)
+    fake_agents_md = MagicMock()
+    fake_agents_md.install.return_value = {"written": False}
+    fake_specialist = MagicMock()
+    fake_specialist.install.return_value = {"written": []}
+    with (
+        patch(
+            "integrations.installer.agents_target.AgentsTargetInstaller",
+            return_value=fake_agents_md,
+        ) as mock_agents_md_cls,
+        patch(
+            "integrations.installer.specialist_agents_codex_target.CodexAgentsInstaller",
+            return_value=fake_specialist,
+        ) as mock_specialist_cls,
+    ):
+        rc = ds_main(["integrate", "install", "codex", "--scope", "user", "--execute"])
+    assert rc == 0
+    assert mock_agents_md_cls.call_args.kwargs["scope"] == "user"
+    assert mock_specialist_cls.call_args.kwargs["scope"] == "user"
+
+
+def test_install_scope_project_via_the_real_cli_matches_omitting_it(tmp_path, monkeypatch):
+    """--scope project on codex used to be accepted by argparse and then silently
+    dropped several layers downstream -- confirm it now genuinely reaches the
+    installer and produces the exact same result as leaving --scope off entirely
+    (codex's own default). --scope user is excluded from CLI-level tests the same
+    way cursor's user scope already is -- see the comment on the --agents test below;
+    no safe override for the real ~/.codex/ exists through this CLI surface."""
+    from interfaces.cli.ds import main as ds_main
+
+    monkeypatch.chdir(tmp_path)
+    assert ds_main(["integrate", "install", "codex", "--scope", "project", "--execute"]) == 0
+    assert (tmp_path / "AGENTS.md").is_file()
+
+
 def test_install_agents_subset_on_claude_code_via_the_real_cli(tmp_path, monkeypatch):
     """claude_code's reviewers are installed by a separate, older path
     (ClaudeCodeInstaller) than codex/gemini_cli/cursor's -- --agents narrowed those
