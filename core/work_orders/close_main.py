@@ -338,8 +338,14 @@ def close_work_order(
     source_root: Path,
     dream_studio_home: Path | None = None,
     planning_root: Path | None = None,
+    actor: str | None = None,
 ) -> dict[str, Any]:
     """Close a work order: evaluate gates, mutate status, emit spool events.
+
+    ``actor``, when given, is an MCP client's name (see integrations.mcp.tools) --
+    NOT a session_id (see start_task's docstring in mutations.py for why). Lands in
+    each emitted event's ``trace.mcp_client``; a terminal/CLI caller passes nothing
+    and the key stays absent.
 
     On gate failure without ``force=True``, returns:
 
@@ -962,6 +968,7 @@ def close_work_order(
                             "milestone_id": wo_milestone_id,
                             "project_id": project_id,
                             "attribution_status": "fully_attributed",
+                            **({"mcp_client": actor} if actor else {}),
                         },
                     )
                     _spool_writer.write_event(envelope.to_dict())
@@ -991,6 +998,7 @@ def close_work_order(
                     "milestone_id": wo_milestone_id,
                     "project_id": project_id,
                     "attribution_status": "fully_attributed",
+                    **({"mcp_client": actor} if actor else {}),
                 },
             )
             _spool_writer.write_event(envelope.to_dict())

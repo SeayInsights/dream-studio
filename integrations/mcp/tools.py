@@ -69,6 +69,31 @@ def _project_status(*, project_id: str, dream_studio_home: Path | None = None) -
     )
 
 
+def _project_create(
+    *,
+    name: str,
+    identity: Identity,
+    description: str = "",
+    project_path: str | None = None,
+    dream_studio_home: Path | None = None,
+) -> Any:
+    from core.projects.mutations_register import register_project
+
+    result = register_project(
+        name=name,
+        description=description,
+        project_path=Path(project_path) if project_path else None,
+        source_root=REPO_ROOT,
+        dream_studio_home=dream_studio_home,
+    )
+    # register_project does a bare INSERT, no CanonicalEventEnvelope/trace to extend
+    # the way create_work_order/close_work_order have -- attribution lives only in
+    # this response, the same "once, to the caller" shape ds_review_dispatch's
+    # dispatched_by already uses for a function with no persisted trace of its own.
+    result["registered_by"] = identity.name
+    return result
+
+
 def _work_order_list(
     *,
     project_id: str | None = None,
@@ -243,6 +268,60 @@ def _work_order_task_done(
     )
 
 
+def _work_order_create(
+    *,
+    project_id: str,
+    milestone_id: str,
+    title: str,
+    description: str,
+    identity: Identity,
+    work_order_type: str | None = None,
+    priority: str | None = None,
+    originating_symptom: str | None = None,
+    module_boundary: str | None = None,
+    dream_studio_home: Path | None = None,
+) -> Any:
+    from core.work_orders.mutations import DEFAULT_WORK_ORDER_PRIORITY, create_work_order
+
+    return create_work_order(
+        project_id=project_id,
+        milestone_id=milestone_id,
+        title=title,
+        description=description,
+        work_order_type=work_order_type,
+        priority=priority or DEFAULT_WORK_ORDER_PRIORITY,
+        originating_symptom=originating_symptom,
+        module_boundary=module_boundary,
+        source_root=REPO_ROOT,
+        dream_studio_home=dream_studio_home,
+        actor=identity.name,
+    )
+
+
+def _work_order_close(
+    *,
+    work_order_id: str,
+    identity: Identity,
+    dream_studio_home: Path | None = None,
+) -> Any:
+    """Never exposes force or skip_verify -- both bypass this work order's own
+    close gates, and there is no watched terminal on the other end of an MCP call
+    to ask "which gates should be skipped, yes?" the way an interactive operator
+    would be. A gate failure over MCP comes back as the same
+    {"ok": False, "error": "Gate check failed", "failures": [...]} a CLI caller
+    gets with neither flag set -- never silently waived."""
+    from core.work_orders.close_main import close_work_order
+
+    return close_work_order(
+        work_order_id=work_order_id,
+        force=False,
+        skip_verify=False,
+        source_root=REPO_ROOT,
+        dream_studio_home=dream_studio_home,
+        actor=identity.name,
+    )
+
+
 def _skill_list(*, pack_filter: str | None = None, dream_studio_home: Path | None = None) -> Any:
     from core.skills.queries import list_skills
 
@@ -326,6 +405,32 @@ TOOLS: list[Tool] = [
         handler=_project_status,
     ),
     Tool(
+        name="ds_project_create",
+        description=(
+            "Register a new project (status 'active'). Idempotent: registering the "
+            "same project_path twice returns the existing project rather than "
+            "creating a duplicate. Requires project:create."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "description": {"type": "string"},
+                "project_path": {
+                    "type": "string",
+                    "description": (
+                        "A path on the machine this MCP server runs on. When given, a "
+                        ".dream-studio-project marker is written there so the CWD "
+                        "resolver can attribute token events."
+                    ),
+                },
+            },
+            "required": ["name"],
+        },
+        handler=_project_create,
+        required_capability="project:create",
+    ),
+    Tool(
         name="ds_work_order_list",
         description=(
             "List work orders, optionally filtered by project and/or status "
@@ -384,6 +489,55 @@ TOOLS: list[Tool] = [
         },
         handler=_work_order_task_done,
         required_capability="work_order:task_mutate",
+    ),
+    Tool(
+        name="ds_work_order_create",
+        description=(
+            "Create a work order under an existing project and milestone. Requires "
+            "both to already exist (returns a clear error naming which one doesn't) "
+            "-- this tool does not create either. description must describe what is "
+            "being done and why (a floor, not a rubric); module_boundary is composed "
+            "into it so edit attribution has a boundary to match. Requires "
+            "work_order:create. The calling client's name is recorded on the "
+            "emitted event's trace."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string"},
+                "milestone_id": {"type": "string"},
+                "title": {"type": "string"},
+                "description": {"type": "string"},
+                "work_order_type": {"type": "string"},
+                "priority": {"type": "string", "description": "Default 'normal'."},
+                "originating_symptom": {"type": "string"},
+                "module_boundary": {
+                    "type": "string",
+                    "description": "Comma-separated paths this work order owns.",
+                },
+            },
+            "required": ["project_id", "milestone_id", "title", "description"],
+        },
+        handler=_work_order_create,
+        required_capability="work_order:create",
+    ),
+    Tool(
+        name="ds_work_order_close",
+        description=(
+            "Close a work order: evaluate its close gates, mutate status to "
+            "'closed', emit events. Only from phase 'pushed' or 'ci_issues' -- "
+            "refuses from any other phase. Never bypasses a gate: force and "
+            "skip_verify are not exposed here, so a gate failure comes back as the "
+            "same refusal a CLI caller gets with neither flag set, never silently "
+            "waived. Requires work_order:close."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {"work_order_id": {"type": "string"}},
+            "required": ["work_order_id"],
+        },
+        handler=_work_order_close,
+        required_capability="work_order:close",
     ),
     Tool(
         name="ds_review_status",

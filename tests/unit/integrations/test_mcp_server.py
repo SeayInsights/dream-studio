@@ -606,6 +606,248 @@ def test_review_record_reaches_the_door_and_carries_recorded_by(dispatched, monk
     assert payload["recorded_by"] == "fulcrum"
 
 
+# ── ds_project_create (capability-gated) ────────────────────────────────────
+
+
+def test_project_create_denies_an_identity_without_the_capability(bootstrapped_home):
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ds_project_create", "arguments": {"name": "New Project"}},
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="reader-only", capabilities=frozenset({"review:run"})),
+    )
+    assert resp["error"]["code"] == -32001
+
+
+def test_project_create_succeeds_and_carries_registered_by(bootstrapped_home):
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_project_create",
+                "arguments": {"name": "New Project", "description": "d"},
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="fulcrum", capabilities=frozenset({"project:create"})),
+    )
+    assert resp["result"]["isError"] is False
+    payload = json.loads(resp["result"]["content"][0]["text"])
+    assert payload["ok"] is True
+    assert payload["name"] == "New Project"
+    assert payload["registered_by"] == "fulcrum"
+
+
+def test_project_create_is_idempotent_on_the_same_project_path(bootstrapped_home, tmp_path):
+    args = {"name": "New Project", "project_path": str(tmp_path)}
+    identity = auth.Identity(name="fulcrum", capabilities=frozenset({"project:create"}))
+    first = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ds_project_create", "arguments": args},
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=identity,
+    )
+    second = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": "ds_project_create", "arguments": args},
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=identity,
+    )
+    first_payload = json.loads(first["result"]["content"][0]["text"])
+    second_payload = json.loads(second["result"]["content"][0]["text"])
+    assert second_payload["project_id"] == first_payload["project_id"]
+    assert second_payload.get("idempotent") is True
+
+
+# ── ds_work_order_create (capability-gated) ─────────────────────────────────
+
+
+@pytest.fixture
+def bootstrapped_home_with_milestone(bootstrapped_home):
+    import sqlite3
+
+    from core.installed_runtime import resolve_installed_runtime_paths
+
+    db_path = resolve_installed_runtime_paths(dream_studio_home=bootstrapped_home).sqlite_path
+    now = "2026-01-01T00:00:00+00:00"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO business_milestones (milestone_id, project_id, title, description, "
+        "status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("ms-real", "proj-1", "m", "d", "pending", now, now),
+    )
+    conn.commit()
+    conn.close()
+    return bootstrapped_home
+
+
+def test_work_order_create_denies_an_identity_without_the_capability(
+    bootstrapped_home_with_milestone,
+):
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_work_order_create",
+                "arguments": {
+                    "project_id": "proj-1",
+                    "milestone_id": "ms-real",
+                    "title": "t",
+                    "description": "x" * 70,
+                },
+            },
+        },
+        dream_studio_home=bootstrapped_home_with_milestone,
+        identity=auth.Identity(name="reader-only", capabilities=frozenset({"review:run"})),
+    )
+    assert resp["error"]["code"] == -32001
+
+
+def test_work_order_create_succeeds_and_attributes_the_emitted_event(
+    bootstrapped_home_with_milestone, monkeypatch
+):
+    captured = []
+    import spool.writer as _writer
+
+    monkeypatch.setattr(
+        _writer, "write_event", lambda envelope, root=None: captured.append(envelope)
+    )
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_work_order_create",
+                "arguments": {
+                    "project_id": "proj-1",
+                    "milestone_id": "ms-real",
+                    "title": "A new work order",
+                    "description": "x" * 70,
+                },
+            },
+        },
+        dream_studio_home=bootstrapped_home_with_milestone,
+        identity=auth.Identity(name="fulcrum", capabilities=frozenset({"work_order:create"})),
+    )
+    assert resp["result"]["isError"] is False
+    payload = json.loads(resp["result"]["content"][0]["text"])
+    assert payload["ok"] is True
+    assert payload["status"] == "created"
+    created_events = [e for e in captured if e["event_type"] == "work_order.created"]
+    assert len(created_events) == 1
+    assert created_events[0]["trace"]["mcp_client"] == "fulcrum"
+
+
+def test_work_order_create_refuses_an_unknown_milestone(bootstrapped_home):
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_work_order_create",
+                "arguments": {
+                    "project_id": "proj-1",
+                    "milestone_id": "ms-does-not-exist",
+                    "title": "t",
+                    "description": "x" * 70,
+                },
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="fulcrum", capabilities=frozenset({"work_order:create"})),
+    )
+    assert resp["result"]["isError"] is False
+    payload = json.loads(resp["result"]["content"][0]["text"])
+    assert payload["ok"] is False
+    assert "Milestone not found" in payload["error"]
+
+
+# ── ds_work_order_close (capability-gated) ──────────────────────────────────
+
+
+def test_work_order_close_denies_an_identity_without_the_capability(bootstrapped_home):
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ds_work_order_close", "arguments": {"work_order_id": "wo-real"}},
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="reader-only", capabilities=frozenset({"review:run"})),
+    )
+    assert resp["error"]["code"] == -32001
+
+
+def test_work_order_close_refuses_from_the_wrong_phase(bootstrapped_home):
+    """close_work_order's own phase check runs before force/skip_verify are even
+    consulted (force waives gate CONTENT, never the pushed/ci_issues phase
+    requirement) -- so this proves the refusal path works end to end over MCP, not
+    that force is hardcoded false. See
+    test_work_order_close_is_never_passed_force_or_skip_verify for that proof
+    directly, against the handler's own call to close_work_order."""
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ds_work_order_close", "arguments": {"work_order_id": "wo-real"}},
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="fulcrum", capabilities=frozenset({"work_order:close"})),
+    )
+    assert resp["result"]["isError"] is False
+    payload = json.loads(resp["result"]["content"][0]["text"])
+    assert payload["ok"] is False
+    # fixture's work order is "in_progress" -- closed only reaches from pushed/ci_issues.
+    assert payload.get("phase_refused") is True
+
+
+def test_work_order_close_is_never_passed_force_or_skip_verify(bootstrapped_home, monkeypatch):
+    """Direct proof the handler hardcodes both to False, not just an assertion on one
+    observable outcome -- spies on close_work_order's own call signature."""
+    import core.work_orders.close_main as close_main_mod
+
+    captured_kwargs = {}
+
+    def _fake_close(**kwargs):
+        captured_kwargs.update(kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(close_main_mod, "close_work_order", _fake_close)
+
+    handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ds_work_order_close", "arguments": {"work_order_id": "wo-real"}},
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="fulcrum", capabilities=frozenset({"work_order:close"})),
+    )
+    assert captured_kwargs["force"] is False
+    assert captured_kwargs["skip_verify"] is False
+
+
 # ── auth ─────────────────────────────────────────────────────────────────────
 
 
@@ -957,7 +1199,7 @@ def test_every_capability_gated_tool_name_is_forthright_about_it():
     """The flip side of the guard above: a tool that DOES mutate state must not be
     named to look read-only -- required_capability is the enforcement mechanism, but
     the name is what a human skimming tools/list sees first."""
-    mutation_hints = ("start", "done", "close", "dispatch", "run", "record", "mutate")
+    mutation_hints = ("start", "done", "close", "dispatch", "run", "record", "mutate", "create")
     for tool in TOOLS:
         if tool.required_capability is None:
             continue
