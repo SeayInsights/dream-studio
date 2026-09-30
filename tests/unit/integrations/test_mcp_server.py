@@ -358,6 +358,80 @@ def test_task_mutations_work_for_the_root_identity_too(bootstrapped_home_with_ta
     assert resp["result"]["isError"] is False
 
 
+# ── ds_review_dispatch (capability-gated) ───────────────────────────────────
+#
+# dispatch_review_round itself (convene + build the lane image + record) is exercised
+# for real, Docker faked, in tests/unit/test_review_answers.py -- these tests are
+# about the MCP wiring around it: the capability gate, and the response carrying
+# dispatched_by, which is mocked here rather than re-proving the orchestration.
+
+
+def test_review_dispatch_denies_an_identity_without_the_capability(bootstrapped_home, monkeypatch):
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_review_dispatch",
+                "arguments": {"work_order_id": "wo-real"},
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="reader-only", capabilities=frozenset({"review:run"})),
+    )
+    assert resp["error"]["code"] == -32001
+
+
+def test_review_dispatch_succeeds_and_carries_dispatched_by(bootstrapped_home, monkeypatch):
+    import core.work_orders.review_answers as ra_mod
+
+    fake_doc = {"stored": True, "round": 1, "credentials": {"review-finding-integrity": "abc123"}}
+    monkeypatch.setattr(ra_mod, "dispatch_review_round", lambda *a, **k: dict(fake_doc))
+
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_review_dispatch",
+                "arguments": {"work_order_id": "wo-real"},
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="fulcrum", capabilities=frozenset({"review:dispatch"})),
+    )
+    assert resp["result"]["isError"] is False
+    payload = json.loads(resp["result"]["content"][0]["text"])
+    assert payload["dispatched_by"] == "fulcrum"
+    assert payload["credentials"] == fake_doc["credentials"]
+
+
+def test_review_dispatch_works_for_the_root_identity_too(bootstrapped_home, monkeypatch):
+    import core.work_orders.review_answers as ra_mod
+
+    monkeypatch.setattr(
+        ra_mod, "dispatch_review_round", lambda *a, **k: {"stored": True, "round": 1}
+    )
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_review_dispatch",
+                "arguments": {"work_order_id": "wo-real"},
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="operator", capabilities=None),
+    )
+    assert resp["result"]["isError"] is False
+    payload = json.loads(resp["result"]["content"][0]["text"])
+    assert payload["dispatched_by"] == "operator"
+
+
 # ── auth ─────────────────────────────────────────────────────────────────────
 
 

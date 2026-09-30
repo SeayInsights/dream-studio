@@ -256,6 +256,47 @@ def record_dispatch(
     return doc
 
 
+def dispatch_review_round(
+    work_order_id: str, *, repo_root: Path, db_path: Path | None = None
+) -> dict[str, Any]:
+    """Convene the round table against HEAD, build the lane image, and record the
+    round -- the same sequence `ds review --dispatch --work-order <id>` runs from a
+    terminal. A `core.*` function so a non-CLI caller (the MCP server's
+    `ds_review_dispatch` tool) gets the identical sequence rather than a second,
+    drifting reimplementation of it.
+
+    Deliberately narrower than the CLI's own `_dispatch`: HEAD only, no `--pr` head
+    resolution and no dirty-working-tree warning -- add those here, not in a second
+    copy, if a caller needs them.
+
+    Raises RuntimeError when Docker is unavailable (naming why) and ValueError for an
+    unknown work order or an assignment a reviewer's seat does not own
+    (`record_dispatch`'s own check) -- neither is swallowed into a quiet no-op result.
+    """
+    from core.gates import lane_sandbox
+    from core.gates.round_table import assignments, convene
+
+    if work_order_project(work_order_id, db_path=db_path) is None:
+        raise ValueError(f"no work order {work_order_id!r} in this authority")
+    ok, why_not = lane_sandbox.docker_available()
+    if not ok:
+        raise RuntimeError(
+            f"{why_not} A lane tests in a container; without one there is no review to" " dispatch."
+        )
+    sha = lane_sandbox.resolve_sha("HEAD", repo_root=repo_root)
+    image = lane_sandbox.build_image(sha, repo_root=repo_root)
+    report = convene(repo_root=repo_root)
+    return record_dispatch(
+        work_order_id,
+        sha=sha,
+        image=image,
+        change_set="(local working tree)",
+        assignments=assignments(report),
+        db_path=db_path,
+        project_root=repo_root,
+    )
+
+
 def lane_ownership(repo_root: Path | None = None) -> dict[Any, set[str]]:
     """Which lanes each reviewer owns, from the registry: lane -> seat -> reviewer.
 

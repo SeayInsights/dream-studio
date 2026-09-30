@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -32,6 +33,7 @@ from core.work_orders import review_answers as ra
 from core.work_orders.review_answers import (
     ARTIFACT_KIND,
     LANE_VERDICTS,
+    dispatch_review_round,
     file_findings_as_tasks,
     finding_as_task,
     open_findings,
@@ -41,6 +43,8 @@ from core.work_orders.review_answers import (
     review_status,
     validate_answers,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 #: Credentials issued by each dispatch in this module, so recording helpers can present
 #: the one issued to the reviewer they record for -- as a real reviewer must.
@@ -133,6 +137,64 @@ def db(tmp_path):
     finally:
         conn.close()
     return db_path
+
+
+# ── dispatch_review_round: the orchestration ds_review_dispatch (MCP) reuses ────
+
+
+def test_dispatch_review_round_raises_for_an_unknown_work_order(db, monkeypatch):
+    from core.gates import lane_sandbox
+
+    monkeypatch.setattr(lane_sandbox, "docker_available", _up)
+    with pytest.raises(ValueError, match="no work order"):
+        dispatch_review_round("wo-does-not-exist", repo_root=REPO_ROOT, db_path=db)
+
+
+def test_dispatch_review_round_raises_when_docker_is_unavailable(db, monkeypatch):
+    from core.gates import lane_sandbox
+
+    monkeypatch.setattr(lane_sandbox, "docker_available", lambda: (False, "docker not found"))
+    with pytest.raises(RuntimeError, match="docker not found"):
+        dispatch_review_round(WO_ID, repo_root=REPO_ROOT, db_path=db)
+
+
+def test_dispatch_review_round_records_a_real_round_and_issues_credentials(db, monkeypatch):
+    """Docker and git are faked; convene() and record_dispatch() run for real against
+    this repo's own round table and the fixture's real work order."""
+    from core.gates import lane_sandbox
+
+    monkeypatch.setattr(lane_sandbox, "docker_available", _up)
+    monkeypatch.setattr(lane_sandbox, "resolve_sha", lambda ref, *, repo_root: "a" * 40)
+    monkeypatch.setattr(lane_sandbox, "build_image", lambda sha, *, repo_root: "ds-review:fake")
+
+    doc = dispatch_review_round(WO_ID, repo_root=REPO_ROOT, db_path=db)
+
+    assert doc["stored"] is True
+    assert doc["sha"] == "a" * 40
+    assert doc["image"] == "ds-review:fake"
+    assert doc["round"] == 1
+    assert doc["credentials"], "a real convening of this repo's bench must name reviewers"
+    # Every credential is a real hex token, matching record_dispatch's own scheme.
+    for token in doc["credentials"].values():
+        assert len(token) == 32
+        int(token, 16)  # raises ValueError if not hex
+
+
+def test_dispatch_review_round_is_a_new_round_on_a_second_call(db, monkeypatch):
+    from core.gates import lane_sandbox
+
+    monkeypatch.setattr(lane_sandbox, "docker_available", _up)
+    monkeypatch.setattr(lane_sandbox, "resolve_sha", lambda ref, *, repo_root: "a" * 40)
+    monkeypatch.setattr(lane_sandbox, "build_image", lambda sha, *, repo_root: "ds-review:fake")
+
+    first = dispatch_review_round(WO_ID, repo_root=REPO_ROOT, db_path=db)
+    second = dispatch_review_round(WO_ID, repo_root=REPO_ROOT, db_path=db)
+    assert second["round"] == first["round"] + 1
+    # A fresh round issues fresh credentials -- the old ones are not reusable.
+    if first["credentials"] and second["credentials"]:
+        first_reviewer = next(iter(first["credentials"]))
+        if first_reviewer in second["credentials"]:
+            assert second["credentials"][first_reviewer] != first["credentials"][first_reviewer]
 
 
 # ── shape: the contract's own refusals ──────────────────────────────────────
