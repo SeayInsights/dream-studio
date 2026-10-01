@@ -43,6 +43,14 @@ _PYTHON = sys.executable
 # reintroducing the four CVEs immediately above. Zero production imports of the
 # third-party `mcp` package anywhere in this repo (grepped) -- reachable only
 # through semgrep's own dev-time linting, same as the rest of this list.
+#
+# CVE-2026-103001 (GHSA-gvp8-978c-rx2q, disclosed 2026-09) is a 13th pyjwt CVE
+# against this same 2.13.0, same semgrep pin, same "no production imports of
+# pyjwt anywhere in this repo" finding (grepped: only interfaces/cli/ci_gate.py
+# references jwt, in this comment). Unlike the twelve above, PyPI has no fix
+# release at all yet -- the advisory's own 2026-09-08 maintainer update says the
+# fix is still in release planning, fix_versions is empty in pip-audit's feed --
+# so there is no version to floor toward even in principle, only to wait for.
 _ACCEPTED_DEV_CVES = (
     "CVE-2026-52870",  # mcp (fixed 1.27.2) — via semgrep
     "CVE-2026-52869",  # mcp (fixed 1.27.2) — via semgrep
@@ -60,6 +68,7 @@ _ACCEPTED_DEV_CVES = (
     "CVE-2026-102273",  # pyjwt (fixed 2.14.0) — via semgrep
     "CVE-2026-102274",  # pyjwt (fixed 2.14.0) — via semgrep
     "CVE-2026-101918",  # pyjwt (fixed 2.15.0) — via semgrep; disclosed after the other 11
+    "CVE-2026-103001",  # pyjwt (no fix release yet) — via semgrep; GHSA-gvp8-978c-rx2q
 )
 
 _PIP_AUDIT_IGNORES = [arg for cve in _ACCEPTED_DEV_CVES for arg in ("--ignore-vuln", cve)]
