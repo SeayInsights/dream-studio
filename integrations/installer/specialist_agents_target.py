@@ -18,14 +18,17 @@ Studio's ~45 domain specialists -- a natural future extension, not this one's jo
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any, Literal
 
 from integrations.compiler.reviewers import (
+    MODEL_LINE_RE,
     project_reviewer_files,
     resolve_agent_names,
+    resolve_seat_assignment,
     reviewer_files,
+    seat_name_for_file,
+    set_model_alias,
 )
 from integrations.targets.registry import (
     get_target_spec,
@@ -33,23 +36,27 @@ from integrations.targets.registry import (
     translate_model,
 )
 
-_MODEL_LINE_RE = re.compile(r"^model: (.+)$", re.MULTILINE)
 
-
-def translate_reviewer_body(body: str, tool_id: str) -> str:
+def translate_reviewer_body(
+    body: str, tool_id: str, *, model_alias_override: str | None = None
+) -> str:
     """The same file, with its one tool-specific line translated.
+
+    *model_alias_override*, when given (a pinned seat's own model -- see
+    `core.config.seat_providers`), replaces the file's own baked-in alias rather than
+    reading it from the frontmatter -- the pin's whole point.
 
     Raises if there is no `model:` line to translate (a compiled reviewer with no model
     is a bug in the compiler, not something to install around) or if `translate_model`
-    refuses the file's own alias for this tool -- both cases mean installing verbatim
-    would ship a model string nobody chose, or none at all.
+    refuses the alias for this tool -- both cases mean installing verbatim would ship a
+    model string nobody chose, or none at all.
     """
-    match = _MODEL_LINE_RE.search(body)
+    match = MODEL_LINE_RE.search(body)
     if not match:
         raise ValueError("no `model:` line found in this reviewer's frontmatter to translate")
-    alias = match.group(1).strip()
+    alias = model_alias_override if model_alias_override is not None else match.group(1).strip()
     translated = translate_model(tool_id, alias)
-    return _MODEL_LINE_RE.sub(f"model: {translated}", body, count=1)
+    return set_model_alias(body, translated)
 
 
 class SpecialistAgentsInstaller:
@@ -88,6 +95,10 @@ class SpecialistAgentsInstaller:
         self.target_dir = specialist_agents_target_path(
             tool_id, project_root=self.project_root, home=self.home, scope=scope
         )
+        # Whether THIS call named its seats explicitly -- governs whether a seat
+        # pinned to a different provider (core.config.seat_providers) gets skipped
+        # here or honored anyway. See install()'s per-file loop.
+        self._explicit = agents is not None
         if agents is not None:
             self._files = resolve_agent_names(agents, repo_root=self.project_root)
         else:
@@ -111,12 +122,28 @@ class SpecialistAgentsInstaller:
             # stays the record of what this call actually did.
             "files": [f.name for f in self._files],
             "written": [],
+            # Every candidate pinned (core.config.seat_providers) to a DIFFERENT
+            # provider than self.tool_id, skipped here because this call named no
+            # explicit --agents -- the "install everything" default routes a pinned
+            # seat to its own provider instead of installing it twice under two
+            # names. An explicit --agents request for the same seat is honored
+            # anyway (see the loop below); it names this exact tool for this exact
+            # seat, a stronger signal than the standing pin.
+            "skipped": [],
         }
-        if mode != "execute":
-            return result
-        self.target_dir.mkdir(parents=True, exist_ok=True)
+        if mode == "execute":
+            self.target_dir.mkdir(parents=True, exist_ok=True)
         for src in self._files:
-            translated = translate_reviewer_body(src.read_text(encoding="utf-8"), self.tool_id)
+            seat = seat_name_for_file(src, repo_root=self.project_root)
+            provider, model_override, _effort_override = resolve_seat_assignment(seat, self.tool_id)
+            if provider != self.tool_id and not self._explicit:
+                result["skipped"].append({"seat": seat, "file": src.name, "pinned_to": provider})
+                continue
+            if mode != "execute":
+                continue
+            translated = translate_reviewer_body(
+                src.read_text(encoding="utf-8"), self.tool_id, model_alias_override=model_override
+            )
             (self.target_dir / src.name).write_text(translated, encoding="utf-8")
             result["written"].append(src.name)
         return result
