@@ -439,6 +439,60 @@ def test_review_dispatch_succeeds_and_carries_dispatched_by(bootstrapped_home, m
     assert payload["credentials"] == fake_doc["credentials"]
 
 
+def test_review_dispatch_threads_force_new_round_through(bootstrapped_home, monkeypatch):
+    """A kwarg-spy, not an outcome check -- the idempotency/force_new_round behavior
+    itself is proven in test_review_answers.py; this proves the MCP tool actually
+    passes the argument through rather than silently dropping it."""
+    import core.work_orders.review_answers as ra_mod
+
+    captured_kwargs = {}
+
+    def _fake_dispatch(*args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return {"stored": True, "round": 2}
+
+    monkeypatch.setattr(ra_mod, "dispatch_review_round", _fake_dispatch)
+
+    handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_review_dispatch",
+                "arguments": {"work_order_id": "wo-real", "force_new_round": True},
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="fulcrum", capabilities=frozenset({"review:dispatch"})),
+    )
+    assert captured_kwargs["force_new_round"] is True
+
+
+def test_review_dispatch_force_new_round_defaults_false(bootstrapped_home, monkeypatch):
+    import core.work_orders.review_answers as ra_mod
+
+    captured_kwargs = {}
+
+    def _fake_dispatch(*args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return {"stored": True, "round": 1}
+
+    monkeypatch.setattr(ra_mod, "dispatch_review_round", _fake_dispatch)
+
+    handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ds_review_dispatch", "arguments": {"work_order_id": "wo-real"}},
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="fulcrum", capabilities=frozenset({"review:dispatch"})),
+    )
+    assert captured_kwargs["force_new_round"] is False
+
+
 def test_review_dispatch_works_for_the_root_identity_too(bootstrapped_home, monkeypatch):
     import core.work_orders.review_answers as ra_mod
 
@@ -748,6 +802,94 @@ def test_project_create_is_idempotent_on_the_same_project_path(bootstrapped_home
     second_payload = json.loads(second["result"]["content"][0]["text"])
     assert second_payload["project_id"] == first_payload["project_id"]
     assert second_payload.get("idempotent") is True
+
+
+# ── ds_work_order_start (capability-gated) ──────────────────────────────────
+#
+# start_work_order's own behavior (brief checks, phase transitions, sequence/
+# structure guards) is exercised for real in tests/unit/test_work_order_start.py --
+# these are about the MCP wiring around it.
+
+
+def test_work_order_start_denies_an_identity_without_the_capability(bootstrapped_home):
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ds_work_order_start", "arguments": {"work_order_id": "wo-real"}},
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="reader-only", capabilities=frozenset({"review:run"})),
+    )
+    assert resp["error"]["code"] == -32001
+
+
+def test_work_order_start_succeeds_on_a_resume_and_attributes_the_emitted_event(
+    bootstrapped_home, monkeypatch
+):
+    """wo-real is already in_progress -- start_work_order treats this as a resume
+    (status does not move, the rest of the sequence still runs), the cheapest real
+    end-to-end path with no extra fixture for a brief-less UI work order."""
+    captured = []
+    import spool.writer as _writer
+
+    monkeypatch.setattr(
+        _writer, "write_event", lambda envelope, root=None: captured.append(envelope)
+    )
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ds_work_order_start", "arguments": {"work_order_id": "wo-real"}},
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="fulcrum", capabilities=frozenset({"work_order:start"})),
+    )
+    assert resp["result"]["isError"] is False
+    payload = json.loads(resp["result"]["content"][0]["text"])
+    assert payload["ok"] is True
+    started_events = [e for e in captured if e["event_type"] == "work_order.started"]
+    assert len(started_events) == 1
+    assert started_events[0]["trace"]["mcp_client"] == "fulcrum"
+
+
+def test_work_order_start_threads_its_arguments_through(bootstrapped_home, monkeypatch):
+    """A kwarg-spy, not an outcome check -- proves the MCP tool actually forwards
+    accept_no_brief/in_sequence/accept_structure rather than silently dropping them."""
+    import core.work_orders.start as start_mod
+
+    captured_kwargs = {}
+
+    def _fake_start(**kwargs):
+        captured_kwargs.update(kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(start_mod, "start_work_order", _fake_start)
+
+    handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_work_order_start",
+                "arguments": {
+                    "work_order_id": "wo-real",
+                    "accept_no_brief": True,
+                    "in_sequence": True,
+                    "accept_structure": "fewer than 2 tasks, reviewed and accepted",
+                },
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="fulcrum", capabilities=frozenset({"work_order:start"})),
+    )
+    assert captured_kwargs["accept_no_brief"] is True
+    assert captured_kwargs["in_sequence"] is True
+    assert captured_kwargs["accept_structure"] == "fewer than 2 tasks, reviewed and accepted"
+    assert captured_kwargs["actor"] == "fulcrum"
 
 
 # ── ds_work_order_create (capability-gated) ─────────────────────────────────

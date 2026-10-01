@@ -182,6 +182,7 @@ def _review_dispatch(
     *,
     work_order_id: str,
     identity: Identity,
+    force_new_round: bool = False,
     dream_studio_home: Path | None = None,
 ) -> Any:
     from core.installed_runtime import resolve_installed_runtime_paths
@@ -190,7 +191,12 @@ def _review_dispatch(
     paths = resolve_installed_runtime_paths(
         source_root=REPO_ROOT, dream_studio_home=dream_studio_home
     )
-    doc = dispatch_review_round(work_order_id, repo_root=REPO_ROOT, db_path=paths.sqlite_path)
+    doc = dispatch_review_round(
+        work_order_id,
+        repo_root=REPO_ROOT,
+        db_path=paths.sqlite_path,
+        force_new_round=force_new_round,
+    )
     # NOT PERSISTED -- dispatch_review_round's own stored artifact carries no actor
     # field (it predates that concept; see mutations.py's trace.mcp_client for the
     # established shape, not yet extended here). This is visible only in the response
@@ -252,6 +258,38 @@ def _review_record(
     )
     result["recorded_by"] = identity.name
     return result
+
+
+def _work_order_start(
+    *,
+    work_order_id: str,
+    identity: Identity,
+    accept_no_brief: bool = False,
+    in_sequence: bool = False,
+    accept_structure: str | None = None,
+    dream_studio_home: Path | None = None,
+) -> Any:
+    """The other missing phase move: created -> in_progress. Without it, a work order
+    made over MCP sat at 'created' forever -- ds_work_order_task_start moves a TASK,
+    not the work order, and ds_work_order_advance only ever accepts in_review/pushed/
+    ci_issues (the phases AFTER in_progress). No stdin y/N here, unlike the CLI's own
+    wrapper around this same function: there is no terminal on the other end of an MCP
+    call to prompt. A UI-typed work order with no locked design brief refuses with
+    requires_brief_confirmation=true instead of silently proceeding or silently
+    blocking; the caller re-calls with accept_no_brief=true once it has actually
+    confirmed that's acceptable, the same contract core.work_orders.start's own
+    docstring already asks of any non-terminal (skill, workflow, hook) caller."""
+    from core.work_orders.start import start_work_order
+
+    return start_work_order(
+        work_order_id=work_order_id,
+        source_root=REPO_ROOT,
+        dream_studio_home=dream_studio_home,
+        accept_no_brief=accept_no_brief,
+        in_sequence=in_sequence,
+        accept_structure=accept_structure,
+        actor=identity.name,
+    )
 
 
 def _work_order_task_start(
@@ -559,6 +597,55 @@ TOOLS: list[Tool] = [
         handler=_work_order_tasks,
     ),
     Tool(
+        name="ds_work_order_start",
+        description=(
+            "Move a work order from created to in_progress: writes context.md, "
+            "records the delivery-boundary start commit, emits work_order.started. "
+            "The other half of ds_work_order_advance -- that tool only accepts "
+            "in_review/pushed/ci_issues, so nothing else moves a work order out of "
+            "'created'. Refuses a UI-typed work order with no locked design brief "
+            "(requires_brief_confirmation: true) unless accept_no_brief is set -- "
+            "there is no terminal on the other end of an MCP call to prompt the way "
+            "the CLI's own y/N does, so confirm first, then set it explicitly. Also "
+            "refuses an unmet declared dependency, and (with in_sequence) an earlier-"
+            "sequence work order in the same milestone that is not yet closed. "
+            "Requires work_order:start. The calling client's name is recorded on the "
+            "emitted event's trace."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "work_order_id": {"type": "string"},
+                "accept_no_brief": {
+                    "type": "boolean",
+                    "description": (
+                        "Proceed despite a UI-typed work order having no locked design"
+                        " brief. Only after you've actually confirmed that's"
+                        " acceptable -- this tool has no way to ask on its own."
+                    ),
+                },
+                "in_sequence": {
+                    "type": "boolean",
+                    "description": (
+                        "Refuse (ok: false) if earlier-sequence work orders in the same"
+                        " milestone are not yet closed, instead of a soft warning."
+                    ),
+                },
+                "accept_structure": {
+                    "type": "string",
+                    "description": (
+                        "Reason this work order is correctly sized despite breaking a"
+                        " structural invariant (fewer than 2 tasks, or no sibling in its"
+                        " milestone)."
+                    ),
+                },
+            },
+            "required": ["work_order_id"],
+        },
+        handler=_work_order_start,
+        required_capability="work_order:start",
+    ),
+    Tool(
         name="ds_work_order_task_start",
         description=(
             "Move a task from created to in_progress. A claim, not a lock -- starting "
@@ -742,11 +829,30 @@ TOOLS: list[Tool] = [
             "review:dispatch. The calling identity becomes the round's chair: it is "
             "the only identity that ever sees these credentials, and MUST NOT also "
             "hold review:record (refused at client-provisioning time, not here -- see "
-            "integrations.mcp.auth.add_client)."
+            "integrations.mcp.auth.add_client). The Docker image build alone can take "
+            "minutes -- set a generous read timeout on this call specifically, or a "
+            "client that gives up and retries will land on the idempotent path below "
+            "rather than actually failing. IDEMPOTENT ON THE COMMIT: calling this again "
+            "for a work order already dispatched at the same HEAD returns that round's "
+            "metadata unchanged (`already_dispatched: true`, empty `credentials` -- a "
+            "credential is shown once, at its own round's original dispatch, and "
+            "cannot be reissued) rather than building a second image and stacking a "
+            "new round -- exactly what a retried timeout used to do before this "
+            "existed. Pass force_new_round=true for a genuinely fresh round (and fresh "
+            "credentials) at the same commit."
         ),
         input_schema={
             "type": "object",
-            "properties": {"work_order_id": {"type": "string"}},
+            "properties": {
+                "work_order_id": {"type": "string"},
+                "force_new_round": {
+                    "type": "boolean",
+                    "description": (
+                        "Dispatch a new round even if this work order was already"
+                        " dispatched at the current HEAD. Default false."
+                    ),
+                },
+            },
             "required": ["work_order_id"],
         },
         handler=_review_dispatch,

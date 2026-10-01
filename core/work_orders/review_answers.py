@@ -128,48 +128,41 @@ def read_dispatch(work_order_id: str, *, db_path: Path | None = None) -> dict[st
     return None
 
 
-def record_dispatch(
+def already_dispatched_response(prior: dict[str, Any], sha: str) -> dict[str, Any]:
+    """The response record_dispatch() and dispatch_review_round() both return when
+    *prior* already carries *sha* and force_new_round was not asked for -- ONE PLACE
+    this shape is built, not two separate copies that could drift (the exact signature
+    `the-other-half-enforced-by-nothing` exists to catch)."""
+    return {
+        **prior,
+        "stored": True,
+        "credentials": {},
+        "already_dispatched": True,
+        "note": (
+            f"round {prior.get('round')} already dispatched at this commit ({sha[:12]})"
+            " -- no new round opened, no image rebuilt, no credentials reissued. A"
+            " credential is shown once, in its own round's dispatch response, and is"
+            " never stored anywhere that could return it again. Pass force_new_round=True"
+            " for a fresh round and fresh credentials."
+        ),
+    }
+
+
+def resolve_round_content(
     work_order_id: str,
-    *,
-    sha: str,
-    image: str,
-    change_set: list[str] | str,
     assignments: list[dict[str, Any]],
-    db_path: Path | None = None,
-    project_root: Path | None = None,
-    ownership: dict[Any, set[str]] | None = None,
-) -> dict[str, Any]:
-    """Record who was asked what, against which commit, as a new round.
-
-    Every assignment is held to the registry's seat-to-lane mapping; a lane handed to a
-    reviewer whose seat does not own it raises ValueError and nothing is recorded.
-
-    `assignments` is extended with every lane that still holds an open finding, assigned
-    to the reviewer that found it -- a finding is resolved by a later verified pass on the
-    same lane, and a dispatch that dropped the lane because the new change set did not
-    select it would let the finding lapse unanswered.
+    *,
+    db_path: Path | None,
+    owned: dict[Any, set[str]],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """The (assignments, carried_open_findings) a round dispatched right now with
+    *assignments* would actually contain -- open findings and an awaiting referee
+    folded in, exactly as `record_dispatch` stores them. Pulled out of `record_dispatch`
+    so its idempotency check can compare against precisely what a NEW round would hold,
+    not an approximation of it: a redispatch at an unchanged sha with a finding newly
+    carried in is a materially different round, and must open one even without
+    force_new_round, while a byte-identical redispatch is the no-op this exists for.
     """
-    # THE MECHANISM CHECKS, not one caller. The existence check lived in the CLI's
-    # dispatch handler only, so any other caller could record a round against an id that
-    # names nothing (the bench's boundary-semantics seat, round two).
-    if work_order_project(work_order_id, db_path=db_path) is None:
-        raise ValueError(f"no work order {work_order_id!r} in this authority")
-
-    owned = lane_ownership(project_root) if ownership is None else ownership
-    for slot in assignments:
-        reviewer = slot.get("reviewer")
-        key = _owner_key(reviewer, slot.get("seat"))
-        stray = sorted(set(slot.get("lanes") or []) - set(owned.get(key, ())))
-        if stray:
-            raise ValueError(
-                f"{reviewer or 'the chair'} does not own {', '.join(stray)} in the lane"
-                " registry. A dispatch may only hand a reviewer its own seat's lanes --"
-                " anything else lets a name answer a question it was never compiled to ask."
-            )
-
-    prior = read_dispatch(work_order_id, db_path=db_path)
-    round_no = int(prior.get("round", 0)) + 1 if prior else 1
-
     slots: dict[Any, dict[str, Any]] = {}
     for slot in assignments:
         # Keyed by reviewer, or by seat when there is none, so two reviewer-less seats do
@@ -215,6 +208,87 @@ def record_dispatch(
             slot["lanes"] = sorted([*slot["lanes"], REFEREE_LANE])
             carried.append(REFEREE_LANE)
 
+    resolved = sorted(slots.values(), key=lambda s: (s["reviewer"] is None, str(s["reviewer"])))
+    return resolved, sorted(carried)
+
+
+def record_dispatch(
+    work_order_id: str,
+    *,
+    sha: str,
+    image: str,
+    change_set: list[str] | str,
+    assignments: list[dict[str, Any]],
+    db_path: Path | None = None,
+    project_root: Path | None = None,
+    ownership: dict[Any, set[str]] | None = None,
+    force_new_round: bool = False,
+) -> dict[str, Any]:
+    """Record who was asked what, against which commit, as a new round.
+
+    Every assignment is held to the registry's seat-to-lane mapping; a lane handed to a
+    reviewer whose seat does not own it raises ValueError and nothing is recorded.
+
+    `assignments` is extended with every lane that still holds an open finding, assigned
+    to the reviewer that found it -- a finding is resolved by a later verified pass on the
+    same lane, and a dispatch that dropped the lane because the new change set did not
+    select it would let the finding lapse unanswered.
+
+    IDEMPOTENT ON (work_order_id, sha, resolved assignments) UNLESS force_new_round.
+    Found by a retried ds_review_dispatch call stacking a second round:
+    `ds_review_dispatch` (MCP) builds a multi-minute Docker image before reaching
+    here, and a caller whose own read timeout fires before that finishes (the
+    http_mcp connector's old 30s default, against a build that legitimately takes
+    minutes) has no way to know the first call actually completed. Retrying hit this
+    function with no guard at all -- a second image build, round N+1, and
+    credentials for round N that could never be collected (the plaintext left this
+    function once, in round N's own, now-discarded response; nothing here ever
+    stores it to reissue).
+
+    RESOLVED, NOT RAW -- comparing against the raw *assignments* argument alone
+    would miss a redispatch at the SAME sha that genuinely needs a new round: a
+    finding recorded since the last dispatch carries a lane forward
+    (`resolve_round_content`'s whole job), and that changes what the round
+    actually contains even when the caller passes the identical input. Only a
+    redispatch whose fully resolved content -- sha AND assignments AND carried
+    findings -- is byte-identical to the standing round is treated as a no-op.
+    force_new_round=True always opens a new one regardless, same cost as before
+    this existed.
+    """
+    # THE MECHANISM CHECKS, not one caller. The existence check lived in the CLI's
+    # dispatch handler only, so any other caller could record a round against an id that
+    # names nothing (the bench's boundary-semantics seat, round two).
+    if work_order_project(work_order_id, db_path=db_path) is None:
+        raise ValueError(f"no work order {work_order_id!r} in this authority")
+
+    owned = lane_ownership(project_root) if ownership is None else ownership
+    for slot in assignments:
+        reviewer = slot.get("reviewer")
+        key = _owner_key(reviewer, slot.get("seat"))
+        stray = sorted(set(slot.get("lanes") or []) - set(owned.get(key, ())))
+        if stray:
+            raise ValueError(
+                f"{reviewer or 'the chair'} does not own {', '.join(stray)} in the lane"
+                " registry. A dispatch may only hand a reviewer its own seat's lanes --"
+                " anything else lets a name answer a question it was never compiled to ask."
+            )
+
+    resolved_assignments, carried = resolve_round_content(
+        work_order_id, assignments, db_path=db_path, owned=owned
+    )
+
+    prior = read_dispatch(work_order_id, db_path=db_path)
+    if (
+        prior is not None
+        and not force_new_round
+        and str(prior.get("sha")) == sha
+        and prior.get("assignments") == resolved_assignments
+        and prior.get("carried_open_findings") == carried
+    ):
+        return already_dispatched_response(prior, sha)
+
+    round_no = int(prior.get("round", 0)) + 1 if prior else 1
+
     # ONE CREDENTIAL PER NAMED REVIEWER, hashed at rest. The plaintext leaves this function
     # once, in its return value, for the dispatcher to hand each reviewer its own.
     # HEX, because a url-safe token can begin with "-", and `--credential -abc...` is read
@@ -223,7 +297,7 @@ def record_dispatch(
     # other side of the coin.
     credentials = {
         str(slot["reviewer"]): secrets.token_hex(16)
-        for slot in slots.values()
+        for slot in resolved_assignments
         if slot.get("reviewer")
     }
 
@@ -233,10 +307,8 @@ def record_dispatch(
         "sha": sha,
         "image": image,
         "change_set": change_set,
-        "assignments": sorted(
-            slots.values(), key=lambda s: (s["reviewer"] is None, str(s["reviewer"]))
-        ),
-        "carried_open_findings": sorted(carried),
+        "assignments": resolved_assignments,
+        "carried_open_findings": carried,
         "at": _now(),
     }
 
@@ -257,7 +329,11 @@ def record_dispatch(
 
 
 def dispatch_review_round(
-    work_order_id: str, *, repo_root: Path, db_path: Path | None = None
+    work_order_id: str,
+    *,
+    repo_root: Path,
+    db_path: Path | None = None,
+    force_new_round: bool = False,
 ) -> dict[str, Any]:
     """Convene the round table against HEAD, build the lane image, and record the
     round -- the same sequence `ds review --dispatch --work-order <id>` runs from a
@@ -272,28 +348,56 @@ def dispatch_review_round(
     Raises RuntimeError when Docker is unavailable (naming why) and ValueError for an
     unknown work order or an assignment a reviewer's seat does not own
     (`record_dispatch`'s own check) -- neither is swallowed into a quiet no-op result.
+
+    CHECKS IDEMPOTENCY BEFORE THE EXPENSIVE PART. `record_dispatch()` is idempotent on
+    (work_order_id, sha, resolved assignments) too, but by the time a caller reaches it
+    here, `build_image()` has already spent its minutes -- exactly the cost a retried
+    `ds_review_dispatch` call (the http_mcp connector's old 30s read timeout against a
+    build that legitimately takes minutes) wastes. `convene()` and the open-findings/
+    referee lookup `resolve_round_content` does are both cheap (no Docker); only
+    `build_image()` is not, so this resolves the round FIRST and checks it against the
+    standing one before ever reaching the build -- the same precise comparison
+    `record_dispatch` makes, not an approximation that might short-circuit a redispatch
+    a newly carried finding actually needs.
     """
     from core.gates import lane_sandbox
     from core.gates.round_table import assignments, convene
 
     if work_order_project(work_order_id, db_path=db_path) is None:
         raise ValueError(f"no work order {work_order_id!r} in this authority")
+    sha = lane_sandbox.resolve_sha("HEAD", repo_root=repo_root)
+    report = convene(repo_root=repo_root)
+    computed_assignments = assignments(report)
+
+    if not force_new_round:
+        owned = lane_ownership(repo_root)
+        resolved, carried = resolve_round_content(
+            work_order_id, computed_assignments, db_path=db_path, owned=owned
+        )
+        prior = read_dispatch(work_order_id, db_path=db_path)
+        if (
+            prior is not None
+            and str(prior.get("sha")) == sha
+            and prior.get("assignments") == resolved
+            and prior.get("carried_open_findings") == carried
+        ):
+            return already_dispatched_response(prior, sha)
+
     ok, why_not = lane_sandbox.docker_available()
     if not ok:
         raise RuntimeError(
             f"{why_not} A lane tests in a container; without one there is no review to" " dispatch."
         )
-    sha = lane_sandbox.resolve_sha("HEAD", repo_root=repo_root)
     image = lane_sandbox.build_image(sha, repo_root=repo_root)
-    report = convene(repo_root=repo_root)
     return record_dispatch(
         work_order_id,
         sha=sha,
         image=image,
         change_set="(local working tree)",
-        assignments=assignments(report),
+        assignments=computed_assignments,
         db_path=db_path,
         project_root=repo_root,
+        force_new_round=force_new_round,
     )
 
 

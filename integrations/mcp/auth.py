@@ -47,6 +47,7 @@ SCHEMA_VERSION = 2
 #: new Tool(required_capability=...) entry.
 KNOWN_CAPABILITIES = frozenset(
     {
+        "work_order:start",
         "work_order:task_mutate",
         "work_order:close",
         "work_order:create",
