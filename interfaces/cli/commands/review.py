@@ -201,6 +201,18 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         help="The work order under review; the round, answers and filed tasks land on it.",
     )
     review_cmd.add_argument(
+        "--force-new-round",
+        dest="force_new_round",
+        action="store_true",
+        help=(
+            "With --dispatch: dispatch a new round even if this work order was already"
+            " dispatched at the current commit. Without it, redispatching an unchanged"
+            " commit is a no-op that returns the existing round (no new image build, no"
+            " reissued credentials -- a credential is shown once, at its own round's"
+            " original dispatch, and cannot be reissued)."
+        ),
+    )
+    review_cmd.add_argument(
         "--as-tasks",
         dest="as_tasks",
         action="store_true",
@@ -358,6 +370,8 @@ def _companion_flags(args: argparse.Namespace) -> str | None:
         return "--model only means something with --set-seat-provider"
     if getattr(args, "effort", None) and not getattr(args, "set_seat_provider", None):
         return "--effort only means something with --set-seat-provider"
+    if getattr(args, "force_new_round", None) and not getattr(args, "dispatch", None):
+        return "--force-new-round only means something with --dispatch"
     if getattr(args, "set_seat_provider", None) and not getattr(args, "provider", None):
         return "--set-seat-provider needs --provider"
     return None
@@ -443,11 +457,47 @@ def _dispatch(
         return 0
 
     from core.gates import lane_sandbox
-    from core.work_orders.review_answers import record_dispatch, work_order_project
+    from core.work_orders.review_answers import (
+        resolve_round_content,
+        already_dispatched_response,
+        lane_ownership,
+        read_dispatch,
+        record_dispatch,
+        work_order_project,
+    )
 
     if work_order_project(args.work_order, db_path=db_path) is None:
         print(f"ds review --dispatch: no work order {args.work_order!r}", file=sys.stderr)
         return 2
+    try:
+        sha = _review_sha(args, repo_root)
+    except RuntimeError as exc:
+        print(f"ds review --dispatch: {exc}", file=sys.stderr)
+        return 2
+
+    # CHECKED BEFORE DOCKER, before the image build -- the expensive part a redundant
+    # redispatch (by habit, or a retried script) would otherwise pay for nothing. The
+    # SAME precise comparison record_dispatch makes internally (sha AND the fully
+    # resolved assignments, open findings carried in), not sha alone -- a redispatch at
+    # an unchanged commit that a newly recorded finding needs carried into a fresh round
+    # must still open one even without --force-new-round.
+    if not args.force_new_round:
+        owned = lane_ownership(repo_root)
+        resolved, carried = resolve_round_content(
+            args.work_order, plan["assignments"], db_path=db_path, owned=owned
+        )
+        prior = read_dispatch(args.work_order, db_path=db_path)
+        if (
+            prior is not None
+            and str(prior.get("sha")) == sha
+            and prior.get("assignments") == resolved
+            and prior.get("carried_open_findings") == carried
+        ):
+            doc = already_dispatched_response(prior, sha)
+            doc["run"] = f'ds review --run "<command>" --work-order {args.work_order}'
+            print(json.dumps(doc, indent=2, sort_keys=True))
+            return 0
+
     ok, why_not = lane_sandbox.docker_available()
     if not ok:
         print(
@@ -457,7 +507,6 @@ def _dispatch(
         )
         return 2
     try:
-        sha = _review_sha(args, repo_root)
         image = lane_sandbox.build_image(sha, repo_root=repo_root)
     except RuntimeError as exc:
         print(f"ds review --dispatch: {exc}", file=sys.stderr)
@@ -472,6 +521,7 @@ def _dispatch(
             assignments=plan["assignments"],
             db_path=db_path,
             project_root=repo_root,
+            force_new_round=args.force_new_round,
         )
     except ValueError as exc:
         print(f"ds review --dispatch: {exc}", file=sys.stderr)

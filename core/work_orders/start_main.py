@@ -50,6 +50,7 @@ def start_work_order(
     brief_data: dict[str, Any] | None = None,
     in_sequence: bool = False,
     accept_structure: str | None = None,
+    actor: str | None = None,
 ) -> dict[str, Any]:
     """Compose read/write/mutate to start a work order.
 
@@ -67,6 +68,10 @@ def start_work_order(
     Or on guard failure:
         `{"ok": False, "error": ..., "requires_brief_confirmation": True}` —
         caller must re-call with `accept_no_brief=True` to proceed.
+
+    ``actor``, when given, is an MCP client's name -- see
+    ``core.work_orders.mutations.start_task``'s docstring for why it is not
+    ``session_id`` and lands in the emitted event's ``trace.mcp_client`` instead.
     """
 
     if brief_data is None:
@@ -244,6 +249,7 @@ def start_work_order(
                 "milestone_id": brief_data.get("milestone_id"),
                 "project_id": brief_data["project_id"],
                 "attribution_status": "fully_attributed",
+                **({"mcp_client": actor} if actor else {}),
             },
         )
         _spool_writer.write_event(envelope.to_dict())

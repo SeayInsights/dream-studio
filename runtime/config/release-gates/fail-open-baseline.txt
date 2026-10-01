@@ -592,9 +592,9 @@ core/work_orders/review_answers.py|126|falsy-return
 core/work_orders/review_rules.py|283|falsy-return
 core/work_orders/start_brief.py|167|bare-except-pass
 core/work_orders/start_brief.py|179|bare-except-pass
-core/work_orders/start_main.py|250|bare-except-pass
-core/work_orders/start_main.py|262|bare-except-pass
-core/work_orders/start_main.py|314|bare-except-pass
+core/work_orders/start_main.py|256|bare-except-pass
+core/work_orders/start_main.py|268|bare-except-pass
+core/work_orders/start_main.py|320|bare-except-pass
 core/work_orders/start_main.py|38|bare-except-pass
 core/work_orders/start_shared.py|58|falsy-return
 core/work_orders/structural_invariants.py|100|falsy-return
@@ -625,7 +625,7 @@ interfaces/cli/commands/integrate.py|255|bare-except-pass
 interfaces/cli/commands/prd.py|63|falsy-return
 interfaces/cli/commands/project.py|969|bare-except-pass
 interfaces/cli/commands/prove.py|198|bare-except-pass
-interfaces/cli/commands/review.py|533|falsy-return
+interfaces/cli/commands/review.py|583|falsy-return
 interfaces/cli/commands/system_dashboard.py|190|bare-except-pass
 interfaces/cli/commands/system_dashboard.py|196|bare-except-pass
 interfaces/cli/commands/system_health.py|246|falsy-return

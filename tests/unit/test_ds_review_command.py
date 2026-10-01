@@ -41,6 +41,7 @@ def _args(**overrides) -> argparse.Namespace:
         "provider": None,
         "model": None,
         "effort": None,
+        "force_new_round": False,
     }
     base.update(overrides)
     return argparse.Namespace(**base)
@@ -230,3 +231,23 @@ def test_list_seat_providers_reports_every_pin(isolated_home, capsys):
     )
     assert rc == 0
     assert "security-review" in capsys.readouterr().out
+
+
+# ── --force-new-round ────────────────────────────────────────────────────────
+
+
+def test_the_review_parser_carries_force_new_round():
+    sub = argparse.ArgumentParser().add_subparsers()
+    review_cmd.register(sub)
+    flags = {
+        action.option_strings[0]
+        for action in sub.choices["review"]._actions
+        if action.option_strings
+    }
+    assert "--force-new-round" in flags
+
+
+def test_force_new_round_without_dispatch_is_refused(capsys):
+    rc = review_cmd.dispatch(_args(force_new_round=True), source_root=None, dream_studio_home=None)
+    assert rc == 2
+    assert "--force-new-round only means something with --dispatch" in capsys.readouterr().err

@@ -99,7 +99,7 @@ def _record(db, reviewer, answers, **kw):
     return record_answers(WO_ID, reviewer, answers, db_path=db, **kw)
 
 
-def _dispatch(db, slots=None):
+def _dispatch(db, slots=None, force_new_round=False):
     slots = slots or [{"reviewer": REVIEWER, "seat": "Claim integrity", "lanes": LANES}]
     return record_dispatch(
         WO_ID,
@@ -109,6 +109,7 @@ def _dispatch(db, slots=None):
         assignments=slots,
         db_path=db,
         ownership=OWNED,
+        force_new_round=force_new_round,
     )
 
 
@@ -180,7 +181,32 @@ def test_dispatch_review_round_records_a_real_round_and_issues_credentials(db, m
         int(token, 16)  # raises ValueError if not hex
 
 
-def test_dispatch_review_round_is_a_new_round_on_a_second_call(db, monkeypatch):
+def test_dispatch_review_round_is_idempotent_on_an_unchanged_commit(db, monkeypatch):
+    """A retried ds_review_dispatch call (the http_mcp connector's old 30s read timeout
+    against a Docker build that legitimately takes minutes) must not stack a second
+    round, rebuild the image, or mint credentials nobody will ever collect -- the exact
+    bug this test used to assert WAS the correct behavior."""
+    from core.gates import lane_sandbox
+
+    build_calls = []
+    monkeypatch.setattr(lane_sandbox, "docker_available", _up)
+    monkeypatch.setattr(lane_sandbox, "resolve_sha", lambda ref, *, repo_root: "a" * 40)
+
+    def _build(sha, *, repo_root):
+        build_calls.append(sha)
+        return "ds-review:fake"
+
+    monkeypatch.setattr(lane_sandbox, "build_image", _build)
+
+    first = dispatch_review_round(WO_ID, repo_root=REPO_ROOT, db_path=db)
+    second = dispatch_review_round(WO_ID, repo_root=REPO_ROOT, db_path=db)
+    assert second["round"] == first["round"]
+    assert second["already_dispatched"] is True
+    assert second["credentials"] == {}
+    assert len(build_calls) == 1, "the retry must not rebuild the image"
+
+
+def test_dispatch_review_round_force_new_round_mints_a_fresh_one(db, monkeypatch):
     from core.gates import lane_sandbox
 
     monkeypatch.setattr(lane_sandbox, "docker_available", _up)
@@ -188,8 +214,9 @@ def test_dispatch_review_round_is_a_new_round_on_a_second_call(db, monkeypatch):
     monkeypatch.setattr(lane_sandbox, "build_image", lambda sha, *, repo_root: "ds-review:fake")
 
     first = dispatch_review_round(WO_ID, repo_root=REPO_ROOT, db_path=db)
-    second = dispatch_review_round(WO_ID, repo_root=REPO_ROOT, db_path=db)
+    second = dispatch_review_round(WO_ID, repo_root=REPO_ROOT, db_path=db, force_new_round=True)
     assert second["round"] == first["round"] + 1
+    assert "already_dispatched" not in second
     # A fresh round issues fresh credentials -- the old ones are not reusable.
     if first["credentials"] and second["credentials"]:
         first_reviewer = next(iter(first["credentials"]))
@@ -518,9 +545,29 @@ def test_two_reviewers_answers_coexist(db):
 # ── the dispatch ────────────────────────────────────────────────────────────
 
 
-def test_each_dispatch_is_a_new_round(db):
+def test_a_second_identical_dispatch_is_idempotent(db):
+    first = _dispatch(db)
+    second = _dispatch(db)
+    assert first["round"] == 1
+    assert second["round"] == 1
+    assert second["already_dispatched"] is True
+    assert second["credentials"] == {}
+
+
+def test_force_new_round_mints_a_new_round_even_when_unchanged(db):
     assert _dispatch(db)["round"] == 1
-    assert _dispatch(db)["round"] == 2
+    forced = record_dispatch(
+        WO_ID,
+        sha="a" * 40,
+        image=IMAGE,
+        change_set=["x.py"],
+        assignments=[{"reviewer": REVIEWER, "seat": "Claim integrity", "lanes": LANES}],
+        db_path=db,
+        ownership=OWNED,
+        force_new_round=True,
+    )
+    assert forced["round"] == 2
+    assert "already_dispatched" not in forced
 
 
 def test_an_open_finding_is_carried_into_the_next_round_even_off_scope(db):
@@ -1000,7 +1047,11 @@ def test_a_later_cannot_tell_does_not_clear_a_finding(db):
     """Found probing round three's sibling: "I could not tell" displaced the finding and the
     work order unblocked. It is recorded against the lane, and the finding stays open."""
     _open_a_finding(db)
-    _dispatch(db)
+    # force_new_round=True: lane-one is already in this dispatch's own slot (LANES), so
+    # a finding on it changes nothing record_dispatch would resolve differently --
+    # redispatching it is correctly idempotent now. A deliberate new round is what this
+    # test needs to set up "a LATER round's cannot-tell", not what happens by default.
+    _dispatch(db, force_new_round=True)
     _record(db, REVIEWER, [{"lane": "lane-one", "verdict": "cannot-tell", "why": "could not see"}])
     [still] = open_findings(WO_ID, db_path=db)
     assert still["lane"] == "lane-one" and still["cannot_tell_rounds"] == [2]
