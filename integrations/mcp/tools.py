@@ -94,6 +94,28 @@ def _project_create(
     return result
 
 
+def _milestone_create(
+    *,
+    project_id: str,
+    title: str,
+    identity: Identity,
+    description: str = "",
+    order_index: int = 0,
+    dream_studio_home: Path | None = None,
+) -> Any:
+    from core.milestones.mutations import create_milestone
+
+    return create_milestone(
+        project_id=project_id,
+        title=title,
+        description=description,
+        order_index=order_index,
+        source_root=REPO_ROOT,
+        dream_studio_home=dream_studio_home,
+        actor=identity.name,
+    )
+
+
 def _work_order_list(
     *,
     project_id: str | None = None,
@@ -322,6 +344,31 @@ def _work_order_close(
     )
 
 
+def _work_order_advance(
+    *,
+    work_order_id: str,
+    to: str,
+    identity: Identity,
+    note: str | None = None,
+    dream_studio_home: Path | None = None,
+) -> Any:
+    """The other half of ds_work_order_close: `to="pushed"`/`"ci_issues"` are the only
+    phases close() accepts from, and nothing upstream of this tool could ever move a
+    work order into either one. `to="in_review"` is included too since it is the same
+    one `advance_work_order` function and the step before pushed on the only path
+    there -- not a judgment call split across three tools for one transition."""
+    from core.work_orders.mutations import advance_work_order
+
+    return advance_work_order(
+        work_order_id=work_order_id,
+        to=to,
+        note=note,
+        source_root=REPO_ROOT,
+        dream_studio_home=dream_studio_home,
+        actor=identity.name,
+    )
+
+
 def _skill_list(*, pack_filter: str | None = None, dream_studio_home: Path | None = None) -> Any:
     from core.skills.queries import list_skills
 
@@ -431,6 +478,30 @@ TOOLS: list[Tool] = [
         required_capability="project:create",
     ),
     Tool(
+        name="ds_milestone_create",
+        description=(
+            "Create a milestone under an existing project -- the thing work orders "
+            "file under; ds_work_order_create requires a milestone_id and does not "
+            "create one itself. description must say what the milestone is for and "
+            "delivers (at least 50 characters): every work order beneath it derives "
+            "its own goal from this prompt, the same floor ds_work_order_create's own "
+            "description holds. Requires milestone:create. The calling client's name "
+            "is recorded on the emitted event's trace."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string"},
+                "title": {"type": "string"},
+                "description": {"type": "string"},
+                "order_index": {"type": "integer", "description": "Sequence hint (advisory)."},
+            },
+            "required": ["project_id", "title", "description"],
+        },
+        handler=_milestone_create,
+        required_capability="milestone:create",
+    ),
+    Tool(
         name="ds_work_order_list",
         description=(
             "List work orders, optionally filtered by project and/or status "
@@ -538,6 +609,33 @@ TOOLS: list[Tool] = [
         },
         handler=_work_order_close,
         required_capability="work_order:close",
+    ),
+    Tool(
+        name="ds_work_order_advance",
+        description=(
+            "Move a work order to 'in_review', 'pushed', or 'ci_issues' -- the other "
+            "half of ds_work_order_close: close only accepts 'pushed' or 'ci_issues', "
+            "and nothing else moves a work order into either one. Refuses out-of-order "
+            "phase moves (phases run created -> in_progress -> in_review -> pushed -> "
+            "ci_issues -> closed) and refuses 'pushed' while the review still holds the "
+            "work order (no dispatch, an unanswered lane, or an open finding -- see "
+            "ds_review_status). Requires work_order:advance. The calling client's name "
+            "is recorded on the emitted event's trace."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "work_order_id": {"type": "string"},
+                "to": {"type": "string", "enum": ["in_review", "pushed", "ci_issues"]},
+                "note": {
+                    "type": "string",
+                    "description": "What is being handed over, or the PR/run this refers to.",
+                },
+            },
+            "required": ["work_order_id", "to"],
+        },
+        handler=_work_order_advance,
+        required_capability="work_order:advance",
     ),
     Tool(
         name="ds_review_status",

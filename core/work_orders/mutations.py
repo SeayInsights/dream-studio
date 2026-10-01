@@ -426,6 +426,7 @@ def advance_work_order(
     source_root: Path,
     dream_studio_home: Path | None = None,
     note: str | None = None,
+    actor: str | None = None,
 ) -> dict[str, Any]:
     """Move a work order to `in_review`, `pushed` or `ci_issues`.
 
@@ -437,6 +438,10 @@ def advance_work_order(
     refused only terminal statuses, so a work order went created -> pushed in one command
     and its review phase was decorative. A terminal work order is still refused -- moving
     one would quietly reopen it, and `work_order.reopened` exists to say that out loud.
+
+    ``actor``, when given, is an MCP client's name -- see ``start_task``'s docstring for
+    why it is not ``session_id`` and lands in the emitted event's ``trace.mcp_client``
+    instead.
     """
     if to not in _ADVANCE_EVENTS:
         return {
@@ -546,6 +551,7 @@ def advance_work_order(
                     "work_order_id": work_order_id,
                     "project_id": project_id,
                     "attribution_status": "fully_attributed",
+                    **({"mcp_client": actor} if actor else {}),
                 },
             ).to_dict()
         )

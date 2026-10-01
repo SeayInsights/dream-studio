@@ -42,6 +42,7 @@ def create_milestone(
     order_index: int = 0,
     source_root: Path,
     dream_studio_home: Path | None = None,
+    actor: str | None = None,
 ) -> dict[str, Any]:
     """Insert a new milestone row for a project.
 
@@ -53,6 +54,10 @@ def create_milestone(
     or on missing project::
 
         {"ok": False, "error": "Project not found: <id>"}
+
+    ``actor``, when given, is an MCP client's name -- see
+    ``core.work_orders.mutations.start_task``'s docstring for why it is not
+    ``session_id`` and lands in the emitted event's ``trace.mcp_client`` instead.
     """
 
     # A MILESTONE IS A PROMPT, like the work orders and tasks beneath it. The
@@ -112,6 +117,7 @@ def create_milestone(
                     "project_id": project_id,
                     "milestone_id": milestone_id,
                     "attribution_status": "fully_attributed",
+                    **({"mcp_client": actor} if actor else {}),
                 },
             ).to_dict()
         )

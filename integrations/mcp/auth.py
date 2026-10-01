@@ -41,15 +41,17 @@ from typing import Any
 TOKEN_FILENAME = "mcp-token.json"
 SCHEMA_VERSION = 2
 
-#: Reserved now, consumed by no tool yet (every tool in tools.py is still read-only,
-#: required_capability=None). Provisioning a client against this set ahead of the
-#: tools that will need it means adding one of those tools later needs no further CLI
-#: or auth.py change -- just a new Tool(required_capability=...) entry.
+#: Every mutation tool in tools.py declares one of these as its required_capability.
+#: A client can be provisioned against a capability before the tool that needs it
+#: exists -- adding that tool later needs no further CLI or auth.py change, just a
+#: new Tool(required_capability=...) entry.
 KNOWN_CAPABILITIES = frozenset(
     {
         "work_order:task_mutate",
         "work_order:close",
         "work_order:create",
+        "work_order:advance",
+        "milestone:create",
         "project:create",
         "review:dispatch",
         "review:run",
