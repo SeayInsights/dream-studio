@@ -181,6 +181,73 @@ def test_dispatch_review_round_records_a_real_round_and_issues_credentials(db, m
         int(token, 16)  # raises ValueError if not hex
 
 
+def test_dispatch_review_round_builds_the_lane_image_from_the_work_orders_own_project(
+    db, monkeypatch, tmp_path
+):
+    """The bug, reported directly: ds_review_dispatch built a container whose
+    /workspace was Dream Studio's own repo for a work order belonging to a DIFFERENT
+    project -- no git repository inside it at all for that project's code, so every
+    finding would be about the wrong codebase. The fixture's own project_path IS
+    tmp_path (see the `db` fixture above) -- that must be what resolve_sha/build_image
+    receive, not REPO_ROOT, even though REPO_ROOT is still what convene()'s REGISTRY
+    lookup gets (canonical/review_lanes.yml has no equivalent under tmp_path)."""
+    from core.gates import lane_sandbox
+
+    captured_sha_root = {}
+    captured_build_root = {}
+    captured_convene_kwargs = {}
+
+    monkeypatch.setattr(lane_sandbox, "docker_available", _up)
+
+    def _fake_resolve_sha(ref, *, repo_root):
+        captured_sha_root["repo_root"] = repo_root
+        return "a" * 40
+
+    def _fake_build_image(sha, *, repo_root):
+        captured_build_root["repo_root"] = repo_root
+        return "ds-review:fake"
+
+    monkeypatch.setattr(lane_sandbox, "resolve_sha", _fake_resolve_sha)
+    monkeypatch.setattr(lane_sandbox, "build_image", _fake_build_image)
+
+    from core.gates.round_table import convene as _real_convene
+
+    def _spy_convene(**kwargs):
+        captured_convene_kwargs.update(kwargs)
+        return _real_convene(**kwargs)
+
+    monkeypatch.setattr("core.gates.round_table.convene", _spy_convene)
+
+    doc = dispatch_review_round(WO_ID, repo_root=REPO_ROOT, db_path=db)
+
+    assert captured_sha_root["repo_root"] == tmp_path
+    assert captured_build_root["repo_root"] == tmp_path
+    assert captured_convene_kwargs["repo_root"] == REPO_ROOT
+    assert captured_convene_kwargs["change_root"] == tmp_path
+    assert doc["stored"] is True
+
+
+def test_dispatch_review_round_raises_clearly_when_no_project_root_resolves(db, monkeypatch):
+    """A declared project_path that does not exist on disk must refuse with a clear
+    reason, not silently fall back to reviewing Dream Studio's own tree -- the exact
+    substitution the reported bug made."""
+    from core.gates import lane_sandbox
+
+    monkeypatch.setattr(lane_sandbox, "docker_available", _up)
+    conn = sqlite3.connect(str(db))
+    try:
+        conn.execute(
+            "UPDATE business_projects SET project_path = ? WHERE project_id = ?",
+            (str(Path(str(db)).parent / "does-not-exist"), PROJECT_ID),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    with pytest.raises(RuntimeError, match="no reviewable project root"):
+        dispatch_review_round(WO_ID, repo_root=REPO_ROOT, db_path=db)
+
+
 def test_dispatch_review_round_is_idempotent_on_an_unchanged_commit(db, monkeypatch):
     """A retried ds_review_dispatch call (the http_mcp connector's old 30s read timeout
     against a Docker build that legitimately takes minutes) must not stack a second
