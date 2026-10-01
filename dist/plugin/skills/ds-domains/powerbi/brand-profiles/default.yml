@@ -1,0 +1,66 @@
+# Default neutral brand profile. Shape and field meanings documented in
+# ../brand-profile.md. Use this profile when no engagement-specific brand
+# profile has been supplied — never edit this file to carry a real client's
+# identity. To brand an engagement, copy this file to a new path (e.g. a
+# per-engagement workspace) and fill in that engagement's values instead.
+
+name: "Default Neutral"
+
+palette:
+  primary:
+    - role: default_text
+      hex: "#1F2933"
+    - role: primary_series
+      hex: "#1F2933"
+    - role: accent_selected
+      hex: "#2E6FDB"
+    - role: series_3
+      hex: "#5B7BA6"
+    - role: series_4
+      hex: "#8AA0BF"
+
+  secondary:
+    - role: divider
+      hex: "#D7DEE5"
+    - role: background_alt
+      hex: "#F4F6F8"
+    - role: row_alternate
+      hex: "#EDF1F4"
+
+  accent:
+    sentiment_policy: neutral
+    positive: null
+    negative: null
+    attention: "#2E6FDB"
+
+typography:
+  font_family: "Segoe UI"
+  roles:
+    title:    { size: 32, weight: "bold" }
+    header:   { size: 14, weight: "semibold" }
+    callout:  { size: 22, weight: "bold" }
+    label:    { size: 11, weight: "regular" }
+    footnote: { size: 9,  weight: "italic" }
+
+logo:
+  variants:
+    # Empty on purpose — the active engagement supplies its own logo assets.
+    # Never commit a real logo path here; see brand-profile.md "Never bundle
+    # client assets".
+    full_color: ""
+    white: ""
+    on_dark: ""
+  selection_rule: >
+    Light or neutral page background -> full_color. Dark or saturated
+    brand-color background -> white (or on_dark if supplied separately).
+
+page_chrome:
+  logo_position: "top-left"
+  refresh_indicator_position: "top-right"
+  footnote_style: "footer band, italic, footnote-size, divider-color text"
+
+theme_file: "brand-profiles/default-theme.json"
+
+decision_rules:
+  - "White-label client deliverable: use the client's own theme instead of the active profile."
+  - "One-off accent moment explicitly requested by the user: apply at the visual level only — never promote into theme defaults."

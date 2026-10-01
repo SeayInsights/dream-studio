@@ -1,0 +1,14 @@
+{
+  "name": "Default Neutral",
+  "dataColors": [
+    "#1F2933",
+    "#2E6FDB",
+    "#5B7BA6",
+    "#8AA0BF",
+    "#B7C4D6",
+    "#D7DEE5"
+  ],
+  "background": "#FFFFFF",
+  "foreground": "#1F2933",
+  "tableAccent": "#2E6FDB"
+}
