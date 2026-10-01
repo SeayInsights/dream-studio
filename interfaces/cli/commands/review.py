@@ -31,6 +31,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from interfaces.cli.cli_utils import _print
+
 GH_TIMEOUT_SECONDS = 60
 
 
@@ -139,6 +141,47 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
             " lane, or an open finding. Exits 1 while it blocks."
         ),
     )
+    loop.add_argument(
+        "--set-seat-provider",
+        dest="set_seat_provider",
+        metavar="SEAT",
+        default=None,
+        help=(
+            "Pin SEAT to a different tool than the rest of the install (with"
+            " --provider), optionally overriding its model (--model) and reasoning"
+            " effort (--effort). Convenes nothing; stores the pin in config.json for"
+            " the next `ds integrate install` to read."
+        ),
+    )
+    loop.add_argument(
+        "--clear-seat-provider",
+        dest="clear_seat_provider",
+        metavar="SEAT",
+        default=None,
+        help="Remove SEAT's pin, if any. A no-op if it had none.",
+    )
+    loop.add_argument(
+        "--list-seat-providers",
+        dest="list_seat_providers",
+        action="store_true",
+        help="List every seat's pinned provider/model/effort override.",
+    )
+
+    review_cmd.add_argument(
+        "--provider",
+        default=None,
+        help="With --set-seat-provider: the tool id to pin the seat to (or claude_code).",
+    )
+    review_cmd.add_argument(
+        "--model",
+        default=None,
+        help="With --set-seat-provider: canonical model alias override (haiku/sonnet/opus/inherit).",
+    )
+    review_cmd.add_argument(
+        "--effort",
+        default=None,
+        help="With --set-seat-provider: reasoning-effort override, if the provider declares any.",
+    )
 
     review_cmd.add_argument(
         "--reviewer", default=None, help="With --record: the reviewer whose answers these are."
@@ -229,6 +272,19 @@ def dispatch(
         return 2
 
     db_path = _db_path(source_root, dream_studio_home)
+    # Seat-provider pins are a standing config preference, not a question about any one
+    # change set or work order -- they convene nothing, same as the doors below.
+    if getattr(args, "set_seat_provider", None):
+        return _set_seat_provider(args)
+    if getattr(args, "clear_seat_provider", None):
+        from core.config import seat_providers
+
+        seat_providers.clear_seat_provider(args.clear_seat_provider)
+        return _print({"ok": True, "cleared": args.clear_seat_provider})
+    if getattr(args, "list_seat_providers", None):
+        from core.config import seat_providers
+
+        return _print({"ok": True, "seat_providers": seat_providers.all_seat_providers()})
     # The doors about a review that already happened convene nothing: convening the bench
     # to answer them would be a report about one change set wearing another's questions.
     if getattr(args, "record", None):
@@ -296,7 +352,36 @@ def _companion_flags(args: argparse.Namespace) -> str | None:
         return f"--{needs_wo[0]} needs --work-order"
     if getattr(args, "record", None) and not getattr(args, "reviewer", None):
         return "--record needs --reviewer"
+    if getattr(args, "provider", None) and not getattr(args, "set_seat_provider", None):
+        return "--provider only means something with --set-seat-provider"
+    if getattr(args, "model", None) and not getattr(args, "set_seat_provider", None):
+        return "--model only means something with --set-seat-provider"
+    if getattr(args, "effort", None) and not getattr(args, "set_seat_provider", None):
+        return "--effort only means something with --set-seat-provider"
+    if getattr(args, "set_seat_provider", None) and not getattr(args, "provider", None):
+        return "--set-seat-provider needs --provider"
     return None
+
+
+def _set_seat_provider(args: argparse.Namespace) -> int:
+    from core.config import seat_providers
+
+    try:
+        seat_providers.set_seat_provider(
+            args.set_seat_provider,
+            provider=args.provider,
+            model=args.model,
+            effort=args.effort,
+        )
+    except (ValueError, KeyError) as exc:
+        return _print({"ok": False, "error": str(exc).replace('"', "")})
+    return _print(
+        {
+            "ok": True,
+            "seat": args.set_seat_provider,
+            "pin": seat_providers.get_seat_provider(args.set_seat_provider),
+        }
+    )
 
 
 def _db_path(source_root: Path, dream_studio_home: Path | None) -> Path:

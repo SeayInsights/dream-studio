@@ -10,11 +10,23 @@ from __future__ import annotations
 
 import argparse
 import subprocess
+from pathlib import Path
 from unittest import mock
 
 import pytest
 
 from interfaces.cli.commands import review as review_cmd
+
+
+@pytest.fixture
+def isolated_home(tmp_path, monkeypatch):
+    """Seat-provider pins live in config.json -- isolate it the same way
+    tests/integration/test_state.py does for every other config.json test."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
+    return tmp_path
 
 
 def _args(**overrides) -> argparse.Namespace:
@@ -26,6 +38,9 @@ def _args(**overrides) -> argparse.Namespace:
         "all_seats": False,
         "no_detectors": True,
         "json": True,
+        "provider": None,
+        "model": None,
+        "effort": None,
     }
     base.update(overrides)
     return argparse.Namespace(**base)
@@ -145,3 +160,73 @@ def test_a_failing_report_exits_one():
     with mock.patch("core.gates.round_table.convene", return_value={"status": "fail", "lanes": []}):
         rc = review_cmd.dispatch(_args(), source_root=None, dream_studio_home=None)
     assert rc == 1
+
+
+# ── seat-provider pins: convene nothing, store a config.json preference ─────
+
+
+def test_set_seat_provider_stores_a_pin(isolated_home, capsys):
+    with mock.patch("core.gates.round_table.convene") as convened:
+        rc = review_cmd.dispatch(
+            _args(set_seat_provider="security-review", provider="codex", model="opus"),
+            source_root=None,
+            dream_studio_home=None,
+        )
+    assert rc == 0
+    assert not convened.called, "a standing config preference convened the bench"
+    from core.config import seat_providers
+
+    assert seat_providers.get_seat_provider("security-review") == {
+        "provider": "codex",
+        "model": "opus",
+    }
+
+
+def test_set_seat_provider_without_provider_is_refused(capsys):
+    rc = review_cmd.dispatch(
+        _args(set_seat_provider="security-review"), source_root=None, dream_studio_home=None
+    )
+    assert rc == 2
+    assert "--set-seat-provider needs --provider" in capsys.readouterr().err
+
+
+def test_provider_flag_without_set_seat_provider_is_refused(capsys):
+    rc = review_cmd.dispatch(_args(provider="codex"), source_root=None, dream_studio_home=None)
+    assert rc == 2
+    assert "--provider only means something with --set-seat-provider" in capsys.readouterr().err
+
+
+def test_set_seat_provider_unknown_provider_is_reported_not_raised(isolated_home, capsys):
+    rc = review_cmd.dispatch(
+        _args(set_seat_provider="security-review", provider="not-a-real-tool"),
+        source_root=None,
+        dream_studio_home=None,
+    )
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert '"ok": false' in out.lower()
+    from core.config import seat_providers
+
+    assert seat_providers.get_seat_provider("security-review") is None
+
+
+def test_clear_seat_provider_removes_a_pin(isolated_home):
+    from core.config import seat_providers
+
+    seat_providers.set_seat_provider("security-review", provider="codex")
+    rc = review_cmd.dispatch(
+        _args(clear_seat_provider="security-review"), source_root=None, dream_studio_home=None
+    )
+    assert rc == 0
+    assert seat_providers.get_seat_provider("security-review") is None
+
+
+def test_list_seat_providers_reports_every_pin(isolated_home, capsys):
+    from core.config import seat_providers
+
+    seat_providers.set_seat_provider("security-review", provider="codex")
+    rc = review_cmd.dispatch(
+        _args(list_seat_providers=True), source_root=None, dream_studio_home=None
+    )
+    assert rc == 0
+    assert "security-review" in capsys.readouterr().out

@@ -87,6 +87,16 @@ class TargetSpec:
     #: string nobody chose, which is the side channel the round table's own per-seat
     #: model field was built to close.
     model_alias_map: dict[CanonicalModelAlias, str] = field(default_factory=dict)
+    #: The reasoning-effort values this tool's own subagent config accepts, or None
+    #: (the default, and every tool's current value) -- not "no such concept exists",
+    #: only "not yet verified against that tool's own docs the same way
+    #: specialist_agent_format and model_alias_map above were". The module docstring's
+    #: own comment on codex names a real, tool-documented "none" value plus a
+    #: per-model floor (astra cannot go below "low") that a flat frozenset here cannot
+    #: represent precisely -- populate this field only once a tool's full effort
+    #: vocabulary is confirmed against its own current docs, and note there whether
+    #: the floor is uniform across every model tier or (like codex) varies by one.
+    effort_levels: frozenset[str] | None = None
 
     def __post_init__(self) -> None:
         if self.supported_scopes is not None:
