@@ -400,6 +400,7 @@ def validate_answers(
         check = str(raw.get("check", "") or "").strip()
         declare = str(raw.get("declare", "") or "").strip()
         resolves_with = str(raw.get("resolves_with", "") or "").strip()
+        environment_gap = str(raw.get("environment_gap", "") or "").strip()
         reproduction = raw.get("reproduction")
 
         if not lane:
@@ -482,6 +483,8 @@ def validate_answers(
         }
         if resolves_with and verdict == "pass":
             entry["resolves_with"] = resolves_with
+        if environment_gap:
+            entry["environment_gap"] = environment_gap
         if isinstance(reproduction, dict):
             entry["reproduction"] = {
                 "command": str(reproduction.get("command", "") or "").strip(),

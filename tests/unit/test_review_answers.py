@@ -335,6 +335,33 @@ def test_declare_is_kept_so_the_route_the_contract_names_is_reachable():
     assert accepted[0]["declare"].startswith("readability")
 
 
+def test_environment_gap_is_kept_when_given():
+    """The CONTRACT asks a reviewer to name what a divergent reproduction environment
+    could not show (release#361's Docker-vs-Deployment-controller miss) -- validate
+    this optional field survives shape-checking the same way declare/resolves_with do,
+    rather than being silently dropped as an unrecognized key."""
+    accepted, _ = _shape(
+        [
+            {
+                "lane": "lane-one",
+                "verdict": "pass",
+                "reproduction": HOLDS,
+                "environment_gap": "ran in plain Docker; no Deployment controller here to"
+                " race kubectl scale against, so this cannot rule out the dump-before-stop"
+                " ordering under a real cluster",
+            }
+        ]
+    )
+    assert accepted[0]["environment_gap"].startswith("ran in plain Docker")
+
+
+def test_environment_gap_is_absent_when_not_given():
+    """Most lanes, most of the time -- an empty/omitted environment_gap must not appear
+    as a stray empty-string key on every stored answer."""
+    accepted, _ = _shape([{"lane": "lane-one", "verdict": "pass", "reproduction": HOLDS}])
+    assert "environment_gap" not in accepted[0]
+
+
 # ── the submission-level refusals ───────────────────────────────────────────
 
 

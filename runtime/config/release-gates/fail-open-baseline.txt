@@ -568,8 +568,8 @@ core/work_orders/escalation.py|468|falsy-return
 core/work_orders/evals_shared.py|167|falsy-return
 core/work_orders/mutations.py|1109|bare-except-pass
 core/work_orders/mutations.py|1116|bare-except-pass
-core/work_orders/mutations.py|1245|bare-except-pass
-core/work_orders/mutations.py|1252|bare-except-pass
+core/work_orders/mutations.py|1251|bare-except-pass
+core/work_orders/mutations.py|1258|bare-except-pass
 core/work_orders/mutations.py|270|bare-except-pass
 core/work_orders/mutations.py|650|bare-except-pass
 core/work_orders/mutations.py|733|bare-except-pass

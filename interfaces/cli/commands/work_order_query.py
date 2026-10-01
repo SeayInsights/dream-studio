@@ -518,82 +518,72 @@ def _work_order_add_task(
 ) -> int:
     """Add a task through the authority. Tasks live in SQLite, never in a document.
 
-    ``create_task`` requires a project id but does not derive one, and it deliberately
-    tolerates a work order that has been emitted but not yet projected. So this reads the
-    project from the work order row when the row is there and asks for ``--project`` when
-    it is not -- rather than refusing, which would reject exactly the just-created work
-    order the mutation goes out of its way to accept.
+    Delegates to `core.work_orders.mutations.add_task` -- the full admission-then-create
+    orchestration (Warden + Surveyor + Herald, then the row write) used to live only
+    here; it is now the one door both this CLI and `ds_work_order_add_task` (MCP) reach,
+    so an MCP-created task is held to the identical gate an operator's own `ds
+    work-order add-task` is. This wrapper's own job shrinks to translating that door's
+    generic, kwarg-spelled messages into the flag-spelled ones an operator at a
+    terminal reads (`--project`, `--why`, `--acceptance`) and printing the NOTED lines
+    an unattended caller has no terminal to show.
     """
-
-    from core.installed_runtime import resolve_installed_runtime_paths
-    from core.work_orders.mutations import create_task
-
-    # ADMISSION RUNS FIRST, before the project lookup. The Warden's lane needs no
-    # database -- whether a criterion is executable is a property of the text -- and
-    # running it after the lookup let 'no such table' answer for a task that was
-    # simply unfilable, reporting the wrong reason to the author. The lanes that DO
-    # need context (boundary, sibling titles) degrade to quiet inside
-    # `_admit_or_report` when the authority cannot be read.
-    # THE ROUND TABLE DECIDES WHETHER THIS MAY BE FILED, before it is filed. This used to
-    # create the task and then print "No executable acceptance criterion. Close cannot
-    # verify this task without one" -- the consequence named exactly, and enforced by
-    # nothing. Measured: 1766 of 3278 tasks in the authority carry no criterion.
-    _admission = _admit_or_report(
-        work_order_id=work_order_id,
-        title=title,
-        description=description,
-        acceptance_criteria=acceptance_criteria,
-        why=why,
-        source_root=source_root,
-        dream_studio_home=dream_studio_home,
-    )
-    if _admission is not None:
-        print(json.dumps(_admission, indent=2))
-        return 1
+    from core.work_orders.mutations import add_task
 
     nl = chr(10)
-    if project_id is None:
-        db_path = resolve_installed_runtime_paths(
-            source_root=source_root, dream_studio_home=dream_studio_home
-        ).sqlite_path
-        from core.work_orders.queries import work_order_project
-
-        project_id = work_order_project(work_order_id, db_path=db_path)
-        if project_id is None:
-            print(
-                json.dumps(
-                    {
-                        "ok": False,
-                        "error": (
-                            f"Work order {work_order_id} is not projected yet, so its "
-                            f"project could not be read. Pass --project <project_id>."
-                        ),
-                    },
-                    indent=2,
-                )
-            )
-            return 1
-
-    # THE DECLARATION IS PERSISTED, not printed and discarded. Found by the
-    # task-criteria-baseline ratchet reporting `0 declared` while a task admitted on a
-    # declared reason sat in the authority: the reason reached stdout and nothing else, so
-    # `--why` was a bare bypass with a nicer spelling. The composing now happens inside
-    # `create_task`, which is where EVERY author arrives -- this door used to compose it
-    # and the mutation did not, so a skill importing the mutation got neither the floor
-    # nor the marker. Passed down rather than applied here, one composer, one caller.
-    result = create_task(
+    result = add_task(
         work_order_id=work_order_id,
-        project_id=project_id,
         title=title,
         description=description,
         acceptance_criteria=acceptance_criteria,
         why=why,
+        project_id=project_id,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
-    print(json.dumps(result, indent=2))
-    if not result.get("ok"):
+
+    if not result.get("ok") and "refusals" in result:
+        # THE ROUND TABLE DECIDED THIS MAY NOT BE FILED. Flag-spelled for the terminal
+        # that reads it -- `add_task`'s own remedy is kwarg-spelled for a programmatic
+        # caller. Measured: 1766 of 3278 tasks in the authority carried no criterion
+        # before this became a refusal rather than a warning after the fact.
+        result["remedy"] = (
+            "add --acceptance with a TEST-CHECK / SQL-CHECK / API-CHECK, or --why"
+            " '<20+ characters saying why this claim cannot be computed>'"
+        )
+        print(json.dumps(result, indent=2))
         return 1
+
+    if not result.get("ok") and "not projected yet" in str(result.get("error", "")):
+        # `add_task` tolerates an unprojected work order the same way `create_task`
+        # itself does; it just cannot derive the project id, so it asks rather than
+        # refusing -- which would reject exactly the just-created work order the
+        # mutation goes out of its way to accept.
+        result["error"] = (
+            f"Work order {work_order_id} is not projected yet, so its project could"
+            " not be read. Pass --project <project_id>."
+        )
+        print(json.dumps(result, indent=2))
+        return 1
+
+    if not result.get("ok"):
+        print(json.dumps(result, indent=2))
+        return 1
+
+    # ADMITTED, AND SAID OUT LOUD -- the same trade the declared-reason branch below
+    # makes visible. An unknown that reaches no surface is a lane whose only effect is
+    # on a path nobody reads, and the operator filing this task is the one person who
+    # can say whether the shared check actually covers both pieces of work.
+    #
+    # Only unknowns that OBSERVED something are printed. The Surveyor's boundary
+    # unknown means "I could not look" and fires on 155 of 175 open work orders;
+    # printing it on every filing would be noise, and noise is how a signal gets
+    # switched off. Keyed on the flag rather than on a seat name, so the surface does
+    # not have to be edited when the roster is.
+    for _unknown in result.pop("unknowns", []) or []:
+        if _unknown.get("observed"):
+            print(f"NOTED ({_unknown['lane']}): {_unknown['reason']}")
+
+    print(json.dumps(result, indent=2))
     if result.get("unverified_claims"):
         print(f"{nl}UNVERIFIED CLAIM: {result['unverified_claims']}")
     if not acceptance_criteria:
@@ -605,102 +595,6 @@ def _work_order_add_task(
             f"{nl}  {' '.join((why or '').split())}"
         )
     return 0
-
-
-def _admit_or_report(
-    *,
-    work_order_id: str,
-    title: str,
-    description: str,
-    acceptance_criteria: str | None,
-    why: str | None,
-    source_root: Path,
-    dream_studio_home: Path | None,
-) -> dict | None:
-    """``None`` when the task may be filed; a printable refusal dict when it may not.
-
-    Reads the work order's own description (for its `Module boundary:` clause) and its
-    sibling task titles, so the Surveyor and Herald lanes have something to judge. A
-    missing or unprojected work order yields no context rather than an error: this is an
-    admission check, and failing to file a task because its work order row has not
-    projected yet would refuse for a reason that has nothing to do with the task.
-    """
-    import sqlite3 as _sqlite3
-
-    from core.installed_runtime import resolve_installed_runtime_paths
-    from core.work_orders.admission import admit_task, paths_named
-
-    wo_description = ""
-    existing_titles: list[str] = []
-    # THE SAME EVIDENCE THE GAP PATH GETS. A lane wired into one of its two writers holds
-    # for whichever writer someone remembered, which is the shape this milestone keeps
-    # paying for -- and this is the writer an OPERATOR uses by hand.
-    existing_criteria: dict[str, str] = {}
-    try:
-        db_path = resolve_installed_runtime_paths(
-            source_root=source_root, dream_studio_home=dream_studio_home
-        ).sqlite_path
-        conn = _sqlite3.connect(str(db_path))
-        try:
-            row = conn.execute(
-                "SELECT description FROM business_work_orders WHERE work_order_id = ?",
-                (work_order_id,),
-            ).fetchone()
-            wo_description = (row[0] if row else "") or ""
-            _rows = conn.execute(
-                "SELECT title, acceptance_criteria, status FROM business_tasks"
-                " WHERE work_order_id = ?",
-                (work_order_id,),
-            ).fetchall()
-            existing_titles = [r[0] or "" for r in _rows]
-            # OPEN tasks only: a criterion carried by finished work is not a second claim
-            # on the same check, and flagging it would report closed work as outstanding.
-            # criterion -> the OPEN task title holding it, so the NOTED line can name the
-            # sibling instead of only quoting the shared check.
-            existing_criteria = {
-                (r[1] or "").strip(): (r[0] or "")
-                for r in _rows
-                if (r[2] or "") in ("pending", "in_progress") and (r[1] or "").strip()
-            }
-        finally:
-            conn.close()
-    except Exception:  # noqa: BLE001 - no context means the lanes that need it stay quiet
-        wo_description, existing_titles, existing_criteria = "", [], {}
-
-    verdict = admit_task(
-        title=title,
-        acceptance_criteria=acceptance_criteria,
-        why=why,
-        work_order_description=wo_description,
-        existing_titles=existing_titles,
-        existing_criteria=existing_criteria,
-        target_paths=paths_named(f"{title} {description}", repo_root=source_root),
-    )
-    if verdict["admitted"]:
-        # ADMITTED, AND SAID OUT LOUD -- the same trade the declared-reason branch below
-        # makes visible. An unknown that reaches no surface is a lane whose only effect is
-        # on a path nobody reads, and the operator filing this task is the one person who
-        # can say whether the shared check actually covers both pieces of work.
-        #
-        # Only unknowns that OBSERVED something are printed. The Surveyor's boundary
-        # unknown means "I could not look" and fires on 155 of 175 open work orders;
-        # printing it on every filing would be noise, and noise is how a signal gets
-        # switched off. Keyed on the flag rather than on a seat name, so the surface does
-        # not have to be edited when the roster is.
-        for _unknown in verdict["unknowns"]:
-            if _unknown.get("observed"):
-                print(f"{chr(10)}NOTED ({_unknown['lane']}): {_unknown['reason']}")
-        return None
-    return {
-        "ok": False,
-        "error": "the round table refused to file this task",
-        "refusals": verdict["refusals"],
-        "unknowns": verdict["unknowns"],
-        "remedy": (
-            "add --acceptance with a TEST-CHECK / SQL-CHECK / API-CHECK, or --why"
-            " '<20+ characters saying why this claim cannot be computed>'"
-        ),
-    }
 
 
 def _work_order_reconcile(
