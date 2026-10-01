@@ -87,16 +87,20 @@ class TargetSpec:
     #: string nobody chose, which is the side channel the round table's own per-seat
     #: model field was built to close.
     model_alias_map: dict[CanonicalModelAlias, str] = field(default_factory=dict)
-    #: The reasoning-effort values this tool's own subagent config accepts, or None
-    #: (the default, and every tool's current value) -- not "no such concept exists",
-    #: only "not yet verified against that tool's own docs the same way
-    #: specialist_agent_format and model_alias_map above were". The module docstring's
-    #: own comment on codex names a real, tool-documented "none" value plus a
-    #: per-model floor (astra cannot go below "low") that a flat frozenset here cannot
-    #: represent precisely -- populate this field only once a tool's full effort
-    #: vocabulary is confirmed against its own current docs, and note there whether
-    #: the floor is uniform across every model tier or (like codex) varies by one.
-    effort_levels: frozenset[str] | None = None
+    #: The reasoning-effort values this tool's own subagent config accepts, ORDERED
+    #: least to most demanding (not a frozenset -- effort_floor_by_model below needs
+    #: to compare positions, not just membership), or None (the default) -- not "no
+    #: such concept exists", only "not yet verified against that tool's own docs the
+    #: same way specialist_agent_format and model_alias_map above were". Populate this
+    #: only once a tool's full effort vocabulary is confirmed against its own current
+    #: docs.
+    effort_levels: tuple[str, ...] | None = None
+    #: A floor narrower than effort_levels' own minimum, for specific model tiers --
+    #: codex's astra (verified against codex's own subagents/model docs, 2026-09)
+    #: cannot drop reasoning effort below "low" the way its luna/sol siblings can.
+    #: Required together with effort_levels (see __post_init__); a tier absent from
+    #: this mapping has no floor narrower than effort_levels' own minimum.
+    effort_floor_by_model: dict[CanonicalModelAlias, str] | None = None
 
     def __post_init__(self) -> None:
         if self.supported_scopes is not None:
@@ -128,6 +132,26 @@ class TargetSpec:
                 f" {self.specialist_agent_format!r} but no model_alias_map -- a seat"
                 " would compile onto a model string nobody chose for this tool"
             )
+        if self.effort_floor_by_model is not None:
+            if not self.effort_levels:
+                raise ValueError(
+                    f"{self.tool_id}: declares effort_floor_by_model but no effort_levels"
+                    " -- a floor is a position within that vocabulary, not a concept on"
+                    " its own"
+                )
+            unknown_models = set(self.effort_floor_by_model) - set(self.model_alias_map)
+            if unknown_models:
+                raise ValueError(
+                    f"{self.tool_id}: effort_floor_by_model names model alias(es)"
+                    f" {sorted(unknown_models)} not in its own model_alias_map"
+                )
+            unknown_floors = set(self.effort_floor_by_model.values()) - set(self.effort_levels)
+            if unknown_floors:
+                raise ValueError(
+                    f"{self.tool_id}: effort_floor_by_model names floor(s)"
+                    f" {sorted(unknown_floors)} not in its own effort_levels"
+                    f" {self.effort_levels}"
+                )
 
 
 # Native-AGENTS.md tools. Most read AGENTS.md at the project root; Cursor reads
@@ -164,6 +188,13 @@ TARGET_SPECS: dict[str, TargetSpec] = {
             "sonnet": "gpt-6-sol",
             "opus": "gpt-6-astra",
         },
+        # Verified against codex's own subagents/model docs, 2026-09: a single ordered
+        # model_reasoning_effort vocabulary spans all three tiers, "none" through "max".
+        # luna and sol can run at any point in it, astra cannot drop below "low" --
+        # the asymmetry effort_floor_by_model exists to express precisely rather than
+        # the coarser "this tool has some effort concept" a flat set would leave it at.
+        effort_levels=("none", "low", "medium", "high", "xhigh", "max"),
+        effort_floor_by_model={"opus": "low"},
     ),
     "gemini_cli": TargetSpec(
         tool_id="gemini_cli",

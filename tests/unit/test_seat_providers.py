@@ -66,10 +66,55 @@ def test_set_seat_provider_unknown_model_alias_raises_for_multitool_target():
 
 
 def test_set_seat_provider_effort_raises_when_tool_declares_none():
-    # No TargetSpec has a populated effort_levels yet (see registry.py's own
-    # comment) -- any effort argument today must raise, not silently accept one.
+    # gemini_cli declares no effort_levels (unverified) -- any effort argument must
+    # raise, not silently accept one.
     with pytest.raises(ValueError, match="declares no effort_levels"):
-        seat_providers.set_seat_provider("security-review", provider="codex", effort="high")
+        seat_providers.set_seat_provider("security-review", provider="gemini_cli", effort="high")
+
+
+def test_set_seat_provider_codex_accepts_a_declared_effort():
+    seat_providers.set_seat_provider("security-review", provider="codex", effort="high")
+    assert seat_providers.get_seat_provider("security-review") == {
+        "provider": "codex",
+        "effort": "high",
+    }
+
+
+def test_set_seat_provider_codex_rejects_an_unknown_effort():
+    with pytest.raises(ValueError, match="unknown effort"):
+        seat_providers.set_seat_provider("security-review", provider="codex", effort="ultra")
+
+
+def test_set_seat_provider_codex_astra_floor_is_enforced_with_an_explicit_model():
+    with pytest.raises(ValueError, match="cannot run below effort 'low'"):
+        seat_providers.set_seat_provider(
+            "security-review", provider="codex", model="opus", effort="none"
+        )
+
+
+def test_set_seat_provider_codex_astra_floor_allows_low_and_above():
+    seat_providers.set_seat_provider(
+        "security-review", provider="codex", model="opus", effort="low"
+    )
+    assert seat_providers.get_seat_provider("security-review") == {
+        "provider": "codex",
+        "model": "opus",
+        "effort": "low",
+    }
+
+
+def test_set_seat_provider_codex_luna_has_no_floor():
+    seat_providers.set_seat_provider(
+        "security-review", provider="codex", model="haiku", effort="none"
+    )
+    assert seat_providers.get_seat_provider("security-review")["effort"] == "none"
+
+
+def test_set_seat_provider_codex_floor_not_enforced_without_an_explicit_model():
+    # Documented, bounded gap: without --model, the floor can't be checked, since it
+    # depends on whichever model this seat resolves to at compile time.
+    seat_providers.set_seat_provider("security-review", provider="codex", effort="none")
+    assert seat_providers.get_seat_provider("security-review")["effort"] == "none"
 
 
 def test_set_seat_provider_effort_raises_for_claude_code():

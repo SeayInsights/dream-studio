@@ -20,7 +20,9 @@ from typing import Any, Literal
 from integrations.compiler.reviewers import (
     project_reviewer_files,
     resolve_agent_names,
+    resolve_seat_assignment,
     reviewer_files,
+    seat_name_for_file,
 )
 from integrations.targets.registry import (
     get_target_spec,
@@ -77,18 +79,29 @@ def _toml_literal_multiline(value: str) -> str:
     return f"'''\n{value}'''"
 
 
-def codex_toml_for_reviewer(body: str) -> str:
+def codex_toml_for_reviewer(
+    body: str, *, model_alias_override: str | None = None, effort: str | None = None
+) -> str:
     """The compiled reviewer's own markdown file, as a Codex custom-agent TOML file.
 
     `body` is the source .md file's full text (frontmatter and all) -- so a caller can
     translate straight from `Path.read_text()`, the same interface
     `translate_reviewer_body` (the md_frontmatter installer's sibling) already uses.
+
+    *model_alias_override*, when given (a pinned seat's own model -- see
+    `core.config.seat_providers`), replaces the file's own baked-in alias. *effort*,
+    when given, adds a fifth `model_reasoning_effort` key -- omitted entirely without
+    one, so an unpinned seat's TOML is byte-identical to before this parameter existed.
     """
     fields, instructions = _split_frontmatter(body)
     for required in ("name", "description"):
         if not fields.get(required):
             raise ValueError(f"reviewer frontmatter has no `{required}`")
-    alias = fields.get("model", "").strip()
+    alias = (
+        model_alias_override
+        if model_alias_override is not None
+        else fields.get("model", "").strip()
+    )
     if not alias:
         raise ValueError("reviewer frontmatter has no `model` to translate")
     model = translate_model("codex", alias)
@@ -97,8 +110,10 @@ def codex_toml_for_reviewer(body: str) -> str:
         f"name = {_toml_basic_string(fields['name'])}",
         f"description = {_toml_basic_string(fields['description'])}",
         f"model = {_toml_basic_string(model)}",
-        f"developer_instructions = {_toml_literal_multiline(instructions)}",
     ]
+    if effort is not None:
+        lines.append(f"model_reasoning_effort = {_toml_basic_string(effort)}")
+    lines.append(f"developer_instructions = {_toml_literal_multiline(instructions)}")
     return "\n".join(lines) + "\n"
 
 
@@ -130,6 +145,8 @@ class CodexAgentsInstaller:
         self.target_dir = specialist_agents_target_path(
             "codex", project_root=self.project_root, home=self.home, scope=scope
         )
+        # See SpecialistAgentsInstaller._explicit -- same meaning, same reason.
+        self._explicit = agents is not None
         if agents is not None:
             self._files = resolve_agent_names(agents, repo_root=self.project_root)
         else:
@@ -148,12 +165,29 @@ class CodexAgentsInstaller:
             # dry-run reporting only written: [] does not answer what a dry-run is for.
             "files": [f"{f.stem}.toml" for f in self._files],
             "written": [],
+            # See SpecialistAgentsInstaller.install()'s "skipped" -- same meaning.
+            "skipped": [],
         }
-        if mode != "execute":
-            return result
-        self.target_dir.mkdir(parents=True, exist_ok=True)
+        if mode == "execute":
+            self.target_dir.mkdir(parents=True, exist_ok=True)
         for src in self._files:
-            toml_text = codex_toml_for_reviewer(src.read_text(encoding="utf-8"))
+            seat = seat_name_for_file(src, repo_root=self.project_root)
+            provider, model_override, effort_override = resolve_seat_assignment(seat, "codex")
+            if provider != "codex" and not self._explicit:
+                result["skipped"].append({"seat": seat, "file": src.name, "pinned_to": provider})
+                continue
+            if mode != "execute":
+                continue
+            # The pin's effort only applies when codex is this seat's actual
+            # (possibly pin-overridden) provider -- see resolve_seat_assignment's
+            # docstring on why effort never carries across an explicit-agents
+            # override onto a different tool.
+            effort = effort_override if provider == "codex" else None
+            toml_text = codex_toml_for_reviewer(
+                src.read_text(encoding="utf-8"),
+                model_alias_override=model_override,
+                effort=effort,
+            )
             out_name = f"{src.stem}.toml"
             (self.target_dir / out_name).write_text(toml_text, encoding="utf-8")
             result["written"].append(out_name)

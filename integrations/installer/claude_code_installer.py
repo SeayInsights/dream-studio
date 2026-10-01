@@ -17,7 +17,14 @@ from integrations.compiler.claude_code import (
     compile_pack,
     merge_claude_md,
 )
-from integrations.compiler.reviewers import PREFIX, project_reviewer_files, resolve_agent_names
+from integrations.compiler.reviewers import (
+    PREFIX,
+    project_reviewer_files,
+    resolve_agent_names,
+    resolve_seat_assignment,
+    seat_name_for_file,
+    set_model_alias,
+)
 from integrations.installer.base import FileOp, FileOpPlan, InstallerBase, RefusalError
 from integrations.installer.file_ops import atomic_copy, atomic_write, backup_before_write
 from integrations.manifest import (
@@ -339,8 +346,21 @@ class ClaudeCodeInstaller(InstallerBase):
                     and agent_file.name not in self._allowed_reviewer_names
                 ):
                     continue
-                rel = agent_file.relative_to(agents_src_dir)
                 content = agent_file.read_text(encoding="utf-8")
+                if agent_file.name.startswith(PREFIX):
+                    # A pinned seat (core.config.seat_providers) routes to a
+                    # different provider -- see SpecialistAgentsInstaller's own
+                    # "skipped"/model_alias_override for the identical reasoning,
+                    # applied here to Claude Code's own native install path.
+                    seat = seat_name_for_file(agent_file, repo_root=self.git_repo_root)
+                    provider, model_override, _effort_override = resolve_seat_assignment(
+                        seat, "claude_code"
+                    )
+                    if provider != "claude_code" and self._allowed_reviewer_names is None:
+                        continue
+                    if model_override is not None:
+                        content = set_model_alias(content, model_override)
+                rel = agent_file.relative_to(agents_src_dir)
                 target = self.config_root / "agents" / rel
                 ops.append(
                     FileOp(
@@ -366,7 +386,15 @@ class ClaudeCodeInstaller(InstallerBase):
                     and project_file.name not in self._allowed_reviewer_names
                 ):
                     continue
+                seat = seat_name_for_file(project_file, repo_root=self.git_repo_root)
+                provider, model_override, _effort_override = resolve_seat_assignment(
+                    seat, "claude_code"
+                )
+                if provider != "claude_code" and self._allowed_reviewer_names is None:
+                    continue
                 content = project_file.read_text(encoding="utf-8")
+                if model_override is not None:
+                    content = set_model_alias(content, model_override)
                 target = self.config_root / "agents" / project_file.name
                 ops.append(
                     FileOp(

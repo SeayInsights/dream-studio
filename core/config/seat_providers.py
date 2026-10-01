@@ -51,7 +51,16 @@ def _validate_model(provider: str, model: str) -> None:
     translate_model(provider, model)  # raises KeyError/ValueError naming what's wrong
 
 
-def _validate_effort(provider: str, effort: str) -> None:
+def _validate_effort(provider: str, model: str | None, effort: str) -> None:
+    """Raises naming what's wrong. *model*, when given in the SAME pin, additionally
+    enforces that provider's per-model effort floor (see TargetSpec.effort_floor_by_model)
+    -- codex's astra cannot run below "low" the way its luna/sol siblings can. Without an
+    explicit *model*, only membership in the tool's own effort_levels is checked: the
+    floor is a property of the MODEL this seat ends up on, and a pin that leaves model
+    unset defers that resolution to _model_for_seat() at compile time, not here -- this
+    is a deliberately bounded gap, not a silent one: pin --model alongside --effort to
+    get the precise check.
+    """
     if provider == _CLAUDE_CODE:
         raise ValueError("claude_code has no reasoning-effort concept for a seat to pin")
     from integrations.targets.registry import get_target_spec
@@ -65,8 +74,15 @@ def _validate_effort(provider: str, effort: str) -> None:
         )
     if effort not in spec.effort_levels:
         raise ValueError(
-            f"{provider}: unknown effort {effort!r}; valid: {sorted(spec.effort_levels)}"
+            f"{provider}: unknown effort {effort!r}; valid: {list(spec.effort_levels)}"
         )
+    if model is not None and spec.effort_floor_by_model:
+        floor = spec.effort_floor_by_model.get(model)
+        if floor is not None and spec.effort_levels.index(effort) < spec.effort_levels.index(floor):
+            raise ValueError(
+                f"{provider}: model {model!r} cannot run below effort {floor!r}"
+                f" (asked for {effort!r})"
+            )
 
 
 def get_seat_provider(seat: str) -> dict[str, Any] | None:
@@ -95,7 +111,7 @@ def set_seat_provider(
     if model is not None:
         _validate_model(provider, model)
     if effort is not None:
-        _validate_effort(provider, effort)
+        _validate_effort(provider, model, effort)
 
     cfg = read_config()
     seats = dict(cfg.get(_KEY, {}))
