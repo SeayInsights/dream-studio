@@ -644,6 +644,83 @@ def test_project_create_succeeds_and_carries_registered_by(bootstrapped_home):
     assert payload["registered_by"] == "fulcrum"
 
 
+def test_milestone_create_denies_an_identity_without_the_capability(bootstrapped_home):
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_milestone_create",
+                "arguments": {"project_id": "proj-1", "title": "m", "description": "x" * 60},
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="reader-only", capabilities=frozenset({"review:run"})),
+    )
+    assert resp["error"]["code"] == -32001
+
+
+def test_milestone_create_succeeds_and_attributes_the_emitted_event(bootstrapped_home, monkeypatch):
+    captured = []
+    import spool.writer as _writer
+
+    monkeypatch.setattr(
+        _writer, "write_event", lambda envelope, root=None: captured.append(envelope)
+    )
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_milestone_create",
+                "arguments": {
+                    "project_id": "proj-1",
+                    "title": "A milestone",
+                    "description": "x" * 60,
+                },
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="fulcrum", capabilities=frozenset({"milestone:create"})),
+    )
+    assert resp["result"]["isError"] is False
+    payload = json.loads(resp["result"]["content"][0]["text"])
+    assert payload["ok"] is True
+    assert payload["project_id"] == "proj-1"
+    created_events = [e for e in captured if e["event_type"] == "milestone.created"]
+    assert len(created_events) == 1
+    assert created_events[0]["trace"]["mcp_client"] == "fulcrum"
+
+
+def test_milestone_create_refuses_an_unknown_project(bootstrapped_home):
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_milestone_create",
+                "arguments": {
+                    "project_id": "proj-does-not-exist",
+                    "title": "m",
+                    "description": "x" * 60,
+                },
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="fulcrum", capabilities=frozenset({"milestone:create"})),
+    )
+    assert resp["result"]["isError"] is False
+    payload = json.loads(resp["result"]["content"][0]["text"])
+    assert payload["ok"] is False
+    assert "Project not found" in payload["error"]
+
+
+# ── ds_project_create: idempotency ───────────────────────────────────────────
+
+
 def test_project_create_is_idempotent_on_the_same_project_path(bootstrapped_home, tmp_path):
     args = {"name": "New Project", "project_path": str(tmp_path)}
     identity = auth.Identity(name="fulcrum", capabilities=frozenset({"project:create"}))
@@ -846,6 +923,118 @@ def test_work_order_close_is_never_passed_force_or_skip_verify(bootstrapped_home
     )
     assert captured_kwargs["force"] is False
     assert captured_kwargs["skip_verify"] is False
+
+
+# ── ds_work_order_advance (capability-gated) ────────────────────────────────
+
+
+def test_work_order_advance_denies_an_identity_without_the_capability(bootstrapped_home):
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_work_order_advance",
+                "arguments": {"work_order_id": "wo-real", "to": "in_review"},
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="reader-only", capabilities=frozenset({"review:run"})),
+    )
+    assert resp["error"]["code"] == -32001
+
+
+def test_work_order_advance_succeeds_and_attributes_the_emitted_event(
+    bootstrapped_home, monkeypatch
+):
+    captured = []
+    import spool.writer as _writer
+
+    monkeypatch.setattr(
+        _writer, "write_event", lambda envelope, root=None: captured.append(envelope)
+    )
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_work_order_advance",
+                "arguments": {"work_order_id": "wo-real", "to": "in_review", "note": "handing off"},
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="fulcrum", capabilities=frozenset({"work_order:advance"})),
+    )
+    assert resp["result"]["isError"] is False
+    payload = json.loads(resp["result"]["content"][0]["text"])
+    assert payload["ok"] is True
+    assert payload["status"] == "in_review"
+    events = [e for e in captured if e["event_type"] == "work_order.review_requested"]
+    assert len(events) == 1
+    assert events[0]["trace"]["mcp_client"] == "fulcrum"
+
+
+def test_work_order_advance_refuses_an_out_of_order_move(bootstrapped_home):
+    """The fixture's work order is "in_progress" -- phases run in order, so jumping
+    straight to "pushed" (skipping "in_review") must be refused, not silently honored."""
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_work_order_advance",
+                "arguments": {"work_order_id": "wo-real", "to": "pushed"},
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="fulcrum", capabilities=frozenset({"work_order:advance"})),
+    )
+    assert resp["result"]["isError"] is False
+    payload = json.loads(resp["result"]["content"][0]["text"])
+    assert payload["ok"] is False
+    assert "cannot move to pushed" in payload["error"]
+
+
+def test_work_order_advance_refuses_pushed_while_the_review_still_holds_it(bootstrapped_home):
+    """The other half of ds_work_order_close being reachable at all: this is the ONE
+    place advance_work_order consults the review (core.work_orders.mutations), so a
+    work order cannot reach "pushed" -- and therefore cannot reach ds_work_order_close
+    -- with an undispatched review."""
+    identity = auth.Identity(name="fulcrum", capabilities=frozenset({"work_order:advance"}))
+    to_review = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_work_order_advance",
+                "arguments": {"work_order_id": "wo-real", "to": "in_review"},
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=identity,
+    )
+    assert json.loads(to_review["result"]["content"][0]["text"])["ok"] is True
+
+    to_pushed = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_work_order_advance",
+                "arguments": {"work_order_id": "wo-real", "to": "pushed"},
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=identity,
+    )
+    payload = json.loads(to_pushed["result"]["content"][0]["text"])
+    assert payload["ok"] is False
+    assert "review still holds it" in payload["error"]
 
 
 # ── auth ─────────────────────────────────────────────────────────────────────
@@ -1199,7 +1388,17 @@ def test_every_capability_gated_tool_name_is_forthright_about_it():
     """The flip side of the guard above: a tool that DOES mutate state must not be
     named to look read-only -- required_capability is the enforcement mechanism, but
     the name is what a human skimming tools/list sees first."""
-    mutation_hints = ("start", "done", "close", "dispatch", "run", "record", "mutate", "create")
+    mutation_hints = (
+        "start",
+        "done",
+        "close",
+        "dispatch",
+        "run",
+        "record",
+        "mutate",
+        "create",
+        "advance",
+    )
     for tool in TOOLS:
         if tool.required_capability is None:
             continue
