@@ -1139,6 +1139,7 @@ def create_task(
     carried_from: str | None = None,
     source_root: Path,
     dream_studio_home: Path | None = None,
+    actor: str | None = None,
 ) -> dict[str, Any]:
     """Insert a new task row with status 'pending'.
 
@@ -1159,6 +1160,10 @@ def create_task(
     COMPOSED INTO the description here so the declaration is auditable on the row rather
     than spent at the door. `carried_from` names the task this one is a move of, which is
     the one case the floor cannot apply to -- see below.
+
+    ``actor``, when given, is an MCP client's name -- see ``start_task``'s docstring for
+    why it is not ``session_id`` and lands in the emitted event's ``trace.mcp_client``
+    instead.
     """
 
     # A TASK IS A PROMPT, and its acceptance criterion is how the prompt says it is done.
@@ -1239,6 +1244,7 @@ def create_task(
                     "work_order_id": work_order_id,
                     "task_id": task_id,
                     "attribution_status": "fully_attributed",
+                    **({"mcp_client": actor} if actor else {}),
                 },
             ).to_dict()
         )
@@ -1263,6 +1269,149 @@ def create_task(
     }
     if acceptance_criteria is not None:
         result["acceptance_criteria"] = acceptance_criteria
+    return result
+
+
+def add_task(
+    *,
+    work_order_id: str,
+    title: str,
+    description: str = "",
+    acceptance_criteria: str | None = None,
+    why: str | None = None,
+    project_id: str | None = None,
+    source_root: Path,
+    dream_studio_home: Path | None = None,
+    actor: str | None = None,
+) -> dict[str, Any]:
+    """Admit and create a task under `work_order_id` -- the FULL round-table admission
+    (Warden + Surveyor + Herald), not just `create_task()`'s own Warden-only floor.
+
+    PULLED OUT OF THE CLI DOOR, not written fresh. `interfaces/cli/commands/
+    work_order_query.py`'s `_work_order_add_task`/`_admit_or_report` already did this --
+    read the work order's description and open sibling tasks, run `admit_task()` with
+    that context, then call `create_task()` -- but only the CLI reached it.
+    `ds_work_order_add_task` (MCP) calling `create_task()` directly would give an
+    MCP-created task a THINNER gate than the CLI's own door: the Warden floor
+    (criterion-or-declared-reason) `create_task()` already runs, but not the Surveyor's
+    boundary check or the Herald's duplicate-title/shared-criterion check, both of which
+    need the context only this function gathers. One admission door, reached from both.
+
+    `project_id`, when omitted, is read from the work order row -- tolerating a work
+    order that has been emitted but not yet projected, the same way `create_task()`
+    itself does. Admission's own context (description, sibling titles) degrades to
+    empty when the row cannot be read yet, rather than refusing for a reason that has
+    nothing to do with the task -- the same tolerance the CLI door already extends.
+
+    Returns `create_task()`'s own shape on success, with an added `"unknowns"` key when
+    admission observed something worth surfacing (e.g. the Surveyor could not determine
+    a boundary) -- the CLI prints these as `NOTED (<lane>): <reason>` lines; a caller
+    with no terminal to print to gets them in the response instead. On refusal:
+    `{"ok": False, "error": "the round table refused to file this task", "refusals":
+    [...], "unknowns": [...], "remedy": "..."}`. On an unresolvable project id:
+    `{"ok": False, "error": "Work order <id> is not projected yet..."}`.
+
+    ``actor``, when given, is an MCP client's name -- see ``start_task``'s docstring for
+    why it is not ``session_id``; passed straight through to `create_task()`.
+    """
+    import sqlite3 as _sqlite3
+
+    from core.work_orders.admission import admit_task, paths_named
+
+    # ADMISSION RUNS FIRST, before requiring the authority to even exist. The Warden's
+    # lane needs no database -- whether a criterion is executable is a property of the
+    # text -- so a criterion-less task is refused the same way with no authority at all
+    # as it is against a real one. _require_db() would raise before admission got a
+    # chance to run at all, turning "no authority" into the error instead of "no
+    # criterion" -- caught by test_the_cli_refuses_a_criterion_less_task_without_a_
+    # declared_reason, which runs against a tmp_path with no studio.db. The lanes that
+    # DO need context (boundary, sibling titles) degrade to quiet below, same as they
+    # always have.
+    from interfaces.cli.ds import resolve_installed_runtime_paths as _resolve_paths
+
+    wo_description = ""
+    existing_titles: list[str] = []
+    existing_criteria: dict[str, str] = {}
+    try:
+        _context_db_path = _resolve_paths(
+            source_root=source_root, dream_studio_home=dream_studio_home
+        ).sqlite_path
+        conn = _sqlite3.connect(str(_context_db_path))
+        try:
+            row = conn.execute(
+                "SELECT description FROM business_work_orders WHERE work_order_id = ?",
+                (work_order_id,),
+            ).fetchone()
+            wo_description = (row[0] if row else "") or ""
+            _rows = conn.execute(
+                "SELECT title, acceptance_criteria, status FROM business_tasks"
+                " WHERE work_order_id = ?",
+                (work_order_id,),
+            ).fetchall()
+            existing_titles = [r[0] or "" for r in _rows]
+            existing_criteria = {
+                (r[1] or "").strip(): (r[0] or "")
+                for r in _rows
+                if (r[2] or "") in ("pending", "in_progress") and (r[1] or "").strip()
+            }
+        finally:
+            conn.close()
+    except Exception:
+        wo_description, existing_titles, existing_criteria = "", [], {}
+
+    verdict = admit_task(
+        title=title,
+        acceptance_criteria=acceptance_criteria,
+        why=why,
+        work_order_description=wo_description,
+        existing_titles=existing_titles,
+        existing_criteria=existing_criteria,
+        target_paths=paths_named(f"{title} {description}", repo_root=source_root),
+    )
+    if not verdict["admitted"]:
+        return {
+            "ok": False,
+            "error": "the round table refused to file this task",
+            "refusals": verdict["refusals"],
+            "unknowns": verdict["unknowns"],
+            "remedy": (
+                "pass acceptance_criteria with a TEST-CHECK / SQL-CHECK / API-CHECK"
+                " naming something that exists, or why='<20+ characters saying why this"
+                " claim cannot be computed>'"
+            ),
+        }
+
+    if project_id is None:
+        from core.work_orders.queries import work_order_project
+
+        project_id = work_order_project(
+            work_order_id,
+            db_path=_resolve_paths(
+                source_root=source_root, dream_studio_home=dream_studio_home
+            ).sqlite_path,
+        )
+        if project_id is None:
+            return {
+                "ok": False,
+                "error": (
+                    f"Work order {work_order_id} is not projected yet, so its project"
+                    " could not be read. Pass project_id explicitly."
+                ),
+            }
+
+    result = create_task(
+        work_order_id=work_order_id,
+        project_id=project_id,
+        title=title,
+        description=description,
+        acceptance_criteria=acceptance_criteria,
+        why=why,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+        actor=actor,
+    )
+    if result.get("ok") and verdict["unknowns"]:
+        result["unknowns"] = verdict["unknowns"]
     return result
 
 

@@ -90,6 +90,35 @@ tree** to test something; the container is where experiments happen.
 - The exit code is the whole command's. `cmd | tail` reports `tail`'s, not `cmd`'s — run
   the command plain, or redirect to a file and `cat` it after.
 
+## Before you stop: enumerate, don't sample
+
+Two misses, same shape, both real: platform#1011 found a cloned volume could retake a
+gateway's lease forever, because the reviewer tested the liveness check and never asked
+what happens when the LOSER of a takeover retries — heartbeat checked the lease nonce,
+register did not, and the loop back to register was never walked. A lane whose signature
+names "two sites deciding the same question" is a claim about EVERY such pair in the
+diff, not the first one you notice; stopping there is how the actual pair goes unasked.
+
+So: when a finding concerns a duplicated predicate, a state machine, a lease, or any
+protocol with more than one participant, list every candidate site or every transition
+before you pick one to test — and when you test a state machine, trace at least one full
+cycle, including what happens to the participant that does NOT win the first exchange,
+not just the transition that reads as the "main" path. A `pass` on one instance is not a
+`pass` on the signature; it is a `pass` on the instance you happened to pick.
+
+## Say what your test environment could not show
+
+release#361's dump-before-stop race only exists under a real Deployment controller — the
+rehearsal ran in plain Docker, where nothing restarts a killed pod, so the race literally
+could not reproduce there, and nobody said so. A `pass` from a reproduction that ran
+somewhere structurally different from production is not the same claim as a `pass` from
+production itself; the difference has to be named, not left for the reader to guess at.
+
+So: if the environment you tested in is known to diverge from where this actually runs
+(a container standing in for a real orchestrator's restart/scheduling behavior, a single
+process standing in for a cluster, a mock standing in for a real dependency), say what
+that divergence means for this specific finding in `environment_gap` — see below.
+
 ## What you return
 
 One answer per lane you were dispatched, and nothing else, in an object that carries the
@@ -125,6 +154,12 @@ For each lane:
 - **`declare`** — optional and rare, findings only: why NO executable check could ever
   decide this finding. The task is then filed as a declared claim instead of a checked
   one. It is not a place for the explanation — that goes in `why`.
+- **`environment_gap`** — optional: what differs between the lane container you
+  reproduced this in and where the change actually runs, that could hide a defect your
+  reproduction cannot surface (see "Say what your test environment could not show"
+  above). Leave it empty when nothing about the lane container diverges from production
+  in a way that matters to this finding — most lanes, most of the time. State it when it
+  does; a silent gap reads as a claim about production that the test never made.
 
 `cannot-tell` is a first-class answer. Narrowing a question until it fits what you can
 test is how a lane stops being asked while still appearing to be answered.

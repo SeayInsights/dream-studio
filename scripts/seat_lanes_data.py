@@ -83,18 +83,33 @@ def seat(
 seat(
     "Chair and verdict owner",
     question="What is the single merge recommendation here, and is every finding's"
-    " severity calibrated against it rather than stated in isolation?",
+    " severity calibrated against it rather than stated in isolation -- WITHOUT letting"
+    " an estimate of real-world impact downgrade a finding that falsifies a claim the"
+    " PR's own text makes?",
     signature="Many opinions and no verdict. Findings arrive at assorted severities with"
     " nothing reconciling them, so the author receives twenty-seven views instead of one"
-    " decision and picks whichever is cheapest.",
+    " decision and picks whichever is cheapest. Its sharper form: a finding proves a"
+    " guarantee the PR itself states (a 'fully', an 'every', a 'matched in full') is"
+    " false, and the chair rates it by estimated consequence ('sends nothing, so minor')"
+    " instead of by the fact that the PR's own stated contract broke.",
     precedent="The review history already speaks this way -- 'Merge recommendation:"
-    " request changes' -- so the verdict is an existing artefact, not a new ceremony.",
+    " request changes' -- so the verdict is an existing artefact, not a new ceremony."
+    " platform#1029: the contract lane found the PR's 'matched in full' claim was false"
+    " on a trailing-newline case; the chair rated the gap by impact ('sends nothing')"
+    " and downgraded it to minor. The reviewer who then requested changes held the PR to"
+    " its own words, which is the standard the chair's impact estimate had replaced.",
     measurement="Severity calibration is a judgement across a whole review; there is"
     " nothing to count in a single diff, and a detector that fired per-finding would be"
-    " grading the parts while the seat exists to grade the whole.",
+    " grading the parts while the seat exists to grade the whole. Whether a finding"
+    " falsifies the PR's OWN stated claim is readable from the PR text and the finding"
+    " together, which is the one piece of this seat's question that IS checkable without"
+    " the judgement the rest of calibration needs.",
     why="A verdict is one recommendation over a set of findings that do not exist until"
     " the other seats have run, so nothing can be computed from the diff alone. It"
-    " becomes an eval once convene() returns a finding set worth grading.",
+    " becomes an eval once convene() returns a finding set worth grading -- and the"
+    " floor rule (a broken self-stated guarantee cannot be downgraded by impact) is"
+    " exactly the sub-question that would grade first, once there is a finding set to"
+    " grade it against.",
 )
 seat(
     "Evidence referee",
@@ -442,17 +457,27 @@ seat(
 )
 seat(
     "Governance canon and board",
-    question="Does this contradict another document that is also in force?",
+    question="Does this contradict another document that is also in force, OR does it"
+    " rest a claim on a citation that exists but does not actually say what this"
+    " document needs it to say?",
     signature="Two canonical documents authorizing and forbidding the same act, an ADR"
-    " edited rather than superseded, or canon propagated to one repo and not its"
-    " siblings.",
-    precedent="planning#28, where CONTRIBUTING authorized what TRIAGE forbade. 735" " records.",
+    " edited rather than superseded, canon propagated to one repo and not its siblings,"
+    " or a cited ADR/ticket/doc that is real and on-topic but never actually covers the"
+    " specific thing being built on top of it.",
+    precedent="planning#28, where CONTRIBUTING authorized what TRIAGE forbade. 735"
+    " records. planning#75: a story's write path rested on ADR-010 as its source of"
+    " truth, and ADR-010 names a different mechanism than the one the story needed --"
+    " the citation existed and was on-topic, and nobody opened it to check it covered"
+    " the specific path.",
     measurement="Cross-document contradiction needs the semantics of both documents;"
     " ADR immutability and numbering are mechanical and this repo already gates the"
-    " numbering half.",
-    why="Detecting that two documents contradict each other requires reading both for"
-    " meaning. The mechanical half -- ADR numbering and immutability -- is already"
-    " covered by existing docs gates.",
+    " numbering half. Whether a citation supports its claim is the same kind of"
+    " semantic read as contradiction, just asked of one document instead of two -- not"
+    " a second check, the same one turned on a single citation.",
+    why="Detecting that two documents contradict each other, or that one document's"
+    " claim outruns what its own citation establishes, both require reading the cited"
+    " material for meaning rather than confirming it exists. The mechanical half -- ADR"
+    " numbering and immutability -- is already covered by existing docs gates.",
 )
 
 # ── Hygiene bench (2) ────────────────────────────────────────────────────────
@@ -644,7 +669,19 @@ SCOPES: dict[str, tuple[str, ...]] = {
     ),
     "Data and migration": ("**/migrations/**", "**/*.sql", "core/event_store/**"),
     "CLI and operator ergonomics": ("interfaces/cli/**", "**/*runbook*", "docs/operations/**"),
-    "Design-system conformance": ("**/*.css", "**/*.scss", "**/*.tsx", "**/*.jsx"),
+    # Widened to docs/** and *.md after planning#75: a planning doc cited DS#31 for
+    # Builder screens that PR did not contain, and this lane never fired on it because
+    # the diff carried no .tsx or .css -- the file-shape gate hid a claim the lane
+    # exists to check, not just the styling it names. A doc making a design-system
+    # claim is this lane's business even when it carries no frontend file itself.
+    "Design-system conformance": (
+        "**/*.css",
+        "**/*.scss",
+        "**/*.tsx",
+        "**/*.jsx",
+        "docs/**",
+        "*.md",
+    ),
     "Accessibility": ("**/*.html", "**/*.tsx", "**/*.jsx", "**/*.vue"),
     "Frontend behavior and payload": (
         "**/*.tsx",

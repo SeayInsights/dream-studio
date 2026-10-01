@@ -320,6 +320,38 @@ def _work_order_create(
     )
 
 
+def _work_order_add_task(
+    *,
+    work_order_id: str,
+    title: str,
+    identity: Identity,
+    description: str = "",
+    acceptance_criteria: str | None = None,
+    why: str | None = None,
+    project_id: str | None = None,
+    dream_studio_home: Path | None = None,
+) -> Any:
+    """The missing half of ds_work_order_create: a work order created over MCP has no
+    tasks, task_start is what moves created -> in_progress, and nothing else can seed
+    one -- so without this, an MCP-created work order can be dispatched for review but
+    can never leave 'created', and so can never close. Runs the SAME admission
+    (Warden + Surveyor + Herald) the CLI's own `ds work-order add-task` does -- see
+    core.work_orders.mutations.add_task, the one door both reach."""
+    from core.work_orders.mutations import add_task
+
+    return add_task(
+        work_order_id=work_order_id,
+        title=title,
+        description=description,
+        acceptance_criteria=acceptance_criteria,
+        why=why,
+        project_id=project_id,
+        source_root=REPO_ROOT,
+        dream_studio_home=dream_studio_home,
+        actor=identity.name,
+    )
+
+
 def _work_order_close(
     *,
     work_order_id: str,
@@ -593,6 +625,47 @@ TOOLS: list[Tool] = [
         required_capability="work_order:create",
     ),
     Tool(
+        name="ds_work_order_add_task",
+        description=(
+            "Add a task to a work order -- the round table's SAME full admission "
+            "(Warden + Surveyor + Herald) the CLI's own `ds work-order add-task` runs, "
+            "not a thinner MCP-only gate. A task needs an executable acceptance_criteria "
+            "(TEST-CHECK/SQL-CHECK/API-CHECK naming something that exists) or a "
+            "why declaring (20+ characters) why no check could ever decide it -- "
+            "refused otherwise, naming which seat raised it. task_start is what moves "
+            "a work order created -> in_progress, and task_start needs a task to exist: "
+            "a work order with no tasks can be dispatched for review but can never "
+            "leave 'created'. project_id is only needed when the work order has not "
+            "projected yet (returns a clear error asking for it); otherwise it is read "
+            "from the work order row. Requires work_order:add_task. The calling "
+            "client's name is recorded on the emitted event's trace."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "work_order_id": {"type": "string"},
+                "title": {"type": "string"},
+                "description": {"type": "string"},
+                "acceptance_criteria": {
+                    "type": "string",
+                    "description": "TEST-CHECK: <path>::<node> / SQL-CHECK / API-CHECK.",
+                },
+                "why": {
+                    "type": "string",
+                    "description": (
+                        "20+ characters declaring why no executable check could ever"
+                        " decide this task. Required when acceptance_criteria is"
+                        " omitted; the task is refused without one of the two."
+                    ),
+                },
+                "project_id": {"type": "string"},
+            },
+            "required": ["work_order_id", "title"],
+        },
+        handler=_work_order_add_task,
+        required_capability="work_order:add_task",
+    ),
+    Tool(
         name="ds_work_order_close",
         description=(
             "Close a work order: evaluate its close gates, mutate status to "
@@ -749,6 +822,15 @@ TOOLS: list[Tool] = [
                             "check": {"type": "string"},
                             "declare": {"type": "string"},
                             "resolves_with": {"type": "string"},
+                            "environment_gap": {
+                                "type": "string",
+                                "description": (
+                                    "What differs between the lane container this was"
+                                    " reproduced in and where the change actually runs,"
+                                    " that could hide a defect the reproduction can't"
+                                    " surface. Optional; most lanes need it empty."
+                                ),
+                            },
                         },
                         "required": ["lane", "verdict"],
                     },

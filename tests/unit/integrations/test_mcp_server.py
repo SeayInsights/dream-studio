@@ -857,6 +857,111 @@ def test_work_order_create_refuses_an_unknown_milestone(bootstrapped_home):
     assert "Milestone not found" in payload["error"]
 
 
+# ── ds_work_order_add_task (capability-gated) ───────────────────────────────
+
+
+def test_work_order_add_task_denies_an_identity_without_the_capability(bootstrapped_home):
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_work_order_add_task",
+                "arguments": {
+                    "work_order_id": "wo-real",
+                    "title": "t",
+                    "acceptance_criteria": "TEST-CHECK: tests/unit/test_x.py::test_y",
+                },
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="reader-only", capabilities=frozenset({"review:run"})),
+    )
+    assert resp["error"]["code"] == -32001
+
+
+def test_work_order_add_task_succeeds_and_attributes_the_emitted_event(
+    bootstrapped_home, monkeypatch
+):
+    captured = []
+    import spool.writer as _writer
+
+    monkeypatch.setattr(
+        _writer, "write_event", lambda envelope, root=None: captured.append(envelope)
+    )
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_work_order_add_task",
+                "arguments": {
+                    "work_order_id": "wo-real",
+                    "title": "A new task",
+                    "acceptance_criteria": (
+                        "TEST-CHECK: tests/unit/integrations/test_mcp_server.py::test_placeholder"
+                    ),
+                },
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="fulcrum", capabilities=frozenset({"work_order:add_task"})),
+    )
+    assert resp["result"]["isError"] is False
+    payload = json.loads(resp["result"]["content"][0]["text"])
+    assert payload["ok"] is True
+    assert payload["status"] == "pending"
+    created_events = [e for e in captured if e["event_type"] == "task.created"]
+    assert len(created_events) == 1
+    assert created_events[0]["trace"]["mcp_client"] == "fulcrum"
+
+
+def test_work_order_add_task_refuses_a_task_nobody_can_check(bootstrapped_home):
+    """The same admission the CLI's own `ds work-order add-task` runs -- not a thinner
+    MCP-only gate. Without acceptance_criteria or why, the Warden refuses it."""
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_work_order_add_task",
+                "arguments": {"work_order_id": "wo-real", "title": "A task nobody can check"},
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="fulcrum", capabilities=frozenset({"work_order:add_task"})),
+    )
+    assert resp["result"]["isError"] is False
+    payload = json.loads(resp["result"]["content"][0]["text"])
+    assert payload["ok"] is False
+    assert "refused to file this task" in payload["error"]
+
+
+def test_work_order_add_task_accepts_a_declared_reason_in_place_of_a_criterion(bootstrapped_home):
+    resp = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ds_work_order_add_task",
+                "arguments": {
+                    "work_order_id": "wo-real",
+                    "title": "Operator attests the thing",
+                    "why": "No computation can establish that a person accepted a risk.",
+                },
+            },
+        },
+        dream_studio_home=bootstrapped_home,
+        identity=auth.Identity(name="fulcrum", capabilities=frozenset({"work_order:add_task"})),
+    )
+    payload = json.loads(resp["result"]["content"][0]["text"])
+    assert payload["ok"] is True
+
+
 # ── ds_work_order_close (capability-gated) ──────────────────────────────────
 
 
@@ -1398,6 +1503,7 @@ def test_every_capability_gated_tool_name_is_forthright_about_it():
         "mutate",
         "create",
         "advance",
+        "add",
     )
     for tool in TOOLS:
         if tool.required_capability is None:
