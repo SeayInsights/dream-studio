@@ -345,9 +345,26 @@ def dispatch_review_round(
     resolution and no dirty-working-tree warning -- add those here, not in a second
     copy, if a caller needs them.
 
-    Raises RuntimeError when Docker is unavailable (naming why) and ValueError for an
-    unknown work order or an assignment a reviewer's seat does not own
-    (`record_dispatch`'s own check) -- neither is swallowed into a quiet no-op result.
+    Raises RuntimeError when Docker is unavailable (naming why), when no reviewable
+    project root could be resolved for this work order, or when that root is not
+    itself a git repository (a declared container folder holding several -- see
+    `ProjectRoots.primary`'s own docstring on why that is reported honestly rather
+    than guessed at). Raises ValueError for an unknown work order or an assignment a
+    reviewer's seat does not own (`record_dispatch`'s own check). None of these are
+    swallowed into a quiet no-op result.
+
+    REVIEWS THE WORK ORDER'S OWN PROJECT, not *repo_root*. A real, reported bug: this
+    used to resolve HEAD and build the lane image from *repo_root* -- Dream Studio's
+    own tree, always, regardless of which project the work order actually belongs to.
+    A work order delivering into another repository (core.work_orders.project_roots)
+    got a container built from Dream Studio's OWN source with no git repository
+    inside it at all for that project's code -- every finding would be about the
+    wrong codebase, and the reviewed project's own git history was simply absent.
+    `repo_root` still has a real job: it is where the lane REGISTRY lives
+    (`canonical/review_lanes.yml`) and stays Dream Studio's own tree even when the
+    code under review lives elsewhere, exactly as `core.gates.round_table.convene`'s
+    own "TWO ROOTS, BECAUSE THEY ARE TWO QUESTIONS" docstring already describes and
+    `core.work_orders.verify_main` already fixed for verify's own equivalent call.
 
     CHECKS IDEMPOTENCY BEFORE THE EXPENSIVE PART. `record_dispatch()` is idempotent on
     (work_order_id, sha, resolved assignments) too, but by the time a caller reaches it
@@ -362,15 +379,38 @@ def dispatch_review_round(
     """
     from core.gates import lane_sandbox
     from core.gates.round_table import assignments, convene
+    from core.work_orders.artifacts import _resolve_db
+    from core.work_orders.project_roots import resolve_project_roots
 
     if work_order_project(work_order_id, db_path=db_path) is None:
         raise ValueError(f"no work order {work_order_id!r} in this authority")
-    sha = lane_sandbox.resolve_sha("HEAD", repo_root=repo_root)
-    report = convene(repo_root=repo_root)
+
+    # DOCKER CHECKED FIRST, before anything that needs a real git repository to
+    # resolve. Nothing below can succeed without it either way, and checking it here
+    # (cheap -- a few-second subprocess call, not `build_image()`'s minutes) answers
+    # the more basic precondition before the project-root/git requirements do.
+    ok, why_not = lane_sandbox.docker_available()
+    if not ok:
+        raise RuntimeError(
+            f"{why_not} A lane tests in a container; without one there is no review to" " dispatch."
+        )
+
+    roots = resolve_project_roots(work_order_id, _resolve_db(db_path))
+    change_root = roots.primary
+    if change_root is None:
+        raise RuntimeError(
+            f"no reviewable project root for {work_order_id!r}: {roots.describe()}. A"
+            " review must be built from the project's own code, not Dream Studio's --"
+            " set this work order's project_path (ds_project_create) to where its code"
+            " actually lives."
+        )
+
+    sha = lane_sandbox.resolve_sha("HEAD", repo_root=change_root)
+    report = convene(repo_root=repo_root, change_root=change_root)
     computed_assignments = assignments(report)
 
+    owned = lane_ownership(repo_root)
     if not force_new_round:
-        owned = lane_ownership(repo_root)
         resolved, carried = resolve_round_content(
             work_order_id, computed_assignments, db_path=db_path, owned=owned
         )
@@ -383,12 +423,7 @@ def dispatch_review_round(
         ):
             return already_dispatched_response(prior, sha)
 
-    ok, why_not = lane_sandbox.docker_available()
-    if not ok:
-        raise RuntimeError(
-            f"{why_not} A lane tests in a container; without one there is no review to" " dispatch."
-        )
-    image = lane_sandbox.build_image(sha, repo_root=repo_root)
+    image = lane_sandbox.build_image(sha, repo_root=change_root)
     return record_dispatch(
         work_order_id,
         sha=sha,
@@ -396,7 +431,8 @@ def dispatch_review_round(
         change_set="(local working tree)",
         assignments=computed_assignments,
         db_path=db_path,
-        project_root=repo_root,
+        project_root=change_root,
+        ownership=owned,
         force_new_round=force_new_round,
     )
 

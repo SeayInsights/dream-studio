@@ -27,6 +27,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from core.work_orders.models import WORK_ORDER_TYPES
+
 from .auth import Identity
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -698,7 +700,15 @@ TOOLS: list[Tool] = [
                 "milestone_id": {"type": "string"},
                 "title": {"type": "string"},
                 "description": {"type": "string"},
-                "work_order_type": {"type": "string"},
+                "work_order_type": {
+                    "type": "string",
+                    "enum": list(WORK_ORDER_TYPES),
+                    "description": (
+                        "Refused if not one of these -- checked here, not just later"
+                        " when ds_work_order_start looks it up (the gap this enum"
+                        " exists to close)."
+                    ),
+                },
                 "priority": {"type": "string", "description": "Default 'normal'."},
                 "originating_symptom": {"type": "string"},
                 "module_boundary": {
@@ -823,9 +833,14 @@ TOOLS: list[Tool] = [
     Tool(
         name="ds_review_dispatch",
         description=(
-            "Convene the round table against HEAD, build the lane's Docker image, and "
-            "record a new dispatch round -- issuing every named reviewer a one-time "
-            "credential, returned once in this call's own response. Requires "
+            "Convene the round table against HEAD of the work order's OWN project "
+            "(core.work_orders.project_roots resolves it from project_path -- never "
+            "Dream Studio's own tree, even when this server runs from a Dream Studio "
+            "checkout), build the lane's Docker image from that commit, and record a "
+            "new dispatch round -- issuing every named reviewer a one-time "
+            "credential, returned once in this call's own response. Refuses clearly "
+            "if the work order's project has no resolvable, git-backed root rather "
+            "than building a container with the wrong code in it. Requires "
             "review:dispatch. The calling identity becomes the round's chair: it is "
             "the only identity that ever sees these credentials, and MUST NOT also "
             "hold review:record (refused at client-provisioning time, not here -- see "

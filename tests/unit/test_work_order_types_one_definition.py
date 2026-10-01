@@ -80,6 +80,83 @@ def test_the_door_refuses_an_undeclared_type(tmp_path, capsys):
         assert declared in err, f"the refusal does not list {declared}"
 
 
+def test_create_refuses_an_undeclared_type_the_same_way_start_would():
+    """The CLI door's argparse `choices=` refuses an undeclared --type before
+    create_work_order() is ever reached -- but ds_work_order_create (MCP) and any other
+    direct caller have no argparse layer at all, and called straight into
+    create_work_order() with no check of its own. Reported directly: create accepted
+    'chore' without complaint, and start then refused with "Unrecognized work order
+    type: chore" -- after the work order already existed. The same "validated in only
+    one of two doors" shape add_task's own admission gate had. source_root=pathlib.Path(".")
+    mirrors test_an_undeclared_priority_is_refused_where_it_can_be_reported -- resolves
+    to this repo's own real authority, which the check below never reaches anyway."""
+    import pathlib
+
+    from core.work_orders.mutations import create_work_order
+
+    result = create_work_order(
+        project_id="p-1",
+        milestone_id="m-1",
+        title="A thing",
+        description="A description long enough to clear the prompt floor for a work order.",
+        work_order_type="chore",
+        source_root=pathlib.Path("."),
+    )
+    assert result["ok"] is False
+    assert "chore" in result["error"], result["error"]
+    for declared in WORK_ORDER_TYPES:
+        assert declared in result["error"], f"the refusal does not name {declared}"
+
+
+def _create_past_the_type_check(**kwargs):
+    """Call create_work_order and report whether the type check itself was what
+    stopped it -- regardless of what happens next (no project, no real authority in
+    this test's isolated env). Everything downstream of the type check is out of
+    scope here; only whether THIS check wrongly fired is."""
+    import pathlib
+
+    from core.work_orders.mutations import create_work_order
+
+    try:
+        result = create_work_order(source_root=pathlib.Path("."), **kwargs)
+    except RuntimeError as exc:
+        return str(exc)
+    return result.get("error", "")
+
+
+def test_create_does_not_refuse_any_declared_type():
+    """A real, declared type must not be the reason create_work_order refuses. The type
+    check runs before create_work_order needs a real project or authority (same
+    positioning as the priority check it mirrors), so whatever stops the call below --
+    "Project not found", or no authority in this test's isolated env -- it is never the
+    type check."""
+    for wo_type in WORK_ORDER_TYPES:
+        error = _create_past_the_type_check(
+            project_id="p-1-does-not-exist",
+            milestone_id="m-1",
+            title="A thing",
+            description="A description long enough to clear the prompt floor for a work order.",
+            work_order_type=wo_type,
+        )
+        assert (
+            "is not one the platform declares" not in error
+        ), f"{wo_type} was refused by the type check: {error}"
+
+
+def test_create_does_not_refuse_an_absent_type():
+    """work_order_type=None is a different, already-handled question (start_brief.py's
+    own "Work order has no type assigned") -- this check must not turn that into the
+    'unrecognized type' refusal too."""
+    error = _create_past_the_type_check(
+        project_id="p-1-does-not-exist",
+        milestone_id="m-1",
+        title="A thing",
+        description="A description long enough to clear the prompt floor for a work order.",
+        work_order_type=None,
+    )
+    assert "is not one the platform declares" not in error
+
+
 def test_no_module_carries_a_second_full_list():
     """A second copy of all ten anywhere in core/ or interfaces/ is the thing this file
     exists to end. The subsets are allowed; a full list is not."""
