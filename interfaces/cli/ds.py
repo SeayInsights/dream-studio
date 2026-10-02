@@ -41,6 +41,7 @@ from interfaces.cli.commands import mcp as mcp_cmd  # noqa: E402
 from interfaces.cli.commands import milestone  # noqa: E402
 from interfaces.cli.commands import prd  # noqa: E402
 from interfaces.cli.commands import pulse as pulse_cmd  # noqa: E402
+from interfaces.cli.commands import profile as profile_cmd  # noqa: E402
 from interfaces.cli.commands import project  # noqa: E402
 from interfaces.cli.commands import grader  # noqa: E402
 from interfaces.cli.commands import prove as prove_cmd  # noqa: E402
@@ -123,6 +124,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Per-group command modules (commands/ package)
     project.register(subcommands)
+    profile_cmd.register(subcommands)
     client_cmd.register(subcommands)
     integrate.register(subcommands)
     skill.register(subcommands)
@@ -283,6 +285,8 @@ def _run(parser, args, source_root: Path, home: Path | None) -> int:
         # Commands delegated to commands/ package modules
         if args.command == "project":
             return project.dispatch(args, source_root=source_root, dream_studio_home=home)
+        if args.command == "profile":
+            return profile_cmd.dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "client":
             return client_cmd.dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "integrate":
