@@ -31,10 +31,11 @@ bandit>=1.7
 # requirements.txt already wants. `pip-audit --strict` against the raised floor at the
 # time: "No known vulnerabilities found".
 #
-# PYJWT IS DIFFERENT: as of 2026-09-30, semgrep's current release (1.178.0) still
+# PYJWT IS DIFFERENT: as of 2026-10-01, semgrep's current release (1.178.0) still
 # hard-pins pyjwt~=2.13.0, and every semgrep release from 1.130.0 up has pinned it the
 # same way -- no floor raise here helps the way it helped click. pyjwt 2.13.0 has since
-# gained 12 CVEs (fixed 2.14.0/2.15.0); see requirements.txt's own pyjwt note and
-# interfaces/cli/ci_gate.py's _ACCEPTED_DEV_CVES for the full account and why it is
-# suppressed as dev-only rather than floored.
+# gained 13 CVEs (12 fixed in 2.14.0/2.15.0; the 13th, CVE-2026-103001, has no fix
+# release yet); see requirements.txt's own pyjwt note and interfaces/cli/ci_gate.py's
+# _ACCEPTED_DEV_CVES for the full account and why it is suppressed as dev-only rather
+# than floored.
 semgrep>=1.130

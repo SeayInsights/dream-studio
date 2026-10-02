@@ -30,10 +30,11 @@ python-multipart>=0.0.6
 # releases, not a permanent constraint: raising semgrep's own floor to 1.130 moved it
 # onto a release line that no longer caps click and resolves a CVE-fixed mcp on its own.
 #
-# STILL TRUE FOR PYJWT, as of 2026-09-30: every semgrep release from 1.130.0 through the
-# current 1.178.0 hard-pins pyjwt~=2.13.0, and pyjwt has since gained 12 CVEs against
-# that exact version (fixed in 2.14.0/2.15.0, which the pin excludes -- pyjwt has no
-# 2.13.x point release). Flooring pyjwt>=2.14.0 here does not coexist with that pin; pip
+# STILL TRUE FOR PYJWT, as of 2026-10-01: every semgrep release from 1.130.0 through the
+# current 1.178.0 hard-pins pyjwt~=2.13.0, and pyjwt has since gained 13 CVEs against
+# that exact version (12 fixed in 2.14.0/2.15.0; the 13th, CVE-2026-103001, has no fix
+# release yet -- see interfaces/cli/ci_gate.py's _ACCEPTED_DEV_CVES). pyjwt has no
+# 2.13.x point release. Flooring pyjwt>=2.14.0 here does not coexist with that pin; pip
 # backtracks semgrep to 1.156.0 instead, reintroducing the click/mcp CVEs this comment
 # describes above. Suppressed as a dev-only transitive CVE in
 # interfaces/cli/ci_gate.py's _ACCEPTED_DEV_CVES (that comment has the full account) --
