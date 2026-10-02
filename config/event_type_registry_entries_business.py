@@ -58,6 +58,27 @@ _BUSINESS_ENTRIES: tuple[RegistryEntry, ...] = (
         payload_required_keys=frozenset({"client_id"}),
     ),
     RegistryEntry(
+        "profile.created",
+        _BUSINESS,
+        "meaningful-unit",
+        "Profile created (a switchable operating-context identity owned by a client)",
+        payload_required_keys=frozenset({"profile_id", "client_id"}),
+    ),
+    RegistryEntry(
+        "profile.activated",
+        _BUSINESS,
+        "meaningful-unit",
+        "Profile set as the active profile (status → active)",
+        payload_required_keys=frozenset({"profile_id"}),
+    ),
+    RegistryEntry(
+        "profile.deactivated",
+        _BUSINESS,
+        "meaningful-unit",
+        "Profile deactivated (status → paused)",
+        payload_required_keys=frozenset({"profile_id"}),
+    ),
+    RegistryEntry(
         "project.registered",
         _BUSINESS,
         "meaningful-unit",

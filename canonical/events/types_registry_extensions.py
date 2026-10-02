@@ -85,6 +85,27 @@ _EXTENSION_ENTRIES: tuple[EventTypeMeta, ...] = (
         EventCategory.PRODUCTION_EMITTED,
     ),
     EventTypeMeta(
+        EventType.PROFILE_CREATED,
+        "sdlc",
+        "A new profile was created (a switchable operating-context identity)",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.PROFILE_ACTIVATED,
+        "sdlc",
+        "A profile was set as the active profile (status → active)",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.PROFILE_DEACTIVATED,
+        "sdlc",
+        "A profile was deactivated (status → paused)",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
         EventType.MILESTONE_CREATED,
         "sdlc",
         "A new milestone was created under a project",
