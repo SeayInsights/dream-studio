@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://dream-studio.local/power-platform/visual.schema.json",
+  "title": "PBIR visual.json (minimal local schema)",
+  "description": "Minimal subset of the PBIR visualContainer schema covering the fields the troubleshooter needs to render a layout preview. Intentionally permissive — Power BI's full schema is at https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.5.0/schema.json — we only enforce the fields we actually use.",
+  "type": "object",
+  "required": ["name", "position", "visual"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Visual ID; should match the folder name."
+    },
+    "position": {
+      "type": "object",
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 },
+        "tabOrder": { "type": "number" }
+      },
+      "additionalProperties": true
+    },
+    "visual": {
+      "type": "object",
+      "required": ["visualType"],
+      "properties": {
+        "visualType": { "type": "string", "minLength": 1 },
+        "query": { "type": "object" },
+        "objects": { "type": "object" },
+        "visualContainerObjects": { "type": "object" },
+        "drillFilterOtherVisuals": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    },
+    "filterConfig": { "type": "object" },
+    "howCreated": { "type": "string" }
+  },
+  "additionalProperties": true
+}

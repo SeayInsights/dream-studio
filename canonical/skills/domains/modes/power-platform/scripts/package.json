@@ -1,0 +1,23 @@
+{
+  "name": "power-platform-pbi-scripts",
+  "version": "0.1.0",
+  "description": "Self-verify Power BI report changes by rendering a layout preview or PBI Desktop screenshot; JSON validators and cleanup scripts for PBIR authoring.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "preview": "node preview-layout.mjs",
+    "validate": "node validate-visual-json.mjs",
+    "compare": "node compare-render.mjs",
+    "postinstall": "playwright install chromium"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "commander": "^12.1.0",
+    "pixelmatch": "^6.0.0",
+    "playwright": "^1.48.0",
+    "pngjs": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

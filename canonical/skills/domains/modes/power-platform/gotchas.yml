@@ -1,6 +1,55 @@
-version: 1.0
+version: 1.1
 
 avoid:
+  - id: custom-visual-hardcoded-colors
+    severity: high
+    discovered: 2026-10-01
+    title: "Never hardcode hex colors in a custom (pbiviz) visual's series rendering"
+    context: "A custom visual that writes colors[i] = '#118DFF' (or any fixed hex) for data-driven series ignores the report's active theme/brand profile entirely — every engagement's report looks wrong, and swapping brand profiles requires rebuilding the visual."
+    fix: "Use host.colorPalette.getColor(seriesName).value for anything data-driven. Chrome (borders, dimmed states) can stay hardcoded to the active brand profile's value. See ../../powerbi/custom-visuals.md Theme-Aware Colors section."
+
+  - id: custom-visual-missing-data-reduction
+    severity: critical
+    discovered: 2026-10-01
+    title: "capabilities.json dataViewMappings without dataReductionAlgorithm crashes on large data"
+    context: "Without a cap, Power BI tries to deliver the full row count to the visual; it works fine in a small test dataset and crashes or hangs once real data volume hits it."
+    fix: "Add dataReductionAlgorithm (e.g. { top: { count: 500 } }) to every categories/rows/columns mapping. See ../../powerbi/custom-visuals.md capabilities.json section."
+
+  - id: visual-filters-not-hidden
+    severity: critical
+    discovered: 2026-10-01
+    title: "Visual-level filters must always set isHiddenInViewMode:true"
+    context: "Power BI Desktop auto-creates a filterConfig.filters[] entry per bound field, visible by default in the 'Filters on this visual' pane — a developer-side artifact, never a user-facing control. A readable (non-hex) filter name also causes Power BI to silently reject the filter and render the visual blank."
+    fix: "Run scripts/hide-visual-filters.mjs then scripts/preemptive-hide-fields.mjs after every Desktop save session. Filter names must be 20-char lowercase hex. See ../../powerbi/pbir-gotchas.md #7."
+
+  - id: pivottable-missing-selector
+    severity: high
+    discovered: 2026-10-01
+    title: "pivotTable styling objects need selector:{id:\"default\"} or Power BI silently ignores them"
+    context: "Without the selector, Power BI Desktop falls back to the active theme for that property block even though the visual.json explicitly sets a value — no error, just a wrong render. tableEx does NOT have this requirement; this is pivotTable-specific."
+    fix: "Add \"selector\": { \"id\": \"default\" } as a sibling of \"properties\" on grid, columnHeaders, rowHeaders (first entry), values, and total. See ../../powerbi/pbir-gotchas.md #3."
+
+  - id: tmdl-standalone-block-comments
+    severity: critical
+    discovered: 2026-10-01
+    title: "Standalone /* */ block comments between TMDL objects break the whole model load"
+    context: "The TMDL parser rejects a standalone block comment between objects with InvalidLineType: Unexpected line type: Other! — Power BI Desktop then refuses to load the entire .pbip and shows the blank 'Add data to your report' welcome screen instead of a clear error."
+    fix: "Use /// description annotations immediately above an object instead of section-header block comments. /* */ is only valid inside a DAX expression body. See ../../powerbi/pbir-gotchas.md T1."
+
+  - id: visualcontainerobjects-top-level
+    severity: critical
+    discovered: 2026-10-01
+    title: "visualContainerObjects must be nested under visual, never a top-level sibling"
+    context: "Placing visualContainerObjects (background/border/padding/title) as a top-level key next to position and visual fails schema validation on .pbip open with an 'additional properties not allowed' error."
+    fix: "Nest it as visual.visualContainerObjects, alongside visual.objects and visual.query. See ../../powerbi/pbir-gotchas.md #1."
+
+  - id: visual-header-hidden-kills-export
+    severity: high
+    discovered: 2026-10-01
+    title: "Hiding a data visual's header removes Export data in the Service"
+    context: "visualContainerObjects.visualHeader show:false removes the entire on-hover header in Service reading view, including the only path to Export data. The regression is invisible while authoring because Desktop edit mode always shows headers regardless of this setting — it only bites the published report."
+    fix: "Keep the header on for any data-bearing visual (tables, matrices, charts, data-bound custom visuals); de-noise it by suppressing individual icons while keeping showOptionsMenu:true. See ../../powerbi/pbir-gotchas.md #15."
+
   - id: pbip-inline-edit
     severity: critical
     discovered: 2026-04-28
@@ -25,9 +74,9 @@ avoid:
   - id: tmdl-tabs
     severity: high
     discovered: 2026-04-28
-    title: "TMDL indentation must be 2 spaces — never tabs"
-    context: "TMDL is whitespace-sensitive. Tab characters cause silent parse failures when Power BI Desktop opens the file."
-    fix: "Always use 2-space indentation in .tmdl files. Check editor settings before writing TMDL."
+    title: "TMDL indentation must be tabs — never spaces"
+    context: "TMDL is whitespace-sensitive. Space-indented lines cause silent parse failures when Power BI Desktop opens the file. (This entry previously said the opposite — corrected 2026-10-01 to match ../../powerbi/pbip-format.md and this file's own SKILL.md anti-patterns table, both of which have always said tabs.)"
+    fix: "Always use tab indentation in .tmdl files. Check editor settings before writing TMDL."
 
   - id: page-visibility-invalid
     severity: critical

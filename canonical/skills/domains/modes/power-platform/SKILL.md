@@ -22,13 +22,29 @@ Read these files first — every time:
 3. `domains/powerbi/storytelling-framework.yml` — for report design
 4. `domains/powerbi/accessibility-checklist.yml` — before any report delivery
 
+## Brand profile
+Before any theming, branding, or visual-styling work (TMDL, report/page/visual JSON, or custom
+visual TypeScript), resolve which brand profile is active for this engagement — ask the user if
+it's unclear. If nothing else is specified, fall back to
+`../../powerbi/brand-profiles/default.yml`. Full schema and resolution rules: `../../powerbi/brand-profile.md`.
+
+**Never hardcode a client's brand values** (hex colors, font names, logo paths, sentiment-color
+rules) directly into TMDL, JSON, or TypeScript. Always read them from the active brand profile.
+
 ## Imports
 - ../../powerbi/dax-patterns.md — data modeling, DAX patterns, DAX error reference
 - ../../powerbi/m-query-patterns.md — query folding, M-query patterns, error reference, semantic model validation
 - ../../powerbi/tmdl-authoring.md — TMDL patterns, _measures table, relationship direction, rename chain, session workflow
+- ../../powerbi/brand-profile.md — swappable brand-profile schema; resolve the active profile before any theming/branding work
+- ../../powerbi/custom-visuals.md — pbiviz custom-visual development: capabilities.json, settings.ts, visual.ts, theme-aware colors, packaging, certification
+- ../../powerbi/visual-verification.md — two-path self-verification (static layout preview + live PBI Desktop screenshot) after any visual.json edit
+- ../../powerbi/pbir-gotchas.md — dense PBIR/TMDL burn-case gotcha list; consult before authoring or debugging visual.json, page.json, or .tmdl
+- ../../powerbi/report-visual-json.md — report/page/visual.json authoring patterns, sort definitions, page-chrome conventions
+- ../../powerbi/quality-tiers-antipatterns.md — anti-patterns to flag, quality-bar checklists, visual.json preflight
+- ../../powerbi/pbi-workflows.md — file-format glossary, PBIP edit/commit workflow, performance debugging, sharing/publishing
 
 ## Trigger
-`intake:`, `sow:`, `proposal:`, `build report:`, `review powerbi:`, `optimize dax:`, `build flow:`, `review flow:`, `build app:`, `review app:`, `client handoff:`, `document:`
+`intake:`, `sow:`, `proposal:`, `build report:`, `review powerbi:`, `optimize dax:`, `build flow:`, `review flow:`, `build app:`, `review app:`, `client handoff:`, `document:`, `build visual:`, `custom visual:`, `pbiviz:`, `verify report:`, `verify visual:`
 
 ## You are the Power Platform specialist
 
@@ -57,6 +73,8 @@ Use this table to quickly classify incoming requests and route to the right appr
 | "Automate [process] when [trigger]..." | Power Automate flow | 4-12 | Flow with error handling (Scope + Configure Run After), approval timeout, environment variables for connections. Set concurrency to 1 if shared state. |
 | "Connect [source A] to [source B]..." | Data model design | 6-16 | Star schema with fact/dimension tables. Check `../../powerbi/m-query-patterns.md` for query folding. Follow `../../powerbi/tmdl-authoring.md`. |
 | "Report takes 30s to load..." | Report performance tuning | 4-10 | Check DirectQuery vs Import, measure complexity, visual count. Use Performance Analyzer. Read `../../powerbi/dax-patterns.md` for SUMMARIZE/TREATAS patterns. Follow `../../powerbi/tmdl-authoring.md` if semantic model changes are needed. |
+| "Build a custom visual..." / "pbiviz:" / mentions capabilities.json, IVisual, settings.ts | Custom-visual (pbiviz) development | 8-24 | Read `../../powerbi/custom-visuals.md` in full. Confirm stock visuals genuinely can't do the job (3-attempt guideline, or immediate for an explicit pbiviz request). Resolve the active brand profile before touching any color/font default. |
+| "Verify this report/visual..." / "does this look right?" / after any visual.json edit | Visual self-verification | 0.25-1 | Read `../../powerbi/visual-verification.md`. Run Path B (`scripts/preview-layout.mjs`) for layout, Path A (`scripts/screenshot-pbi-desktop.ps1`) for real render, before declaring done. |
 
 **Escalation:** If the request does not match any pattern above, ask one clarifying question: "Is this primarily a data issue, a visualization issue, or a process automation issue?"
 
@@ -125,6 +143,23 @@ After any build or change, verify in this order:
 4. **RLS** — use "Modeling → View As Role" for each role; confirm data filters correctly
 5. **All pages** — click through every report page; no blank visuals, no "Can't display visual" errors
 6. **Publish to dev workspace** — confirm report loads in browser at app.powerbi.com
+
+### Automated visual verification (preferred for layout/visual-JSON changes)
+
+Steps 3 and 5 above are a manual fallback/summary. For any change touching `visual.json` or
+`page.json`, the preferred path is the automated two-path verification system in
+`../../powerbi/visual-verification.md`:
+
+1. `node scripts/validate-visual-json.mjs "<Report-folder>"` — schema pre-flight.
+2. `node scripts/exec-quality-check.mjs "<Report-folder>"` — static exec-grade defect scan.
+3. `node scripts/preview-layout.mjs "<Report-folder>" --page <pageId> --out .preview/iter1-<pageId>.png` — Path B, fast static layout preview (~3s). Read the PNG before deciding the layout is right.
+4. Once layout is right (or the question needs real colors/data/custom-visual rendering): `powershell -File scripts/screenshot-pbi-desktop.ps1 -Pbip "<file>.pbip" -Out .preview/approval-<pageId>.png -PageId "<pageId>" -AssumeLoggedIn -CanvasOnly` — Path A, live render (~20-45s; set the tool timeout to ≥ 360000 ms). Walk the result through the exec-grade checklist in `../../powerbi/visual-verification.md` before declaring done.
+5. After a Power BI Desktop save session, run `node scripts/post-save.mjs "<Report-folder>"` to chain the filter-hiding and drift-check cleanup scripts.
+
+Script paths above are relative to this mode's own directory (`scripts/`, sibling to
+`version-detection.sh`). Stop after 3 self-verification iterations and surface the PNGs to the
+operator/reviewer rather than grinding silently — see the troubleshooting loop in
+`../../powerbi/visual-verification.md`.
 
 ## Power Apps
 

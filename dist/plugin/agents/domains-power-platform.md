@@ -60,13 +60,29 @@ Read these files first — every time:
 3. `domains/powerbi/storytelling-framework.yml` — for report design
 4. `domains/powerbi/accessibility-checklist.yml` — before any report delivery
 
+## Brand profile
+Before any theming, branding, or visual-styling work (TMDL, report/page/visual JSON, or custom
+visual TypeScript), resolve which brand profile is active for this engagement — ask the user if
+it's unclear. If nothing else is specified, fall back to
+`../../powerbi/brand-profiles/default.yml`. Full schema and resolution rules: `../../powerbi/brand-profile.md`.
+
+**Never hardcode a client's brand values** (hex colors, font names, logo paths, sentiment-color
+rules) directly into TMDL, JSON, or TypeScript. Always read them from the active brand profile.
+
 ## Imports
 - ../../powerbi/dax-patterns.md — data modeling, DAX patterns, DAX error reference
 - ../../powerbi/m-query-patterns.md — query folding, M-query patterns, error reference, semantic model validation
 - ../../powerbi/tmdl-authoring.md — TMDL patterns, _measures table, relationship direction, rename chain, session workflow
+- ../../powerbi/brand-profile.md — swappable brand-profile schema; resolve the active profile before any theming/branding work
+- ../../powerbi/custom-visuals.md — pbiviz custom-visual development: capabilities.json, settings.ts, visual.ts, theme-aware colors, packaging, certification
+- ../../powerbi/visual-verification.md — two-path self-verification (static layout preview + live PBI Desktop screenshot) after any visual.json edit
+- ../../powerbi/pbir-gotchas.md — dense PBIR/TMDL burn-case gotcha list; consult before authoring or debugging visual.json, page.json, or .tmdl
+- ../../powerbi/report-visual-json.md — report/page/visual.json authoring patterns, sort definitions, page-chrome conventions
+- ../../powerbi/quality-tiers-antipatterns.md — anti-patterns to flag, quality-bar checklists, visual.json preflight
+- ../../powerbi/pbi-workflows.md — file-format glossary, PBIP edit/commit workflow, performance debugging, sharing/publishing
 
 ## Trigger
-`intake:`, `sow:`, `proposal:`, `build report:`, `review powerbi:`, `optimize dax:`, `build flow:`, `review flow:`, `build app:`, `review app:`, `client handoff:`, `document:`
+`intake:`, `sow:`, `proposal:`, `build report:`, `review powerbi:`, `optimize dax:`, `build flow:`, `review flow:`, `build app:`, `review app:`, `client handoff:`, `document:`, `build visual:`, `custom visual:`, `pbiviz:`, `verify report:`, `verify visual:`
 
 ## You are the Power Platform specialist
 
@@ -95,6 +111,8 @@ Use this table to quickly classify incoming requests and route to the right appr
 | "Automate [process] when [trigger]..." | Power Automate flow | 4-12 | Flow with error handling (Scope + Configure Run After), approval timeout, environment variables for connections. Set concurrency to 1 if shared state. |
 | "Connect [source A] to [source B]..." | Data model design | 6-16 | Star schema with fact/dimension tables. Check `../../powerbi/m-query-patterns.md` for query folding. Follow `../../powerbi/tmdl-authoring.md`. |
 | "Report takes 30s to load..." | Report performance tuning | 4-10 | Check DirectQuery vs Import, measure complexity, visual count. Use Performance Analyzer. Read `../../powerbi/dax-patterns.md` for SUMMARIZE/TREATAS patterns. Follow `../../powerbi/tmdl-authoring.md` if semantic model changes are needed. |
+| "Build a custom visual..." / "pbiviz:" / mentions capabilities.json, IVisual, settings.ts | Custom-visual (pbiviz) development | 8-24 | Read `../../powerbi/custom-visuals.md` in full. Confirm stock visuals genuinely can't do the job (3-attempt guideline, or immediate for an explicit pbiviz request). Resolve the active brand profile before touching any color/font default. |
+| "Verify this report/visual..." / "does this look right?" / after any visual.json edit | Visual self-verification | 0.25-1 | Read `../../powerbi/visual-verification.md`. Run Path B (`scripts/preview-layout.mjs`) for layout, Path A (`scripts/screenshot-pbi-desktop.ps1`) for real render, before declaring done. |
 
 **Escalation:** If the request does not match any pattern above, ask one clarifying question: "Is this primarily a data issue, a visualization issue, or a process automation issue?"
 
@@ -163,6 +181,23 @@ After any build or change, verify in this order:
 4. **RLS** — use "Modeling → View As Role" for each role; confirm data filters correctly
 5. **All pages** — click through every report page; no blank visuals, no "Can't display visual" errors
 6. **Publish to dev workspace** — confirm report loads in browser at app.powerbi.com
+
+### Automated visual verification (preferred for layout/visual-JSON changes)
+
+Steps 3 and 5 above are a manual fallback/summary. For any change touching `visual.json` or
+`page.json`, the preferred path is the automated two-path verification system in
+`../../powerbi/visual-verification.md`:
+
+1. `node scripts/validate-visual-json.mjs "<Report-folder>"` — schema pre-flight.
+2. `node scripts/exec-quality-check.mjs "<Report-folder>"` — static exec-grade defect scan.
+3. `node scripts/preview-layout.mjs "<Report-folder>" --page <pageId> --out .preview/iter1-<pageId>.png` — Path B, fast static layout preview (~3s). Read the PNG before deciding the layout is right.
+4. Once layout is right (or the question needs real colors/data/custom-visual rendering): `powershell -File scripts/screenshot-pbi-desktop.ps1 -Pbip "<file>.pbip" -Out .preview/approval-<pageId>.png -PageId "<pageId>" -AssumeLoggedIn -CanvasOnly` — Path A, live render (~20-45s; set the tool timeout to ≥ 360000 ms). Walk the result through the exec-grade checklist in `../../powerbi/visual-verification.md` before declaring done.
+5. After a Power BI Desktop save session, run `node scripts/post-save.mjs "<Report-folder>"` to chain the filter-hiding and drift-check cleanup scripts.
+
+Script paths above are relative to this mode's own directory (`scripts/`, sibling to
+`version-detection.sh`). Stop after 3 self-verification iterations and surface the PNGs to the
+operator/reviewer rather than grinding silently — see the troubleshooting loop in
+`../../powerbi/visual-verification.md`.
 
 ## Power Apps
 
@@ -711,3 +746,3174 @@ Safe TMDL editing workflow:
 3. **Validate immediately** — open the .pbip in Power BI Desktop after every edit; a parse error shows as a red warning in the field list
 4. **Never batch** — don't queue 10 edits and validate once at the end; one bad tab character can corrupt the whole table block
 5. **Python for file ops** — use Python with UTF-8 encoding when reading/writing TMDL; Windows shell tools break on accented characters
+
+---
+
+# Imported by that skill — ../../powerbi/brand-profile.md
+
+# Brand Profile — Schema and Contract
+
+Every Power BI skill document under this domain (`custom-visuals.md`, `visual-verification.md`,
+`pbir-gotchas.md`, `report-visual-json.md`, `quality-tiers-antipatterns.md`, `pbi-workflows.md`,
+and the mode's own `SKILL.md`) refers to **"the active brand profile"** instead of naming a
+client, a palette, a font, or a logo path directly. This file is the schema/contract for that
+profile: what it contains, how an agent resolves which one is active, and the rules for when a
+deviation from it is legitimate.
+
+**No skill text in this domain may hardcode a client's brand identity** — not a hex code, not a
+font name, not a logo path, not a sentiment color. If a concrete value is needed to illustrate a
+pattern, write it as a reference into the active profile (e.g. "the active brand profile's
+`palette.primary[0]` color") rather than a literal.
+
+## Why this exists
+
+The reference content in this domain carries real engineering value — PBIR gotchas, DAX
+patterns, visual-verification tooling — that has nothing to do with any one client's colors or
+logo. Baking a specific brand into the skill text would mean every new engagement requires
+editing the skill itself. Instead, brand identity lives in a small, swappable profile file, and
+the skill text only ever points at it.
+
+## Resolving the active profile
+
+1. If the user has already told the agent which engagement/client this work is for and a profile
+   exists for it, use that profile.
+2. If it's unclear which profile applies and the work involves theming, branding, or visual
+   styling, **ask** — don't guess a client's colors.
+3. If nothing else is specified (a scratch report, an internal demo, a first pass before a client
+   profile exists), fall back to `brand-profiles/default.yml` — the neutral starter profile
+   shipped alongside this file.
+4. Once resolved, read the profile's fields and the theme file it points to before doing any
+   theming, TMDL, JSON, or TypeScript work that touches color, font, or logo.
+
+## Schema
+
+A brand profile is a YAML file with this shape:
+
+```yaml
+name: "<profile display name>"
+
+palette:
+  primary:
+    # Chart-series colors double as the profile's primary identity colors, in order.
+    # role is a stable identifier other skill text can reference; hex is the value.
+    - role: default_text          # body/label text color
+      hex: "#1F2933"
+    - role: primary_series        # first data-series / chart color
+      hex: "#1F2933"
+    - role: accent_selected       # accent / selected-state color
+      hex: "#2E6FDB"
+    # Additional entries extend the series palette (role: series_3, series_4, ...)
+
+  secondary:
+    # Dividers, backgrounds, alternating row shading — the quiet colors.
+    - role: divider
+      hex: "#D7DEE5"
+    - role: background_alt
+      hex: "#F4F6F8"
+    - role: row_alternate
+      hex: "#EDF1F4"
+
+  accent:
+    # sentiment_policy governs how positive/negative values are conveyed:
+    #   neutral       — no color-coded positive/negative. Direction is conveyed by
+    #                   arrow glyphs (▲▼) plus a single text color; use bold weight
+    #                   for emphasis instead of a second color.
+    #   accent-coded  — positive and negative/attention accent colors below are
+    #                   applied directly to values, fonts, or conditional formatting.
+    sentiment_policy: neutral        # "neutral" | "accent-coded"
+    positive: null                   # hex; required when sentiment_policy = accent-coded
+    negative: null                   # hex; required when sentiment_policy = accent-coded
+    attention: "#2E6FDB"             # "deserves a look" accent — used under either policy
+
+typography:
+  # Power BI only renders fonts actually installed on the VIEWER'S machine — a
+  # brand guide's print/display font is not safe here. Use a system/Microsoft-suite
+  # font (Segoe UI, Calibri, Arial) unless the engagement has confirmed the display
+  # font is installed tenant-wide.
+  font_family: "Segoe UI"
+  roles:
+    title:    { size: 32, weight: "bold" }
+    header:   { size: 14, weight: "semibold" }
+    callout:  { size: 22, weight: "bold" }      # card / big-number values
+    label:    { size: 11, weight: "regular" }
+    footnote: { size: 9,  weight: "italic" }
+
+logo:
+  # Each variant is a PATH PLACEHOLDER. The active engagement supplies the actual
+  # asset; a brand profile never bundles a logo file itself (see "Never bundle
+  # assets" below).
+  variants:
+    full_color: ""      # for light backgrounds
+    white: ""            # for dark/saturated backgrounds
+    on_dark: ""           # alias of white, kept distinct in case the engagement
+                          # wants a different asset for a dark-but-not-brand-color bg
+  selection_rule: >
+    Light or neutral page background -> full_color. Dark or saturated brand-color
+    background -> white (or on_dark if supplied separately).
+
+page_chrome:
+  # Layout conventions for the header/footer band — not pixel positions (those
+  # live in report-visual-json.md's generic canvas-grid convention), just which
+  # slot each chrome element occupies.
+  logo_position: "top-left"
+  refresh_indicator_position: "top-right"
+  footnote_style: "footer band, italic, footnote-size, divider-color text"
+
+theme_file: "brand-profiles/default-theme.json"
+  # Path to the actual Power BI theme JSON for this profile. Import it in Power BI
+  # Desktop via View -> Themes -> Browse for themes. See pbi-workflows.md.
+
+decision_rules:
+  # When it's correct to deviate from the active profile instead of applying it.
+  - "White-label client deliverable: use the client's own theme instead of the active profile."
+  - "One-off accent moment explicitly requested by the user: apply at the visual
+     level only (objects / conditional formatting on that one visual) — never
+     promote a one-off into the theme or into other visuals."
+```
+
+### Field notes
+
+- **`palette.primary`** — a brand's "primary colors" double as its ordered chart-series palette.
+  `role: primary_series` is index 0 into the theme's `dataColors[]`; later `series_N` entries are
+  index 1, 2, 3... Skill text should say "`ColorId` indexes into the active brand profile's
+  `dataColors` order" rather than naming a specific color at a specific index (see
+  `report-visual-json.md`'s `ThemeDataColor` section).
+- **`palette.accent.sentiment_policy`** — this is the field that replaces every "no traffic-light
+  red/green, use Navy + arrows" or "green/orange sentiment, no red" rule from a specific brand
+  guide. A profile with `neutral` policy gets direction from glyph + weight, never a second color.
+  A profile with `accent-coded` policy gets `positive`/`negative` hexes applied directly.
+- **`typography.font_family`** — must be a font Power BI can actually render for the audience.
+  Prefer the Microsoft/Windows system font set (Segoe UI, Calibri, Arial) unless the engagement
+  has verified tenant-wide font installation.
+- **`logo.variants`** — always empty-string placeholders in a committed profile. Never commit an
+  actual logo asset into this domain (see below).
+- **`theme_file`** — points at an actual Power BI theme JSON, which is the file you import into
+  Power BI Desktop. The profile YAML itself is not importable into Power BI; it's the
+  skill-readable source of truth that the theme JSON (and any TypeScript/TMDL that needs a brand
+  value) is generated from or kept in sync with.
+
+## Never bundle client assets
+
+A brand profile file (YAML or theme JSON) never contains or points at a committed logo image,
+font file, or any other binary brand asset belonging to a real client. Logo paths are always
+placeholders the active engagement fills in from its own workspace. This keeps the skill
+repository free of any one client's intellectual property and keeps profiles trivially
+swappable — the whole point of this mechanism.
+
+## Using a profile in skill work
+
+- **Theming a report:** read `theme_file`, apply it per `pbi-workflows.md`'s theme-application
+  section.
+- **Writing DAX/visual-JSON conditional color:** reference the resolved hex from the active
+  profile's `palette.accent` (if `sentiment_policy: accent-coded`) or the `neutral` glyph/weight
+  convention — never hardcode a hex in the measure or visual JSON itself beyond what the active
+  profile resolved to for this one piece of work.
+- **Scaffolding a custom visual:** derive the generated LESS variables and format-pane color
+  defaults from the active profile's `palette` and `typography`, not from any example baked into
+  this skill (see `custom-visuals.md` and `scripts/new-visual.ps1`'s `-BrandProfile` parameter).
+- **No profile resolvable and the work doesn't need one yet:** proceed, but resolve before the
+  first theming/branding/visual-styling decision actually has to be made.
+
+## Default profile
+
+`brand-profiles/default.yml` is a concrete, neutral profile conforming to this schema — the
+fallback when no engagement-specific profile is supplied. It is intentionally plain: a dark
+neutral slate for default text and the primary series, a mid-blue accent, light-grey secondary
+tones, Segoe UI typography, and `sentiment_policy: neutral`. It carries no trace of any specific
+client's brand identity. `brand-profiles/default-theme.json` is its paired, importable Power BI
+theme JSON.
+
+---
+
+# Imported by that skill — ../../powerbi/custom-visuals.md
+
+# Custom Visual (pbiviz) Development
+
+Building, theming, packaging, and certifying Power BI custom visuals (pbiviz / IVisual /
+TypeScript). Companion to this domain's `dax-patterns.md` / `m-query-patterns.md` /
+`tmdl-authoring.md` / `pbip-format.md` (semantic-model and report-JSON side) and to
+`visual-verification.md` (self-verifying a report change). Read `brand-profile.md` first if this
+work touches any color, font, or logo default.
+
+All `scripts/...` paths below are relative to the power-platform mode's own directory:
+`canonical/skills/domains/modes/power-platform/` (sibling to that mode's `SKILL.md`).
+
+## When to build custom vs. stock
+
+Build a custom visual when:
+
+- **Grid consolidation** — replacing dozens of card visuals with one (a KPI-grid pattern).
+- **Embedded controls** — the visual needs its own dropdown/toggle, avoiding a separate slicer.
+- **Domain-specific visualization** — a distribution heatmap, a status strip, a timeline with
+  event markers and shaded regions — where stock matrix/line visuals can't render the shape.
+- **Quadrant analysis with auto-computed thresholds** — a scatter plot that computes its own
+  median/quartile lines from the bound data.
+- **Complex cross-filtering** — selection logic that's awkward to express in a stock slicer.
+
+Use a stock visual when:
+
+- Simple bar/line/scatter with no special interactivity.
+- Standard table or matrix.
+- KPI cards — including the trapezoid/cut-corner look (`shapeCustomRectangle.tileShape:
+  'tabCutTopCornersByPixel'`, a stock `cardVisual` property — see `report-visual-json.md`). This
+  is **not** a reason to build a custom visual.
+
+**Escalation discipline (from the main build skill):** after three distinct stock-visual
+approaches have failed to meet a requirement, custom-visual development is the right tool — but
+confirm with the user before starting; it's a multi-day commitment, not a one-off edit. For an
+immediate, unambiguous custom-visual request (the user says "pbiviz", "capabilities.json",
+"IVisual", "build a custom visual", etc.), start directly — no three-attempt threshold needed.
+
+## Project structure
+
+```
+<org-prefix>-<kebab-case-name>/
+├── pbiviz.json                       ← visual metadata + entry points
+├── capabilities.json                 ← data roles, formatting properties, dataView mapping
+├── package.json                      ← npm dependencies + scripts
+├── tsconfig.json                     ← TypeScript config
+├── eslint.config.mjs                 ← Power BI ESLint rules
+├── src/
+│   ├── visual.ts                     ← main Visual class (IVisual)
+│   └── settings.ts                   ← FormattingSettingsModel
+├── style/
+│   └── visual.less                   ← LESS stylesheet
+├── assets/
+│   └── icon.png                      ← visual thumbnail (20×20; also 64×64 for org install)
+└── dist/                             ← .pbiviz output (gitignored)
+```
+
+### Naming conventions
+
+Use your organization's own short prefix, consistently, across folder name, `pbiviz.json`'s
+`name`, `guid`, and `displayName`:
+
+| Field | Format | Example (prefix `acme`) |
+|---|---|---|
+| Folder | `<prefix>-<kebab-case-name>` | `acme-status-slicer` |
+| `name` in JSON | `<prefix><PascalCaseName>` | `acmeStatusSlicer` |
+| `guid` | `<prefix><PascalCaseName>` + 32 hex chars | `acmeStatusSlicerA1B2C3D4...` |
+| `displayName` | `<Org> <Spaced Name>` | `Acme Status Slicer` |
+
+Generate the GUID suffix fresh from any UUID generator (strip dashes) for every new visual —
+never copy-paste from another visual's GUID. The full GUID must be globally unique across every
+custom visual ever published, anywhere.
+
+### Scaffold script
+
+```powershell
+pwsh scripts/new-visual.ps1 -Name "MyVisual" -DisplayName "My Visual" -BrandProfile <path-to-profile.yml>
+```
+
+Wraps `pbiviz new` and patches in the active brand profile's defaults (typography and format-pane
+color defaults in `style/visual.less`, author info, org prefix). Omit `-BrandProfile` to fall back
+to `brand-profiles/default.yml`. See `scripts/new-visual.ps1`.
+
+### `pbiviz.json`
+
+```json
+{
+  "visual": {
+    "name": "acmeMyVisual",
+    "displayName": "Acme My Visual",
+    "guid": "acmeMyVisualXXXXXXXXXXXXXXXXXXXXXX",
+    "visualClassName": "Visual",
+    "version": "1.0.0.0",
+    "description": "One-line description of what the visual does."
+  },
+  "apiVersion": "5.3.0",
+  "author": {
+    "name": "<your organization>",
+    "email": "<contact address>"
+  },
+  "assets": {
+    "icon": "assets/icon.png"
+  },
+  "style": "style/visual.less",
+  "capabilities": "capabilities.json"
+}
+```
+
+### `package.json`
+
+```json
+{
+  "name": "visual",
+  "version": "1.0.0.0",
+  "scripts": {
+    "pbiviz": "pbiviz",
+    "start": "pbiviz start",
+    "package": "pbiviz package",
+    "lint": "npx eslint ."
+  },
+  "dependencies": {
+    "@types/d3": "7.4.3",
+    "d3": "7.9.0",
+    "powerbi-visuals-api": "~5.3.0",
+    "powerbi-visuals-utils-formattingmodel": "6.0.4"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.8.0",
+    "eslint": "^9.11.1",
+    "eslint-plugin-powerbi-visuals": "^1.0.0",
+    "typescript": "5.5.4"
+  }
+}
+```
+
+Pin versions exactly. Mismatches between `powerbi-visuals-api` and
+`powerbi-visuals-utils-formattingmodel` are a common build-failure source (see Gotcha #9 below) —
+the 5.3.0 API expects 6.0.4 of the formatting utils; bump both together.
+
+### `tsconfig.json`
+
+```json
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "moduleResolution": "node",
+    "lib": ["es2022", "dom"],
+    "outDir": "./.tmp/build/",
+    "strict": true
+  },
+  "files": ["./src/visual.ts"]
+}
+```
+
+### `eslint.config.mjs`
+
+```js
+import powerbiVisualsConfigs from "eslint-plugin-powerbi-visuals";
+
+export default [
+    powerbiVisualsConfigs.configs.recommended,
+    { ignores: ["node_modules/**", "dist/**", ".vscode/**", ".tmp/**"] }
+];
+```
+
+### `style/visual.less`
+
+Derive the color/font variables from the active brand profile rather than hardcoding a specific
+palette:
+
+```less
+@font-family: "<active profile typography.font_family>", "Segoe UI", sans-serif;
+@text-color: <active profile palette.primary default_text hex>;
+@accent-color: <active profile palette.primary accent_selected hex>;
+@border-color: <active profile palette.secondary divider hex>;
+@white: #FFFFFF;
+
+.visual-container {
+  font-family: @font-family;
+  color: @text-color;
+  overflow-y: auto;
+
+  .tile {
+    background: @white;
+    color: @text-color;
+    border: 1px solid @border-color;
+    padding: 8px 12px;
+
+    &--selected {
+      background: @border-color;
+      border-color: @accent-color;
+    }
+
+    &--dimmed {
+      opacity: 0.35;
+    }
+  }
+}
+```
+
+`scripts/new-visual.ps1` generates this block automatically from whatever `-BrandProfile` you
+pass it (or the default profile if omitted) — you shouldn't normally hand-write it.
+
+## `capabilities.json`
+
+Defines what fields the user can drop on the visual, how Power BI delivers data, and what
+formatting properties appear in the format pane. Three main sections: `dataRoles`,
+`dataViewMappings`, `objects`.
+
+### Categorical data role pattern (most common)
+
+```json
+{
+  "dataRoles": [
+    {
+      "displayName": "Category",
+      "name": "category",
+      "kind": "Grouping",
+      "description": "What to group rows by"
+    },
+    {
+      "displayName": "Value",
+      "name": "value",
+      "kind": "Measure",
+      "description": "Numeric value driving the visual"
+    }
+  ],
+  "dataViewMappings": [
+    {
+      "categorical": {
+        "categories": {
+          "for": { "in": "category" },
+          "dataReductionAlgorithm": { "top": { "count": 500 } }
+        },
+        "values": {
+          "select": [{ "bind": { "to": "value" } }]
+        }
+      }
+    }
+  ],
+  "objects": {
+    "myCard": {
+      "properties": {
+        "color": { "type": { "fill": { "solid": { "color": true } } } },
+        "fontSize": { "type": { "formatting": { "fontSize": true } } },
+        "showLabels": { "type": { "bool": true } }
+      }
+    }
+  },
+  "privileges": []
+}
+```
+
+### Matrix data role (heatmap, cross-tab)
+
+```json
+"dataViewMappings": [{
+  "matrix": {
+    "rows": { "for": { "in": "rows" }, "dataReductionAlgorithm": { "top": { "count": 2000 } } },
+    "columns": { "for": { "in": "columns" }, "dataReductionAlgorithm": { "top": { "count": 200 } } },
+    "values": { "select": [{ "bind": { "to": "values" } }] }
+  }
+}]
+```
+
+### `kind` values for data roles
+
+- `Grouping` — dimension fields users group by
+- `Measure` — numeric aggregates
+- `GroupingOrMeasure` — accepts either
+
+### `dataReductionAlgorithm` is required
+
+Without a cap, large datasets crash the visual. Common values:
+
+- `{ "top": { "count": 500 } }` — first 500 categories
+- `{ "sample": { "count": 1000 } }` — random sample
+- `{ "bottom": { "count": 100 } }` — last 100 categories
+
+Pick a value that's a reasonable upper bound for the visual's purpose. A KPI grid might cap at
+50; a distribution heatmap might cap at 2,000; a matrix at 2,000 rows.
+
+### `objects` types (formatting pane properties)
+
+| Type | Use for |
+|---|---|
+| `{ "numeric": true }` | Number input (font size, columns, etc.) |
+| `{ "bool": true }` | Toggle |
+| `{ "text": true }` | Text input |
+| `{ "fill": { "solid": { "color": true } } }` | Color picker |
+| `{ "formatting": { "fontSize": true } }` | Font-size dropdown |
+| `{ "enumeration": [...] }` | Dropdown with predefined choices |
+| `{ "formatting": { "fontFamily": true } }` | Font family picker |
+
+The `objects` IDs and property names here must match the names used in `settings.ts` — that's how
+Power BI wires format-pane controls to your TypeScript.
+
+### `privileges`
+
+Most visuals: `"privileges": []`. Add specific privileges only if needed:
+
+```json
+"privileges": [
+  { "name": "WebAccess", "essential": true, "parameters": ["https://*.example.com"] }
+]
+```
+
+For org-wide or certified visuals, reviewers scrutinize any non-empty `privileges` — see the
+Certification Checklist below.
+
+## `src/settings.ts`
+
+`FormattingSettingsModel` pattern using `powerbi-visuals-utils-formattingmodel` — the TypeScript
+side of the format pane. The `objects` IDs in `capabilities.json` must match the `name` fields
+here.
+
+```ts
+import { formattingSettings } from "powerbi-visuals-utils-formattingmodel";
+
+import FormattingSettingsCard = formattingSettings.SimpleCard;
+import FormattingSettingsSlice = formattingSettings.Slice;
+import FormattingSettingsModel = formattingSettings.Model;
+
+class MyCard extends FormattingSettingsCard {
+    color = new formattingSettings.ColorPicker({
+        name: "color",
+        displayName: "Color",
+        value: { value: "<active brand profile default_text hex>" }
+    });
+
+    fontSize = new formattingSettings.NumUpDown({
+        name: "fontSize",
+        displayName: "Font Size",
+        value: 12,
+        options: {
+            minValue: { type: powerbi.visuals.ValidatorType.Min, value: 8 },
+            maxValue: { type: powerbi.visuals.ValidatorType.Max, value: 36 }
+        }
+    });
+
+    showLabels = new formattingSettings.ToggleSwitch({
+        name: "showLabels",
+        displayName: "Show Labels",
+        value: true
+    });
+
+    name: string = "myCard";              // ← matches capabilities.json objects.myCard
+    displayName: string = "My Card";
+    slices: Array<FormattingSettingsSlice> = [this.color, this.fontSize, this.showLabels];
+}
+
+export class VisualFormattingSettingsModel extends FormattingSettingsModel {
+    myCard = new MyCard();
+    cards = [this.myCard];
+}
+```
+
+### Common slice types
+
+| Slice | Use for |
+|---|---|
+| `ColorPicker` | Color selection. `value: { value: "#HEX" }`. |
+| `NumUpDown` | Numeric input with min/max. |
+| `Slider` | 0–100 range. |
+| `ToggleSwitch` | Boolean toggle. |
+| `TextInput` | Free-text entry. |
+| `AutoDropdown` | Enum from `capabilities.json`'s `enumeration` list. |
+| `FontPicker` | Font family. |
+
+Full list is in `powerbi-visuals-utils-formattingmodel`'s typings — when in doubt, check the
+package's `.d.ts` or the Microsoft Learn format-pane docs.
+
+### Default values for a new visual's format-pane controls
+
+Use the active brand profile as the starting `value:` for each slice, not a hardcoded client's
+colors:
+
+| Slice | Source |
+|---|---|
+| Default text color | active profile `palette.primary` role `default_text` |
+| Default accent color | active profile `palette.primary` role `accent_selected` |
+| Default neutral / borders | active profile `palette.secondary` role `divider` |
+| Default font family | active profile `typography.font_family` |
+| Default font size | 10–12pt (10 for table cells, 11 for body, 12 for cards) is a reasonable starting range |
+| Default series colors | **Don't hardcode.** Pull from `host.colorPalette` in `visual.ts` — see Theme-Aware Colors below. |
+
+### Repopulate on every `update()`
+
+Critical: call `populateFormattingSettingsModel` on every `update()` invocation, not just in the
+constructor. Otherwise format-pane changes don't take effect (Gotcha #6 below).
+
+## `src/visual.ts`
+
+The `IVisual` class — main lifecycle, dataView handling, host APIs, selection, tooltip.
+
+```ts
+"use strict";
+
+import "./../style/visual.less";
+import powerbi from "powerbi-visuals-api";
+import { FormattingSettingsService } from "powerbi-visuals-utils-formattingmodel";
+
+import IVisual = powerbi.extensibility.visual.IVisual;
+import VisualConstructorOptions = powerbi.extensibility.visual.VisualConstructorOptions;
+import VisualUpdateOptions = powerbi.extensibility.visual.VisualUpdateOptions;
+import IVisualHost = powerbi.extensibility.visual.IVisualHost;
+import ISelectionManager = powerbi.extensibility.ISelectionManager;
+import IColorPalette = powerbi.extensibility.IColorPalette;
+
+import { VisualFormattingSettingsModel } from "./settings";
+
+export class Visual implements IVisual {
+    private target: HTMLElement;
+    private host: IVisualHost;
+    private selectionManager: ISelectionManager;
+    private colorPalette: IColorPalette;
+    private formattingSettings: VisualFormattingSettingsModel;
+    private formattingSettingsService: FormattingSettingsService;
+
+    constructor(options: VisualConstructorOptions) {
+        this.target = options.element;
+        this.host = options.host;
+        this.selectionManager = this.host.createSelectionManager();
+        this.colorPalette = this.host.colorPalette;        // ← honor active theme
+        this.formattingSettingsService = new FormattingSettingsService();
+        // Initialize root container in this.target (DOM or SVG)
+    }
+
+    public update(options: VisualUpdateOptions): void {
+        // 1. Validate dataView
+        const dataView = options.dataViews?.[0];
+        if (!dataView?.categorical?.categories?.length) {
+            this.renderEmptyState();
+            return;
+        }
+
+        // 2. Populate formatting settings from dataView (every update, not just constructor)
+        this.formattingSettings = this.formattingSettingsService.populateFormattingSettingsModel(
+            VisualFormattingSettingsModel,
+            dataView
+        );
+
+        // 3. Transform data
+        const data = this.transformData(dataView.categorical);
+
+        // 4. Render
+        this.render(data, options.viewport);
+    }
+
+    public getFormattingModel(): powerbi.visuals.FormattingModel {
+        return this.formattingSettingsService.buildFormattingModel(this.formattingSettings);
+    }
+
+    private transformData(categorical: powerbi.DataViewCategorical) {
+        const categories = categorical.categories[0];
+        const values = categorical.values[0];
+
+        return categories.values.map((cat, i) => ({
+            category: <string>cat,
+            value: <number>values.values[i],
+            selectionId: this.host.createSelectionIdBuilder()
+                .withCategory(categories, i)
+                .createSelectionId()
+        }));
+    }
+
+    private render(data: any[], viewport: powerbi.IViewport) {
+        // Clear container — DOM accumulates across update() calls otherwise
+        while (this.target.firstChild) this.target.removeChild(this.target.firstChild);
+
+        // Use this.colorPalette.getColor(seriesName).value for theme-aware series colors
+        // Use this.formattingSettings.<card>.<property>.value for user settings
+
+        data.forEach((row, i) => {
+            const el = document.createElement("div");
+            el.className = "tile";
+            el.style.color = this.formattingSettings.myCard.color.value.value;
+            el.style.fontSize = this.formattingSettings.myCard.fontSize.value + "px";
+            el.textContent = `${row.category}: ${row.value}`;
+
+            // Cross-filter on click
+            el.addEventListener("click", (e) => {
+                this.selectionManager.select(row.selectionId, (e as MouseEvent).ctrlKey)
+                    .then(() => this.updateSelectionStyle());
+            });
+
+            this.target.appendChild(el);
+        });
+    }
+
+    private renderEmptyState() {
+        while (this.target.firstChild) this.target.removeChild(this.target.firstChild);
+        const empty = document.createElement("div");
+        empty.className = "visual-empty";
+        empty.innerHTML = "<h3>Add data to see the visual</h3>";
+        this.target.appendChild(empty);
+    }
+
+    private updateSelectionStyle() {
+        // Re-render with dimming for unselected items
+    }
+}
+```
+
+### Selection manager + cross-filter
+
+```ts
+this.selectionManager.select(selectionId, multiSelect).then(() => {
+    const selectedIds = this.selectionManager.getSelectionIds();
+    // Re-render with dimming for non-selected items
+});
+```
+
+Build selection IDs at data-transform time (not at click time — they need the categorical
+metadata):
+
+```ts
+const selectionId = this.host.createSelectionIdBuilder()
+    .withCategory(categories, rowIndex)
+    .createSelectionId();
+```
+
+For matrix data, use `.withMatrixNode(node, levels)`. For series data, `.withSeries(seriesGroups,
+seriesValue)`.
+
+### Tooltip service
+
+```ts
+private tooltipService = this.host.tooltipService;
+
+el.addEventListener("mouseover", (e) => {
+    this.tooltipService.show({
+        coordinates: [e.clientX, e.clientY],
+        isTouchEvent: false,
+        dataItems: [
+            { displayName: "Category", value: row.category },
+            { displayName: "Value", value: row.value.toString() }
+        ],
+        identities: [row.selectionId]
+    });
+});
+
+el.addEventListener("mouseout", () => {
+    this.tooltipService.hide({ immediately: false, isTouchEvent: false });
+});
+```
+
+## Theme-Aware Colors
+
+Why `host.colorPalette` matters, and why hardcoded hex constants (`#118DFF` or any other fixed
+value) are a smell to fix.
+
+### The pattern
+
+```ts
+const seriesColor = this.colorPalette.getColor("Series 1").value;  // pulls from active theme dataColors
+```
+
+When the report's active theme is the active brand profile's theme, this returns that profile's
+`dataColors[]` entries in order (`"Series 0"` → `palette.primary[0]`, `"Series 1"` →
+`palette.primary[1]`, and so on). When the analyst applies a different theme, the same code
+produces that theme's colors — no rebuild required.
+
+### Why this matters
+
+Custom visuals are one of the few places in a PBIP project where it's tempting to hardcode
+colors: the LESS stylesheet can define fixed variables, the format-pane color picker needs a
+default value, and TypeScript drawing a series sees a clean `colors[i]` API. It's faster to
+write `colors[i] = "#118DFF"` than to wire up the host palette correctly. But the cost is real:
+
+- The visual ignores the report theme — every brand profile's report looks wrong.
+- The visual is hostile to certified-visual review (org-wide rollout requires theme-aware colors).
+- Swapping a client's colors means rebuilding and republishing the visual instead of just
+  swapping the active brand profile's theme.
+
+### What to use `host.colorPalette` for vs. format-pane defaults
+
+| Use case | Use |
+|---|---|
+| Series colors (a category's bar, a line, a quadrant point) | `host.colorPalette.getColor(seriesName).value` |
+| Default value for a user-facing color picker (the analyst can override) | The active brand profile's default in `settings.ts` |
+| Fixed neutral chrome (borders, hover backgrounds, dimmed states) | The active brand profile's secondary color, hardcoded in `style/visual.less` as a LESS variable |
+| Conditional fills based on a value (positive vs. negative) | `host.colorPalette.getColor("Positive")`/`"Negative"` if the theme defines them — otherwise the active profile's `palette.accent.positive`/`negative` (if `sentiment_policy: accent-coded`) or its neutral glyph+weight convention |
+
+Rule of thumb: **anything driven by data** (series, categorical fills, conditional formatting)
+goes through `host.colorPalette`. **Anything driven by the visual's chrome** (borders, the format
+pane's default color value, dimming) is the active brand profile's value, hardcoded at build
+time.
+
+### Migrating an existing visual off hardcoded hex
+
+1. Find hex constants in `src/visual.ts` and `style/visual.less`.
+2. For each, decide: is this series-driven (data-bound) or chrome (fixed)?
+3. Series-driven → replace with `this.colorPalette.getColor(name).value`. Pick a stable `name`
+   (the category value, or `"Series 0"`/`"Series 1"`/etc.).
+4. Chrome → keep hardcoded but swap the value to the active brand profile's equivalent.
+5. Test with the active profile's theme applied — colors should match the report.
+6. Test with a different theme applied — colors should change. If they don't, a hardcoded
+   constant was missed.
+
+### Custom palette without a theme
+
+Sometimes the requirement is "use these specific colors regardless of theme" — a status-color
+encoding where Green = Active, Yellow = Warning, Red = Inactive must always be those colors
+regardless of the active brand profile. That's fine:
+
+```ts
+const STATUS_COLORS = { active: "#2E7D32", warning: "#F9A825", inactive: "#C62828" };
+```
+
+This is not a series color, it's a fixed semantic encoding. Document why it's hardcoded so a
+future reviewer doesn't try to "fix" it into `host.colorPalette`.
+
+## Packaging & Sideload
+
+### Pre-flight check
+
+Before scaffolding, verify the toolchain:
+
+```powershell
+pwsh scripts/check-pbiviz-env.ps1
+```
+
+Verifies Node ≥ 18, the `pbiviz` CLI (`npm i -g powerbi-visuals-tools`), and the pbiviz dev SSL
+certificate (`pbiviz install-cert`). Prints the exact fix command for anything missing.
+
+### Dev loop
+
+```bash
+cd <org-prefix>-<visual-name>/
+npm install          # first time
+npm start             # dev server at https://localhost:8080/
+```
+
+In Power BI Desktop:
+
+1. File → Options & Settings → Options → Preview features → enable **Developer Visual**
+   (one-time, per machine).
+2. Insert tab → "..." More visuals → Get more visuals → search "Developer Visual" → drop the
+   placeholder onto the report. It loads from `https://localhost:8080/`.
+3. Drop fields onto the visual. It hot-reloads on every TypeScript save.
+
+If changes don't appear: visual's "..." menu → **Refresh visual**. Still stuck: kill `npm start`,
+reload PBI Desktop, restart `npm start`.
+
+### Lint and package
+
+```bash
+npm run lint                        # ESLint with Power BI rules — fix all warnings before packaging
+npm run package                     # produces dist/<visualName>.<guid>.<version>.pbiviz
+```
+
+Bump `pbiviz.json`'s `version` for each release: `1.0.0.0` → `1.0.1.0` for a patch, `1.1.0.0` for
+a feature.
+
+### Installing the `.pbiviz` in one report
+
+Power BI Desktop → Insert → "..." More visuals → Import a visual from a file → pick the
+`.pbiviz`. The visual is embedded in that report only; it lives under the report's
+`.Report/CustomVisuals/` folder when saved as PBIP.
+
+### Installing organization-wide
+
+Power BI admin portal → Tenant settings → Organizational visuals → Add custom visual → upload the
+`.pbiviz`. Once a tenant admin approves, every user in the org finds it under "Get more visuals →
+My organization." Check the Certification Checklist below before submitting.
+
+### What to commit / ignore
+
+```gitignore
+node_modules/
+.tmp/
+dist/
+*.pbiviz                # if generated locally; commit only released versions
+```
+
+Commit released `.pbiviz` files separately as part of a release tag if a versioned download
+artifact is needed.
+
+## Gotchas
+
+Ten common failures during pbiviz development, in rough frequency order.
+
+### 1. GUID collision
+
+**Symptom:** the visual loads but data doesn't bind, or another report's custom visual shows
+instead.
+
+**Cause:** copy-pasting from another visual without changing `guid` in `pbiviz.json`. Power BI
+uses the GUID as the visual's identity.
+
+**Fix:** always generate a fresh GUID — `<name>` + 32 hex chars from any UUID generator (strip
+dashes). The full GUID must be globally unique across every custom visual ever published.
+
+### 2. `dataReductionAlgorithm` missing
+
+**Symptom:** works on small data, crashes or hangs on large datasets.
+
+**Cause:** `capabilities.json`'s `dataViewMappings` has no `dataReductionAlgorithm`.
+
+**Fix:**
+
+```json
+"categories": {
+  "for": { "in": "category" },
+  "dataReductionAlgorithm": { "top": { "count": 500 } }
+}
+```
+
+500 is fine for tile/grid visuals; 2000 for matrices; 50 for KPI cards.
+
+### 3. Hardcoded color hex
+
+**Symptom:** visual ignores the report theme regardless of which one is applied.
+
+**Cause:** series colors hardcoded as hex literals instead of `host.colorPalette`.
+
+**Fix:** see Theme-Aware Colors above. Replace `colors[i] = "#118DFF"` with `colors[i] =
+this.colorPalette.getColor("Series " + i).value`.
+
+### 4. No `renderEmptyState`
+
+**Symptom:** the visual throws (`Cannot read property 'values' of undefined`) the moment it's
+added with no fields bound.
+
+**Fix:** validate at the top of `update()`:
+
+```ts
+const dataView = options.dataViews?.[0];
+if (!dataView?.categorical?.categories?.length) {
+    this.renderEmptyState();
+    return;
+}
+```
+
+### 5. Forgetting to clear the container
+
+**Symptom:** DOM elements accumulate on every interaction — after 10 clicks, 10 stacked copies
+of every tile.
+
+**Fix:** clear at the top of every render:
+
+```ts
+while (this.target.firstChild) this.target.removeChild(this.target.firstChild);
+```
+
+### 6. Stale formatting settings
+
+**Symptom:** changing a format-pane value (font size, color) doesn't update the visual until
+re-added.
+
+**Cause:** `populateFormattingSettingsModel` only called in the constructor.
+
+**Fix:** call it on every `update()`:
+
+```ts
+this.formattingSettings = this.formattingSettingsService.populateFormattingSettingsModel(
+    VisualFormattingSettingsModel,
+    dataView
+);
+```
+
+### 7. Selection IDs not regenerated when data changes
+
+**Symptom:** clicking a tile cross-filters the wrong row, or stops filtering after a slicer
+change.
+
+**Fix:** rebuild selection IDs in `transformData` on every `update()`. Don't cache them at the
+class level.
+
+### 8. D3 scales not recomputed on viewport change
+
+**Symptom:** after resizing the visual on the canvas, points clip or axes misalign.
+
+**Fix:** recompute scales every `update()` from `options.viewport.width` / `.height`.
+
+### 9. API version mismatch
+
+**Symptom:** `npm install` succeeds but `npm start`/`npm run package` fails with cryptic
+TypeScript errors.
+
+**Cause:** `powerbi-visuals-api` and `powerbi-visuals-utils-formattingmodel` versions out of sync.
+
+**Fix:** pin both to versions known to work together (5.3.0 API ↔ 6.0.4 formatting utils). When
+upgrading, bump both at once and check the API release notes for breaking changes.
+
+### 10. Visual broke after a Power BI Desktop update
+
+**Symptom:** worked yesterday, broken today, no code change.
+
+**Cause:** Desktop pinned a newer API version than the sideloaded `.pbiviz` was built against.
+
+**Fix:** rebuild with `npm run package` against the current API version.
+
+## Certification Checklist
+
+Requirements before org-wide rollout, and the additional bar for Microsoft AppSource
+certification.
+
+### Org-wide minimum bar
+
+Required for any visual uploaded via Admin portal → Organizational visuals:
+
+- [ ] **Unique GUID.** No collision with any other org or Microsoft AppSource visual.
+- [ ] **`dataReductionAlgorithm` set on every `dataViewMapping`** — must not crash on a 100K-row table.
+- [ ] **Validates `dataView` at top of `update()`** — renders empty state on missing data.
+- [ ] **Theme-aware series colors** — `host.colorPalette` for all data-driven colors.
+- [ ] **No `console.log`** in the production build (lint should catch this).
+- [ ] **No external network calls** unless `privileges` declares them with a real reason.
+- [ ] **No `eval` / `Function` constructor** — fails security review.
+- [ ] **Linter passes** — `npm run lint` clean.
+- [ ] **Visual icon** — 20×20 PNG in `assets/icon.png`, optionally 64×64 for a listing.
+- [ ] **`description`** in `pbiviz.json` is one real human sentence, not "Custom visual."
+- [ ] **`version` is bumped** since the previous upload.
+- [ ] **Tested with the active brand profile's theme applied** — colors/fonts read correctly.
+- [ ] **Tested with empty data** — no JS error in console.
+- [ ] **Tested with maximum-cap data** — visual remains responsive.
+
+### Microsoft AppSource certified — additional bar
+
+Certified visuals can be embedded in exported PowerPoints/PDFs and pass through Power BI
+Service's stricter sandbox. Only pursue this if the visual will be published in AppSource.
+
+- [ ] **No external resources at runtime** — no fetched JS, fonts, images, or stylesheets. All
+      assets bundled.
+- [ ] **No `WebAccess` privilege** unless absolutely necessary; even then, declared with specific
+      URL patterns.
+- [ ] **Export-to-image works** — renders correctly when Power BI captures it as PNG/PDF (no
+      animations, no on-load delays).
+- [ ] **Consistent rendering across viewport sizes** — test at 200×100 (small mobile tile) and
+      1900×1000 (full canvas).
+- [ ] **Source code submission** — Microsoft reviews the TypeScript before certifying. No
+      embarrassing comments, no hardcoded internal URLs.
+- [ ] **Public author info** in `pbiviz.json` — `author.email` will be visible.
+- [ ] **Privacy policy URL** required for AppSource listing.
+
+### Submission process
+
+**Org-wide:** `npm run package` → upload via admin portal → Tenant settings → Organizational
+visuals → Add custom visual → tenant admin approves → visual appears under "Get more visuals → My
+organization."
+
+**Microsoft AppSource (certified):** submit via Partner Center, provide source code, Microsoft
+reviews (typically 2-4 weeks), approval adds the visual to AppSource with the certified checkmark.
+
+### Common rejection reasons
+
+- Missing `dataReductionAlgorithm` — crashes on test datasets.
+- Hardcoded colors — ignores the active theme.
+- Console errors on empty data — no `renderEmptyState`.
+- Network access without justification.
+- Mismatched `apiVersion` — submitted against a deprecated API version.
+
+Walk the Gotchas list above before submitting; it's the same checklist reviewers use.
+
+---
+
+# Imported by that skill — ../../powerbi/visual-verification.md
+
+# Visual Verification — Two-Path Self-Verification
+
+All `scripts/...` and `templates/...` paths in this file are relative to the power-platform
+mode's own directory: `canonical/skills/domains/modes/power-platform/` (sibling to that mode's
+`SKILL.md` and `version-detection.sh`) — not to this `powerbi/` domain folder.
+
+Self-verify Power BI report changes via two complementary paths before declaring a layout or
+visual-JSON change done. Both paths feed a multimodal `Read` so the agent verifies its own work
+instead of asserting it looks right from the JSON alone.
+
+- **Path B — static layout preview** (`scripts/preview-layout.mjs`): fast (~3s), no credentials,
+  deterministic. Reads `visual.json` bounding boxes and renders a wireframe mock — rectangles,
+  type chips, bound-field names. Does **not** show real colors, real data, or real chart/custom-
+  visual rendering. The inner-loop default for layout iteration.
+- **Path A — live Power BI Desktop screenshot** (`scripts/screenshot-pbi-desktop.ps1`): slower
+  (~20-45s), requires Power BI Desktop installed and (for the very first launch) a signed-in
+  session. Captures the real rendered report off-screen — real theme, real DAX values, real
+  chart/custom-visual output. The approval-gate render before surfacing work to the operator or
+  reviewer.
+
+**The operator/reviewer is the approver, not the verifier.** Work should never reach them with a
+defect either path's checklist would have caught.
+
+## When to use which
+
+| | Path B (static layout) | Path A (live Desktop) |
+|---|---|---|
+| Stack | Node + Playwright | PowerShell + System.Drawing (Win32 PrintWindow) |
+| Input | A `*.Report` folder | A `.pbip` file |
+| Output | PNG of every visual's rectangle at correct x/y/w/h, with type chip, title, bound fields | PNG of the rendered report canvas |
+| Speed | ~3 seconds | ~20s warm / ~45s cold |
+| Credentials | None | Power BI Desktop installed; first launch may need a signed-in session |
+| Determinism | Same input → same output | Captures whatever actually renders |
+| Sees real data? | No | Yes |
+| Sees real theme/colors? | No — fixed wireframe mock chrome | Yes |
+| Sees custom-visual (pbiviz) rendering? | No — rectangle + type chip only | Yes |
+| Can target a specific page? | Yes, `--page` | Yes, `-PageId` |
+
+### Use Path B by default for any layout question
+
+- "Did I move the visual to the right place?"
+- "Is anything overlapping after the rearrange?"
+- "Is the table cropped past the canvas?"
+- "Is the title still visible?"
+- "Did I bind the right fields?"
+- "Is the page chrome (logo, divider, header) intact after my edit?"
+- A quick sanity check after a bulk edit across multiple `visual.json` files.
+
+It's deterministic, fast, free, and answers layout-correctness questions in the large majority of
+cases.
+
+### Use Path A when the question is about rendered output
+
+- "Did the theme apply correctly? Are the colors right?"
+- "Does the conditional formatting on this column actually highlight the values I expect?"
+- "Is the data correct? Does the measure return what I expect?"
+- "Is the custom visual rendering its actual TypeScript output?" (Path B draws a generic
+  placeholder for any visual type it doesn't recognize, including custom visuals.)
+- "How does it look at full canvas size?"
+- "Did saving from Desktop break anything that doesn't show up in the JSON?"
+
+Use Path A sparingly — it's materially more expensive per iteration (cold start, process
+lifecycle, image-token cost) than Path B.
+
+### Combining the two
+
+A reasonable loop for a substantive visual rework:
+
+1. Edit `visual.json`.
+2. Run Path B to confirm position/binding.
+3. Loop 1–2 until layout is right.
+4. Run Path A once at the end to confirm theme/data/render.
+5. If Path A reveals an issue Path B couldn't see, fix and re-run Path A.
+
+Don't run Path A on every iteration — most edits are layout-only, and its cost is roughly an
+order of magnitude higher than Path B's.
+
+### Context budget — every Path A run costs multimodal tokens
+
+Each Path A round-trip can write both a full-window capture and a cropped canvas-only PNG.
+Reading both costs real tokens that stay in conversation history through every subsequent turn —
+image cost is unrecoverable. Rules of thumb:
+
+- **Read only the `_canvas.png` crop** in the inner verification loop. The full-window capture
+  (with Desktop's ribbon/pane chrome) is for diagnostic moments only.
+- **Pass `-CanvasOnly`** to the screenshot script when only the canvas is needed — it deletes the
+  full-window capture after cropping.
+- **Pass `-HighRes` only when pixel-precision matters** (diagnosing a 4px overflow, a 0.5pt font
+  weight question). The default resolution is legible for ordinary layout/typography/color
+  review.
+- **Cap visible Path A iterations per page per conversation** (roughly 10). Past that, image
+  context dominates working context — recommend a fresh conversation.
+- **Skip intermediate reads.** When iterating, run Path A → adjust → run again, but only `Read`
+  the final canvas before declaring done.
+
+## The troubleshooting loop
+
+When a `visual.json` has just been edited, or a user reports a visual issue, follow this 7-step
+loop.
+
+### 1. Identify the page and visual(s) in scope
+
+Every `visual.json` lives at `<Report>/definition/pages/<pageId>/visuals/<visualId>/visual.json`.
+From an edited file path you can derive both. If the user reports an issue without a path, ask
+which page, or grep `pages/*/visuals/<id>/visual.json` for the visual `name` they mentioned.
+
+### 2. Validate before rendering
+
+```bash
+node scripts/validate-visual-json.mjs "<...>.Report" --page <pageId>
+```
+
+Catches: missing `position` or non-numeric x/y/w/h, missing `visual.visualType`, a `name` field
+that doesn't match its folder, off-canvas warnings, plain JSON parse errors. Fix schema breaks
+first — there's no point rendering a broken JSON.
+
+### 3. Exec-quality scan
+
+```bash
+node scripts/exec-quality-check.mjs "<...>.Report"
+```
+
+Catches static defects a reviewer calls out repeatedly: opaque white textbox/image container
+backgrounds, on-canvas slicers (if the convention is Filter-pane-only), mismatched image aspect
+ratios, fractional pixel positions from a Desktop mouse-resize, missing `pivotTable` selectors,
+visible visual-level filters. **Must be clean before Path A.** See `pbir-gotchas.md` and
+`quality-tiers-antipatterns.md` for the mechanisms behind each check.
+
+### 4. Preview (Path B, fast)
+
+```bash
+node scripts/preview-layout.mjs "<...>.Report" --page <pageId> --out .preview/iter<N>-<pageId>.png
+```
+
+Number iterations (`iter1`, `iter2`, ...) so failed attempts aren't overwritten.
+
+### 5. Read and decide
+
+`Read` the PNG. Sanity-check: are visuals where expected? Any overlap? Is the title visible? Do
+bound fields match the ask?
+
+- **Layout correct and the change was layout-only** → done. Cite the PNG path.
+- **Layout wrong** → propose **one** minimal JSON edit and loop back to step 2. Don't shotgun
+  multiple changes at once — small, reversible edits are easier to verify.
+- **The change touched theme/colors/data/conditional formatting/custom visuals** → Path B can't
+  answer this. Run Path A as a follow-up.
+
+### 6. Approval gate (Path A, real render)
+
+Once Path B says layout looks right, or the question needs real colors/DAX/charts:
+
+```powershell
+powershell -File scripts/screenshot-pbi-desktop.ps1 `
+    -Pbip "<file>.pbip" `
+    -Out .preview/approval-<pageId>.png `
+    -PageId "<pageId>" `
+    -AssumeLoggedIn `
+    -CanvasOnly
+```
+
+**Set the tool timeout to at least 360000 ms (6 minutes).** The script's own render hard cap is
+300s; a shorter tool timeout kills the wrapper mid-run and orphans the spawned Power BI Desktop
+process (the next run's recovery logic cleans it up, but that run's capture is lost). `Read` the
+resulting PNG and walk it through the Exec-Grade Checklist below. **If any item fails, fix and
+re-render. Do not declare done.**
+
+### 7. Stop after 3 iterations
+
+If the visual still looks wrong after 3 self-verification passes, **stop and surface the PNGs and
+diagnosis to the operator/reviewer.** Three failures in a row usually means one of:
+
+- The static preview is missing the dimension that's actually broken (a data issue — run Path A).
+- The mental model of the fix is wrong — a human's eyes are faster than another speculative edit.
+- There's a Power BI rendering quirk that can't be fixed from JSON alone.
+
+Don't grind silently. Three is the cap.
+
+## Path A — how it works
+
+The live screenshot script (`scripts/screenshot-pbi-desktop.ps1`) does the following, end to end:
+
+1. **Resolves Power BI Desktop's path** — explicit parameter > `$env:PBI_DESKTOP_EXE` > `.pbip`
+   file association > App Paths registry > known install locations > `PATH`. Handles both the
+   classic installer and the Microsoft Store package.
+2. **Snapshots existing Power BI Desktop PIDs** — any process running before launch is sacred and
+   is never touched, even if the user has other projects open.
+3. **Applies reversible pre-launch JSON edits** — `pages/pages.json`'s `activePageName` set to the
+   requested page, `report.json`'s `outspacePane.expanded` set to `false` (collapses the filter
+   pane for more canvas). Originals are captured in memory and on disk for crash recovery.
+4. **Launches Power BI Desktop**, waits for the window it spawned (ignoring any pre-existing
+   session).
+5. **Three-stage adaptive wait:** a title gate (file loaded — window title contains the `.pbip`
+   stem, max 60s), a pixel-stability poll (a 16×9 fingerprint grid, mean-delta threshold, several
+   consecutive stable frames, max 4 min), and a hard cap on total elapsed time (max 5 min).
+6. **Off-screen capture** — moves the window to `(-32000, -32000)` so it never visibly sits over
+   the user's other work, resizes it to a deterministic size, then captures via `PrintWindow` with
+   `PW_RENDERFULLCONTENT`. (Not `ShowWindow(SW_HIDE)` — that crashes Power BI Desktop's
+   WPF/DirectX renderer.)
+7. **Auto-closes without a save prompt** — force-kills only the PIDs identified as spawned by this
+   run. Any pre-existing session is left untouched. Runs in a `finally` block, so every exit path
+   (success, timeout, capture error) closes the spawned instance.
+8. **Restores the original JSON** in the same `finally` block.
+9. **Crash recovery** — a stale edit-lock file from a previous crashed run restores the original
+   report JSON on the next run's start; an orphan-PID lock records every spawned PID so a prior
+   run that was hard-killed (tool timeout, Ctrl+C) gets its leaked Power BI Desktop instance
+   cleaned up by the next run.
+10. **Concurrency safety** — a machine-wide named mutex serializes Path A: one capture at a time
+    across every session on the machine. A second capture queues up to `-CaptureGateWaitSec`
+    (default 300s), then exits with a retryable gate-timeout code — that's not a failure, just
+    contention.
+
+### Honest caveats
+
+- The window briefly flashes at its default location for ~1-2s before being moved off-screen —
+  unavoidable until Power BI Desktop's WPF init tolerates `WindowStyle Hidden` (currently it
+  crashes the app in that state).
+- The captured frame includes Power BI Desktop's edit-mode chrome (ribbon, page tabs,
+  Visualizations/Data panes) unless cropped to canvas-only.
+- Modal dialogs (auth refresh, error popups) aren't auto-detected; if Desktop hangs on one, the
+  script exits with a render-timeout code after 5 minutes.
+- Concurrent sessions queue rather than parallelize — the machine-wide gate means N sessions
+  running Path A take N × capture-time.
+- Path A captures **edit mode**, not published view. Drill-down icons on a matrix, bookmark-driven
+  state, slicer interaction, drill-through navigation, and tooltip pages are all invisible in edit
+  mode — see "Blind spots" below.
+
+## What the layout preview shows
+
+Per visual on the page:
+
+- A rectangle at the visual's actual `position.{x,y,width,height}` (canvas defaults 1280×720, read
+  from `page.json`).
+- A type chip ("tableEx", "cardVisual", "azureMap", etc.).
+- The title text (or the visual's `name` if `visualContainerObjects.title.show=false`).
+- Bound field names from `visual.query.queryState.*.projections[].displayName`.
+- Type-appropriate filler — a striped grid for `tableEx`/`pivotTable`/`matrix`, a slicer chevron,
+  a big-number placeholder for `cardVisual`, a diagonal-striped pattern for maps, a dashed "IMG"
+  box for `image`, bar-chart placeholder bars for chart types, and so on. A custom (pbiviz) visual
+  renders as an explicit "not rendered in Path B" badge with its visual-type string — it does not
+  fall through to a misleading stock-chart mock even when its name contains a substring like
+  "scatter" or "slicer".
+
+This is **not** a data-faithful render — it's a wireframe. Treat it like a layout mock, not a
+preview of the finished report. The mock chrome uses a fixed neutral palette; it is not yet
+brand-aware (rendering the active brand profile's colors in the preview is a possible future
+enhancement, not current behavior).
+
+### `visualType` taxonomy
+
+| `visualType` (pattern) | Rendered as |
+|---|---|
+| `tableEx` / `pivotTable` / `matrix` | Striped grid: header row with column-name cells (from bound fields), placeholder body rows |
+| `card` / `cardVisual` | Soft background, big-number placeholder, centered |
+| `slicer` / `advancedSlicer` | Bordered box, label from first bound field, a chevron |
+| `azureMap` / `shapeMap` / `filledMap` / `map` | Diagonal striped pattern, "MAP" centered |
+| `image` | Dashed border, "IMG" centered, white background |
+| `shape` | Solid fill with rounded corners |
+| `*chart` / `*column` / `*bar` / `*line` / `*area` / `*pie` / `*donut` / `*scatter` / `*combo` / `*funnel` / `*gauge` / `*kpi` / `*treemap` | Axis lines + stepped placeholder bars |
+| Custom/organizational visual (a GUID/hash embedded in the `visualType` string) | Explicit "custom visual — not rendered in Path B" badge, detected **before** stock-pattern matching so a custom visual named e.g. `orgVelocityScatter` doesn't get mis-rendered as a stock scatter chart |
+| anything else | Soft background, raw `visualType` string shown verbatim |
+
+If a new stock or custom visual type starts showing up frequently and the unknown-type render
+isn't useful, add a regex branch to `renderFiller()` in `scripts/preview-layout.mjs`, the matching
+CSS to `templates/preview.html.tmpl`, and a row to this table.
+
+## Exec-grade checklist
+
+Path A captures must be inspected against this checklist before surfacing them to the
+operator/reviewer. The bar is presentation-ready for executive review on every affected page, not
+just the page being actively worked on.
+
+**How to apply:** render Path A on every affected page AND `Read` each PNG. Scan against this
+checklist. If any item fails, fix and re-render. Do not declare done until all pass.
+
+### 1. Scroll bars — zero tolerance
+
+- [ ] No vertical scroll bar on any image visual (banner, logo, footer)
+- [ ] No vertical scroll bar on any textbox (title, footnote, label)
+- [ ] No horizontal scroll bar on tables — all columns visible, no truncated headers
+- [ ] No scroll bar on small inline elements
+
+### 2. Truncated text — zero tolerance
+
+- [ ] No ellipsis on card values (`$252...` is a hard fail)
+- [ ] No truncated table cell values, especially right-aligned `$` columns
+- [ ] No clipped column headers
+- [ ] Names and labels fully visible
+
+### 3. Container backgrounds — every textbox/image
+
+- [ ] Logo and title/footnote image and text containers: `visualContainerObjects.background.show
+      = false` (they should bleed transparent, not frame in opaque white)
+- [ ] `cardVisual` containers: keep `background.show=true` with an explicit color — cards should
+      pop against the page background, unlike chrome text/images
+
+### 4. Aspect ratios — image containers must match their asset
+
+Verify every image visual's `position.width / position.height ≈` the actual source asset's
+aspect ratio. Tolerance ±5%. An off-ratio container with Fit/Fill scaling produces a stretched
+logo or letterboxed whitespace. Maintain the current engagement's actual registered-asset
+dimensions as a lookup table in `exec-quality-check.mjs` (see that script's `assetRatios` map) —
+it ships empty here since no assets are bundled with this skill; populate it from the active
+engagement's `StaticResources/RegisteredResources/`.
+
+### 5. Empty space inside visual containers
+
+- [ ] No empty area below table rows (container height ≈ data height + small padding)
+- [ ] No empty space inside a textbox container beyond font-height headroom
+- [ ] A visual with N rows × known row height should have a container ≈ that height, not the
+      full available body envelope
+
+### 6. Edit-mode artifacts
+
+Edit-mode captures (Path A) can show chrome that won't appear in published view:
+
+- [ ] No formatting toolbar overlay on a textbox (indicates it has focus)
+- [ ] No blinking caret next to titles or labels
+- [ ] No "..." menu chiclets near the top of visuals
+
+If present: consider replacing a static textbox with a `cardVisual` bound to a string measure, or
+accept the artifact only if confirmed to not appear in published view.
+
+### 7. Number formatting — exec readability
+
+- [ ] `$` values display compactly (e.g. `$252M`, never a raw unformatted integer overflowing a
+      card)
+- [ ] Tables can show full precision — more cell width is available there
+- [ ] Sentiment colors (if the active brand profile's `sentiment_policy` is `accent-coded`) match
+      that profile's `positive`/`negative` hexes; under `neutral` policy, direction is glyph +
+      weight only, never a second color
+
+### 8. Slicers — follow the engagement's on-canvas-slicer convention
+
+- [ ] If the convention is Filter-pane-only (confirm with the operator, don't assume): no slicer
+      visuals on the canvas; page-level filters via `page.json`'s `filterConfig.filters[]`
+- [ ] If an on-canvas slicer was explicitly requested, it's an accepted, intentional deviation —
+      the static scanner will still flag it; that's expected
+
+### 9. Alignment
+
+- [ ] Page title positioned per the page-chrome convention (left rail or top-left header)
+- [ ] Row labels aligned adjacent to the data they describe
+- [ ] Card titles and values centered within cards
+- [ ] Table column headers and cells aligned per column type (`$` right, text left)
+
+### 10. Template-copy hygiene — navigation & dev artifacts
+
+Reports scaffolded by copying another report inherit dev-era navigation and placeholder junk:
+
+- [ ] No `actionButton` on a visible page that page-navigates to a hidden page, unless confirmed
+      intentional — the tab strip / page navigator is the standard nav surface a client should see
+- [ ] No placeholder literals anywhere: `'test'` button states, `TODO`, `lorem`, `DELETE_*`
+      measure bindings
+- [ ] Every `pageNavigator` sets `pages.showHiddenPages = false` — otherwise hidden dev pages
+      appear in the tab strip during edit-mode review
+- [ ] Hidden pages orphaned by removed nav buttons are flagged for deletion, not left indefinitely
+      "hidden"
+
+All of the above are enforced statically by `exec-quality-check.mjs` (hidden-page findings
+downgrade to warnings there).
+
+### 11. Page-level
+
+- [ ] Page background is not pure white if the active profile specifies a page background color
+      — use it for depth
+- [ ] No large empty area below visuals before the footer (a gap over ~200px suggests visuals
+      should be repositioned or another visual added)
+- [ ] Page tabs at the bottom show the correct active page
+
+### What to do if a check fails
+
+1. **Don't ship.** Fix it. Re-render. Re-check.
+2. **Add to `pbir-gotchas.md`** if the fix is a non-obvious PBIR convention worth capturing.
+3. **Update `exec-quality-check.mjs`** if the defect is detectable statically from JSON.
+
+### Path A as the approval gate, not Path B alone
+
+Path B is bbox-only — it misses image padding, theme colors, container styling, real data fit,
+and font rendering. Settling for Path B alone on a styling-sensitive change is not acceptable.
+
+- Visual.json layout/style edits → Path A required before declaring done.
+- TMDL / measure / theme-only edits with no visual.json change → Path B sufficient.
+- Skill-doc edits only → no screenshot needed.
+
+## Blind spots — what each path cannot see
+
+Knowing which blind spot applies tells you when to escalate.
+
+### Path B (static layout preview)
+
+Path B reads bounding boxes from `visual.json` and draws them. It does not execute Power BI, so
+it cannot see:
+
+- Real theme colors — every visual renders with the same fixed mock chrome.
+- Real data — no DAX evaluation; values are placeholders.
+- Image internal padding — Power BI's default ~12px padding around a rendered image is invisible
+  here; a logo that looks "indented" in Desktop looks fine in Path B.
+- Chart rendering — bar/line/column charts render as generic placeholder bars.
+- Container background color application.
+- Conditional formatting / measure-driven colors — cells show a placeholder color, not the
+  resolved one.
+- Custom (pbiviz) visual TypeScript output — only the bounding rectangle and bound field names.
+
+**Escalate to Path A when** the question is about colors, data fit, image padding, custom-visual
+rendering, or whether a styling property actually took effect.
+
+### Path A (live Power BI Desktop screenshot)
+
+Path A captures Desktop in **edit mode**. It does not capture:
+
+- Drill-down icons (`+`/`−`) on matrix visuals — they only appear in published view / app reader.
+  Path A always shows a fully-expanded matrix regardless of `expansionStates.isCollapsed`.
+- Slicer interaction state or bookmark-driven state.
+- Drill-through navigation or tooltip pages.
+- Tall / non-standard-height canvases render at Desktop's persisted zoom and scroll position (not
+  stored in the PBIR source), so a very tall Fit-to-width page may capture only a slice of the
+  canvas. Use Path B for full-page structural review of tall pages; treat tall-page Path A
+  captures as spot checks of whatever region happens to be visible.
+
+**Escalate beyond Path A when** the question is about published-only behavior — publish to a
+workspace and screenshot, or toggle Desktop's View → Reading View manually.
+
+### Exec-quality scanner (`exec-quality-check.mjs`)
+
+A JSON-level static analyzer. It parses `visual.json`/`page.json` and checks structural
+properties — it does not rasterize anything, so it cannot see anything that only emerges at
+render time:
+
+- SVG text overflow inside a custom (pbiviz) visual's own rendering.
+- Missing layout features in a custom visual compared to an intended mockup.
+- Format-string mismatches (a number rendering `20.25%` when the intent was `+20.2%`).
+- Cross-visual bleed-through (a lower-z-order textbox showing through gaps between tiles).
+- Sentiment-color drift inside a pbiviz's own resolved rendering.
+- An auto-bound visual title placeholder Power BI may still emit despite `title.show=false`.
+- Header/footer band positioning that overlaps a custom visual in ways the per-visual bbox check
+  doesn't catch.
+
+**Mitigation:** Path A's multimodal `Read` is the catch-all. A clean `exec-quality-check` scan is
+necessary but not sufficient for declaring done. After it passes and Path A succeeds, scan the
+canvas image specifically for: caption text fully visible inside every tile, column headers
+present where the mockup has them, no stray fragments in tile gaps, number formats matching the
+mockup's precision, sentiment arrows/colors matching the value's sign, and label-tile grouping
+matching the mockup's structure. The image-diff tool below (`compare-render.mjs`) is the
+pixel-level safety net for what this scanner structurally can't see.
+
+## Render-level regression checking
+
+Once a render is approved, save it as a baseline (e.g. `.preview/approval-<page>_canvas.png`).
+Diff future captures against it to catch silent regressions:
+
+```bash
+node scripts/compare-render.mjs <candidate.png> <baseline.png> [--max-diff-pct 0.5] [--threshold 0.1]
+```
+
+This flags *that* something changed in pixels (clipped text, color drift, a layout shift); the
+multimodal `Read` of the diff image tells you *what*.
+
+## Honest limitations
+
+- Path B doesn't render data, theme colors, or chart shapes — it's a wireframe, not a faithful
+  render.
+- Path B can't render a custom visual's actual TypeScript output — only its bounding rectangle
+  and bound fields. For real custom-visual output, use Path A or `npm start` sideload (see
+  `custom-visuals.md`).
+- Path A captures with Desktop's chrome visible unless cropped to canvas-only.
+- Path A briefly flashes the Desktop window on launch before moving it off-screen.
+- Path A doesn't auto-detect modal dialogs; a hung modal surfaces as a render-timeout after 5
+  minutes.
+- Path A can't clean up after a hard kill of the script process itself (tool timeout, Ctrl+C on
+  some hosts) — the spawned Desktop instance survives until the next run's orphan-PID recovery.
+  Always pass a tool timeout ≥ 360s so this stays rare.
+- Concurrent sessions queue rather than parallelize.
+- Path A captures edit mode, not published view.
+
+## Resources in this domain
+
+| Path | What it is |
+|---|---|
+| `scripts/preview-layout.mjs` | Node + Playwright static layout previewer (Path B). |
+| `scripts/validate-visual-json.mjs` | ajv-based pre-flight schema validator. |
+| `scripts/exec-quality-check.mjs` | JSON-level static defect scanner (see `pbir-gotchas.md` for the mechanisms it enforces). |
+| `scripts/check-page-chrome-drift.mjs` | Detects drift in repeated chrome visuals (logo, title, refresh indicator, footer) across pages. |
+| `scripts/hide-visual-filters.mjs` | Bulk-sets `isHiddenInViewMode:true` on every visual-level filter already in a `filterConfig`. |
+| `scripts/preemptive-hide-fields.mjs` | Pre-creates hidden filter entries for bound fields PBI hasn't persisted yet. |
+| `scripts/post-save.mjs` | Umbrella pipeline chaining the above four scripts in order. Run after every Power BI Desktop save session. |
+| `scripts/round-positions.mjs` | Rounds fractional position coordinates from a Desktop mouse-resize to integers. |
+| `scripts/compare-render.mjs` | Pixel-diff a candidate render against an approved baseline. |
+| `scripts/bulk-transparent-bg.mjs` | Sets `background.show=false` on textbox/image visuals by name, in bulk. |
+| `scripts/zero-textbox-padding.mjs` | Zeroes textbox internal padding so short containers don't clip/scroll text. |
+| `templates/preview.html.tmpl` | HTML scaffold with the mock-chrome CSS used by `preview-layout.mjs`. |
+| `references/schemas/visual.schema.json` (ported as `schemas/visual.schema.json`) | Local, intentionally permissive PBIR visual schema for offline validation. |
+| `scripts/screenshot-pbi-desktop.ps1` | Path A — live Power BI Desktop screenshot. |
+| `scripts/edit-report-for-capture.ps1` | Reversible JSON edits used by Path A (dot-sourced helper). |
+
+---
+
+# Imported by that skill — ../../powerbi/pbir-gotchas.md
+
+# PBIR and TMDL Gotchas
+
+Hand-edited `visual.json`, `page.json`, and `.tmdl` files hit a small set of recurring traps. The
+PBIR JSON schema is permissive — Power BI Desktop's renderer is stricter than the schema, and
+several of these fail **silently** (clean schema, wrong or blank render) rather than with an
+error on open. Check each before declaring a change done.
+
+All `scripts/...` paths below are relative to the power-platform mode's own directory:
+`canonical/skills/domains/modes/power-platform/`.
+
+---
+
+## 1. `visualContainerObjects` placement
+
+**Rule:** `visualContainerObjects` (holds `border`, `background`, `padding`, `title`) MUST be a
+child of `visual`, NOT a top-level sibling.
+
+```json
+{
+  "name": "...",
+  "position": {...},
+  "visual": {
+    "visualType": "...",
+    "objects": {...},
+    "visualContainerObjects": {...},   // ← HERE
+    "drillFilterOtherVisuals": true
+  }
+}
+```
+
+Top-level placement fails schema validation on `.pbip` open:
+> Property 'visualContainerObjects' has not been defined and the schema does not allow additional properties.
+
+---
+
+## 2. Slicer shape — start minimal, expand from a proven example
+
+**Rule:** The schema validator passes slicer shapes Power BI Desktop silently rejects (renders the
+page blank). The minimal shape below is a **safe floor**, not a hard ceiling — properties beyond
+it are not automatically fatal, but if a hand-authored slicer renders the page blank, strip back
+to this floor and re-add one property at a time.
+
+Safe-floor shape:
+- `objects.data[].properties.mode` = `'Dropdown'`
+- `objects.items[].properties.textSize` = a numeric `D` literal (NO `fontFamily`)
+- `visualContainerObjects.title` — may set `show`, `text`, `fontColor`. NOT `fontFamily` or
+  `textSize`.
+- `query.queryState.Values.projections[]` with `"active": true`
+
+**Confirmed working beyond the floor** (don't treat these as forbidden — a production slicer can
+render cleanly with all of them):
+- `objects.selection[].properties.singleSelect = false` (explicit multi-select; omitting it also
+  defaults to multi-select)
+- `objects.general[].properties.filter` — a pre-selected default value
+- `objects.header[].properties.show = false` (hide the built-in header when using a container
+  title instead)
+- `objects.items[].properties.textSize = '11D'`
+- `visualContainerObjects.border[].properties.radius = '4D'` (rounded corners work)
+
+The earlier blanket rule ("no radius, omit singleSelect, omit general.filter, textSize must be
+10D") was over-restrictive — none of those were ever the proven cause of a blank page. The
+reliable failure mode is putting `fontFamily`/`textSize` on the **title**
+(`visualContainerObjects.title`) or other styling properties Power BI doesn't emit there.
+
+Path B (the static layout preview — see `visual-verification.md`) doesn't catch a silent
+rejection, since the JSON is schema-clean. Only Path A (live render) surfaces it. Numeric columns
+work fine in Dropdown mode.
+
+---
+
+## 3. `pivotTable` (matrix) requires `selector` on styling objects
+
+**Rule:** Every styling object under a `pivotTable`'s `visual.objects.*` needs `"selector": {
+"id": "default" }` as a sibling of `"properties"`. Without it, Power BI silently ignores the
+explicit values and falls back to the active theme.
+
+Applies to: `grid`, `columnHeaders`, `rowHeaders` (the first, styling entry), `values` (both
+`backColorPrimary`/`Secondary`), `total`, `subTotals`.
+
+`tableEx` does **not** have this requirement — its property overrides win against the theme
+without selectors. This is `pivotTable`-specific.
+
+Example — setting `values.backColorPrimary` without a selector gets silently overridden by the
+theme's own `pivotTable.values.backColorPrimary`; adding `"selector": { "id": "default" }` makes
+the override stick. `exec-quality-check.mjs` enforces this on `entries[0]`. Subsequent entries
+(like a `showExpandCollapseButtons` toggle) are legitimately selector-less.
+
+---
+
+## 4. Matrix `+`/`-` drill icons need `showExpandCollapseButtons`
+
+**Rule:** To show `+`/`-` drill icons next to matrix row headers, add a SECOND entry to
+`objects.rowHeaders` with only `showExpandCollapseButtons: true`. The first entry holds default
+styling (with selector). The second entry is a per-property override and does **not** need a
+selector.
+
+```json
+"rowHeaders": [
+  {
+    "properties": { "fontFamily": ..., "backColor": {...} },
+    "selector": { "id": "default" }
+  },
+  {
+    "properties": {
+      "showExpandCollapseButtons": {
+        "expr": { "Literal": { "Value": "true" } }
+      }
+    }
+  }
+]
+```
+
+`expansionStates.isCollapsed: true` controls the INITIAL collapsed state. `showExpandCollapseButtons:
+true` makes the click-icons visible. These are independent.
+
+---
+
+## 5. `visualGroup` children use RELATIVE positions
+
+**Rule:** A `visual.json` with `parentGroupName: "<group>"` has its `position.x`/`position.y`
+interpreted **relative to the parent group's origin**, NOT as absolute canvas coordinates.
+
+Workflow when authoring groups:
+1. Decide the group's bounding box (`groupX`, `groupY`, `groupW`, `groupH`).
+2. Create the group with `visualGroup: { displayName, groupMode: "ScaleMode" }` and no `visual`
+   key.
+3. For each child: set `parentGroupName: "<group>"` AND rewrite `position.x = absoluteX - groupX`,
+   `position.y = absoluteY - groupY`.
+4. Child width/height stay unchanged.
+
+Minimum group shape:
+
+```json
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.5.0/schema.json",
+  "name": "v_group_r0",
+  "position": { "x": 384, "y": 80, "z": 100, "height": 130, "width": 851, "tabOrder": 0 },
+  "visualGroup": { "displayName": "Row r0", "groupMode": "ScaleMode" }
+}
+```
+
+Symptom of using absolute coordinates for children: opaque white rectangles where the groups sit,
+plus children appearing at wrong offsets.
+
+### 5b. `visualContainerObjects.title` sizes text with `fontSize`, NOT `textSize`
+
+**Rule:** the container title object takes `fontSize`. `textSize` is valid in some OTHER objects
+(e.g. `pivotTable`'s `grid.textSize`) but on a title it hard-fails the `.pbip` open with:
+
+> An additional property 'textSize' was included in the /visual/visualContainerObjects/title/0/properties property
+
+Unlike the silent-fallback gotchas above, this one is LOUD — Desktop refuses the file outright.
+
+---
+
+## 6. Textbox vertical centering
+
+**Rule:** Textboxes default to top-aligned. To center vertically inside the container, add
+`verticalAlignment` as a sibling of `paragraphs` inside `objects.general[0].properties`:
+
+```json
+"visual": {
+  "visualType": "textbox",
+  "objects": {
+    "general": [
+      {
+        "properties": {
+          "verticalAlignment": { "expr": { "Literal": { "Value": "'Middle'" } } },
+          "paragraphs": [...]
+        }
+      }
+    ]
+  }
+}
+```
+
+Valid values: `'Top'` (default), `'Middle'`, `'Bottom'`. Single-quotes inside the Literal Value,
+matching the convention for other Power BI string literals.
+
+Apply whenever the container height is taller than the text content (title cards in card rows,
+body textboxes, header/footer labels).
+
+---
+
+## 7. Visual-level filters always hidden
+
+**Rule:** Every entry in a visual's `filterConfig.filters[]` MUST have `isHiddenInViewMode: true`.
+No exceptions.
+
+```json
+"filterConfig": {
+  "filters": [
+    {
+      "name": "...",
+      "field": {...},
+      "type": "Categorical",
+      "isHiddenInViewMode": true     ← REQUIRED
+    }
+  ]
+}
+```
+
+User-facing filters belong on the page (`page.json.filterConfig`), the report
+(`report.json.filterConfig`), or an on-canvas slicer visual. "Filters on this visual" is a
+developer-side surface only.
+
+**Critical:** filter `name` values MUST be 20-char lowercase hex (Power BI Desktop's internal
+UUID format). Readable names cause Power BI to silently reject the filter and render the visual
+blank.
+
+Two-step auto-fix workflow:
+
+```bash
+node scripts/hide-visual-filters.mjs "<...>.Report"       # hide existing visible entries
+node scripts/preemptive-hide-fields.mjs "<...>.Report"    # pre-create hidden entries for bound fields
+```
+
+Both idempotent. Run after every Power BI Desktop save session. `exec-quality-check.mjs` fails on
+any visible visual-level filter.
+
+Two filter sources to be aware of:
+1. **Auto-bound field filters** — Power BI Desktop emits one `Categorical` entry per bound column
+   when fields are added to a `tableEx`, matrix, or chart's data roles.
+2. **Deliberate developer filters** — pinning a card to one slice. A layout choice, not a user
+   lever.
+
+### 7b. Hand-authored TopN filters — one unknown property = EMPTY REPORT SHELL
+
+An invalid property in a `filterConfig` entry doesn't break just that visual — **Power BI Desktop
+opens the whole report as an empty shell**: blank canvas, no page tabs, empty Data pane, and (when
+launched off-screen for a Path A capture) no visible error dialog. Every page captures as a
+uniform blank.
+
+Rules for hand-authoring a `"type": "TopN"` filter:
+- **Mirror a Desktop-authored example structurally.** Copy one from a working report (grep for
+  `'"TopN"'` under `<Report>/definition/pages`) and swap only entities/properties/Top count.
+- The count lives ONLY in `filter.From[].Expression.Subquery.Query.Top` — there is **no**
+  top-level `howMany` property, even though it looks like it should exist.
+- Include `"howCreated": "User"` and `"isHiddenInViewMode": true`; `name` = 20-char lowercase hex.
+- A Path A capture that comes back as a uniform blank after a filter edit means a *report-level*
+  parse failure — bisect `filterConfig` edits first, before suspecting TMDL.
+
+`validate-visual-json.mjs` passes this case (the schema is permissive) — only a live Desktop load
+catches it.
+
+---
+
+## 8. `tableEx` auto-fit doesn't equalize column widths
+
+**Rule:** Setting `objects.general.autoSizeColumnWidth = false` on a `tableEx` does NOT make Power
+BI distribute columns evenly across the visual width. Even with auto-fit off, Power BI sizes each
+column to its content, producing a horizontal scrollbar whenever long text columns exceed the
+visual's display width.
+
+**Symptom:** a bottom scroll bar on a `tableEx` even after toggling auto-fit off in JSON. Long
+left-side columns hog space; right-side columns disappear off-canvas.
+
+**Workarounds (pick one):**
+1. **Drop columns to fit.** Keep 4–6 essential columns; move secondary ones to a tooltip or drill
+   page. Usually the right answer.
+2. **Specify explicit `columnWidth` per projection.** Heavy — must measure and tune each width;
+   brittle when data changes.
+3. **Word-wrap long text values** via `objects.values[0].properties.wordWrap = true`. Grows row
+   height instead of column width, but Power BI still picks column widths from the longest
+   single-line content within the column.
+4. **Widen the visual.** No-op if the table already occupies the available width.
+
+**What didn't help (tried and verified failures):** `general.autoSizeColumnWidth = false` alone;
+`values.wordWrap = true` alone; changing `columnHeaders.wordWrap` (headers wrap, columns stay
+content-sized).
+
+See also the `tableEx` total-row hiding pattern in `report-visual-json.md`, which is similarly
+counterintuitive.
+
+---
+
+## 9. `azureMap` bubbles need a conditional `fillColor` to color by category
+
+**Rule:** On the Azure Map visual (`visualType: "azureMap"`), binding a field to the `Legend` role
+shows a legend and is necessary, but does **NOT** give each category a distinct bubble color on
+its own — every bubble renders in the default blue. To color bubbles by category, hand-author a
+**second `bubbleLayer` entry** whose `fillColor` is a `Conditional` expression mapping each
+category value to a hex.
+
+Role layout that works:
+- `Category` — the point identity column.
+- `Latitude` / `Longitude` — the lat/lon columns, each wrapped in a `Min` aggregation
+  (`"Function": 4`). (`X`/`Y` mirror them with `Avg`, `"Function": 1`, for the auto-zoom center.)
+- `Legend` — the category column you want colored.
+- `Tooltips` — extra columns for hover.
+
+`bubbleLayer` takes **two** array entries: layer settings (`show`, `clusteringEnabled: false` —
+clustering hides individual points — `markerType: 'image'`, `bubbleRadius`), then the per-category
+`fillColor` as a `Conditional` with one `Cases[]` entry per category:
+
+```json
+"bubbleLayer": [
+  {
+    "properties": {
+      "show":              { "expr": { "Literal": { "Value": "true" } } },
+      "clusteringEnabled": { "expr": { "Literal": { "Value": "false" } } },
+      "markerType":        { "expr": { "Literal": { "Value": "'image'" } } },
+      "bubbleRadius":      { "expr": { "Literal": { "Value": "13L" } } }
+    }
+  },
+  {
+    "properties": {
+      "fillColor": {
+        "solid": { "color": { "expr": { "Conditional": { "Cases": [
+          {
+            "Condition": { "Comparison": {
+              "ComparisonKind": 0,
+              "Left":  { "Aggregation": { "Expression": { "Column": {
+                "Expression": { "SourceRef": { "Entity": "<your entity>" } },
+                "Property": "<category column>" } }, "Function": 3 } },
+              "Right": { "Literal": { "Value": "'<category value>'" } }
+            } },
+            "Value": { "Literal": { "Value": "'#6B007B'" } }
+          }
+          // … one Case per category value …
+        ] } } } }
+      }
+    }
+  }
+]
+```
+
+Notes:
+- The `Left` side aggregates the category column with `"Function": 3` (Min) — matching how Power
+  BI Desktop emits the conditional when "Format by → field value" is set on the bubble color.
+- `ComparisonKind: 0` is equality; the literal on `Right` is single-quoted.
+- This is verbose — one `Cases` entry per category. If the category set is large and stable,
+  generate the `Cases[]` array programmatically rather than by hand.
+
+Path B can't catch this — it draws the map as a placeholder; only Path A (or a published report)
+shows the real bubble colors.
+
+---
+
+## 10. Bookmark visibility — `display.mode` is a strict enum; "visible" does not exist
+
+**Rule:** In a `*.bookmark.json`, `singleVisual.display.mode` accepts ONLY `maximize | spotlight |
+elevation | hidden`. There is no `"visible"` — writing it makes Power BI Desktop reject the
+definition and open to a BLANK report with **no page tabs** (looks like a hang/timing issue; it
+isn't — check for schema errors first).
+
+To express visibility in a show/hide toggle bookmark (the Desktop-emitted shape):
+
+```json
+"visualContainers": {
+  "v_shown":  { "singleVisual": { "visualType": "pivotTable", "objects": {} } },
+  "v_hidden": { "singleVisual": { "visualType": "pivotTable", "objects": {}, "display": { "mode": "hidden" } } }
+}
+```
+
+- **Visible** = the `singleVisual` block present (visualType + objects) with NO `display` key.
+- An **empty container `{}` does NOT restore visibility** — it hides whichever visual is
+  referenced and never un-hides the other.
+- Definition-level `"isHidden": true` on a `visual.json` sets the default state; a bookmark with
+  the shapes above toggles it correctly.
+- `options.targetVisualNames` must list every visual the bookmark controls; `suppressData: true`
+  keeps filters/slicers untouched.
+
+---
+
+## 11. `actionButton` — label and styling use STATE-OBJECT pairs, not single default entries
+
+**Rule:** `actionButton`'s `objects.text` / `fill` / `outline` follow the theme's state model: a
+**selectorless entry holding only `show`**, then one entry per state with `selector: {"id":
+"default"}` (plus optional `"hover"`, `"selected"`, `"disabled"`). Packing `show` + `text` + fonts
+into one default-selector entry gets the whole block silently dropped → an empty, unstyled button.
+
+```json
+"text": [
+  { "properties": { "show": {...true} } },
+  { "properties": { "text": {...}, "fontColor": {...}, "fontSize": {...} }, "selector": { "id": "default" } }
+]
+```
+
+- Do NOT use `visualContainerObjects.title` as the button label — it renders as a caption ABOVE
+  the button face (production buttons set title `show: false` while keeping a `text` value for
+  the tooltip/alt name).
+- Size buttons to their label: default ~10pt Segoe needs roughly 6.2px/char + 24px padding.
+
+---
+
+## 12. `cardVisual` (new card) silently rejects hand-authored single-measure bindings in some shapes
+
+**Rule:** A hand-authored `cardVisual` bound to one (especially text) measure can render as an
+empty white skeleton with ALL formatting objects ignored — the binding is rejected wholesale, not
+partially. The legacy `card` visual (`queryState.Values`, `objects.labels`/`categoryLabels`)
+accepts the same binding reliably and renders transparent-on-band chrome fine. For simple dynamic
+text (period stamps, refresh stamps), prefer the legacy `card`.
+
+---
+
+## 13. Verification is per-render-state: ANY later geometry/format tweak voids it
+
+**Process rule:** "verified live" attaches to the exact JSON that was rendered. If width,
+position, or font is nudged afterward — even trivially — the verification is void; re-render
+before handoff. Text-bearing containers are the highest-risk class for this, since
+truncation/wrap is width-sensitive at the pixel level.
+
+---
+
+## 14. Theme wildcard `color` silently kills visual-level Conditional formatting
+
+**Rule:** A custom theme whose `visualStyles` `*` → `*` → `*` wildcard entry sets `color`
+OVERRIDES visual-level `Conditional` color expressions — the visual renders the theme color even
+when the condition matches. The wildcard entry should set `fontFamily` only; default text color
+belongs in the theme's `foreground` / `firstLevelElements`.
+
+**Symptom:** conditional formatting (per-category accent bars, sentiment fills) renders in the
+theme's flat color; the visual's JSON looks correct; validators pass. Only a live A/B render (same
+visual, theme with vs. without the wildcard color) exposes it.
+
+---
+
+## 15. NEVER hide the visual header on data visuals — it kills Export data in the Service
+
+**Rule:** `visualContainerObjects.visualHeader` `show: false` removes the entire on-hover header
+in the Service reading view — including the "⋯ More options" menu, which is the ONLY path report
+consumers have to **Export data**. On any data-bearing visual (pivotTable, tableEx, charts,
+decompositionTreeVisual, data-bound custom visuals), do not set `show: false`. In almost all cases
+the header stays ON; de-noise it by suppressing individual icons instead, always keeping
+`showOptionsMenu: true`:
+
+```json
+"visualHeader": [
+  {
+    "properties": {
+      "show":                          { "expr": { "Literal": { "Value": "true"  } } },
+      "showOptionsMenu":               { "expr": { "Literal": { "Value": "true"  } } },
+      "showFocusModeButton":           { "expr": { "Literal": { "Value": "true"  } } },
+      "showDrillRoleSelector":         { "expr": { "Literal": { "Value": "false" } } },
+      "showDrillUpButton":             { "expr": { "Literal": { "Value": "false" } } },
+      "showDrillToggleButton":         { "expr": { "Literal": { "Value": "false" } } },
+      "showDrillDownLevelButton":      { "expr": { "Literal": { "Value": "false" } } },
+      "showDrillDownExpandButton":     { "expr": { "Literal": { "Value": "false" } } },
+      "showPinButton":                 { "expr": { "Literal": { "Value": "false" } } },
+      "showSmartNarrativeButton":      { "expr": { "Literal": { "Value": "false" } } },
+      "showSeeDataLayoutToggleButton": { "expr": { "Literal": { "Value": "false" } } },
+      "showTooltipButton":             { "expr": { "Literal": { "Value": "false" } } }
+    }
+  }
+]
+```
+
+Notes:
+- Desktop **edit mode always shows headers regardless of this setting**, so the regression is
+  invisible while authoring — it only bites the published report. Neither Path A nor Path B
+  catches it (the header only exists on hover in reading view).
+- Export also requires report-level `settings.exportDataMode` to allow it (`AllowSummarized` is a
+  common standard) — check both when export is "missing", but the hidden header is the usual
+  culprit.
+- Custom visuals additionally need `supportsExport: true` in `capabilities.json`, or Export data
+  stays unavailable even with the header visible.
+- The carve-out: decorative visuals (textbox, image, shape, actionButton, header-chrome/period
+  cards, refresh-stamp cards) and slicers may keep hidden headers — there is nothing meaningful to
+  export and the hover chrome is pure noise there.
+
+---
+
+## 16. Theme retrofit: hexes inside `Conditional` expressions are design, not theme candidates
+
+**Rule:** When applying a brand theme to an existing report and remapping literal colors to
+`ThemeDataColor`, ONLY remap plain `Literal` fills/font colors. Hex literals inside `Conditional`
+`Cases[].Value` entries encode the report author's conditional logic (per-bucket colors,
+sentiment thresholds) — remapping them flattens every branch to one theme color.
+
+---
+
+## 17. New StaticResources must be registered in `report.json`'s `resourcePackages`
+
+**Rule:** Dropping a PNG/JSON into `StaticResources/RegisteredResources/` is not enough — the file
+must also appear as an item under `report.json` → `resourcePackages` → `RegisteredResources`. An
+unregistered image renders **silently blank** (no error, no placeholder); an unregistered theme is
+ignored.
+
+```json
+{ "name": "my_asset.png", "path": "my_asset.png", "type": "Image" }
+```
+
+---
+
+## TMDL and semantic-model gotchas
+
+`.tmdl` files live under `<...>.SemanticModel/definition/`. They define tables, measures,
+columns, relationships, and the model itself. These are the recurring traps that block a `.pbip`
+from loading, with symptoms Power BI Desktop surfaces poorly. (TMDL's base syntax rules —
+tabs-not-spaces indentation, `/// Description` annotations, measure placement — live in this
+domain's `tmdl-authoring.md`; these are the deeper, burn-case-level traps.)
+
+### T1. NO standalone `/* */` block comments
+
+**Rule:** the TMDL parser rejects standalone `/* ... */` block comments between objects. The
+parser error is `InvalidLineType: Unexpected line type: Other!` and Power BI Desktop refuses to
+load the entire `.pbip`. The user sees the "Add data to your report" welcome screen — the actual
+error only surfaces by clicking "Issues were found" in the file-open flow.
+
+**What IS allowed:**
+- `/// description text` — attaches as a description to the IMMEDIATELY following object
+  (measure/column/table). One or more lines, no blank line between the `///` block and the target.
+- `/* ... */` — ONLY inside DAX expression bodies. Treated as a DAX comment, not TMDL syntax.
+
+**What ISN'T allowed:** standalone `/* ... */` block comments between objects; `// single-line`
+comments anywhere in the TMDL body; `#` comments anywhere.
+
+**How to apply:** when generating measures/columns, skip section-header comments entirely. If you
+must document, use `///` immediately above the target object.
+
+### T2. Auto Date/Time removal needs `variation` cleanup
+
+**Rule:** disabling Auto Date/Time requires FIVE coordinated edits, not just one. Missing step 3
+silently breaks model load.
+
+1. `model.tmdl` — set `annotation __PBI_TimeIntelligenceEnabled = 0` (down from `1`).
+2. `model.tmdl` — remove every `ref table LocalDateTable_*` and `ref table DateTableTemplate_*`
+   line.
+3. **For each source-of-truth date column** with auto-date wiring, DELETE the inline `variation`
+   block:
+   ```
+   variation Variation
+       isDefault
+       relationship: <guid>
+       defaultHierarchy: LocalDateTable_<guid>.'Date Hierarchy'
+   ```
+4. `relationships.tmdl` — delete the relationships that linked source date columns to the deleted
+   LocalDateTables.
+5. `tables/` — delete `LocalDateTable_*.tmdl` + `DateTableTemplate_*.tmdl` files.
+
+**Symptom of missing step 3:** Power BI Desktop opens to the "Add data to your report" welcome
+screen with no error popup — Path A would show the window title stuck at `Untitled - Power BI
+Desktop`. The date columns themselves stay, but their `variation` blocks point to deleted tables,
+and the parser fails silently.
+
+**How to apply:** after deleting `LocalDateTable`/`DateTableTemplate` tmdl files, grep
+`definition/tables/` for `LocalDateTable_` and `DateTableTemplate_` — any hit inside a `variation`
+block needs the whole 3-line block removed.
+
+### T3. PowerShell file editing — UTF-8 NO BOM, always explicit
+
+**Rule:** when bulk-editing `.tmdl` from PowerShell:
+- ALWAYS read with explicit UTF-8: `Get-Content -Encoding UTF8` or
+  `[System.IO.File]::ReadAllText($p, [System.Text.UTF8Encoding]::new($false))`
+- ALWAYS write UTF-8 no-BOM:
+  `[System.IO.File]::WriteAllText($p, $text, (New-Object System.Text.UTF8Encoding $false))`
+
+**Why:** default `Get-Content` uses the system codepage (Windows-1252 on en-US), silently mangling
+non-ASCII characters (an en-dash or a checkmark glyph turns into mojibake). Default `Out-File` /
+`Set-Content` / `WriteAllLines` use UTF-16 LE with a BOM — TMDL files should be UTF-8 NO BOM
+throughout a repo; adding a BOM doesn't crash Power BI but breaks encoding consistency and shows
+up in diffs.
+
+**Counterintuitive constructor:** `[System.Text.UTF8Encoding]::new($true)` means "with BOM".
+`$false` = no BOM. Easy to flip by accident.
+
+**Verify after each write:**
+```powershell
+[System.IO.File]::ReadAllBytes($p)[0..2]
+# First 3 bytes should NOT be 0xEF 0xBB 0xBF
+```
+
+### T4. Where to look when a `.pbip` fails to load
+
+Power BI Desktop opens the welcome screen ("Add data to your report") instead of the report when
+the model fails to parse. Diagnose in this order:
+
+1. **TMDL Format Error popup** — click "Issues were found" on the file-open flow. Names the file
+   and line.
+2. **`model.tmdl`** — `ref table` lines pointing to deleted tables, or annotations with wrong
+   values.
+3. **`tables/*.tmdl`** — orphan `variation` blocks (T2), references to deleted measures inside DAX
+   bodies, standalone `/* */` comments (T1).
+4. **`relationships.tmdl`** — relationships referencing deleted tables/columns.
+5. **`expressions.tmdl`** — broken parameter expressions.
+6. **`cultures/en-US.tmdl`** — usually tolerant of orphan refs to deleted objects (it's metadata),
+   but worth a grep if other diagnostics come up clean.
+
+**Path A as a smoke test:** when the title-gate clears in under 60s and the window title shows the
+report name, the model parsed cleanly. If it stays `Untitled - Power BI Desktop`, the model didn't
+load.
+
+---
+
+## `visualType` taxonomy (for the layout-preview renderer)
+
+How `scripts/preview-layout.mjs` (Path B — see `visual-verification.md`) renders each
+`visual.visualType` value. Match is case-insensitive; pattern matching falls through in the order
+shown.
+
+| `visualType` (regex) | Rendered as |
+|---|---|
+| `tableEx` / `pivotTable` / `matrix` | Striped grid: header row with column-name cells (from bound fields), placeholder body rows |
+| `card` / `cardVisual` | Soft background, big-number placeholder, centered, in the active brand profile's accent color |
+| `slicer` / `advancedSlicer` | Bordered box, label from first bound field, a chevron |
+| `azureMap` / `shapeMap` / `filledMap` / `map` | Diagonal striped pattern, "MAP" centered in monospace |
+| `image` | Dashed grey border, "IMG" centered in monospace, white background |
+| `shape` | Solid fill with rounded corners |
+| `*chart` / `*column` / `*bar` / `*line` / `*area` / `*pie` / `*donut` / `*scatter` / `*combo` / `*funnel` / `*gauge` / `*kpi` / `*treemap` | Y/X axis lines, stepped placeholder bars, cycling through the active brand profile's primary/secondary/tertiary series colors (`palette.primary` entries in order) |
+| Custom/organizational visual (a GUID/hash embedded in the `visualType` string) | Detected FIRST, before the stock patterns above — a custom visual's name often contains a stock-sounding substring ("scatter", "slicer", "map"), which would otherwise hijack it into a misleading stock mock. Renders as an explicit "custom visual — not rendered in Path B" badge with the type string. |
+| anything else | Soft background, raw `visualType` string shown verbatim |
+
+Custom visuals come through with their pbiviz `name` as the `visualType` and render per the
+custom-visual branch above — the chip displays the name verbatim.
+
+Adjusting the taxonomy: add a regex branch to `renderFiller()` in `scripts/preview-layout.mjs`,
+the matching CSS to `templates/preview.html.tmpl`, and a row to this table. The renderer is
+intentionally a wireframe, not a faithful rendering — small visual cues (a striped pattern, a
+chevron, an axis line) are enough for "is the right kind of visual in the right place" without the
+engineering cost of a real render.
+
+---
+
+# Imported by that skill — ../../powerbi/report-visual-json.md
+
+# Report / Page / Visual JSON Authoring
+
+The report side of a PBIP project — the JSON files Power BI Desktop reads to render pages,
+visuals, filters, and bookmarks. This file covers JSON-**authoring patterns**; for the
+structural file-layout overview (what lives where, the `.pbip`/`.pbir`/`.pbism` entry points),
+see this domain's `pbip-format.md`. For the dense burn-case list of traps in these files, see
+`pbir-gotchas.md` — this file cross-references rather than duplicates those.
+
+Read `brand-profile.md` first if any of this touches theme color.
+
+## Folder layout
+
+```
+<ReportName>.Report/
+├── definition.pbir                                         ← report manifest
+├── StaticResources/
+│   ├── SharedResources/BaseThemes/<theme>.json             ← theme JSON(s)
+│   └── RegisteredResources/<image>.png                     ← embedded images
+└── definition/
+    ├── report.json                                         ← top-level config
+    ├── pages/
+    │   ├── pages.json                                      ← page order, active page
+    │   └── <page-UUID>/
+    │       ├── page.json                                   ← page config + filters
+    │       └── visuals/
+    │           └── <visual-UUID>/
+    │               └── visual.json                         ← per-visual config
+    ├── bookmarks/
+    │   ├── bookmarks.json                                  ← bookmark manifest
+    │   └── <bookmark-UUID>.bookmark.json                   ← exploration state
+    └── CustomVisuals/                                      ← embedded .pbiviz packages
+        └── <visual-name>/
+```
+
+UUIDs are 20-hex-character lowercase strings (Power BI's internal format), not standard UUID-v4.
+
+## `report.json`
+
+Top-level config. Notable sections:
+
+```json
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/report/3.1.0/schema.json",
+  "themeCollection": {
+    "baseTheme": {
+      "name": "<active brand profile's theme name>",
+      "version": "1.0.0",
+      "type": 1
+    }
+  },
+  "settings": {
+    "useNewFilterPaneExperience": true
+  },
+  "resourcePackages": [
+    {
+      "name": "RegisteredResources",
+      "type": 1,
+      "items": [
+        {
+          "name": "<logo file name>",
+          "path": "<logo file name>",
+          "type": "Image"
+        }
+      ]
+    }
+  ]
+}
+```
+
+- **`themeCollection.baseTheme`** — references the theme JSON in
+  `StaticResources/SharedResources/BaseThemes/`. Point this at the active brand profile's
+  `theme_file` (see `brand-profile.md`).
+- **`resourcePackages`** — declares embedded images. Reference these from `image` visuals via
+  `ResourcePackageItem`. Every registered item must also physically exist under
+  `StaticResources/RegisteredResources/` — see `pbir-gotchas.md` #17 for what happens when it
+  doesn't.
+- **`reportVersionAtImport`** — schema version per artifact type (visual: 2.5.0, report: 3.1.0).
+  Power BI manages these; don't hand-edit.
+
+## `pages/pages.json`
+
+```json
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/pagesMetadata/1.0.0/schema.json",
+  "pageOrder": [
+    "4f4dcef64806020a36bc",
+    "cdfdb57fd60eee9dc9a5"
+  ],
+  "activePageName": "4f4dcef64806020a36bc"
+}
+```
+
+Order here = order in the page tab strip. `activePageName` = page that opens by default.
+
+## `pages/<UUID>/page.json`
+
+```json
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.0.0/schema.json",
+  "name": "<UUID>",
+  "displayName": "KPI Overview",
+  "displayOption": "FitToPage",
+  "height": 720,
+  "width": 1280,
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "<UUID>",
+        "displayName": "Region",
+        "ordinal": 0,
+        "field": {
+          "Column": {
+            "Expression": { "SourceRef": { "Entity": "Sales Detail" } },
+            "Property": "Region"
+          }
+        },
+        "type": "Categorical",
+        "howCreated": "User"
+      }
+    ],
+    "filterSortOrder": "Custom"
+  }
+}
+```
+
+Patterns:
+
+- **`displayOption: "FitToPage"`** — responsive, scales with viewport. Use this; avoid `"Actual
+  Size"` unless a pixel-perfect layout is required.
+- **Default size: 1280×720** is the common exec-report canvas (see the grid convention below);
+  taller canvases are used for scroll-style dashboards.
+- **Page-level filters cascade** to all visuals on the page. Set common dimensions here (region,
+  period, business unit).
+- **`filterSortOrder: "Custom"`** + `ordinal` per filter controls the left-rail order in view mode.
+- **Background image**, if used, is registered in `RegisteredResources` and referenced the same
+  way a visual's image would be — used for a watermark or brand pattern on every page.
+
+## `pages/<UUID>/visuals/<UUID>/visual.json`
+
+The big one. Structure:
+
+```json
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.5.0/schema.json",
+  "name": "<UUID>",
+  "position": {
+    "x": 64, "y": 96, "z": 8000,
+    "height": 200, "width": 320,
+    "tabOrder": 5000
+  },
+  "visual": {
+    "visualType": "cardVisual",
+    "query": {
+      "queryState": {
+        "Data": {
+          "projections": [
+            {
+              "field": { ... measure or column expression ... },
+              "queryRef": "Measures Table.$ Sales",
+              "nativeQueryRef": "$ Sales",
+              "displayName": "$ Sales"
+            }
+          ]
+        }
+      }
+    },
+    "objects": { ... },
+    "visualContainerObjects": { ... },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": { ... }
+}
+```
+
+- **`visualType`** — common values: `cardVisual` (current card format), `card` (legacy, see
+  `pbir-gotchas.md` #12), `tableEx`, `pivotTable`, `lineClusteredColumnComboChart`, `barChart`,
+  `columnChart`, `lineChart`, `slicer`, `scatterChart`, `donutChart`, `image`, `textbox`,
+  `actionButton`. Custom visuals use their full GUID as the value (see `custom-visuals.md`).
+- **`position.z`** — z-index. Higher = on top.
+- **`query.queryState.<role>.projections[]`** — binds fields to visual roles. Roles vary by
+  visual type (`Card` has `Data`; a combo chart has `Category`, `Y`, `Y2`, `Series`).
+- **`objects`** — visual-internal styling (the formatting pane on the right).
+- **`visualContainerObjects`** — outer container styling (background, border, padding, title — at
+  the wrapping container level). See `pbir-gotchas.md` #1 for the placement rule.
+
+### Sort order (`sortDefinition`)
+
+To control how a table/matrix/chart is sorted, add a `sortDefinition` block as a **sibling of
+`query`** inside `visual` (NOT inside `query`, NOT at the top level). Omitting it lets Power BI
+pick a default sort, which is rarely the one you want for an exec deliverable.
+
+```json
+"visual": {
+  "visualType": "tableEx",
+  "query": { "queryState": { ... } },
+  "sortDefinition": {
+    "sort": [
+      {
+        "field": {
+          "Measure": {
+            "Expression": { "SourceRef": { "Entity": "Measures Table" } },
+            "Property": "$ Sales"
+          }
+        },
+        "direction": "Descending"
+      }
+    ],
+    "isDefaultSort": true
+  },
+  "objects": { ... }
+}
+```
+
+- `sort[]` — each entry is `{ field, direction }`. `field` uses the same `Measure`/`Column`
+  expression shape as a projection. `direction` is `"Ascending"` or `"Descending"`.
+- `isDefaultSort: true` — marks this as the visual's initial sort (the state before any user click
+  on a column header).
+- The sort field does **not** have to be a displayed column — sorting by a measure that isn't one
+  of the table's columns works.
+
+Hand-authoring `sortDefinition` in the wrong position (inside `query`, or as a top-level sibling)
+throws a schema error on `.pbip` open.
+
+## Stock card trapezoid styling
+
+The trapezoidal/cut-corner KPI card look is a **stock `cardVisual`** with `shapeCustomRectangle`
+settings — NOT a custom visual (see `custom-visuals.md` for when a custom visual actually is
+warranted; this isn't one of those cases):
+
+```json
+"objects": {
+  "shapeCustomRectangle": [
+    {
+      "properties": {
+        "rectangleRoundedCurveCustomStyle": { "expr": { "Literal": { "Value": "false" } } },
+        "tileShape": { "expr": { "Literal": { "Value": "'tabCutTopCornersByPixel'" } } },
+        "tabCutCornerSnipSizeTop": { "expr": { "Literal": { "Value": "20L" } } },
+        "tabCutCornerSnipSizeBottom": { "expr": { "Literal": { "Value": "20L" } } },
+        "tabCutCornerSnipSizeCustomStyle": { "expr": { "Literal": { "Value": "false" } } }
+      },
+      "selector": { "id": "default" }
+    }
+  ]
+}
+```
+
+Key fields:
+
+- **`tileShape: 'tabCutTopCornersByPixel'`** — produces the trapezoidal silhouette with cut
+  corners.
+- **`tabCutCornerSnipSizeTop` / `Bottom`** — corner snip size in pixels. 20 is comfortable for
+  ~200px-tall cards.
+
+A theme can bundle these settings as a named style preset (Power BI Desktop exposes applying a
+style preset via the format pane's "Style preset" dropdown) if the active brand profile's theme
+defines one.
+
+## Conditional `fontColor` on `cardVisual`
+
+```json
+"value": [{
+  "properties": {
+    "fontColor": {
+      "solid": {
+        "color": {
+          "expr": {
+            "Conditional": {
+              "Cases": [
+                { "Condition": { "Comparison": { "ComparisonKind": 2, "Left": <measure>, "Right": { "Literal": { "Value": "0D" } } } },
+                  "Value": { "Literal": { "Value": "'<positive-case hex>'" } } },
+                { "Condition": { "Comparison": { "ComparisonKind": 3, "Left": <measure>, "Right": { "Literal": { "Value": "0D" } } } },
+                  "Value": { "Literal": { "Value": "'<negative-case hex>'" } } }
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "selector": { "data": [{ "dataViewWildcard": { "matchingOption": 0 } }], "metadata": "Sum(<table>.<measure>)" }
+}]
+```
+
+Resolve `<positive-case hex>`/`<negative-case hex>` from the active brand profile's
+`palette.accent`:
+- `sentiment_policy: neutral` → use the same hex (the profile's `default_text` color) for both
+  cases, and convey direction with an arrow glyph in the display measure instead.
+- `sentiment_policy: accent-coded` → use the profile's `positive`/`negative` hexes directly.
+
+## Transparent containers over page backgrounds
+
+When a page has a background image (a logo watermark, a brand pattern), set the visual containers
+transparent so the image shows through:
+
+```json
+"visualContainerObjects": {
+  "background": [
+    {
+      "properties": {
+        "show": { "expr": { "Literal": { "Value": "true" } } },
+        "transparency": { "expr": { "Literal": { "Value": "100D" } } }
+      }
+    }
+  ]
+}
+```
+
+`100D` = 100% transparent. For `cardVisual` specifically, also set
+`objects.layout.backgroundTransparency: 100D`.
+
+## Theme-driven color via `ThemeDataColor`
+
+To pull a color from the theme palette (so swapping themes — i.e. swapping the active brand
+profile — propagates everywhere):
+
+```json
+"fontColor": {
+  "solid": {
+    "color": {
+      "expr": {
+        "ThemeDataColor": {
+          "ColorId": 0,
+          "Percent": 0
+        }
+      }
+    }
+  }
+}
+```
+
+`ColorId` indexes into the active brand profile's theme `dataColors[]` array — `0` is
+`palette.primary[0]` (`default_text`/first series), `1` is the next primary entry, and so on, in
+whatever order the profile's `palette.primary` list is defined (see `brand-profile.md`).
+`Percent` shifts the resolved color toward white (positive) or black (negative).
+
+Use this instead of a hardcoded hex whenever the color should follow theme swaps.
+
+## Page chrome (the master-report look)
+
+Codify these elements across every body page of a multi-page report:
+
+### Top-left: Logo
+
+An `image` visual near the top-left corner, pointing to a registered resource:
+
+```json
+"visualType": "image",
+"objects": {
+  "general": [{
+    "properties": {
+      "imageUrl": {
+        "expr": {
+          "ResourcePackageItem": {
+            "PackageName": "RegisteredResources",
+            "PackageType": 1,
+            "ItemName": "<active brand profile logo variant file name>"
+          }
+        }
+      }
+    }
+  }]
+}
+```
+
+Which logo variant to reference (`full_color`, `white`, `on_dark`) is the active brand profile's
+`logo.selection_rule`, applied against this page's background — see `brand-profile.md`.
+
+### Top-right: Data refresh indicator
+
+A `textbox` or `cardVisual` bound to a "Data Refreshed" measure, positioned near the top-right of
+the header band. Typography per the active brand profile's `typography.roles.label`.
+
+### Bottom: Methodology footnote
+
+A `textbox` at the bottom of the page, full-width minus margins. Typography per the active brand
+profile's `typography.roles.footnote` (typically italic, smallest role size).
+
+### Optional: Left-rail master nav
+
+For multi-page reports, a vertical pill list of `actionButton` visuals — one per page — with the
+active page highlighted in the active brand profile's accent color and inactives in its default
+text color.
+
+## Filters (page vs. visual level)
+
+Page-level filter config goes in `page.json`'s `filterConfig.filters[]`. These cascade to every
+visual on the page.
+
+Visual-level filters go in a visual's own `filterConfig.filters[]`. These layer on top of page
+filters and can override or add.
+
+Filter `type` values:
+- `"Categorical"` — slicer-style multi-select
+- `"Advanced"` — a DAX-expression filter
+- `"TopN"` — top/bottom N (see `pbir-gotchas.md` #7b for the hand-authoring footgun)
+- `"RelativeDate"` — last N days/weeks/months
+
+### ALL visual-level filters must be hidden — no exceptions
+
+**Every entry in `filterConfig.filters[]` on a `visual.json` gets `isHiddenInViewMode: true`. No
+exceptions.** Full rule, mechanism, and the two-script cleanup workflow (`hide-visual-filters.mjs`
+then `preemptive-hide-fields.mjs`) are in `pbir-gotchas.md` #7. The model: viewers interact with
+page-level and report-level filters via the Filter pane, or with an on-canvas slicer visual — they
+never interact with "Filters on this visual".
+
+Where filters legitimately stay visible (NOT in `visual.json`):
+
+| User control | Where it lives |
+|---|---|
+| "Filter this whole report" | `report.json` → `filterConfig.filters[]` (no `isHiddenInViewMode`) |
+| "Filter this page" | `page.json` → `filterConfig.filters[]` (no `isHiddenInViewMode`) |
+| On-canvas selection control (e.g., a region picker) | A `slicer`/`advancedSlicer` **visual** on the canvas — it IS the filter; no separate filter entry needed |
+
+### Hidden technical filters (date scoping without a slicer)
+
+Same `isHiddenInViewMode: true` flag, used to scope a visual to a date range without exposing a
+slicer:
+
+```json
+{
+  "name": "<UUID>",
+  "field": { "Column": { ..., "Property": "term_date" } },
+  "type": "Advanced",
+  "filter": {
+    "Version": 2,
+    "From": [{ "Name": "c", "Entity": "<entity>", "Type": 0 }],
+    "Where": [{
+      "Condition": {
+        "And": {
+          "Left": { "Comparison": { "ComparisonKind": 2, "Left": { "Column": { "Expression": { "SourceRef": { "Source": "c" } }, "Property": "term_date" } }, "Right": { "DateSpan": { "Expression": { "Literal": { "Value": "datetime'2025-01-01T00:00:00'" } }, "TimeUnit": 5 } } } },
+          "Right": { "Comparison": { "ComparisonKind": 4, "Left": { ... }, "Right": { ... } } }
+        }
+      }
+    }]
+  },
+  "isHiddenInViewMode": true
+}
+```
+
+## Bookmarks
+
+`bookmarks/bookmarks.json` lists the bookmarks; one `<UUID>.bookmark.json` per bookmark.
+
+```json
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/1.0.0/schema.json",
+  "name": "<UUID>",
+  "displayName": "Hide Filters",
+  "options": { "suppressActiveSection": false, "suppressData": true },
+  "explorationState": {
+    "version": "1.0",
+    "activeSection": "<page-UUID>",
+    "sections": {
+      "<page-UUID>": {
+        "visualContainers": {
+          "<visual-UUID>": {
+            "filters": { "byExpr": [...] },
+            "singleVisual": { "activeProjections": {...} }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+A common pattern is a "Hide Filters" bookmark with `suppressData: true` that collapses the filter
+pane for cleaner viewing. See `pbir-gotchas.md` #10 for the `display.mode` enum trap on
+show/hide-toggle bookmarks.
+
+### Page-level filter with no default (show all)
+
+When a filter should be available in the pane for optional refinement but with NO preset value
+(filter pane shows "is (All)"):
+
+```json
+{
+  "name": "<UUID>",
+  "displayName": "Business Manager",
+  "ordinal": 1,
+  "field": {
+    "Column": {
+      "Expression": { "SourceRef": { "Entity": "<entity>" } },
+      "Property": "Business_Manager"
+    }
+  },
+  "type": "Categorical",
+  "howCreated": "User"
+}
+```
+
+The minimal shape: `field` + `type: "Categorical"` + `howCreated: "User"`. No `filter` body block,
+no `objects.general.requireSingleSelect`. A common cloned-page trap: an inherited filter carrying
+`requireSingleSelect: true` plus a hardcoded default value — both must come out for a true
+"All by default" filter.
+
+To go the other way (lock to a value, hidden from view): keep the `filter` body, add
+`isHiddenInViewMode: true` + `isLockedInViewMode: true`.
+
+### Hiding totals on `tableEx`
+
+The bottom total row on a `tableEx` is suppressed by `objects.total[0].properties.totals = false`:
+
+```json
+"total": [
+  {
+    "properties": {
+      "totals": { "expr": { "Literal": { "Value": "false" } } }
+    }
+  }
+]
+```
+
+NOT `total.show`. NOT `general.totals`. NOT `subTotals.rowSubtotals` (that's the `pivotTable`
+property). Power BI Desktop's linter strips the wrong property names and they have no effect —
+`total.totals` is what survives a save and actually suppresses the row.
+
+For `pivotTable` (matrix) instead use `subTotals.rowSubtotals = false` +
+`subTotals.columnSubtotals = false`. See `pbir-gotchas.md` #3 for the wider matrix-selector story.
+
+## Visual variety — when to use what
+
+| Use case | Visual type |
+|---|---|
+| Single number with optional secondary | `cardVisual` |
+| Multiple cards in a row | Several `cardVisual` (trapezoid pattern, or a custom KPI grid — see `custom-visuals.md`) |
+| Time series, two metrics | `lineClusteredColumnComboChart` |
+| Time series, one metric | `lineChart` |
+| Categorical comparison | `barChart` (horizontal) or `columnChart` (vertical) |
+| Distribution / quadrant analysis | `scatterChart`, or a custom quadrant visual with auto-thresholds — see `custom-visuals.md` |
+| Heatmap with two dimensions | A custom visual — stock matrix doesn't render colors well |
+| Detail table | `tableEx` |
+| Cross-tab | `pivotTable` |
+| Multi-select dimension | `slicer` |
+| Selector with status colors | A custom status-slicer visual — see `custom-visuals.md` |
+| Geographic points | `azureMap` — but the `Legend` role does NOT color bubbles distinctly on its own; see `pbir-gotchas.md` #9 |
+| Page navigation | `actionButton` |
+
+If stock visuals don't fit, build custom — see `custom-visuals.md`.
+
+## Common mistakes
+
+1. **Treating the trapezoid card as a custom visual** — it's stock `cardVisual` with
+   `shapeCustomRectangle.tileShape`.
+2. **Hardcoded color hex on every visual** — use `ThemeDataColor` so a theme/brand-profile swap
+   propagates.
+3. **No page-level filters** — every visual ends up with its own filter; impossible to slice the
+   whole page at once.
+4. **Any visible visual-level filter** — see "ALL visual-level filters must be hidden" above and
+   `pbir-gotchas.md` #7.
+5. **Not registering an image as a `RegisteredResources` package item** — pasting it directly
+   into a visual works but doesn't share across pages and doesn't update on logo swap.
+6. **Pixel-perfect layouts at `Actual Size`** — breaks on any non-default screen. Use
+   `FitToPage`.
+
+## Page layout grid
+
+A common PBI exec-report canvas convention — not a mandate, but a reasonable default to lock in
+when there's no reason to deviate:
+
+```
+Canvas:        1280 × 720
+Outer margin:  24 left/right (footer is full-bleed)
+Header band:   y = 20-90  (logo @ y=24 h=56, title @ y=20 h=70, refresh @ y=24 h=30)
+Body band:     y = 96-652 (556 px tall — MAXIMUM body envelope, not a fixed card height)
+Footer band:   y = 660-720 (full bleed, image)
+Inner gap:     16 px between visuals (vertical AND horizontal)
+Body→footer:   ≥8 px breathing room (last visual bottom ≤ 652)
+```
+
+Right margin: most body visuals end at `x ≤ 1256`. A refresh-indicator card is a common exception,
+sitting closer to the far edge than other body visuals.
+
+**Card height is a MAXIMUM, not a target.** A card sized to the full 556px body envelope but
+containing 10 rows of data looks half-empty and reads as broken. Size cards to typical-data-height
+plus small headroom.
+
+## Page chrome canonical shape
+
+Repeats on every body page. Treat as a single source of truth — if these drift across pages, the
+report looks inconsistent. `scripts/check-page-chrome-drift.mjs` (relative to the power-platform
+mode's own directory — see `visual-verification.md`) enforces this programmatically.
+
+| Visual name | Position | Visual type | Notes |
+|---|---|---|---|
+| `v_logo` | x=24, y=24, w=92, h=56 | `image` | Active brand profile's logo (variant per `logo.selection_rule`). **Requires `padding=0` on all sides** (see below) |
+| `v_title` | x=130, y=20, w=700, h=70 | `textbox` | Active profile's `typography.roles.title`, bold + a lighter secondary line if split |
+| `v_refresh` | x=936, y=24, w=296, h=30 | `cardVisual` | bound to a "Refresh Display" measure. Right-aligned, italic, active profile's `label` typography. **Add a `filterConfig` Advanced filter on the bound measure** to suppress the visual when blank |
+| `v_footer_bar` | x=0, y=660, w=1280, h=60 | `image` | Full-bleed footer image. **Requires `padding=0` on all sides** |
+
+## Image visual padding=0 (required for logos and decorative images)
+
+Power BI image visuals apply default internal padding (~10–14px) around the rendered image. Logos
+in tight header bars and full-bleed footers look indented or floating unless padding is explicitly
+zeroed.
+
+```json
+"visualContainerObjects": {
+  "border": [
+    { "properties": { "show": { "expr": { "Literal": { "Value": "false" } } } } }
+  ],
+  "background": [
+    { "properties": { "show": { "expr": { "Literal": { "Value": "false" } } } } }
+  ],
+  "padding": [
+    {
+      "properties": {
+        "top":    { "expr": { "Literal": { "Value": "0D" } } },
+        "right":  { "expr": { "Literal": { "Value": "0D" } } },
+        "bottom": { "expr": { "Literal": { "Value": "0D" } } },
+        "left":   { "expr": { "Literal": { "Value": "0D" } } }
+      }
+    }
+  ]
+}
+```
+
+Path B (the static layout preview) cannot show this difference — image padding is only visible in
+Power BI Desktop or published view (Path A). See `visual-verification.md`.
+
+## Matrix (`pivotTable`) canonical shape
+
+The matrix is the most footgun-heavy visual in PBIR. The selector requirement and drill-icon
+mechanics are covered in full in `pbir-gotchas.md` #3 and #4; the remaining shape rules:
+
+### `general.layout` controls drill-down icon visibility
+
+| Value | Row-header rendering | Drill icons (`+`/`−`) |
+|---|---|---|
+| `'Compact'` (default) | Stacked with indentation | **Appear in published view** when subtotals enabled |
+| `'Tabular'` | One column per row level | None — always-expanded look |
+| `'Outline'` | Similar to Compact, different indent | Appear in published view |
+
+Choose `Compact` when end-users should drill. Choose `Tabular` when the report should always show
+every row level with no interactivity. Setting `Tabular` and then asking why there are no `+`
+icons is the most common matrix authoring mistake.
+
+### `expansionStates.isPinned: true` overrides `isCollapsed: true`
+
+A pinned level always renders. For a collapsed-by-default initial state, remove `isPinned` from
+the level you want collapsed.
+
+```json
+"expansionStates": [
+  {
+    "roles": ["Rows"],
+    "levels": [
+      { "queryRefs": ["<entity>.<level-1-column>"] },
+      {
+        "queryRefs": ["<entity>.<level-2-column>"],
+        "isCollapsed": true
+      }
+    ],
+    "root": {}
+  }
+]
+```
+
+### Power BI Desktop edit mode renders the matrix fully expanded
+
+Path A captures edit mode. Drill icons appear on hover in edit mode and persistently in published
+view. Don't chase them in static Path A captures — verify by publishing or toggling Desktop's
+View → Reading View.
+
+### Container background choice depends on page background
+
+| Page bg | Container bg | Result |
+|---|---|---|
+| Active profile's `background_alt` | White `#FFFFFF` | Clean: a white card pops against a tinted page; tinted data rows pop against the white container |
+| Active profile's `background_alt` | Same tint | **Card is invisible** — data and container both blend with the page. Either add a strong border (the profile's `default_text` color) or change the container |
+| Active profile's `background_alt` | Transparent (`show: false`) | Card edge depends on data rows only; empty area below data shows the page tint. Sometimes desirable, sometimes visually "off" |
+
+**Recommendation:** white container + a strong border in the active profile's `default_text`
+color + the profile's `background_alt` tint on data rows, over a tinted page.
+
+## How hand-authored properties survive Power BI Desktop saves
+
+Power BI Desktop rewrites `visual.json` on every save. Properties it doesn't recognize, or
+properties matching theme defaults, are at risk of being stripped:
+
+1. **Include the selector.** Covered in `pbir-gotchas.md` #3 for `pivotTable`. Properties without
+   selectors are first to be dropped.
+2. **Don't set properties to values identical to the theme.** Power BI sees these as "no override
+   needed" and drops them. To lock a property at a value the theme already sets, use a
+   one-shade-different value instead.
+3. **Place properties on object blocks Power BI emits.** An invented `objects.foo` block Power BI
+   doesn't know about gets dropped on save. Compare against an existing Desktop-authored
+   `visual.json` for the same `visualType`.
+4. **Schema version drift is a smoke signal.** A page last touched in Power BI Desktop has a newer
+   `$schema` than pages touched only programmatically. Mixed versions in one Report mean someone
+   hand-edited one page in Desktop.
+
+Workflow consequence: when iterating with a human editing in Power BI Desktop concurrently, do
+save → close → reopen between edits. Disk-read state and Desktop's in-memory state diverge
+silently otherwise.
+
+---
+
+# Imported by that skill — ../../powerbi/quality-tiers-antipatterns.md
+
+# Quality Bar and Anti-Patterns
+
+How to recognize a high-quality Power BI artifact, and what to flag back to the user when a
+low-quality pattern shows up in the working repo.
+
+## Five anti-patterns to flag on detection
+
+When any of these appear in the user's working repo, **say so before continuing**. Recommend the
+right structure first; only mirror the bad pattern if the user explicitly says to just match the
+existing structure.
+
+### 1. Inline measures on fact tables
+
+**Smell:** a fact table TMDL file (e.g. `tables/POS.tmdl`) contains `measure '...' = ...` blocks.
+
+**Why bad:** discoverability — users hunt across many tables to find measures. Hard to share
+across reports. Can't apply `excludeFromModelRefresh` to a fact table, so refreshes try to
+re-load source data unnecessarily.
+
+**Right pattern:** all measures in a dedicated `Measures Table` with `excludeFromModelRefresh`.
+Reference fact-table columns from there.
+
+**Example:** a fact table with inline measures vs. a dedicated Measures Table doing it right —
+both are the same underlying mechanism; cite whatever example exists in the current repo when
+flagging this.
+
+### 2. Raw source column names surfaced to users
+
+**Smell:** the field list shows names like `IMF_Record_ID`, `ConsumerGTIN`, `BRAND_DESC_RAW`,
+`Sales_CUR` — source-system naming leaking straight through.
+
+**Why bad:** confusing for end users. Brittle — when the source schema changes, every report
+visual that references the raw name breaks.
+
+**Right pattern:** friendly column names at the column level (`Request Number`, `Consumer GTIN`,
+`Brand Description`, `$ Sales`). Hide raw columns with `isHidden`. Surface only curated names.
+
+```tmdl
+column 'Sales_CUR'
+    dataType: double
+    isHidden                          ← hide raw
+    summarizeBy: none
+    sourceColumn: SCANNED_RETAIL_DOLLARS_CUR
+
+column '$ Sales'                      ← friendly alias
+    dataType: double
+    formatString: \$#,0;(\$#,0);\$#,0
+    summarizeBy: sum
+    sourceColumn: SCANNED_RETAIL_DOLLARS_CUR
+```
+
+(In practice, keep just one column with a friendly name and the raw `sourceColumn` reference.
+Don't duplicate.)
+
+### 3. Bidirectional cross-filter on every dimension-to-fact relationship
+
+**Smell:** multiple relationships in `relationships.tmdl` with `crossFilteringBehavior:
+bothDirections`, especially when one dimension links to multiple facts.
+
+**Why bad:** causes ambiguous filter context. Power BI may pick a different evaluation path than
+expected; measures can return wrong values silently.
+
+**Right pattern:** default to many-to-one single-direction. Use bidirectional sparingly —
+typically one relationship per benchmark/share table where it's semantically required. If a
+single calculation needs bidirectional behavior, use `CROSSFILTER()` inside the measure instead
+of changing the relationship globally.
+
+```dax
+$ Sales (Benchmark) =
+    CALCULATE(
+        [$ Sales],
+        CROSSFILTER('Brand Sales Detail'[commodity], 'Commodity Benchmark'[commodity], BOTH)
+    )
+```
+
+A dimension fanned out bidirectionally to several fact tables is resolved by picking one fact as
+primary and leaving the others single-direction.
+
+### 4. Legacy `.bim` JSON model format
+
+**Smell:** the project uses `<ReportName>.bim` (a single big JSON file) instead of TMDL — a PBIP
+folder with `Model.bim` instead of a `definition/` subfolder.
+
+**Why bad:** no source-control benefits — every change shows up as a giant JSON diff. No
+DevMode capabilities. A pre-April-2024 format Microsoft has moved away from.
+
+**Right pattern:** convert to TMDL. In Power BI Desktop, open the `.pbip` and resave — Desktop
+auto-converts to the modern `definition/` folder structure. Test thoroughly afterward; some
+legacy `.bim` features (older M source dialects, deprecated annotations) may need manual cleanup.
+
+### 5. No DAX defensive coding
+
+**Smell:** measures that compute change percentages without `DIVIDE` guards and without outlier
+suppression.
+
+```dax
+-- BAD
+Sales % Change = (SUM(POS[Sales]) - SUM(POS[Sales LY])) / SUM(POS[Sales LY])
+```
+
+**Why bad:** `#DIV/0!` errors on rows with zero LY; nonsensical 4000% spikes from new-item
+launches make charts unreadable.
+
+**Right pattern:**
+
+```dax
+-- GOOD
+Sales % Change =
+    VAR _cur = SUM(POS[Sales])
+    VAR _ly = SUM(POS[Sales LY])
+    VAR _change = DIVIDE(_cur - _ly, _ly)
+    RETURN
+        IF(ABS(_change) > 1, BLANK(), _change)
+```
+
+`DIVIDE()` returns `BLANK()` on a zero divisor. The `IF` blanks extreme outliers (beyond ±100%).
+See `dax-patterns.md` for more defensive-DAX patterns.
+
+## Quality bar quick check
+
+Before delivering work, run through this:
+
+- [ ] All measures in `Measures Table`, none inline on fact tables.
+- [ ] Friendly column names exposed; raw source names hidden.
+- [ ] `lineageTag` UUID on every column and measure, including new ones.
+- [ ] `formatString` on every numeric/percentage/date measure.
+- [ ] `DIVIDE` guards on every percent-change measure; outlier suppression where applicable.
+- [ ] Star schema; bidirectional cross-filter only where justified, max one per pair.
+- [ ] PBIP TMDL format, not legacy `.bim`.
+- [ ] `definition.pbism` not hand-edited (Power BI regenerates it on save).
+- [ ] The active brand profile's theme applied (`report.json.themeCollection.baseTheme` points
+      at it — see `brand-profile.md`).
+- [ ] Page chrome conventions followed: logo, refresh indicator, footer methodology positioned
+      per the active brand profile's `page_chrome` (see `report-visual-json.md`).
+- [ ] Custom visuals (if any) use `host.colorPalette` for theme awareness (see
+      `custom-visuals.md`).
+- [ ] Typography matches the active brand profile's `typography.font_family` throughout (set in
+      the theme; override per-visual only when needed).
+- [ ] No ad-hoc accent-color substitutions for default positive/negative coloring — sentiment
+      coloring follows the active brand profile's `palette.accent.sentiment_policy`, not a color
+      picked in the moment.
+
+## Visual.json preflight (after any layout edit)
+
+Run before invoking the visual-verification tooling (`visual-verification.md`) or surfacing
+changes to the operator/reviewer. These catch the regressions that keep recurring:
+
+- [ ] **No visual bottom exceeds the body envelope's max y** (overlaps the footer band). See the
+      page-layout-grid convention in `report-visual-json.md`; programmatic check in
+      `scripts/exec-quality-check.mjs`.
+- [ ] **No visual right edge exceeds the right margin**, except a deliberately wider chrome
+      element like a refresh indicator.
+- [ ] **Every `image` visual declares `padding=0` on all four sides** under
+      `visualContainerObjects.padding`. Power BI Desktop's default ~12px image padding makes
+      logos look indented.
+- [ ] **Every `pivotTable` styling object has `selector: { id: "default" }`.** Without it, Power
+      BI silently falls back to theme. `tableEx` is exempt. (`pbir-gotchas.md` #3.)
+- [ ] **Card height fits typical data height + small headroom.** Not the full body envelope.
+      Empty space below the last data row reads as broken.
+- [ ] **Repeated chrome visuals (`v_logo`, `v_title`, `v_refresh`, `v_footer_bar`) match across
+      all pages.** Run `scripts/check-page-chrome-drift.mjs` to confirm position, schema, and
+      property parity.
+- [ ] **`general.layout` on `pivotTable` matches the intended drill model.** `Compact` = `+`/`−`
+      icons in published view. `Tabular` = no drill, always expanded. Setting `Tabular` and then
+      asking why there are no drill icons is the canonical mistake.
+- [ ] **Container background contrasts with the page background.** A container tinted the same
+      as the page is invisible — either change the container or add a strong border.
+- [ ] **Every visual-level filter has `isHiddenInViewMode: true`.** No exceptions. Users
+      interact with filters at the page or report level via the Filter pane, or via an on-canvas
+      slicer visual — never a visible visual-level filter. `exec-quality-check.mjs` fails on any
+      visible one. (`pbir-gotchas.md` #7.)
+
+If any item fails, fix BEFORE a Path A capture (see `visual-verification.md`) — Path A is
+expensive (~20-30s per page); use it to verify the *final* state, not to discover preflight
+issues.
+
+## Flagging language for the user
+
+When an anti-pattern is detected, surface it clearly. Sample phrasings — generalize the specific
+nouns to whatever the actual working repo contains:
+
+- *"This file has measures inline on the fact table — that pattern is hard to maintain. Want me
+  to set up a `Measures Table` and migrate them first, or just add this measure to the existing
+  structure?"*
+- *"`IMF_Record_ID` is a raw source column name. Convention is to alias it to something like
+  `Request Number` and hide the raw. Want me to do that as part of this change?"*
+- *"This project is on legacy `.bim` JSON format. Modern PBIP uses TMDL — much better for source
+  control. Want me to convert before adding new measures?"*
+- *"This % change measure has no `DIVIDE` guard. New-item launches will produce 4000% spikes that
+  wreck the charts. I'll add the guard and outlier suppression unless you'd rather match the
+  existing measure exactly."*
+
+Then proceed based on the user's choice. Don't silently mirror a flagged anti-pattern without
+asking first.
+
+---
+
+# Imported by that skill — ../../powerbi/pbi-workflows.md
+
+# Power BI Workflows
+
+End-to-end build / dev / deploy flows for Power BI work: file formats, the PBIP edit cycle, git
+conventions, performance debugging, version pinning, and sharing.
+
+## File format glossary
+
+| Extension | What it is | When you see it |
+|---|---|---|
+| `.pbip` | Power BI Project — the modern source-control-friendly format (since April 2024). Folder structure with TMDL + JSON. | Active development. |
+| `.pbix` | Power BI Desktop file — the legacy single-file binary. | Published reports, end-user files. |
+| `.pbit` | Power BI Template — `.pbix` minus the data, plus metadata. Used to start new reports from a known starting point. | A pre-branded template, if the engagement has one. |
+| `.bim` | Legacy semantic model JSON, pre-PBIP. | Old reports. Convert before substantive edits — see `quality-tiers-antipatterns.md`. |
+| `.tmdl` | TMDL source files inside `.SemanticModel/definition/`. | Hand-edit these for model changes. |
+| `.pbism` | Compiled binary semantic model manifest. | Inside `.SemanticModel/`. **Never hand-edit.** |
+| `.pbir` | Report manifest. | Inside `.Report/`. |
+| `.pbiviz` | Packaged custom visual. | Output of `npm run package` (see `custom-visuals.md`). |
+
+## Editing a PBIP project
+
+1. **Edit TMDL/JSON** in your editor (a TMDL syntax extension is recommended if available).
+2. **Open the `.pbip`** in Power BI Desktop. It reads the source files, builds the in-memory
+   model, and renders the report.
+3. **Save in Power BI Desktop** to regenerate `.pbism` and any other compiled artifacts. Desktop
+   will also reformat TMDL slightly on save — that's expected.
+4. **Test changes** by interacting with the report.
+5. **Commit** the changed `.tmdl` and `.json` files (and the regenerated `.pbism` — yes, even
+   though it's binary; git tracks it as a binary diff).
+
+### What to commit / ignore
+
+```gitignore
+# Inside .SemanticModel/
+.pbi/                   # Power BI Desktop cache, machine-specific
+*.bim.bak                # Backup files
+diagramLayout.json.bak
+```
+
+For custom-visual repo `.gitignore` patterns, see `custom-visuals.md`'s "What to commit / ignore"
+section.
+
+## Applying the active brand profile's theme to a report
+
+1. Resolve the active brand profile (see `brand-profile.md`) and its `theme_file`.
+2. Open the report in Power BI Desktop.
+3. View tab → Themes dropdown → **Browse for themes**.
+4. Pick the active profile's `theme_file`.
+5. Power BI applies the theme — chart colors, fonts, table styles update.
+6. **Save the report.** The theme is now embedded; sharing the file shares the theme.
+
+Starting a brand-new report from a pre-branded template, if the engagement has one, is a
+template-specific step outside this skill's generic workflow — follow that template's own
+instructions, then apply the active brand profile's theme as above if the template doesn't
+already carry it.
+
+## Git conventions
+
+Commit messages: `feat:`, `fix:`, `chore:`, `docs:` prefix. Reference the report or visual in
+scope.
+
+Examples:
+- `feat(scorecard): add Quintile Axis sort column to Brand dimension`
+- `fix(measures): add DIVIDE guard to POS $ Sales - % Change`
+- `chore(theme): bump dataColors[] to lead with the active brand profile's primary color`
+- `docs: update report-visual-json notes for new Section Divider page`
+
+For multi-file PBIP edits, prefer atomic commits — one logical change per commit, even if it
+spans several TMDL files. Power BI Desktop tends to touch many files on save (lineageTag
+regeneration, etc.), so review the diff before committing and exclude noise.
+
+## Performance debugging
+
+When a measure is slow:
+
+1. **Performance Analyzer** (View tab → Performance Analyzer → Start recording → interact with
+   the visual). Shows DAX query time, visual render time, other.
+2. Copy the DAX query from Performance Analyzer.
+3. Open **DAX Studio** (free download). Connect to the running Power BI Desktop instance.
+4. Paste the query, run with **Server Timings** enabled.
+5. Look for high formula-engine time relative to storage-engine time → likely poor DAX (nested
+   `CALCULATE` without `VAR`s, expensive iterators, missing indices).
+
+Common fixes:
+- Replace nested `CALCULATE` with `VAR` blocks.
+- Switch `IF` + `SUMX` to `CALCULATE` + filter where possible.
+- Materialize intermediate aggregates as columns at refresh time.
+- Reduce cardinality of related columns.
+
+## Power BI Desktop version pinning
+
+The PBIP format and TMDL schema evolve. Pin the team to a single Power BI Desktop version to
+avoid drift across a shared repo. Major upgrades happen periodically; coordinate with the team
+before upgrading, and record the pinned version wherever the team keeps its tooling conventions.
+
+Symptoms of a version mismatch in a shared PBIP repo:
+- TMDL files re-formatted on every save with whitespace-only diffs.
+- New annotations appearing that older Desktop versions don't recognize.
+- Custom visual API mismatches (see `custom-visuals.md` Gotcha #9/#10).
+
+## Sharing a PBIP / PBIX
+
+- **Internal review:** push the PBIP to the team's repo; reviewers clone and open in Power BI
+  Desktop. Don't commit the `.pbi/` cache (gitignored).
+- **Client delivery:** save as `.pbix` (File → Save As → Power BI Desktop file). Send the `.pbix`
+  only — the client shouldn't see the source.
+- **Organization rollout via Power BI Service:** publish from Power BI Desktop → File → Publish
+  → choose workspace. Configure refresh in the Service.
+
+## Pre-commit sanity checklist
+
+- Open the report in Power BI Desktop. Does it load without errors? (Schema mismatches show as
+  red banners.)
+- Click each page. Do all visuals render? (Empty visuals mean broken bindings.)
+- Hover over a few visuals. Does the tooltip show data?
+- Apply each top-level slicer/filter. Does the data update?
+- Check Performance Analyzer for any single visual taking over 2 seconds.
+- Save → close → reopen. Does it still load?
+
+If all green, commit. If any red, fix before committing.

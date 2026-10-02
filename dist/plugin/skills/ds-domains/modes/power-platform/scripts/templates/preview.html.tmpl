@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{REPORT_NAME}} — {{PAGE_DISPLAY_NAME}}</title>
+<style>
+  :root {
+    --navy: #001F40;
+    --cobalt: #264DDF;
+    --blueberry: #357BF5;
+    --steel: #75A4F7;
+    --pearl: #D5E4EF;
+    --pearl-soft: #EEF4FA;
+    --white: #FFFFFF;
+    --grey-line: #C8D3DD;
+    --grey-text: #6B7C8E;
+    --error: #B71C1C;
+    --warn: #B7791F;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; font-family: "Calibri", "Segoe UI", sans-serif; background: var(--pearl-soft); color: var(--navy); }
+
+  .header {
+    height: 60px;
+    padding: 8px 16px;
+    background: var(--navy);
+    color: var(--white);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header-title { font-size: 14px; font-weight: 600; letter-spacing: 0.3px; }
+  .header-meta  { font-size: 11px; opacity: 0.85; font-family: "Consolas", monospace; }
+
+  .canvas {
+    position: relative;
+    width: {{CANVAS_WIDTH}}px;
+    height: {{CANVAS_HEIGHT}}px;
+    margin: 0;
+    background: var(--white);
+    overflow: hidden;
+  }
+
+  /* Visual base */
+  .v {
+    position: absolute;
+    background: var(--white);
+    border: 1px solid var(--grey-line);
+    overflow: hidden;
+    padding: 4px 6px 6px 6px;
+    color: var(--navy);
+    font-size: 11px;
+  }
+  .v-off-canvas { outline: 2px dashed var(--warn); outline-offset: -2px; }
+  .v-error { background: #FFEAEA; border-color: var(--error); }
+
+  .v-type-chip {
+    display: inline-block;
+    background: var(--pearl);
+    color: var(--navy);
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 8px;
+    margin-bottom: 2px;
+    font-family: "Consolas", monospace;
+  }
+  .v-title {
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--navy);
+    border-bottom: 1px solid var(--pearl);
+    padding-bottom: 2px;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .v-title-hidden { color: var(--grey-text); font-style: italic; font-weight: 400; }
+  .v-title-tag { font-size: 9px; color: var(--warn); margin-left: 4px; }
+
+  .v-fields {
+    margin-top: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    font-size: 9px;
+  }
+  .v-field {
+    background: var(--pearl-soft);
+    color: var(--navy);
+    padding: 1px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--pearl);
+  }
+  .v-err {
+    margin-top: 4px;
+    color: var(--error);
+    font-size: 10px;
+    font-family: "Consolas", monospace;
+  }
+
+  /* Fillers */
+  .filler { margin-top: 4px; flex-grow: 1; }
+
+  .filler.grid {
+    border: 1px solid var(--pearl);
+    background: var(--white);
+  }
+  .grid-header { display: flex; background: var(--navy); color: var(--white); font-size: 9px; }
+  .grid-header .grid-cell { font-weight: 600; }
+  .grid-body { display: flex; flex-direction: column; }
+  .grid-row { display: flex; }
+  .grid-row:nth-child(even) { background: var(--pearl-soft); }
+  .grid-cell {
+    flex: 1 1 0;
+    padding: 2px 6px;
+    border-right: 1px solid var(--pearl);
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .filler.card {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--pearl-soft);
+    height: calc(100% - 32px);
+  }
+  .card-num { font-size: 28px; font-weight: 700; color: var(--cobalt); }
+
+  .filler.slicer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid var(--steel);
+    background: var(--white);
+    padding: 4px 8px;
+    height: 22px;
+  }
+  .slicer-label { color: var(--navy); font-size: 11px; }
+  .slicer-chevron { color: var(--cobalt); font-size: 14px; }
+
+  .filler.map {
+    background: linear-gradient(135deg, #E5ECF3 25%, #D5E4EF 25%, #D5E4EF 50%, #E5ECF3 50%, #E5ECF3 75%, #D5E4EF 75%);
+    background-size: 14px 14px;
+    color: var(--grey-text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-family: "Consolas", monospace;
+    height: calc(100% - 32px);
+  }
+
+  .filler.image {
+    border: 2px dashed var(--grey-line);
+    color: var(--grey-text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-family: "Consolas", monospace;
+    height: calc(100% - 32px);
+    background: var(--white);
+  }
+
+  .filler.shape {
+    background: var(--cobalt);
+    border-radius: 4px;
+    height: calc(100% - 32px);
+  }
+
+  .filler.chart {
+    display: grid;
+    grid-template-columns: 16px 1fr;
+    grid-template-rows: 1fr 16px;
+    gap: 2px;
+    height: calc(100% - 32px);
+  }
+  .chart-axis-y { border-right: 1px solid var(--grey-line); grid-column: 1; grid-row: 1; }
+  .chart-axis-x { border-top: 1px solid var(--grey-line); grid-column: 2; grid-row: 2; }
+  .chart-bars {
+    grid-column: 2; grid-row: 1;
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    padding: 4px;
+  }
+  .chart-bar { flex: 1 1 0; background: var(--cobalt); }
+  .chart-bar:nth-child(2n) { background: var(--blueberry); }
+  .chart-bar:nth-child(3n) { background: var(--steel); }
+
+  .filler.unknown {
+    background: var(--pearl-soft);
+    color: var(--grey-text);
+    font-family: "Consolas", monospace;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    height: calc(100% - 32px);
+  }
+
+  /* Custom / organizational visual — Path B can't render real output, so the
+     box is visually distinct (diagonal hatch) and self-labels as a placeholder. */
+  .filler.custom {
+    height: calc(100% - 32px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 3px;
+    padding: 4px;
+    color: var(--navy);
+    border: 1px dashed var(--steel);
+    background-color: var(--pearl-soft);
+    background-image: repeating-linear-gradient(
+      45deg, transparent, transparent 6px,
+      rgba(38, 77, 223, 0.06) 6px, rgba(38, 77, 223, 0.06) 12px
+    );
+  }
+  .custom-badge {
+    font-size: 8px;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--white);
+    background: var(--cobalt);
+    padding: 1px 6px;
+    border-radius: 8px;
+  }
+  .custom-type {
+    font-family: "Consolas", monospace;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--navy);
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .custom-note { font-size: 8px; color: var(--grey-text); line-height: 1.2; }
+  .custom-note code { font-family: "Consolas", monospace; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-title">{{REPORT_NAME}} — {{PAGE_DISPLAY_NAME}}</div>
+    <div class="header-meta">{{PAGE_ID}} · {{VISUAL_SUMMARY}}</div>
+  </div>
+  <div class="canvas">
+    {{VISUALS_HTML}}
+  </div>
+</body>
+</html>
