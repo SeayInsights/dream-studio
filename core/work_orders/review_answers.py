@@ -405,6 +405,29 @@ def dispatch_review_round(
             " actually lives."
         )
 
+    # THE ROUND-TABLE BUG: a project registered from wherever the review happened to check
+    # code out (a worktree taken under round-table's own tree, say) carries a project_path
+    # that names the TOOL's layout, not the client's repository, and the bare path-prefix
+    # classifier mistags it -- "round-table/_reviews/plat-roundtable" has no "fulcrum" in it
+    # even when every commit inside is Fulcrum's. `roots` is already resolved here, so this
+    # reuses it rather than re-deriving a second answer; see
+    # `core.clients.backfill.reconcile_project_client_from_review` for the never-overwrite
+    # rule that keeps this from clobbering a deliberate client assignment. Best-effort: a
+    # client-tagging hiccup must never block a review dispatch.
+    try:
+        from core.clients.backfill import reconcile_project_client_from_review
+
+        reconcile_project_client_from_review(work_order_id, roots, db_path=db_path)
+    except Exception as exc:  # noqa: BLE001 - metadata, never the dispatch itself
+        from core.telemetry.diagnostics import log_diagnostic
+
+        log_diagnostic(
+            category="failure",
+            source="dispatch_review_round.reconcile_project_client_from_review",
+            context={"work_order_id": work_order_id},
+            details={"error_type": type(exc).__name__, "error_message": str(exc)},
+        )
+
     sha = lane_sandbox.resolve_sha("HEAD", repo_root=change_root)
     report = convene(repo_root=repo_root, change_root=change_root)
     computed_assignments = assignments(report)

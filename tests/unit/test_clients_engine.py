@@ -4,7 +4,9 @@ default + fit proposed work to a client's projects, and the backfill classifies 
 
 from __future__ import annotations
 
+import subprocess
 import sqlite3
+import uuid
 from pathlib import Path
 
 import pytest
@@ -28,6 +30,44 @@ def _seed_project(conn, pid, name, client_id=None, path=None, status="active"):
     )
 
 
+def _seed_work_order(conn, wo_id, project_id):
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description, work_order_type,"
+        "  status, created_at, updated_at)"
+        " VALUES (?,?,NULL,'WO','d','infrastructure','in_progress',?,?)",
+        (wo_id, project_id, NOW, NOW),
+    )
+
+
+def _git(root: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", *args],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=60,
+    )
+
+
+def _make_repo(root: Path) -> Path:
+    """A real git repository, the way `tests/unit/test_multiroot_review.py` builds one --
+    the round-table-unwrapping logic is driven against real git markers for the same reason
+    that file gives: the repo/worktree distinction is exactly the thing an invented fixture
+    would get wrong."""
+    root.mkdir(parents=True, exist_ok=True)
+    _git(root, "init", "-q")
+    _git(root, "config", "user.email", "t@example.com")
+    _git(root, "config", "user.name", "t")
+    (root / "file.txt").write_text("x", encoding="utf-8")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "base")
+    return root
+
+
 # ── classify (pure) ─────────────────────────────────────────────────────────
 
 
@@ -45,6 +85,31 @@ def test_classify_project(name, path, expected):
     from core.clients.backfill import classify_project
 
     assert classify_project(name, path) == expected
+
+
+def test_classify_project_prefers_a_resolved_root_over_the_bare_path():
+    """THE ROUND-TABLE BUG, at the pure-function level: a project's own project_path can
+    name the reviewing tool's working directory rather than the client's repository, and a
+    resolved_root -- once something upstream has gone and found the real one -- must win
+    over that bare string, not merely supplement it."""
+    from core.clients.backfill import classify_project
+
+    assert (
+        classify_project(
+            "plat-roundtable",
+            r"C:\Users\Example\round-table\_reviews\plat-roundtable",
+            resolved_root=r"C:\Users\Example\Fulcrum\platform",
+        )
+        == "fulcrum"
+    )
+    # With no resolved_root, the bare path alone still mistags it -- the precondition that
+    # makes the line above a real fix rather than a no-op.
+    assert (
+        classify_project(
+            "plat-roundtable", r"C:\Users\Example\round-table\_reviews\plat-roundtable"
+        )
+        == "seayinsights"
+    )
 
 
 # ── projections (direct handler calls) ──────────────────────────────────────
@@ -374,3 +439,192 @@ def test_backfill_emits_assignment_per_null_project(tmp_path: Path, monkeypatch)
     assert got == {"p-ful": "fulcrum", "p-ds": "seayinsights"}  # p-has skipped (already assigned)
     assert all(a["attribution_status"] == "backfill" for a in assigns)
     assert result["assigned"]["fulcrum"] == 1 and result["assigned"]["seayinsights"] == 1
+
+
+# ── the round-table bug: classify by the repo under review, not the tool's own path ──
+
+
+def test_classify_project_for_work_order_unwraps_a_worktree_to_its_repository(
+    tmp_path: Path,
+):
+    """THE EXACT REPORTED BUG. The operator's own project_path for the mistagged project
+    was a round-table review session's own working directory
+    (``round-table/_reviews/plat-roundtable``) -- a worktree checked out there for a one-off
+    inspection of Fulcrum's platform repo, which itself lives somewhere else entirely
+    (``Fulcrum/platform``, per the operator's own correctly-tagged sibling project). The bare
+    path has no "fulcrum" in it; the repository the worktree branches from does."""
+    from core.clients.backfill import classify_project_for_work_order
+
+    fulcrum_repo = _make_repo(tmp_path / "Fulcrum" / "platform")
+    review_session = tmp_path / "round-table" / "_reviews" / "plat-roundtable"
+    review_session.parent.mkdir(parents=True)
+    _git(fulcrum_repo, "worktree", "add", "-q", "-b", "pr-under-review", str(review_session))
+
+    db = _db(tmp_path)
+    conn = sqlite3.connect(str(db))
+    pid, wo = str(uuid.uuid4()), str(uuid.uuid4())
+    _seed_project(conn, pid, "plat-roundtable", path=str(review_session))
+    _seed_work_order(conn, wo, pid)
+    conn.commit()
+    conn.close()
+
+    assert classify_project_for_work_order(wo, db_path=db) == "fulcrum"
+    # And the precondition that makes this a real fix: the bare heuristic alone, on the
+    # worktree's own path, still gets it wrong.
+    from core.clients.backfill import classify_project
+
+    assert classify_project("plat-roundtable", str(review_session)) == "seayinsights"
+
+
+def test_classify_project_for_work_order_tags_dream_studios_own_review_correctly(
+    tmp_path: Path,
+):
+    """Round-table also reviews Dream Studio's own PRs -- the case a blanket
+    ``round-table/ -> fulcrum`` mapping would have flipped the other way. A plain repository
+    (not a worktree of something else) resolves through the same path unchanged, and must
+    still land on whatever client Dream Studio's own project resolves to: SeayInsights, the
+    registry default (`core.clients.queries.DEFAULT_CLIENT_ID`), confirmed independently by
+    `test_classify_project`'s own ``("Dream Studio", ..., "seayinsights")`` case rather than
+    assumed here by name alone."""
+    from core.clients.backfill import classify_project_for_work_order
+    from core.clients.queries import DEFAULT_CLIENT_ID
+
+    assert DEFAULT_CLIENT_ID == "seayinsights"
+
+    ds_repo = _make_repo(tmp_path / "round-table")  # the tool reviewing itself, at HEAD
+
+    db = _db(tmp_path)
+    conn = sqlite3.connect(str(db))
+    pid, wo = str(uuid.uuid4()), str(uuid.uuid4())
+    _seed_project(conn, pid, "Dream Studio", path=str(ds_repo))
+    _seed_work_order(conn, wo, pid)
+    conn.commit()
+    conn.close()
+
+    assert classify_project_for_work_order(wo, db_path=db) == "seayinsights"
+
+
+def test_classify_project_for_work_order_falls_back_with_nothing_resolvable(tmp_path: Path):
+    """No project_path on record -- the genuinely standalone case -- returns None so the
+    caller falls back to the bare heuristic, rather than inventing a guess."""
+    from core.clients.backfill import classify_project_for_work_order
+
+    db = _db(tmp_path)
+    conn = sqlite3.connect(str(db))
+    pid, wo = str(uuid.uuid4()), str(uuid.uuid4())
+    _seed_project(conn, pid, "No Path Project")  # path left NULL
+    _seed_work_order(conn, wo, pid)
+    conn.commit()
+    conn.close()
+
+    assert classify_project_for_work_order(wo, db_path=db) is None
+    assert classify_project_for_work_order("no-such-work-order", db_path=db) is None
+
+
+def test_reconcile_project_client_from_review_upgrades_a_default_tag(tmp_path, monkeypatch):
+    """The live wiring `dispatch_review_round` calls: a project still sitting on the
+    SeayInsights default (exactly the state `register_project`'s own blind default, or a
+    prior backfill miss, leaves a mistagged round-table project in) is corrected once a real
+    round-table dispatch resolves the worktree to its actual repository."""
+    from core.clients import mutations
+    from core.clients.backfill import reconcile_project_client_from_review
+    from core.work_orders.project_roots import resolve_project_roots
+
+    fulcrum_repo = _make_repo(tmp_path / "Fulcrum" / "platform")
+    review_session = tmp_path / "round-table" / "_reviews" / "plat-roundtable"
+    review_session.parent.mkdir(parents=True)
+    _git(fulcrum_repo, "worktree", "add", "-q", "-b", "pr-under-review", str(review_session))
+
+    db = _db(tmp_path)
+    conn = sqlite3.connect(str(db))
+    pid, wo = str(uuid.uuid4()), str(uuid.uuid4())
+    _seed_project(conn, pid, "plat-roundtable", client_id="seayinsights", path=str(review_session))
+    _seed_work_order(conn, wo, pid)
+    conn.commit()
+    conn.close()
+
+    assigns = []
+    monkeypatch.setattr(
+        mutations, "assign_project_client", lambda **kw: assigns.append(kw) or {"ok": True}
+    )
+
+    roots = resolve_project_roots(wo, db)
+    result = reconcile_project_client_from_review(wo, roots, db_path=db)
+
+    assert result == {"ok": True}
+    assert assigns == [
+        {"project_id": pid, "client_id": "fulcrum", "attribution_status": "backfill"}
+    ]
+
+
+def test_reconcile_project_client_from_review_never_overwrites_an_explicit_client(
+    tmp_path, monkeypatch
+):
+    """The adversarial case round-table reviewing its OWN PRs would hit with a blanket
+    mapping, generalised: a project already carrying a NON-default client is never silently
+    reassigned, even when the resolved root disagrees with it -- this module has no way to
+    tell a deliberate choice from a stale guess, so it must not guess."""
+    from core.clients import mutations
+    from core.clients.backfill import reconcile_project_client_from_review
+    from core.work_orders.project_roots import resolve_project_roots
+
+    fulcrum_repo = _make_repo(tmp_path / "Fulcrum" / "platform")
+    review_session = tmp_path / "round-table" / "_reviews" / "plat-roundtable"
+    review_session.parent.mkdir(parents=True)
+    _git(fulcrum_repo, "worktree", "add", "-q", "-b", "pr-under-review", str(review_session))
+
+    db = _db(tmp_path)
+    conn = sqlite3.connect(str(db))
+    pid, wo = str(uuid.uuid4()), str(uuid.uuid4())
+    # Already explicitly on a DIFFERENT non-default client.
+    _seed_project(conn, pid, "plat-roundtable", client_id="hypershift", path=str(review_session))
+    _seed_work_order(conn, wo, pid)
+    conn.commit()
+    conn.close()
+
+    assigns = []
+    monkeypatch.setattr(
+        mutations, "assign_project_client", lambda **kw: assigns.append(kw) or {"ok": True}
+    )
+
+    roots = resolve_project_roots(wo, db)
+    result = reconcile_project_client_from_review(wo, roots, db_path=db)
+
+    assert result is None
+    assert assigns == []
+
+
+def test_backfill_prefers_the_resolved_work_order_root_over_the_bare_project_path(
+    tmp_path: Path, monkeypatch
+):
+    """`backfill_project_clients` wires the same preference in for the one-time
+    migration-activation path: a NULL-client project with a work order on record is
+    classified by the resolved root, not the bare project_path column."""
+    from core.clients import backfill
+
+    fulcrum_repo = _make_repo(tmp_path / "Fulcrum" / "platform")
+    review_session = tmp_path / "round-table" / "_reviews" / "plat-roundtable"
+    review_session.parent.mkdir(parents=True)
+    _git(fulcrum_repo, "worktree", "add", "-q", "-b", "pr-under-review", str(review_session))
+
+    db = _db(tmp_path)
+    conn = sqlite3.connect(str(db))
+    pid, wo = str(uuid.uuid4()), str(uuid.uuid4())
+    _seed_project(conn, pid, "plat-roundtable", path=str(review_session))  # client_id NULL
+    _seed_work_order(conn, wo, pid)
+    conn.commit()
+    conn.close()
+
+    assigns = []
+    from core.clients import mutations
+
+    monkeypatch.setattr(
+        mutations, "assign_project_client", lambda **kw: assigns.append(kw) or {"ok": True}
+    )
+
+    result = backfill.backfill_project_clients(db_path=db)
+
+    assert assigns == [
+        {"project_id": pid, "client_id": "fulcrum", "attribution_status": "backfill"}
+    ]
+    assert result["assigned"] == {"fulcrum": 1}

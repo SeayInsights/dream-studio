@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -225,6 +226,130 @@ def test_dispatch_review_round_builds_the_lane_image_from_the_work_orders_own_pr
     assert captured_convene_kwargs["repo_root"] == REPO_ROOT
     assert captured_convene_kwargs["change_root"] == tmp_path
     assert doc["stored"] is True
+
+
+def _git(root: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", *args],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=60,
+    )
+
+
+def _make_repo(root: Path) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    _git(root, "init", "-q")
+    _git(root, "config", "user.email", "t@example.com")
+    _git(root, "config", "user.name", "t")
+    (root / "file.txt").write_text("x", encoding="utf-8")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "base")
+    return root
+
+
+def test_dispatch_review_round_corrects_a_mistagged_client_from_the_resolved_root(
+    db, monkeypatch, tmp_path
+):
+    """THE ROUND-TABLE BUG, end to end. The work order's project declares a project_path
+    that is a worktree checked out under a review tool's own directory for a one-off
+    inspection -- the operator's own reported case, ``round-table/_reviews/plat-roundtable``
+    -- while the repository that worktree actually branches from is Fulcrum's. Before this
+    fix the project sat on no client (or the SeayInsights default) forever, because nothing
+    ever looked past the worktree's own path; dispatching a review is the one live moment a
+    real root gets resolved, and it must now correct the tag rather than leave it guessed.
+    """
+    from core.gates import lane_sandbox
+
+    from core.clients import mutations as client_mutations
+
+    fulcrum_repo = _make_repo(tmp_path / "Fulcrum" / "platform")
+    review_session = tmp_path / "round-table" / "_reviews" / "plat-roundtable"
+    review_session.parent.mkdir(parents=True)
+    _git(fulcrum_repo, "worktree", "add", "-q", "-b", "pr-under-review", str(review_session))
+
+    conn = sqlite3.connect(str(db))
+    try:
+        conn.execute(
+            "UPDATE business_projects SET project_path = ? WHERE project_id = ?",
+            (str(review_session), PROJECT_ID),
+        )
+        conn.commit()
+        before = conn.execute(
+            "SELECT client_id FROM business_projects WHERE project_id = ?", (PROJECT_ID,)
+        ).fetchone()
+    finally:
+        conn.close()
+    assert before[0] is None, "precondition: the project starts with no client on record"
+
+    monkeypatch.setattr(lane_sandbox, "docker_available", _up)
+    monkeypatch.setattr(lane_sandbox, "resolve_sha", lambda ref, *, repo_root: "a" * 40)
+    monkeypatch.setattr(lane_sandbox, "build_image", lambda sha, *, repo_root: "ds-review:fake")
+
+    # assign_project_client emits an event and runs a projection tick against whatever DB
+    # `DREAM_STUDIO_DB_PATH` resolves to (a session-wide tmp DB, not this test's own `db`
+    # fixture) -- captured here, the same way the rest of this module and
+    # tests/unit/test_clients_engine.py verify a client assignment, rather than relying on
+    # that second, unrelated database to materialize it.
+    assigns = []
+    monkeypatch.setattr(
+        client_mutations,
+        "assign_project_client",
+        lambda **kw: assigns.append(kw) or {"ok": True},
+    )
+
+    dispatch_review_round(WO_ID, repo_root=REPO_ROOT, db_path=db)
+
+    assert assigns == [
+        {"project_id": PROJECT_ID, "client_id": "fulcrum", "attribution_status": "backfill"}
+    ], "the dispatch must tag the project by the repository the worktree branches from"
+
+
+def test_dispatch_review_round_does_not_retag_a_project_already_on_a_non_default_client(
+    db, monkeypatch, tmp_path
+):
+    """Round-table also reviews Dream Studio's OWN pull requests -- the case a blanket
+    directory-prefix mapping would flip the other way. A project already carrying an
+    explicit, non-default client must survive a dispatch unchanged even when the resolved
+    root would suggest something else, because nothing here can tell a deliberate
+    reassignment from a stale guess."""
+    from core.gates import lane_sandbox
+    from core.clients import mutations as client_mutations
+
+    fulcrum_repo = _make_repo(tmp_path / "Fulcrum" / "platform")
+    review_session = tmp_path / "round-table" / "_reviews" / "plat-roundtable"
+    review_session.parent.mkdir(parents=True)
+    _git(fulcrum_repo, "worktree", "add", "-q", "-b", "pr-under-review", str(review_session))
+
+    conn = sqlite3.connect(str(db))
+    try:
+        conn.execute(
+            "UPDATE business_projects SET project_path = ?, client_id = 'hypershift'"
+            " WHERE project_id = ?",
+            (str(review_session), PROJECT_ID),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    monkeypatch.setattr(lane_sandbox, "docker_available", _up)
+    monkeypatch.setattr(lane_sandbox, "resolve_sha", lambda ref, *, repo_root: "a" * 40)
+    monkeypatch.setattr(lane_sandbox, "build_image", lambda sha, *, repo_root: "ds-review:fake")
+
+    assigns = []
+    monkeypatch.setattr(
+        client_mutations,
+        "assign_project_client",
+        lambda **kw: assigns.append(kw) or {"ok": True},
+    )
+
+    dispatch_review_round(WO_ID, repo_root=REPO_ROOT, db_path=db)
+
+    assert assigns == [], "an explicit non-default client must never be silently reassigned"
 
 
 def test_dispatch_review_round_raises_clearly_when_no_project_root_resolves(db, monkeypatch):
