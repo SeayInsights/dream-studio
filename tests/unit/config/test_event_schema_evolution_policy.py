@@ -113,6 +113,16 @@ _GOOD_PAYLOADS: dict[str, dict] = {
     "client.deleted": {
         "client_id": "acme",
     },
+    "profile.created": {
+        "profile_id": str(uuid.uuid4()),
+        "client_id": "seayinsights",
+    },
+    "profile.activated": {
+        "profile_id": str(uuid.uuid4()),
+    },
+    "profile.deactivated": {
+        "profile_id": str(uuid.uuid4()),
+    },
     "work_order.deleted": {
         "work_order_id": str(uuid.uuid4()),
         "project_id": "proj-test",

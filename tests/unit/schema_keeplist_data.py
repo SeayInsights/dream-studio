@@ -37,6 +37,7 @@ CLASSIFICATION: dict[str, str] = {
     "business_clients": "KEEP",  # Added migration 155 (Client Layer, Phase 2): client organizing layer over business_projects
     "business_design_briefs": "KEEP",
     "business_milestones": "KEEP",
+    "business_profiles": "KEEP",  # Added migration 159 (profile layer): switchable operating-context identity owned by a client
     "business_projects": "KEEP",
     "business_tasks": "KEEP",
     "business_work_order_artifacts": "KEEP",  # Added migration 144 (WO-FILESDB-P1): WO ceremony artifacts moved off .planning disk into the authority
