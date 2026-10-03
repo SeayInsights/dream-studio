@@ -98,7 +98,7 @@ def projects_dir_for_cwd(cwd: Path) -> Path:
         else:
             cleaned += f"-u{ord(ch):04x}-"
     slug = cleaned[:200]
-    return Path.home() / ".claude" / "projects" / slug
+    return paths.claude_config_root() / "projects" / slug
 
 
 def kb_baseline(projects: Path, session_id: str | None) -> float:

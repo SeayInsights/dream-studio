@@ -77,7 +77,9 @@ def _resolve_db(db_path: Path | None) -> Path:
 
 
 def _transcript_root() -> Path:
-    return Path.home() / ".claude" / "projects"
+    from core.config.paths import claude_config_root
+
+    return claude_config_root() / "projects"
 
 
 def decode_transcript_dir(name: str) -> str:

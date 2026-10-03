@@ -12,6 +12,7 @@ second approach trustworthy.
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -182,3 +183,27 @@ def test_active_project_is_not_used_as_evidence():
         "attribution must not read raw_claude_code_events.project_id — it records "
         "the globally-active project, not where the work happened"
     )
+
+
+# ---------------------------------------------------------------------------
+# Transcript root — must follow CLAUDE_CONFIG_DIR, not just the default ~/.claude
+# ---------------------------------------------------------------------------
+
+
+def test_transcript_root_honors_claude_config_dir(monkeypatch, tmp_path):
+    """A second Claude Code identity (its own CLAUDE_CONFIG_DIR) has its own transcripts.
+    Before this fix _transcript_root() hardcoded ~/.claude/projects, so that identity's
+    sessions were invisible to attribution no matter what was installed there."""
+    from core.event_store.project_attribution import _transcript_root
+
+    other_identity = tmp_path / "claude-fulcrum"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(other_identity))
+    assert _transcript_root() == other_identity / "projects"
+
+
+def test_transcript_root_falls_back_to_the_default(monkeypatch, tmp_path):
+    from core.event_store.project_attribution import _transcript_root
+
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    assert _transcript_root() == tmp_path / ".claude" / "projects"

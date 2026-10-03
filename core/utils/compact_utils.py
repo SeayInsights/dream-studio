@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from core.config.paths import claude_config_root
+
 
 def projects_dir(cwd: Path) -> Path:
     """Get the project-specific directory for sentinels and state."""
@@ -24,7 +26,7 @@ def projects_dir(cwd: Path) -> Path:
             cleaned += "-"
         else:
             cleaned += f"-u{ord(ch):04x}-"
-    return Path.home() / ".claude" / "projects" / cleaned[:200]
+    return claude_config_root() / "projects" / cleaned[:200]
 
 
 def sentinel_path(projects: Path, session_id: str | None, label: str) -> Path:
