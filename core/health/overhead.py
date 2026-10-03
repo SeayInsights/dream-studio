@@ -15,6 +15,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from core.config.paths import claude_config_root
+
 # ── Frontmatter parser (promoted from lint_skills.py) ────────────────────────
 
 
@@ -175,7 +177,7 @@ def run_overhead_checks(
         finding_count→ len(findings)
     """
     _source_root = Path(source_root)
-    _claude_dir = Path(claude_dir) if claude_dir is not None else Path.home() / ".claude"
+    _claude_dir = Path(claude_dir) if claude_dir is not None else claude_config_root()
 
     try:
         findings: list[dict[str, str]] = []

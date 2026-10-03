@@ -81,6 +81,25 @@ def user_data_dir() -> Path:
     return path
 
 
+def claude_config_root() -> Path:
+    """Claude Code's OWN config root -- CLAUDE_CONFIG_DIR, else ~/.claude -- NOT created.
+
+    THE ONE PLACE CLAUDE CODE'S CONFIG ROOT IS SPELLED. This is a different thing from
+    home_dir() above: home_dir() is Dream Studio's own home (DREAM_STUDIO_HOME / ~/.dream-
+    studio); this is the config root of the Claude Code CLI itself, which the real `claude`
+    binary relocates with CLAUDE_CONFIG_DIR. An operator can run a second, separate Claude
+    Code identity for a different engagement -- its own session transcripts, hooks, and
+    settings.json under a directory that is not ~/.claude -- and code that spells
+    `Path.home() / ".claude"` directly can never see it, no matter what that identity's
+    hooks install. tests/unit/test_claude_config_root.py fails on a new spelling in core/,
+    interfaces/, integrations/, or control/.
+
+    Resolving a path does not create it.
+    """
+    override = os.environ.get("CLAUDE_CONFIG_DIR")
+    return Path(override).expanduser() if override else Path.home() / ".claude"
+
+
 def project_root() -> Path:
     """Return the project the user is currently working in."""
     return Path.cwd()
@@ -111,9 +130,9 @@ def _project_slug(project_path: Path | None = None) -> str:
 
 
 def memory_dir(project_path: Path | None = None) -> Path:
-    """Return ~/.claude/projects/<slug>/memory/ for the given project (or cwd)."""
+    """Return <claude_config_root()>/projects/<slug>/memory/ for the given project (or cwd)."""
     slug = _project_slug(project_path)
-    path = Path.home() / ".claude" / "projects" / slug / "memory"
+    path = claude_config_root() / "projects" / slug / "memory"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -241,7 +260,7 @@ def warn_version_mismatch() -> None:
         if sentinel.exists():
             return
         # Check optional Claude Code adapter cache version.
-        cache_root = Path.home() / ".claude" / "plugins" / "cache" / "dream-studio"
+        cache_root = claude_config_root() / "plugins" / "cache" / "dream-studio"
         if cache_root.exists():
             for version_dir in sorted(cache_root.glob("*/*/plugin.json")):
                 try:

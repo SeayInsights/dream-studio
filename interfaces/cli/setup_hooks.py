@@ -18,13 +18,14 @@ import shlex
 import sys
 from pathlib import Path
 
+from core.config.paths import claude_config_root
 from interfaces.cli.setup_shared import HOOKS_JSON, REPO_ROOT, StepResult
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 
-SETTINGS_JSON = Path.home() / ".claude" / "settings.json"
+SETTINGS_JSON = claude_config_root() / "settings.json"
 
 # Packs whose runtime/hooks/<pack>/ subdir holds real handler files. Kept in
 # sync with core.health.doctor_shared._PROJECTED_HOOK_SUBDIRS and

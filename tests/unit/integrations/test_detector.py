@@ -19,6 +19,17 @@ def test_detect_claude_code_user_scope_default(tmp_path, monkeypatch):
     assert result.config_root == Path.home() / ".claude"
 
 
+def test_detect_claude_code_user_scope_honors_claude_config_dir(tmp_path, monkeypatch):
+    """A second Claude Code identity (e.g. a Fulcrum-specific CLAUDE_CONFIG_DIR) must be
+    the config root detection reports for user scope -- not the default ~/.claude."""
+    other_home = tmp_path / "claude-fulcrum"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(other_home))
+    monkeypatch.chdir(tmp_path)
+    result = detect_claude_code()
+    assert result.scope == "user"
+    assert result.config_root == other_home
+
+
 def test_detect_claude_code_project_scope_when_dot_claude_present(tmp_path, monkeypatch):
     (tmp_path / ".claude").mkdir()
     monkeypatch.chdir(tmp_path)

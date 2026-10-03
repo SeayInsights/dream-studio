@@ -170,10 +170,10 @@ core/config/hookq.py|130|bare-except-pass
 core/config/hookq.py|136|bare-except-pass
 core/config/hookq.py|80|falsy-return
 core/config/hookq.py|97|falsy-return
-core/config/paths.py|158|falsy-return
-core/config/paths.py|223|bare-except-pass
-core/config/paths.py|261|bare-except-pass
-core/config/paths.py|263|bare-except-pass
+core/config/paths.py|177|falsy-return
+core/config/paths.py|242|bare-except-pass
+core/config/paths.py|280|bare-except-pass
+core/config/paths.py|282|bare-except-pass
 core/config/paths.py|57|bare-except-pass
 core/config/platform.py|145|bare-except-pass
 core/config/retention.py|206|falsy-return
@@ -330,7 +330,7 @@ core/graph/query_analysis.py|226|falsy-return
 core/graph/query_analysis.py|229|falsy-return
 core/graph/query_analysis.py|288|falsy-return
 core/health/doctor_checks.py|35|falsy-return
-core/health/doctor_main.py|159|bare-except-pass
+core/health/doctor_main.py|160|bare-except-pass
 core/health/doctor_skill_sync.py|165|falsy-return
 core/health/doctor_skill_sync.py|169|falsy-return
 core/health/doctor_skill_sync.py|230|falsy-return
@@ -519,9 +519,9 @@ core/telemetry/tool_tracking.py|221|bare-except-pass
 core/telemetry/tool_tracking.py|244|bare-except-pass
 core/utils/changelog_helpers.py|115|falsy-return
 core/utils/changelog_helpers.py|42|falsy-return
-core/utils/compact_utils.py|56|bare-except-pass
-core/utils/compact_utils.py|75|bare-except-pass
-core/utils/compact_utils.py|85|bare-except-pass
+core/utils/compact_utils.py|58|bare-except-pass
+core/utils/compact_utils.py|77|bare-except-pass
+core/utils/compact_utils.py|87|bare-except-pass
 core/utils/milestone.py|127|falsy-return
 core/utils/milestone.py|141|falsy-return
 core/utils/milestone.py|82|falsy-return
@@ -648,7 +648,7 @@ interfaces/cli/ds_learn_expand.py|166|bare-except-pass
 interfaces/cli/ds_learn_review.py|146|bare-except-pass
 interfaces/cli/ds_learn_review.py|22|bare-except-pass
 interfaces/cli/ds_memory_ingest.py|519|bare-except-pass
-interfaces/cli/ds_memory_sessions.py|52|falsy-return
+interfaces/cli/ds_memory_sessions.py|48|falsy-return
 interfaces/cli/ds_work_order_core.py|50|falsy-return
 interfaces/cli/efficiency_analytics.py|155|falsy-return
 interfaces/cli/generate_routing.py|148|falsy-return
@@ -684,7 +684,7 @@ interfaces/cli/resume_from_handoff.py|88|falsy-return
 interfaces/cli/session_analytics.py|100|falsy-return
 interfaces/cli/session_analytics.py|108|falsy-return
 interfaces/cli/setup_diagnostics.py|100|bare-except-pass
-interfaces/cli/setup_hooks.py|177|falsy-return
+interfaces/cli/setup_hooks.py|178|falsy-return
 interfaces/cli/setup_steps.py|160|bare-except-pass
 interfaces/cli/setup_steps.py|171|bare-except-pass
 interfaces/cli/spec_risk_check.py|127|falsy-return

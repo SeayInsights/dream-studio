@@ -42,7 +42,9 @@ def detect_claude_code(
     if scope == "project":
         config_root = cwd / ".claude"
     else:
-        config_root = Path.home() / ".claude"
+        from core.config.paths import claude_config_root
+
+        config_root = claude_config_root()
 
     return DetectedTool(tool_id=CLAUDE_CODE_TOOL_ID, scope=scope, config_root=config_root)
 

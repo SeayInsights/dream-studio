@@ -476,7 +476,9 @@ def _canonical_skill_drift(source_root: Path, manifest: dict) -> list[str]:
     # it is a broken one.
     recorded_scope = str(manifest.get("scope") or "").strip()
     if recorded_scope == "user":
-        config_root, scope = Path.home() / ".claude", "user"
+        from core.config.paths import claude_config_root
+
+        config_root, scope = claude_config_root(), "user"
     else:
         detected = detect_claude_code()
         config_root, scope = detected.config_root, detected.scope
@@ -694,8 +696,10 @@ def _update_command(
         # both projection trees stay in sync.  The project-scope tree has no hook registrations
         # (dispatch consolidation); the user-global tree is the single dispatch surface.
         if install_ok and detected.scope == "project":
+            from core.config.paths import claude_config_root
+
             user_installer = ClaudeCodeInstaller(
-                Path.home() / ".claude",
+                claude_config_root(),
                 "user",
                 canonical_root=canonical_root,
                 ds_home=ds_home,

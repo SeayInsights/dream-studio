@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from core.config.paths import claude_config_root
 from core.health.overhead import run_overhead_checks
 from core.health.validate import run_validation
 from core.installed_runtime import resolve_installed_runtime_paths
@@ -47,7 +48,7 @@ def run_doctor_checks(
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
-    claude_dir = Path.home() / ".claude"
+    claude_dir = claude_config_root()
 
     dispatcher_ok = _check_dispatcher_hooks(claude_dir)
     skills_info = _check_skills_installed(claude_dir, source_root=source_root)

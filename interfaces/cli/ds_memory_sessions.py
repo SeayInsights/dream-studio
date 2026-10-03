@@ -31,16 +31,12 @@ Type 'yes' to proceed, or press Enter to cancel: """
 
 def cmd_memory_ingest_sessions(args) -> int:
     """Entry point for `ds memory ingest-sessions`."""
-    import os
-
     if args.claude_projects_dir:
         claude_projects_dir = Path(args.claude_projects_dir)
     else:
-        if sys.platform == "win32":
-            user_profile = os.environ.get("USERPROFILE", str(Path.home()))
-            claude_projects_dir = Path(user_profile) / ".claude" / "projects"
-        else:
-            claude_projects_dir = Path.home() / ".claude" / "projects"
+        from core.config.paths import claude_config_root
+
+        claude_projects_dir = claude_config_root() / "projects"
 
     dry_run: bool = getattr(args, "dry_run", False)
     no_consent_prompt: bool = getattr(args, "no_consent_prompt", False)

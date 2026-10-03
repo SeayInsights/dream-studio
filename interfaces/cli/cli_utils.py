@@ -59,7 +59,9 @@ def _default_claude_settings_paths() -> list[str]:
         paths.append(Path(detected.config_root) / "settings.json")
     except Exception:  # noqa: BLE001 — detection is best-effort; user-global is the fallback
         pass
-    paths.append(Path.home() / ".claude" / "settings.json")
+    from core.config.paths import claude_config_root
+
+    paths.append(claude_config_root() / "settings.json")
     seen: set[str] = set()
     deduped: list[str] = []
     for p in paths:

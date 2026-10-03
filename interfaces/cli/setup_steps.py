@@ -184,8 +184,10 @@ def step_memory_init() -> StepResult:
     """FR-S04: Create ~/.claude/projects/<slug>/memory/ and seed MEMORY.md."""
     name = "Memory dir init"
     try:
+        from core.config.paths import claude_config_root
+
         slug = _repo_slug()
-        memory_dir = Path.home() / ".claude" / "projects" / slug / "memory"
+        memory_dir = claude_config_root() / "projects" / slug / "memory"
         memory_dir.mkdir(parents=True, exist_ok=True)
 
         memory_file = memory_dir / "MEMORY.md"
