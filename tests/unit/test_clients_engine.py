@@ -97,15 +97,17 @@ def test_classify_project_prefers_a_resolved_root_over_the_bare_path():
     assert (
         classify_project(
             "plat-roundtable",
-            r"C:\Users\danni\round-table\_reviews\plat-roundtable",
-            resolved_root=r"C:\Users\danni\Fulcrum\platform",
+            r"C:\Users\Example\round-table\_reviews\plat-roundtable",
+            resolved_root=r"C:\Users\Example\Fulcrum\platform",
         )
         == "fulcrum"
     )
     # With no resolved_root, the bare path alone still mistags it -- the precondition that
     # makes the line above a real fix rather than a no-op.
     assert (
-        classify_project("plat-roundtable", r"C:\Users\danni\round-table\_reviews\plat-roundtable")
+        classify_project(
+            "plat-roundtable", r"C:\Users\Example\round-table\_reviews\plat-roundtable"
+        )
         == "seayinsights"
     )
 
