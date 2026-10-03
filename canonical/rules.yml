@@ -226,6 +226,30 @@ rules:
       discriminated two commits through unrelated churn, and a later plain pass erasing the
       referee requirement.
 
+  - id: a-reviewed-project-is-tagged-by-its-real-repo-not-the-tools-own-path
+    statement: >
+      Dispatching a review resolves the work order's actual code root (unwrapping a
+      worktree to the repository it branches from) and corrects the project's client tag
+      from it when the project still carries no client or the SeayInsights default; a
+      project already carrying an explicit fulcrum or hypershift assignment is never
+      retagged, because nothing here can tell a deliberate reassignment from a stale guess.
+    source: core/work_orders/review_answers.py
+    enforced_by:
+      - tests/unit/test_review_answers.py::test_dispatch_review_round_corrects_a_mistagged_client_from_the_resolved_root
+      - tests/unit/test_review_answers.py::test_dispatch_review_round_does_not_retag_a_project_already_on_a_non_default_client
+      - tests/unit/test_clients_engine.py::test_classify_project_for_work_order_unwraps_a_worktree_to_its_repository
+      - tests/unit/test_clients_engine.py::test_reconcile_project_client_from_review_upgrades_a_default_tag
+      - tests/unit/test_clients_engine.py::test_reconcile_project_client_from_review_never_overwrites_an_explicit_client
+    note: >
+      A round-table review session's own working directory
+      (round-table/_reviews/plat-roundtable, the operator's own reported case) is a
+      worktree, not a description of whose code it holds -- the bare path-prefix
+      classifier (core.clients.backfill.classify_project) mistagged a real Fulcrum review
+      as SeayInsights because the scratch checkout's own path has no "fulcrum" in it. The
+      fix keys on the repository the worktree branches from, which dispatch_review_round
+      already resolves as change_root, rather than widen the path heuristic into a guess
+      that would flip the same bug for round-table reviewing Dream Studio's own PRs.
+
   - id: a-work-order-is-not-pushed-while-its-review-holds-it
     statement: >
       While the lane review holds a work order -- no dispatch, an unanswered lane, or an
