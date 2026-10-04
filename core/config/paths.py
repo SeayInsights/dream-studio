@@ -82,7 +82,12 @@ def user_data_dir() -> Path:
 
 
 def claude_config_root() -> Path:
-    """Claude Code's OWN config root -- CLAUDE_CONFIG_DIR, else ~/.claude -- NOT created.
+    """Claude Code's OWN config root -- NOT created. Resolution order:
+
+      1. The active Dream Studio profile's claude_config_dir, if a profile is active
+         AND that field is set on it.
+      2. CLAUDE_CONFIG_DIR env var, if set.
+      3. ~/.claude (default).
 
     THE ONE PLACE CLAUDE CODE'S CONFIG ROOT IS SPELLED. This is a different thing from
     home_dir() above: home_dir() is Dream Studio's own home (DREAM_STUDIO_HOME / ~/.dream-
@@ -94,8 +99,43 @@ def claude_config_root() -> Path:
     hooks install. tests/unit/test_claude_config_root.py fails on a new spelling in core/,
     interfaces/, integrations/, or control/.
 
+    Step 1 (migration 159, core/profiles/) lets an operator with several profiles --
+    SeayInsights, Fulcrum, more to come -- point each at its own Claude Code identity
+    without an env var per shell. Looking it up is wrapped in one broad try/except: this
+    function is called from very early/low-level contexts (the Claude Code detector,
+    doctor health checks, hook setup) that must keep working with no Dream Studio
+    authority DB at all (fresh checkout), a DB that predates migration 159 (no
+    business_profiles table), or a locked/unreadable DB file -- every one of those must
+    fall through to step 2/3, never raise. A caught failure is not swallowed silently
+    (that would trip core.gates.fail_open_census): it goes through
+    core.telemetry.diagnostics.log_diagnostic, which is documented to never raise itself.
+    The DB-file existence check before the lookup is a cheap short-circuit for the
+    overwhelmingly common "Dream Studio isn't installed here" case -- it avoids both the
+    connect/query/close round trip and sqlite3.connect() silently creating an empty
+    database file at a path nothing has initialized yet.
+
     Resolving a path does not create it.
     """
+    try:
+        from core.config.database import _default_db_path
+
+        if _default_db_path().is_file():
+            from core.profiles.queries import active_profile
+
+            profile = active_profile()
+            if profile:
+                profile_dir = profile.get("claude_config_dir")
+                if profile_dir:
+                    return Path(profile_dir).expanduser()
+    except Exception as exc:
+        from core.telemetry.diagnostics import log_diagnostic
+
+        log_diagnostic(
+            category="failure",
+            source="core.config.paths.claude_config_root",
+            details={"error_type": type(exc).__name__, "error_message": str(exc)},
+        )
+
     override = os.environ.get("CLAUDE_CONFIG_DIR")
     return Path(override).expanduser() if override else Path.home() / ".claude"
 

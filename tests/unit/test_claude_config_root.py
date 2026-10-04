@@ -18,10 +18,12 @@ relocates with CLAUDE_CONFIG_DIR. Do not conflate the two in either direction.
 from __future__ import annotations
 
 import re
+import sqlite3
 import subprocess
 from pathlib import Path
 
 from core.config.paths import claude_config_root
+from core.config.sqlite_bootstrap import bootstrap_database
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -42,6 +44,117 @@ def test_claude_config_root_falls_back_to_the_default(monkeypatch, tmp_path):
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     assert claude_config_root() == tmp_path / ".claude"
+
+
+# ── active-profile precedence (migration 159, core/profiles/) ─────────────────────
+
+
+def _seed_active_profile(db_path: Path, *, claude_config_dir: str | None) -> None:
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute(
+            "INSERT INTO business_profiles"
+            " (profile_id, client_id, name, claude_config_dir, status, created_at, updated_at)"
+            " VALUES ('p1', 'seayinsights', 'P', ?, 'active',"
+            " '2026-10-02T00:00:00+00:00', '2026-10-02T00:00:00+00:00')",
+            (claude_config_dir,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_claude_config_root_prefers_the_active_profiles_config_dir(monkeypatch, tmp_path):
+    """The active profile's claude_config_dir wins even when CLAUDE_CONFIG_DIR is also set."""
+    db_path = tmp_path / "studio.db"
+    bootstrap_database(db_path)
+    profile_dir = tmp_path / "claude-fulcrum-profile"
+    _seed_active_profile(db_path, claude_config_dir=str(profile_dir))
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-env-var"))
+
+    assert claude_config_root() == profile_dir
+
+
+def test_claude_config_root_falls_back_to_env_var_when_profile_has_no_config_dir(
+    monkeypatch, tmp_path
+):
+    """An active profile with claude_config_dir unset (None) falls through to the env var."""
+    db_path = tmp_path / "studio.db"
+    bootstrap_database(db_path)
+    _seed_active_profile(db_path, claude_config_dir=None)
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db_path))
+    env_dir = tmp_path / "claude-env-var"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(env_dir))
+
+    assert claude_config_root() == env_dir
+
+
+def test_claude_config_root_falls_back_to_default_when_profile_config_dir_is_empty(
+    monkeypatch, tmp_path
+):
+    """An active profile with claude_config_dir == '' is treated as unset, not a real path."""
+    db_path = tmp_path / "studio.db"
+    bootstrap_database(db_path)
+    _seed_active_profile(db_path, claude_config_dir="")
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db_path))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    assert claude_config_root() == tmp_path / ".claude"
+
+
+def test_claude_config_root_falls_back_when_no_profile_is_active(monkeypatch, tmp_path):
+    """business_profiles exists (migration 159 applied) but has zero active rows."""
+    db_path = tmp_path / "studio.db"
+    bootstrap_database(db_path)
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db_path))
+    env_dir = tmp_path / "claude-env-var"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(env_dir))
+
+    assert claude_config_root() == env_dir
+
+
+def test_claude_config_root_falls_back_when_profiles_table_is_missing(monkeypatch, tmp_path):
+    """A pre-migration-159 DB (file exists, business_profiles does not) never raises."""
+    db_path = tmp_path / "studio.db"
+    sqlite3.connect(str(db_path)).close()
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db_path))
+    env_dir = tmp_path / "claude-env-var"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(env_dir))
+
+    assert claude_config_root() == env_dir
+
+
+def test_claude_config_root_falls_back_when_no_db_exists_at_all(monkeypatch, tmp_path):
+    """A fresh checkout with no Dream Studio authority DB at all never raises."""
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(tmp_path / "nonexistent-dir" / "studio.db"))
+    env_dir = tmp_path / "claude-env-var"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(env_dir))
+
+    assert claude_config_root() == env_dir
+
+
+def test_claude_config_root_logs_but_does_not_raise_on_a_broken_profiles_table(
+    monkeypatch, tmp_path
+):
+    """A caught lookup failure is reported via log_diagnostic, not silently swallowed."""
+    db_path = tmp_path / "studio.db"
+    sqlite3.connect(str(db_path)).close()
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db_path))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    calls = []
+    monkeypatch.setattr(
+        "core.telemetry.diagnostics.log_diagnostic",
+        lambda **kwargs: calls.append(kwargs),
+    )
+
+    assert claude_config_root() == tmp_path / ".claude"
+    assert len(calls) == 1
+    assert calls[0]["source"] == "core.config.paths.claude_config_root"
+    assert calls[0]["details"]["error_type"] == "OperationalError"
 
 
 #: Trees the rule reaches, matching the bug report's own scope exactly.
