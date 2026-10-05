@@ -52,6 +52,17 @@ WHAT IT CANNOT DO. The dispatcher holds every credential it issues, because hand
 out is its job. That is the chair -- the operator's own process -- and it is the trust
 boundary: a local tool without an identity system cannot prove the chair did not answer
 as a seat. The limit is stated here rather than implied away.
+
+A LANE CAN DEMAND HOW, NOT JUST WHETHER. The lane registry already says what to ask;
+nothing said how to investigate it well, and four techniques (enumerate every paired
+site before answering a shared-predicate question, prove the break with a counterfactual
+rather than trusting a guard reads right, fetch a tool's own current docs rather than
+answer from memory, verify every cited record by opening it) lived in reviewers' heads the
+same way the lane questions themselves once did. `method_requirements` on a lane
+(canonical/review_lanes.yml, `METHOD_VOCABULARY` below) names which apply; `validate_answers`
+refuses a submission that declares a required technique and carries no structured evidence
+for it (`paired_sites`, `counterfactual`, `docs_consulted`, `citations_verified`), the same
+enforce-or-refuse shape as the reproduction requirement above, not a softer, separate one.
 """
 
 from __future__ import annotations
@@ -73,6 +84,26 @@ LANE_VERDICTS = ("pass", "finding", "cannot-tell")
 
 #: The verdicts that claim something was TESTED, and so must carry a reproduction.
 TESTED_VERDICTS = ("pass", "finding")
+
+#: THE FOUR TECHNIQUES, as a closed vocabulary -- same reason `LANE_VERDICTS` and the
+#: seat roster (`core.gates.review_lane_registry.SEATS`) are closed sets rather than
+#: free text: a lane declaring a misspelled technique would require evidence nothing
+#: ever checks for, which reads as enforcement and is not. A lane names zero, one, or
+#: several of these in its `method_requirements:` list (canonical/review_lanes.yml,
+#: authored in scripts/seat_lanes_data.py's `METHOD_REQUIREMENTS` table); `validate_answers`
+#: below is the enforcement side, extending the same answer-shape contract that already
+#: refuses a `pass` with no reproduction to these four investigation techniques.
+METHOD_ENUMERATE_PAIRED_SITES = "enumerate_paired_sites"
+METHOD_PROVE_THE_BREAK = "prove_the_break"
+METHOD_FETCH_AUTHORITATIVE_DOCS = "fetch_authoritative_docs"
+METHOD_VERIFY_CITED_RECORDS = "verify_cited_records"
+
+METHOD_VOCABULARY = (
+    METHOD_ENUMERATE_PAIRED_SITES,
+    METHOD_PROVE_THE_BREAK,
+    METHOD_FETCH_AUTHORITATIVE_DOCS,
+    METHOD_VERIFY_CITED_RECORDS,
+)
 
 #: Where a review lives: kind review_verdict, beside the verify verdict (instance_key '').
 #: Answers are keyed per reviewer under a prefix; the dispatch has its own key.
@@ -513,6 +544,26 @@ def lane_ownership(repo_root: Path | None = None) -> dict[Any, set[str]]:
     return owned
 
 
+def lane_method_requirements(repo_root: Path | None = None) -> dict[str, list[str]]:
+    """Which of the four techniques each lane requires of its answer, from the registry.
+
+    Read fresh from `_lanes()`, same as `lane_ownership` above and for the same reason: a
+    lane's `method_requirements` travels with the registry, not with whoever happens to be
+    convening this round. A lane with no `method_requirements` key, or an empty one, is
+    simply absent from the result -- `validate_answers` reads a missing lane here as
+    "nothing required", which is what keeps this additive: every lane that never opted
+    into a technique answers exactly as it did before this existed.
+    """
+    from core.gates.round_table import _lanes
+
+    out: dict[str, list[str]] = {}
+    for lane in _lanes(repo_root):
+        required = lane.get("method_requirements") or []
+        if isinstance(required, list) and required:
+            out[str(lane.get("id"))] = [str(r) for r in required]
+    return out
+
+
 def _owner_key(reviewer: str | None, seat: str | None) -> str:
     """Who owns a lane: the reviewer, or the seat itself when it has no compiled reviewer.
 
@@ -534,22 +585,113 @@ def dispatched_lanes(dispatch: dict[str, Any] | None, reviewer: str) -> list[str
 # ── validating answers ──────────────────────────────────────────────────────
 
 
+def _method_gaps(
+    raw: dict[str, Any],
+    *,
+    verdict: str,
+    required: set[str],
+    reproduction: Any,
+) -> list[str]:
+    """Named gaps between the techniques *required* and what this raw answer evidences.
+
+    SHAPE ONLY, same discipline as the rest of `validate_answers`: no container runs here,
+    and no attempt is made to parse free text for "a citation" or "a mutation" -- a grep
+    standing in for a drive is exactly the substitution `a-channel-outside-the-accounting`'s
+    own `measurement` field (canonical/review_lanes.yml) exists to refuse. What this checks
+    is that the reviewer filled in the STRUCTURED field each technique demands, not that its
+    prose reads well -- the same division `evidence`/`why`/`declare` already draw.
+    """
+    gaps: list[str] = []
+
+    if METHOD_ENUMERATE_PAIRED_SITES in required:
+        sites = raw.get("paired_sites")
+        named = [str(s).strip() for s in sites if str(s).strip()] if isinstance(sites, list) else []
+        if len(named) < 2:
+            gaps.append(
+                "enumerate_paired_sites: `paired_sites` must list at least two specific"
+                " sites actually inspected (a file:line or symbol each), not just the one"
+                " site the diff touched -- checking siblings is the whole point"
+            )
+
+    if METHOD_PROVE_THE_BREAK in required and verdict == "pass":
+        # A finding's own reproduction already demonstrates the break (it is a command
+        # that fails); this is asked only of a pass, which otherwise only ever shows the
+        # guard succeeding and never what its absence or a wrong value would look like.
+        counterfactual = raw.get("counterfactual")
+        if (
+            not isinstance(counterfactual, dict)
+            or not str(counterfactual.get("command", "") or "").strip()
+        ):
+            gaps.append(
+                "prove_the_break: a pass needs `counterfactual` naming the command run"
+                " against the mutated or bypassed guard and the exit_code it produced --"
+                " a pass that only re-runs the happy path never showed what breaking the"
+                " guard looks like"
+            )
+        else:
+            code = counterfactual.get("exit_code")
+            if not isinstance(code, int) or isinstance(code, bool):
+                gaps.append("prove_the_break: `counterfactual.exit_code` must be an integer")
+            elif isinstance(reproduction, dict) and code == reproduction.get("exit_code"):
+                gaps.append(
+                    "prove_the_break: `counterfactual.exit_code` is identical to the"
+                    " reproduction's own exit_code -- a counterfactual that behaves the"
+                    " same as the guarded case proves nothing broke"
+                )
+
+    if METHOD_FETCH_AUTHORITATIVE_DOCS in required:
+        docs = raw.get("docs_consulted")
+        named = [str(d).strip() for d in docs if str(d).strip()] if isinstance(docs, list) else []
+        if not named:
+            gaps.append(
+                "fetch_authoritative_docs: `docs_consulted` must name at least one"
+                " document or URL actually fetched for this lane, not reasoned from"
+                " training-data memory"
+            )
+
+    if METHOD_VERIFY_CITED_RECORDS in required and str(raw.get("evidence", "") or "").strip():
+        citations = raw.get("citations_verified")
+        named = (
+            [str(c).strip() for c in citations if str(c).strip()]
+            if isinstance(citations, list)
+            else []
+        )
+        if not named:
+            gaps.append(
+                "verify_cited_records: this answer's `evidence` cites a record, so"
+                " `citations_verified` must name each one actually opened and confirmed --"
+                " a citation taken on trust is exactly what this technique exists to refuse"
+            )
+
+    return gaps
+
+
 def validate_answers(
     answers: list[dict[str, Any]],
     *,
     reviewer: str,
     assigned_lanes: list[str],
+    method_requirements: dict[str, list[str]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Split a reviewer's answers into accepted and refused on SHAPE alone.
 
     No container is run here; `record_answers` verifies reproductions afterwards. Returns
     ``(accepted, refused)``, every refusal named -- a thrown-away answer would report a
     lane answered while the record shows it unanswered.
+
+    *method_requirements* is lane id -> the techniques (`METHOD_VOCABULARY`) that lane's
+    answer must evidence, as declared on the lane itself (`lane_method_requirements`
+    reads it from the registry). Defaulting to ``{}`` rather than loading the registry
+    here keeps this function a pure shape-check over its own arguments: every existing
+    caller that does not pass this keyword enforces nothing new, which is the "no lane
+    with no method_requirements regresses" guarantee the four techniques were added
+    under -- `record_answers` is what wires the real registry in by default.
     """
     accepted: list[dict[str, Any]] = []
     refused: list[dict[str, Any]] = []
     seen: set[str] = set()
     assigned = set(assigned_lanes)
+    method_requirements = method_requirements or {}
 
     for raw in answers:
         if not isinstance(raw, dict):
@@ -635,6 +777,15 @@ def validate_answers(
                 )
                 continue
 
+        required_methods = set(method_requirements.get(lane) or ())
+        if required_methods:
+            gaps = _method_gaps(
+                raw, verdict=verdict, required=required_methods, reproduction=reproduction
+            )
+            if gaps:
+                refused.append({"lane": lane, "reason": "; ".join(gaps)})
+                continue
+
         seen.add(lane)
         entry = {
             "lane": lane,
@@ -653,6 +804,25 @@ def validate_answers(
                 "command": str(reproduction.get("command", "") or "").strip(),
                 "exit_code": reproduction.get("exit_code"),
             }
+        if isinstance(raw.get("paired_sites"), list):
+            sites = [str(s).strip() for s in raw["paired_sites"] if str(s).strip()]
+            if sites:
+                entry["paired_sites"] = sites
+        if isinstance(raw.get("counterfactual"), dict):
+            cf_command = str(raw["counterfactual"].get("command", "") or "").strip()
+            if cf_command:
+                entry["counterfactual"] = {
+                    "command": cf_command,
+                    "exit_code": raw["counterfactual"].get("exit_code"),
+                }
+        if isinstance(raw.get("docs_consulted"), list):
+            docs = [str(d).strip() for d in raw["docs_consulted"] if str(d).strip()]
+            if docs:
+                entry["docs_consulted"] = docs
+        if isinstance(raw.get("citations_verified"), list):
+            citations = [str(c).strip() for c in raw["citations_verified"] if str(c).strip()]
+            if citations:
+                entry["citations_verified"] = citations
         accepted.append(entry)
 
     return accepted, refused
@@ -718,6 +888,7 @@ def record_answers(
     verify: Callable[..., tuple[bool, dict[str, Any] | None, str]] | None = None,
     ensure_image: Callable[[str], str] | None = None,
     credential: str | None = None,
+    method_requirements: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     """Validate, verify and store a reviewer's answers for the current round.
 
@@ -728,6 +899,13 @@ def record_answers(
 
     ``complete`` requires the write to have landed: the first convening found `stored`
     returned False and read by nothing, so a failed write reported a complete review.
+
+    *method_requirements* defaults to the real registry's own declarations
+    (`lane_method_requirements(project_root)`) rather than to "nothing required" -- unlike
+    `validate_answers`'s own conservative default, this is the door a live submission
+    actually goes through, so it must see what the lane really demands. Injectable for
+    the same reason `verify`/`ensure_image` are: a test can hand it a fixed mapping
+    without needing a real lane in `canonical/review_lanes.yml` to exercise it.
     """
     if work_order_project(work_order_id, db_path=db_path) is None:
         return {
@@ -794,7 +972,15 @@ def record_answers(
             )
         }
 
-    accepted, refused = validate_answers(answers, reviewer=reviewer, assigned_lanes=assigned)
+    if method_requirements is None:
+        method_requirements = lane_method_requirements(project_root)
+
+    accepted, refused = validate_answers(
+        answers,
+        reviewer=reviewer,
+        assigned_lanes=assigned,
+        method_requirements=method_requirements,
+    )
 
     doc = _reviewer_doc(work_order_id, reviewer, db_path=db_path)
     standing = _current_by_lane(doc["submissions"])

@@ -65,6 +65,9 @@ lanes:
       - "core/gates/**"
       - "hooks/**"
       - "runtime/hooks/**"
+    method_requirements:
+      - "enumerate_paired_sites"
+      - "prove_the_break"
     eval: tests/evals/test_review_lane_predicate_parity.py
   - id: a-contract-that-names-one-of-two-mechanisms
     seat: "Claim integrity"
@@ -97,6 +100,9 @@ lanes:
       - "JSON Schema 2020-12"
       - "RFC 9457 problem details"
       - "Semantic Versioning 2.0.0 for API surface"
+    method_requirements:
+      - "enumerate_paired_sites"
+      - "verify_cited_records"
     judgment: true
     why: >-
       THERE IS NOTHING TO CHECK AGAINST YET. This lane compares a code claim to the decision
@@ -167,6 +173,8 @@ lanes:
       - "OWASP Top 10 A09:2025 Security Logging and Alerting Failures"
       - "NIST SP 800-92 log management"
       - "OpenTelemetry semantic conventions"
+    method_requirements:
+      - "enumerate_paired_sites"
     eval: tests/evals/test_review_lane_value_reaches_a_reader.py
   - id: a-status-the-far-end-does-not-handle
     seat: "Boundary semantics"
@@ -202,6 +210,8 @@ lanes:
       - "CWE-703 improper check or handling of exceptional conditions"
       - "CWE-754 improper check for unusual conditions"
       - "Saltzer and Schroeder fail-safe defaults"
+    method_requirements:
+      - "enumerate_paired_sites"
     eval: tests/evals/test_review_lane_status_survives_translation.py
   - id: a-test-that-cannot-fail
     seat: "Gate and test integrity"
@@ -240,6 +250,8 @@ lanes:
       to mutate the subject and watch, which is a reviewer's act rather than a gate's.
     standards:
       - "ISO/IEC/IEEE 29119-4 test techniques"
+    method_requirements:
+      - "prove_the_break"
     eval: tests/evals/test_review_lane_a_test_that_cannot_fail.py
   - id: a-channel-outside-the-accounting
     seat: "Boundary semantics"
@@ -289,6 +301,10 @@ lanes:
       - "OWASP Top 10 A05:2025 Injection"
       - "CWE-22 path traversal"
       - "CWE-409 decompression bomb"
+    method_requirements:
+      - "enumerate_paired_sites"
+      - "prove_the_break"
+      - "fetch_authoritative_docs"
     eval: tests/evals/test_review_lane_the_surface_outside_the_rules.py
   - id: chair-and-verdict-owner
     seat: "Chair and verdict owner"
@@ -340,6 +356,8 @@ lanes:
       Whether a claim carries a reproduction is checkable in the review artefact, but whether the
       reproduction PROVES the claim requires running it against a mutated tree, which is a graded
       exercise rather than a static scan.
+    method_requirements:
+      - "prove_the_break"
     judgment: true
     why: >-
       No review artefact in this repo yet carries a per-finding reproduction command, so there is
@@ -361,6 +379,8 @@ lanes:
       Re-checking a finding means re-running its own check at a newer commit, which the finding
       must carry to be re-checkable at all -- so this seat depends on the Evidence referee's
       output and is graded on the pair.
+    method_requirements:
+      - "verify_cited_records"
     judgment: true
     why: >-
       It audits other seats' findings, which do not exist until they have run, so it has no input
@@ -386,6 +406,9 @@ lanes:
       - "OWASP ASVS v5.0.0 V8 Authorization"
       - "OWASP Top 10 A01:2025 Broken Access Control"
       - "NIST SP 800-63B session lifecycle"
+    method_requirements:
+      - "enumerate_paired_sites"
+      - "prove_the_break"
     judgment: true
     why: >-
       There is no machine-readable authorization model in this repo to diff a change against. It
@@ -415,6 +438,8 @@ lanes:
       - "**/secret*"
       - "**/*credential*"
       - ".github/workflows/**"
+    method_requirements:
+      - "fetch_authoritative_docs"
     judgment: true
     why: >-
       Scope and rotation live in cluster and provider configuration this repo does not contain, so
@@ -450,6 +475,8 @@ lanes:
       - "pyproject.toml"
       - ".github/workflows/**"
       - "**/uv.lock"
+    method_requirements:
+      - "fetch_authoritative_docs"
     judgment: true
     why: >-
       Requires resolving registry and workflow identities outside this repo. The pinning half
@@ -479,6 +506,8 @@ lanes:
       - "*.tfvars"
       - "**/terraform/**"
       - "**/*iam*"
+    method_requirements:
+      - "fetch_authoritative_docs"
     judgment: true
     why: >-
       No IaC in this repository for a detector to examine, and a detector that examines nothing
@@ -508,6 +537,9 @@ lanes:
       - "**/kustomize/**"
       - "**/charts/**"
       - "**/zarf*"
+    method_requirements:
+      - "enumerate_paired_sites"
+      - "fetch_authoritative_docs"
     judgment: true
     why: >-
       Needs cluster state to compute what a prune would remove. Dream Studio ships no GitOps
@@ -536,6 +568,8 @@ lanes:
       - "**/version*"
       - ".github/workflows/**"
       - "CHANGELOG.md"
+    method_requirements:
+      - "fetch_authoritative_docs"
     judgment: true
     why: >-
       The format rules differ per target ecosystem and this repo publishes to none of them yet.
@@ -562,6 +596,9 @@ lanes:
       - "**/migrations/**"
       - "**/*.sql"
       - "core/event_store/**"
+    method_requirements:
+      - "enumerate_paired_sites"
+      - "prove_the_break"
     judgment: true
     why: >-
       Dream Studio already runs migration-risk and migration-authority gates for the mechanical
@@ -591,6 +628,9 @@ lanes:
       - "**/*.jsx"
       - "docs/**"
       - "*.md"
+    method_requirements:
+      - "enumerate_paired_sites"
+      - "prove_the_break"
     judgment: true
     why: >-
       Dream Studio ships no design system or frontend bundle, so a detector would examine zero
@@ -620,6 +660,9 @@ lanes:
       - "**/*.tsx"
       - "**/*.jsx"
       - "**/*.vue"
+    method_requirements:
+      - "prove_the_break"
+      - "fetch_authoritative_docs"
     judgment: true
     why: >-
       No rendered markup in this repository to check. The thinness of the evidence -- one
@@ -647,6 +690,8 @@ lanes:
       - "**/*.ts"
       - "**/*.js"
       - "**/*.css"
+    method_requirements:
+      - "prove_the_break"
     judgment: true
     why: >-
       No frontend in this repository. Registered so a project convening this table from its own
@@ -673,6 +718,9 @@ lanes:
       - "interfaces/cli/**"
       - "**/*runbook*"
       - "docs/operations/**"
+    method_requirements:
+      - "fetch_authoritative_docs"
+      - "prove_the_break"
     judgment: true
     why: >-
       Comparing help text against actual default values needs a parse of both, which is buildable
@@ -698,6 +746,9 @@ lanes:
       - "canonical/agents/**"
       - ".mcp.json"
       - "integrations/marketplace/**"
+    method_requirements:
+      - "fetch_authoritative_docs"
+      - "prove_the_break"
     judgment: true
     why: >-
       Whether a truncation misleads depends on what the consumer infers from it, and the consumer
@@ -758,6 +809,9 @@ lanes:
       - "docs/**"
       - "canonical/**"
       - "*.md"
+    method_requirements:
+      - "enumerate_paired_sites"
+      - "verify_cited_records"
     judgment: true
     why: >-
       Detecting that two documents contradict each other, or that one document's claim outruns
@@ -819,6 +873,9 @@ lanes:
       - "PEP 8"
       - "PEP 484 type hints"
       - "CWE-561 dead code"
+    method_requirements:
+      - "enumerate_paired_sites"
+      - "prove_the_break"
     judgment: true
     why: >-
       The leanness gate already measures this and is advisory on purpose, because the count is

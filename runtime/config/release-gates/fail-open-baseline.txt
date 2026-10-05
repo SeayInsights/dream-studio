@@ -588,7 +588,7 @@ core/work_orders/range_attribution.py|217|falsy-return
 core/work_orders/range_attribution.py|330|falsy-return
 core/work_orders/range_attribution.py|97|falsy-return
 core/work_orders/reconcile.py|112|falsy-return
-core/work_orders/review_answers.py|126|falsy-return
+core/work_orders/review_answers.py|157|falsy-return
 core/work_orders/review_rules.py|283|falsy-return
 core/work_orders/start_brief.py|167|bare-except-pass
 core/work_orders/start_brief.py|179|bare-except-pass

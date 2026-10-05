@@ -73,6 +73,14 @@ IMAGE = "ds-review:fake"
 FAILS = {"command": "python -m pytest /tmp/t.py -q", "exit_code": 1}
 HOLDS = {"command": "python -m pytest tests/unit/test_x.py -q", "exit_code": 0}
 REAL_TEST = "TEST-CHECK: tests/unit/test_review_answers.py::test_two_reviewers_answers_coexist"
+#: The real `evidence-referee` lane requires prove_the_break (its own question IS "does
+#: reverting the fix turn the check red"), so a `pass` on it -- unlike the fake lanes
+#: above -- must carry this alongside its reproduction. exit_code differs from HOLDS's
+#: own so the two are never read as the same outcome.
+REFEREE_COUNTERFACTUAL = {
+    "command": "git stash && python -m pytest tests/unit/test_x.py -q",
+    "exit_code": 1,
+}
 #: The fake lanes' ownership, declared the way the registry declares the real ones.
 OWNED = {
     REVIEWER: {"lane-one", "lane-two"},
@@ -579,6 +587,248 @@ def test_environment_gap_is_absent_when_not_given():
     as a stray empty-string key on every stored answer."""
     accepted, _ = _shape([{"lane": "lane-one", "verdict": "pass", "reproduction": HOLDS}])
     assert "environment_gap" not in accepted[0]
+
+
+# ── method_requirements: the four investigation techniques ─────────────────
+#
+# Four techniques made a recent round of reviews effective and lived only in reviewers'
+# heads: enumerate every paired site before answering a shared-predicate question, prove
+# a guard's break with a counterfactual rather than trusting it reads right, fetch a
+# tool's own current docs rather than answer from memory, verify every cited record by
+# opening it. A lane opts into zero or more via `method_requirements:`
+# (canonical/review_lanes.yml); these tests hold the enforcement side in isolation, with
+# a fake lane and an injected requirements map so they say nothing about which of the
+# real 26 lanes require what -- that lives in tests/unit/test_review_lane_methods.py and
+# in the registry itself.
+
+
+def _shape_methods(answers, requirements):
+    return validate_answers(
+        answers, reviewer=REVIEWER, assigned_lanes=LANES, method_requirements=requirements
+    )
+
+
+def test_a_lane_with_no_method_requirements_is_unaffected():
+    """THE NO-REGRESSION GUARANTEE. A lane absent from method_requirements -- which is
+    every lane before this feature, and every lane since that genuinely needs none of the
+    four -- validates exactly as it did before this existed. Omitting the keyword
+    entirely (as every pre-existing call in this file does) must behave identically."""
+    with_kwarg = _shape_methods(
+        [{"lane": "lane-one", "verdict": "pass", "reproduction": HOLDS}], {}
+    )
+    without_kwarg = _shape([{"lane": "lane-one", "verdict": "pass", "reproduction": HOLDS}])
+    assert with_kwarg == without_kwarg
+    accepted, refused = with_kwarg
+    assert refused == []
+    assert "paired_sites" not in accepted[0]
+    assert "counterfactual" not in accepted[0]
+
+
+def test_enumerate_paired_sites_refuses_a_single_site():
+    """The whole point is checking siblings -- one site, however well documented, is the
+    one the diff already touched."""
+    _accepted, refused = _shape_methods(
+        [
+            {
+                "lane": "lane-one",
+                "verdict": "cannot-tell",
+                "why": "needs the prod logs",
+                "paired_sites": ["app/auth.py:393"],
+            }
+        ],
+        {"lane-one": ["enumerate_paired_sites"]},
+    )
+    assert "enumerate_paired_sites" in refused[0]["reason"]
+    assert "paired_sites" in refused[0]["reason"]
+
+
+def test_enumerate_paired_sites_accepts_two_or_more():
+    accepted, refused = _shape_methods(
+        [
+            {
+                "lane": "lane-one",
+                "verdict": "cannot-tell",
+                "why": "needs the prod logs",
+                "paired_sites": ["app/auth.py:393", "app/auth.py:409"],
+            }
+        ],
+        {"lane-one": ["enumerate_paired_sites"]},
+    )
+    assert refused == []
+    assert accepted[0]["paired_sites"] == ["app/auth.py:393", "app/auth.py:409"]
+
+
+def test_prove_the_break_refuses_a_pass_with_no_counterfactual():
+    """A pass that only ever re-runs the happy path never showed what breaking the guard
+    looks like."""
+    _accepted, refused = _shape_methods(
+        [{"lane": "lane-one", "verdict": "pass", "reproduction": HOLDS}],
+        {"lane-one": ["prove_the_break"]},
+    )
+    assert "prove_the_break" in refused[0]["reason"]
+    assert "counterfactual" in refused[0]["reason"]
+
+
+def test_prove_the_break_refuses_a_counterfactual_identical_to_the_reproduction():
+    """A counterfactual that behaves exactly like the guarded case proves nothing broke."""
+    _accepted, refused = _shape_methods(
+        [
+            {
+                "lane": "lane-one",
+                "verdict": "pass",
+                "reproduction": HOLDS,
+                "counterfactual": {"command": "mutate the guard", "exit_code": HOLDS["exit_code"]},
+            }
+        ],
+        {"lane-one": ["prove_the_break"]},
+    )
+    assert "identical" in refused[0]["reason"]
+
+
+def test_prove_the_break_accepts_a_distinct_counterfactual():
+    accepted, refused = _shape_methods(
+        [
+            {
+                "lane": "lane-one",
+                "verdict": "pass",
+                "reproduction": HOLDS,
+                "counterfactual": {"command": "mutate the guard", "exit_code": 1},
+            }
+        ],
+        {"lane-one": ["prove_the_break"]},
+    )
+    assert refused == []
+    assert accepted[0]["counterfactual"] == {"command": "mutate the guard", "exit_code": 1}
+
+
+def test_prove_the_break_does_not_apply_to_a_finding():
+    """A finding's own reproduction already IS the demonstrated break -- a failing
+    command. Nothing more is asked of it."""
+    accepted, refused = _shape_methods(
+        [{"lane": "lane-one", "verdict": "finding", "evidence": "a.py:1", "reproduction": FAILS}],
+        {"lane-one": ["prove_the_break"]},
+    )
+    assert refused == []
+    assert accepted[0]["verdict"] == "finding"
+
+
+def test_fetch_authoritative_docs_refuses_with_no_docs_consulted():
+    _accepted, refused = _shape_methods(
+        [{"lane": "lane-one", "verdict": "pass", "reproduction": HOLDS}],
+        {"lane-one": ["fetch_authoritative_docs"]},
+    )
+    assert "fetch_authoritative_docs" in refused[0]["reason"]
+    assert "docs_consulted" in refused[0]["reason"]
+
+
+def test_fetch_authoritative_docs_accepts_a_named_source():
+    accepted, refused = _shape_methods(
+        [
+            {
+                "lane": "lane-one",
+                "verdict": "pass",
+                "reproduction": HOLDS,
+                "docs_consulted": ["https://docs.python.org/3/library/tarfile.html#pax-headers"],
+            }
+        ],
+        {"lane-one": ["fetch_authoritative_docs"]},
+    )
+    assert refused == []
+    assert accepted[0]["docs_consulted"] == [
+        "https://docs.python.org/3/library/tarfile.html#pax-headers"
+    ]
+
+
+def test_verify_cited_records_refuses_when_evidence_cites_nothing_confirmed():
+    _accepted, refused = _shape_methods(
+        [
+            {
+                "lane": "lane-one",
+                "verdict": "finding",
+                "evidence": "see WO 48bd8ab3's precedent",
+                "reproduction": FAILS,
+            }
+        ],
+        {"lane-one": ["verify_cited_records"]},
+    )
+    assert "verify_cited_records" in refused[0]["reason"]
+    assert "citations_verified" in refused[0]["reason"]
+
+
+def test_verify_cited_records_is_not_asked_of_an_answer_with_no_evidence():
+    """A pass with no prose cites nothing, so there is nothing to confirm."""
+    accepted, refused = _shape_methods(
+        [{"lane": "lane-one", "verdict": "pass", "reproduction": HOLDS}],
+        {"lane-one": ["verify_cited_records"]},
+    )
+    assert refused == []
+    assert "citations_verified" not in accepted[0]
+
+
+def test_verify_cited_records_accepts_a_named_confirmation():
+    accepted, refused = _shape_methods(
+        [
+            {
+                "lane": "lane-one",
+                "verdict": "finding",
+                "evidence": "see WO 48bd8ab3's precedent",
+                "reproduction": FAILS,
+                "citations_verified": ["opened WO 48bd8ab3, confirmed the filtered key"],
+            }
+        ],
+        {"lane-one": ["verify_cited_records"]},
+    )
+    assert refused == []
+    assert accepted[0]["citations_verified"] == ["opened WO 48bd8ab3, confirmed the filtered key"]
+
+
+def test_several_required_methods_name_every_gap_at_once():
+    """A partial submission shows everything missing in one pass, the same courtesy
+    `test_multiple_problems_all_appear_in_one_raised_message` holds for the registry."""
+    _accepted, refused = _shape_methods(
+        [{"lane": "lane-one", "verdict": "pass", "reproduction": HOLDS}],
+        {"lane-one": ["enumerate_paired_sites", "prove_the_break", "fetch_authoritative_docs"]},
+    )
+    reason = refused[0]["reason"]
+    assert "enumerate_paired_sites" in reason
+    assert "prove_the_break" in reason
+    assert "fetch_authoritative_docs" in reason
+
+
+def test_method_requirements_on_one_lane_does_not_bleed_into_another():
+    accepted, refused = _shape_methods(
+        [
+            {"lane": "lane-one", "verdict": "pass", "reproduction": HOLDS},
+            {"lane": "lane-two", "verdict": "pass", "reproduction": HOLDS},
+        ],
+        {"lane-one": ["prove_the_break"]},
+    )
+    assert [r["lane"] for r in refused] == ["lane-one"]
+    assert [a["lane"] for a in accepted] == ["lane-two"]
+
+
+def test_record_answers_defaults_method_requirements_from_the_real_registry(db):
+    """Not validate_answers in isolation -- the plumbing. Nothing in this test injects a
+    requirements map, so record_answers must load it from the real registry itself
+    (`lane_method_requirements`): `a-test-that-cannot-fail` requires prove_the_break
+    there, and a live `pass` with no counterfactual against it must be refused exactly as
+    the unit tests above refuse a fake lane told the same thing directly."""
+    record_dispatch(
+        WO_ID,
+        sha="a" * 40,
+        image=IMAGE,
+        change_set=["x.py"],
+        assignments=[{"reviewer": REVIEWER, "seat": "s", "lanes": ["a-test-that-cannot-fail"]}],
+        db_path=db,
+        ownership={REVIEWER: {"a-test-that-cannot-fail"}},
+    )
+    result = _record(
+        db,
+        REVIEWER,
+        [{"lane": "a-test-that-cannot-fail", "verdict": "pass", "reproduction": HOLDS}],
+    )
+    assert result["accepted"] == []
+    assert any("prove_the_break" in r["reason"] for r in result["refused"]), result["refused"]
 
 
 # ── the submission-level refusals ───────────────────────────────────────────
@@ -1465,7 +1715,14 @@ def test_the_referee_answering_in_a_later_round_releases_it(db):
     _record(
         db,
         "review-finding-integrity",
-        [{"lane": "evidence-referee", "verdict": "pass", "reproduction": HOLDS}],
+        [
+            {
+                "lane": "evidence-referee",
+                "verdict": "pass",
+                "reproduction": HOLDS,
+                "counterfactual": REFEREE_COUNTERFACTUAL,
+            }
+        ],
     )
     status = review_status(WO_ID, db_path=db)
     assert status["awaiting_referee"] == []
@@ -1491,7 +1748,14 @@ def test_a_referee_answer_in_the_same_round_does_not_count(db):
     _record(
         db,
         "review-finding-integrity",
-        [{"lane": "evidence-referee", "verdict": "pass", "reproduction": HOLDS}],
+        [
+            {
+                "lane": "evidence-referee",
+                "verdict": "pass",
+                "reproduction": HOLDS,
+                "counterfactual": REFEREE_COUNTERFACTUAL,
+            }
+        ],
     )
     _resolve(db, {(NEW, STALE["command"]): 1, (OLD, REPLACEMENT): 1, (NEW, REPLACEMENT): 0})
     assert [a["lane"] for a in review_status(WO_ID, db_path=db)["awaiting_referee"]] == ["lane-one"]

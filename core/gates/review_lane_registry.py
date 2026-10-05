@@ -24,6 +24,17 @@ in this repo, not two that drift.
 EVERY LANE ALSO CARRIES ITS PRECEDENT. Each one exists because of a specific finding,
 and the finding is the only thing that tells a later reader whether the lane is still worth
 asking. A lane with no precedent is someone's hunch with a registry entry.
+
+A LANE MAY ALSO DECLARE `method_requirements:`, naming zero or more of the four
+investigation techniques a good answer to IT specifically needs (paired-site enumeration,
+proving the break, fetching authoritative docs, verifying cited records -- the closed
+vocabulary in `core.work_orders.review_answers.METHOD_VOCABULARY`). Optional, unlike the
+enforcement key: most lanes name none, and a lane naming one not in that set is refused
+the same way an unknown seat or model is -- a typo there would require evidence nothing
+is prepared to check, which reads as enforcement and is not. The enforcement side (a
+submitted answer must carry the matching structured evidence) lives in
+`core.work_orders.review_answers.validate_answers`, not here: this gate holds the
+REGISTRY to shape; that module holds ANSWERS to it.
 """
 
 from __future__ import annotations
@@ -37,6 +48,7 @@ from pathlib import Path
 import yaml
 
 from integrations.compiler.agents import ALLOWED_MODEL_ALIASES
+from core.work_orders.review_answers import METHOD_VOCABULARY
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -259,6 +271,22 @@ def validate_lanes(lanes: list[dict], *, closed_seats: frozenset[str] | None) ->
                 f"{lane_id}: model {model!r} is neither an alias"
                 f" ({sorted(ALLOWED_MODEL_ALIASES)}) nor a concrete claude-* id."
             )
+
+        if "method_requirements" in lane:
+            methods = lane.get("method_requirements")
+            if not isinstance(methods, list):
+                errors.append(
+                    f"{lane_id}: `method_requirements` must be a list, not"
+                    f" {type(methods).__name__}."
+                )
+            else:
+                unknown = sorted(set(str(m) for m in methods) - set(METHOD_VOCABULARY))
+                if unknown:
+                    errors.append(
+                        f"{lane_id}: method_requirements names {unknown}, not drawn from"
+                        f" {sorted(METHOD_VOCABULARY)}. A lane cannot require evidence for"
+                        " a technique nothing is prepared to check."
+                    )
 
         for field in _REQUIRED_PROSE:
             text = str(lane.get(field) or "").strip()
