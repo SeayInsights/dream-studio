@@ -34,6 +34,9 @@ from core.work_orders import review_answers as ra
 from core.work_orders.review_answers import (
     ARTIFACT_KIND,
     LANE_VERDICTS,
+    MISSION_LANE_ID,
+    MISSION_REVIEW_CLIENTS,
+    apply_mission_lane_client_gate,
     dispatch_review_round,
     file_findings_as_tasks,
     finding_as_task,
@@ -1990,3 +1993,213 @@ def test_an_unchanged_pin_stays_idempotent_across_two_dispatches(db, isolated_se
     assert second["round"] == 1
     assert second["already_dispatched"] is True
     assert second["credentials"] == {}
+
+
+# ── mission-domain-consequence is gated by client, not by changed paths ─────
+#
+# canonical/review_lanes.yml's mission-domain-consequence lane has no `scope:`, so
+# core.gates.round_table.lane_is_relevant's path-based default ("absence means
+# always-relevant") hands it to every single dispatch of every project. Its own cited
+# precedents (platform#504, platform#673, fulcrum-gateway#53) are all Fulcrum-sourced, so
+# apply_mission_lane_client_gate strips it from a dispatch whose project resolves to a
+# client other than MISSION_REVIEW_CLIENTS, and leaves it alone when that client cannot be
+# determined at all -- the fail-open direction `lane_is_relevant` itself already uses.
+
+MISSION_SEAT = "The receiver's view"  # the real seat that owns MISSION_LANE_ID
+
+
+def test_mission_review_clients_is_seeded_with_only_fulcrum():
+    """Locks the seed set down: every one of the lane's own cited precedents in
+    canonical/review_lanes.yml is Fulcrum-sourced, and nothing else is named. A second
+    client belongs here only as a deliberate, reviewed edit -- this test fails loudly if
+    one is ever added by accident alongside unrelated work."""
+    assert MISSION_REVIEW_CLIENTS == frozenset({"fulcrum"})
+
+
+def test_gate_leaves_assignments_unchanged_when_client_is_unknown():
+    """client_id=None -- no work order, no project_path, or a resolution that genuinely
+    failed -- must never strip the lane. This is the fail-open direction itself, isolated
+    from every DB/dispatch concern."""
+    slots = [{"reviewer": "r", "seat": MISSION_SEAT, "lanes": [MISSION_LANE_ID, "other-lane"]}]
+    assert apply_mission_lane_client_gate(slots, None) == slots
+
+
+def test_gate_leaves_assignments_unchanged_when_client_is_fulcrum():
+    slots = [{"reviewer": "r", "seat": MISSION_SEAT, "lanes": [MISSION_LANE_ID, "other-lane"]}]
+    assert apply_mission_lane_client_gate(slots, "fulcrum") == slots
+
+
+def test_gate_strips_the_lane_when_client_is_known_and_not_fulcrum():
+    slots = [{"reviewer": "r", "seat": MISSION_SEAT, "lanes": [MISSION_LANE_ID, "other-lane"]}]
+    out = apply_mission_lane_client_gate(slots, "seayinsights")
+    assert out == [{"reviewer": "r", "seat": MISSION_SEAT, "lanes": ["other-lane"]}]
+
+
+def test_gate_strips_the_lane_for_the_default_client_too():
+    """THE CASE THE GATE EXISTS FOR. `seayinsights` is the default every unattributed
+    project lands on (core.clients.queries.DEFAULT_CLIENT_ID) -- an unrelated SaaS product
+    or an open-source library resolves to exactly this value, not to None. Treating it as
+    "unknown" here would leave the confirmed problem unfixed for the overwhelming majority
+    of real projects, so this is distinct from the client=None fail-open test above."""
+    slots = [{"reviewer": "r", "seat": MISSION_SEAT, "lanes": [MISSION_LANE_ID]}]
+    assert apply_mission_lane_client_gate(slots, "seayinsights") == []
+
+
+def test_gate_drops_a_slot_left_with_no_lanes():
+    """A seat whose only selected lane was mission-domain-consequence must not dispatch a
+    reviewer nothing left to review -- the slot itself disappears, not an empty `lanes`.
+    Uses a different non-fulcrum client than the default-client test above, so this is a
+    distinct case (any known, non-mission client drops an emptied slot) rather than a
+    restatement of it."""
+    slots = [{"reviewer": "r", "seat": MISSION_SEAT, "lanes": [MISSION_LANE_ID]}]
+    assert apply_mission_lane_client_gate(slots, "hypershift") == []
+
+
+def test_gate_keeps_a_slots_other_lanes_when_stripping_this_one():
+    slots = [
+        {"reviewer": "r1", "seat": MISSION_SEAT, "lanes": [MISSION_LANE_ID, "a", "b"]},
+        {"reviewer": "r2", "seat": "Claim integrity", "lanes": ["c"]},
+    ]
+    out = apply_mission_lane_client_gate(slots, "seayinsights")
+    assert out == [
+        {"reviewer": "r1", "seat": MISSION_SEAT, "lanes": ["a", "b"]},
+        {"reviewer": "r2", "seat": "Claim integrity", "lanes": ["c"]},
+    ]
+
+
+def test_client_id_for_work_order_reads_the_resolved_column(db):
+    conn = sqlite3.connect(str(db))
+    try:
+        conn.execute(
+            "UPDATE business_projects SET client_id = 'fulcrum' WHERE project_id = ?",
+            (PROJECT_ID,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    assert ra._client_id_for_work_order(WO_ID, db_path=db) == "fulcrum"
+
+
+def test_client_id_for_work_order_is_none_for_an_unknown_work_order(db):
+    assert ra._client_id_for_work_order("wo-does-not-exist", db_path=db) is None
+
+
+def test_client_id_for_work_order_is_none_when_the_column_is_null(db):
+    """The `db` fixture's own project row never sets client_id -- it starts NULL, the
+    realistic starting state for any project created before a review has ever resolved
+    one."""
+    assert ra._client_id_for_work_order(WO_ID, db_path=db) is None
+
+
+def _set_client(db: Path, client_id: str) -> None:
+    conn = sqlite3.connect(str(db))
+    try:
+        conn.execute(
+            "UPDATE business_projects SET client_id = ? WHERE project_id = ?",
+            (client_id, PROJECT_ID),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _mock_dispatch_plumbing(monkeypatch):
+    from core.gates import lane_sandbox
+
+    monkeypatch.setattr(lane_sandbox, "docker_available", _up)
+    monkeypatch.setattr(lane_sandbox, "resolve_sha", lambda ref, *, repo_root: "a" * 40)
+    monkeypatch.setattr(lane_sandbox, "build_image", lambda sha, *, repo_root: "ds-review:fake")
+
+
+def _lanes_in(doc: dict) -> set:
+    return {lane for slot in doc["assignments"] for lane in slot["lanes"]}
+
+
+def test_dispatch_includes_the_mission_lane_when_the_resolved_client_is_fulcrum(db, monkeypatch):
+    """No regression for the lane's actual intended audience: a Fulcrum project's review
+    still asks the mission-consequence question."""
+    _mock_dispatch_plumbing(monkeypatch)
+    _set_client(db, "fulcrum")
+
+    doc = dispatch_review_round(WO_ID, repo_root=REPO_ROOT, db_path=db)
+
+    assert MISSION_LANE_ID in _lanes_in(doc)
+
+
+def test_dispatch_excludes_the_mission_lane_when_the_resolved_client_is_not_fulcrum(
+    db, monkeypatch
+):
+    """THE CONFIRMED PROBLEM, FIXED: a project resolved to any client other than Fulcrum
+    -- here the SeayInsights default, the realistic case for an unrelated SaaS product or
+    an open-source library -- no longer gets asked a CUI-classification question."""
+    _mock_dispatch_plumbing(monkeypatch)
+    _set_client(db, "seayinsights")
+
+    doc = dispatch_review_round(WO_ID, repo_root=REPO_ROOT, db_path=db)
+
+    assert MISSION_LANE_ID not in _lanes_in(doc)
+
+
+def test_dispatch_keeps_the_mission_lane_when_client_resolution_genuinely_fails(db, monkeypatch):
+    """FAIL-OPEN, PROVEN END TO END, NOT ASSUMED. The project's client starts NULL (the
+    `db` fixture's own default) and reconcile_project_client_from_review -- which would
+    otherwise resolve and write one on this very dispatch -- is forced to fail, the same
+    way a real resolution failure (an unreadable project_path, a broken git worktree)
+    would leave nothing for `_client_id_for_work_order` to read. The lane must stay
+    included, and nothing must get written to business_projects.client_id."""
+    _mock_dispatch_plumbing(monkeypatch)
+
+    import core.clients.backfill as client_backfill
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("simulated resolution failure")
+
+    monkeypatch.setattr(client_backfill, "reconcile_project_client_from_review", _boom)
+
+    doc = dispatch_review_round(WO_ID, repo_root=REPO_ROOT, db_path=db)
+
+    assert MISSION_LANE_ID in _lanes_in(doc)
+    conn = sqlite3.connect(str(db))
+    try:
+        row = conn.execute(
+            "SELECT client_id FROM business_projects WHERE project_id = ?", (PROJECT_ID,)
+        ).fetchone()
+    finally:
+        conn.close()
+    assert row[0] is None, "a genuinely failed resolution must write nothing"
+
+
+def test_a_changed_client_resolution_forces_a_new_round_at_the_same_commit(db, monkeypatch):
+    """The idempotency interaction this gate is most likely to get subtly wrong, mirroring
+    the model-pin test above (test_a_changed_pin_forces_a_new_round_at_the_same_commit) for
+    a client-resolution change instead: the resolved client changing between two dispatches
+    of the SAME sha, with nothing else different, must still open a new round -- the lane
+    SET a seat is assigned now differs even though no caller-passed input changed."""
+    _mock_dispatch_plumbing(monkeypatch)
+    _set_client(db, "seayinsights")
+
+    first = dispatch_review_round(WO_ID, repo_root=REPO_ROOT, db_path=db)
+    assert first["round"] == 1
+    assert "already_dispatched" not in first
+    assert MISSION_LANE_ID not in _lanes_in(first)
+
+    _set_client(db, "fulcrum")
+
+    second = dispatch_review_round(WO_ID, repo_root=REPO_ROOT, db_path=db)
+    assert second["round"] == 2, "a changed client resolution is a resolved-content change"
+    assert "already_dispatched" not in second
+    assert MISSION_LANE_ID in _lanes_in(second)
+
+
+def test_an_unchanged_client_resolution_stays_idempotent_across_two_dispatches(db, monkeypatch):
+    """The other half: a client that is already standing, unchanged between two dispatches
+    of the same commit, must not itself manufacture a spurious new round."""
+    _mock_dispatch_plumbing(monkeypatch)
+    _set_client(db, "fulcrum")
+
+    first = dispatch_review_round(WO_ID, repo_root=REPO_ROOT, db_path=db)
+    assert first["round"] == 1
+
+    second = dispatch_review_round(WO_ID, repo_root=REPO_ROOT, db_path=db)
+    assert second.get("already_dispatched") is True
+    assert second["round"] == 1
