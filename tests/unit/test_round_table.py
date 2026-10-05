@@ -17,6 +17,7 @@ is worse than the defects the surface exists to find.
 
 from __future__ import annotations
 
+from fnmatch import fnmatch, fnmatchcase
 from pathlib import Path
 
 import pytest
@@ -1087,3 +1088,282 @@ def test_a_local_install_is_told_when_its_review_skill_is_behind():
         "the table, which is the rule WO d0658106 exists to make a property of the "
         "substrate. Refresh the install with `ds update`."
     )
+
+
+# ── scope matching: gitwildmatch via pathspec, not stdlib fnmatch ───────────
+#
+# `lane_is_relevant` used to hand-roll a `**` approximation on top of `fnmatch`, which has
+# no real concept of recursive directory globbing. The one shape that got a hand patch
+# (a leading `**/x` also matching a top-level `x`) was never the only gap: `fnmatch`'s `*`
+# happens to cross `/` in its translated regex, which papered over most trailing-wildcard
+# cases by ACCIDENT while never correctly handling a `**` representing ZERO intervening
+# directories, and while never correctly anchoring a bare `X/**` to the repo root the way
+# a real `.gitignore` pattern does. Both are fixed by matching with `pathspec`'s
+# `gitwildmatch` backend -- the same engine git itself uses -- instead of hand-patching a
+# third special case onto a matcher that was never built for this.
+
+
+def _real_lane_scope() -> dict[str, list[str]]:
+    """Every real lane's own `scope` list, straight from the generated registry -- not a
+    second, hand-copied list that can only drift from it."""
+    data = yaml.safe_load(
+        (REPO_ROOT / "canonical" / "review_lanes.yml").read_text(encoding="utf-8")
+    )
+    return {lane["id"]: lane["scope"] for lane in data["lanes"] if lane.get("scope")}
+
+
+def _old_fnmatch_lane_is_relevant(patterns: list[str], paths: list[str]) -> bool:
+    """The REPLACED algorithm, reproduced exactly (not imported -- it no longer exists in
+    `core.gates.round_table`), so the regression test below can show its own work rather
+    than asserting the new behavior in isolation and asking a reader to trust that it used
+    to be different."""
+    for pattern in patterns:
+        for path in paths:
+            if fnmatch(path, pattern) or fnmatch(path, f"*/{pattern}"):
+                return True
+            if pattern.startswith("**/") and fnmatch(path, pattern[3:]):
+                return True
+    return False
+
+
+# One worked (match_path, no_match_path) pair per distinct pattern string actually used in
+# canonical/review_lanes.yml today. Keyed by pattern rather than by lane so the same pair
+# covers a pattern wherever it recurs across lanes (`.github/workflows/**` alone seats four).
+# `test_every_real_lane_pattern_has_worked_examples` fails loudly, naming the pattern, if the
+# registry ever grows one this table does not cover -- the exhaustiveness is enforced, not
+# assumed.
+_PATTERN_EXAMPLES: dict[str, tuple[str, str]] = {
+    ".github/workflows/**": (".github/workflows/ci.yml", "hooks/run.sh"),
+    "canonical/workflows/**": ("canonical/workflows/README.md", ".github/workflows/ci.yml"),
+    "core/gates/**": ("core/gates/__init__.py", "core/event_store/__init__.py"),
+    # Anchored to the REPO-ROOT hooks/ directory (deployment hook scripts) -- the old
+    # fnmatch-based matcher also fired this lane for an unrelated nested directory that
+    # merely happened to share the final path segment name "hooks" (see
+    # test_an_anchored_pattern_no_longer_reaches_an_unrelated_same_named_directory below).
+    "hooks/**": ("hooks/run.sh", "runtime/hooks/enqueue.py"),
+    "runtime/hooks/**": ("runtime/hooks/enqueue.py", "hooks/run.sh"),
+    "**/*.env*": ("config/.env.production", "config/env_config.py"),
+    "**/secret*": ("core/gates/secret_scan.py", "core/gates/round_table.py"),
+    "**/*credential*": ("core/gates/credential_patterns.py", "core/gates/round_table.py"),
+    "requirements*.txt": ("requirements.txt", "requirements.lock"),
+    "**/*.lock": ("requirements.lock", "requirements.txt"),
+    "package.json": (
+        "canonical/skills/domains/modes/power-platform/scripts/package.json",
+        "pyproject.toml",
+    ),
+    "pyproject.toml": ("pyproject.toml", "requirements.txt"),
+    "**/uv.lock": ("projections/frontend/uv.lock", "requirements.lock"),
+    "*.tf": ("infra/main.tf", "infra/main.tf.bak"),
+    "*.tfvars": ("infra/terraform.tfvars", "infra/main.tf"),
+    "**/terraform/**": (
+        "canonical/skills/infra/modes/terraform/SKILL.md",
+        "canonical/skills/infra/modes/kubernetes-expert/SKILL.md",
+    ),
+    "**/*iam*": ("infra/iam-role.json", "infra/network-policy.json"),
+    "**/k8s/**": ("deploy/k8s/service.yaml", "deploy/ecs/service.yaml"),
+    "**/helm/**": ("deploy/helm/Chart.yaml", "deploy/k8s/service.yaml"),
+    "**/kustomize/**": ("deploy/kustomize/base/kustomization.yaml", "deploy/helm/Chart.yaml"),
+    "**/charts/**": ("deploy/charts/myapp/Chart.yaml", "deploy/helm/values.yaml"),
+    "**/zarf*": ("uds/zarf.yaml", "uds/chart/values.yaml"),
+    "**/.released_version": (
+        "core/event_store/migrations/.released_version",
+        "core/event_store/migrations/144_wo_artifacts.sql",
+    ),
+    "**/version*": ("core/health/version.py", "core/health/release.py"),
+    # Case-sensitive, deliberately: see test_release_pattern_case_sensitivity_is_now_platform_consistent.
+    "CHANGELOG.md": ("CHANGELOG.md", "canonical/skills/core/modes/think/changelog.md"),
+    "**/migrations/**": ("core/event_store/migrations/README.md", "core/event_store/__init__.py"),
+    "**/*.sql": (
+        "core/event_store/migrations/144_wo_artifacts.sql",
+        "core/event_store/migrations/README.md",
+    ),
+    "core/event_store/**": ("core/event_store/__init__.py", "core/gates/round_table.py"),
+    "**/*.css": (
+        "projections/frontend/static/dashboard.css",
+        "projections/frontend/static/dashboard.js",
+    ),
+    "**/*.scss": (
+        "projections/frontend/static/dashboard.scss",
+        "projections/frontend/static/dashboard.css",
+    ),
+    "**/*.tsx": ("projections/frontend/src/App.tsx", "projections/frontend/static/dashboard.js"),
+    "**/*.jsx": ("projections/frontend/src/App.jsx", "projections/frontend/static/dashboard.js"),
+    # Anchored to the REPO-ROOT docs/ directory -- the old matcher also fired this lane (and
+    # governance-canon-and-board, docs-style-and-attribution below) for a per-skill "docs"
+    # subdirectory nested under canonical/skills/, unrelated to the top-level docs.
+    "docs/**": ("docs/CLI.md", "canonical/skills/workflow/docs/contracts/workflow-contract.md"),
+    "*.md": ("AGENTS.md", "core/gates/round_table.py"),
+    "**/*.html": (
+        "projections/frontend/dashboard.html",
+        "projections/frontend/static/dashboard.js",
+    ),
+    "**/*.vue": ("projections/frontend/src/App.vue", "projections/frontend/src/App.tsx"),
+    "**/*.ts": ("canonical/skills/setup/skill.ts", "canonical/skills/setup/skill.tsx"),
+    "**/*.js": (
+        "projections/frontend/static/dashboard.js",
+        "projections/frontend/static/dashboard.css",
+    ),
+    "interfaces/cli/**": ("interfaces/cli/ds.py", "interfaces/api/README.md"),
+    "**/*runbook*": (
+        "canonical/skills/release/modes/pre-launch/templates/deployment-runbook.md",
+        "canonical/skills/release/modes/pre-launch/templates/checklist.md",
+    ),
+    "docs/operations/**": ("docs/operations/gates.md", "docs/architecture/contract-atlas.md"),
+    "canonical/skills/**": ("canonical/skills/STRUCTURE.md", "canonical/agents/README.md"),
+    "canonical/agents/**": ("canonical/agents/README.md", "canonical/skills/STRUCTURE.md"),
+    ".mcp.json": (".mcp.json", "package.json"),
+    "integrations/marketplace/**": (
+        "integrations/marketplace/__init__.py",
+        "integrations/compiler/reviewers.py",
+    ),
+    # Anchored to the REPO-ROOT canonical/ directory -- the old matcher also fired this lane
+    # for tests/unit/canonical/ (a test-fixture directory) and docs/canonical/ (JSON schema
+    # exports), neither of which is the governance surface this lane means.
+    "canonical/**": ("canonical/rules.yml", "tests/unit/canonical/test_types.py"),
+    "**/*.md": ("AGENTS.md", "core/gates/round_table.py"),
+}
+
+
+def test_every_real_lane_pattern_has_worked_examples():
+    """Every scope pattern actually authored in the registry today has a worked
+    (match, no-match) pair in `_PATTERN_EXAMPLES` above. A new pattern lands here
+    un-covered -- this fails, naming it, rather than the parametrized test below
+    silently iterating zero cases for it."""
+    missing = sorted(
+        {
+            pattern
+            for patterns in _real_lane_scope().values()
+            for pattern in patterns
+            if pattern not in _PATTERN_EXAMPLES
+        }
+    )
+    assert not missing, (
+        f"canonical/review_lanes.yml authored pattern(s) with no worked example: {missing}. "
+        "Add a (match_path, no_match_path) pair to _PATTERN_EXAMPLES in this file."
+    )
+
+
+def _lane_pattern_cases() -> list[tuple[str, str, str, str]]:
+    cases = []
+    for lane_id, patterns in sorted(_real_lane_scope().items()):
+        for pattern in patterns:
+            match_path, no_match_path = _PATTERN_EXAMPLES.get(pattern, (None, None))
+            if match_path is not None:
+                cases.append((lane_id, pattern, match_path, no_match_path))
+    return cases
+
+
+@pytest.mark.parametrize(
+    "lane_id, pattern, match_path, no_match_path",
+    _lane_pattern_cases(),
+    ids=[f"{c[0]}::{c[1]}" for c in _lane_pattern_cases()],
+)
+def test_every_real_lane_pattern_matches_and_rejects_as_authored(
+    lane_id, pattern, match_path, no_match_path
+):
+    """Exhaustive, per-pattern coverage over every scope pattern actually authored for
+    every one of the 26 real lanes today (14 carry a scope; 12 fire unconditionally --
+    see test_every_scopeless_lane_fires_unconditionally below). A future change to the
+    matcher that narrows or widens any one of these cannot pass silently: this is the
+    regression lock the matcher swap itself has no other test for.
+    """
+    lane = {"scope": [pattern]}
+    assert (
+        round_table.lane_is_relevant(lane, [match_path]) is True
+    ), f"lane {lane_id!r} pattern {pattern!r} should have matched {match_path!r}"
+    assert (
+        round_table.lane_is_relevant(lane, [no_match_path]) is False
+    ), f"lane {lane_id!r} pattern {pattern!r} should NOT have matched {no_match_path!r}"
+
+
+def test_every_scopeless_lane_fires_unconditionally():
+    """The 12 lanes with no declared `scope` are not a gap in the table above -- absence of
+    scope means always-relevant, preserved exactly across the matcher swap."""
+    data = yaml.safe_load(
+        (REPO_ROOT / "canonical" / "review_lanes.yml").read_text(encoding="utf-8")
+    )
+    scopeless = [lane for lane in data["lanes"] if not lane.get("scope")]
+    assert len(scopeless) == 12, (
+        f"expected 12 scopeless lanes, found {len(scopeless)} -- update this count and "
+        "reconsider whether the newly-scoped lane needs _PATTERN_EXAMPLES coverage above."
+    )
+    for lane in scopeless:
+        assert round_table.lane_is_relevant(lane, ["wherever/this/points.py"]) is True
+        assert round_table.lane_is_relevant(lane, []) is True
+
+
+# ── the motivating regression: a Helm chart nested under a package directory ────────────
+
+
+def test_a_zero_directory_globstar_reaches_the_uds_chart_layout():
+    """THE MOTIVATING CASE. A Helm chart does not always live at a fixed depth: it can sit
+    directly under a package directory (`uds/chart/templates/deployment.yaml`, zero
+    intervening directories) or nested further (`uds/some-service/chart/templates/x.yaml`).
+    A lane meaning to cover "a chart/ directory anywhere under uds/" is authored as
+    `uds/**/chart/**` -- gitignore's own `**` means "zero or more path segments", so one
+    pattern reaches both depths.
+
+    THE OLD fnmatch-BASED MATCHER COULD NOT: its translated regex requires an actual `/`
+    character to stand in for each `**`, so `uds/**/chart/**` only ever matched when there
+    was at least one real directory between `uds/` and `chart/` -- the deeper-nested shape
+    worked by the same `*`-crosses-`/` accident documented at the top of this section, while
+    the direct, zero-directory `uds/chart/` layout -- the actual motivating report -- fell
+    through every one of the matcher's three checks and never fired the lane at all.
+    """
+    pattern = "uds/**/chart/**"
+    zero_dir_path = "uds/chart/templates/deployment.yaml"
+    nested_path = "uds/some-service/chart/templates/deployment.yaml"
+
+    # The replaced algorithm, run directly against both shapes:
+    assert _old_fnmatch_lane_is_relevant([pattern], [zero_dir_path]) is False, (
+        "this is the gap the fix exists for -- if this starts passing, the fnmatch "
+        "reference implementation above has drifted from what core.gates.round_table "
+        "used to do, and no longer demonstrates the regression it is pinned to prove"
+    )
+    assert _old_fnmatch_lane_is_relevant([pattern], [nested_path]) is True, (
+        "the deeper-nested shape worked under the old matcher too (by accident, not by "
+        "correctly understanding **) -- only the zero-directory layout was the gap"
+    )
+
+    # The new matcher, run against both shapes: gitwildmatch understands ** as "zero or
+    # more segments", so both the motivating zero-directory layout and the deeper-nested
+    # one are reached by the same pattern.
+    lane = {"scope": [pattern]}
+    assert round_table.lane_is_relevant(lane, [zero_dir_path]) is True
+    assert round_table.lane_is_relevant(lane, [nested_path]) is True
+
+
+def test_an_anchored_pattern_no_longer_reaches_an_unrelated_same_named_directory():
+    """The flip side of the fix, found auditing all 26 lanes' real patterns against every
+    file actually tracked in this repository (not a hypothetical): the old matcher's `*`
+    crossing `/` meant a bare `X/**` was never truly anchored, so `hooks/**` -- authored for
+    the repo-ROOT `hooks/` directory (deployment hook scripts; `runtime/hooks/**` is a
+    separate, deliberate entry right beside it for the runtime hook modules) -- ALSO fired
+    for a same-named `hooks/` directory nested inside an unrelated packaged project
+    template, which has nothing to do with this repo's own gate machinery.
+
+    A narrowing, not a loss: the old match was never the author's intent, it was `fnmatch`
+    conflating "anchored to the root" with "matches wherever this name recurs".
+    """
+    template_hooks_file = "packs/domains/templates/project-standards/hooks/lib/audit.py"
+
+    assert (
+        _old_fnmatch_lane_is_relevant(["hooks/**"], [template_hooks_file]) is True
+    ), "the old matcher's over-match this test documents was expected to still reproduce"
+    assert round_table.lane_is_relevant({"scope": ["hooks/**"]}, [template_hooks_file]) is False
+
+
+def test_release_pattern_case_sensitivity_is_now_platform_consistent():
+    """`fnmatch.fnmatch` case-folds via `os.path.normcase` -- case-INSENSITIVE on Windows,
+    case-sensitive on POSIX. The old matcher's `**/version*` against the repo's own
+    top-level `VERSION` file therefore depended on which OS ran it: it matched on a
+    Windows dev machine and never reliably matched on the Linux/Mac CI legs this table
+    also runs on. `fnmatchcase` -- explicitly case-sensitive regardless of OS -- shows what
+    every platform other than Windows already got:
+    """
+    assert fnmatchcase("VERSION", "version*") is False
+
+    # gitwildmatch is case-sensitive on every platform, same as real git pathspecs. This
+    # does not newly break VERSION's coverage under this lane -- Linux/Mac CI already saw
+    # exactly this miss; Windows now sees the same, deterministic answer they always did.
+    assert round_table.lane_is_relevant({"scope": ["**/version*"]}, ["VERSION"]) is False
