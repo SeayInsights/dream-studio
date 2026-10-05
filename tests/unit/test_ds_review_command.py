@@ -9,6 +9,7 @@ exists and that `--pr` means what it says.
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 from pathlib import Path
 from unittest import mock
@@ -42,6 +43,7 @@ def _args(**overrides) -> argparse.Namespace:
         "model": None,
         "effort": None,
         "force_new_round": False,
+        "coverage": False,
     }
     base.update(overrides)
     return argparse.Namespace(**base)
@@ -251,3 +253,81 @@ def test_force_new_round_without_dispatch_is_refused(capsys):
     rc = review_cmd.dispatch(_args(force_new_round=True), source_root=None, dream_studio_home=None)
     assert rc == 2
     assert "--force-new-round only means something with --dispatch" in capsys.readouterr().err
+
+
+# ── --coverage: the 15-dimension visibility report ──────────────────────────
+
+
+def test_the_review_parser_carries_coverage():
+    sub = argparse.ArgumentParser().add_subparsers()
+    review_cmd.register(sub)
+    flags = {
+        option for action in sub.choices["review"]._actions for option in action.option_strings
+    }
+    assert "--coverage" in flags
+
+
+def test_coverage_convenes_nothing():
+    """A standing report over the registry, not a question about any one change set --
+    same shape as the seat-provider doors above."""
+    with mock.patch("core.gates.round_table.convene") as convened:
+        rc = review_cmd.dispatch(_args(coverage=True), source_root=None, dream_studio_home=None)
+    assert rc == 0
+    assert not convened.called, "a standing coverage report convened the bench"
+
+
+def test_coverage_prints_every_gap_dimension_by_name(capsys):
+    """End-to-end through the real command dispatch and the real coverage module --
+    nothing here is mocked, so this proves the CLI door actually prints the report, not
+    just that the underlying function returns the right data."""
+    rc = review_cmd.dispatch(
+        _args(coverage=True, json=False), source_root=None, dream_studio_home=None
+    )
+    out = capsys.readouterr().out
+    assert rc == 0
+    for gap_name in ("Performance", "API versioning", "Licensing", "Accessibility", "Mobile"):
+        assert gap_name in out
+        assert f"{gap_name}" in out
+    assert "0 lane(s)" in out
+    for seat_name in (
+        "Access and reach",
+        "Boundary semantics",
+        "Chair and verdict owner",
+        "Claim integrity",
+        "Finding integrity",
+        "Gate and test integrity",
+        "Interface conformance",
+        "Irreversible operations",
+        "Publication and provenance",
+        "The receiver's view",
+    ):
+        assert seat_name in out
+
+
+def test_coverage_json_reports_the_same_fifteen_dimensions(capsys):
+    rc = review_cmd.dispatch(
+        _args(coverage=True, json=True), source_root=None, dream_studio_home=None
+    )
+    assert rc == 0
+    doc = json.loads(capsys.readouterr().out)
+    assert len(doc["dimensions"]) == 15
+    assert doc["drift"] == []
+    gap_rows = {row["dimension"]: row for row in doc["dimensions"] if not row["covered"]}
+    assert set(gap_rows) == {
+        "Performance",
+        "API versioning",
+        "Licensing",
+        "Accessibility",
+        "Mobile",
+    }
+    assert all(row["lane_count"] == 0 for row in gap_rows.values())
+
+
+def test_coverage_with_repo_is_refused(capsys):
+    """--coverage always reads Dream Studio's own registry; --repo would silently be
+    ignored rather than honoured, which `_companion_flags` refuses instead."""
+    rc = review_cmd.dispatch(
+        _args(coverage=True, repo="/some/other/project"), source_root=None, dream_studio_home=None
+    )
+    assert rc == 2
+    assert "--coverage" in capsys.readouterr().err
