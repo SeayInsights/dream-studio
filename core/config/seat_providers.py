@@ -15,6 +15,15 @@ key, the same shape get_quiet_mode/set_quiet_mode already use for a different ke
 _model_for_seat() would have resolved anyway; an unset effort means "that tool's own
 default", never a literal default string, since not every tool declares
 effort_levels (most don't yet -- see TargetSpec.effort_levels).
+
+TWO CONSUMERS READ A PIN'S MODEL, NOT ONE. `integrations.compiler.reviewers.
+resolve_seat_assignment()` is the compile-time reader -- an installer bakes the
+resolved model into a static subagent file. `resolve_live_model()` in that same module
+is the live-dispatch-time reader: `core.work_orders.review_answers.dispatch_review_round`
+has no subagent file to bake anything into, only a dispatch record to annotate, so a pin
+set here is informational metadata on that record (which model a seat was configured to
+run on when the round was dispatched), never a claim this module or either reader can
+verify was actually honored.
 """
 
 from __future__ import annotations

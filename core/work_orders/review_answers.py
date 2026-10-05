@@ -63,6 +63,17 @@ same way the lane questions themselves once did. `method_requirements` on a lane
 refuses a submission that declares a required technique and carries no structured evidence
 for it (`paired_sites`, `counterfactual`, `docs_consulted`, `citations_verified`), the same
 enforce-or-refuse shape as the reproduction requirement above, not a softer, separate one.
+
+A SEAT'S PINNED MODEL WAS INVISIBLE HERE. `core.config.seat_providers` lets an operator
+pin a seat to a specific model, and `integrations.compiler.reviewers.
+resolve_seat_assignment()` already bakes that pin into a COMPILED, INSTALLED subagent
+file -- but this module, the live credentialed dispatch path, never consulted it: a
+pinned seat's model changed what got installed and nothing about what a live round
+actually recorded. `lane_models()` below reads the same pin, pin-aware, for a live
+round; `record_dispatch`/`dispatch_review_round` fold the result onto each seat's
+assignment slot as a `model` key, and `review_status` reads it back. INFORMATIONAL ONLY:
+there is no way to prove which model actually produced a submitted answer, so this is
+metadata on the dispatch record, never a check `record_answers` enforces against it.
 """
 
 from __future__ import annotations
@@ -185,6 +196,7 @@ def resolve_round_content(
     *,
     db_path: Path | None,
     owned: dict[Any, set[str]],
+    models: dict[str, str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """The (assignments, carried_open_findings) a round dispatched right now with
     *assignments* would actually contain -- open findings and an awaiting referee
@@ -193,6 +205,19 @@ def resolve_round_content(
     not an approximation of it: a redispatch at an unchanged sha with a finding newly
     carried in is a materially different round, and must open one even without
     force_new_round, while a byte-identical redispatch is the no-op this exists for.
+
+    *models* is `lane_models()`'s seat -> resolved model mapping (empty/omitted when the
+    caller has none to give). Folded onto each slot by SEAT, after every slot -- fresh,
+    carried-finding, and referee -- already exists, so one pass covers all three sources
+    rather than three separate writes that could drift. A seat absent from *models*
+    (unresolvable, or simply not looked up) keeps no `model` key at all, same as every
+    other optional field this module adds only when it has something to say.
+
+    THIS IS WHY A CHANGED PIN FORCES A NEW ROUND. `record_dispatch`'s idempotency check
+    compares the PRIOR round's stored assignments against what resolving right now would
+    produce; a pin that changed a seat's model between two dispatches of the same commit
+    changes that seat's `model` value here, so the comparison correctly reads as new
+    content -- not a cache that would miss it.
     """
     slots: dict[Any, dict[str, Any]] = {}
     for slot in assignments:
@@ -239,6 +264,12 @@ def resolve_round_content(
             slot["lanes"] = sorted([*slot["lanes"], REFEREE_LANE])
             carried.append(REFEREE_LANE)
 
+    if models:
+        for slot in slots.values():
+            seat = slot.get("seat")
+            if seat and seat in models:
+                slot["model"] = models[seat]
+
     resolved = sorted(slots.values(), key=lambda s: (s["reviewer"] is None, str(s["reviewer"])))
     return resolved, sorted(carried)
 
@@ -253,6 +284,7 @@ def record_dispatch(
     db_path: Path | None = None,
     project_root: Path | None = None,
     ownership: dict[Any, set[str]] | None = None,
+    models: dict[str, str] | None = None,
     force_new_round: bool = False,
 ) -> dict[str, Any]:
     """Record who was asked what, against which commit, as a new round.
@@ -285,6 +317,13 @@ def record_dispatch(
     findings -- is byte-identical to the standing round is treated as a no-op.
     force_new_round=True always opens a new one regardless, same cost as before
     this existed.
+
+    *models* defaults the same way *ownership* does -- `lane_models(project_root)` when
+    omitted -- and is folded into `resolved_assignments` by `resolve_round_content`
+    before the idempotency comparison above, so a seat's pin changing between two
+    dispatches of the SAME sha is a resolved-content change too: it forces a new round
+    exactly like a newly carried finding already does, and an unchanged pin stays
+    byte-identical and short-circuits as before this existed.
     """
     # THE MECHANISM CHECKS, not one caller. The existence check lived in the CLI's
     # dispatch handler only, so any other caller could record a round against an id that
@@ -293,6 +332,7 @@ def record_dispatch(
         raise ValueError(f"no work order {work_order_id!r} in this authority")
 
     owned = lane_ownership(project_root) if ownership is None else ownership
+    models = lane_models(project_root) if models is None else models
     for slot in assignments:
         reviewer = slot.get("reviewer")
         key = _owner_key(reviewer, slot.get("seat"))
@@ -305,7 +345,7 @@ def record_dispatch(
             )
 
     resolved_assignments, carried = resolve_round_content(
-        work_order_id, assignments, db_path=db_path, owned=owned
+        work_order_id, assignments, db_path=db_path, owned=owned, models=models
     )
 
     prior = read_dispatch(work_order_id, db_path=db_path)
@@ -463,10 +503,16 @@ def dispatch_review_round(
     report = convene(repo_root=repo_root, change_root=change_root)
     computed_assignments = assignments(report)
 
+    # BOTH READ FROM THE REGISTRY ROOT, NOT change_root -- the same "two roots" reason
+    # this function's own docstring gives for repo_root vs change_root. Letting
+    # record_dispatch() default either one from project_root=change_root would resolve
+    # seat ownership AND seat models against the wrong tree whenever they differ, so both
+    # are computed here and passed through explicitly, never left to that fallback.
     owned = lane_ownership(repo_root)
+    models = lane_models(repo_root)
     if not force_new_round:
         resolved, carried = resolve_round_content(
-            work_order_id, computed_assignments, db_path=db_path, owned=owned
+            work_order_id, computed_assignments, db_path=db_path, owned=owned, models=models
         )
         prior = read_dispatch(work_order_id, db_path=db_path)
         if (
@@ -487,6 +533,7 @@ def dispatch_review_round(
         db_path=db_path,
         project_root=change_root,
         ownership=owned,
+        models=models,
         force_new_round=force_new_round,
     )
 
@@ -542,6 +589,55 @@ def lane_ownership(repo_root: Path | None = None) -> dict[Any, set[str]]:
         reviewer = reviewer_for_seat(seat, repo_root=repo_root)
         owned.setdefault(_owner_key(reviewer, seat), set()).add(str(lane.get("id")))
     return owned
+
+
+def lane_models(repo_root: Path | None = None) -> dict[str, str]:
+    """Each seat's live model right now, pin-aware: `core.config.seat_providers`'s pin
+    when it names one, else the registry's own per-seat model, aggregated across that
+    seat's lanes the same way the compiled reviewer file is
+    (`integrations.compiler.reviewers.resolve_live_model`, the live-dispatch counterpart
+    of `resolve_seat_assignment`'s compile-time reading of the same pin store).
+
+    INFORMATIONAL METADATA ON A DISPATCH RECORD, NOT ENFORCEMENT. There is no way to
+    prove which model actually answered a lane; this records which model a seat was
+    CONFIGURED to run on at the moment a round was dispatched, so `record_answers` never
+    reads it and no submission is ever accepted or refused on it.
+
+    Read fresh from `_lanes()`, same as `lane_ownership` above and for the same reason: a
+    pin can change between two dispatches of the same commit, and the model a round
+    records must reflect the pin standing WHEN THAT ROUND WAS DISPATCHED, not whatever a
+    later read happens to find.
+
+    Keyed by seat name, not by owner_key/reviewer -- a pin is set per seat, and every
+    assignment slot already carries its own seat name to look up here. A seat whose
+    lanes cannot resolve to one model (disagreeing, or none declared) is left out rather
+    than raising: that is a registry-authoring defect
+    `integrations.compiler.reviewers.check()` already owns catching before a push, and
+    this is metadata on a dispatch record, not a second gate over the same fact.
+    """
+    from core.gates.round_table import _lanes
+    from integrations.compiler.reviewers import group_by_seat, resolve_live_model
+
+    out: dict[str, str] = {}
+    for seat, seat_lanes in group_by_seat(_lanes(repo_root)).items():
+        try:
+            out[seat] = resolve_live_model(seat, seat_lanes)
+        except ValueError as exc:
+            # NOT SILENT. Best-effort metadata must not block a dispatch over a registry
+            # defect that a dedicated gate (integrations.compiler.reviewers.check(), run
+            # at push time) already owns catching -- but swallowing it with no trace at
+            # all would be the exact defect-class this repo's own fail-open census
+            # exists to find, one level up from the product code it scans.
+            from core.telemetry.diagnostics import log_diagnostic
+
+            log_diagnostic(
+                category="failure",
+                source="review_answers.lane_models",
+                context={"seat": seat},
+                details={"error_type": type(exc).__name__, "error_message": str(exc)},
+            )
+            continue
+    return out
 
 
 def lane_method_requirements(repo_root: Path | None = None) -> dict[str, list[str]]:
@@ -1294,6 +1390,18 @@ def review_status(work_order_id: str, *, db_path: Path | None = None) -> dict[st
             f" {REFEREE_LANE} lane, which judges whether that test exercises the defect"
         )
 
+    # READ BACK FROM THE DISPATCH, not re-resolved live: the model that matters here is
+    # the one THIS ROUND actually recorded (`resolve_round_content`'s own "model" key,
+    # see lane_models()), not whatever a pin resolves to right now -- those two can
+    # differ the moment an operator changes a pin without redispatching. Informational
+    # only, same as the field it is read from: this says which model a seat was
+    # configured to run on, never which model actually answered it.
+    seat_models = {
+        str(slot["seat"]): slot["model"]
+        for slot in (dispatch or {}).get("assignments") or []
+        if slot.get("seat") and slot.get("model")
+    }
+
     return {
         "work_order_id": work_order_id,
         "dispatched": dispatch is not None,
@@ -1306,6 +1414,7 @@ def review_status(work_order_id: str, *, db_path: Path | None = None) -> dict[st
         "resolved": resolved,
         "awaiting_referee": pending_referee,
         "chair_lanes": sorted(chair_lanes),
+        "seat_models": seat_models,
         "blocking": bool(reasons),
         "reasons": reasons,
     }
