@@ -460,6 +460,7 @@ def _dispatch(
     from core.work_orders.review_answers import (
         resolve_round_content,
         already_dispatched_response,
+        lane_models,
         lane_ownership,
         read_dispatch,
         record_dispatch,
@@ -483,8 +484,9 @@ def _dispatch(
     # must still open one even without --force-new-round.
     if not args.force_new_round:
         owned = lane_ownership(repo_root)
+        models = lane_models(repo_root)
         resolved, carried = resolve_round_content(
-            args.work_order, plan["assignments"], db_path=db_path, owned=owned
+            args.work_order, plan["assignments"], db_path=db_path, owned=owned, models=models
         )
         prior = read_dispatch(args.work_order, db_path=db_path)
         if (

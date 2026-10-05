@@ -414,6 +414,39 @@ def _model_for_seat(seat: str, lanes: list[dict[str, Any]]) -> str:
     return model
 
 
+def resolve_live_model(seat: str, lanes: list[dict[str, Any]]) -> str:
+    """The model *seat*'s reviewer runs on for a LIVE dispatch, right now -- pin-aware.
+
+    `resolve_seat_assignment(seat, install_target)` answers the COMPILE-TIME version of
+    this question: which tool and model a seat's compiled subagent FILE gets baked onto,
+    with `install_target` naming the tool an `ds integrate install` is writing that file
+    for. A live round (`core.work_orders.review_answers.dispatch_review_round`) installs
+    nothing -- there is no subagent file to bake a model into, and so no object for a
+    pin's provider to REPLACE the way `resolve_seat_assignment` replaces
+    `install_target`. A live dispatch always runs this seat as itself; the only question
+    is which model, not which tool.
+
+    So this is narrower on purpose: it reads the SAME pin store
+    (`core.config.seat_providers.get_seat_provider`) for only the model half of a pin,
+    with no install-target parameter to thread through, and falls back to the same
+    aggregated, agreement-enforced model `_model_for_seat()` already computes for the
+    compiled file when there is no pin or the pin left model unset. A pin's effect on
+    which model reviews a seat is now visible whether that seat compiles to an installed
+    file or runs through a live dispatch -- the same fact, read by both.
+
+    Raises ValueError exactly when `_model_for_seat()` would (the seat's lanes disagree
+    on a model, or none declares one): a pin naming no model defers to that same
+    aggregation, so a registry authoring defect is a defect here too, not silently
+    reported as "no model to show".
+    """
+    from core.config.seat_providers import get_seat_provider
+
+    pin = get_seat_provider(seat)
+    if pin and pin.get("model"):
+        return str(pin["model"])
+    return _model_for_seat(seat, lanes)
+
+
 def seat_name_for_file(path: Path, *, repo_root: Path | None = None) -> str:
     """The seat name a compiled reviewer file was generated from -- the inverse of
     `_slug()`, so an installer deciding per-seat routing can ask "whose seat is this

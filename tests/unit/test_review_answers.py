@@ -1892,3 +1892,101 @@ def test_a_credential_can_always_be_passed_on_the_command_line(db):
     for _ in range(64):
         for token in _dispatch(db)["credentials"].values():
             assert re.fullmatch(r"[0-9a-f]{32}", token), token
+
+
+# ── a seat's pinned model is visible to a live dispatch ─────────────────────
+#
+# core.config.seat_providers lets an operator pin a seat to a specific model, and
+# integrations.compiler.reviewers.resolve_seat_assignment() already bakes that into a
+# COMPILED, INSTALLED subagent file. These tests hold the other half: a live, credentialed
+# dispatch (record_dispatch/dispatch_review_round) must see the same pin, informationally
+# -- it is metadata on the dispatch record, never something record_answers checks.
+#
+# _dispatch(db)'s default slot names a REAL seat ("Claim integrity") so lane_models()'s
+# default (the real canonical/review_lanes.yml, via record_dispatch's own fallback) has
+# something real to resolve -- these tests never pass models= explicitly.
+
+REAL_SEAT = "Claim integrity"  # a real seat in canonical/review_lanes.yml
+
+
+@pytest.fixture
+def isolated_seat_pin_home(tmp_path, monkeypatch):
+    """Seat-provider pins live in config.json under DREAM_STUDIO_HOME -- isolated to a
+    per-test tmp dir so setting one cannot leak into this developer's real
+    ~/.dream-studio or into another test in this session (conftest.py sets
+    DREAM_STUDIO_HOME once, session-wide). Same approach
+    test_seat_pin_installer_routing.py's isolated_ds_home fixture uses."""
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / "ds-home"))
+
+
+def test_lane_models_resolves_the_registrys_own_model_with_no_pin(isolated_seat_pin_home):
+    """No behavior change for the common case: every real seat today declares `sonnet`
+    uniformly (scripts/seat_lanes_data.py's DEFAULT_MODEL), and lane_models() must read
+    exactly that, not a literal of its own."""
+    assert ra.lane_models()[REAL_SEAT] == "sonnet"
+
+
+def test_lane_models_resolves_a_pinned_model(isolated_seat_pin_home):
+    from core.config import seat_providers
+
+    seat_providers.set_seat_provider(REAL_SEAT, provider="claude_code", model="opus")
+    assert ra.lane_models()[REAL_SEAT] == "opus"
+
+
+def test_dispatch_records_the_pinned_model_on_the_seats_own_assignment(db, isolated_seat_pin_home):
+    """The pin's effect on a LIVE dispatch, not just a compiled/installed file."""
+    from core.config import seat_providers
+
+    seat_providers.set_seat_provider(REAL_SEAT, provider="claude_code", model="opus")
+    doc = _dispatch(db)
+    [slot] = [a for a in doc["assignments"] if a["seat"] == REAL_SEAT]
+    assert slot["model"] == "opus"
+
+
+def test_dispatch_with_no_pin_records_the_registrys_model(db, isolated_seat_pin_home):
+    doc = _dispatch(db)
+    [slot] = [a for a in doc["assignments"] if a["seat"] == REAL_SEAT]
+    assert slot["model"] == "sonnet"
+
+
+def test_status_surfaces_the_seats_resolved_model(db, isolated_seat_pin_home):
+    from core.config import seat_providers
+
+    seat_providers.set_seat_provider(REAL_SEAT, provider="claude_code", model="opus")
+    _dispatch(db)
+    status = review_status(WO_ID, db_path=db)
+    assert status["seat_models"][REAL_SEAT] == "opus"
+
+
+def test_a_changed_pin_forces_a_new_round_at_the_same_commit(db, isolated_seat_pin_home):
+    """The idempotency interaction this task is most likely to get subtly wrong: a pin
+    changing between two dispatches of the SAME sha, with the SAME raw assignments, must
+    still open a new round -- the resolved content (including the model) differs even
+    though nothing the caller passed did."""
+    from core.config import seat_providers
+
+    first = _dispatch(db)
+    assert first["round"] == 1
+    assert "already_dispatched" not in first
+
+    seat_providers.set_seat_provider(REAL_SEAT, provider="claude_code", model="opus")
+    second = _dispatch(db)
+    assert second["round"] == 2, "a pin change is a resolved-content change, not a no-op"
+    assert "already_dispatched" not in second
+    [slot] = [a for a in second["assignments"] if a["seat"] == REAL_SEAT]
+    assert slot["model"] == "opus"
+
+
+def test_an_unchanged_pin_stays_idempotent_across_two_dispatches(db, isolated_seat_pin_home):
+    """The other half: a pin that is ALREADY standing, unchanged between two dispatches
+    of the same commit, must not itself manufacture a spurious new round."""
+    from core.config import seat_providers
+
+    seat_providers.set_seat_provider(REAL_SEAT, provider="claude_code", model="opus")
+    first = _dispatch(db)
+    assert first["round"] == 1
+
+    second = _dispatch(db)
+    assert second["round"] == 1
+    assert second["already_dispatched"] is True
+    assert second["credentials"] == {}
