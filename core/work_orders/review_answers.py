@@ -74,6 +74,21 @@ round; `record_dispatch`/`dispatch_review_round` fold the result onto each seat'
 assignment slot as a `model` key, and `review_status` reads it back. INFORMATIONAL ONLY:
 there is no way to prove which model actually produced a submitted answer, so this is
 metadata on the dispatch record, never a check `record_answers` enforces against it.
+
+ONE LANE FIRED REGARDLESS OF WHO WAS BEING REVIEWED. `mission-domain-consequence` (seat
+"The receiver's view") asks a CUI/classification question with every cited precedent
+Fulcrum-sourced, and carries no `scope:` in canonical/review_lanes.yml -- so
+`lane_is_relevant`'s path-based default ("absence means always-relevant") handed it to
+every dispatch of every project, Fulcrum or not. `scope:` cannot fix this: the lane isn't
+about which files changed, it's about what the software DOES, which
+`core/gates/round_table.py` has no business concept of and should not gain one.
+`apply_mission_lane_client_gate` is the client-level relevance gate instead, applied as a
+post-filter on `dispatch_review_round`'s own `computed_assignments` -- `MISSION_LANE_ID` /
+`MISSION_REVIEW_CLIENTS` name what it gates and who it is for. It reads
+`business_projects.client_id` back from `_client_id_for_work_order`, the same signal
+`reconcile_project_client_from_review` (#871) resolves just before it runs, NEVER the
+operator's own active profile (`core.profiles`) -- that names the operator's own working
+context, which can disagree with which client the reviewed project itself belongs to.
 """
 
 from __future__ import annotations
@@ -133,6 +148,29 @@ CHAIR_SEAT = "Chair and verdict owner"
 #: resolves. The door proves a `resolves_with` test discriminates the fix; only a judgment
 #: can say it is ABOUT the defect, and this is the seat whose question that is.
 REFEREE_LANE = "evidence-referee"
+
+#: The one lane canonical/review_lanes.yml gates by CLIENT rather than by changed paths.
+#: `core.gates.round_table.lane_is_relevant`'s scope mechanism is PATH-based -- it asks
+#: "did the diff touch something this lane cares about" -- and `mission-domain-consequence`
+#: has no `scope:` at all (confirmed against the live registry), so that mechanism's own
+#: documented default ("a lane with no scope fires unconditionally... absence means
+#: always-relevant") hands it to every single dispatch of every project, Fulcrum-related
+#: or not. The lane is not about which files changed; it is about what the reviewed
+#: software DOES, a different kind of relevance question that `lane_is_relevant`
+#: deliberately does not learn -- `core/gates/round_table.py` stays free of any
+#: client/work-order concept -- so the second gate belongs here instead, in the module
+#: that already crosses that boundary for `reconcile_project_client_from_review`. See
+#: `apply_mission_lane_client_gate` below.
+MISSION_LANE_ID = "mission-domain-consequence"
+
+#: Clients `mission-domain-consequence`'s CUI/classification question actually applies to.
+#: Seeded with just `fulcrum`: every one of the lane's own cited precedents in
+#: canonical/review_lanes.yml -- platform#504, platform#673, fulcrum-gateway#53 -- is
+#: Fulcrum-sourced, and nothing in the registry backs asking a SeayInsights SaaS product or
+#: an open-source library about CUI marking, dissemination controls, or an air-gap
+#: assumption. Adding a second client here is a deliberate, reviewed decision that THAT
+#: client's own work also warrants this lane -- never inferred from a name or a guess.
+MISSION_REVIEW_CLIENTS: frozenset[str] = frozenset({"fulcrum"})
 
 
 def _credential_hash(credential: str) -> str:
@@ -399,6 +437,95 @@ def record_dispatch(
     return doc
 
 
+def _client_id_for_work_order(work_order_id: str, *, db_path: Path | None) -> str | None:
+    """`business_projects.client_id` for this work order's project, read fresh -- or None
+    when nothing is known: no such work order, no project, the column is NULL, or the
+    authority cannot be reached at all.
+
+    A PLAIN COLUMN READ, NOT A SECOND CLASSIFICATION. `core.clients.backfill
+    .classify_project_for_work_order` answers a different question -- what a project
+    SHOULD map to, guessed from its name/path -- and calling it here would let this gate
+    override an operator's own `assign_project_client` call with a guess of its own. By
+    the time `dispatch_review_round` reaches this, `reconcile_project_client_from_review`
+    has already had its one live chance to correct a stale/default client against the real
+    resolved root (#871); this reads exactly what that left standing, never a second,
+    independently-derived guess at the same fact.
+    """
+    import sqlite3
+
+    from core.work_orders.artifacts import _resolve_db
+
+    try:
+        conn = sqlite3.connect(f"file:{_resolve_db(db_path)}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return None
+    try:
+        row = conn.execute(
+            "SELECT p.client_id FROM business_work_orders w"
+            " JOIN business_projects p ON w.project_id = p.project_id"
+            " WHERE w.work_order_id = ?",
+            (work_order_id,),
+        ).fetchone()
+    except sqlite3.Error:
+        return None
+    finally:
+        conn.close()
+    return str(row[0]) if row and row[0] else None
+
+
+def apply_mission_lane_client_gate(
+    assignments: list[dict[str, Any]],
+    client_id: str | None,
+    *,
+    lane_id: str = MISSION_LANE_ID,
+    mission_clients: frozenset[str] = MISSION_REVIEW_CLIENTS,
+) -> list[dict[str, Any]]:
+    """Strip *lane_id* out of every assignment slot when *client_id* is affirmatively
+    known and not in *mission_clients* -- the client-level relevance gate
+    `core.gates.round_table.lane_is_relevant`'s path-based `scope:` mechanism cannot fit,
+    because this lane is not asking "did the diff touch X", it is asking "what does this
+    software DO" (see `MISSION_LANE_ID`'s own comment above).
+
+    FAILS OPEN ON AN UNKNOWN CLIENT -- same direction, and the same reasoning,
+    `lane_is_relevant`'s own "a lane with no scope fires unconditionally... absence means
+    always-relevant" default already uses: the cost of wrongly hiding a mission-consequence
+    question is a missed classification/mission risk, and this lane's own precedent
+    (platform#673, "called the highest-weighted finding in that review" despite being low
+    code-severity) is direct evidence that omission can be worse here than for the median
+    lane. So `client_id=None` -- no work order, no project_path, or
+    `reconcile_project_client_from_review` genuinely could not resolve one -- leaves every
+    assignment untouched. Only a client this system actually RECORDED a value for, and
+    that value disagreeing with *mission_clients*, excludes the lane.
+
+    THIS HOLDS EVEN WHEN THE RESOLVED CLIENT IS THE DEFAULT, `seayinsights`
+    (`core.clients.queries.DEFAULT_CLIENT_ID`). `core.clients.backfill` treats that same
+    value as a SENTINEL meaning "not particularly attributed" for one specific purpose --
+    deciding whether an automatic reclassification is allowed to overwrite it -- but that
+    is a different question from the one asked here. An unrelated SaaS product or an
+    open-source library is exactly what resolves to that default, and excluding the lane
+    for it is the whole reason this gate exists; treating the default as "unknown" here
+    would leave the confirmed problem -- every review asked a CUI question regardless of
+    project -- unfixed for the overwhelming majority of real cases.
+
+    A slot left with no lanes after stripping *lane_id* is dropped entirely, not kept as
+    an assignment with nothing in it -- a seat that owns other lanes besides this one keeps
+    its slot when the change set's own scope selected any of them; a seat whose only
+    selected lane WAS this one must not dispatch a reviewer nothing to review.
+    """
+    if client_id is None or client_id in mission_clients:
+        return assignments
+    out: list[dict[str, Any]] = []
+    for slot in assignments:
+        lanes = list(slot.get("lanes") or [])
+        if lane_id not in lanes:
+            out.append(slot)
+            continue
+        kept = [ln for ln in lanes if ln != lane_id]
+        if kept:
+            out.append({**slot, "lanes": kept})
+    return out
+
+
 def dispatch_review_round(
     work_order_id: str,
     *,
@@ -502,6 +629,18 @@ def dispatch_review_round(
     sha = lane_sandbox.resolve_sha("HEAD", repo_root=change_root)
     report = convene(repo_root=repo_root, change_root=change_root)
     computed_assignments = assignments(report)
+
+    # THE CLIENT GATE. mission-domain-consequence has no `scope:` in
+    # canonical/review_lanes.yml, so convene()/assignments() above hand it to every single
+    # dispatch of every project regardless of relevance. reconcile_project_client_from_review
+    # just above is this project's own live moment of truth for its client -- reading that
+    # back is this gate's whole input, never a second guess re-derived here and never the
+    # OPERATOR's own active profile (core.profiles.queries.active_profile): that describes
+    # the operator's own working context, which can disagree with which client THIS work
+    # order's own project actually belongs to, and gating on it would ask the wrong question.
+    computed_assignments = apply_mission_lane_client_gate(
+        computed_assignments, _client_id_for_work_order(work_order_id, db_path=db_path)
+    )
 
     # BOTH READ FROM THE REGISTRY ROOT, NOT change_root -- the same "two roots" reason
     # this function's own docstring gives for repo_root vs change_root. Letting
