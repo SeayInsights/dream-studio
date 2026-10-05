@@ -625,7 +625,7 @@ interfaces/cli/commands/integrate.py|255|bare-except-pass
 interfaces/cli/commands/prd.py|63|falsy-return
 interfaces/cli/commands/project.py|969|bare-except-pass
 interfaces/cli/commands/prove.py|198|bare-except-pass
-interfaces/cli/commands/review.py|611|falsy-return
+interfaces/cli/commands/review.py|614|falsy-return
 interfaces/cli/commands/system_dashboard.py|190|bare-except-pass
 interfaces/cli/commands/system_dashboard.py|196|bare-except-pass
 interfaces/cli/commands/system_health.py|246|falsy-return

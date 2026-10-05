@@ -24,9 +24,10 @@ says which.
 
 WHAT `--coverage` ADDS. The 26 lanes above are a record of review history, not a designed
 map of what deserves review, and whole domains (performance, API versioning, licensing,
-accessibility, mobile) have no seat at all -- invisibly, because nothing enumerated the
-domains this bench does not cover next to the ones it does.
-`core/gates/review_dimension_coverage.py` is that enumeration; this flag is its door.
+accessibility, mobile) have no SEAT of their own -- invisibly, because nothing enumerated
+the domains this bench does not have a seat for next to the ones it does. A domain with no
+seat can still have a real lane filed under an unrelated one, though (accessibility does);
+`core/gates/review_dimension_coverage.py` reports that too, rather than a false zero.
 Convenes nothing, invents no lane, and always reads Dream Studio's own registry.
 """
 
@@ -178,10 +179,12 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         action="store_true",
         help=(
             "Report review-dimension coverage: which of the 15 declared review"
-            " dimensions (the 10 seats this bench convenes, plus 5 named gaps --"
-            " performance, API versioning, licensing, accessibility, mobile) have a"
-            " real lane, and which have none. Convenes nothing and always reports on"
-            " Dream Studio's own canonical/review_lanes.yml, never --repo's."
+            " dimensions (the 10 seats this bench convenes, plus 5 with no seat of"
+            " their own -- performance, API versioning, licensing, accessibility,"
+            " mobile) have a real lane backing them, whether by a dedicated seat or by"
+            " a specific lane filed under an unrelated one, and which are genuine gaps"
+            " with none. Convenes nothing and always reports on Dream Studio's own"
+            " canonical/review_lanes.yml, never --repo's."
         ),
     )
 

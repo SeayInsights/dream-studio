@@ -276,7 +276,7 @@ def test_coverage_convenes_nothing():
     assert not convened.called, "a standing coverage report convened the bench"
 
 
-def test_coverage_prints_every_gap_dimension_by_name(capsys):
+def test_coverage_prints_every_dimension_by_name(capsys):
     """End-to-end through the real command dispatch and the real coverage module --
     nothing here is mocked, so this proves the CLI door actually prints the report, not
     just that the underlying function returns the right data."""
@@ -287,8 +287,10 @@ def test_coverage_prints_every_gap_dimension_by_name(capsys):
     assert rc == 0
     for gap_name in ("Performance", "API versioning", "Licensing", "Accessibility", "Mobile"):
         assert gap_name in out
-        assert f"{gap_name}" in out
     assert "0 lane(s)" in out
+    # Accessibility is NOT a flat zero -- a real lane already covers it, filed under a
+    # different seat. The CLI must print that fact, not a false "0 lane(s)" beside it.
+    assert "1 lane(s)" in out
     for seat_name in (
         "Access and reach",
         "Boundary semantics",
@@ -312,15 +314,23 @@ def test_coverage_json_reports_the_same_fifteen_dimensions(capsys):
     doc = json.loads(capsys.readouterr().out)
     assert len(doc["dimensions"]) == 15
     assert doc["drift"] == []
-    gap_rows = {row["dimension"]: row for row in doc["dimensions"] if not row["covered"]}
-    assert set(gap_rows) == {
-        "Performance",
-        "API versioning",
-        "Licensing",
-        "Accessibility",
-        "Mobile",
-    }
-    assert all(row["lane_count"] == 0 for row in gap_rows.values())
+    by_dimension = {row["dimension"]: row for row in doc["dimensions"]}
+
+    genuine_gaps = {"Performance", "API versioning", "Licensing", "Mobile"}
+    for name in genuine_gaps:
+        assert by_dimension[name]["covered"] is False
+        assert by_dimension[name]["lane_count"] == 0
+
+    # Accessibility has no DEDICATED seat (still true) but IS covered, via the real
+    # `accessibility` lane filed under "Interface conformance" -- the fix this test locks
+    # in. Reporting it inside `genuine_gaps` above would be the exact bug that shipped
+    # and got caught in review.
+    accessibility = by_dimension["Accessibility"]
+    assert accessibility["covered"] is True
+    assert accessibility["dedicated_seat"] is False
+    assert accessibility["match_kind"] == "lane_override"
+    assert accessibility["lane_count"] == 1
+    assert accessibility["lane_ids"] == ["accessibility"]
 
 
 def test_coverage_with_repo_is_refused(capsys):
