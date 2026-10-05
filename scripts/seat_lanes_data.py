@@ -713,6 +713,116 @@ SCOPES: dict[str, tuple[str, ...]] = {
 }
 
 
+# ── Which of the four investigation techniques each lane requires ───────────────
+#
+# WHAT'S BEING ANNOTATED. The lane schema already says what to ask; nothing said how to
+# investigate it well on code nobody has seen before. Four techniques made a recent round
+# of reviews effective and lived nowhere but in reviewers' own heads -- enumerate every
+# paired site before answering a shared-predicate question, prove a guard's break with a
+# counterfactual rather than trusting it reads right, fetch a tool's own current docs
+# rather than answer from training-data memory, verify every cited precedent/record by
+# actually opening it. `core.work_orders.review_answers.METHOD_VOCABULARY` is the closed
+# set; this table says which lanes genuinely need which, and `validate_answers` refuses a
+# submission that is missing the matching structured evidence for one its lane requires.
+#
+# KEYED BY THE RENDERED LANE ID, not by seat -- unlike STANDARDS and SCOPES, which are
+# seat-level facts (a lane keeps its declaring seat's standards/scope even across a
+# merge). A technique is a property of the SPECIFIC QUESTION a lane asks, not of the seat
+# holding it: `seat()` already lets one seat hold two lanes with different enforcement,
+# and tying this to the seat would force them to agree on techniques they have no reason
+# to share.
+#
+# HONEST, NOT PADDED. A lane with no plausible connection to any of the four gets no
+# entry here at all (absence means "nothing required", same as absence from STANDARDS or
+# SCOPES) rather than a list padded for symmetry. Four of the twenty-six lanes -- the
+# Chair (grades already-produced findings, not fresh investigation), Mission-domain
+# consequence (an external judgement about use, not a code technique), and
+# docs-style-and-attribution (a DETECTOR lane: `convene()` runs it directly and no
+# reviewer is ever dispatched it to answer, so a requirement here would bind nobody) --
+# genuinely connect to none of the four and are left out rather than forced in.
+METHOD_REQUIREMENTS: dict[str, tuple[str, ...]] = {
+    # Literally about two sites deciding one question, and its own precedent is a
+    # reproduced CONTROL (a disabled account proven through) -- the technique's own
+    # textbook case.
+    "the-other-half-enforced-by-nothing": ("enumerate_paired_sites", "prove_the_break"),
+    # "Mechanisms X AND Y" is an enumeration of every mechanism a claim depends on; the
+    # contract's own citation (the ADR point naming one of them) must be opened and
+    # checked, not trusted to say what the lane assumes.
+    "a-contract-that-names-one-of-two-mechanisms": (
+        "enumerate_paired_sites",
+        "verify_cited_records",
+    ),
+    # Tracing from a producer to EVERY possible reader (including a non-Python one) is
+    # the same enumeration move as paired sites, turned on consumers instead of predicates
+    # -- the lane's own `measurement` performed exactly this enumeration at scale.
+    "a-produced-value-with-no-reader": ("enumerate_paired_sites",),
+    # Comparing a producer's whole vocabulary against every consumer branch requires
+    # enumerating both sides, not just the one branch the diff happens to touch.
+    "a-status-the-far-end-does-not-handle": ("enumerate_paired_sites",),
+    # The canonical prove_the_break lane -- its own question IS "show me it going red".
+    "a-test-that-cannot-fail": ("prove_the_break",),
+    # The Cartographer's own precedent is built from reading `tarfile`'s OWN documented
+    # side channels (fetch_authoritative_docs), building adversarial archives that prove
+    # the guard breaks (prove_the_break), and its `measurement` enumerates every format's
+    # production sites one by one (enumerate_paired_sites) -- all three are load-bearing
+    # in the one precedent that created this lane.
+    "a-channel-outside-the-accounting": (
+        "enumerate_paired_sites",
+        "prove_the_break",
+        "fetch_authoritative_docs",
+    ),
+    # "Does reverting the fix actually turn the check red" is prove_the_break verbatim.
+    "evidence-referee": ("prove_the_break",),
+    # Re-checking a finding means re-confirming a previously cited record still holds,
+    # not demonstrating a fresh break -- the technique this seat's whole question IS.
+    "reviewer-s-reviewer": ("verify_cited_records",),
+    # The largest theme on the bench, and its own precedent (a disabled account's JWT
+    # resurrected) requires checking the issuance site against the revocation site
+    # (paired sites) and demonstrating a revoked principal still gets in (prove_the_break).
+    "authz-and-identity": ("enumerate_paired_sites", "prove_the_break"),
+    # "The wrong mode or the wrong scope" is only wrong against what the secret store's
+    # OWN documentation says a condition should look like -- ClusterSecretStore's options
+    # are not reconstructable from memory.
+    "secrets-and-data-at-rest": ("fetch_authoritative_docs",),
+    "supply-chain-and-provenance": ("fetch_authoritative_docs",),
+    "cloud-iam-and-iac": ("fetch_authoritative_docs",),
+    # Blast radius is "what does prune remove that nobody listed" -- enumerating the full
+    # live inventory against the declared one -- checked against the GitOps tool's own
+    # documented prune/self-heal semantics.
+    "gitops-and-rollout-safety": ("enumerate_paired_sites", "fetch_authoritative_docs"),
+    # Version-format law is per-ecosystem (Apple's CFBundleShortVersionString, SemVer) and
+    # has to be read from that ecosystem's own current spec, not remembered.
+    "release-and-version-model": ("fetch_authoritative_docs",),
+    # "Forward AND back" and "every invariant afterwards" are proved by actually running
+    # the migration both directions and checking every constraint, not by reading the SQL.
+    "data-and-migration": ("enumerate_paired_sites", "prove_the_break"),
+    # "A token bypassed for a raw value" is a second copy of a decision (paired sites);
+    # "never reached the browser" is proved by an actual build, not a diff read.
+    "design-system-conformance": ("enumerate_paired_sites", "prove_the_break"),
+    # Keyboard/screen-reader operability is demonstrated, not inferred, and the ARIA
+    # accessible-name computation it is measured against is read from the WAI-ARIA spec
+    # itself, not remembered.
+    "accessibility": ("prove_the_break", "fetch_authoritative_docs"),
+    # "Looks live and is dead" is proved by actually driving the control.
+    "frontend-behavior-and-payload": ("prove_the_break",),
+    # "Only what the docs say" means literally running the documented commands from a
+    # clean box (prove_the_break) against the actual POSIX/GNU conventions text it is
+    # measured on (fetch_authoritative_docs), not assuming the help text is right.
+    "cli-and-operator-ergonomics": ("fetch_authoritative_docs", "prove_the_break"),
+    # What a cap or truncation does TO THE MODEL is read from the runtime/provider's own
+    # documented behaviour and then demonstrated by actually driving it with the capped
+    # input, not inferred from the number alone.
+    "agent-and-plugin-runtime": ("fetch_authoritative_docs", "prove_the_break"),
+    # Contradiction is inherently about more than one document (enumerate every other
+    # canonical document that might also govern the same act), and whether a citation
+    # actually supports the claim it is cited for is the technique's own definition.
+    "governance-canon-and-board": ("enumerate_paired_sites", "verify_cited_records"),
+    # "A second copy of a rule that must agree with the first" is paired sites by
+    # definition; whether dead code is truly unreachable is proved, not asserted.
+    "code-quality-and-structure": ("enumerate_paired_sites", "prove_the_break"),
+}
+
+
 # ── Per-seat model ────────────────────────────────────────────────────────────
 #
 # KEYED BY THE FINAL SEAT, unlike STANDARDS and SCOPES above. Those are lane-level facts
@@ -1411,6 +1521,9 @@ def _block(lane_id: str, seat: str, spec) -> str:
         if table.get(seat):
             lines.append(f"    {key}:")
             lines += [f"      - {json.dumps(v)}" for v in table[seat]]
+    if METHOD_REQUIREMENTS.get(lane_id):
+        lines.append("    method_requirements:")
+        lines += [f"      - {json.dumps(v)}" for v in METHOD_REQUIREMENTS[lane_id]]
     kind, value = enforcement
     if kind == "detector" and lane_id in DEFERS:
         lines.append("    defers:")

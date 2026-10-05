@@ -625,6 +625,39 @@ rules:
       considered it" identical. Measured before choosing the rule: flagging compound
       questions textually would have fired on 21 of 30 lanes, because a setup sentence
       followed by a question is this registry's house style.
+  - id: a-lane-requiring-a-technique-is-answered-with-it
+    statement: >
+      A review lane's `method_requirements` names which of enumerate_paired_sites,
+      prove_the_break, fetch_authoritative_docs and verify_cited_records a good answer to
+      it needs. An answer to a lane requiring one is refused unless it carries the
+      matching structured evidence -- paired_sites, counterfactual, docs_consulted,
+      citations_verified -- not a restated claim that the technique was used.
+    source: core/work_orders/review_answers.py
+    enforced_by:
+      - core/gates/review_lane_registry.py
+      - tests/unit/test_review_answers.py::test_enumerate_paired_sites_refuses_a_single_site
+      - tests/unit/test_review_answers.py::test_prove_the_break_refuses_a_pass_with_no_counterfactual
+      - tests/unit/test_review_answers.py::test_prove_the_break_does_not_apply_to_a_finding
+      - tests/unit/test_review_answers.py::test_fetch_authoritative_docs_refuses_with_no_docs_consulted
+      - tests/unit/test_review_answers.py::test_verify_cited_records_refuses_when_evidence_cites_nothing_confirmed
+      - tests/unit/test_review_answers.py::test_a_lane_with_no_method_requirements_is_unaffected
+      - tests/unit/test_review_answers.py::test_record_answers_defaults_method_requirements_from_the_real_registry
+      - tests/unit/test_review_lane_methods.py::test_the_gate_rejects_an_unknown_method_requirement
+    note: >
+      The registry already said WHAT to ask; nothing said HOW to investigate it well on
+      code nobody had seen before. Four techniques made a recent round of reviews
+      effective and lived only in reviewers' own heads -- enumerate every site deciding
+      the same question before answering it, demonstrate the counterfactual rather than
+      trust a guard reads right, fetch a tool's own current documentation rather than
+      answer from training-data memory, open every cited precedent rather than take a
+      citation on trust. Writing them into skill prose would put them exactly where the
+      operator has already said guidance goes to die, so this extends the SAME
+      answer-shape contract that already refuses a pass or finding carrying no
+      reproduction (`a-review-lane-answers-by-testing`, above) rather than inventing a
+      second, softer mechanism. A lane that requires none of the four -- most of them --
+      is unaffected; `method_requirements` is a closed vocabulary the registry gate
+      checks, same as `seat` and `model`, so a lane cannot require evidence for a
+      technique nothing is prepared to check.
   - id: work-order-declares-module-boundary
     statement: >
       Every work order must declare the paths it owns, so an edit is attributed by a

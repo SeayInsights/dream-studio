@@ -181,11 +181,22 @@ one answer per lane:
   "reproduction": {"command": "python -m pytest /tmp/t.py -q", "exit_code": 1},
   "evidence": "what the output shows, and file:line of the defect",
   "why": "one or two sentences tying it to the lane's signature",
-  "check": "TEST-CHECK: tests/unit/test_x.py::test_y   (findings only, optional)"}]}
+  "check": "TEST-CHECK: tests/unit/test_x.py::test_y   (findings only, optional)",
+  "counterfactual": {"command": "mutate the guard, rerun", "exit_code": 0}}]}
 ```
 
 **DON'T** answer the specialist lanes yourself in one pass. Until the reviewers existed
 the table ended at "N lane(s) need a person", and that is exactly what happened.
+
+Some lanes also name `method_requirements` (`canonical/review_lanes.yml`) -- the
+investigation techniques a good answer to THAT lane needs, beyond reading the diff:
+`enumerate_paired_sites` (list every site deciding the same question, not just the one
+the diff touched, as `paired_sites`), `prove_the_break` (a `pass` names the mutation or
+bypassed input that would fail the guard, as `counterfactual` -- the lane above is this
+technique's own textbook case), `fetch_authoritative_docs` (name the document or URL
+actually fetched, as `docs_consulted`), `verify_cited_records` (confirm every record
+`evidence` cites was opened, as `citations_verified`). A lane naming none of the four --
+most of them -- asks for none of these fields.
 
 **3. Record what came back.**
 
@@ -195,9 +206,10 @@ ds review --record answers.json --reviewer review-gate-and-test-integrity --work
 
 The door **re-runs every reproduction** in a fresh container from the round's image and
 refuses any answer whose exit code does not match what the reviewer reported. It also
-refuses a lane the reviewer was not dispatched, a finding with no evidence, and a pass or
-finding with no reproduction. With Docker down it records nothing. It reports which of
-that reviewer's lanes are **still unanswered**.
+refuses a lane the reviewer was not dispatched, a finding with no evidence, a pass or
+finding with no reproduction, and an answer to a lane requiring one of the four
+techniques above that carries no matching evidence for it. With Docker down it records
+nothing. It reports which of that reviewer's lanes are **still unanswered**.
 
 **4. Ask whether the review still holds the work order.**
 
