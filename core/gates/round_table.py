@@ -33,11 +33,11 @@ import json
 import shlex
 import os
 import subprocess
-from fnmatch import fnmatch
 import sys
 from pathlib import Path
 from time import monotonic
 
+import pathspec
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -332,20 +332,35 @@ def lane_is_relevant(lane: dict, paths: list[str]) -> bool:
     A lane with no scope fires unconditionally. Absence means always-relevant, not forgotten --
     the cost of wrongly hiding a lane is a defect nobody was asked about, while the cost of
     wrongly showing one is a line of output, so the default leans toward showing.
+
+    MATCHED WITH GITIGNORE SEMANTICS, not stdlib `fnmatch`. `fnmatch` has no real concept of
+    `**` (recursive directory globbing) -- it is a single-segment wildcard engine wearing a
+    multi-segment pattern's clothes, and a single `*` happens to also span `/` in its
+    translated regex, which papers over the gap for some shapes and silently misauthors
+    others. A lane scoped to `chart/**` was meant to mean "the chart directory at the repo
+    root", but fnmatch's looseness ALSO matched `some/other/chart/**` wherever that
+    directory name recurred -- an unanchored false positive, not a feature. A real Helm
+    layout nests its chart under a package directory (`uds/chart/templates/deployment.yaml`),
+    which an anchored `chart/**` was never going to reach either way; the fix for THAT shape
+    is `**/chart/**` in the registry's own authored scope, and this function's job is to get
+    `**` right so that authoring choice is the only thing left to get right.
+    `pathspec.GitIgnoreSpec` is the same matcher `.gitignore` itself uses (it replicates
+    git's actual handling, including edge cases where git's behavior differs from its own
+    documentation -- see the class's own docstring): `**/x` matches a top-level `x` without
+    a hand-patched fallback, `**` in the middle of a pattern matches zero or more path
+    segments, and a bare `X/**` is anchored to the repo root rather than matching `X`
+    wherever it recurs. Not `PathSpec.from_lines("gitwildmatch", ...)` -- that name is a
+    deprecated backward-compat alias in pathspec >= 1.0 for the same underlying pattern
+    class `GitIgnoreSpec` uses by default; this calls the current, non-deprecated entry
+    point directly rather than the name its own deprecation warning says to stop using.
     """
     patterns = lane.get("scope") or []
     if not patterns:
         return True
     if not paths:
         return True
-    for pattern in patterns:
-        for path in paths:
-            if fnmatch(path, pattern) or fnmatch(path, f"*/{pattern}"):
-                return True
-            # `**/x` should also match a top-level `x`, which fnmatch does not do.
-            if pattern.startswith("**/") and fnmatch(path, pattern[3:]):
-                return True
-    return False
+    spec = pathspec.GitIgnoreSpec.from_lines(patterns)
+    return any(spec.match_file(path) for path in paths)
 
 
 def convene(

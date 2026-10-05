@@ -24,12 +24,16 @@ certifi==2026.5.20
     #   httpx
 click==8.4.1
     # via uvicorn
+cloudpickle==3.1.2
+    # via joblib
 colorama==0.4.6
     # via click
-et-xmlfile==2.0.0
-    # via openpyxl
+duckdb==1.5.6
+    # via -r requirements.txt
 fastapi==0.136.3
     # via -r requirements.txt
+formulaic==1.2.2
+    # via statsmodels
 h11==0.16.0
     # via
     #   httpcore
@@ -42,26 +46,46 @@ idna==3.16
     # via
     #   anyio
     #   httpx
+interface-meta==2.0.1
+    # via formulaic
 jinja2==3.1.6
     # via -r requirements.txt
+joblib==1.6.0
+    # via scikit-learn
 jsonschema==4.26.0
     # via -r requirements.txt
 jsonschema-specifications==2025.9.1
     # via jsonschema
-lxml==6.1.1
-    # via python-pptx
 markupsafe==3.0.3
     # via jinja2
+narwhals==2.27.0
+    # via
+    #   formulaic
+    #   scikit-learn
 networkx==3.6.1
     # via -r requirements.txt
 numpy==2.4.6
-    # via pandas
-openpyxl==3.1.5
-    # via -r requirements.txt
+    # via
+    #   -r requirements.txt
+    #   formulaic
+    #   pandas
+    #   patsy
+    #   scikit-learn
+    #   scipy
+    #   statsmodels
+packaging==26.3
+    # via
+    #   patsy
+    #   statsmodels
 pandas==2.3.3
+    # via
+    #   -r requirements.txt
+    #   formulaic
+    #   statsmodels
+pathspec==1.1.1
     # via -r requirements.txt
-pillow==12.2.0
-    # via python-pptx
+patsy==1.0.3
+    # via statsmodels
 psutil==7.2.2
     # via -r requirements.txt
 pydantic==2.13.4
@@ -73,8 +97,6 @@ pydantic-core==2.46.4
 python-dateutil==2.9.0.post0
     # via pandas
 python-multipart==0.0.29
-    # via -r requirements.txt
-python-pptx==1.0.2
     # via -r requirements.txt
 pytz==2026.2
     # via pandas
@@ -90,17 +112,29 @@ rpds-py==0.30.0
     # via
     #   jsonschema
     #   referencing
+scikit-learn==1.9.1
+    # via -r requirements.txt
+scipy==1.18.1
+    # via
+    #   -r requirements.txt
+    #   formulaic
+    #   scikit-learn
+    #   statsmodels
 six==1.17.0
     # via python-dateutil
 starlette==1.1.0
     # via fastapi
+statsmodels==0.15.0
+    # via -r requirements.txt
+threadpoolctl==3.7.0
+    # via scikit-learn
 typing-extensions==4.15.0
     # via
     #   anyio
     #   fastapi
+    #   formulaic
     #   pydantic
     #   pydantic-core
-    #   python-pptx
     #   referencing
     #   starlette
     #   typing-inspection
@@ -112,5 +146,5 @@ tzdata==2026.2
     # via pandas
 uvicorn==0.48.0
     # via -r requirements.txt
-xlsxwriter==3.2.9
-    # via python-pptx
+wrapt==2.5.0
+    # via formulaic

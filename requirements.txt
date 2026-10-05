@@ -42,6 +42,12 @@ python-multipart>=0.0.6
 # regex: pinned to satisfy dateparser>=1.4.0 transitive requirement
 regex>=2024.9.11
 
+# pathspec: gitignore-style pattern matching for review-lane scope resolution
+# (core/gates/round_table.py::lane_is_relevant). Was already present as an undeclared
+# transitive dependency of black; declared directly because production code now
+# imports it rather than relying on a dev tool's incidental install.
+pathspec>=1.1
+
 # LLM safety scanners: giskard, rebuff, llm-guard
 # Real libraries not yet evaluated for Python 3.12 compatibility.
 # Stub implementations in guardrails/scanners/ provide equivalent
