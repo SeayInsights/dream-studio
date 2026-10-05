@@ -21,6 +21,14 @@ and convening the whole bench over their local working tree while printing a rep
 will read as "PR 812 reviewed" is the substitution this module exists to refuse. So a
 `gh` that is missing, unauthenticated, or pointed at an unknown PR exits non-zero and
 says which.
+
+WHAT `--coverage` ADDS. The 26 lanes above are a record of review history, not a designed
+map of what deserves review, and whole domains (performance, API versioning, licensing,
+accessibility, mobile) have no SEAT of their own -- invisibly, because nothing enumerated
+the domains this bench does not have a seat for next to the ones it does. A domain with no
+seat can still have a real lane filed under an unrelated one, though (accessibility does);
+`core/gates/review_dimension_coverage.py` reports that too, rather than a false zero.
+Convenes nothing, invents no lane, and always reads Dream Studio's own registry.
 """
 
 from __future__ import annotations
@@ -166,6 +174,19 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         action="store_true",
         help="List every seat's pinned provider/model/effort override.",
     )
+    loop.add_argument(
+        "--coverage",
+        action="store_true",
+        help=(
+            "Report review-dimension coverage: which of the 15 declared review"
+            " dimensions (the 10 seats this bench convenes, plus 5 with no seat of"
+            " their own -- performance, API versioning, licensing, accessibility,"
+            " mobile) have a real lane backing them, whether by a dedicated seat or by"
+            " a specific lane filed under an unrelated one, and which are genuine gaps"
+            " with none. Convenes nothing and always reports on Dream Studio's own"
+            " canonical/review_lanes.yml, never --repo's."
+        ),
+    )
 
     review_cmd.add_argument(
         "--provider",
@@ -297,6 +318,8 @@ def dispatch(
         from core.config import seat_providers
 
         return _print({"ok": True, "seat_providers": seat_providers.all_seat_providers()})
+    if getattr(args, "coverage", None):
+        return _show_coverage(args)
     # The doors about a review that already happened convene nothing: convening the bench
     # to answer them would be a report about one change set wearing another's questions.
     if getattr(args, "record", None):
@@ -374,6 +397,12 @@ def _companion_flags(args: argparse.Namespace) -> str | None:
         return "--force-new-round only means something with --dispatch"
     if getattr(args, "set_seat_provider", None) and not getattr(args, "provider", None):
         return "--set-seat-provider needs --provider"
+    if getattr(args, "coverage", None) and getattr(args, "repo", None):
+        return (
+            "--coverage always reports on Dream Studio's own canonical/review_lanes.yml,"
+            " never --repo's -- the 15 declared dimensions are this bench's own, not a"
+            " generic per-project report. Drop --repo."
+        )
     return None
 
 
@@ -635,6 +664,14 @@ def _record_answers(args: argparse.Namespace, *, db_path: Path, source_root: Pat
     # Accepted answers are stored even beside refused ones -- dropping them would punish
     # the lanes answered properly -- but the submission is not a complete review.
     return 0 if result["complete"] else 1
+
+
+def _show_coverage(args: argparse.Namespace) -> int:
+    from core.gates.review_dimension_coverage import render, run
+
+    result = run()
+    print(json.dumps(result, indent=2, sort_keys=True) if args.json else render(result))
+    return 1 if result["status"] == "fail" else 0
 
 
 def _show_findings(args: argparse.Namespace, *, db_path: Path) -> int:
