@@ -54,7 +54,12 @@ from .claude_code_fileops import (
     _prune_empty_ancestors,
 )
 from .claude_code_launcher import _first_run_guide, _get_ds_version, _write_global_launcher
-from .claude_code_shared import _REPO_ROOT, _app_python, _python_cmd
+from .claude_code_shared import (
+    _REPO_ROOT,
+    _app_python,
+    _compute_file_hash_chunked,
+    _python_cmd,
+)
 from .claude_code_fileops import (
     MODULE_FOR_HOOK_FILE,
     RETIRED_STUB_MARKER,
@@ -119,6 +124,30 @@ def _retired_stub_for(rel: str) -> str:
 
 
 _is_retired_stub = is_retired_stub
+
+
+def already_on_disk(op: FileOp) -> bool:
+    """Whether *op*'s target already holds exactly what *op* would write.
+
+    The one comparison the executor and the dry run share. It reads the file: a recorded
+    manifest hash says what was written once, not what is there now, and `ds uninstall`
+    (or an operator) may have changed the file since. Text targets are read back as text
+    (atomic_write writes platform newlines) and compared with the content to be written;
+    copies compare bytes with their source.
+    """
+    if not op.target.is_file():
+        return False
+    try:
+        if op.source_content is not None:
+            # Compared as text, both sides newline-normalized: what would be written.
+            return op.target.read_text(encoding="utf-8") == op.source_content
+        if op.source_path is not None:
+            return _compute_file_hash_chunked(op.target) == _compute_file_hash_chunked(
+                op.source_path
+            )
+    except (OSError, UnicodeDecodeError):
+        return False
+    return False
 
 
 def _post_install_validate(config_root: Path, settings_path: Path) -> dict[str, Any]:
@@ -629,6 +658,12 @@ class ClaudeCodeInstaller(InstallerBase):
                 )
             )
 
+        # A path this plan writes is never also deleted by it. The skill sweep removes
+        # files a skill directory does not ship, and the workflow contract is installed
+        # into one: deleted first and then (manifest says "unchanged") not written, it
+        # vanished on every second install.
+        written = {str(op.target) for op in ops if op.op not in ("delete", "skip", "keep")}
+        ops = [op for op in ops if not (op.op == "delete" and str(op.target) in written)]
         return FileOpPlan(ops=ops, tool="claude_code", scope=self.scope)
 
     def _stale_hook_copy_ops(
@@ -844,9 +879,10 @@ class ClaudeCodeInstaller(InstallerBase):
                 continue
 
             target_str = str(op.target)
-            is_unchanged = bool(
-                manifest_hash_map.get(target_str) == op.source_hash and op.source_hash
-            )
+            # Unchanged means the file on disk already holds this content -- not that the
+            # manifest recorded it once. After `ds uninstall` the recorded hash still
+            # matched and the reinstall wrote nothing back.
+            is_unchanged = already_on_disk(op)
 
             # Categorize op
             parts = list(Path(op.target).parts)
