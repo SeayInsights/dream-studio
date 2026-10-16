@@ -407,6 +407,36 @@ def reset_warnings():
     yield
 
 
+_SESSION_HOME = (
+    _pathlib.Path(_os.environ["DREAM_STUDIO_HOME"])
+    if _os.environ.get("DREAM_STUDIO_HOME")
+    else None
+)
+
+
+@pytest.fixture(autouse=True)
+def install_markers_do_not_leak():
+    """An install marker one test leaves in the session's shared home marks it for all
+    the rest.
+
+    `state/installed-version` or an integration manifest makes a home "installed", and
+    the authority guard then refuses to create the configured authority there -- for
+    every later test that points DREAM_STUDIO_DB_PATH at a fresh temporary database.
+    Markers a test creates in the session home are removed after it; the real
+    ~/.dream-studio is never touched.
+    """
+    home = _SESSION_HOME
+    if home is None or home.resolve() == (_pathlib.Path.home() / ".dream-studio").resolve():
+        yield
+        return
+    from core.config.sqlite_bootstrap import _install_markers
+
+    before = set(_install_markers(home))
+    yield
+    for marker in set(_install_markers(home)) - before:
+        marker.unlink(missing_ok=True)
+
+
 @pytest.fixture(autouse=True)
 def default_verify_mock(monkeypatch):
     """WO-GRADER-ADVERSARIAL: independent review is default-on at close, so any

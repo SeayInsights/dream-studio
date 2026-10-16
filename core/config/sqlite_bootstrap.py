@@ -175,19 +175,45 @@ class AuthorityRefusedError(RuntimeError):
 #: that has had one (scoped to that one file: a value of "1" or another path does nothing).
 CREATE_AUTHORITY_ENV = "DREAM_STUDIO_CREATE_AUTHORITY"
 
-#: Authorities already seen to carry a schema in this process (they cannot lose it).
-_VERIFIED_AUTHORITIES: set[str] = set()
+#: Authorities already seen to carry a schema in this process, by FILE identity
+#: (st_dev, st_ino), not by path: a long-running process (`ds mcp serve`, the dashboard)
+#: whose authority is replaced at the same path by an empty file must check the new file.
+_VERIFIED_AUTHORITIES: dict[str, tuple[int, int]] = {}
+
+
+def _norm(path: str | Path) -> str:
+    """One spelling per file: resolved, `..` collapsed, and case-folded where the
+    filesystem is case-insensitive."""
+
+    return os.path.normcase(os.path.realpath(os.path.abspath(str(path))))
 
 
 def _owning_home(db_path: Path) -> Path | None:
-    """The Dream Studio home whose authority *db_path* is (<home>/state/studio.db).
+    """The Dream Studio home whose authority *db_path* is, or None.
+
+    The authority is `<home>/state/studio.db` however the path is spelled (case,
+    `..`), and also whatever path this process is configured to use as its authority
+    (DREAM_STUDIO_DB_PATH, or home_dir()/state/studio.db), owned by home_dir(). Matching
+    the TEXT `state/studio.db` let `STATE/Studio.db`, `state/x/../studio.db` and a
+    relocated DREAM_STUDIO_DB_PATH create a fresh authority in a home with an install.
 
     Only the authority itself: files.db and the other state databases are created on
     first use in an installed home, and that is correct.
     """
 
-    if db_path.name == "studio.db" and db_path.parent.name == "state":
-        return db_path.parent.parent
+    real = Path(os.path.realpath(os.path.abspath(str(db_path))))
+    if os.path.normcase(real.name) == os.path.normcase("studio.db") and os.path.normcase(
+        real.parent.name
+    ) == os.path.normcase("state"):
+        return real.parent.parent
+    from core.config.paths import home_dir
+
+    home = home_dir()
+    configured = [home / "state" / "studio.db"]
+    if os.environ.get("DREAM_STUDIO_DB_PATH"):
+        configured.append(Path(os.environ["DREAM_STUDIO_DB_PATH"]).expanduser())
+    if any(_norm(candidate) == _norm(real) for candidate in configured):
+        return home
     return None
 
 
@@ -302,14 +328,17 @@ def assert_may_create_database(db_path: str | Path) -> None:
     db_path = Path(db_path)
     exists = db_path.exists()
     if exists:
-        key = str(db_path.resolve())
-        if key in _VERIFIED_AUTHORITIES:
+        key = _norm(db_path)
+        stat = db_path.stat()
+        identity = (stat.st_dev, stat.st_ino)
+        if stat.st_size > 0 and _VERIFIED_AUTHORITIES.get(key) == identity:
             return
+        _VERIFIED_AUTHORITIES.pop(key, None)
         home = _owning_home(db_path)
         if home is None or not _install_markers(home):
             return
         if has_authority_schema(db_path):
-            _VERIFIED_AUTHORITIES.add(key)
+            _VERIFIED_AUTHORITIES[key] = identity
             return
     if not migration_files():
         raise AuthorityRefusedError(
@@ -318,7 +347,7 @@ def assert_may_create_database(db_path: str | Path) -> None:
             "install is incomplete; reinstall it (`ds self-install --execute`) before running commands."
         )
     wanted = os.environ.get(CREATE_AUTHORITY_ENV)
-    if wanted and Path(wanted).expanduser().resolve() == db_path.resolve():
+    if wanted and _norm(Path(wanted).expanduser()) == _norm(db_path):
         return
     home = _owning_home(db_path)
     if home is None:
