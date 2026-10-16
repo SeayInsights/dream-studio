@@ -109,8 +109,8 @@ def _authority_violations(enforcement, session: dict) -> list[str]:
                     "Product source was edited under work orders whose module boundaries both"
                     f" cover it ({others}) but no authority write was recorded this session for"
                     " any of them. A write to ANY ONE satisfies this. Mark completed tasks:"
-                    f" py -m interfaces.cli.ds work-order tasks {markable[0]}"
-                    f" then py -m interfaces.cli.ds work-order task-done {markable[0]} <task_id>."
+                    f" ds work-order tasks {markable[0]}"
+                    f" then ds work-order task-done {markable[0]} <task_id>."
                 )
             else:
                 violations.append(
@@ -119,7 +119,7 @@ def _authority_violations(enforcement, session: dict) -> list[str]:
                     " any of them. Every task on all of them is already complete, so there is"
                     " nothing to mark done. If this edit is NEW work, register it against the"
                     " one it belongs to:"
-                    f" py -m interfaces.cli.ds work-order add-task {claimants[0]} --title ..."
+                    f" ds work-order add-task {claimants[0]} --title ..."
                     " --acceptance TEST-CHECK:... A write to ANY ONE satisfies this."
                 )
         else:
@@ -188,19 +188,19 @@ def _authority_violations(enforcement, session: dict) -> list[str]:
                     f" {wo_id} but no authority write was recorded this session."
                     " Every task on it is already complete, so there is nothing to mark"
                     " done. If this edit is NEW work, register it:"
-                    f" py -m interfaces.cli.ds work-order add-task {wo_id} --title ..."
+                    f" ds work-order add-task {wo_id} --title ..."
                     " --acceptance TEST-CHECK:... That records it and satisfies this."
                     " If the work is finished, close it once its gates pass:"
-                    f" py -m interfaces.cli.ds work-order close {wo_id}."
+                    f" ds work-order close {wo_id}."
                 )
             else:
                 violations.append(
                     "Product source was edited under work order"
                     f" {wo_id} but no authority write was recorded this session."
                     " Mark completed tasks:"
-                    f" py -m interfaces.cli.ds work-order tasks {wo_id}"
-                    f" then py -m interfaces.cli.ds work-order task-done {wo_id} <task_id>"
-                    f" (or close: py -m interfaces.cli.ds work-order close {wo_id})."
+                    f" ds work-order tasks {wo_id}"
+                    f" then ds work-order task-done {wo_id} <task_id>"
+                    f" (or close: ds work-order close {wo_id})."
                 )
     return violations
 
@@ -239,7 +239,7 @@ def _docstore_violations(enforcement, session: dict) -> list[str]:
                     f"Documentation artifact {path} was edited this session, has no"
                     " files.db record, and is no longer on disk, so it cannot be"
                     " registered as-is. If it was renamed, register the current path:"
-                    ' py -m interfaces.cli.ds files add "<new path>"'
+                    ' ds files add "<new path>"'
                     f" --project-id {project_id}. If it was deleted deliberately, this"
                     f" session has nothing left to record for it: the edit stays on the"
                     " session record, so this will block up to"
@@ -248,7 +248,7 @@ def _docstore_violations(enforcement, session: dict) -> list[str]:
             else:
                 violations.append(
                     f"Documentation artifact {path} has no files.db record."
-                    f' Register it: py -m interfaces.cli.ds files add "{path}"'
+                    f' Register it: ds files add "{path}"'
                     f" --project-id {project_id}"
                 )
     return violations

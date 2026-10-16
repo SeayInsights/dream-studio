@@ -730,12 +730,12 @@ runtime/hooks/meta/on-edit-dispatch.py|30|bare-except-pass
 runtime/hooks/meta/on-edit-enforce.py|103|bare-except-pass
 runtime/hooks/meta/on-edit-enforce.py|157|bare-except-pass
 runtime/hooks/meta/on-edit-enforce.py|193|bare-except-pass
-runtime/hooks/meta/on-edit-enforce.py|277|bare-except-pass
-runtime/hooks/meta/on-edit-enforce.py|300|bare-except-pass
-runtime/hooks/meta/on-edit-enforce.py|330|falsy-return
-runtime/hooks/meta/on-edit-enforce.py|343|bare-except-pass
+runtime/hooks/meta/on-edit-enforce.py|274|bare-except-pass
+runtime/hooks/meta/on-edit-enforce.py|297|bare-except-pass
+runtime/hooks/meta/on-edit-enforce.py|327|falsy-return
+runtime/hooks/meta/on-edit-enforce.py|340|bare-except-pass
 runtime/hooks/meta/on-edit-enforce.py|36|bare-except-pass
-runtime/hooks/meta/on-edit-enforce.py|379|bare-except-pass
+runtime/hooks/meta/on-edit-enforce.py|376|bare-except-pass
 runtime/hooks/meta/on-first-run.py|16|bare-except-pass
 runtime/hooks/meta/on-first-run.py|42|bare-except-pass
 runtime/hooks/meta/on-first-run.py|61|bare-except-pass

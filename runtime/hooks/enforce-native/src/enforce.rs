@@ -177,7 +177,7 @@ pub fn enforce(env: &Env, tier: &str, payload: &Value, out: &mut dyn std::io::Wr
         }
 
         if kind == PathKind::DocstoreOnly {
-            let reason = "[dream-studio] Zero-disk .planning: working notes, specs, plans, and reports are authored in the files.db docstore, never on disk. Use:\n  py -m interfaces.cli.ds files write \"<name>\" --category planning [--work-order <id>]\n  (read: ds files read <name>  \u{b7}  list: ds files list --category planning)\nOperator escape hatch: set DS_ENFORCE=0 (or run at a lower DS_ENFORCE_TIER).";
+            let reason = "[dream-studio] Zero-disk .planning: working notes, specs, plans, and reports are authored in the files.db docstore, never on disk. Use:\n  ds files write \"<name>\" --category planning [--work-order <id>]\n  (read: ds files read <name>  \u{b7}  list: ds files list --category planning)\nOperator escape hatch: set DS_ENFORCE=0 (or run at a lower DS_ENFORCE_TIER).";
             let decision = apply(tier, "zero_disk_planning", reason, session_id.as_deref(), out);
             return (decision, session_id);
         }
@@ -192,11 +192,11 @@ pub fn enforce(env: &Env, tier: &str, payload: &Value, out: &mut dyn std::io::Wr
             )];
             if let Some(next) = &next {
                 lines.push(format!(
-                    "Run: py -m interfaces.cli.ds work-order start {}  (next: {})",
+                    "Run: ds work-order start {}  (next: {})",
                     next.work_order_id, next.title
                 ));
             }
-            lines.push(format!("Or list work orders: py -m interfaces.cli.ds work-order list {}", project.project_id));
+            lines.push(format!("Or list work orders: ds work-order list {}", project.project_id));
             lines.push("Operator escape hatch: set DS_ENFORCE=0 (or run at a lower DS_ENFORCE_TIER).".to_string());
             let reason = lines.join("\n");
             let decision = apply(tier, "authority_source_edit", &reason, session_id.as_deref(), out);

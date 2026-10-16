@@ -213,7 +213,7 @@ def _enforce(tier: str) -> tuple[str, str | None]:
                 reason = (
                     "[dream-studio] Zero-disk .planning: working notes, specs, plans, and"
                     " reports are authored in the files.db docstore, never on disk. Use:\n"
-                    '  py -m interfaces.cli.ds files write "<name>" --category planning'
+                    '  ds files write "<name>" --category planning'
                     " [--work-order <id>]\n"
                     "  (read: ds files read <name>  ·  list: ds files list --category planning)\n"
                     "Operator escape hatch: set DS_ENFORCE=0 (or run at a lower DS_ENFORCE_TIER)."
@@ -239,13 +239,10 @@ def _enforce(tier: str) -> tuple[str, str | None]:
                 ]
                 if nxt is not None:
                     lines.append(
-                        f"Run: py -m interfaces.cli.ds work-order start {nxt['work_order_id']}"
+                        f"Run: ds work-order start {nxt['work_order_id']}"
                         f"  (next: {nxt['title']})"
                     )
-                lines.append(
-                    "Or list work orders: py -m interfaces.cli.ds work-order list"
-                    f" {project['project_id']}"
-                )
+                lines.append("Or list work orders: ds work-order list" f" {project['project_id']}")
                 lines.append(
                     "Operator escape hatch: set DS_ENFORCE=0 (or run at a lower DS_ENFORCE_TIER)."
                 )
