@@ -177,10 +177,12 @@ class AuthorityRefusedError(RuntimeError):
 #: that has had one (scoped to that one file: a value of "1" or another path does nothing).
 CREATE_AUTHORITY_ENV = "DREAM_STUDIO_CREATE_AUTHORITY"
 
-#: Authorities already seen to carry a schema in this process, by FILE identity
-#: (st_dev, st_ino), not by path: a long-running process (`ds mcp serve`, the dashboard)
-#: whose authority is replaced at the same path by an empty file must check the new file.
-_VERIFIED_AUTHORITIES: dict[str, tuple[int, int]] = {}
+#: Authorities already seen to carry a schema in this process, by FILE STATE
+#: (st_dev, st_ino, st_size, st_mtime_ns), not by path: a long-running process (`ds mcp
+#: serve`, the dashboard) whose authority is replaced at the same path, or truncated and
+#: rewritten in place under the same inode, must check the file again. Any write changes
+#: the key, so a live authority is re-checked (one read-only query) after each change.
+_VERIFIED_AUTHORITIES: dict[str, tuple[int, int, int, int]] = {}
 
 
 def _norm(path: str | Path) -> str:
@@ -416,8 +418,8 @@ def assert_may_create_database(db_path: str | Path) -> None:
     if exists:
         key = _norm(db_path)
         stat = db_path.stat()
-        identity = (stat.st_dev, stat.st_ino)
-        if stat.st_size > 0 and _VERIFIED_AUTHORITIES.get(key) == identity:
+        identity = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+        if _VERIFIED_AUTHORITIES.get(key) == identity:
             return
         _VERIFIED_AUTHORITIES.pop(key, None)
         home = _owning_home(db_path)

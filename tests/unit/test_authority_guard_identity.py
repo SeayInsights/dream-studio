@@ -164,3 +164,53 @@ def test_an_unmarked_home_still_creates_its_authority(tmp_path):
         timeout=300,
     )
     assert out.stdout.strip().splitlines()[-1:] == ["CREATED"], out.stdout + out.stderr[-1500:]
+
+
+def _verified_then(tmp_path, monkeypatch):
+    from core.event_store.connection import _connect
+
+    monkeypatch.setenv("DREAM_STUDIO_APPLY_UNRELEASED", "1")
+    monkeypatch.delenv(CREATE_AUTHORITY_ENV, raising=False)
+    home = tmp_path / "home"
+    (home / "state").mkdir(parents=True)
+    db = home / "state" / "studio.db"
+    bootstrap_database(db)
+    _marked(home)
+    conn = _connect(db)
+    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    conn.close()  # verified once, as a long-running process would
+    for suffix in ("-wal", "-shm"):
+        part = Path(str(db) + suffix)
+        if part.exists():
+            part.unlink()
+    return db, os.stat(db).st_ino
+
+
+def test_an_authority_truncated_in_place_is_refused(tmp_path, monkeypatch):
+    """Same inode, same path: the cache must not take it for the verified file."""
+    from core.event_store.connection import _connect
+
+    db, ino = _verified_then(tmp_path, monkeypatch)
+    with open(db, "r+b") as handle:
+        handle.truncate(0)
+    assert os.stat(db).st_ino == ino
+    with pytest.raises(AuthorityRefusedError):
+        _connect(db).close()
+
+
+def test_an_authority_truncated_then_rewritten_in_place_is_refused(tmp_path, monkeypatch):
+    """Truncated to 0 and a schema-less page written into the same file (non-zero size,
+    same inode): still not the authority that was verified."""
+    from core.event_store.connection import _connect
+
+    db, ino = _verified_then(tmp_path, monkeypatch)
+    with open(db, "r+b") as handle:
+        handle.truncate(0)
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA journal_mode=DELETE")
+    conn.execute("CREATE TABLE stray (x INTEGER)")
+    conn.commit()
+    conn.close()
+    assert os.stat(db).st_ino == ino and os.stat(db).st_size > 0
+    with pytest.raises(AuthorityRefusedError):
+        _connect(db).close()
