@@ -173,7 +173,10 @@ WAL_SIZE_LIMIT_BYTES = int(os.environ.get("DS_WAL_SIZE_LIMIT_BYTES", str(64 * 10
 
 def _connect(db_path: Path | None = None) -> sqlite3.Connection:
     if db_path is not None:
+        from core.config.sqlite_bootstrap import assert_may_create_database
+
         db_path = Path(db_path)
+        assert_may_create_database(db_path)
         db_path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(str(db_path), timeout=30.0)
         conn.row_factory = sqlite3.Row

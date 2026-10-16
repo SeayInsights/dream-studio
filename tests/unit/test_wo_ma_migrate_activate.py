@@ -303,12 +303,16 @@ class TestMigrateActivate:
 
 
 class TestUnreleasedGateStillHolds:
-    def test_unreleased_migration_blocked_on_live_db_without_flag(self, tmp_path: Path) -> None:
+    def test_unreleased_migration_blocked_on_live_db_without_flag(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
         """WO-MS gate: without apply_unreleased=True, unreleased migrations are blocked.
 
         Normal ds commands call run_migrations() without apply_unreleased — the gate
         still prevents auto-apply of anything beyond .released_version on the live DB.
         """
+        # tests/conftest.py opts the session's test home in; this test is about the gate.
+        monkeypatch.delenv("DREAM_STUDIO_APPLY_UNRELEASED", raising=False)
         mdir = tmp_path / "migrations"
         mdir.mkdir()
         _make_migration(mdir, 1, "init")

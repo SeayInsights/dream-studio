@@ -16,12 +16,16 @@ on a feature branch from silently mutating the live authority DB before review:
    version of an authority is the larger of the two. Any migration with a higher
    version is considered unreleased.
 
-2. Unreleased migrations will NOT apply to the live authority DB
-   (~/.dream-studio/state/studio.db) unless ``DREAM_STUDIO_APPLY_UNRELEASED=1``
-   is set. They apply normally to temp/test DBs (any path outside ~/.dream-studio/).
+2. Unreleased migrations will NOT apply to the live authority DB (any database inside
+   the Dream Studio home in use, ``core.config.paths.home_dir()``, or inside the default
+   home) unless ``DREAM_STUDIO_APPLY_UNRELEASED=1`` is set. They apply normally to
+   temp/test DBs.
 
 3. Before the first migration applies to the live authority DB, the current DB
-   is snapshotted to ``~/.dream-studio/state/backups/studio-pre-N-TIMESTAMP.db``.
+   is snapshotted to ``<home>/state/backups/studio-pre-N-TIMESTAMP.db``.
+
+4. A missing authority is never silently re-created in a home that has had an install
+   (``assert_may_create_database``).
 
 For in-dev migration work: use ``bootstrap_database(tmp_path / "studio.db", ...)``
 with an explicit temp path. The gate skips for any non-live-authority DB path.
@@ -121,25 +125,109 @@ def released_migration_version(db_file: str | Path | None = None) -> int:
 
 
 def _is_live_authority_db(db_file: str) -> bool:
-    """True if db_file is the live authority DB under ~/.dream-studio/."""
+    """True if db_file is inside the Dream Studio home in use OR the default home.
+
+    The home in use (home_dir(): DREAM_STUDIO_HOME, `--home`): an authority under
+    `--home X` is as live as the default one, and checking only the default exempted it
+    from the unreleased-migration gate and the pre-migration backup. The default home
+    too: the protection must not follow the variable it protects against, so a run with
+    DREAM_STUDIO_HOME pointed elsewhere still treats the operator's real authority as live.
+    """
 
     if not db_file:
         return False
-    try:
-        Path(db_file).resolve().relative_to((Path.home() / ".dream-studio").resolve())
-        return True
-    except ValueError:
-        return False
+    from core.config.paths import default_home, home_dir
+
+    path = Path(db_file).resolve()
+    return any(path.is_relative_to(home.resolve()) for home in {home_dir(), default_home()})
+
+
+class AuthorityRefusedError(RuntimeError):
+    """Creating this database would silently replace or fake an authority."""
+
+
+#: Set to 1 to create a fresh, empty authority on purpose in a home that has had one.
+CREATE_AUTHORITY_ENV = "DREAM_STUDIO_CREATE_AUTHORITY"
+
+
+def _owning_home(db_path: Path) -> Path | None:
+    """The Dream Studio home whose authority *db_path* is (<home>/state/studio.db).
+
+    Only the authority itself: files.db and the other state databases are created on
+    first use in an installed home, and that is correct.
+    """
+
+    if db_path.name == "studio.db" and db_path.parent.name == "state":
+        return db_path.parent.parent
+    return None
+
+
+def _install_markers(home: Path) -> list[Path]:
+    """Evidence that *home* has held an installed Dream Studio."""
+
+    markers = [home / "state" / "installed-version"]
+    integrations = home / "integrations"
+    if integrations.is_dir():
+        markers.extend(sorted(integrations.rglob("manifest.json")))
+    return [m for m in markers if m.is_file()]
+
+
+def assert_may_create_database(db_path: str | Path) -> None:
+    """Refuse to CREATE a database file whose absence means something went wrong.
+
+    sqlite3.connect() creates a missing file. On 2026-09-23 that is how the operator's
+    authority was replaced: a path resolved to a missing studio.db, a connection quietly
+    created an empty one, the migrations ran on it, and every command from then on read
+    and wrote a database with no projects in it. Nothing looked at the evidence that a
+    real authority had existed. Two refusals, checked only when the file is missing:
+
+    - no migration files at all: the database would be created with no schema (a broken
+      or partial install), and run_migrations() returns early without saying so;
+    - the owning home shows an installed Dream Studio (state/installed-version, or an
+      integration manifest) yet its authority file is gone: restore it, do not replace it.
+
+    A brand-new home (no markers) creates normally. CREATE_AUTHORITY_ENV=1 creates on
+    purpose.
+    """
+
+    db_path = Path(db_path)
+    if db_path.exists():
+        return
+    if not migration_files():
+        raise AuthorityRefusedError(
+            f"Refusing to create {db_path}: no migration files were found under "
+            f"{migrations_dir()}, so the database would have no schema. This Dream Studio "
+            "install is incomplete; reinstall it (`ds self-install`) before running commands."
+        )
+    if os.environ.get(CREATE_AUTHORITY_ENV) == "1":
+        return
+    home = _owning_home(db_path)
+    if home is None:
+        return
+    markers = _install_markers(home)
+    if not markers:
+        return
+    backups = home / "state" / "backups"
+    raise AuthorityRefusedError(
+        f"Refusing to create a new, empty authority at {db_path}: this home has an "
+        f"installed Dream Studio ({', '.join(str(m) for m in markers[:3])}) but its "
+        "authority database is missing. Creating it would silently replace the operator's "
+        f"projects, work orders and history with an empty database. Restore it instead: "
+        f"backups are under {backups} (a directory holding studio.db restores with "
+        f"`ds restore <dir> --execute`; a studio-pre-*.db file is copied to {db_path}). "
+        f"To start a new, empty authority deliberately, set {CREATE_AUTHORITY_ENV}=1."
+    )
 
 
 def _backup_live_db(conn: sqlite3.Connection, db_file: str, current_version: int) -> Path:
     """Snapshot the live authority DB before applying migrations.
 
     Uses the SQLite backup API (not file copy) so WAL state is consistent.
-    Returns the backup path.
+    Returns the backup path. The snapshot lands beside the authority, in
+    <state>/backups, whichever home that authority belongs to.
     """
 
-    backup_dir = Path.home() / ".dream-studio" / "state" / "backups"
+    backup_dir = Path(db_file).parent / "backups"
     backup_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     backup_path = backup_dir / f"studio-pre-{current_version + 1}-{timestamp}.db"
@@ -230,6 +318,7 @@ def activate_pending_migrations(db_path: Path | None = None) -> dict:
         }
 
     db_path = Path(db_path)
+    assert_may_create_database(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path), timeout=30.0)
     conn.row_factory = sqlite3.Row
@@ -505,6 +594,7 @@ def bootstrap_database(db_path: Path, *, target_version: int | None = None) -> i
     """Create or migrate a SQLite DB at db_path, then return schema version."""
 
     db_path = Path(db_path)
+    assert_may_create_database(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path), timeout=30.0)
     try:

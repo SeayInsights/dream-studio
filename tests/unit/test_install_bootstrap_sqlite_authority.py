@@ -48,6 +48,8 @@ def test_fresh_temp_home_runtime_bootstrap_creates_db_and_applies_latest(
     DatabaseRuntime.reset_instance()
     monkeypatch.delenv(database.DB_PATH_ENV, raising=False)
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "fresh-home"))
+    # tests/conftest.py opts the session's test home in; this test is about the gate.
+    monkeypatch.delenv("DREAM_STUDIO_APPLY_UNRELEASED", raising=False)
 
     runtime = initialize_database()
     try:

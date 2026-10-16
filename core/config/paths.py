@@ -99,7 +99,19 @@ def home_dir() -> Path:
     Resolving a path does not create it; user_data_dir() is the one that does.
     """
     override = os.environ.get("DREAM_STUDIO_HOME")
-    return Path(override).expanduser() if override else Path.home() / USER_DATA_DIRNAME
+    if override:
+        return Path(override).expanduser()
+    return default_home()
+
+
+def default_home() -> Path:
+    """The home when nothing chooses another (~/.dream-studio). NOT created.
+
+    For the few checks that must recognise the operator's real home whatever the
+    environment says (core.config.sqlite_bootstrap._is_live_authority_db); everything
+    else resolves the home through home_dir().
+    """
+    return Path.home() / USER_DATA_DIRNAME
 
 
 def user_data_dir() -> Path:

@@ -88,8 +88,9 @@ class DatabaseRuntime:
 
     def _initialize_database(self):
         """Initialize database with proper settings."""
-        from core.config.sqlite_bootstrap import run_migrations
+        from core.config.sqlite_bootstrap import assert_may_create_database, run_migrations
 
+        assert_may_create_database(self.db_path)
         conn = sqlite3.connect(str(self.db_path), timeout=30.0)
         try:
             # Enable WAL mode
@@ -207,8 +208,12 @@ def get_connection(read_only: bool = False) -> sqlite3.Connection:
     else:
         db_path = get_db_path()
 
-    # Ensure directory exists (unless read-only)
+    # Ensure directory exists (unless read-only), and never quietly create an authority
+    # that should already exist (core.config.sqlite_bootstrap.assert_may_create_database).
     if not read_only:
+        from core.config.sqlite_bootstrap import assert_may_create_database
+
+        assert_may_create_database(db_path)
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Use URI for read-only mode

@@ -55,9 +55,25 @@ def _inject_migration(migrations_dir: Path, version: int, sql: str = "") -> Path
 
 
 def test_live_db_detected_under_dream_studio_home(tmp_path, monkeypatch):
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / ".dream-studio"))
     live_path = str(tmp_path / ".dream-studio" / "state" / "studio.db")
     assert _is_live_authority_db(live_path) is True
+
+
+def test_live_db_covers_the_home_in_use_and_the_default_home(tmp_path, monkeypatch):
+    """An authority under `--home X` is as live as the default one, and the default one
+    stays live whatever DREAM_STUDIO_HOME says.
+
+    _is_live_authority_db checked only the default home, so a home set through
+    DREAM_STUDIO_HOME was exempt from the unreleased-migration gate and the pre-migration
+    backup.
+    """
+    other_home = tmp_path / "elsewhere"
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(other_home))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    assert _is_live_authority_db(str(other_home / "state" / "studio.db")) is True
+    assert _is_live_authority_db(str(tmp_path / ".dream-studio" / "state" / "studio.db")) is True
+    assert _is_live_authority_db(str(tmp_path / "scratch" / "studio.db")) is False
 
 
 def test_temp_db_not_detected_as_live(tmp_path):
@@ -103,7 +119,7 @@ def test_unreleased_migration_skipped_on_live_db(tmp_path, monkeypatch):
     from core.config import sqlite_bootstrap
 
     # Point home to tmp_path so live-authority check works
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / ".dream-studio"))
     monkeypatch.delenv("DREAM_STUDIO_APPLY_UNRELEASED", raising=False)
 
     # Set up fake migrations dir with two migrations: 001 (released) and 002 (unreleased)
@@ -132,7 +148,7 @@ def test_released_migration_applies_to_live_db(tmp_path, monkeypatch):
     """A released migration applies normally to the live authority DB."""
     from core.config import sqlite_bootstrap
 
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / ".dream-studio"))
     monkeypatch.delenv("DREAM_STUDIO_APPLY_UNRELEASED", raising=False)
 
     fake_migrations = tmp_path / "migrations"
@@ -157,7 +173,7 @@ def test_apply_unreleased_opt_in_applies_unreleased_migration(tmp_path, monkeypa
     """DREAM_STUDIO_APPLY_UNRELEASED=1 allows unreleased migrations on live DB."""
     from core.config import sqlite_bootstrap
 
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / ".dream-studio"))
     monkeypatch.setenv("DREAM_STUDIO_APPLY_UNRELEASED", "1")
 
     fake_migrations = tmp_path / "migrations"
@@ -185,7 +201,7 @@ def test_unreleased_migration_applies_to_non_live_db(tmp_path, monkeypatch):
     from core.config import sqlite_bootstrap
 
     # Use a real tmp_path home so the live check uses a different base
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "some-other-home"))
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / "some-other-home" / ".dream-studio"))
     monkeypatch.delenv("DREAM_STUDIO_APPLY_UNRELEASED", raising=False)
 
     fake_migrations = tmp_path / "migrations"
@@ -215,7 +231,7 @@ def test_backup_created_before_migration_on_live_db(tmp_path, monkeypatch):
     """A timestamped backup is written to ~/.dream-studio/state/backups/ before migration."""
     from core.config import sqlite_bootstrap
 
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / ".dream-studio"))
     monkeypatch.delenv("DREAM_STUDIO_APPLY_UNRELEASED", raising=False)
 
     fake_migrations = tmp_path / "migrations"
@@ -242,7 +258,7 @@ def test_no_backup_on_non_live_db(tmp_path, monkeypatch):
     """No backup is written for temp/test DBs."""
     from core.config import sqlite_bootstrap
 
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "other-home"))
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / "other-home" / ".dream-studio"))
     monkeypatch.delenv("DREAM_STUDIO_APPLY_UNRELEASED", raising=False)
 
     fake_migrations = tmp_path / "migrations"
@@ -269,7 +285,7 @@ def test_backup_only_taken_once_per_run_migrations_call(tmp_path, monkeypatch):
     """Only one backup is created per run_migrations() call, regardless of migration count."""
     from core.config import sqlite_bootstrap
 
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / ".dream-studio"))
     monkeypatch.delenv("DREAM_STUDIO_APPLY_UNRELEASED", raising=False)
 
     fake_migrations = tmp_path / "migrations"

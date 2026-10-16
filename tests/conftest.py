@@ -42,6 +42,12 @@ if "DREAM_STUDIO_DB_PATH" not in _os.environ:
     _os.environ["DREAM_STUDIO_DB_PATH"] = str(_session_tmp / "state" / "studio.db")
     _os.environ["DS_SPOOL_ROOT"] = str(_session_tmp / "events")
 
+# The session's Dream Studio home is a test home, and every database inside a home is a
+# "live" authority to the unreleased-migration gate (core.config.sqlite_bootstrap.
+# _is_live_authority_db follows DREAM_STUDIO_HOME). Apply every shipped migration to it,
+# as the gate always did for test databases; tests of the gate itself delenv this.
+_os.environ.setdefault("DREAM_STUDIO_APPLY_UNRELEASED", "1")
+
 # Same isolation guard, for git instead of the DB.
 #
 # git exports GIT_DIR -- pointing at the operator's real repository -- to every hook it runs.

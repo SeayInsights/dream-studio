@@ -252,16 +252,9 @@ def test_diagnostics_follow_home_not_the_user_directory(tmp_path, monkeypatch):
 #: (standards, gate manifest, local analytics), and an isolated run builds a home on
 #: purpose; those are not the home --home decides, and each is listed with that reason.
 _MAY_SPELL_THE_HOME = {
-    # The resolver, and the live-install protection that must not follow the variable it
-    # protects against: recognising and backing up the operator's real authority.
-    (
-        "core/config/sqlite_bootstrap.py",
-        'Path(db_file).resolve().relative_to((Path.home() / ".dream-studio").resolve())',
-    ): "live authority",
-    (
-        "core/config/sqlite_bootstrap.py",
-        'backup_dir = Path.home() / ".dream-studio" / "state" / "backups"',
-    ): "live authority backup",
+    # The live-install protection that must not follow the variable it protects against
+    # (recognising the operator's real authority) now goes through
+    # core.config.paths.default_home(), and its backups land beside the authority.
     # A directory NAME, not a location.
     (
         "core/gates/hanging_detectors.py",
