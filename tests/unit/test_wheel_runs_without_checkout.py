@@ -266,3 +266,73 @@ def test_installed_validate_and_fresh_migration_never_touch_the_checkout(install
     assert report["ds_files"], "probe imported no Dream Studio module"
     leaked = [f for f in report["ds_files"] if f and not f.lower().startswith(venv)]
     assert not leaked, f"modules loaded from outside the installed app: {leaked[:10]}"
+
+
+HOOK_PROBE = r"""
+import io, json, runpy, sys
+module, event, payload, top = sys.argv[1], sys.argv[2], sys.argv[3], json.loads(sys.argv[4])
+sys.argv = [module] + ([event] if event else [])
+sys.stdin = io.StringIO(payload)
+captured, real = io.StringIO(), sys.stdout
+sys.stdout = captured
+code = 0
+try:
+    runpy.run_module(module, run_name="__main__", alter_sys=True)
+except SystemExit as exc:
+    code = exc.code or 0
+finally:
+    sys.stdout = real
+files = sorted(
+    getattr(m, "__file__", None) or ""
+    for name, m in list(sys.modules.items())
+    if name.split(".")[0] in top
+)
+print(json.dumps({"code": code, "files": files, "sys_path": sys.path}))
+"""
+
+
+@pytest.mark.parametrize(
+    "module,event,payload",
+    [
+        ("runtime.dispatch.hooks", "UserPromptSubmit", {"session_id": "t", "prompt": "hi"}),
+        ("emitters.claude_code.run", "UserPromptSubmit", {"session_id": "t", "prompt": "hi"}),
+        (
+            "runtime.hooks.meta.on-edit-enforce",
+            "",
+            {"session_id": "t", "tool_name": "Edit", "tool_input": {"file_path": "x.py"}},
+        ),
+    ],
+)
+def test_installed_hook_modules_run_from_the_app_even_inside_a_checkout(
+    installed, module, event, payload
+):
+    """The hook command is `<app python> -I -m <module>`, and Claude Code runs it with the
+    PROJECT as the working directory -- here, the Dream Studio checkout itself. Plain `-m`
+    would put that directory first on sys.path and import the checkout's packages."""
+    tmp = installed["tmp"]
+    proc = subprocess.run(
+        [
+            str(installed["py"]),
+            "-I",
+            "-c",
+            HOOK_PROBE,
+            module,
+            event,
+            json.dumps(payload),
+            json.dumps(DS_TOP_LEVEL),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=REPO,
+        env=_isolated_env(tmp),
+        timeout=600,
+    )
+    assert proc.returncode == 0, proc.stderr[-3000:]
+    report = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert report["code"] == 0
+    repo = str(REPO.resolve()).lower()
+    assert repo not in {str(Path(p).resolve()).lower() for p in report["sys_path"] if p}
+    venv = str(installed["venv"].resolve()).lower()
+    leaked = [f for f in report["files"] if f and not f.lower().startswith(venv)]
+    assert not leaked, f"hook imported Dream Studio code from outside the app: {leaked[:10]}"

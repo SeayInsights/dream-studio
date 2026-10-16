@@ -8,10 +8,15 @@ hook was invoked (shim, direct python, test harness).
 from __future__ import annotations
 
 import os
+import sys
 from functools import lru_cache
 from pathlib import Path
 
 USER_DATA_DIRNAME = ".dream-studio"
+
+#: Written by `ds self-install` into an app venv's prefix: the Dream Studio home that app
+#: was installed into. See home_dir().
+APP_HOME_MARKER = "dream-studio-home"
 
 
 @lru_cache(maxsize=1)
@@ -97,11 +102,18 @@ def home_dir() -> Path:
     on a new spelling in core/ or interfaces/.
 
     Resolving a path does not create it; user_data_dir() is the one that does.
+
+    AN INSTALLED APP DEFAULTS TO THE HOME IT WAS INSTALLED INTO. `ds self-install --home
+    H` writes H into the app venv (APP_HOME_MARKER under sys.prefix). Hooks run that
+    venv's python with no `--home` and no environment of their own, so without this an
+    app installed into a second home would read and write the default home's authority
+    from every hook. The environment variable still wins.
     """
     override = os.environ.get("DREAM_STUDIO_HOME")
     if override:
         return Path(override).expanduser()
-    return default_home()
+    installed = installed_app_home()
+    return installed if installed is not None else default_home()
 
 
 def default_home() -> Path:
@@ -112,6 +124,15 @@ def default_home() -> Path:
     else resolves the home through home_dir().
     """
     return Path.home() / USER_DATA_DIRNAME
+
+
+def installed_app_home() -> Path | None:
+    """The home recorded by `ds self-install` in the running venv, or None outside one."""
+    marker = Path(sys.prefix) / APP_HOME_MARKER
+    if not marker.is_file():
+        return None
+    text = marker.read_text(encoding="utf-8").strip()
+    return Path(text) if text else None
 
 
 def user_data_dir() -> Path:

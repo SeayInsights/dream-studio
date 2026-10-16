@@ -22,6 +22,7 @@ _DS_EMITTER_MARKERS = (
     "hooks/run.py",  # installed path (Unix)
     "emitters/claude_code/run.py",  # legacy: direct repo path reference
     "/'emitters'/'claude_code'/'run.py'",  # legacy: pathlib expression form
+    "-m emitters.claude_code.run",  # module mode: an installed app's package
 )
 
 _DS_DISPATCHER_MARKERS = (
@@ -29,11 +30,14 @@ _DS_DISPATCHER_MARKERS = (
     "hooks/dispatch/hooks.py",  # installed path (Unix)
     "runtime/dispatch/hooks.py",  # legacy: direct repo path reference
     "'dispatch'/'hooks.py'",  # legacy: pathlib expression form
+    "-m runtime.dispatch.hooks",  # module mode: an installed app's package
 )
 
 _DS_ENFORCEMENT_MARKERS = (
     "on-edit-enforce.py",
     "on-stop-enforce.py",
+    "-m runtime.hooks.meta.on-edit-enforce",  # module mode
+    "-m runtime.hooks.meta.on-stop-enforce",  # module mode
 )
 
 
@@ -83,8 +87,12 @@ def _command_is_legacy_ds_hook(command: str) -> bool:
 def _event_has_stable_ds_hook(event_list: list[Any]) -> bool:
     """Return True if the event list has at least one new stable-path DS hook
     (emitter, dispatcher, or enforcement)."""
-    stable_emitter_markers = ("hooks\\run.py", "hooks/run.py")
-    stable_dispatcher_markers = ("hooks\\dispatch\\hooks.py", "hooks/dispatch/hooks.py")
+    stable_emitter_markers = ("hooks\\run.py", "hooks/run.py", "-m emitters.claude_code.run")
+    stable_dispatcher_markers = (
+        "hooks\\dispatch\\hooks.py",
+        "hooks/dispatch/hooks.py",
+        "-m runtime.dispatch.hooks",
+    )
     for entry in event_list:
         for h in entry.get("hooks", []):
             if not isinstance(h, dict):
@@ -310,6 +318,48 @@ def deregister_ds_hooks(settings: dict[str, Any]) -> tuple[dict[str, Any], int]:
             hooks_section.pop(event, None)
     if not hooks_section:
         result.pop("hooks", None)
+    return result, removed
+
+
+def purge_superseded_ds_hooks(
+    settings: dict[str, Any], keep_commands: set[str]
+) -> tuple[dict[str, Any], list[str]]:
+    """Remove every Dream-Studio-owned hook command this install does not register.
+
+    The merge above is additive, so moving hooks from copied files to installed modules
+    (or from one app interpreter to another) would otherwise leave the old command beside
+    the new one and run every hook twice -- the old one from a projection the installer is
+    deleting. Foreign hooks are never touched; an entry left with no hooks is dropped.
+    """
+    import copy as _copy
+
+    result = _copy.deepcopy(settings)
+    hooks_section = result.get("hooks")
+    if not isinstance(hooks_section, dict):
+        return result, []
+    removed: list[str] = []
+    for event in list(hooks_section.keys()):
+        entries = hooks_section.get(event)
+        if not isinstance(entries, list):
+            continue
+        kept_entries = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                kept_entries.append(entry)
+                continue
+            kept_hooks = []
+            for h in entry.get("hooks", []):
+                command = h.get("command", "") if isinstance(h, dict) else ""
+                if command and command not in keep_commands and _entry_is_ds_owned({"hooks": [h]}):
+                    removed.append(command)
+                    continue
+                kept_hooks.append(h)
+            if kept_hooks or not entry.get("hooks"):
+                kept_entries.append({**entry, "hooks": kept_hooks})
+        if kept_entries:
+            hooks_section[event] = kept_entries
+        else:
+            hooks_section.pop(event, None)
     return result, removed
 
 

@@ -41,17 +41,19 @@ from integrations.targets.claude_code.settings_merge import (
     purge_all_hook_registrations,
     purge_legacy_hooks,
     purge_read_posttooluse_matcher,
+    purge_superseded_ds_hooks,
     settings_to_json,
 )
 
 from .claude_code_fileops import (
     _collect_hook_file_ops,
     _collect_skill_dir_ops,
+    _interpolate_hook_modules,
     _interpolate_hooks_dir,
     _prune_empty_ancestors,
 )
 from .claude_code_launcher import _first_run_guide, _get_ds_version, _write_global_launcher
-from .claude_code_shared import _REPO_ROOT
+from .claude_code_shared import _REPO_ROOT, _python_cmd
 
 
 def _post_install_validate(config_root: Path, settings_path: Path) -> dict[str, Any]:
@@ -75,6 +77,7 @@ def _post_install_validate(config_root: Path, settings_path: Path) -> dict[str, 
                         "dispatch/hooks.py" in cmd
                         or "dispatch\\hooks.py" in cmd
                         or "runtime/dispatch/hooks" in cmd
+                        or "runtime.dispatch.hooks" in cmd
                         or "'dispatch'/'hooks.py'" in cmd
                     ):
                         dispatcher_ok = True
@@ -105,6 +108,7 @@ class ClaudeCodeInstaller(InstallerBase):
         git_repo_root: Path | None = None,
         skip_hook_install: bool = False,
         agents: list[str] | None = None,
+        hook_mode: Literal["module", "files"] | None = None,
     ):
         """*agents*, if given, narrows which of the round table's `review-*.md`
         reviewers land in step 5/5b below to that subset (seat name or slug -- see
@@ -114,7 +118,23 @@ class ClaudeCodeInstaller(InstallerBase):
         the other three. Every other agent profile under canonical/agents/ (Dream
         Studio's ~45 domain specialists) is unaffected -- this flag has only ever
         meant "the round table's reviewers", never the whole bench.
+
+        *hook_mode* picks how hooks run. "module": settings.json runs the app's own
+        interpreter on the installed modules (`<python> -I -m runtime.dispatch.hooks`),
+        nothing is copied into <config_root>/hooks, and copies a previous install recorded
+        in this root's manifest are removed. "files": the projection this installer has
+        always written (hook files copied under <config_root>/hooks, with the
+        .ds-source-root sidecar putting the checkout on sys.path). None picks "module"
+        when running from an installed app and "files" from a source checkout, whose
+        packages a bare interpreter cannot import.
         """
+        if hook_mode is None:
+            from core.config.paths import is_source_checkout
+
+            hook_mode = "files" if is_source_checkout() else "module"
+        if hook_mode not in ("module", "files"):
+            raise ValueError(f"hook_mode must be 'module' or 'files', got {hook_mode!r}")
+        self.hook_mode = hook_mode
         self.config_root = config_root
         self.scope = scope
         self.canonical_root = canonical_root
@@ -162,7 +182,7 @@ class ClaudeCodeInstaller(InstallerBase):
         # finding, wo-pack-split-data round 1). Only prunes paths this installer itself wrote
         # in a PRIOR install (present in the manifest with a real write operation) that the
         # current canonical tree no longer produces — never a file it doesn't recognize.
-        existing_manifest = read_manifest("claude_code", self.ds_home)
+        existing_manifest = read_manifest("claude_code", self.ds_home, self.config_root)
         if existing_manifest is not None:
             skills_root = self.config_root / "skills"
             for entry in existing_manifest.get("files", []):
@@ -275,9 +295,19 @@ class ClaudeCodeInstaller(InstallerBase):
 
         # 3. settings.json — merge_json (with {hooks_dir} interpolation + legacy purge)
         hooks_dir = self.config_root / "hooks"
-        interpolated_hooks = _interpolate_hooks_dir(pack["settings_hooks"], hooks_dir)
+        if self.hook_mode == "module":
+            interpolated_hooks = _interpolate_hook_modules(pack["settings_hooks"], _python_cmd())
+        else:
+            interpolated_hooks = _interpolate_hooks_dir(pack["settings_hooks"], hooks_dir)
         settings_target = self.config_root / "settings.json"
         existing_settings = load_settings(settings_target)
+        if self.hook_mode == "module":
+            # Every DS hook this install does not register goes: the copied-file commands
+            # of a previous install, and another app interpreter's module commands.
+            existing_settings, _superseded = purge_superseded_ds_hooks(
+                existing_settings,
+                {h.get("command", "") for e in interpolated_hooks for h in e.get("hooks", [])},
+            )
         merged, skip_reasons = merge_settings(existing_settings, interpolated_hooks)
         merged, _purged = purge_legacy_hooks(merged)
         merged = dedup_hooks_by_normalized_command(merged)
@@ -450,7 +480,14 @@ class ClaudeCodeInstaller(InstallerBase):
 
         # 7. Hook files — copy hook scripts, meta handlers, and .plugin-root sidecar
         source_root = self._get_source_root()
-        ops.extend(_collect_hook_file_ops(source_root, hooks_dir, source_root, backup_base))
+        if self.hook_mode == "files":
+            ops.extend(_collect_hook_file_ops(source_root, hooks_dir, source_root, backup_base))
+        else:
+            # Module mode copies nothing. A previous files-mode install's copies -- the
+            # handler tree, its __init__ shims and the .plugin-root/.ds-source-root sidecars
+            # that put the checkout on sys.path -- are removed, but only the ones this
+            # root's manifest records this installer writing.
+            ops.extend(self._stale_hook_copy_ops(existing_manifest, hooks_dir, backup_base))
 
         # 7b. Git pre-push hook — install to <git_repo_root>/.git/hooks/pre-push (B.3).
         # Opt-in: only when git_repo_root is explicitly provided. The CLI sets this
@@ -484,10 +521,12 @@ class ClaudeCodeInstaller(InstallerBase):
                 )
             )
 
-        # 8. installed-version — write version marker (must be last)
+        # 8. installed-version: write version marker (must be last). Module mode runs from
+        # an installed app, whose installed-version (`<version> <sha>`) is written by
+        # `ds self-install`; rewriting it here with the bare VERSION would lose the sha.
         source_root = self._get_source_root()
         version_file = source_root / "VERSION"
-        if version_file.is_file():
+        if self.hook_mode == "files" and version_file.is_file():
             repo_version = version_file.read_text(encoding="utf-8").strip()
             version_target = ds_home / "state" / "installed-version"
             ops.append(
@@ -503,6 +542,38 @@ class ClaudeCodeInstaller(InstallerBase):
             )
 
         return FileOpPlan(ops=ops, tool="claude_code", scope=self.scope)
+
+    def _stale_hook_copy_ops(
+        self, manifest: dict[str, Any] | None, hooks_dir: Path, backup_base: Path
+    ) -> list[FileOp]:
+        """Delete ops for hook files a previous install copied under *hooks_dir*."""
+        if manifest is None:
+            return []
+        ops: list[FileOp] = []
+        seen: set[str] = set()
+        for entry in manifest.get("files", []):
+            path_str = entry.get("path", "")
+            if not path_str or path_str in seen or entry.get("operation") in ("skip", "delete"):
+                continue
+            target = Path(path_str)
+            if hooks_dir not in target.parents:
+                continue
+            seen.add(path_str)
+            ops.append(
+                FileOp(
+                    target=target,
+                    op="delete",
+                    backup_required=True,
+                    source_hash="",
+                    reason="Remove copied hook file: hooks now run from the installed app",
+                    safety_notes=(
+                        "Recorded in this config root's manifest as written by a previous "
+                        "install. Backed up before removal."
+                    ),
+                    backup_path=backup_base,
+                )
+            )
+        return ops
 
     def install(self, mode: Literal["dry_run", "execute"]) -> dict[str, Any]:
         if mode not in ("dry_run", "execute"):
@@ -534,7 +605,7 @@ class ClaudeCodeInstaller(InstallerBase):
         hooks_installed: list[str] = []
 
         # Load existing manifest for incremental hash comparison
-        existing_manifest = read_manifest("claude_code", self.ds_home)
+        existing_manifest = read_manifest("claude_code", self.ds_home, self.config_root)
         manifest_hash_map: dict[str, str] = {}
         if existing_manifest:
             for entry in existing_manifest.get("files", []):
@@ -552,6 +623,7 @@ class ClaudeCodeInstaller(InstallerBase):
         workflows_updated = 0
         workflows_unchanged = 0
         hook_files_installed: list[str] = []
+        hook_files_removed = 0
 
         for op in file_plan.ops:
             if op.op == "skip":
@@ -563,8 +635,15 @@ class ClaudeCodeInstaller(InstallerBase):
                     if op.backup_required:
                         backup_path = backup_before_write(op.target, backup_dir)
                     op.target.unlink()
-                    _prune_empty_ancestors(op.target.parent, stop_at=self.config_root / "skills")
-                    skills_files_removed += 1
+                    hooks_root = self.config_root / "hooks"
+                    if hooks_root in op.target.parents:
+                        _prune_empty_ancestors(op.target.parent, stop_at=hooks_root)
+                        hook_files_removed += 1
+                    else:
+                        _prune_empty_ancestors(
+                            op.target.parent, stop_at=self.config_root / "skills"
+                        )
+                        skills_files_removed += 1
                 files_written.append(
                     {
                         "path": str(op.target),
@@ -651,8 +730,9 @@ class ClaudeCodeInstaller(InstallerBase):
             scope=self.scope,
             ds_version=_get_ds_version(),
             files=manifest_files,
+            config_root=self.config_root,
         )
-        write_manifest("claude_code", manifest, self.ds_home)
+        write_manifest("claude_code", manifest, self.ds_home, self.config_root)
 
         # B.3: ensure the git pre-push hook is executable on Unix-like systems.
         # FileOp's atomic_write does not preserve the +x bit and Windows ignores it.
@@ -691,11 +771,14 @@ class ClaudeCodeInstaller(InstallerBase):
         # Post-install validation (inline lightweight check)
         validation = _post_install_validate(self.config_root, self.config_root / "settings.json")
 
-        # Write global launcher scripts
-        launcher_output = _write_global_launcher(ds_home=ds_home)
-
-        # Print PATH instructions
-        print(launcher_output["path_instructions"])
+        # Write global launcher scripts. Module mode runs from an installed app, whose one
+        # launcher (<home>/bin/ds.cmd) `ds self-install` owns; this one would point it back
+        # at a checkout and append a PATH line to the shell profile.
+        if self.hook_mode == "files":
+            launcher_output = _write_global_launcher(ds_home=ds_home)
+            print(launcher_output["path_instructions"])
+        else:
+            launcher_output = {"skipped": "module mode: ds self-install owns the launcher"}
 
         # Print first-run guide if no active projects exist
         first_run_guide = _first_run_guide(ds_home=ds_home)
@@ -730,6 +813,8 @@ class ClaudeCodeInstaller(InstallerBase):
             "agents_installed": agents_installed,
             "hooks_installed": hooks_installed,
             "hook_files_installed": hook_files_installed,
+            "hook_files_removed": hook_files_removed,
+            "hook_mode": self.hook_mode,
             "git_hook_installed": git_hook_installed,
             "launcher": launcher_output,
             "plan": plan_summary,

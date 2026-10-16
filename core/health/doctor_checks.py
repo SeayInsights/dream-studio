@@ -17,6 +17,7 @@ def _check_dispatcher_hooks(claude_dir: Path) -> bool:
         "hooks\\dispatch\\hooks.py",
         "hooks/dispatch/hooks.py",
         "runtime/dispatch/hooks",
+        "-m runtime.dispatch.hooks",  # module mode (an installed app)
         "'dispatch'/'hooks.py'",
     )
     try:

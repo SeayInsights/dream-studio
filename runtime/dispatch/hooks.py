@@ -31,7 +31,14 @@ def _get_plugin_root() -> Path:
             return Path(sidecar.read_text(encoding="utf-8").strip()).resolve()
         except Exception:
             pass
-    return Path(__file__).parent.parent.resolve()
+    copied_tree = Path(__file__).parent.parent.resolve()
+    if (copied_tree / "runtime" / "hooks").is_dir():
+        return copied_tree
+    # Run as a module (`python -I -m runtime.dispatch.hooks`) from an installed app or a
+    # checkout: the handlers belong to the same code root this module was imported from.
+    from core.config.paths import code_root
+
+    return code_root()
 
 
 def _get_source_root() -> Path | None:

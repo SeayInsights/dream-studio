@@ -7,6 +7,7 @@ WO-GF-CONTROL-INSTALL-split: see claude_code.py facade docstring.
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,51 @@ def _interpolate_hooks_dir(hooks: list[dict[str, Any]], hooks_dir: Path) -> list
                 if "{python_cmd}" in cmd:
                     cmd = cmd.replace("{python_cmd}", python_cmd)
                 h["command"] = cmd
+        result.append(entry)
+    return result
+
+
+#: Hook script (as hooks_template.json names it under {hooks_dir}) -> the module that IS
+#: that script inside the installed packages. Module mode runs `<python> -I -m <module>`.
+MODULE_FOR_HOOK_FILE: dict[str, str] = {
+    "run.py": "emitters.claude_code.run",
+    "dispatch/hooks.py": "runtime.dispatch.hooks",
+    "runtime/hooks/meta/on-edit-enforce.py": "runtime.hooks.meta.on-edit-enforce",
+    "runtime/hooks/meta/on-stop-enforce.py": "runtime.hooks.meta.on-stop-enforce",
+}
+
+_HOOK_FILE_ARG = re.compile(r'"\{hooks_dir\}/([^"]+)"')
+
+
+def _interpolate_hook_modules(hooks: list[dict[str, Any]], python_cmd: str) -> list[dict[str, Any]]:
+    """Rewrite template hook commands to run installed MODULES, not copied files.
+
+    `{python_cmd} "{hooks_dir}/dispatch/hooks.py" Stop` becomes
+    `{python_cmd} -I -m runtime.dispatch.hooks Stop`. -I (isolated mode) matters: a hook
+    runs with the PROJECT as its working directory, and plain `-m` puts that directory
+    first on sys.path -- so inside a Dream Studio checkout the hook would import the
+    checkout's `runtime` instead of the installed app's. Isolated mode also ignores
+    PYTHONPATH. A template entry with no module mapping raises: silently keeping a file
+    path would point the hook at a file module mode no longer installs.
+    """
+    import copy as _copy
+
+    result = []
+    for entry in hooks:
+        entry = _copy.deepcopy(entry)
+        for h in entry.get("hooks", []):
+            if not isinstance(h, dict):
+                continue
+            cmd = h.get("command", "")
+
+            def _module(match: re.Match[str]) -> str:
+                rel = match.group(1)
+                if rel not in MODULE_FOR_HOOK_FILE:
+                    raise ValueError(f"hooks_template.json names {rel!r}, which has no module")
+                return f"-I -m {MODULE_FOR_HOOK_FILE[rel]}"
+
+            cmd = _HOOK_FILE_ARG.sub(_module, cmd)
+            h["command"] = cmd.replace("{python_cmd}", python_cmd)
         result.append(entry)
     return result
 

@@ -228,6 +228,7 @@ def _check_dispatcher_hooks(claude_dir: Path) -> bool:
         "hooks\\dispatch\\hooks.py",  # installed path (Windows)
         "hooks/dispatch/hooks.py",  # installed path (Unix)
         "runtime/dispatch/hooks",  # legacy repo-relative path
+        "-m runtime.dispatch.hooks",  # module mode (an installed app)
         "'dispatch'/'hooks.py'",  # legacy pathlib expression
     )
     try:
@@ -556,7 +557,11 @@ def _update_command(
         # checking hooks alone is why an install could be missing the files a mode needs.
         from integrations.manifest import read_manifest
 
-        manifest = read_manifest("claude_code", ds_home=paths.dream_studio_home)
+        from core.config.paths import claude_config_root
+
+        manifest = read_manifest(
+            "claude_code", ds_home=paths.dream_studio_home, config_root=claude_config_root()
+        )
         if not manifest:
             # AN UNREADABLE MANIFEST IS NOT A CLEAN ONE. read_manifest swallows
             # JSONDecodeError and OSError into None, so a deleted, truncated or corrupt

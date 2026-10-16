@@ -183,12 +183,16 @@ def main() -> int:
         return 0
 
     try:
-        plugin_root = _get_plugin_root()
-        if str(plugin_root) not in sys.path:
-            sys.path.insert(0, str(plugin_root))
-        source_root = _get_source_root()
-        if source_root and str(source_root) not in sys.path:
-            sys.path.append(str(source_root))
+        if not __package__:
+            # Run as a copied file (<config_root>/hooks/run.py): the sidecars say where the
+            # libraries are. Run as a module (`python -I -m emitters.claude_code.run`) from
+            # an installed app, the libraries are already importable and nothing is added.
+            plugin_root = _get_plugin_root()
+            if str(plugin_root) not in sys.path:
+                sys.path.insert(0, str(plugin_root))
+            source_root = _get_source_root()
+            if source_root and str(source_root) not in sys.path:
+                sys.path.append(str(source_root))
 
         from emitters.claude_code.emitter import (
             normalize_post_compact,

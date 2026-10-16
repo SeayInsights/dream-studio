@@ -12,6 +12,13 @@ from interfaces.cli.cli_utils import _print
 # Parser registration
 # ---------------------------------------------------------------------------
 
+_CONFIG_ROOT_HELP = (
+    "Claude Code config root to install into (repeatable). Each root is installed as a "
+    "user-scope root with its own manifest, and no git pre-push hook is written. Without "
+    "it the root is guessed from the working directory (./.claude, else CLAUDE_CONFIG_DIR "
+    "or ~/.claude) and a pre-push hook goes into the working directory's repository."
+)
+
 
 def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
     """Attach the ``integrate`` subparser tree to *subcommands*."""
@@ -35,12 +42,18 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
     )
     integrate_plan.add_argument("tool", choices=list(_SUPPORTED_TOOLS))
     integrate_plan.add_argument("--scope", choices=["user", "project"], default=None)
+    integrate_plan.add_argument(
+        "--config-root", action="append", default=None, help=_CONFIG_ROOT_HELP
+    )
 
     integrate_install = integrate_sub.add_parser(
         "install", help="Install integration for a tool (requires --dry-run or --execute)"
     )
     integrate_install.add_argument("tool", choices=list(_SUPPORTED_TOOLS))
     integrate_install.add_argument("--scope", choices=["user", "project"], default=None)
+    integrate_install.add_argument(
+        "--config-root", action="append", default=None, help=_CONFIG_ROOT_HELP
+    )
     integrate_install.add_argument(
         "--agents",
         default=None,
@@ -146,6 +159,32 @@ def dispatch(
 
     if args.integrate_command == "plan":
         scope = getattr(args, "scope", None)
+        config_roots = getattr(args, "config_root", None)
+        if config_roots:
+            plans = []
+            for root in config_roots:
+                installer = ClaudeCodeInstaller(
+                    Path(root).expanduser().resolve(),
+                    "user",
+                    canonical_root=canonical_root,
+                    ds_home=ds_home,
+                )
+                plans.append(
+                    {
+                        "config_root": str(installer.config_root),
+                        "hook_mode": installer.hook_mode,
+                        "plan": installer.plan().summary(),
+                    }
+                )
+            return _print(
+                {
+                    "model_name": "dream_studio_integrate_plan",
+                    "derived_view": True,
+                    "primary_authority": False,
+                    "tool": "claude_code",
+                    "plans": plans,
+                }
+            )
         detected = detect_claude_code(scope_override=scope)
         installer = ClaudeCodeInstaller(
             detected.config_root,
@@ -230,6 +269,33 @@ def dispatch(
                     "primary_authority": False,
                     "tool": tool_id,
                     **result,
+                }
+            )
+
+        config_roots = getattr(args, "config_root", None)
+        if config_roots:
+            # Explicit roots: nothing is guessed from the working directory, and no git
+            # pre-push hook is written (that is a Dream Studio repository's own dev gate,
+            # not part of installing Dream Studio into a Claude Code identity).
+            installs = []
+            for root in config_roots:
+                installer = ClaudeCodeInstaller(
+                    Path(root).expanduser().resolve(),
+                    "user",
+                    canonical_root=canonical_root,
+                    ds_home=ds_home,
+                    git_repo_root=None,
+                    agents=agents,
+                )
+                installs.append(installer.install(mode))
+            return _print(
+                {
+                    "model_name": "dream_studio_integrate_install",
+                    "derived_view": True,
+                    "primary_authority": False,
+                    "tool": "claude_code",
+                    "ok": all(r.get("ok") for r in installs),
+                    "installs": installs,
                 }
             )
 

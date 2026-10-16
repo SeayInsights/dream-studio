@@ -123,7 +123,8 @@ def test_execute_writes_manifest(config_root, canonical_root, ds_home):
         config_root, "user", canonical_root=canonical_root, ds_home=ds_home
     )
     installer.install("execute")
-    manifest = read_manifest("claude_code", ds_home)
+    # One manifest per config root (integrations.manifest.get_manifest_path).
+    manifest = read_manifest("claude_code", ds_home, config_root)
     assert manifest is not None
     assert manifest["schema_version"] == MANIFEST_SCHEMA_VERSION
     assert manifest["tool"] == "claude_code"
@@ -234,7 +235,7 @@ def test_execute_manifest_no_longer_lists_removed_orphan(config_root, canonical_
         config_root, "user", canonical_root=canonical_root, ds_home=ds_home
     )
     installer.install("execute")
-    manifest = read_manifest("claude_code", ds_home)
+    manifest = read_manifest("claude_code", ds_home, config_root)
     paths = {entry["path"] for entry in manifest["files"]}
     assert str(orphan) not in paths
 
