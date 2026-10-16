@@ -116,8 +116,7 @@ def _get_event_store(
     # For testing: create new instance with override
     if override_db_path is not None or override_conn is not None:
         try:
-            repo_root = Path(__file__).resolve().parents[2]
-            docs_dir = repo_root / "docs" / "canonical"
+            docs_dir = paths.code_root() / "docs" / "canonical"
 
             if not docs_dir.exists():
                 return None
@@ -143,8 +142,7 @@ def _get_event_store(
     if _event_store is None:
         try:
             # Initialize validator with taxonomy and schema from docs/canonical/
-            repo_root = Path(__file__).resolve().parents[2]
-            docs_dir = repo_root / "docs" / "canonical"
+            docs_dir = paths.code_root() / "docs" / "canonical"
 
             if not docs_dir.exists():
                 # Canonical schema not found - skip event emission

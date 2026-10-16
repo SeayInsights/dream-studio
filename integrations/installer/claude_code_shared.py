@@ -13,9 +13,11 @@ import platform
 import sys
 from pathlib import Path
 
-# Repo root: integrations/installer/claude_code.py → integrations/installer → integrations → repo
+from core.config.paths import code_root
+
+# The code root: the checkout, or the installed app's site-packages (core.config.paths).
 _INSTALLER_DIR = Path(__file__).resolve().parent
-_REPO_ROOT = _INSTALLER_DIR.parent.parent
+_REPO_ROOT = code_root()
 _DS_ENTRY = _REPO_ROOT / "interfaces" / "cli" / "ds_entry.py"
 
 _CHUNK_SIZE = 65536  # 64 KB — used for chunked hashing of files > 1 MB

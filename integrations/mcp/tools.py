@@ -27,11 +27,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from core.config.paths import code_root
 from core.work_orders.models import WORK_ORDER_TYPES
 
 from .auth import Identity
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+#: The code root (checkout or installed app), never a guess from this file's location.
+REPO_ROOT = code_root()
 
 
 @dataclass(frozen=True)

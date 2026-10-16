@@ -8,9 +8,37 @@ hook was invoked (shim, direct python, test harness).
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 from pathlib import Path
 
 USER_DATA_DIRNAME = ".dream-studio"
+
+
+@lru_cache(maxsize=1)
+def code_root() -> Path:
+    """The directory that holds Dream Studio's packages AND its shipped runtime data.
+
+    THE ONE PLACE THE CODE LOCATION IS RESOLVED. In a checkout this is the repository
+    root. In an installed wheel it is the site-packages directory the packages were
+    installed into, and the build (setup.py, pyproject's shipped-root-data) puts the
+    root-level data files -- VERSION, packs.yaml, docs/canonical/*.json, ... -- at the
+    same relative paths there, so `code_root() / "docs" / "canonical"` names the same
+    thing in both. Resolved through importlib.resources rather than a `parents[N]` walk
+    from some module's __file__, which silently meant "the checkout" wherever the module
+    happened to sit.
+
+    Read-only by contract: nothing in the runtime writes under this directory
+    (tests/unit/test_cli_never_writes_code_root.py).
+    """
+    from importlib.resources import files
+
+    return Path(str(files("core"))).resolve().parent
+
+
+def is_source_checkout(root: Path | None = None) -> bool:
+    """True when *root* (default code_root()) is a source tree, not an installed app."""
+    root = code_root() if root is None else root
+    return (root / "pyproject.toml").is_file()
 
 
 def plugin_root() -> Path:

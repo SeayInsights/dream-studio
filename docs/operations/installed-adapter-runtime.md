@@ -19,7 +19,9 @@ The installed runtime keeps source and state separate:
 | Evidence | `~/.dream-studio/meta` | file-backed private evidence |
 
 The source root can be supplied with `--source-root` or
-`DREAM_STUDIO_SOURCE_ROOT`. The runtime home can be supplied with `--home` or
+`DREAM_STUDIO_SOURCE_ROOT`; otherwise it is the code root `ds` runs from
+(`core.config.paths.code_root()`: the checkout, or the installed app's
+site-packages, which carries the same runtime data at the same relative paths). The runtime home can be supplied with `--home` or
 `DREAM_STUDIO_HOME`. Commands must not assume the current working directory is
 the Dream Studio repo.
 

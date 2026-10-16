@@ -9,7 +9,7 @@ inside the source checkout.
 
 | Area | Purpose |
 | --- | --- |
-| Source root | Installed Dream Studio source/build files and product code. |
+| Source root | Installed Dream Studio source/build files and product code: a checkout, or an installed wheel that carries the runtime data at the same relative paths (`core.config.paths.code_root()`). |
 | Dream Studio home | User-local runtime state, normally `~/.dream-studio`. |
 | SQLite authority | `state/studio.db` inside the selected Dream Studio home. |
 | Runtime config | `config/runtime.json` inside the selected Dream Studio home. |

@@ -39,9 +39,10 @@ from pathlib import Path
 
 
 def migrations_dir() -> Path:
-    """Return the repo-backed SQLite migration directory."""
+    """Return the shipped SQLite migration directory (checkout or installed app)."""
+    from core.config.paths import code_root
 
-    return Path(__file__).resolve().parents[1] / "event_store" / "migrations"
+    return code_root() / "core" / "event_store" / "migrations"
 
 
 def migration_files() -> list[Path]:

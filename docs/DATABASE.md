@@ -34,7 +34,7 @@ Valid `ds_files.category` values: `handoff`, `evidence`, `release`, `rollback`, 
 
 | Path | Meaning | Git policy |
 | --- | --- | --- |
-| `core/event_store/migrations/` | Repo-backed SQLite schema migrations | Tracked |
+| `core/event_store/migrations/` | Repo-backed SQLite schema migrations, shipped in the wheel as package data | Tracked |
 | `core/event_store/migrations/rollback/` | Paired reverse migrations (reversible from 154+; see [migrations.md](migrations.md)) | Tracked |
 | `core/config/sqlite_bootstrap.py` | Bootstrap and migration application | Tracked |
 | `core/config/database.py` | Canonical DB path resolver and environment override behavior | Tracked |

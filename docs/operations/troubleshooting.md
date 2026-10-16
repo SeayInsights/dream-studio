@@ -60,6 +60,16 @@ Use `ds version` to confirm the source/runtime resolver, `ds doctor` for
 read-only health checks, and `ds repair` for a non-mutating repair plan. These
 commands do not perform cleanup, live SQLite writes, or destructive repair.
 
+## Installed ds Fails With ModuleNotFoundError: compat
+
+Symptom: `ds` from a `pip install`ed wheel exits on `import compat`, or runs but
+never validates an event.
+
+Wheels built before 2026-10 left out the top-level `compat` module, the `config`
+package and every runtime data file. Rebuild from a current commit; the wheel now
+ships them (`pyproject.toml` package data and `[tool.dream-studio]
+shipped-root-data`, copied by `setup.py`).
+
 ## Legacy Install Detected
 
 Symptom: a user previously installed Dream Studio from an old checkout, or

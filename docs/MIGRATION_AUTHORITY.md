@@ -119,7 +119,9 @@ All new migrations MUST be added here. Migrations 001-141 were collapsed into
 `142_lean_baseline.sql` by the 2026-07-04 squash above; new migrations start
 at 143. The migration runner in `core/config/sqlite_bootstrap.py` (delegated
 to by the thin wrappers in `core/event_store/studio_db.py`) reads from this
-directory exclusively.
+directory exclusively, through `core.config.paths.code_root()`: the checkout, or
+an installed wheel, which ships the directory (`*.sql` and `.released_version`)
+as package data.
 
 ## Schema Version Authority
 

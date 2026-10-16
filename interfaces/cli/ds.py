@@ -18,9 +18,18 @@ import os
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+if not __package__:
+    # Run as a script (`py interfaces/cli/ds.py`) from a checkout: make its packages
+    # importable. Imported as a package -- the installed console script, `-m` -- this
+    # never runs, so an installed app never puts a checkout on sys.path.
+    _script_root = str(Path(__file__).resolve().parents[2])
+    if _script_root not in sys.path:
+        sys.path.insert(0, _script_root)
+
+from core.config.paths import code_root  # noqa: E402
+
+#: The code root: the checkout, or the installed app (core.config.paths.code_root).
+REPO_ROOT = code_root()
 
 # Core imports used in main(). installed_runtime_model is re-exported here (not
 # called in this module) because core.health.status and test patches resolve it
@@ -205,7 +214,10 @@ def _home_environment(home: Path | None):
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    source_root = Path(args.source_root).resolve() if args.source_root else REPO_ROOT
+    # --source-root, then DREAM_STUDIO_SOURCE_ROOT (which core.installed_runtime documents
+    # and this used to ignore), then the code root this `ds` is running from.
+    _source = args.source_root or os.environ.get("DREAM_STUDIO_SOURCE_ROOT")
+    source_root = Path(_source).resolve() if _source else REPO_ROOT
     home = Path(args.home).resolve() if args.home else None
     with _home_environment(home):
         return _run(parser, args, source_root, home)

@@ -73,10 +73,9 @@ def resolve_installed_runtime_paths(
 ) -> InstalledRuntimePaths:
     """Resolve source/state paths without depending on the caller's cwd."""
 
-    source = Path(
-        source_root or os.environ.get(SOURCE_ENV) or Path(__file__).resolve().parents[1]
-    ).resolve()
-    from core.config.paths import home_dir
+    from core.config.paths import code_root, home_dir
+
+    source = Path(source_root or os.environ.get(SOURCE_ENV) or code_root()).resolve()
 
     home = Path(dream_studio_home or os.environ.get(HOME_ENV) or home_dir()).resolve()
     return InstalledRuntimePaths(source_root=source, dream_studio_home=home)
