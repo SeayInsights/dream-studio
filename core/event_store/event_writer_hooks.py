@@ -60,7 +60,6 @@ def clear_expired_sentinels(db_path: Path | None = None) -> int:
         return 0
 
 
-@_with_retry
 def _surface_authority_refusal(exc: Exception, session_id: str | None) -> None:
     """Say once per session that the authority guard is refusing every write.
 
@@ -82,6 +81,7 @@ def _surface_authority_refusal(exc: Exception, session_id: str | None) -> None:
     print(f"[dream-studio] {exc}", file=sys.stderr)
 
 
+@_with_retry
 def insert_hook_execution(
     hook_name: str,
     hook_type: str,
