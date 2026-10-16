@@ -83,7 +83,12 @@ def authority_data_check(home: Path, db_path: Path) -> dict[str, Any]:
     }
     if not db_path.is_file():
         if _install_markers(home):
-            result["warnings"].append(f"authority database missing: {db_path}")
+            from core.config.sqlite_bootstrap import lost_authority_message
+
+            # The same words, backups and way out every other surface gives.
+            result["warnings"].append(
+                lost_authority_message(db_path) or f"authority database missing: {db_path}"
+            )
         else:
             result["notes"].append(f"no authority database yet: {db_path}")
         return result
@@ -115,8 +120,8 @@ def authority_data_check(home: Path, db_path: Path) -> dict[str, Any]:
         result["warnings"].append(
             f"this installed home's {EMPTY_WITHOUT_BASELINE} "
             "and no counts were ever recorded: if it had data, it was replaced, so restore it "
-            "(`ds --home <home> restore <dir> --execute`); if it is new, record the empty "
-            "baseline with `ds doctor --record-counts`"
+            f"(`ds --home {home} restore <dir> --execute`); if it is new, record the empty "
+            f"baseline with `ds --home {home} doctor --record-counts`"
         )
     if previous:
         before = previous["counts"]
