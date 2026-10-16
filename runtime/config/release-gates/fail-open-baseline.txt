@@ -170,10 +170,10 @@ core/config/hookq.py|130|bare-except-pass
 core/config/hookq.py|136|bare-except-pass
 core/config/hookq.py|80|falsy-return
 core/config/hookq.py|97|falsy-return
-core/config/paths.py|314|falsy-return
-core/config/paths.py|379|bare-except-pass
-core/config/paths.py|417|bare-except-pass
-core/config/paths.py|419|bare-except-pass
+core/config/paths.py|327|falsy-return
+core/config/paths.py|392|bare-except-pass
+core/config/paths.py|430|bare-except-pass
+core/config/paths.py|432|bare-except-pass
 core/config/paths.py|91|bare-except-pass
 core/config/platform.py|145|bare-except-pass
 core/config/retention.py|206|falsy-return
@@ -329,7 +329,7 @@ core/graph/query_analysis.py|226|falsy-return
 core/graph/query_analysis.py|229|falsy-return
 core/graph/query_analysis.py|288|falsy-return
 core/health/doctor_checks.py|36|falsy-return
-core/health/doctor_main.py|238|bare-except-pass
+core/health/doctor_main.py|251|bare-except-pass
 core/health/doctor_skill_sync.py|165|falsy-return
 core/health/doctor_skill_sync.py|169|falsy-return
 core/health/doctor_skill_sync.py|230|falsy-return
@@ -622,7 +622,7 @@ interfaces/cli/build_adapters.py|95|falsy-return
 interfaces/cli/cli_utils.py|66|bare-except-pass
 interfaces/cli/commands/diagnostics.py|72|bare-except-pass
 interfaces/cli/commands/diagnostics.py|90|bare-except-pass
-interfaces/cli/commands/integrate.py|321|bare-except-pass
+interfaces/cli/commands/integrate.py|330|bare-except-pass
 interfaces/cli/commands/prd.py|63|falsy-return
 interfaces/cli/commands/project.py|969|bare-except-pass
 interfaces/cli/commands/prove.py|198|bare-except-pass

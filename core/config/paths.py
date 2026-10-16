@@ -160,11 +160,16 @@ def user_data_dir() -> Path:
 
 
 def claude_config_root() -> Path:
-    """Claude Code's OWN config root -- NOT created. Resolution order:
+    """Claude Code's OWN config root -- NOT created. See claude_config_root_with_reason."""
+    return claude_config_root_with_reason()[0]
 
-      1. The active Dream Studio profile's claude_config_dir, if a profile is active
+
+def claude_config_root_with_reason() -> tuple[Path, str]:
+    """Claude Code's OWN config root and why it was chosen -- NOT created. Order:
+
+      1. CLAUDE_CONFIG_DIR env var, if set: the root this shell's `claude` uses.
+      2. The active Dream Studio profile's claude_config_dir, if a profile is active
          AND that field is set on it.
-      2. CLAUDE_CONFIG_DIR env var, if set.
       3. ~/.claude (default).
 
     THE ONE PLACE CLAUDE CODE'S CONFIG ROOT IS SPELLED. This is a different thing from
@@ -177,23 +182,29 @@ def claude_config_root() -> Path:
     hooks install. tests/unit/test_claude_config_root.py fails on a new spelling in core/,
     interfaces/, integrations/, or control/.
 
-    Step 1 (migration 159, core/profiles/) lets an operator with several profiles --
-    SeayInsights, Fulcrum, more to come -- point each at its own Claude Code identity
-    without an env var per shell. Looking it up is wrapped in one broad try/except: this
-    function is called from very early/low-level contexts (the Claude Code detector,
-    doctor health checks, hook setup) that must keep working with no Dream Studio
-    authority DB at all (fresh checkout), a DB that predates migration 159 (no
-    business_profiles table), or a locked/unreadable DB file -- every one of those must
-    fall through to step 2/3, never raise. A caught failure is not swallowed silently
-    (that would trip core.gates.fail_open_census): it goes through
-    core.telemetry.diagnostics.log_diagnostic, which is documented to never raise itself.
-    The DB-file existence check before the lookup is a cheap short-circuit for the
-    overwhelmingly common "Dream Studio isn't installed here" case -- it avoids both the
-    connect/query/close round trip and sqlite3.connect() silently creating an empty
-    database file at a path nothing has initialized yet.
+    THE ENVIRONMENT WINS OVER THE PROFILE. The profile used to come first, so a shell
+    whose CLAUDE_CONFIG_DIR named one root had `ds doctor --fix` and `ds integrate
+    install` write into whatever root the authority's active profile named instead -- and
+    for an authority copied from somewhere else, that was another identity's real
+    settings.json. An explicit environment is the operator's statement about THIS shell;
+    the profile (migration 159, core/profiles/) is the default for shells that say
+    nothing, so an operator with several profiles needs no env var per shell.
+
+    The profile lookup is wrapped in one broad try/except: this function is called from
+    very early/low-level contexts (the Claude Code detector, doctor health checks, hook
+    setup) that must keep working with no Dream Studio authority DB at all (fresh
+    checkout), a DB that predates migration 159 (no business_profiles table), or a
+    locked/unreadable DB file -- every one of those must fall through to the default,
+    never raise. A caught failure is not swallowed silently (that would trip
+    core.gates.fail_open_census): it goes through core.telemetry.diagnostics.log_diagnostic,
+    which is documented to never raise itself. The DB-file existence check before the
+    lookup avoids both the round trip and creating an empty database file.
 
     Resolving a path does not create it.
     """
+    override = os.environ.get("CLAUDE_CONFIG_DIR")
+    if override:
+        return Path(override).expanduser(), "CLAUDE_CONFIG_DIR is set"
     try:
         from core.config.database import _default_db_path
 
@@ -204,7 +215,11 @@ def claude_config_root() -> Path:
             if profile:
                 profile_dir = profile.get("claude_config_dir")
                 if profile_dir:
-                    return Path(profile_dir).expanduser()
+                    return (
+                        Path(profile_dir).expanduser(),
+                        f"the active Dream Studio profile {profile.get('name')!r} names it"
+                        " (CLAUDE_CONFIG_DIR is not set)",
+                    )
     except Exception as exc:
         from core.telemetry.diagnostics import log_diagnostic
 
@@ -213,9 +228,7 @@ def claude_config_root() -> Path:
             source="core.config.paths.claude_config_root",
             details={"error_type": type(exc).__name__, "error_message": str(exc)},
         )
-
-    override = os.environ.get("CLAUDE_CONFIG_DIR")
-    return Path(override).expanduser() if override else Path.home() / ".claude"
+    return Path.home() / ".claude", "the default (no CLAUDE_CONFIG_DIR, no profile root)"
 
 
 def _has_profile_table(db: Path) -> bool:

@@ -216,12 +216,25 @@ def run_doctor_checks(
             or hook_freshness_info["stale"]
         ):
             try:
+                # The root this doctor examined, named explicitly: integrate would
+                # otherwise resolve one itself, and from a working directory inside some
+                # repository it would also write that repository's git pre-push hook.
                 subprocess.run(
-                    _ds_command(paths.dream_studio_home, "integrate", "install", "claude_code")
+                    _ds_command(
+                        paths.dream_studio_home,
+                        "integrate",
+                        "install",
+                        "claude_code",
+                        "--config-root",
+                        str(claude_dir),
+                    )
                     + ["--execute"],
                     check=False,
                 )
-                fix_actions.append("install: ran integrate install claude_code --execute")
+                fix_actions.append(
+                    f"install: ran integrate install claude_code --config-root {claude_dir} "
+                    "--execute"
+                )
             except Exception as exc:
                 fix_actions.append(f"install: failed — {exc}")
         if failed_info["count"] > 0:

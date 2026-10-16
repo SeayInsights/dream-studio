@@ -661,6 +661,33 @@ class ClaudeCodeInstaller(InstallerBase):
                 )
         return ops
 
+    def _refuse_writes_outside_the_root(self, file_plan: Any) -> None:
+        """Every planned write lands in this root, the Dream Studio home, or (only when
+        one was given) the named repository's .git/hooks -- nothing else.
+
+        An install is for ONE Claude Code root. A planned write anywhere else means the
+        root was resolved one way and a path another (the class of bug that once wrote a
+        profile's root while the environment named a different one), so the whole
+        install is refused before anything is written.
+        """
+        allowed = [self.config_root.resolve(), get_ds_home(self.ds_home).resolve()]
+        if self.git_repo_root is not None:
+            allowed.append((self.git_repo_root / ".git" / "hooks").resolve())
+        outside = sorted(
+            str(op.target)
+            for op in file_plan.ops
+            if op.op != "skip"
+            and not any(
+                root == Path(op.target).resolve() or root in Path(op.target).resolve().parents
+                for root in allowed
+            )
+        )
+        if outside:
+            raise RefusalError(
+                f"refusing to install into {self.config_root}: the plan writes outside it "
+                f"and the Dream Studio home: {outside[:5]}"
+            )
+
     def install(self, mode: Literal["dry_run", "execute"]) -> dict[str, Any]:
         if mode not in ("dry_run", "execute"):
             raise RefusalError(
@@ -670,6 +697,7 @@ class ClaudeCodeInstaller(InstallerBase):
 
         file_plan = self.plan()
         plan_summary = file_plan.summary()
+        self._refuse_writes_outside_the_root(file_plan)
 
         if mode == "dry_run":
             return {

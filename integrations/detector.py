@@ -18,6 +18,8 @@ class DetectedTool:
     tool_id: str
     scope: str  # "user" or "project"
     config_root: Path
+    #: Why this root: which rule of the resolution order chose it, for the operator.
+    reason: str = ""
 
 
 def _infer_scope(working_dir: Path) -> str:
@@ -41,12 +43,19 @@ def detect_claude_code(
 
     if scope == "project":
         config_root = cwd / ".claude"
+        reason = (
+            "--scope project"
+            if scope_override == "project"
+            else f"the working directory has a project .claude ({config_root})"
+        )
     else:
-        from core.config.paths import claude_config_root
+        from core.config.paths import claude_config_root_with_reason
 
-        config_root = claude_config_root()
+        config_root, reason = claude_config_root_with_reason()
 
-    return DetectedTool(tool_id=CLAUDE_CODE_TOOL_ID, scope=scope, config_root=config_root)
+    return DetectedTool(
+        tool_id=CLAUDE_CODE_TOOL_ID, scope=scope, config_root=config_root, reason=reason
+    )
 
 
 def detect_multitool(tool_id: str, *, working_dir: Path | None = None) -> DetectedTool:

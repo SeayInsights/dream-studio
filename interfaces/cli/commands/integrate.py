@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -15,8 +16,10 @@ from interfaces.cli.cli_utils import _print
 _CONFIG_ROOT_HELP = (
     "Claude Code config root to install into (repeatable). Each root is installed as a "
     "user-scope root with its own manifest, and no git pre-push hook is written. Without "
-    "it the root is guessed from the working directory (./.claude, else CLAUDE_CONFIG_DIR "
-    "or ~/.claude) and a pre-push hook goes into the working directory's repository."
+    "it the root is resolved in this order: ./.claude in the working directory (project "
+    "scope), CLAUDE_CONFIG_DIR, the active Dream Studio profile's claude_config_dir, "
+    "~/.claude; the chosen root and the reason are printed first, and a pre-push hook "
+    "goes into the working directory's repository."
 )
 
 
@@ -300,6 +303,12 @@ def dispatch(
             )
 
         detected = detect_claude_code(scope_override=scope)
+        # Say which root and why, before writing: the root is resolved, not given.
+        print(
+            f"[dream-studio] Claude Code root: {detected.config_root} ({detected.reason}). "
+            "Pass --config-root <path> to install into a specific root.",
+            file=sys.stderr,
+        )
         # B.3: install the git pre-push hook into the cwd's repo (if any).
         # Tests do NOT pass cwd, so the operator's real .git/hooks/ is untouched.
         cwd = Path.cwd()
@@ -336,6 +345,8 @@ def dispatch(
                 "derived_view": True,
                 "primary_authority": False,
                 **result,
+                "config_root": str(detected.config_root),
+                "config_root_reason": detected.reason,
             }
         )
 

@@ -54,6 +54,19 @@ and asks for a session restart, and the next one deletes them. `ds integrate ins
 under `<home>/integrations/claude_code/roots/`. An app defaults to the home it was
 installed into.
 
+Without `--config-root`, the Claude Code root is resolved in this order, and
+`ds integrate install` prints the root it chose and why before writing:
+
+1. `./.claude` in the working directory (project scope), or `--scope project`;
+2. `CLAUDE_CONFIG_DIR`, when set;
+3. the active Dream Studio profile's `claude_config_dir`;
+4. `~/.claude`.
+
+An install writes only into that root, the Dream Studio home and (from a checkout,
+without `--config-root`) the working directory's `.git/hooks`; a plan that writes
+anywhere else is refused. `ds doctor --fix` repairs the root it examined and passes it
+as `--config-root`, so it never writes a git hook.
+
 ## Global Command Surface
 
 The installed command surface is `ds`:
