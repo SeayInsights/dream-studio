@@ -325,6 +325,9 @@ def describe_backup(backup: Path) -> str:
             if "_schema_version" not in tables:
                 return "no Dream Studio schema"
             version = conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0]
+            if version is None:
+                # A pre-migration copy taken before the first migration ran.
+                return "empty, no migration applied"
             parts = [f"schema {version}"]
             for label, table in _DESCRIBED_TABLES:
                 if table in tables:
@@ -342,10 +345,15 @@ def restore_guidance(home: Path, db_path: Path) -> str:
 
     backups = present_backups(home)
     if backups:
-        listed = "; ".join(f"{p} ({describe_backup(p)})" for p in backups[:8])
+        described = [(p, describe_backup(p)) for p in backups]
+        listed = "; ".join(f"{p} ({what})" for p, what in described[:8])
         more = f" (and {len(backups) - 8} more)" if len(backups) > 8 else ""
         where = f"Backups present, newest first: {listed}{more}."
-        override = ""
+        holding = [p for p, what in described if what.startswith("schema ")]
+        # Only empty or unreadable copies: the deliberate way out stays visible.
+        override = (
+            "" if holding else " None of them holds an authority; " + _start_over(home, db_path)
+        )
     else:
         where = (
             f"No backup was found under {home / 'state' / 'backups'}, {home / 'backups'} or "

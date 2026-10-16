@@ -132,3 +132,17 @@ def test_the_refusal_names_the_deliberate_way_out_exactly_once(marked):
     with pytest.raises(AuthorityRefusedError) as excinfo:
         assert_may_create_database(marked / "state" / "studio.db")
     assert str(excinfo.value).count(f"{CREATE_AUTHORITY_ENV}=") == 1
+
+
+def test_a_pre_migration_copy_with_no_schema_reads_as_empty_and_the_way_out_stays(marked):
+    from core.config.sqlite_bootstrap import CREATE_AUTHORITY_ENV, restore_guidance
+
+    copy = marked / "state" / "backups" / "studio-pre-1-20261016-000000.db"
+    copy.parent.mkdir(parents=True)
+    conn = sqlite3.connect(str(copy))
+    conn.execute("CREATE TABLE _schema_version (version INTEGER PRIMARY KEY, applied_at TEXT)")
+    conn.commit()
+    conn.close()
+    text = restore_guidance(marked, marked / "state" / "studio.db")
+    assert "empty, no migration applied" in text and "schema None" not in text
+    assert f"{CREATE_AUTHORITY_ENV}=" in text and "migrate init" in text

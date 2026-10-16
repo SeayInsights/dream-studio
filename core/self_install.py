@@ -182,7 +182,12 @@ def _repoint_launchers(home: Path, backup_dir: Path, app_id: str, log: list[str]
     content = delegating_launchers(home)
     repointed = []
     for path in stale_path_launchers(home):
-        new = content.get(path.name) or next(iter(content.values()))
+        new = content.get(path.name)
+        if new is None:
+            # A launcher name this platform does not write (an extensionless `ds` on
+            # Windows): batch content in it would not run. Reported, not rewritten.
+            log.append(f"left {path}: no delegating launcher of that kind on this platform")
+            continue
         saved = backup_dir / "launchers" / path.name
         saved.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, saved)
@@ -398,11 +403,19 @@ _MIGRATE_PROBE = (
     " 'activation_carried_over': carried, 'code_root': str(code_root())}))\n"
 )
 
+#: Run by the PREVIOUS app, which may predate any helper module, so it is self-contained.
+#: Immutable when there is no WAL content to read, so it leaves no -wal/-shm behind.
 _SCHEMA_PROBE = (
-    "import json, sqlite3, sys\n"
+    "import json, os, sqlite3, sys\n"
+    "from pathlib import Path\n"
     "from core.config.sqlite_bootstrap import latest_migration_version\n"
-    "c = sqlite3.connect(sys.argv[1] + '?mode=ro', uri=True)\n"
+    "db = Path(sys.argv[1])\n"
+    "wal = Path(str(db) + '-wal')\n"
+    "busy = wal.is_file() and wal.stat().st_size > 0\n"
+    "flags = 'mode=ro' if busy else 'mode=ro&immutable=1'\n"
+    "c = sqlite3.connect(db.as_uri() + '?' + flags, uri=True)\n"
     "v = c.execute('SELECT MAX(version) FROM _schema_version').fetchone()[0] or 0\n"
+    "c.close()\n"
     "print(json.dumps({'schema_version': v, 'latest': latest_migration_version()}))\n"
 )
 
@@ -940,8 +953,7 @@ def self_install(plan: SelfInstallPlan, *, dry_run: bool) -> dict[str, Any]:
             "current_after": current,
             "error": (
                 f"{exc} self-install never creates an authority in a home that has had one "
-                f"(unless DREAM_STUDIO_CREATE_AUTHORITY names {plan.db_path}); it migrates the "
-                "one that is there."
+                "except that way; it migrates the one that is there."
             ),
         }
     # EVERY REFUSAL THE REAL RUN MAKES, THE DRY RUN MAKES TOO. A dry run that said ok:true
@@ -1178,7 +1190,7 @@ def rollback(home: Path, *, dry_run: bool) -> dict[str, Any]:
         venv = app_root / previous / "venv"
         probe = json.loads(
             _run(
-                [str(venv_python(venv)), "-I", "-c", _SCHEMA_PROBE, db_path.resolve().as_uri()],
+                [str(venv_python(venv)), "-I", "-c", _SCHEMA_PROBE, str(db_path.resolve())],
                 env=_app_env(home),
                 cwd=app_root,
             )
