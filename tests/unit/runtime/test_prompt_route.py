@@ -126,3 +126,48 @@ def test_main_survives_a_malformed_payload(monkeypatch, capsys, raw):
     monkeypatch.setattr(sys, "stdin", io.StringIO(raw))
     route.main()
     assert capsys.readouterr().out.strip() == ""
+
+
+# --- only the user's own words route ------------------------------------------------
+
+_BANNER = (
+    "\n[dream-studio] Welcome! Setup is not complete yet.\n\n"
+    "To finish onboarding correctly:\n\n"
+    "  1. Close this session\n"
+    "  2. Open a NEW Claude Code session\n"
+    "  3. Run: workflow: run studio-onboard\n\n"
+    "This message will not appear again once setup is complete.\n"
+)
+
+
+def _routed(prompt: str, capsys) -> str:
+    route._route({"prompt": prompt})
+    return capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "relayed",
+    [
+        "<task-notification>\n<summary>review: the agent finished; changelog updated</summary>\n"
+        "</task-notification>",
+        "<system-reminder>workflow: run studio-onboard</system-reminder>",
+        '<agent-message from="seat">review: PR 12 looks fine</agent-message>',
+        _BANNER,
+    ],
+)
+def test_text_the_user_did_not_write_never_routes(relayed, capsys, monkeypatch):
+    """The routing hook injected `<dream-studio-routing> ... 'workflow:'` because the
+    onboarding banner says `workflow: run studio-onboard`, and matched `review:` and
+    `changelog` inside harness-relayed agent reports and task notifications."""
+    monkeypatch.delenv("DS_ROUTING", raising=False)
+    assert _routed(relayed, capsys) == ""
+    assert _routed(f"thanks, carry on\n{relayed}", capsys) == ""
+
+
+def test_the_users_own_trigger_still_routes_beside_relayed_text(capsys, monkeypatch):
+    monkeypatch.delenv("DS_ROUTING", raising=False)
+    out = _routed(
+        "<system-reminder>workflow: run studio-onboard</system-reminder>\ndebug: my test fails",
+        capsys,
+    )
+    assert "ds-code-health" in out, out
