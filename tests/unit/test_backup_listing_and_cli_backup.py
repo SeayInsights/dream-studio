@@ -118,3 +118,17 @@ def test_with_no_backup_the_guidance_names_the_deliberate_way_out(marked):
     db = marked / "state" / "studio.db"
     text = restore_guidance(marked, db)
     assert f"{CREATE_AUTHORITY_ENV}={db}" in text
+
+
+def test_the_refusal_names_the_deliberate_way_out_exactly_once(marked):
+    import pytest
+
+    from core.config.sqlite_bootstrap import (
+        CREATE_AUTHORITY_ENV,
+        AuthorityRefusedError,
+        assert_may_create_database,
+    )
+
+    with pytest.raises(AuthorityRefusedError) as excinfo:
+        assert_may_create_database(marked / "state" / "studio.db")
+    assert str(excinfo.value).count(f"{CREATE_AUTHORITY_ENV}=") == 1

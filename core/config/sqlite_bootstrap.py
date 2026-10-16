@@ -447,13 +447,18 @@ def assert_may_create_database(db_path: str | Path) -> None:
         state = "is an empty file"
     else:
         state = "holds no Dream Studio schema or is not a SQLite database"
+    guidance = restore_guidance(home, db_path)
+    if CREATE_AUTHORITY_ENV not in guidance:
+        guidance += (
+            f" To start a new, empty authority deliberately, set "
+            f"{CREATE_AUTHORITY_ENV}={db_path}."
+        )
     raise AuthorityRefusedError(
         f"Refusing to create a new, empty authority at {db_path}: this home has an "
         f"installed Dream Studio ({', '.join(str(m) for m in markers[:3])}) but its "
         f"authority database {state}. Creating it would silently replace the operator's "
-        "projects, work orders and history with an empty database. Restore it instead. "
-        f"{restore_guidance(home, db_path)} To start a new, empty authority deliberately, "
-        f"set {CREATE_AUTHORITY_ENV}={db_path}."
+        f"projects, work orders and history with an empty database. Restore it instead. "
+        f"{guidance}"
     )
 
 
