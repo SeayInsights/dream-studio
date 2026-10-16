@@ -56,6 +56,7 @@ from interfaces.cli.commands import grader  # noqa: E402
 from interfaces.cli.commands import prove as prove_cmd  # noqa: E402
 from interfaces.cli.commands import enforce as enforce_cmd  # noqa: E402
 from interfaces.cli.commands import review as review_cmd  # noqa: E402
+from interfaces.cli.commands import self_install as self_install_cmd  # noqa: E402
 from interfaces.cli.commands import skill  # noqa: E402
 from interfaces.cli.commands import system  # noqa: E402
 from interfaces.cli.commands import task  # noqa: E402
@@ -153,6 +154,7 @@ def build_parser() -> argparse.ArgumentParser:
     config.register(subcommands)
     diagnostics.register(subcommands)
     mcp_cmd.register(subcommands)
+    self_install_cmd.register(subcommands)
 
     # -----------------------------------------------------------------------
     # Parse & resolve globals
@@ -323,6 +325,8 @@ def _run(parser, args, source_root: Path, home: Path | None) -> int:
             return config.dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "mcp":
             return mcp_cmd.dispatch(args, source_root=source_root, dream_studio_home=home)
+        if args.command == "self-install":
+            return self_install_cmd.dispatch(args, dream_studio_home=home)
         if args.command == "grader":
             return grader.dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "prove":
