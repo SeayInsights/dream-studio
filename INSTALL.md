@@ -69,7 +69,7 @@ Both should return status `pass` / `ready: true`.
 
 Register your first project:
 ```bash
-py -m interfaces.cli.ds project register --name "My Project"
+py -m interfaces.cli.ds project register --name "My Project" --path /path/to/your/project
 ```
 
 Then run `ds project state` to see where the work stands. In Claude Code, `resume:`

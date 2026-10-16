@@ -111,3 +111,10 @@ def test_ds_entry_preflight_is_at_module_level():
     assert (
         version_check_pos < main_def_pos
     ), "Version check must appear before def main() (module-level, not inside main)"
+
+
+def test_both_install_scripts_follow_dream_studio_home():
+    """They installed into ~/.dream-studio whatever DREAM_STUDIO_HOME said."""
+    for script in (_INSTALL_SH, _INSTALL_PS1):
+        content = script.read_text(encoding="utf-8")
+        assert "DREAM_STUDIO_HOME" in content and "--home" in content, script.name

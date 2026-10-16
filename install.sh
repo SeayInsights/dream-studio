@@ -60,11 +60,11 @@ cd "$REPO_DIR"
 
 # Install Dream Studio into its home as a versioned app (it creates or migrates the
 # authority) and its Claude Code integration into one config root. Run again to upgrade.
-DS_HOME_DIR="$HOME/.dream-studio"
+DS_HOME_DIR="${DREAM_STUDIO_HOME:-$HOME/.dream-studio}"
 CONFIG_ROOT="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 echo ""
 echo "Installing Dream Studio into $DS_HOME_DIR (Claude Code root: $CONFIG_ROOT)..."
-"$PYTHON" -m interfaces.cli.ds self-install --config-root "$CONFIG_ROOT" --execute || {
+"$PYTHON" -m interfaces.cli.ds --home "$DS_HOME_DIR" self-install --config-root "$CONFIG_ROOT" --execute || {
     echo "ERROR: ds self-install failed. See output above." >&2
     exit 1
 }

@@ -49,11 +49,11 @@ if ($LASTEXITCODE -ne 0) {
 
 # Install Dream Studio into its home as a versioned app (it creates or migrates the
 # authority) and its Claude Code integration into one config root. Run again to upgrade.
-$DsHome = "$env:USERPROFILE\.dream-studio"
+$DsHome = if ($env:DREAM_STUDIO_HOME) { $env:DREAM_STUDIO_HOME } else { "$env:USERPROFILE\.dream-studio" }
 $ConfigRoot = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { "$env:USERPROFILE\.claude" }
 Write-Host ""
 Write-Host "Installing Dream Studio into $DsHome (Claude Code root: $ConfigRoot)..."
-& $Python -m interfaces.cli.ds self-install --config-root "$ConfigRoot" --execute
+& $Python -m interfaces.cli.ds --home "$DsHome" self-install --config-root "$ConfigRoot" --execute
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: ds self-install failed. See output above." -ForegroundColor Red
     exit 1
