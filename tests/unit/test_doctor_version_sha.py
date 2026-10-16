@@ -1,4 +1,4 @@
-"""version_current compares the commit, not only the version string (round-table S13).
+"""version_current compares the commit, not only the version string.
 
 VERSION has said 0.1.0 for every commit, so comparing versions alone reported any
 older install as current.

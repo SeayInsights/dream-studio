@@ -1,11 +1,12 @@
 """How much business data the authority holds, and whether that just fell.
 
-The empty authority that replaced the operator's real one on 2026-09-23 passed
-every health check Dream Studio had: a database with the full schema and zero
-projects is perfectly healthy by every structural measure. What was wrong was
-the DATA, and nothing counted it. ``authority_data_check`` counts the key
-business tables read-only, warns on an empty one, and warns when a count fell
-below the last recorded baseline. Recording that baseline is a write, so it is
+When an operator's authority was replaced by an empty one on 2026-09-23 (a path
+resolved to a missing studio.db and a connection created a new file), the empty
+database passed every health check Dream Studio had: a database with the full schema
+and zero projects is healthy by every structural measure. What was wrong was the
+DATA, and nothing counted it. ``authority_data_check`` counts the key business tables
+read-only, notes an empty one, and warns when a count fell below the last recorded
+baseline, or when an installed home's authority is empty with no baseline at all. Recording that baseline is a write, so it is
 never implicit: ``ds doctor --record-counts`` and ``ds self-install`` record it.
 """
 

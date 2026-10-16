@@ -19,7 +19,11 @@ bash install.sh
 .\install.ps1
 ```
 
-The script installs Python dependencies, bootstraps the runtime database, and installs the Claude Code integration.
+The script installs the Python dependencies, then runs
+`ds self-install --config-root <root> --execute`: it builds Dream Studio from the
+committed checkout into `~/.dream-studio` as a versioned app, creates or migrates the
+authority, and installs the Claude Code integration into `CLAUDE_CONFIG_DIR` (or
+`~/.claude`). pip needs network access or a warm cache. Running it again upgrades.
 
 ## Manual Install
 

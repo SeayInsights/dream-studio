@@ -1,6 +1,6 @@
 """`ds doctor --fix` re-runs THIS Dream Studio against THIS home.
 
-Round-table B4: the repair steps spawned `sys.executable -m interfaces.cli.ds ...`
+The repair steps spawned `sys.executable -m interfaces.cli.ds ...`
 without -I and without --home. From an installed app run inside a checkout, `-m`
 put the working directory first on sys.path and the repair ran the checkout's code;
 and without --home it repaired the default home, not the one doctor examined.

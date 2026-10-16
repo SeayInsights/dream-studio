@@ -1,4 +1,4 @@
-"""An installed app never writes workflow prompts into its own code (round-table S5)."""
+"""An installed app never writes workflow prompts into its own code."""
 
 from __future__ import annotations
 

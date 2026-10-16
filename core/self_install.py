@@ -880,8 +880,9 @@ def self_install(plan: SelfInstallPlan, *, dry_run: bool) -> dict[str, Any]:
             "switched": False,
             "current_after": current,
             "error": (
-                f"{exc} self-install never creates an authority in a home that has had one; "
-                "it migrates the one that is there."
+                f"{exc} self-install never creates an authority in a home that has had one "
+                f"(unless DREAM_STUDIO_CREATE_AUTHORITY names {plan.db_path}); it migrates the "
+                "one that is there."
             ),
         }
     # EVERY REFUSAL THE REAL RUN MAKES, THE DRY RUN MAKES TOO. A dry run that said ok:true

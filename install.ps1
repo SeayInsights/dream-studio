@@ -47,26 +47,23 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# Bootstrap the runtime database
+# Install Dream Studio into its home as a versioned app (it creates or migrates the
+# authority) and its Claude Code integration into one config root. Run again to upgrade.
+$DsHome = "$env:USERPROFILE\.dream-studio"
+$ConfigRoot = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { "$env:USERPROFILE\.claude" }
 Write-Host ""
-Write-Host "Bootstrapping runtime database..."
-& $Python -m interfaces.cli.ds rehearsal-install --rehearsal-home "$env:USERPROFILE\.dream-studio"
+Write-Host "Installing Dream Studio into $DsHome (Claude Code root: $ConfigRoot)..."
+& $Python -m interfaces.cli.ds self-install --config-root "$ConfigRoot" --execute
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "ERROR: ds rehearsal-install (DB bootstrap) failed." -ForegroundColor Red
+    Write-Host "ERROR: ds self-install failed. See output above." -ForegroundColor Red
     exit 1
 }
 
-# Install the integration (CLAUDE.md, hooks, skill files)
-Write-Host ""
-Write-Host "Installing Dream Studio integration..."
-& $Python -m interfaces.cli.ds integrate install claude_code --execute
-
-# Report
+# Report, from the installed app
 Write-Host ""
 Write-Host "Running health check..."
-& $Python -m interfaces.cli.ds doctor
+& "$DsHome\bin\ds.cmd" doctor
 
 Write-Host ""
 Write-Host "Dream Studio installed." -ForegroundColor Green
-Write-Host "Restart PowerShell or run: . `$PROFILE"
-Write-Host "Then type: ds doctor"
+Write-Host "Add $DsHome\bin to PATH (see INSTALL.md), then type: ds doctor"

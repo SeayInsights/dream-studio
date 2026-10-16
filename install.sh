@@ -58,25 +58,22 @@ cd "$REPO_DIR"
     exit 1
 }
 
-# Bootstrap the runtime database
+# Install Dream Studio into its home as a versioned app (it creates or migrates the
+# authority) and its Claude Code integration into one config root. Run again to upgrade.
+DS_HOME_DIR="$HOME/.dream-studio"
+CONFIG_ROOT="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 echo ""
-echo "Bootstrapping runtime database..."
-"$PYTHON" -m interfaces.cli.ds rehearsal-install --rehearsal-home "$HOME/.dream-studio" || {
-    echo "ERROR: ds rehearsal-install (DB bootstrap) failed." >&2
+echo "Installing Dream Studio into $DS_HOME_DIR (Claude Code root: $CONFIG_ROOT)..."
+"$PYTHON" -m interfaces.cli.ds self-install --config-root "$CONFIG_ROOT" --execute || {
+    echo "ERROR: ds self-install failed. See output above." >&2
     exit 1
 }
 
-# Install the integration (CLAUDE.md, hooks, skill files)
-echo ""
-echo "Installing Dream Studio integration..."
-"$PYTHON" -m interfaces.cli.ds integrate install claude_code --execute
-
-# Report
+# Report, from the installed app
 echo ""
 echo "Running health check..."
-"$PYTHON" -m interfaces.cli.ds doctor
+"$DS_HOME_DIR/bin/ds" doctor
 
 echo ""
 echo "Dream Studio installed successfully."
-echo "Restart your terminal or run: source ~/.bashrc"
-echo "Then type: ds doctor"
+echo "Add $DS_HOME_DIR/bin to PATH (see INSTALL.md), then type: ds doctor"

@@ -112,7 +112,7 @@ def _baseline(tmp: Path) -> dict:
 
 
 def test_a_drop_is_attention_and_record_counts_will_not_bury_it(populated):
-    """Round-table S4: a drop used to leave the doctor at status pass and exit 0, and
+    """A drop used to leave the doctor at status pass and exit 0, and
     `--record-counts` recorded the smaller numbers as the new normal before checking."""
     proc = _ds(populated, "doctor", "--record-counts")
     assert proc.returncode == 0, proc.stdout[-1500:]

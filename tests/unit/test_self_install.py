@@ -304,7 +304,7 @@ def test_cli_refuses_a_dirty_tree(repo, home):
 
 def test_the_real_build_writes_the_home_marker_into_the_app_venv(si, repo, home, monkeypatch):
     """The fake_build fixture writes the marker itself, so it proved nothing about the
-    real _build_app (round-table S14). Here only the slow commands are stubbed -- the
+    real _build_app. Here only the slow commands are stubbed -- the
     wheel build, the venv and the pip install -- and the marker must come from the code."""
     import sys as _sys
 
@@ -329,7 +329,7 @@ def test_the_real_build_writes_the_home_marker_into_the_app_venv(si, repo, home,
 
 
 def test_self_install_refuses_over_a_drop_and_keeps_the_baseline(si, repo, home, fake_build):
-    """Round-table S4: self-install re-baselined over a drop and reported ok."""
+    """`ds self-install` re-baselined over a drop and reported ok."""
     db = _authority(home, rows=3)
     conn = sqlite3.connect(db)
     conn.execute("CREATE TABLE business_projects (project_id TEXT, name TEXT)")
@@ -438,7 +438,7 @@ def test_checkout_install_command_into_an_app_home_writes_delegating_launchers(t
 def test_self_install_repoints_a_checkout_launcher_on_path(
     si, repo, home, fake_build, tmp_path, monkeypatch
 ):
-    """Round-table S7: ~/.local/bin/ds.cmd stayed first on PATH and kept running the
+    """~/.local/bin/ds.cmd stayed first on PATH and kept running the
     checkout after self-install; the app's launcher was never reached."""
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "userhome"))
     stale = _checkout_launcher(home)
@@ -479,7 +479,7 @@ def test_install_command_from_an_app_delegates_to_the_home_launcher(tmp_path, mo
 
 
 def test_an_authority_activated_in_the_old_tree_keeps_its_activation(tmp_path, monkeypatch):
-    """Round-table S8: the operator activated 159 by bumping the in-tree .released_version
+    """The operator activated 159 by bumping the in-tree .released_version
     (the old mechanism). After self-install the shipped sentinel says 158 and no
     migrations-activated-version exists, so `ds migrate status` reported 159 pending on an
     authority that already had it."""

@@ -79,7 +79,7 @@ def test_the_installer_relocates_a_script_and_it_stays_one_hook():
 def test_a_module_spelling_is_the_same_hook_as_its_file(module_form, file_form):
     """An installed app registers `<python> -I -X utf8 -m <module>`. That is the same hook
     as the copied file it replaces, and as an earlier app's `-I -m` spelling, so a merge
-    must never register it beside either one (round-table nit)."""
+    must never register it beside either one."""
     assert hook_identity(module_form) == hook_identity(file_form)
 
 

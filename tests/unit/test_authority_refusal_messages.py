@@ -1,4 +1,4 @@
-"""What the operator is told when the authority is gone (round-table S10).
+"""What the operator is told when the authority is gone.
 
 Every CLI path that needs the authority said "Run rehearsal-install first" -- in an
 installed home that advice re-creates an empty authority over the lost one. And a

@@ -1,4 +1,5 @@
-"""Installer findings from the 2026-10-16 round table (B3, S1, S2, S6).
+"""The installer never rewires an app home, owns hooks by exact shape, retires copied
+hooks safely, and runs them in UTF-8 mode.
 
 B3  A checkout's files-mode install aimed at a self-installed home rewrote the app's
     launcher back to the checkout, stripped the sha from installed-version and

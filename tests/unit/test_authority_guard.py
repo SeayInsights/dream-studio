@@ -1,6 +1,6 @@
 """A missing authority is restored, never silently re-created.
 
-On 2026-09-23 the operator's authority was replaced by an empty database: a path
+On 2026-09-23 an operator's authority was replaced by an empty database: a path
 resolved to a missing studio.db, sqlite3.connect() created it, the migrations ran,
 and every command afterwards worked against a database with no projects in it.
 bootstrap_database, _connect and get_connection all create a missing file, and

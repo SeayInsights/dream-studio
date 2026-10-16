@@ -1,6 +1,6 @@
 """The authority guard cannot be walked around through an empty file.
 
-Round-table finding B1 (2026-10-16): assert_may_create_database only asked whether
+assert_may_create_database only asked whether
 studio.db EXISTED. About 120 raw sqlite3.connect() call sites create a 0-byte file
 on first touch -- the pulse's artifact read, the Stop handoff's config read, the
 PostToolUse rubric check, doctor's main-CI cache -- and every guarded open after

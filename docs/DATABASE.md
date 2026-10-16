@@ -204,9 +204,10 @@ replacing validation, Work Order, security, analytics, or adapter authority.
 - Migration activation state is per authority (`<home>/state/migrations-activated-version`);
   the shipped `core/event_store/migrations/.released_version` is never written at runtime.
 - `ds doctor` and `ds validate` read the authority through read-only connections.
-  `ds doctor` reports row counts of projects, work orders, tasks and events and warns
-  on an empty table or a drop against `<home>/state/authority-counts.json`
-  (written only by `ds doctor --record-counts` and `ds self-install`).
+  `ds doctor` reports row counts of projects, work orders, tasks and events. An empty
+  table is a note; it warns on a drop against `<home>/state/authority-counts.json`
+  (written only by `ds doctor --record-counts` and `ds self-install`), and on an
+  installed home's authority that is empty with no counts ever recorded.
 - Tests that write must use temp or injected DB paths.
 - Live DB migration requires explicit approval, fresh backup, backup verification, and rollback instructions.
 - Destructive migration, DB record deletion, retention cleanup, compaction, and archive execution are separate approval boundaries.

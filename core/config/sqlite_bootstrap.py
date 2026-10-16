@@ -391,7 +391,7 @@ def missing_authority_message(db_path: str | Path, fresh: str) -> str:
 def assert_may_create_database(db_path: str | Path) -> None:
     """Refuse to CREATE a database file whose absence means something went wrong.
 
-    sqlite3.connect() creates a missing file. On 2026-09-23 that is how the operator's
+    sqlite3.connect() creates a missing file. On 2026-09-23 that is how an operator's
     authority was replaced: a path resolved to a missing studio.db, a connection quietly
     created an empty one, the migrations ran on it, and every command from then on read
     and wrote a database with no projects in it. Nothing looked at the evidence that a

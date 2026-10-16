@@ -3,7 +3,7 @@
 Measured 2026-10-15 on main 0a1f7673: a wheel built from a clean export carried none
 of the runtime's data files (migrations, event schemas, packs.yaml, VERSION, the
 canonical tree), left out the top-level `compat` module and the `config` package,
-and an installed `ds --help` died with ModuleNotFoundError: compat. Every surface
+and an installed `ds --help` died with "No module named 'compat'". Every surface
 therefore ran straight from the git checkout.
 
 This builds the wheel from the TRACKED files only (what `git archive` of a commit
@@ -346,7 +346,7 @@ def test_installed_hook_modules_run_from_the_app_even_inside_a_checkout(
     if module == "runtime.dispatch.hooks":
         # A HANDLER ran, not just the entry point. The assertions above hold for a
         # dispatcher that exits 0 having run nothing; dispatch_tracking writes a timing
-        # line only for a handler it actually executed (round-table S14).
+        # line only for a handler it actually executed.
         timing = tmp / "home" / "state" / "hook-timing.jsonl"
         handlers = [json.loads(line)["handler"] for line in timing.read_text("utf-8").splitlines()]
         assert "on-prompt-dispatch" in handlers, handlers
@@ -545,7 +545,7 @@ def _surface(tmp: Path, name: str, cmd: list[str], cwd: Path, extra_env: dict) -
 
 
 def test_the_installed_app_serves_what_the_checkout_serves(installed):
-    """Round-table S5: runtime data the wheel did not ship (the security source list,
+    """Runtime data the wheel did not ship (the security source list,
     adapter-projections/) made six dashboard routes and `ds contract-atlas` fail in the
     app, the installed CLAUDE.md lost its Authority/Resume projection, and plugin_root()
     raised, which locked every progressive skill mode."""
