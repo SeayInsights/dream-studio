@@ -329,7 +329,7 @@ core/graph/query_analysis.py|226|falsy-return
 core/graph/query_analysis.py|229|falsy-return
 core/graph/query_analysis.py|288|falsy-return
 core/health/doctor_checks.py|36|falsy-return
-core/health/doctor_main.py|188|bare-except-pass
+core/health/doctor_main.py|212|bare-except-pass
 core/health/doctor_skill_sync.py|165|falsy-return
 core/health/doctor_skill_sync.py|169|falsy-return
 core/health/doctor_skill_sync.py|230|falsy-return

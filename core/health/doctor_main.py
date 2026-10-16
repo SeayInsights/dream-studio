@@ -35,6 +35,37 @@ from .doctor_checks import (
 )
 from .doctor_skill_sync import _check_skills_installed
 
+#: Runs the ds entry point from an explicit code root (argv[1]); the rest is ds's argv.
+_DS_BOOTSTRAP = (
+    "import sys; sys.path.insert(0, sys.argv.pop(1)); "
+    "from interfaces.cli.ds import main; sys.exit(main(sys.argv[1:]))"
+)
+
+
+def _ds_command(home: Path, *args: str) -> list[str]:
+    """The command that re-runs THIS ds (this interpreter, this code root) on *home*.
+
+    `sys.executable -m interfaces.cli.ds` put the working directory first on sys.path,
+    so an installed app's repair run inside a checkout executed the checkout; and with
+    no --home it repaired the default home rather than the one doctor examined.
+    -I drops the working directory and PYTHON* variables, -X utf8 keeps output decodable,
+    and the code root is passed explicitly.
+    """
+    from core.config.paths import code_root
+
+    return [
+        sys.executable,
+        "-I",
+        "-X",
+        "utf8",
+        "-c",
+        _DS_BOOTSTRAP,
+        str(code_root()),
+        "--home",
+        str(home),
+        *args,
+    ]
+
 
 def run_doctor_checks(
     *,
@@ -160,15 +191,8 @@ def run_doctor_checks(
         ):
             try:
                 subprocess.run(
-                    [
-                        sys.executable,
-                        "-m",
-                        "interfaces.cli.ds",
-                        "integrate",
-                        "install",
-                        "claude_code",
-                        "--execute",
-                    ],
+                    _ds_command(paths.dream_studio_home, "integrate", "install", "claude_code")
+                    + ["--execute"],
                     check=False,
                 )
                 fix_actions.append("install: ran integrate install claude_code --execute")
@@ -192,7 +216,7 @@ def run_doctor_checks(
                 fix_actions.append(f"requeue: failed — {exc}")
             try:
                 subprocess.run(
-                    [sys.executable, "-m", "interfaces.cli.ds", "spool", "ingest"],
+                    _ds_command(paths.dream_studio_home, "spool", "ingest"),
                     check=False,
                 )
                 fix_actions.append("spool ingest: ran spool ingest to process requeued events")
@@ -201,7 +225,7 @@ def run_doctor_checks(
         if not version_info["current"]:
             try:
                 subprocess.run(
-                    [sys.executable, "-m", "interfaces.cli.ds", "update"],
+                    _ds_command(paths.dream_studio_home, "update"),
                     check=False,
                 )
                 fix_actions.append("update: ran ds update")
