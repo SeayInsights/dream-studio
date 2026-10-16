@@ -21,9 +21,10 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
     )
     analyze_sub = analyze_cmd.add_subparsers(dest="analyze_command", required=True)
 
-    analyze_aggregate = analyze_sub.add_parser(  # noqa: F841
+    analyze_aggregate = analyze_sub.add_parser(
         "aggregate", help="Run ML metrics aggregation (studio.db → aggregate_metrics.db)"
     )
+    analyze_aggregate.set_defaults(reads_authority=True)
 
     analyze_intake = analyze_sub.add_parser(
         "intake", help="Register a brownfield repo for intake scanning"

@@ -126,6 +126,7 @@ def add_render_subcommand(subparsers) -> None:
         "findings",
         help="Every finding from every producer, in one page",
     )
+    findings.set_defaults(reads_authority=True)
     findings.add_argument(
         "--project-id",
         default=None,

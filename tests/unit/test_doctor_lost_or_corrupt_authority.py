@@ -97,7 +97,11 @@ def test_a_corrupt_authority_routes_every_surface_to_restore(tmp_path):
     identity = ["-c", "user.name=t", "-c", "user.email=t@t"]
     for cmd in (["init", "-q"], ["add", "."], [*identity, "commit", "-q", "-m", "one"]):
         subprocess.run(["git", "-C", str(repo), *cmd], check=True, capture_output=True)
-    for args in (("project", "state"), ("self-install", "--dry-run", "--repo", str(repo))):
+    for args in (
+        ("project", "state"),
+        ("acceptance",),
+        ("self-install", "--dry-run", "--repo", str(repo)),
+    ):
         proc = _ds(tmp_path, *args)
         out = proc.stdout + proc.stderr
         assert proc.returncode != 0, out[-1500:]

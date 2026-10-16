@@ -276,7 +276,9 @@ def _run(parser, args, source_root: Path, home: Path | None) -> int:
     # A command that reads or writes the authority refuses, loudly and with the way back,
     # in a home that has had an install and lost it: these used to answer "No open
     # escalations.", HEALTHY, or ready:false with exit 0, over an authority that was gone.
-    if args.command in _AUTHORITY_COMMANDS:
+    # A whole command in _AUTHORITY_COMMANDS, or one subcommand that declares it reads the
+    # authority with set_defaults(reads_authority=True).
+    if args.command in _AUTHORITY_COMMANDS or getattr(args, "reads_authority", False):
         from core.config.database import _default_db_path
         from core.config.sqlite_bootstrap import lost_authority_message
 

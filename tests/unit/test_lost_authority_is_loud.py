@@ -85,6 +85,9 @@ def test_a_prompt_in_a_home_that_lost_its_authority_carries_the_restore_guidance
         ["pulse"],
         ["validate"],
         ["migrate", "status"],
+        ["enforce", "report"],
+        ["analyze", "aggregate"],
+        ["render", "findings"],
     ],
 )
 def test_cli_commands_refuse_loudly_in_a_home_that_lost_its_authority(lost, command):
