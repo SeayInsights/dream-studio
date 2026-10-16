@@ -202,7 +202,9 @@ class TestMigrateActivate:
         assert rc == 0
         assert "--confirm" in out
 
-    def test_activate_confirm_applies_and_bumps_released_version(self, tmp_path: Path) -> None:
+    def test_activate_confirm_applies_and_records_activation_beside_the_authority(
+        self, tmp_path: Path
+    ) -> None:
         mdir = tmp_path / "migrations"
         mdir.mkdir()
         _make_migration(mdir, 1, "init")
@@ -223,7 +225,13 @@ class TestMigrateActivate:
         assert len(result["applied"]) == 1
         assert result["applied"][0]["version"] == 2
         assert result["released_version"] == 2
-        assert rv.read_text(encoding="utf-8").strip() == "2"
+        # Activation is recorded beside the authority; the shipped file is never written.
+        assert (tmp_path / "migrations-activated-version").read_text(encoding="utf-8") == "2"
+        assert rv.read_text(encoding="utf-8").strip() == "1"
+        with patch("core.config.sqlite_bootstrap.migrations_dir", return_value=mdir):
+            from core.config.sqlite_bootstrap import pending_migrations_info
+
+            assert pending_migrations_info(db_path) == []
 
     def test_activate_no_pending_returns_ok(self, tmp_path: Path) -> None:
         mdir = tmp_path / "migrations"

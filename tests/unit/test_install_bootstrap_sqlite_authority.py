@@ -58,7 +58,7 @@ def test_fresh_temp_home_runtime_bootstrap_creates_db_and_applies_latest(
         # applies migrations up to the RELEASED version and defers any unreleased ones
         # (latest > released) to `ds migrate activate`. This equals latest only when no
         # migration is pending release; with one pending (e.g. 153) it is released.
-        assert _schema_version(expected_db) == released_migration_version()
+        assert _schema_version(expected_db) == released_migration_version(expected_db)
         assert expected_db != LIVE_DB
     finally:
         DatabaseRuntime.reset_instance()

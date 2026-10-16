@@ -758,8 +758,12 @@ def _validate_status(*, source_root: Path, dream_studio_home: Path | None) -> di
 def _migrate_command(args: argparse.Namespace) -> int:
     from core.config.sqlite_bootstrap import activate_pending_migrations, pending_migrations_info
 
+    # Activation state belongs to an authority, so "pending" is asked of the one this
+    # command acts on: --db-path when given, else the default authority.
+    db_path = Path(args.db_path).resolve() if getattr(args, "db_path", None) else None
+
     if args.migrate_subcommand == "status":
-        pending = pending_migrations_info()
+        pending = pending_migrations_info(db_path)
         if not pending:
             return _print(
                 {"ok": True, "pending_count": 0, "message": "All merged migrations are activated."}
@@ -777,7 +781,7 @@ def _migrate_command(args: argparse.Namespace) -> int:
         )
 
     if args.migrate_subcommand == "activate":
-        pending = pending_migrations_info()
+        pending = pending_migrations_info(db_path)
         if not pending:
             return _print(
                 {"ok": True, "applied": [], "message": "No pending migrations to activate."}
@@ -791,7 +795,6 @@ def _migrate_command(args: argparse.Namespace) -> int:
             print("  Re-run with --confirm to proceed.\n")
             return 0
 
-        db_path = Path(args.db_path).resolve() if getattr(args, "db_path", None) else None
         result = activate_pending_migrations(db_path)
         return _print(result)
 

@@ -16,7 +16,10 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from core.config.sqlite_bootstrap import released_migration_version
+# The SHIPPED ceiling (migrations/.released_version), not released_migration_version(),
+# which also counts a local `ds migrate activate` beside the authority: this pins what
+# every install receives.
+from core.config.sqlite_bootstrap import shipped_released_version
 
 # The migration that adds the ``impact_affirmation`` artifact kind (core/event_store/
 # migrations/154_wo_artifacts_impact_affirmation.sql). The change_impact_affirmed gate is
@@ -27,7 +30,7 @@ IMPACT_AFFIRMATION_MIGRATION = 154
 
 def test_affirmation_migration_released_and_write_degrades_gracefully(tmp_path: Path):
     # 1. The gate's backing migration is released (not "unreleased" on live DBs).
-    assert released_migration_version() >= IMPACT_AFFIRMATION_MIGRATION, (
+    assert shipped_released_version() >= IMPACT_AFFIRMATION_MIGRATION, (
         "migration that adds impact_affirmation is unreleased while the change_impact_affirmed "
         "gate is active by calendar — affirm-impact cannot store, close is blocked"
     )

@@ -292,3 +292,28 @@ def test_backup_only_taken_once_per_run_migrations_call(tmp_path, monkeypatch):
         assert len(backups) == 1, f"Expected exactly 1 backup, got {backups}"
     finally:
         conn.close()
+
+
+def test_activation_state_beside_an_authority_raises_only_its_released_version(
+    tmp_path, monkeypatch
+):
+    """`ds migrate activate` records its activation beside the authority it activated
+    (ACTIVATED_VERSION_FILE), never in the shipped migrations directory: one authority's
+    activation must not release a migration for another."""
+    from core.config import sqlite_bootstrap
+
+    fake_migrations = tmp_path / "migrations"
+    fake_migrations.mkdir()
+    for version in (1, 2, 3):
+        _inject_migration(fake_migrations, version)
+    (fake_migrations / ".released_version").write_text("1\n", encoding="utf-8")
+    monkeypatch.setattr(sqlite_bootstrap, "migrations_dir", lambda: fake_migrations)
+
+    activated = tmp_path / "home-a" / "state" / "studio.db"
+    other = tmp_path / "home-b" / "state" / "studio.db"
+    activated.parent.mkdir(parents=True)
+    (activated.parent / sqlite_bootstrap.ACTIVATED_VERSION_FILE).write_text("3", encoding="utf-8")
+
+    assert released_migration_version(activated) == 3
+    assert released_migration_version(other) == 1
+    assert (fake_migrations / ".released_version").read_text(encoding="utf-8") == "1\n"

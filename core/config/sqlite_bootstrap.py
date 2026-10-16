@@ -9,9 +9,12 @@ from the repo-backed migration files without relying on an existing operator DB.
 Migrations auto-apply on every _connect() call. To prevent an in-dev migration
 on a feature branch from silently mutating the live authority DB before review:
 
-1. ``core/event_store/migrations/.released_version`` tracks the max released
-   migration version (updated when a migration PR merges to main). Any migration
-   with version > released_version is considered unreleased.
+1. ``core/event_store/migrations/.released_version`` is the SHIPPED default: the max
+   released migration version (updated when a migration PR merges to main). It is
+   read-only at runtime. ``ds migrate activate`` records its own activation beside the
+   authority it activated (``<home>/state/migrations-activated-version``); the released
+   version of an authority is the larger of the two. Any migration with a higher
+   version is considered unreleased.
 
 2. Unreleased migrations will NOT apply to the live authority DB
    (~/.dream-studio/state/studio.db) unless ``DREAM_STUDIO_APPLY_UNRELEASED=1``
@@ -63,12 +66,17 @@ def latest_migration_version() -> int:
     return max(_migration_version(path) for path in files)
 
 
-def released_migration_version() -> int:
-    """Return the max migration version considered released on main.
+#: Per-authority activation state, written by `ds migrate activate` NEXT TO the database
+#: it activated (normally <home>/state/). It used to be written into the shipped
+#: migrations directory, which made every activation an edit to the source tree -- a
+#: dirty checkout for a developer, and a write into site-packages for an installed app.
+ACTIVATED_VERSION_FILE = "migrations-activated-version"
 
-    Reads from ``core/event_store/migrations/.released_version``. If the file
-    is absent (e.g. older installs), all current migrations are treated as
-    released (backward-compatible default).
+
+def shipped_released_version() -> int:
+    """The released version the code ships: migrations/.released_version (read-only).
+
+    Absent or unreadable means every shipped migration is released (older installs).
     """
 
     rv_path = migrations_dir() / ".released_version"
@@ -78,6 +86,38 @@ def released_migration_version() -> int:
         return int(rv_path.read_text(encoding="utf-8").strip())
     except (ValueError, OSError):
         return latest_migration_version()
+
+
+def _activation_state_path(db_file: str | Path | None = None) -> Path:
+    """Where the activation state of the authority at *db_file* lives."""
+
+    if not db_file:
+        from core.config.database import _default_db_path
+
+        db_file = _default_db_path()
+    return Path(db_file).parent / ACTIVATED_VERSION_FILE
+
+
+def activated_migration_version(db_file: str | Path | None = None) -> int:
+    """The version `ds migrate activate` last activated for this authority (0 if never)."""
+
+    state = _activation_state_path(db_file)
+    if not state.is_file():
+        return 0
+    text = state.read_text(encoding="utf-8").strip()
+    # Unparseable state is "never activated": the shipped default still applies.
+    return int(text) if text.isdigit() else 0
+
+
+def released_migration_version(db_file: str | Path | None = None) -> int:
+    """Return the max migration version considered released for this authority.
+
+    The larger of the shipped default (``migrations/.released_version``, bumped when a
+    migration PR merges) and the authority's own activation state (``ds migrate
+    activate``). *db_file* defaults to the default authority path.
+    """
+
+    return max(shipped_released_version(), activated_migration_version(db_file))
 
 
 def _is_live_authority_db(db_file: str) -> bool:
@@ -148,13 +188,13 @@ def split_statements(sql_text: str) -> list[str]:
     return statements
 
 
-def pending_migrations_info() -> list[dict]:
+def pending_migrations_info(db_file: str | Path | None = None) -> list[dict]:
     """Return metadata for merged-but-not-activated migrations.
 
     Pending = version > released_migration_version() AND <= latest_migration_version().
     These are merged to repo/HEAD but not yet activated on the live authority DB.
     """
-    released = released_migration_version()
+    released = released_migration_version(db_file)
     pending = []
     for path in migration_files():
         version = _migration_version(path)
@@ -169,17 +209,18 @@ def pending_migrations_info() -> list[dict]:
 def activate_pending_migrations(db_path: Path | None = None) -> dict:
     """Apply pending-activation migrations to the live authority DB.
 
-    Operator-invoked ONLY via ``ds migrate activate``. Bumps .released_version
-    to the latest merged migration after successful apply.
+    Operator-invoked ONLY via ``ds migrate activate``. Records the latest merged
+    migration as activated FOR THIS AUTHORITY (ACTIVATED_VERSION_FILE beside it) after
+    a successful apply. The shipped migrations/.released_version is never written.
     """
     if db_path is None:
         from core.config.paths import home_dir
 
         db_path = home_dir() / "state" / "studio.db"
 
-    pending = pending_migrations_info()
+    pending = pending_migrations_info(db_path)
     if not pending:
-        released = released_migration_version()
+        released = released_migration_version(db_path)
         return {
             "ok": True,
             "applied": [],
@@ -188,6 +229,8 @@ def activate_pending_migrations(db_path: Path | None = None) -> dict:
             "message": "No pending migrations.",
         }
 
+    db_path = Path(db_path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path), timeout=30.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
@@ -200,8 +243,9 @@ def activate_pending_migrations(db_path: Path | None = None) -> dict:
         conn.close()
 
     latest = latest_migration_version()
-    rv_path = migrations_dir() / ".released_version"
-    rv_path.write_text(str(latest), encoding="utf-8")
+    state = _activation_state_path(db_path)
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(str(latest), encoding="utf-8")
 
     # Post-activation data backfills (idempotent, best-effort). Client Layer (migration 155):
     # classify every project with a NULL client_id into a client via project.client_assigned
@@ -264,7 +308,7 @@ def run_migrations(
     db_row = conn.execute("PRAGMA database_list").fetchone()
     db_file: str = db_row[2] if db_row else ""
     live = _is_live_authority_db(db_file)
-    released = released_migration_version()
+    released = released_migration_version(db_file or None)
     if apply_unreleased is None:
         apply_unreleased = bool(os.environ.get("DREAM_STUDIO_APPLY_UNRELEASED"))
     backup_taken = False

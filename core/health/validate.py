@@ -28,7 +28,7 @@ def run_validation(
     if db_exists:
         with _connect(paths.sqlite_path) as conn:
             schema_version = conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0]
-    pending = pending_migrations_info()
+    pending = pending_migrations_info(paths.sqlite_path)
     return {
         "model_name": "dream_studio_installed_runtime_validation",
         "derived_view": True,
