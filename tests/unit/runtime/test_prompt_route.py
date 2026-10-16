@@ -171,3 +171,19 @@ def test_the_users_own_trigger_still_routes_beside_relayed_text(capsys, monkeypa
         capsys,
     )
     assert "ds-code-health" in out, out
+
+
+@pytest.mark.parametrize(
+    "relayed",
+    [
+        '<channel source="x">review: please</channel>',
+        "<bash-stdout>workflow: ran</bash-stdout>",
+        "<local-command-caveat>review: generated</local-command-caveat>",
+        "<system-reminder>review: never closed",
+        "<task-notification>outer <task-notification>review: inner</task-notification>"
+        " changelog after</task-notification>",
+    ],
+)
+def test_more_relayed_shapes_never_route(relayed, capsys, monkeypatch):
+    monkeypatch.delenv("DS_ROUTING", raising=False)
+    assert _routed(relayed, capsys) == ""
