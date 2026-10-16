@@ -53,11 +53,13 @@ def _interpolate_hook_modules(hooks: list[dict[str, Any]], python_cmd: str) -> l
     """Rewrite template hook commands to run installed MODULES, not copied files.
 
     `{python_cmd} "{hooks_dir}/dispatch/hooks.py" Stop` becomes
-    `{python_cmd} -I -m runtime.dispatch.hooks Stop`. -I (isolated mode) matters: a hook
+    `{python_cmd} -I -X utf8 -m runtime.dispatch.hooks Stop`. -I (isolated mode) matters: a hook
     runs with the PROJECT as its working directory, and plain `-m` puts that directory
     first on sys.path -- so inside a Dream Studio checkout the hook would import the
     checkout's `runtime` instead of the installed app's. Isolated mode also ignores
-    PYTHONPATH. A template entry with no module mapping raises: silently keeping a file
+    PYTHONPATH -- and PYTHONIOENCODING, which is why -X utf8 is there: without it stdin
+    and stdout were cp1252, a non-ASCII project path failed to decode and the edit guard
+    failed open. A template entry with no module mapping raises: silently keeping a file
     path would point the hook at a file module mode no longer installs.
     """
     import copy as _copy
@@ -74,7 +76,7 @@ def _interpolate_hook_modules(hooks: list[dict[str, Any]], python_cmd: str) -> l
                 rel = match.group(1)
                 if rel not in MODULE_FOR_HOOK_FILE:
                     raise ValueError(f"hooks_template.json names {rel!r}, which has no module")
-                return f"-I -m {MODULE_FOR_HOOK_FILE[rel]}"
+                return f"-I -X utf8 -m {MODULE_FOR_HOOK_FILE[rel]}"
 
             cmd = _HOOK_FILE_ARG.sub(_module, cmd)
             h["command"] = cmd.replace("{python_cmd}", python_cmd)

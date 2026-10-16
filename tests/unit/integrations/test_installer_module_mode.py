@@ -7,8 +7,8 @@ manifest per home, shared by every Claude Code config root installed from it, an
 guessed the config root from the working directory.
 
 Module mode (the default from an installed app) writes settings.json commands of the
-form `<app python> -I -m runtime.dispatch.hooks Stop`, copies no hook files, removes
-the copies a previous install recorded in this root's manifest, and drops the old
+form `<app python> -I -X utf8 -m runtime.dispatch.hooks Stop`, copies no hook files, retires
+then removes the copies a previous install recorded in this root's manifest, and drops the old
 file-path commands so no hook runs twice.
 """
 
@@ -109,7 +109,7 @@ def test_module_mode_plan_copies_nothing_and_runs_modules(tmp_path, canonical_ro
     ]
     assert commands
     for cmd in commands:
-        assert " -I -m " in cmd, cmd
+        assert " -I -X utf8 -m " in cmd, cmd
         assert "{hooks_dir}" not in cmd and "hooks/" not in cmd.replace("\\", "/"), cmd
     assert any("-m runtime.dispatch.hooks UserPromptSubmit" in c for c in commands)
     assert any("-m runtime.hooks.meta.on-edit-enforce" in c for c in commands)
@@ -131,8 +131,10 @@ def test_switching_to_module_mode_removes_the_copies_and_the_old_commands(
     stray.write_text("# not ours", encoding="utf-8")
 
     result = _install(config_root, canonical_root, ds_home, "module")
-
     assert result["hook_mode"] == "module"
+    # The first install only retires the copies (a running session still calls them);
+    # the next one removes them: see test_installer_round_two.py.
+    result = _install(config_root, canonical_root, ds_home, "module")
     assert result["hook_files_removed"] > 0
     assert not (hooks_dir / ".ds-source-root").exists()
     assert not (hooks_dir / ".plugin-root").exists()
@@ -143,7 +145,7 @@ def test_switching_to_module_mode_removes_the_copies_and_the_old_commands(
     commands = _commands(config_root)
     assert "echo foreign-hook" in commands
     ds_commands = [c for c in commands if c != "echo foreign-hook"]
-    assert ds_commands and all(" -I -m " in c for c in ds_commands), ds_commands
+    assert ds_commands and all(" -I -X utf8 -m " in c for c in ds_commands), ds_commands
     registrations = [
         (event, e.get("matcher"), h["command"])
         for event, entries in _settings(config_root)["hooks"].items()
