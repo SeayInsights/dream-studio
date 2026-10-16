@@ -61,6 +61,27 @@ def clear_expired_sentinels(db_path: Path | None = None) -> int:
 
 
 @_with_retry
+def _surface_authority_refusal(exc: Exception, session_id: str | None) -> None:
+    """Say once per session that the authority guard is refusing every write.
+
+    The refusal used to vanish into hook_executions_fallback.jsonl: a session in an
+    installed home whose authority was lost wrote nothing anywhere and nobody was told.
+    One stderr line per session, marked by a file in the state directory.
+    """
+    from core.config.sqlite_bootstrap import AuthorityRefusedError
+
+    if not isinstance(exc, AuthorityRefusedError):
+        return
+    safe = "".join(c for c in (session_id or "no-session") if c.isalnum() or c in "-_")[:64]
+    marker = paths.state_dir() / f".authority-refused-{safe}"
+    if marker.exists():
+        return
+    marker.touch()
+    import sys
+
+    print(f"[dream-studio] {exc}", file=sys.stderr)
+
+
 def insert_hook_execution(
     hook_name: str,
     hook_type: str,
@@ -119,6 +140,7 @@ def insert_hook_execution(
     except Exception as e:
         # 3. If DB locked: write to fallback file
         _reraise_if_busy(e)
+        _surface_authority_refusal(e, session_id)
         try:
             fallback = paths.state_dir() / "hook_executions_fallback.jsonl"
             fallback.parent.mkdir(parents=True, exist_ok=True)

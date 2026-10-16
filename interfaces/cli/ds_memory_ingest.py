@@ -500,9 +500,14 @@ def run_memory_ingest(
 ) -> dict:
     """Run all three extraction passes and return a summary report."""
     if not dry_run and not db_path.exists():
+        from core.config.sqlite_bootstrap import missing_authority_message
+
         raise RuntimeError(
-            f"Dream Studio SQLite authority is missing at {db_path}. "
-            "Run rehearsal-install first."
+            missing_authority_message(
+                db_path,
+                f"Dream Studio SQLite authority is missing at {db_path}. "
+                "Run rehearsal-install first.",
+            )
         )
 
     # studio.db connection for authority reads (reg_gotchas, business_projects)

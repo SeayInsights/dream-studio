@@ -258,6 +258,24 @@ def restore_guidance(home: Path, db_path: Path) -> str:
     )
 
 
+def missing_authority_message(db_path: str | Path, fresh: str) -> str:
+    """What to tell the operator when a command needs an authority that is not there.
+
+    In a home that has had an install the bootstrap advice the CLI used to give
+    ("Run rehearsal-install first") would re-create an empty authority over the lost one;
+    there the message says to restore, and lists the backups actually present. *fresh*
+    is the existing advice, kept for a home that never had an authority.
+    """
+    db_path = Path(db_path)
+    home = _owning_home(db_path)
+    if home is None or not _install_markers(home):
+        return fresh
+    return (
+        f"Dream Studio SQLite authority is missing at {db_path}, in a home that has had an "
+        f"install. Restore it; do not re-create it. {restore_guidance(home, db_path)}"
+    )
+
+
 def assert_may_create_database(db_path: str | Path) -> None:
     """Refuse to CREATE a database file whose absence means something went wrong.
 
