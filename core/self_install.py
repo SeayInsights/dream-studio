@@ -892,11 +892,22 @@ def self_install(plan: SelfInstallPlan, *, dry_run: bool) -> dict[str, Any]:
     # A DROP STOPS THE INSTALL. Counts below the recorded baseline mean business data went
     # missing since the last check; installing over that, then recording the smaller
     # numbers as the new baseline, would bury the loss.
-    from core.health.authority_data import authority_data_check, drops
+    from core.health.authority_data import authority_data_check, drops, empty_without_baseline
 
     before = authority_data_check(plan.home, plan.db_path)
     refusal = None
-    if drops(before):
+    if db_exists and empty_without_baseline(before):
+        # What a REPLACED authority looks like. Installing over it and recording zeros as
+        # the baseline would make the next doctor say pass. Only a run that creates the
+        # authority records its empty counts without asking.
+        refusal = (
+            "refusing to install: this installed home's authority exists but holds no "
+            "projects, work orders, tasks or events, and no counts were ever recorded. If it "
+            "had data it was replaced: restore it (`ds --home "
+            f"{plan.home} restore <dir> --execute`). If it is meant to be empty, record that "
+            f"with `ds --home {plan.home} doctor --record-counts`, then run self-install again."
+        )
+    elif drops(before):
         refusal = (
             "refusing to install: the authority's business counts dropped since the last "
             f"baseline ({'; '.join(drops(before))}). Restore from a backup, or record the "

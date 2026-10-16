@@ -659,3 +659,31 @@ def test_an_incomplete_live_app_is_never_removed(si, repo, home, fake_build, mon
 def test_a_failed_command_shows_its_arguments_not_its_program(si):
     shown = si._shown(["C:/py.exe", "-I", "-c", "import x\nprint(1)", "C:/home/state/studio.db"])
     assert shown == "C:/py.exe -I -c <inline program> C:/home/state/studio.db"
+
+
+def test_self_install_refuses_an_installed_homes_empty_authority_with_no_baseline(
+    si, repo, home, fake_build, monkeypatch
+):
+    """It printed doctor's replaced-authority warning inside ok:true and recorded a zero
+    baseline, so the next doctor said pass over what may be a replaced authority."""
+    from core.config.sqlite_bootstrap import CREATE_AUTHORITY_ENV, bootstrap_database
+
+    (home / "state" / "installed-version").write_text("0.1.0 " + "a" * 40 + "\n", "utf-8")
+    db = home / "state" / "studio.db"
+    monkeypatch.setenv("DREAM_STUDIO_APPLY_UNRELEASED", "1")
+    monkeypatch.setenv(CREATE_AUTHORITY_ENV, str(db))
+    bootstrap_database(db)
+    monkeypatch.delenv(CREATE_AUTHORITY_ENV)
+    plan = si.resolve_plan(home=home, repo=repo, ref="HEAD")
+    for dry_run in (True, False):
+        result = si.self_install(plan, dry_run=dry_run)
+        assert result["ok"] is False, result
+        assert "doctor --record-counts" in result["error"]
+    assert not (home / "state" / "authority-counts.json").exists()
+    assert not (home / "app" / "current").exists()
+
+
+def test_a_first_install_that_creates_the_authority_records_it_silently(si, repo, home, fake_build):
+    plan = si.resolve_plan(home=home, repo=repo, ref="HEAD")
+    result = si.self_install(plan, dry_run=False)
+    assert result["ok"], result

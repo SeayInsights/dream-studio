@@ -104,11 +104,16 @@ def authority_data_check(home: Path, db_path: Path) -> dict[str, Any]:
             result["warnings"].append(f"{label}: table {KEY_TABLES[label]} is missing")
         elif count == 0:
             result["notes"].append(f"{label}: zero rows")
-    if not previous and _install_markers(home) and counts and not any(counts.values()):
+    if (
+        not previous
+        and _install_markers(home)
+        and counts
+        and all(isinstance(c, int) and c == 0 for c in counts.values())
+    ):
         # What a REPLACED authority looks like: schema-complete, empty, and no baseline to
         # compare against because the baseline was never recorded or was lost with it.
         result["warnings"].append(
-            "this installed home's authority holds no projects, work orders, tasks or events "
+            f"this installed home's {EMPTY_WITHOUT_BASELINE} "
             "and no counts were ever recorded: if it had data, it was replaced, so restore it "
             "(`ds --home <home> restore <dir> --execute`); if it is new, record the empty "
             "baseline with `ds doctor --record-counts`"
@@ -122,6 +127,15 @@ def authority_data_check(home: Path, db_path: Path) -> dict[str, Any]:
                     f"{label}: dropped from {was} to {count} since {previous.get('recorded_at')}"
                 )
     return result
+
+
+#: The words of the warning for an installed home's empty authority with no baseline.
+EMPTY_WITHOUT_BASELINE = "authority holds no projects, work orders, tasks or events"
+
+
+def empty_without_baseline(check: dict[str, Any]) -> list[str]:
+    """The replaced-authority warning of an authority_data_check result, if it has one."""
+    return [w for w in check.get("warnings", []) if EMPTY_WITHOUT_BASELINE in w]
 
 
 def drops(check: dict[str, Any]) -> list[str]:
