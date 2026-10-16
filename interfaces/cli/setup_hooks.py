@@ -187,6 +187,8 @@ def _split_interpreter(command: str) -> tuple[str, str] | None:
 
 #: A handler script named anywhere in a command, however it is spelled.
 _SCRIPT_RE = re.compile(r"[\w.\-]+\.py")
+#: A module run with `-m`, after any interpreter flags.
+_MODULE_RE = re.compile(r"(?:^|\s)-m\s+([\w\-]+(?:\.[\w\-]+)*)(?=\s|$)")
 #: The event the hook handles. Quoted inside a bootstrap
 #: (``sys.argv=[str(x),'PostToolUse']``), bare as a resolved argv
 #: (``"<script>" PostToolUse``) -- both spellings must read the same.
@@ -220,6 +222,11 @@ def hook_identity(command: str) -> str:
     tail = tail.replace(NATIVE_ENQUEUE_BIN, "enqueue.py")
     # Same reasoning for the native enforcer: it IS on-edit-enforce.py.
     tail = tail.replace(NATIVE_ENFORCE_BIN, "on-edit-enforce.py")
+    # An installed app runs the module (`<python> -I -X utf8 -m runtime.dispatch.hooks`)
+    # that the copied file (`.../dispatch/hooks.py`) used to run: the same hook, keyed by
+    # the module's last component as the file is keyed by its basename. Interpreter flags
+    # (`-I`, `-X utf8`) are spelling, not identity.
+    tail = _MODULE_RE.sub(lambda m: f" {m.group(1).rsplit('.', 1)[-1]}.py", tail)
     scripts = _SCRIPT_RE.findall(tail)
     if scripts:
         event = _EVENT_RE.search(tail)

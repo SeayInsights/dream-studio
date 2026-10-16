@@ -53,6 +53,47 @@ def test_the_installer_relocates_a_script_and_it_stays_one_hook():
 
 
 @pytest.mark.parametrize(
+    "module_form,file_form",
+    [
+        (
+            '"C:/ds/app/current/venv/Scripts/python.exe" -I -X utf8 -m runtime.dispatch.hooks Stop',
+            '"C:/Python312/python.exe" "C:/ds-home/.claude/hooks/dispatch/hooks.py" Stop',
+        ),
+        (
+            '"C:/ds/app/current/venv/Scripts/python.exe" -I -m runtime.dispatch.hooks Stop',
+            '"C:/Python312/python.exe" "C:/ds-home/.claude/hooks/dispatch/hooks.py" Stop',
+        ),
+        (
+            '"C:/ds/app/current/venv/Scripts/python.exe" -I -X utf8 -m emitters.claude_code.run '
+            "UserPromptSubmit",
+            '"C:/Python312/python.exe" "C:/ds-home/.claude/hooks/run.py" UserPromptSubmit',
+        ),
+        (
+            '"C:/ds/app/current/venv/Scripts/python.exe" -I -X utf8 -m '
+            "runtime.hooks.meta.on-edit-enforce",
+            '"C:/Python312/python.exe" "C:/ds-home/.claude/hooks/runtime/hooks/meta/'
+            'on-edit-enforce.py"',
+        ),
+    ],
+)
+def test_a_module_spelling_is_the_same_hook_as_its_file(module_form, file_form):
+    """An installed app registers `<python> -I -X utf8 -m <module>`. That is the same hook
+    as the copied file it replaces, and as an earlier app's `-I -m` spelling, so a merge
+    must never register it beside either one (round-table nit)."""
+    assert hook_identity(module_form) == hook_identity(file_form)
+
+
+def test_different_modules_or_events_stay_different_hooks():
+    py = '"C:/ds/app/current/venv/Scripts/python.exe" -I -X utf8 -m '
+    assert hook_identity(py + "runtime.dispatch.hooks Stop") != hook_identity(
+        py + "runtime.dispatch.hooks PostToolUse"
+    )
+    assert hook_identity(py + "runtime.dispatch.hooks Stop") != hook_identity(
+        py + "emitters.claude_code.run Stop"
+    )
+
+
+@pytest.mark.parametrize(
     "a,b,why",
     [
         (
