@@ -14,20 +14,25 @@ import pytest
 
 
 def _session_home() -> Path:
-    """The session's shared test home, never the real one; skip when there is none."""
-    value = os.environ.get("DREAM_STUDIO_HOME")
-    if not value:
-        pytest.skip("no session Dream Studio home in this environment")
-    home = Path(value)
-    if home.resolve() == (Path.home() / ".dream-studio").resolve():
-        pytest.skip("DREAM_STUDIO_HOME is the real home; never write a marker there")
+    """The session home conftest itself created, with no marker in it yet; skip otherwise.
+
+    A home that came in through the environment may be an operator's: nothing here
+    writes into it, and an existing marker is never overwritten.
+    """
+    made = os.environ.get("DREAM_STUDIO_TEST_SESSION_HOME")
+    if not made or os.environ.get("DREAM_STUDIO_HOME") != made:
+        pytest.skip("DREAM_STUDIO_HOME is not the session home conftest created")
+    home = Path(made)
+    if (home / "state" / "installed-version").exists():
+        pytest.skip("the session home already carries a marker; never overwrite it")
     return home
 
 
 def test_a_test_that_installs_leaves_a_marker_behind():
     home = _session_home()
     (home / "state").mkdir(parents=True, exist_ok=True)
-    (home / "state" / "installed-version").write_text("0.1.0 abc\n", encoding="utf-8")
+    with open(home / "state" / "installed-version", "x", encoding="utf-8") as marker:
+        marker.write("0.1.0 abc\n")
 
 
 def test_the_next_test_can_still_create_its_own_authority(tmp_path, monkeypatch):
