@@ -158,6 +158,19 @@ def _path_launchers(home: Path) -> tuple[list[Path], list[dict[str, str]]]:
     return stale, left
 
 
+def launcher_belongs_to(text: str, home: Path) -> bool:
+    """Whether a `ds` launcher's *text* is Dream Studio's, for *home*: a checkout
+    launcher pinned to it, or one that hands every call to <home>/bin."""
+    if str(launcher_path(home)) in text:
+        return True
+    owned = (
+        "DREAM_STUDIO_SOURCE_ROOT" in text
+        or "ds_entry.py" in text
+        or ("interfaces" in text and "ds.py" in text)
+    )
+    return owned and _same_path(_launcher_home(text), home)
+
+
 def stale_path_launchers(home: Path) -> list[Path]:
     """The ~/.local/bin launchers for THIS home that bypass <home>/bin."""
     return _path_launchers(home)[0]

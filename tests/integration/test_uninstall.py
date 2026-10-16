@@ -238,3 +238,50 @@ def test_end_to_end(tmp_path: Path) -> None:
     assert not (command_dir / "ds.ps1").exists()
     assert (Path(done["backup_path"]) / "studio.db").is_file()
     assert not home.exists()
+
+
+def test_uninstall_removes_only_this_homes_launchers_and_keeps_a_copy(tmp_path: Path) -> None:
+    """It deleted ds.cmd and ds.ps1 in the command directory by name, with no copy: an
+    operator's own ds.cmd, or another home's launcher, went with them."""
+    home = _setup_home(tmp_path)
+    command_dir = tmp_path / "bin"
+    install_global_command_surface(
+        source_root=REPO_ROOT, dream_studio_home=home, command_dir=command_dir, execute=True
+    )
+    ours = (command_dir / "ds.cmd").read_text(encoding="utf-8")
+    other_home = tmp_path / "other-home"
+    foreign = (
+        '$env:DREAM_STUDIO_SOURCE_ROOT = "C:/src"\n'
+        f'$env:DREAM_STUDIO_HOME = "{other_home}"\n'
+        "& py C:/src/interfaces/cli/ds.py @args\n"
+    )
+    (command_dir / "ds.ps1").write_text(foreign, encoding="utf-8")
+
+    result = uninstall_runtime(
+        source_root=REPO_ROOT,
+        dream_studio_home=home,
+        claude_settings_paths=[],
+        command_dir=command_dir,
+        execute=True,
+    )
+    assert not (command_dir / "ds.cmd").exists()
+    assert (command_dir / "ds.ps1").read_text(encoding="utf-8") == foreign
+    assert [Path(p).name for p in result["launchers_left"]] == ["ds.ps1"]
+    saved = [Path(p) for p in result["launchers_backed_up"]]
+    assert [p.name for p in saved] == ["ds.cmd"] and saved[0].read_text(encoding="utf-8") == ours
+    assert home not in saved[0].parents, "the copy must survive a later --purge-state"
+
+
+def test_uninstall_leaves_an_operators_own_ds_cmd(tmp_path: Path) -> None:
+    home = _setup_home(tmp_path)
+    command_dir = tmp_path / "bin"
+    command_dir.mkdir()
+    (command_dir / "ds.cmd").write_text("@echo off\necho my own tool\n", encoding="utf-8")
+    uninstall_runtime(
+        source_root=REPO_ROOT,
+        dream_studio_home=home,
+        claude_settings_paths=[],
+        command_dir=command_dir,
+        execute=True,
+    )
+    assert (command_dir / "ds.cmd").read_text(encoding="utf-8") == "@echo off\necho my own tool\n"

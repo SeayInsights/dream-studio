@@ -160,12 +160,33 @@ def uninstall_runtime(
 
     # Tier 1 — integration teardown (always runs under --execute).
     result["hooks_deregistered"] = [_deregister_claude_hooks(p) for p in settings_paths]
+    # Only this home's launchers, by content, not by name: an operator's own ds.cmd, or
+    # another home's, is left and reported. Each removed one is copied first, outside the
+    # home, so a later --purge-state cannot take the copy with it.
+    from datetime import UTC, datetime
+
+    from core.self_install import launcher_belongs_to
+
     launchers_removed: list[str] = []
+    launchers_left: list[str] = []
+    launchers_backed_up: list[str] = []
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    copies = home.parent / f"{home.name}-uninstall-backups" / "launchers" / stamp
     for target in launcher_targets:
-        if target.is_file():
-            target.unlink()
-            launchers_removed.append(str(target))
+        if not target.is_file():
+            continue
+        if not launcher_belongs_to(target.read_text(encoding="utf-8", errors="replace"), home):
+            launchers_left.append(str(target))
+            continue
+        copies.mkdir(parents=True, exist_ok=True)
+        saved = copies / target.name
+        shutil.copy2(target, saved)
+        launchers_backed_up.append(str(saved))
+        target.unlink()
+        launchers_removed.append(str(target))
     result["launchers_removed"] = launchers_removed
+    result["launchers_left"] = launchers_left
+    result["launchers_backed_up"] = launchers_backed_up
     result["uninstall_executed"] = True
     result["status"] = "uninstalled"
 
