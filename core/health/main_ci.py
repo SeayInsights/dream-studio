@@ -61,6 +61,14 @@ CACHE_MAX_AGE_SECONDS = 300
 _CACHE_KEY_PREFIX = "main_ci."
 
 
+def _clip(text: str, limit: int) -> str:
+    """*text* cut to at most *limit* characters at a word boundary, marked when cut."""
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 3].rsplit(" ", 1)[0] or text[: limit - 3]
+    return cut.rstrip() + "..."
+
+
 def _cache_key(repo_root: Path | None) -> str:
     """Cache key namespaced by repository.
 
@@ -191,7 +199,7 @@ def _gh_json(args: list[str], cwd: Path | None) -> tuple[Any, str | None]:
         return None, "gh returned no usable exit status"
     if result.returncode != 0:
         detail = (_text(result.stderr) or _text(result.stdout)).strip().splitlines()
-        reason = detail[0][:200] if detail else f"gh exited {result.returncode}"
+        reason = _clip(detail[0], 200) if detail else f"gh exited {result.returncode}"
         return None, reason
     raw = _text(result.stdout)
     if not raw.strip():
@@ -247,7 +255,7 @@ def _local_head_includes(
     # Any other exit is git declining to answer (unknown object in a shallow
     # clone, not a repository, bad sha) — not evidence either way.
     detail = (probe.stderr if isinstance(probe.stderr, str) else "").strip().splitlines()
-    return None, (detail[0][:160] if detail else f"git merge-base exited {code}")
+    return None, (_clip(detail[0], 160) if detail else f"git merge-base exited {code}")
 
 
 def main_ci_status(
