@@ -382,7 +382,7 @@ def test_a_launcher_pinned_to_another_home_is_reported_and_left(
     assert [item["path"] for item in result["left_launchers"]] == [str(other)]
 
 
-def test_a_repointed_launcher_is_saved_and_restored_on_rollback(
+def test_a_repointed_launcher_is_saved_and_kept_delegating_on_rollback(
     si, repo, home, fake_build, tmp_path, monkeypatch
 ):
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "userhome"))
@@ -401,11 +401,15 @@ def test_a_repointed_launcher_is_saved_and_restored_on_rollback(
     assert saved.is_file() and saved.read_text(encoding="utf-8") == before
     assert str(si.launcher_path(home)) in stale.read_text(encoding="utf-8")
 
+    # A rollback goes to another INSTALLED app: putting the checkout launcher back would
+    # take PATH off the app the rollback just made current.
     dry = si.rollback(home, dry_run=True)
-    assert any(w["step"] == "restore-launcher" and w["path"] == str(stale) for w in dry["writes"])
+    assert not any(w["step"] == "restore-launcher" for w in dry["writes"])
     back = si.rollback(home, dry_run=False)
     assert back["ok"], back
-    assert stale.read_text(encoding="utf-8") == before
+    assert str(si.launcher_path(home)) in stale.read_text(encoding="utf-8")
+    assert [item["saved"] for item in back["saved_launchers"]] == [str(saved)]
+    assert saved.read_text(encoding="utf-8") == before
 
 
 def test_rollback_with_no_previous_says_why_and_what_to_do(si, home):

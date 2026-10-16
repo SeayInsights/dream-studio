@@ -54,7 +54,7 @@ network access or a warm pip cache. `--dry-run` in place of `--execute` prints e
 Add `~/.dream-studio/bin` to PATH, ahead of any older `ds` launcher. `ds.cmd` (Windows) or
 `ds` there runs the current app with `--home` pinned. An older `ds.cmd` in `~/.local/bin`
 that ran a checkout against this home is rewritten by `self-install` to call it (the
-previous file is kept for `--rollback`); one pinned to another home is left alone.
+previous file is kept in the install's backup directory); one pinned to another home is left alone.
 
 ### 4. Verify installation
 

@@ -184,25 +184,18 @@ def _repoint_launchers(home: Path, backup_dir: Path, app_id: str, log: list[str]
     return repointed
 
 
-def _launchers_to_restore(home: Path, leaving: str | None) -> list[dict]:
-    """The launchers the install of *leaving* repointed, still as it wrote them."""
+def _saved_launchers(home: Path) -> list[dict]:
+    """The PATH launchers an install repointed, with where each previous file was saved.
+
+    A rollback never puts them back: it always goes to another INSTALLED app, which wants
+    the delegating launchers, and a restored checkout launcher would take PATH off the
+    app the rollback just made current. They are reported so going back to a checkout
+    stays a deliberate, manual step.
+    """
     record = home / "state" / REPOINTED_RECORD
     if not record.is_file():
         return []
-    doc = json.loads(record.read_text(encoding="utf-8"))
-    if not leaving or doc.get("app_id") != leaving:
-        return []
-    restore = []
-    for item in doc.get("launchers", []):
-        path, saved = Path(item["path"]), Path(item["saved"])
-        try:
-            with path.open(encoding="utf-8", newline="") as handle:
-                unchanged = handle.read() == item["written"]
-        except OSError:
-            unchanged = False
-        if unchanged and saved.is_file():
-            restore.append(item)
-    return restore
+    return list(json.loads(record.read_text(encoding="utf-8")).get("launchers", []))
 
 
 def _assert_inside(path: Path, parent: Path) -> None:
@@ -1099,17 +1092,15 @@ def rollback(home: Path, *, dry_run: bool) -> dict[str, Any]:
         },
         {"step": "launcher", "path": str(launcher_path(home)), "content": launcher_content(home)},
     ]
-    restore = _launchers_to_restore(home, current)
-    writes += [
-        {
-            "step": "restore-launcher",
-            "path": item["path"],
-            "detail": f"the launcher the install of {current} repointed, from {item['saved']}",
-        }
-        for item in restore
-    ]
+    saved = _saved_launchers(home)
     if dry_run:
-        return {**base, "ok": True, "dry_run": True, "writes": writes}
+        return {
+            **base,
+            "ok": True,
+            "dry_run": True,
+            "writes": writes,
+            "saved_launchers": [{"path": i["path"], "saved": i["saved"]} for i in saved],
+        }
     log: list[str] = []
     backup = None
     if db_path.exists():
@@ -1147,20 +1138,13 @@ def rollback(home: Path, *, dry_run: bool) -> dict[str, Any]:
         current=current,
         log=log,
     )
-    restored = []
-    for item in restore:
-        shutil.copy2(item["saved"], item["path"])
-        restored.append(item["path"])
-        log.append(f"restored {item['path']} from {item['saved']}")
-    if restore:
-        (home / "state" / REPOINTED_RECORD).unlink(missing_ok=True)
     return {
         **base,
         "ok": True,
         "dry_run": False,
         "switched": True,
         "current_after": previous,
-        "restored_launchers": restored,
+        "saved_launchers": [{"path": item["path"], "saved": item["saved"]} for item in saved],
         "backup": str(backup) if backup else None,
         "log": log,
     }
