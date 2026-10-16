@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 from typing import Any
 
 from core.config.sqlite_bootstrap import latest_migration_version, pending_migrations_info
-from core.event_store.studio_db import _connect
 from core.module_profiles import validate_module_profiles
 
 
@@ -26,8 +26,23 @@ def run_validation(
     db_exists = paths.sqlite_path.exists()
     schema_version: int | None = None
     if db_exists:
-        with _connect(paths.sqlite_path) as conn:
-            schema_version = conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0]
+        # Read-only: validation reports the schema, it does not migrate it. The migrating
+        # _connect() applied pending migrations and set the journal mode on every call,
+        # under a payload that says doctor_runs_read_only.
+        conn = sqlite3.connect(
+            f"{paths.sqlite_path.resolve().as_uri()}?mode=ro", uri=True, timeout=30.0
+        )
+        try:
+            # A file with no schema yet reports None, as a missing file does.
+            has_table = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_schema_version'"
+            ).fetchone()
+            if has_table:
+                schema_version = conn.execute(
+                    "SELECT MAX(version) FROM _schema_version"
+                ).fetchone()[0]
+        finally:
+            conn.close()
     pending = pending_migrations_info(paths.sqlite_path)
     return {
         "model_name": "dream_studio_installed_runtime_validation",

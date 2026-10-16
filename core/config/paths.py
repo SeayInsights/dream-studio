@@ -126,6 +126,22 @@ def default_home() -> Path:
     return Path.home() / USER_DATA_DIRNAME
 
 
+def installed_version(home: Path | None = None) -> tuple[str | None, str | None]:
+    """(version, sha) from <home>/state/installed-version.
+
+    `ds self-install` writes "<version> <full sha>"; the older integration installer wrote
+    the bare version, which reads back with sha None. Compare versions through this, never
+    the raw file text, or every self-installed home looks out of date.
+    """
+    marker = (home if home is not None else home_dir()) / "state" / "installed-version"
+    if not marker.is_file():
+        return None, None
+    parts = marker.read_text(encoding="utf-8").split()
+    if not parts:
+        return None, None
+    return parts[0], (parts[1] if len(parts) > 1 else None)
+
+
 def installed_app_home() -> Path | None:
     """The home recorded by `ds self-install` in the running venv, or None outside one."""
     marker = Path(sys.prefix) / APP_HOME_MARKER

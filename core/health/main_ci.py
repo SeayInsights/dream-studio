@@ -256,6 +256,7 @@ def main_ci_status(
     limit: int = 5,
     max_age_seconds: int = 0,
     db_path: Path | None = None,
+    write_cache: bool = True,
 ) -> dict[str, Any]:
     """Latest ``full-ci`` conclusion for ``main``.
 
@@ -281,7 +282,8 @@ def main_ci_status(
     answer — ``ds doctor`` and ``ds project state`` do, because they run
     constantly; ``close`` does not, because declaring work done must not be told
     about main by a cache. Any cached return carries a non-zero ``age_seconds`` so
-    no caller can mistake it for live.
+    no caller can mistake it for live. ``write_cache=False`` reads the cache but never
+    writes it back -- ``ds doctor`` is read-only.
     """
     cached = _read_cache(repo_root, max_age_seconds, db_path)
     if cached is not None:
@@ -318,7 +320,7 @@ def main_ci_status(
             includes, why = None, None if not payload.get("head_sha") else "not applicable"
         payload["local_head_includes_run"] = includes
         payload["local_head_reason"] = why
-        if max_age_seconds > 0:
+        if max_age_seconds > 0 and write_cache:
             _write_cache(payload, repo_root, db_path)
         return payload
 

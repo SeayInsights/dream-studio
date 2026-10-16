@@ -29,6 +29,7 @@ from .doctor_checks import (
     _check_failed_events,
     _check_handoff_spawner,
     _check_hook_freshness,
+    _check_installed_app,
     _check_stale_dbs,
     _check_version_current,
 )
@@ -40,8 +41,16 @@ def run_doctor_checks(
     source_root: Path,
     dream_studio_home: Path | None = None,
     fix: bool = False,
+    record_counts: bool = False,
 ) -> dict[str, Any]:
-    """Composite doctor status. fix=True triggers self-healing side effects."""
+    """Composite doctor status. fix=True triggers self-healing side effects.
+
+    Without fix or record_counts this writes nothing: every authority read goes through
+    a read-only connection and the main-CI cache is read but not written back
+    (tests/unit/test_doctor_read_only.py snapshots the home around a run).
+    record_counts=True writes the business row counts as the baseline later runs
+    compare against (core.health.authority_data).
+    """
 
     validation = run_validation(source_root=source_root, dream_studio_home=dream_studio_home)
     paths = resolve_installed_runtime_paths(
@@ -58,6 +67,7 @@ def run_doctor_checks(
     handoff_spawner_info = _check_handoff_spawner(source_root)
     stale_dbs_info = _check_stale_dbs(paths.dream_studio_home)
     hook_freshness_info = _check_hook_freshness(source_root, claude_dir)
+    installed_app_info = _check_installed_app(paths.dream_studio_home)
 
     from core.config.schema_coherence import check_schema_coherence
 
@@ -73,6 +83,13 @@ def run_doctor_checks(
     from core.health.doctor_bypass import bypass_audit
 
     bypass_audit_info = bypass_audit(live_db)
+
+    from core.health.authority_data import authority_data_check
+    from core.health.authority_data import record_counts as _record_counts
+
+    if record_counts and live_db.is_file():
+        _record_counts(paths.dream_studio_home, live_db)
+    authority_data_info = authority_data_check(paths.dream_studio_home, live_db)
 
     # WO-MAINRED-VISIBILITY: the post-merge full-ci verdict for main. pr-smoke
     # green is merge authorization, not proof main is green — and main sat red
@@ -92,8 +109,19 @@ def run_doctor_checks(
     # a traceback instead of a doctor payload. The reader is built not to raise, but
     # "built not to" is what was believed before a TypeError from it took main red
     # for a day. An advisory check earns no right to abort the report around it.
+    from core.config.paths import is_source_checkout
+
     try:
-        main_ci_info = main_ci_status(repo_root=source_root, max_age_seconds=CACHE_MAX_AGE_SECONDS)
+        if not is_source_checkout(source_root):
+            # An installed app has no repository to ask about; main's CI is a
+            # development signal for a checkout.
+            raise LookupError(f"{source_root} is an installed app, not a source checkout")
+        main_ci_info = main_ci_status(
+            repo_root=source_root,
+            max_age_seconds=CACHE_MAX_AGE_SECONDS,
+            db_path=live_db,
+            write_cache=False,
+        )
         _main_ci_warning = main_ci_warning(main_ci_info)
         if _main_ci_warning:
             main_ci_info["warning"] = _main_ci_warning
@@ -189,7 +217,7 @@ def run_doctor_checks(
             "sqlite_exists": validation["sqlite_exists"],
             "schema_version_known": validation["schema_version"] is not None,
             "module_profiles_valid": not validation["module_profile_errors"],
-            "doctor_runs_read_only": True,
+            "doctor_runs_read_only": not (fix or record_counts),
             "dispatcher_hooks_installed": dispatcher_ok,
             "skills_installed": skills_info,
             "agents_installed": agents_info,
@@ -201,6 +229,8 @@ def run_doctor_checks(
             "stale_dbs": stale_dbs_info,
             "hook_freshness": hook_freshness_info,
             "bypass_audit": bypass_audit_info,
+            "installed_app": installed_app_info,
+            "authority_data": authority_data_info,
             "main_ci": main_ci_info,
         },
         "validation": validation,

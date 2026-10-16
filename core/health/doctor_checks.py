@@ -101,13 +101,18 @@ def _check_handoff_spawner(source_root: Path) -> dict[str, Any]:
 def _check_version_current(source_root: Path, dream_studio_home: Path) -> dict[str, Any]:
     try:
         repo_file = source_root / "VERSION"
-        installed_file = dream_studio_home / "state" / "installed-version"
         repo_ver = repo_file.read_text(encoding="utf-8").strip() if repo_file.is_file() else None
-        installed_ver = (
-            installed_file.read_text(encoding="utf-8").strip() if installed_file.is_file() else None
-        )
+        # "<version> <sha>" from `ds self-install`; compare the version, report both.
+        from core.config.paths import installed_version
+
+        installed_ver, installed_sha = installed_version(dream_studio_home)
         current = repo_ver is not None and repo_ver == installed_ver
-        return {"repo": repo_ver, "installed": installed_ver, "current": current}
+        return {
+            "repo": repo_ver,
+            "installed": installed_ver,
+            "installed_sha": installed_sha,
+            "current": current,
+        }
     except Exception:
         return {"repo": None, "installed": None, "current": False}
 
@@ -172,3 +177,42 @@ def _check_hook_freshness(source_root: Path, claude_dir: Path) -> dict[str, Any]
         if canon_bytes != deployed_bytes:
             stale.append(rel)
     return {"checked": checked, "stale": stale, "ok": not stale}
+
+
+def _check_installed_app(dream_studio_home: Path) -> dict[str, Any]:
+    """Which code this doctor runs from, against the app `ds self-install` installed.
+
+    A doctor that compares a checkout with itself proves nothing about what the hooks
+    and the launcher run. This names the code root in use, the installed app that
+    <home>/app/current points at (its app.json), and whether installed-version agrees.
+    """
+    from core.config.paths import code_root, installed_version, is_source_checkout
+
+    code = code_root()
+    current = dream_studio_home / "app" / "current"
+    target = current.resolve() if current.exists() else None
+    record = None
+    if target is not None and (target / "app.json").is_file():
+        import json
+
+        record = json.loads((target / "app.json").read_text(encoding="utf-8"))
+    version, sha = installed_version(dream_studio_home)
+    running_from_app = target is not None and target in code.parents
+    warnings: list[str] = []
+    if target is not None and not running_from_app:
+        warnings.append(f"this ds runs from {code}, not the installed app {target}")
+    if record is not None and (record.get("version"), record.get("sha")) != (version, sha):
+        warnings.append(
+            f"installed-version ({version} {sha}) does not match the current app "
+            f"({record.get('version')} {record.get('sha')})"
+        )
+    return {
+        "code_root": str(code),
+        "running_from_checkout": is_source_checkout(code),
+        "installed_app": str(target) if target is not None else None,
+        "installed_app_record": record,
+        "running_from_installed_app": running_from_app,
+        "installed_version": version,
+        "installed_sha": sha,
+        "warnings": warnings,
+    }

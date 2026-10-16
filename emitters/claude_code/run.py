@@ -110,7 +110,9 @@ def _version_check() -> str | None:
                 "DREAM STUDIO: Install not verified. "
                 "Run: ds integrate install claude_code --execute"
             )
-        installed_version = installed_version_file.read_text(encoding="utf-8").strip()
+        # "<version> <sha>" from `ds self-install`, or a bare version from older installs.
+        installed_parts = installed_version_file.read_text(encoding="utf-8").split()
+        installed_version = installed_parts[0] if installed_parts else ""
         if repo_version != installed_version:
             return (
                 f"DREAM STUDIO UPDATE AVAILABLE\n"

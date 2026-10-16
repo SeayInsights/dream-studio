@@ -57,6 +57,14 @@ def register_health(subcommands: argparse._SubParsersAction) -> None:  # type: i
     )
     _doctor_cmd.add_argument("--fix", action="store_true", help="Attempt to fix failing checks")
     _doctor_cmd.add_argument(
+        "--record-counts",
+        action="store_true",
+        help=(
+            "Record the authority's business row counts as the baseline later runs warn "
+            "against (the one write a doctor run makes, and only with this flag)"
+        ),
+    )
+    _doctor_cmd.add_argument(
         "mode",
         nargs="?",
         default=None,
@@ -166,6 +174,7 @@ def dispatch_health(
                 source_root=source_root,
                 dream_studio_home=dream_studio_home,
                 fix=getattr(args, "fix", False),
+                record_counts=getattr(args, "record_counts", False),
             )
         )
 
@@ -306,28 +315,41 @@ def _check_version_current(source_root: Path, dream_studio_home: Path) -> dict[s
     """Compare repo VERSION vs installed-version. Fail-open."""
     try:
         repo_file = source_root / "VERSION"
-        installed_file = dream_studio_home / "state" / "installed-version"
         repo_ver = repo_file.read_text(encoding="utf-8").strip() if repo_file.is_file() else None
-        installed_ver = (
-            installed_file.read_text(encoding="utf-8").strip() if installed_file.is_file() else None
-        )
+        # "<version> <sha>" from `ds self-install`; compare the version, report both.
+        from core.config.paths import installed_version
+
+        installed_ver, installed_sha = installed_version(dream_studio_home)
         current = repo_ver is not None and repo_ver == installed_ver
-        return {"repo": repo_ver, "installed": installed_ver, "current": current}
+        return {
+            "repo": repo_ver,
+            "installed": installed_ver,
+            "installed_sha": installed_sha,
+            "current": current,
+        }
     except Exception:
         return {"repo": None, "installed": None, "current": False}
 
 
 def _doctor_status(
-    *, source_root: Path, dream_studio_home: Path | None, fix: bool = False
+    *,
+    source_root: Path,
+    dream_studio_home: Path | None,
+    fix: bool = False,
+    record_counts: bool = False,
 ) -> dict[str, Any]:
-    from core.config.platform import ensure_platform_recorded
     from core.health.doctor import run_doctor_checks
 
-    ensure_platform_recorded()
+    if fix:
+        # Refreshing the platform profile is a write; a plain `ds doctor` is read-only.
+        from core.config.platform import ensure_platform_recorded
+
+        ensure_platform_recorded()
     return run_doctor_checks(
         source_root=source_root,
         dream_studio_home=dream_studio_home,
         fix=fix,
+        record_counts=record_counts,
     )
 
 
@@ -545,9 +567,9 @@ def _update_command(
         _print({"ok": False, "error": "VERSION file not found in source root"})
         return 1
 
-    installed_version = (
-        installed_file.read_text(encoding="utf-8").strip() if installed_file.is_file() else None
-    )
+    from core.config.paths import installed_version as _installed_version
+
+    installed_version = _installed_version(paths.dream_studio_home)[0]
 
     drifted: list[str] = []
     if installed_version == repo_version:
@@ -718,7 +740,10 @@ def _update_command(
 
     install_output = json.dumps(install_result, indent=2, sort_keys=True)
 
-    if install_ok:
+    from core.config.paths import is_source_checkout
+
+    # Run from an installed app, the marker ("<version> <sha>") belongs to `ds self-install`.
+    if install_ok and is_source_checkout():
         installed_file.parent.mkdir(parents=True, exist_ok=True)
         installed_file.write_text(repo_version + "\n", encoding="utf-8")
 
