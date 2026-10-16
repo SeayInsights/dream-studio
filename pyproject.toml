@@ -43,7 +43,7 @@ py-modules = ["compat"]
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["core*", "runtime*", "interfaces*", "spool*", "projections*", "emitters*", "canonical*", "control*", "shared*", "guardrails*", "integrations*", "config", "config.*"]
-exclude = ["tests*", "docs*", ".planning*", ".audit*", "*.__pycache__"]
+exclude = ["tests*", "docs*", ".planning*", ".audit*", "*.__pycache__", "*.tests", "*.tests.*"]
 
 # Runtime data that lives INSIDE a package directory ships as package data. "*" covers
 # every package (namespace packages included, so canonical/skills/**, the migrations and
@@ -68,7 +68,8 @@ shipped-root-data = [
     "packs.yaml",
     "config.yml",
     "docs/canonical/*.json",
-    "docs/contracts/workflow-contract.md",
+    "docs/contracts/**/*",
+    "adapter-projections/**/*",
     "schemas/*.json",
     "templates/**/*",
     "hooks/git/pre-push",

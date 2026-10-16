@@ -179,10 +179,13 @@ def test_wheel_carries_every_runtime_data_file(installed):
         and "/" in rel
         and not rel.endswith(EXCLUDED_SUFFIXES)
         and rel.rsplit("/", 1)[-1] not in EXCLUDED_NAMES
+        and "/tests/" not in f"/{rel}"  # test packages stay out of the wheel
     ]
     expected += shipped_root_data(str(REPO))
     expected.append("compat.py")
     missing = sorted(rel for rel in expected if rel not in names)
+    shipped_tests = sorted(n for n in names if "/tests/" in f"/{n}")
+    assert not shipped_tests, f"test packages shipped in the wheel: {shipped_tests[:5]}"
     assert not missing, f"{len(missing)} runtime files missing from the wheel: {missing[:20]}"
     for must in (
         "core/event_store/migrations/.released_version",
@@ -336,3 +339,81 @@ def test_installed_hook_modules_run_from_the_app_even_inside_a_checkout(
     venv = str(installed["venv"].resolve()).lower()
     leaked = [f for f in report["files"] if f and not f.lower().startswith(venv)]
     assert not leaked, f"hook imported Dream Studio code from outside the app: {leaked[:10]}"
+
+
+ROUTES_PROBE = r"""
+import json, sys
+from fastapi.testclient import TestClient
+import projections.api.main as m
+from core.config.paths import code_root, plugin_root
+from integrations.compiler.claude_code import compile_pack
+
+def _plugin_root_is_code_root():
+    try:
+        return plugin_root() == code_root()
+    except RuntimeError:
+        return False
+
+
+client = TestClient(m.app, raise_server_exceptions=False)
+routes = {}
+for r in m.app.routes:
+    methods = getattr(r, "methods", None) or set()
+    path = getattr(r, "path", "")
+    if "GET" not in methods or "{" in path or path.startswith(("/docs", "/redoc", "/openapi")):
+        continue
+    routes[path] = client.get(path).status_code
+print(json.dumps({
+    "routes": routes,
+    "claude_md": compile_pack(None)["files"]["CLAUDE.md"],
+    "plugin_root_is_code_root": _plugin_root_is_code_root(),
+}))
+"""
+
+
+def _surface(tmp: Path, name: str, cmd: list[str], cwd: Path, extra_env: dict) -> dict:
+    import shutil as _shutil
+
+    home = tmp / f"surface-{name}"
+    (home / "state").mkdir(parents=True, exist_ok=True)
+    _shutil.copy2(tmp / "surface-seed.db", home / "state" / "studio.db")
+    env = _isolated_env(tmp)
+    env["DREAM_STUDIO_HOME"] = str(home)
+    env["DREAM_STUDIO_DB_PATH"] = str(home / "state" / "studio.db")
+    env.update(extra_env)
+    proc = subprocess.run(
+        cmd + ["-c", ROUTES_PROBE],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=cwd,
+        env=env,
+        timeout=900,
+    )
+    assert proc.returncode == 0, proc.stderr[-3000:]
+    return json.loads(proc.stdout.strip().splitlines()[-1])
+
+
+def test_the_installed_app_serves_what_the_checkout_serves(installed):
+    """Round-table S5: runtime data the wheel did not ship (the security source list,
+    adapter-projections/) made six dashboard routes and `ds contract-atlas` fail in the
+    app, the installed CLAUDE.md lost its Authority/Resume projection, and plugin_root()
+    raised, which locked every progressive skill mode."""
+    from core.config.sqlite_bootstrap import bootstrap_database, shipped_released_version
+
+    tmp = installed["tmp"]
+    seed = tmp / "surface-seed.db"
+    if not seed.exists():
+        bootstrap_database(seed, target_version=shipped_released_version())
+    checkout = _surface(tmp, "checkout", [sys.executable], REPO, {"PYTHONPATH": str(REPO)})
+    app = _surface(tmp, "app", [str(installed["py"]), "-I"], tmp, {})
+
+    differs = {
+        path: (checkout["routes"][path], app["routes"].get(path))
+        for path in checkout["routes"]
+        if checkout["routes"][path] != app["routes"].get(path)
+    }
+    assert not differs, f"routes answer differently from the installed app: {differs}"
+    assert app["claude_md"] == checkout["claude_md"]
+    assert app["plugin_root_is_code_root"] is True

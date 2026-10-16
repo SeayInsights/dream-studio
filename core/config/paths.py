@@ -66,10 +66,11 @@ def plugin_root() -> Path:
         if (candidate / ".claude-plugin" / "plugin.json").is_file():
             return candidate
 
-    # Fallback: infer from this file's location. Check for repo-root-specific
-    # markers (canonical/skills only exists at repo root, not in subdirectories
-    # like core/ which also has a skills/ dir).
-    inferred = Path(__file__).resolve().parents[1]
+    # Fallback: the code root (a checkout, or an installed app's site-packages, which
+    # ships canonical/ and packs.yaml at the same relative paths). It used to be inferred
+    # from this file's location -- core/, which never holds those markers -- so an
+    # installed app raised here and every progressive skill mode stayed locked.
+    inferred = code_root()
     if (inferred / "canonical" / "skills").is_dir() or (inferred / "packs.yaml").is_file():
         return inferred
 

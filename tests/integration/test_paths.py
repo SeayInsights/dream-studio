@@ -87,10 +87,14 @@ def test_plugin_root_walks_up_to_manifest(tmp_path, monkeypatch):
 
 
 def test_plugin_root_raises_when_no_manifest(tmp_path, monkeypatch):
-    """If we relocate lib to a dir with no manifest anywhere upward, error."""
+    """No manifest upward and a code root without canonical/skills or packs.yaml: error.
+
+    The fallback is the code root (core.config.paths.code_root), not this file's
+    location, so the code root is what gets relocated here."""
     monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
     fake_lib = tmp_path / "fake_lib"
     fake_lib.mkdir()
     monkeypatch.setattr(paths, "__file__", str(fake_lib / "paths.py"))
+    monkeypatch.setattr(paths, "code_root", lambda: tmp_path / "fake_code_root")
     with pytest.raises(RuntimeError, match="Could not locate plugin root"):
         paths.plugin_root()
