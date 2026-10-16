@@ -282,7 +282,7 @@ class ClaudeCodeInstaller(InstallerBase):
         pack = compile_pack(self.canonical_root)
         ops: list[FileOp] = []
         ds_home = get_ds_home(self.ds_home)
-        backup_base = ds_home / "backups" / "claude_code"
+        backup_base = self.backup_root(ds_home)
         canonical_root = (
             self.canonical_root if self.canonical_root is not None else (_REPO_ROOT / "canonical")
         )
@@ -772,6 +772,14 @@ class ClaudeCodeInstaller(InstallerBase):
                 )
         return ops
 
+    def backup_root(self, ds_home: Path) -> Path:
+        """This config root's own backup directory: <home>/backups/claude_code/<root key>,
+        the key its manifest is filed under. One shared directory let two roots' backups
+        of the same relative path overwrite each other."""
+        from integrations.manifest import config_root_key
+
+        return ds_home / "backups" / "claude_code" / config_root_key(self.config_root)
+
     def _refuse_writes_outside_the_root(self, file_plan: Any) -> None:
         """Every planned write lands in this root, the Dream Studio home, or (only when
         one was given) the named repository's .git/hooks -- nothing else.
@@ -828,7 +836,7 @@ class ClaudeCodeInstaller(InstallerBase):
 
         # execute mode
         ds_home = get_ds_home(self.ds_home)
-        backup_dir = ds_home / "backups" / "claude_code"
+        backup_dir = self.backup_root(ds_home)
         files_written: list[dict[str, Any]] = []
         manifest_files: list[dict[str, Any]] = []
         agents_installed: list[str] = []

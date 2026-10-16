@@ -45,7 +45,9 @@ def backup_before_write(target: Path, backup_dir: Path, *, relative_to: Path | N
     `__init__.py` files under one root are seven backups, not one overwritten seven
     times. Returns the backup path (whether or not the source existed).
     """
-    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    # Microseconds, and a counter if that still collides: two backups of one file in the
+    # same second used to be one.
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     rel_parent = Path()
     if relative_to is not None:
         try:
@@ -53,6 +55,10 @@ def backup_before_write(target: Path, backup_dir: Path, *, relative_to: Path | N
         except ValueError:
             rel_parent = Path()
     backup_path = backup_dir / rel_parent / f"{target.name}.{ts}.bak"
+    n = 1
+    while backup_path.exists():
+        backup_path = backup_dir / rel_parent / f"{target.name}.{ts}-{n}.bak"
+        n += 1
     backup_path.parent.mkdir(parents=True, exist_ok=True)
     if target.exists():
         shutil.copy2(target, backup_path)

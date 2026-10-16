@@ -673,9 +673,7 @@ class SelfInstallPlan:
             "settings": str(root / "settings.json"),
             # backup_before_write copies each file it overwrites or deletes, first.
             "backups": [
-                str(
-                    self.home / "backups" / "claude_code" / _relative_or_name(Path(op.target), root)
-                )
+                str(installer.backup_root(self.home) / _relative_or_name(Path(op.target), root))
                 + ".<UTC timestamp>.bak"
                 for op in changes
                 if op.backup_required and Path(op.target).exists()
