@@ -54,11 +54,16 @@ from .claude_code_fileops import (
     _prune_empty_ancestors,
 )
 from .claude_code_launcher import _first_run_guide, _get_ds_version, _write_global_launcher
-from .claude_code_shared import _REPO_ROOT, _python_cmd
+from .claude_code_shared import _REPO_ROOT, _app_python, _python_cmd
+from .claude_code_fileops import (
+    MODULE_FOR_HOOK_FILE,
+    RETIRED_STUB_MARKER,
+    is_retired_stub,
+)
 
 #: What a retired copied hook entry point becomes (see _stale_hook_copy_ops).
 RETIRED_HOOK_STUB = (
-    "# dream-studio retired hook stub\n"
+    f"{RETIRED_STUB_MARKER}\n"
     "import sys\n"
     "\n"
     "print(\n"
@@ -68,12 +73,52 @@ RETIRED_HOOK_STUB = (
     "sys.exit(0)\n"
 )
 
+#: The retired ENFORCEMENT entry points. Exiting 0 would switch enforcement off in every
+#: session that started before the install, so these hand the call to the installed
+#: module: same stdin and arguments, its stdout, stderr and exit code.
+_ENFORCE_FILES = frozenset(
+    {"runtime/hooks/meta/on-edit-enforce.py", "runtime/hooks/meta/on-stop-enforce.py"}
+)
 
-def _is_retired_stub(path: Path) -> bool:
-    try:
-        return path.read_text(encoding="utf-8").startswith("# dream-studio retired hook stub")
-    except (OSError, UnicodeDecodeError):
-        return False
+_ENFORCE_HANDOFF_STUB = """{marker}
+# A Claude Code session that started before Dream Studio moved to its installed app still
+# calls this path. Enforcement must not switch off under it, so the call is handed to the
+# installed module with the same stdin and arguments, and its answer is returned as is.
+import sys
+from subprocess import run
+
+APP_PYTHON = {python!r}
+MODULE = {module!r}
+
+data = sys.stdin.buffer.read()
+try:
+    proc = run(
+        [APP_PYTHON, "-I", "-X", "utf8", "-m", MODULE, *sys.argv[1:]],
+        input=data,
+        capture_output=True,
+    )
+except OSError as exc:
+    sys.stderr.write(
+        f"[dream-studio] {{MODULE}} could not run from the installed app ({{exc}}). "
+        "Restart this Claude Code session to load the installed hooks.\\n"
+    )
+    sys.exit(0)
+sys.stdout.buffer.write(proc.stdout)
+sys.stderr.buffer.write(proc.stderr)
+sys.exit(proc.returncode)
+"""
+
+
+def _retired_stub_for(rel: str) -> str:
+    """The stub that replaces the copied entry point *rel* (relative to hooks/)."""
+    if rel in _ENFORCE_FILES:
+        return _ENFORCE_HANDOFF_STUB.format(
+            marker=RETIRED_STUB_MARKER, python=_app_python(), module=MODULE_FOR_HOOK_FILE[rel]
+        )
+    return RETIRED_HOOK_STUB
+
+
+_is_retired_stub = is_retired_stub
 
 
 def _post_install_validate(config_root: Path, settings_path: Path) -> dict[str, Any]:
@@ -126,6 +171,7 @@ class ClaudeCodeInstaller(InstallerBase):
         canonical_root: Path | None = None,
         ds_home: Path | None = None,
         git_repo_root: Path | None = None,
+        purge_retired_hooks: bool = False,
         skip_hook_install: bool = False,
         agents: list[str] | None = None,
         hook_mode: Literal["module", "files"] | None = None,
@@ -160,6 +206,7 @@ class ClaudeCodeInstaller(InstallerBase):
         self.canonical_root = canonical_root
         self.ds_home = ds_home
         self.git_repo_root = git_repo_root
+        self.purge_retired_hooks = purge_retired_hooks
         self.skip_hook_install = skip_hook_install
         self.agents = agents
         self._allowed_reviewer_names: frozenset[str] | None = (
@@ -589,13 +636,17 @@ class ClaudeCodeInstaller(InstallerBase):
     ) -> list[FileOp]:
         """Retire the hook files a previous files-mode install copied under *hooks_dir*.
 
-        TWO INSTALLS, NOT ONE. A Claude Code session that started before this install
+        RETIRED, NOT DELETED. A Claude Code session that started before this install
         keeps running the old commands -- `python <hooks>/dispatch/hooks.py Stop` -- until
         it restarts, and deleting those files under it made every such hook exit non-zero,
-        which blocks Edit/Write, prompts and Stop. So the first module-mode install
-        replaces each registered entry script with an exit-0 stub that tells the session
-        to restart, and leaves the rest of the copied tree where it is (recorded as kept);
-        the next install, finding only stubs, removes everything it recorded.
+        which blocks Edit/Write, prompts and Stop. So each registered entry script becomes
+        a stub: run.py and dispatch/hooks.py exit 0 and ask for a restart; the two
+        enforcement entry points hand the call to the installed module, so enforcement
+        stays on in those sessions. The rest of the copied tree is kept (recorded).
+
+        No later install deletes any of it, because no install can know that every
+        session from before the first one has ended. Only an explicit purge
+        (`ds integrate install ... --purge-retired-hooks`) removes everything recorded.
         """
         if manifest is None:
             return []
@@ -614,10 +665,9 @@ class ClaudeCodeInstaller(InstallerBase):
             return p.relative_to(hooks_dir).as_posix()
 
         entries = [p for p in recorded if _rel(p) in DS_HOOK_FILES]
-        first_run = any(p.is_file() and not _is_retired_stub(p) for p in entries)
         ops: list[FileOp] = []
         for target in recorded:
-            if not first_run:
+            if self.purge_retired_hooks:
                 ops.append(
                     FileOp(
                         target=target,
@@ -633,21 +683,38 @@ class ClaudeCodeInstaller(InstallerBase):
                     )
                 )
             elif target in entries:
-                ops.append(
-                    FileOp(
-                        target=target,
-                        op="create",
-                        backup_required=True,
-                        source_hash=compute_hash(RETIRED_HOOK_STUB),
-                        source_content=RETIRED_HOOK_STUB,
-                        reason="Retire a copied hook entry point: exit 0 and ask for a restart",
-                        safety_notes=(
-                            "A running session still calls this file until it restarts; the "
-                            "next install removes it."
-                        ),
-                        backup_path=backup_base,
+                stub = _retired_stub_for(_rel(target))
+                current = target.read_text(encoding="utf-8") if target.is_file() else None
+                if current == stub:
+                    ops.append(
+                        FileOp(
+                            target=target,
+                            op="keep",
+                            backup_required=False,
+                            source_hash="",
+                            reason="Keep a retired hook entry point",
+                            safety_notes="Already the current stub; untouched.",
+                        )
                     )
-                )
+                elif target.is_file():
+                    ops.append(
+                        FileOp(
+                            target=target,
+                            op="create",
+                            backup_required=True,
+                            source_hash=compute_hash(stub),
+                            source_content=stub,
+                            reason=(
+                                "Retire a copied hook entry point: hand enforcement to the "
+                                "installed module, or exit 0 and ask for a restart"
+                            ),
+                            safety_notes=(
+                                "A running session still calls this file until it restarts; "
+                                "only --purge-retired-hooks removes it."
+                            ),
+                            backup_path=backup_base,
+                        )
+                    )
             else:
                 ops.append(
                     FileOp(
@@ -655,7 +722,7 @@ class ClaudeCodeInstaller(InstallerBase):
                         op="keep",
                         backup_required=False,
                         source_hash="",
-                        reason="Keep a copied hook file until the next install removes it",
+                        reason="Keep a copied hook file until --purge-retired-hooks removes it",
                         safety_notes="Untouched in this run.",
                     )
                 )

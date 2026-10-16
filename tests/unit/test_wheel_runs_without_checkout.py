@@ -349,6 +349,136 @@ def test_installed_hook_modules_run_from_the_app_even_inside_a_checkout(
         assert "on-prompt-dispatch" in handlers, handlers
 
 
+INSTALL_PROBE = r"""
+import json, sys
+from pathlib import Path
+from unittest.mock import patch
+from integrations.installer.claude_code import ClaudeCodeInstaller
+root, home, mode = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
+with patch(
+    "integrations.installer.claude_code_launcher._write_path_to_profile",
+    return_value={"profile": "x", "action": "skipped"},
+):
+    r = ClaudeCodeInstaller(root, "user", ds_home=home, hook_mode=mode).install("execute")
+print(json.dumps({"ok": r.get("ok"), "hook_mode": r.get("hook_mode")}))
+"""
+
+
+def test_a_retired_enforcement_hook_still_enforces_in_a_running_session(installed):
+    """A session that started under a files-mode install keeps calling the copied
+    on-edit-enforce.py after the move to module mode. Its stub must give the installed
+    module's answer, byte for byte, not exit 0 and switch enforcement off."""
+    tmp = installed["tmp"]
+    root, home = tmp / "retire-root", tmp / "retire-home"
+    root.mkdir(exist_ok=True)
+    env = {**_isolated_env(tmp), "DREAM_STUDIO_HOME": str(home)}
+    env["DREAM_STUDIO_DB_PATH"] = str(home / "state" / "studio.db")
+    project = tmp / "retire-project"
+    (project / ".planning").mkdir(parents=True, exist_ok=True)
+    # A registered project in a fresh authority: enforcement decides only inside one.
+    boot = subprocess.run(
+        [
+            str(installed["py"]),
+            "-I",
+            "-c",
+            "import sys; from core.config.sqlite_bootstrap import bootstrap_database; "
+            "bootstrap_database(sys.argv[1])",
+            str(home / "state" / "studio.db"),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=tmp,
+        env=env,
+        timeout=600,
+    )
+    assert boot.returncode == 0, boot.stderr[-1500:]
+    reg = subprocess.run(
+        [
+            str(installed["py"]),
+            "-I",
+            "-m",
+            "interfaces.cli.ds",
+            "--home",
+            str(home),
+            "project",
+            "register",
+            "--name",
+            "Retire",
+            "--path",
+            str(project),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=tmp,
+        env=env,
+        timeout=600,
+    )
+    assert reg.returncode == 0, reg.stdout[-1500:] + reg.stderr[-1500:]
+    for py, mode, cwd in ((sys.executable, "files", REPO), (str(installed["py"]), "module", tmp)):
+        proc = subprocess.run(
+            [
+                py,
+                *(["-I"] if mode == "module" else []),
+                "-c",
+                INSTALL_PROBE,
+                str(root),
+                str(home),
+                mode,
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=cwd,
+            env=env,
+            timeout=600,
+        )
+        assert proc.returncode == 0, proc.stderr[-3000:]
+        assert json.loads(proc.stdout.strip().splitlines()[-1])["hook_mode"] == mode
+
+    stub = root / "hooks" / "runtime" / "hooks" / "meta" / "on-edit-enforce.py"
+    assert stub.read_text(encoding="utf-8").startswith("# dream-studio retired hook stub")
+    payload = json.dumps(
+        {
+            "session_id": "t",
+            "tool_name": "Write",
+            "tool_input": {"file_path": str(project / ".planning" / "x.md"), "content": "x"},
+            "cwd": str(project),
+        }
+    )
+
+    # Enforcement ignores paths under the temp directory, which is where pytest's tmp
+    # lives: give the hook processes a temp directory of their own.
+    hook_temp = tmp / "retire-temp"
+    hook_temp.mkdir(exist_ok=True)
+    hook_env = {**env, "TEMP": str(hook_temp), "TMP": str(hook_temp), "TMPDIR": str(hook_temp)}
+
+    def run(cmd):
+        return subprocess.run(
+            cmd,
+            input=payload.encode("utf-8"),
+            capture_output=True,
+            cwd=project,
+            env=hook_env,
+            timeout=300,
+        )
+
+    via_stub = run([sys.executable, str(stub)])
+    direct = run(
+        [str(installed["py"]), "-I", "-X", "utf8", "-m", "runtime.hooks.meta.on-edit-enforce"]
+    )
+    assert (via_stub.returncode, via_stub.stdout) == (
+        direct.returncode,
+        direct.stdout,
+    ), via_stub.stderr.decode("utf-8", "replace")[-2000:]
+    assert b"Restart this Claude Code session" not in via_stub.stdout + via_stub.stderr
+    assert b"deny" in direct.stdout, "the probe must exercise a real enforcement decision"
+
+
 ROUTES_PROBE = r"""
 import json, sys
 from fastapi.testclient import TestClient

@@ -47,9 +47,11 @@ running from a git checkout:
 Claude Code hooks installed from the app run the app's modules,
 `<home>/app/current/venv/Scripts/python.exe -I -X utf8 -m runtime.dispatch.hooks <event>`;
 nothing is copied into the config root's `hooks/` directory and no `.ds-source-root`
-sidecar is written. Copies an earlier files-mode install recorded are retired in two
-steps: the first module-mode install turns each entry script into a stub that exits 0
-and asks for a session restart, and the next one deletes them. `ds integrate install claude_code --config-root <path>`
+sidecar is written. Copies an earlier files-mode install recorded are retired, not
+deleted: each entry script becomes a stub. `run.py` and `dispatch/hooks.py` exit 0 and
+ask for a session restart; the two enforcement entry points hand the call to the
+installed module, so enforcement stays on in a session that started before the install.
+Only `--purge-retired-hooks` removes them. `ds integrate install claude_code --config-root <path>`
 (repeatable) installs into each named Claude Code config root with its own manifest
 under `<home>/integrations/claude_code/roots/`. An app defaults to the home it was
 installed into.

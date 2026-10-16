@@ -68,9 +68,14 @@ def _commands(config_root: Path) -> list[str]:
     ]
 
 
-def _install(config_root, canonical_root, ds_home, mode):
+def _install(config_root, canonical_root, ds_home, mode, **kwargs):
     installer = ClaudeCodeInstaller(
-        config_root, "user", canonical_root=canonical_root, ds_home=ds_home, hook_mode=mode
+        config_root,
+        "user",
+        canonical_root=canonical_root,
+        ds_home=ds_home,
+        hook_mode=mode,
+        **kwargs,
     )
     with patch("integrations.installer.claude_code_launcher._write_path_to_profile") as prof:
         prof.return_value = {"profile": "x", "action": "skipped"}
@@ -132,9 +137,12 @@ def test_switching_to_module_mode_removes_the_copies_and_the_old_commands(
 
     result = _install(config_root, canonical_root, ds_home, "module")
     assert result["hook_mode"] == "module"
-    # The first install only retires the copies (a running session still calls them);
-    # the next one removes them: see test_installer_round_two.py.
+    # Installs only retire the copies (a running session still calls them); an explicit
+    # purge removes them: see test_installer_round_two.py.
     result = _install(config_root, canonical_root, ds_home, "module")
+    assert result["hook_files_removed"] == 0
+    assert (hooks_dir / "dispatch" / "hooks.py").is_file()
+    result = _install(config_root, canonical_root, ds_home, "module", purge_retired_hooks=True)
     assert result["hook_files_removed"] > 0
     assert not (hooks_dir / ".ds-source-root").exists()
     assert not (hooks_dir / ".plugin-root").exists()

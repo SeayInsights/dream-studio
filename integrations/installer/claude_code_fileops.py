@@ -46,6 +46,18 @@ MODULE_FOR_HOOK_FILE: dict[str, str] = {
     "runtime/hooks/meta/on-stop-enforce.py": "runtime.hooks.meta.on-stop-enforce",
 }
 
+#: First line of every stub that replaces a retired copied hook entry point.
+RETIRED_STUB_MARKER = "# dream-studio retired hook stub"
+
+
+def is_retired_stub(path: Path) -> bool:
+    """Whether *path* is a stub a module-mode install left in place of a copied hook."""
+    try:
+        return path.read_text(encoding="utf-8").startswith(RETIRED_STUB_MARKER)
+    except (OSError, UnicodeDecodeError):
+        return False
+
+
 _HOOK_FILE_ARG = re.compile(r'"\{hooks_dir\}/([^"]+)"')
 
 

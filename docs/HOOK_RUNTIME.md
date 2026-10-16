@@ -75,10 +75,16 @@ The dispatcher finds its handlers inside the installed packages, and each handle
 runs writes its line to `<home>/state/hook-timing.jsonl` as in a checkout. Nothing is
 copied into `<config_root>/hooks` and no `.ds-source-root` is written.
 
-Moving a root from files mode to module mode retires the old copies in two steps: the
-first install replaces each recorded entry script with a stub that exits 0 and asks
-for a session restart, so a session started before the install that still calls the
-old path is not broken, and the next install deletes the stubs. Old Dream Studio commands are recognised by exact shape (a Python
+Moving a root from files mode to module mode retires the old copies without deleting
+them, because a session started before the install still calls the old paths. Each
+recorded entry script becomes a stub: `run.py` and `dispatch/hooks.py` exit 0 and ask
+for a session restart; `on-edit-enforce.py` and `on-stop-enforce.py` hand the call to
+the installed module with the same stdin and arguments and return its output and exit
+code, so enforcement stays on in those sessions. No later install deletes them (none
+can know that every such session has ended);
+`ds integrate install claude_code --config-root <root> --purge-retired-hooks --execute`
+removes the whole recorded tree. `ds doctor` counts the stubs as retired, not stale.
+Old Dream Studio commands are recognised by exact shape (a Python
 interpreter running a Dream Studio hook module, or a Dream Studio hook file under this
 root's `hooks/`) and replaced; any other hook in settings.json is left alone.
 `setup_hooks.hook_identity` treats the module and file spellings of one hook as the

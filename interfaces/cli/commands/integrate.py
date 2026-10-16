@@ -58,6 +58,16 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         "--config-root", action="append", default=None, help=_CONFIG_ROOT_HELP
     )
     integrate_install.add_argument(
+        "--purge-retired-hooks",
+        action="store_true",
+        help=(
+            "Delete the hook files an earlier files-mode install copied under the root's "
+            "hooks/ directory, including the stubs left in their place. Only once every "
+            "Claude Code session started before the move to the installed app has ended: "
+            "such a session still calls those paths."
+        ),
+    )
+    integrate_install.add_argument(
         "--agents",
         default=None,
         help=(
@@ -289,6 +299,7 @@ def dispatch(
                     ds_home=ds_home,
                     git_repo_root=None,
                     agents=agents,
+                    purge_retired_hooks=getattr(args, "purge_retired_hooks", False),
                 )
                 installs.append(installer.install(mode))
             return _print(
@@ -337,6 +348,7 @@ def dispatch(
             git_repo_root=git_repo_root,
             skip_hook_install=_skip_hook,
             agents=agents,
+            purge_retired_hooks=getattr(args, "purge_retired_hooks", False),
         )
         result = installer.install(mode)
         return _print(

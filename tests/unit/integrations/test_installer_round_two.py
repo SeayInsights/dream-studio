@@ -190,9 +190,62 @@ def test_copied_hooks_become_stubs_first_and_go_on_the_next_install(
     assert proc.returncode == 0
     assert "restart" in (proc.stdout + proc.stderr).lower()
 
+    # A later install never deletes them: a session started before the FIRST install
+    # can still be running, and a missing entry point exits non-zero, which blocks it.
     _install(config_root, canonical_root, ds_home, "module")
+    assert entry.is_file() and handler.is_file()
+    stub_text = entry.read_text(encoding="utf-8")
+    _install(config_root, canonical_root, ds_home, "module")
+    assert entry.read_text(encoding="utf-8") == stub_text
+
+    # Only an explicit purge removes the retired tree.
+    installer = ClaudeCodeInstaller(
+        config_root,
+        "user",
+        canonical_root=canonical_root,
+        ds_home=ds_home,
+        hook_mode="module",
+        purge_retired_hooks=True,
+    )
+    with patch("integrations.installer.claude_code_launcher._write_path_to_profile") as prof:
+        prof.return_value = {"profile": "x", "action": "skipped"}
+        installer.install("execute")
     assert not entry.exists() and not handler.exists()
     assert not [p for p in hooks.rglob("*") if p.is_file()] if hooks.exists() else True
+
+
+def test_the_enforcement_entry_points_hand_off_instead_of_exiting_zero(
+    tmp_path, canonical_root, ds_home
+):
+    """A retired on-edit-enforce/on-stop-enforce that exits 0 switches enforcement off
+    in every running session. Their stubs run the installed module instead."""
+    config_root = tmp_path / "claude"
+    config_root.mkdir()
+    _install(config_root, canonical_root, ds_home, "files")
+    _install(config_root, canonical_root, ds_home, "module")
+    hooks = config_root / "hooks"
+    for rel, module in (
+        ("runtime/hooks/meta/on-edit-enforce.py", "runtime.hooks.meta.on-edit-enforce"),
+        ("runtime/hooks/meta/on-stop-enforce.py", "runtime.hooks.meta.on-stop-enforce"),
+    ):
+        text = (hooks / rel).read_text(encoding="utf-8")
+        assert text.startswith("# dream-studio retired hook stub")
+        assert f"MODULE = {module!r}" in text, text
+        assert "sys.exit(proc.returncode)" in text
+        assert "Restart this Claude Code session" not in text.split("except OSError")[0]
+
+
+def test_doctor_counts_retired_stubs_as_expected_not_stale(tmp_path, canonical_root, ds_home):
+    from core.health.doctor_checks import _check_hook_freshness
+
+    config_root = tmp_path / "claude"
+    config_root.mkdir()
+    _install(config_root, canonical_root, ds_home, "files")
+    _install(config_root, canonical_root, ds_home, "module")
+    info = _check_hook_freshness(canonical_root, config_root)
+    assert info["ok"], info
+    assert info["stale"] == []
+    assert set(info.get("retired", [])) >= {"dispatch/hooks.py", "run.py"}
 
 
 # --- S6 ---------------------------------------------------------------------------

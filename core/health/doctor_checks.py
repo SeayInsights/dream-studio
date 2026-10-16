@@ -213,12 +213,19 @@ def _check_hook_freshness(source_root: Path, claude_dir: Path) -> dict[str, Any]
     Line endings are normalized so a CRLF install still compares equal.
     """
     from core.health.doctor_shared import projected_hook_relpaths
+    from integrations.installer.claude_code_fileops import is_retired_stub
 
     stale: list[str] = []
+    retired: list[str] = []
     checked = 0
     for rel in projected_hook_relpaths(source_root):
         canonical = source_root / rel
         deployed = claude_dir / "hooks" / rel
+        # A module-mode install leaves stubs where copied entry points were; they are
+        # meant to differ from the source.
+        if deployed.is_file() and is_retired_stub(deployed):
+            retired.append(rel)
+            continue
         if not canonical.is_file() or not deployed.is_file():
             continue
         checked += 1
@@ -229,7 +236,20 @@ def _check_hook_freshness(source_root: Path, claude_dir: Path) -> dict[str, Any]
             continue
         if canon_bytes != deployed_bytes:
             stale.append(rel)
-    return {"checked": checked, "stale": stale, "ok": not stale}
+    from integrations.targets.claude_code.settings_merge import DS_HOOK_FILES
+
+    for rel in sorted(DS_HOOK_FILES):
+        deployed = claude_dir / "hooks" / rel
+        if rel not in retired and deployed.is_file() and is_retired_stub(deployed):
+            retired.append(rel)
+    if retired:
+        # The copied tree beside a retired entry point is no longer run: hooks run from
+        # the installed app's modules.
+        stale = []
+    result: dict[str, Any] = {"checked": checked, "stale": stale, "ok": not stale}
+    if retired:
+        result["retired"] = retired
+    return result
 
 
 def _check_installed_app(dream_studio_home: Path) -> dict[str, Any]:
