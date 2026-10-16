@@ -98,23 +98,76 @@ def _check_handoff_spawner(source_root: Path) -> dict[str, Any]:
         return {"status": "fail", "reason": str(exc), "spawn_importable": False}
 
 
-def _check_version_current(source_root: Path, dream_studio_home: Path) -> dict[str, Any]:
-    try:
-        repo_file = source_root / "VERSION"
-        repo_ver = repo_file.read_text(encoding="utf-8").strip() if repo_file.is_file() else None
-        # "<version> <sha>" from `ds self-install`; compare the version, report both.
-        from core.config.paths import installed_version
+def _code_sha(source_root: Path) -> str | None:
+    """The commit the code at *source_root* was built from, when that can be known.
 
-        installed_ver, installed_sha = installed_version(dream_studio_home)
-        current = repo_ver is not None and repo_ver == installed_ver
-        return {
-            "repo": repo_ver,
-            "installed": installed_ver,
-            "installed_sha": installed_sha,
-            "current": current,
-        }
-    except Exception:
-        return {"repo": None, "installed": None, "current": False}
+    An installed app: the sha in its app.json (<app>/app.json above venv/.../site-packages).
+    A git checkout: HEAD. Anything else: None.
+    """
+    import json
+    import shutil
+    import subprocess
+
+    for parent in source_root.parents:
+        record = parent / "app.json"
+        if record.is_file():
+            sha = json.loads(record.read_text(encoding="utf-8")).get("sha")
+            return sha if isinstance(sha, str) and sha else None
+    if not (source_root / ".git").exists() or shutil.which("git") is None:
+        return None
+    proc = subprocess.run(
+        ["git", "-C", str(source_root), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=10,
+        check=False,
+    )
+    sha = proc.stdout.strip()
+    return sha if proc.returncode == 0 and len(sha) == 40 else None
+
+
+def _check_version_current(source_root: Path, dream_studio_home: Path) -> dict[str, Any]:
+    """Is the installed Dream Studio the code this doctor runs?
+
+    VERSION is the same string for every commit, so comparing it alone called any older
+    install current. When both sides know their commit (installed-version's sha from
+    `ds self-install`; app.json or the checkout's HEAD here) the commits are compared.
+    When either does not, the answer is None -- unknown -- with the reason, never True.
+    """
+    from core.config.paths import installed_version
+
+    repo_file = source_root / "VERSION"
+    repo_ver = repo_file.read_text(encoding="utf-8").strip() if repo_file.is_file() else None
+    installed_ver, installed_sha = installed_version(dream_studio_home)
+    code_sha = _code_sha(source_root)
+    reason = None
+    if repo_ver is None or installed_ver is None:
+        current: bool | None = False
+        reason = "no VERSION here" if repo_ver is None else "nothing installed in this home"
+    elif repo_ver != installed_ver:
+        current = False
+        reason = f"installed {installed_ver}, this code is {repo_ver}"
+    elif installed_sha and code_sha:
+        current = installed_sha == code_sha
+        if not current:
+            reason = f"installed commit {installed_sha[:10]}, this code is {code_sha[:10]}"
+    else:
+        current = None
+        reason = (
+            "installed-version records no commit (an install older than ds self-install)"
+            if not installed_sha
+            else "the commit of this code is unknown"
+        )
+    return {
+        "repo": repo_ver,
+        "installed": installed_ver,
+        "installed_sha": installed_sha,
+        "code_sha": code_sha,
+        "current": current,
+        "reason": reason,
+    }
 
 
 #: Directories under the Dream Studio home whose ``*.db`` files are expected

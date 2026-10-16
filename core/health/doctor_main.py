@@ -73,6 +73,7 @@ def run_doctor_checks(
     dream_studio_home: Path | None = None,
     fix: bool = False,
     record_counts: bool = False,
+    accept_drop: bool = False,
 ) -> dict[str, Any]:
     """Composite doctor status. fix=True triggers self-healing side effects.
 
@@ -118,9 +119,25 @@ def run_doctor_checks(
     from core.health.authority_data import authority_data_check
     from core.health.authority_data import record_counts as _record_counts
 
-    if record_counts and live_db.is_file():
-        _record_counts(paths.dream_studio_home, live_db)
+    from core.health.authority_data import drops
+
     authority_data_info = authority_data_check(paths.dream_studio_home, live_db)
+    record_refused = None
+    if record_counts and authority_data_info["readable"]:
+        if drops(authority_data_info) and not accept_drop:
+            record_refused = (
+                "not recorded: the counts dropped since the last baseline "
+                f"({'; '.join(drops(authority_data_info))}). Find out why first; to record "
+                "the smaller numbers as the new baseline anyway, add --accept-drop."
+            )
+        else:
+            authority_data_info["recorded"] = _record_counts(paths.dream_studio_home, live_db)
+            authority_data_info = {
+                **authority_data_check(paths.dream_studio_home, live_db),
+                "recorded": authority_data_info["recorded"],
+            }
+    if record_refused:
+        authority_data_info["record_refused"] = record_refused
 
     # WO-MAINRED-VISIBILITY: the post-merge full-ci verdict for main. pr-smoke
     # green is merge authorization, not proof main is green — and main sat red
@@ -168,12 +185,21 @@ def run_doctor_checks(
         not dispatcher_ok
         or skills_info["missing"]
         or failed_info["count"] >= 6
-        or not version_info["current"]
+        or version_info["current"] is False
     )
     has_warnings = 0 < failed_info["count"] < 6
 
+    # Data at risk: an authority_data or installed_app warning (a drop, a missing table, a
+    # lost authority, a ds that is not the installed app) is never a pass.
+    authority_attention = bool(
+        authority_data_info["warnings"]
+        or installed_app_info["warnings"]
+        or authority_data_info.get("record_refused")
+    )
     if critical_fail:
         overall = "fail"
+    elif authority_attention:
+        overall = "attention_required"
     elif not core_pass:
         overall = "attention_required"
     elif has_warnings:
@@ -222,7 +248,7 @@ def run_doctor_checks(
                 fix_actions.append("spool ingest: ran spool ingest to process requeued events")
             except Exception as exc:
                 fix_actions.append(f"spool ingest: failed — {exc}")
-        if not version_info["current"]:
+        if version_info["current"] is False:
             try:
                 subprocess.run(
                     _ds_command(paths.dream_studio_home, "update"),
@@ -237,6 +263,7 @@ def run_doctor_checks(
         "derived_view": True,
         "primary_authority": False,
         "status": overall,
+        "authority_attention": authority_attention,
         "checks": {
             "sqlite_exists": validation["sqlite_exists"],
             "schema_version_known": validation["schema_version"] is not None,

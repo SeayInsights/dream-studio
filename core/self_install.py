@@ -526,6 +526,27 @@ def self_install(plan: SelfInstallPlan, *, dry_run: bool) -> dict[str, Any]:
     if dry_run:
         return {**base, "ok": True, "dry_run": True, "writes": writes}
 
+    # A DROP STOPS THE INSTALL. Counts below the recorded baseline mean business data went
+    # missing since the last check; installing over that, then recording the smaller
+    # numbers as the new baseline, would bury the loss (round-table S4).
+    from core.health.authority_data import authority_data_check, drops
+
+    before = authority_data_check(plan.home, plan.db_path)
+    if drops(before):
+        return {
+            **base,
+            "ok": False,
+            "dry_run": False,
+            "switched": False,
+            "current_after": current,
+            "error": (
+                "refusing to install: the authority's business counts dropped since the last "
+                f"baseline ({'; '.join(drops(before))}). Restore from a backup, or record the "
+                "new counts deliberately with `ds doctor --record-counts --accept-drop`, then "
+                "run self-install again."
+            ),
+        }
+
     log: list[str] = []
     try:
         if not reuse:
@@ -572,12 +593,12 @@ def self_install(plan: SelfInstallPlan, *, dry_run: bool) -> dict[str, Any]:
         log=log,
     )
 
-    # The doctor warns when business row counts fall below a recorded baseline. Report
-    # any drop against the previous baseline first, then record the post-install counts.
-    from core.health.authority_data import authority_data_check, record_counts
+    # Record the post-install counts as the baseline `ds doctor` warns against. A drop
+    # was refused before anything ran, so this never records over one.
+    from core.health.authority_data import record_counts
 
     authority = authority_data_check(plan.home, plan.db_path)
-    if authority["readable"]:
+    if authority["readable"] and not drops(authority):
         authority["recorded"] = record_counts(plan.home, plan.db_path)
 
     integrations = []

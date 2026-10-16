@@ -61,8 +61,14 @@ def register_health(subcommands: argparse._SubParsersAction) -> None:  # type: i
         action="store_true",
         help=(
             "Record the authority's business row counts as the baseline later runs warn "
-            "against (the one write a doctor run makes, and only with this flag)"
+            "against (the one write a doctor run makes, and only with this flag). Refused "
+            "when the counts dropped since the last baseline, unless --accept-drop"
         ),
+    )
+    _doctor_cmd.add_argument(
+        "--accept-drop",
+        action="store_true",
+        help="With --record-counts: record counts that are lower than the last baseline",
     )
     _doctor_cmd.add_argument(
         "mode",
@@ -169,14 +175,18 @@ def dispatch_health(
                 return 1
             print("[dashboard-truth] OVERALL: PASS")
             return 0
-        return _print(
-            _doctor_status(
-                source_root=source_root,
-                dream_studio_home=dream_studio_home,
-                fix=getattr(args, "fix", False),
-                record_counts=getattr(args, "record_counts", False),
-            )
+        report = _doctor_status(
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+            fix=getattr(args, "fix", False),
+            record_counts=getattr(args, "record_counts", False),
+            accept_drop=getattr(args, "accept_drop", False),
         )
+        _print(report)
+        # Exit 1 when business data may be at risk (core.health.authority_data warnings,
+        # an installed-app mismatch, or a refused --record-counts); other findings keep
+        # the status field as their signal.
+        return 1 if report.get("authority_attention") else 0
 
     if args.command == "update":
         return _update_command(
@@ -231,30 +241,14 @@ def _version_status(*, source_root: Path, dream_studio_home: Path | None) -> dic
     return get_version(source_root=source_root, dream_studio_home=dream_studio_home)
 
 
-def _check_dispatcher_hooks(claude_dir: Path) -> bool:
-    """Return True if the DS dispatcher hook is registered for UserPromptSubmit."""
-    _DISPATCHER_MARKERS = (
-        "hooks\\dispatch\\hooks.py",  # installed path (Windows)
-        "hooks/dispatch/hooks.py",  # installed path (Unix)
-        "runtime/dispatch/hooks",  # legacy repo-relative path
-        "-m runtime.dispatch.hooks",  # module mode (an installed app)
-        "'dispatch'/'hooks.py'",  # legacy pathlib expression
-    )
-    try:
-        settings_path = claude_dir / "settings.json"
-        if not settings_path.is_file():
-            return False
-        data = json.loads(settings_path.read_text(encoding="utf-8"))
-        hooks_section = data.get("hooks", {})
-        event_entries = hooks_section.get("UserPromptSubmit", [])
-        for entry in event_entries:
-            for h in entry.get("hooks", []):
-                cmd = h.get("command", "")
-                if any(m in cmd for m in _DISPATCHER_MARKERS):
-                    return True
-        return False
-    except Exception:
-        return False
+# One copy of each doctor check: these live in core.health.doctor_checks and are
+# re-exported here for the names callers and tests already import from this module.
+from core.health.doctor_checks import (  # noqa: E402, F401
+    _check_agents_installed,
+    _check_dispatcher_hooks,
+    _check_failed_events,
+    _check_version_current,
+)
 
 
 def _get_expected_skill_ids(source_root: Path) -> list[str]:
@@ -282,61 +276,13 @@ def _check_skills_installed(claude_dir: Path, source_root: Path | None = None) -
         return {"total_expected": len(expected), "installed": 0, "missing": expected}
 
 
-def _check_agents_installed(claude_dir: Path, source_root: Path) -> dict[str, Any]:
-    """Return agents install status — checks canonical/agents/ vs ~/.claude/agents/."""
-    try:
-        agents_src = source_root / "canonical" / "agents"
-        expected = (
-            [p.stem for p in agents_src.glob("*.md") if p.name != "README.md"]
-            if agents_src.is_dir()
-            else []
-        )
-        agents_dir = claude_dir / "agents"
-        installed = [name for name in expected if (agents_dir / f"{name}.md").is_file()]
-        missing = [name for name in expected if name not in installed]
-        return {"total_expected": len(expected), "installed": len(installed), "missing": missing}
-    except Exception:
-        return {"total_expected": 0, "installed": 0, "missing": []}
-
-
-def _check_failed_events(dream_studio_home: Path) -> dict[str, int]:
-    """Return count of *.json files in ~/.dream-studio/events/failed/ root only."""
-    try:
-        failed_dir = dream_studio_home / "events" / "failed"
-        if not failed_dir.is_dir():
-            return {"count": 0}
-        count = sum(1 for p in failed_dir.iterdir() if p.is_file() and p.suffix == ".json")
-        return {"count": count}
-    except Exception:
-        return {"count": 0}
-
-
-def _check_version_current(source_root: Path, dream_studio_home: Path) -> dict[str, Any]:
-    """Compare repo VERSION vs installed-version. Fail-open."""
-    try:
-        repo_file = source_root / "VERSION"
-        repo_ver = repo_file.read_text(encoding="utf-8").strip() if repo_file.is_file() else None
-        # "<version> <sha>" from `ds self-install`; compare the version, report both.
-        from core.config.paths import installed_version
-
-        installed_ver, installed_sha = installed_version(dream_studio_home)
-        current = repo_ver is not None and repo_ver == installed_ver
-        return {
-            "repo": repo_ver,
-            "installed": installed_ver,
-            "installed_sha": installed_sha,
-            "current": current,
-        }
-    except Exception:
-        return {"repo": None, "installed": None, "current": False}
-
-
 def _doctor_status(
     *,
     source_root: Path,
     dream_studio_home: Path | None,
     fix: bool = False,
     record_counts: bool = False,
+    accept_drop: bool = False,
 ) -> dict[str, Any]:
     from core.health.doctor import run_doctor_checks
 
@@ -350,6 +296,7 @@ def _doctor_status(
         dream_studio_home=dream_studio_home,
         fix=fix,
         record_counts=record_counts,
+        accept_drop=accept_drop,
     )
 
 

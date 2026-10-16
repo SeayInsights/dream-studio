@@ -319,3 +319,24 @@ def test_the_real_build_writes_the_home_marker_into_the_app_venv(si, repo, home,
     assert marker.read_text(encoding="utf-8").strip() == str(plan.home)
     assert si.app_record(plan.app_dir)["sha"] == plan.sha
     assert _sys.executable  # the build ran with this interpreter's pip
+
+
+def test_self_install_refuses_over_a_drop_and_keeps_the_baseline(si, repo, home, fake_build):
+    """Round-table S4: self-install re-baselined over a drop and reported ok."""
+    db = _authority(home, rows=3)
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE business_projects (project_id TEXT, name TEXT)")
+    conn.executemany("INSERT INTO business_projects VALUES (?, ?)", [("p1", "a"), ("p2", "b")])
+    conn.commit()
+    conn.close()
+    first = si.resolve_plan(home=home, repo=repo, ref="HEAD")
+    baseline = home / "state" / "authority-counts.json"
+    baseline.write_text(
+        json.dumps({"recorded_at": "2026-10-15T00:00:00+00:00", "counts": {"projects": 5}}),
+        encoding="utf-8",
+    )
+    result = si.self_install(first, dry_run=False)
+    assert result["ok"] is False and result["switched"] is False
+    assert "dropped" in result["error"]
+    assert json.loads(baseline.read_text(encoding="utf-8"))["counts"]["projects"] == 5
+    assert not (home / "app" / "current").exists()

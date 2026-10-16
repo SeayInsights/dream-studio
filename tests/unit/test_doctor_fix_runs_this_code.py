@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 from core.config.paths import code_root
@@ -32,7 +33,8 @@ def test_every_repair_runs_isolated_from_this_code_root_against_this_home(tmp_pa
         spawned.append([str(c) for c in cmd])
         return subprocess.CompletedProcess(cmd, 0)
 
-    monkeypatch.setattr(doctor_main.subprocess, "run", fake_run)
+    # Replace only doctor_main's own handle on subprocess, not subprocess.run for everyone.
+    monkeypatch.setattr(doctor_main, "subprocess", types.SimpleNamespace(run=fake_run))
     doctor_main.run_doctor_checks(source_root=code_root(), dream_studio_home=home, fix=True)
 
     assert spawned, "no repair was attempted"

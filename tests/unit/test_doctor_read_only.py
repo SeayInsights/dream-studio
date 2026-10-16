@@ -107,10 +107,17 @@ def test_doctor_reports_business_row_counts(populated):
     assert authority["readable"] is True
 
 
-def test_doctor_warns_on_zero_and_on_a_drop_against_recorded_counts(populated):
-    # Record a baseline explicitly (the one write, opt-in), then lose the project.
+def _baseline(tmp: Path) -> dict:
+    return json.loads((tmp / "home" / "state" / "authority-counts.json").read_text("utf-8"))
+
+
+def test_a_drop_is_attention_and_record_counts_will_not_bury_it(populated):
+    """Round-table S4: a drop used to leave the doctor at status pass and exit 0, and
+    `--record-counts` recorded the smaller numbers as the new normal before checking."""
     proc = _ds(populated, "doctor", "--record-counts")
-    assert proc.returncode in (0, 1), proc.stderr[-2000:]
+    assert proc.returncode == 0, proc.stdout[-1500:]
+    recorded = _baseline(populated)["counts"]["projects"]
+    assert recorded >= 1
     db = populated / "home" / "state" / "studio.db"
     conn = sqlite3.connect(db)
     try:
@@ -120,12 +127,37 @@ def test_doctor_warns_on_zero_and_on_a_drop_against_recorded_counts(populated):
     finally:
         conn.close()
 
-    authority = _doctor(populated)["checks"]["authority_data"]
-    warnings = " ".join(authority["warnings"])
+    proc = _ds(populated, "doctor")
+    start = proc.stdout.index("{")
+    report = json.loads(proc.stdout[start:])
+    authority = report["checks"]["authority_data"]
     assert authority["counts"]["projects"] == 0
-    assert "projects" in warnings and "dropped" in warnings
-    assert "zero" in warnings or "empty" in warnings
-    assert authority["last_recorded"]["counts"]["projects"] >= 1
+    assert any("projects" in w and "dropped" in w for w in authority["warnings"])
+    assert report["status"] in ("attention_required", "fail")
+    assert proc.returncode == 1, "a drop must not exit 0"
+
+    proc = _ds(populated, "doctor", "--record-counts")
+    assert proc.returncode == 1
+    assert "--accept-drop" in proc.stdout + proc.stderr
+    assert _baseline(populated)["counts"]["projects"] == recorded, "the drop was recorded"
+
+    proc = _ds(populated, "doctor", "--record-counts", "--accept-drop")
+    assert _baseline(populated)["counts"]["projects"] == 0
+    report = _doctor(populated)
+    assert not report["checks"]["authority_data"]["warnings"]
+
+
+def test_empty_tables_without_a_baseline_are_notes_not_warnings(tmp_path):
+    for sub in ("home", "claude", "userhome", "work"):
+        (tmp_path / sub).mkdir()
+    from core.config.sqlite_bootstrap import bootstrap_database, shipped_released_version
+
+    bootstrap_database(
+        tmp_path / "home" / "state" / "studio.db", target_version=shipped_released_version()
+    )
+    authority = _doctor(tmp_path)["checks"]["authority_data"]
+    assert authority["warnings"] == []
+    assert any("zero rows" in n for n in authority["notes"])
 
 
 def test_doctor_names_the_code_root_it_runs_from(populated):

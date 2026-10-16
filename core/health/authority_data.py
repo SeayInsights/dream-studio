@@ -60,16 +60,29 @@ def last_recorded(home: Path) -> dict[str, Any] | None:
 
 
 def authority_data_check(home: Path, db_path: Path) -> dict[str, Any]:
-    """Counts, the last recorded baseline, and warnings. Writes nothing."""
+    """Counts, the last recorded baseline, warnings and notes. Writes nothing.
+
+    WARNINGS mean data may be lost and make the doctor's status attention_required with
+    a non-zero exit: a count below the recorded baseline, a key table missing, an
+    unreadable authority, or no authority in a home that has had an install. NOTES are
+    information: an empty table with nothing recorded to compare against is what a new
+    install or a new project looks like.
+    """
+    from core.config.sqlite_bootstrap import _install_markers
+
     result: dict[str, Any] = {
         "db_path": str(db_path),
         "readable": False,
         "counts": {},
         "last_recorded": None,
         "warnings": [],
+        "notes": [],
     }
     if not db_path.is_file():
-        result["warnings"].append(f"authority database missing: {db_path}")
+        if _install_markers(home):
+            result["warnings"].append(f"authority database missing: {db_path}")
+        else:
+            result["notes"].append(f"no authority database yet: {db_path}")
         return result
     try:
         counts = read_counts(db_path)
@@ -84,7 +97,7 @@ def authority_data_check(home: Path, db_path: Path) -> dict[str, Any]:
         if count is None:
             result["warnings"].append(f"{label}: table {KEY_TABLES[label]} is missing")
         elif count == 0:
-            result["warnings"].append(f"{label}: zero rows (empty authority?)")
+            result["notes"].append(f"{label}: zero rows")
     if previous:
         before = previous["counts"]
         for label, count in counts.items():
@@ -96,8 +109,17 @@ def authority_data_check(home: Path, db_path: Path) -> dict[str, Any]:
     return result
 
 
+def drops(check: dict[str, Any]) -> list[str]:
+    """The drop warnings of an authority_data_check result."""
+    return [w for w in check.get("warnings", []) if " dropped from " in w]
+
+
 def record_counts(home: Path, db_path: Path) -> dict[str, Any]:
-    """Write the current counts as the baseline later checks compare against."""
+    """Write the current counts as the baseline later checks compare against.
+
+    Callers check for a drop first (drops()); recording over one makes the loss the
+    new normal and silences every later warning about it.
+    """
     record = {"recorded_at": datetime.now(UTC).isoformat(), "counts": read_counts(db_path)}
     path = counts_path(home)
     path.parent.mkdir(parents=True, exist_ok=True)
