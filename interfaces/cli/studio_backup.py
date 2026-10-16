@@ -132,14 +132,20 @@ def backup(db: Path | None = None) -> Path:
         print(f"ERROR: Database not found at {src_path}", file=sys.stderr)
         sys.exit(1)
 
-    bak_path = src_path.with_suffix(".db.bak")
-    src = sqlite3.connect(str(src_path))
-    dst = sqlite3.connect(str(bak_path))
-    try:
-        src.backup(dst)
-    finally:
-        dst.close()
-        src.close()
+    # The same checks as the pulse's rolling backup: an empty or schema-less studio.db is
+    # never copied over studio.db.bak, and a .bak holding more business rows than the
+    # source is kept beside the new one. This copied whatever the file held, and run on
+    # an emptied authority it replaced the last real backup with an empty database.
+    from core.config.state import backup_db
+
+    bak_path = backup_db(force=True, db_path=src_path, maintenance=False)
+    if bak_path is None:
+        print(
+            f"ERROR: {src_path} was not backed up: it is empty, has no Dream Studio schema, "
+            "or could not be read. The existing backup was left as it is.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     size_kb = bak_path.stat().st_size / 1024
     print(f"Backup created: {bak_path} ({size_kb:.1f} KB)")

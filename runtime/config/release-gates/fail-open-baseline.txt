@@ -182,8 +182,8 @@ core/config/retention.py|316|falsy-return
 core/config/retention.py|327|falsy-return
 core/config/retention.py|382|falsy-return
 core/config/schema_coherence_scan.py|178|bare-except-pass
-core/config/sqlite_bootstrap.py|572|bare-except-pass
-core/config/sqlite_bootstrap.py|763|falsy-return
+core/config/sqlite_bootstrap.py|615|bare-except-pass
+core/config/sqlite_bootstrap.py|806|falsy-return
 core/config/state.py|120|bare-except-pass
 core/config/state.py|160|bare-except-pass
 core/config/state.py|175|falsy-return
@@ -191,10 +191,10 @@ core/config/state.py|203|bare-except-pass
 core/config/state.py|225|falsy-return
 core/config/state.py|242|bare-except-pass
 core/config/state.py|253|bare-except-pass
-core/config/state.py|312|bare-except-pass
-core/config/state.py|321|falsy-return
-core/config/state.py|350|bare-except-pass
-core/config/state.py|358|falsy-return
+core/config/state.py|316|bare-except-pass
+core/config/state.py|326|falsy-return
+core/config/state.py|355|bare-except-pass
+core/config/state.py|363|falsy-return
 core/config/state.py|83|falsy-return
 core/decisions/emitter.py|166|falsy-return
 core/design_briefs/mutations.py|147|bare-except-pass
@@ -689,7 +689,7 @@ interfaces/cli/setup_steps.py|160|bare-except-pass
 interfaces/cli/setup_steps.py|171|bare-except-pass
 interfaces/cli/spec_risk_check.py|127|falsy-return
 interfaces/cli/spec_risk_check.py|26|bare-except-pass
-interfaces/cli/studio_backup.py|280|bare-except-pass
+interfaces/cli/studio_backup.py|286|bare-except-pass
 runtime/dispatch/hooks.py|108|falsy-return
 runtime/dispatch/hooks.py|174|bare-except-pass
 runtime/dispatch/hooks.py|178|bare-except-pass

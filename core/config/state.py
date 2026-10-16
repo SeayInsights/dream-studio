@@ -279,20 +279,24 @@ def _keep_richer_backup(db_path: Path, bak_path: Path) -> None:
     bak_path.rename(bak_path.with_name(f"{bak_path.name}.{stamp}"))
 
 
-def backup_db(force: bool = False) -> Path | None:
+def backup_db(
+    force: bool = False, *, db_path: Path | None = None, maintenance: bool = True
+) -> Path | None:
     """Back up studio.db using the SQLite online backup API. Monthly VACUUM on day 1.
 
     Rate-limited to BACKUP_MIN_INTERVAL_SEC; pass force=True for an explicit
-    operator-requested backup.
+    operator-requested backup. *db_path* backs up another authority file (the explicit
+    `studio_backup.py backup`); *maintenance* False skips the monthly VACUUM and the
+    cloud push, which only the pulse's rolling backup runs.
     """
-    db_path = paths.state_dir() / "studio.db"
+    db_path = db_path or paths.state_dir() / "studio.db"
     if not db_path.is_file():
         return None
     from core.config.sqlite_bootstrap import has_authority_schema
 
     # AN EMPTY FILE IS NOT BACKED UP OVER A REAL ONE. A raw open elsewhere can leave a
     # 0-byte or schema-less studio.db where the authority was; copying that over
-    # studio.db.bak destroyed the last copy of the real data (round-table B1).
+    # studio.db.bak destroyed the last copy of the real data.
     if not has_authority_schema(db_path):
         return None
     bak_path = db_path.with_suffix(".db.bak")
@@ -315,8 +319,9 @@ def backup_db(force: bool = False) -> Path | None:
         src.backup(dst)
         dst.close()
         src.close()
-        _maybe_vacuum(db_path)
-        _maybe_cloud_push()
+        if maintenance:
+            _maybe_vacuum(db_path)
+            _maybe_cloud_push()
         return bak_path
     except Exception:
         return None

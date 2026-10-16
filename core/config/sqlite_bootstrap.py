@@ -261,8 +261,45 @@ def present_backups(home: Path) -> list[Path]:
             found.extend(p.parent for p in root.glob("*/studio.db") if p.is_file())
     state = home / "state"
     if state.is_dir():
-        found.extend(p for p in state.glob("studio.db.bak*") if p.is_file())
+        # studio.db.bak and the kept studio.db.bak.<UTC timestamp> copies; not their
+        # -wal/-shm sidecars, which are not backups.
+        found.extend(
+            p for p in state.glob("studio.db.bak*") if p.is_file() and _BAK_NAME.match(p.name)
+        )
     return sorted(set(found), key=lambda p: p.stat().st_mtime, reverse=True)
+
+
+_BAK_NAME = re.compile(r"^studio\.db\.bak(\.\d{8}T\d{6}Z)?$")
+
+_DESCRIBED_TABLES = (("projects", "business_projects"), ("work orders", "business_work_orders"))
+
+
+def describe_backup(backup: Path) -> str:
+    """What *backup* holds: its schema and business rows, or why it holds nothing.
+
+    So that an empty newest backup is visible as empty before anyone restores it.
+    """
+
+    target = backup / "studio.db" if backup.is_dir() else backup
+    try:
+        if target.stat().st_size == 0:
+            return "empty, 0 bytes"
+        conn = sqlite3.connect(f"{target.resolve().as_uri()}?mode=ro", uri=True, timeout=5.0)
+        try:
+            tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master")}
+            if "_schema_version" not in tables:
+                return "no Dream Studio schema"
+            version = conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0]
+            parts = [f"schema {version}"]
+            for label, table in _DESCRIBED_TABLES:
+                if table in tables:
+                    count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                    parts.append(f"{label} {count}")
+            return ", ".join(parts)
+        finally:
+            conn.close()
+    except (OSError, sqlite3.Error) as exc:
+        return f"unreadable: {type(exc).__name__}"
 
 
 def restore_guidance(home: Path, db_path: Path) -> str:
@@ -270,17 +307,23 @@ def restore_guidance(home: Path, db_path: Path) -> str:
 
     backups = present_backups(home)
     if backups:
-        listed = "; ".join(str(p) for p in backups[:8])
+        listed = "; ".join(f"{p} ({describe_backup(p)})" for p in backups[:8])
         more = f" (and {len(backups) - 8} more)" if len(backups) > 8 else ""
         where = f"Backups present, newest first: {listed}{more}."
+        override = ""
     else:
         where = (
             f"No backup was found under {home / 'state' / 'backups'}, {home / 'backups'} or "
             f"{home / 'state'}."
         )
+        override = (
+            " With no backup to restore, start a new, empty authority deliberately by "
+            f"setting {CREATE_AUTHORITY_ENV}={db_path}."
+        )
     return (
         f"{where} A directory holding studio.db restores with "
-        f"`ds --home {home} restore <dir> --execute`; a .db or .bak file is copied to {db_path}."
+        f"`ds --home {home} restore <dir> --execute`; a .db or .bak file is copied to "
+        f"{db_path}.{override}"
     )
 
 
