@@ -433,6 +433,20 @@ def test_runtime_lib_home_matches_core_config_paths(tmp_path, monkeypatch):
     monkeypatch.setenv("USERPROFILE", str(tmp_path / "os-home"))
     assert runtime_home.home_dir() == core_paths.home_dir()
 
+    # Run from a self-installed app: the venv records the home it was installed into
+    # (APP_HOME_MARKER under sys.prefix). Hooks run that venv's python with no --home, so
+    # the stdlib copy must find the same home, or the edit guard reads the default home.
+    import sys
+
+    prefix = tmp_path / "app-venv"
+    prefix.mkdir()
+    (prefix / core_paths.APP_HOME_MARKER).write_text(
+        str(tmp_path / "installed-home") + "\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(sys, "prefix", str(prefix))
+    assert core_paths.home_dir() == tmp_path / "installed-home"
+    assert runtime_home.home_dir() == core_paths.home_dir()
+
 
 def test_hook_writes_under_dream_studio_home_not_the_os_home(tmp_path, monkeypatch):
     """Behavioral proof for one entry hook, end to end. `emitters/claude_code/run.py`'s

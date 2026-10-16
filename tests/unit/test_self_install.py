@@ -293,3 +293,29 @@ def test_cli_refuses_a_dirty_tree(repo, home):
     proc = _cli(home, "--repo", str(repo), "--dry-run")
     assert proc.returncode == 1
     assert "dirty tree" in json.loads(proc.stdout)["error"]
+
+
+def test_the_real_build_writes_the_home_marker_into_the_app_venv(si, repo, home, monkeypatch):
+    """The fake_build fixture writes the marker itself, so it proved nothing about the
+    real _build_app (round-table S14). Here only the slow commands are stubbed -- the
+    wheel build, the venv and the pip install -- and the marker must come from the code."""
+    import sys as _sys
+
+    def run(cmd, *, env=None, cwd=None):
+        if "wheel" in cmd and "-w" in cmd:
+            dist = Path(cmd[cmd.index("-w") + 1])
+            dist.mkdir(parents=True, exist_ok=True)
+            (dist / "dream_studio-9.9.9-py3-none-any.whl").write_bytes(b"")
+        elif cmd[1:3] == ["-m", "venv"]:
+            py = si.venv_python(Path(cmd[3]))
+            py.parent.mkdir(parents=True, exist_ok=True)
+            py.write_text("", encoding="utf-8")
+        return ""
+
+    monkeypatch.setattr(si, "_run", run)
+    plan = si.resolve_plan(home=home, repo=repo, ref="HEAD")
+    si._build_app(plan, [])
+    marker = plan.app_dir / "venv" / si.APP_HOME_MARKER
+    assert marker.read_text(encoding="utf-8").strip() == str(plan.home)
+    assert si.app_record(plan.app_dir)["sha"] == plan.sha
+    assert _sys.executable  # the build ran with this interpreter's pip
