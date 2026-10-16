@@ -714,3 +714,48 @@ def test_the_integration_preview_lists_only_what_will_change(si, repo, home, tmp
     assert sum(preview["operations"].values()) <= 3, preview["operations"]
     assert len(preview["backups"]) <= 3, preview["backups"][:5]
     assert preview["unchanged"] > 100
+
+
+def _backup_dir(root: Path, name: str, age: int) -> Path:
+    d = root / name
+    d.mkdir(parents=True)
+    (d / "studio.db").write_bytes(b"x" * 10)
+    stamp = 1_700_000_000 + age
+    os.utime(d / "studio.db", (stamp, stamp))
+    os.utime(d, (stamp, stamp))
+    return d
+
+
+def test_backup_retention_keeps_the_newest_five_and_nothing_else_is_touched(si, home):
+    """Each install and rollback keeps a full copy of the authority (about 1.5 GB at real
+    size) and nothing ever removed one."""
+    backups = home / "state" / "backups"
+    made = [_backup_dir(backups, f"self-install-9.9.9-aaaaaaaaaa-{i:02d}", i) for i in range(6)]
+    made += [_backup_dir(backups, "self-install-rollback-9.9.9-bbbbbbbbbb-x", 10)]
+    keep = [backups / "studio-pre-restore-20261016T161346Z.db", backups / "studio-pre-3-x.db"]
+    for f in keep:
+        f.write_bytes(b"y")
+    manual = _backup_dir(home / "backups", "manual", 0)
+
+    removed = si.prune_self_install_backups(home, keep=5)
+    assert sorted(Path(p).name for p in removed) == [
+        "self-install-9.9.9-aaaaaaaaaa-00",
+        "self-install-9.9.9-aaaaaaaaaa-01",
+    ]
+    survivors = sorted(p.name for p in backups.iterdir())
+    assert "self-install-rollback-9.9.9-bbbbbbbbbb-x" in survivors
+    assert all(f.exists() for f in keep) and manual.exists()
+
+
+def test_a_self_install_reports_the_backups_it_pruned(si, repo, home, fake_build):
+    _authority(home)
+    backups = home / "state" / "backups"
+    for i in range(6):
+        _backup_dir(backups, f"self-install-0.0.1-cccccccccc-{i:02d}", i)
+    plan = si.resolve_plan(home=home, repo=repo, ref="HEAD")
+    dry = si.self_install(plan, dry_run=True)
+    assert any(w["step"] == "prune-backup" for w in dry["writes"])
+    result = si.self_install(plan, dry_run=False)
+    assert result["ok"], result
+    assert result["pruned_backups"], result
+    assert len([p for p in backups.iterdir() if p.name.startswith("self-install-")]) == 5

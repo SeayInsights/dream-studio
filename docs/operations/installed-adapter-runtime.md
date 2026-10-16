@@ -43,6 +43,7 @@ running from a git checkout:
 | `<home>/app/previous` | App id `current` replaced; `ds self-install --rollback --execute` returns to it |
 | `<home>/state/installed-version` | `<version> <full sha>` |
 | `<home>/bin/ds.cmd` | The one launcher: the current app's `ds --home <home>` |
+| `<home>/state/backups/self-install-*` | The authority copy each install and rollback takes; the newest 5 are kept |
 
 Claude Code hooks installed from the app run the app's modules,
 `<home>/app/current/venv/Scripts/python.exe -I -X utf8 -m runtime.dispatch.hooks <event>`;

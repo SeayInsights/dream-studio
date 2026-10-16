@@ -211,6 +211,41 @@ def _saved_launchers(home: Path) -> list[dict]:
     return list(json.loads(record.read_text(encoding="utf-8")).get("launchers", []))
 
 
+#: How many self-install and rollback authority backups a home keeps.
+BACKUPS_KEPT = 5
+
+
+def _self_install_backups(home: Path) -> list[Path]:
+    """The authority backups self-install and rollback took (state/backups/self-install-*
+    directories holding studio.db), newest first by when the copy was made."""
+    root = home / "state" / "backups"
+    if not root.is_dir():
+        return []
+    found = [
+        p
+        for p in root.iterdir()
+        if p.is_dir() and p.name.startswith("self-install-") and (p / "studio.db").is_file()
+    ]
+    return sorted(found, key=lambda p: (p / "studio.db").stat().st_mtime, reverse=True)
+
+
+def prune_self_install_backups(home: Path, keep: int = BACKUPS_KEPT) -> list[str]:
+    """Remove all but the newest *keep* self-install and rollback backups; return them.
+
+    Each is a full copy of the authority (about 1.5 GB at real size), and nothing ever
+    removed one. Only those directories are candidates, the newest is always kept, and
+    every other backup -- pre-restore copies, the pre-migration studio-pre-* files,
+    `ds backup` output -- is never touched.
+    """
+    root = home / "state" / "backups"
+    removed = []
+    kept = max(keep, 1)
+    for old in _self_install_backups(home)[kept:]:
+        _remove_tree(old, root)
+        removed.append(str(old))
+    return removed
+
+
 def _assert_inside(path: Path, parent: Path) -> None:
     """Refuse to delete anything that is not strictly inside *parent*."""
     path = path.resolve()
@@ -524,6 +559,18 @@ class SelfInstallPlan:
                 "detail": "business row counts: the baseline `ds doctor` warns against",
             },
         ]
+        # Retention: the install adds one backup (when there is an authority to back up),
+        # then keeps the newest BACKUPS_KEPT.
+        kept_existing = BACKUPS_KEPT - 1 if db_exists else BACKUPS_KEPT
+        kept_existing = max(kept_existing, 1)
+        for old in _self_install_backups(self.home)[kept_existing:]:
+            steps.append(
+                {
+                    "step": "prune-backup",
+                    "path": str(old),
+                    "detail": f"keeps the newest {BACKUPS_KEPT} self-install and rollback backups",
+                }
+            )
         for root in self.config_roots:
             steps.append(self._integration_preview(root))
         return steps
@@ -1012,6 +1059,9 @@ def self_install(plan: SelfInstallPlan, *, dry_run: bool) -> dict[str, Any]:
     if authority["readable"] and not drops(authority):
         authority["recorded"] = record_counts(plan.home, plan.db_path)
 
+    pruned = prune_self_install_backups(plan.home)
+    for path in pruned:
+        log.append(f"removed old backup {path} (keeping the newest {BACKUPS_KEPT})")
     repointed = _repoint_launchers(plan.home, plan.backup_dir, plan.app_id, log)
     left = _path_launchers(plan.home)[1]
 
@@ -1052,6 +1102,7 @@ def self_install(plan: SelfInstallPlan, *, dry_run: bool) -> dict[str, Any]:
         "authority_data": authority,
         "repointed_launchers": repointed,
         "left_launchers": left,
+        "pruned_backups": pruned,
         "integrations": integrations,
         "log": log,
     }
@@ -1156,6 +1207,9 @@ def rollback(home: Path, *, dry_run: bool) -> dict[str, Any]:
         current=current,
         log=log,
     )
+    pruned = prune_self_install_backups(home)
+    for path in pruned:
+        log.append(f"removed old backup {path} (keeping the newest {BACKUPS_KEPT})")
     return {
         **base,
         "ok": True,
@@ -1163,6 +1217,7 @@ def rollback(home: Path, *, dry_run: bool) -> dict[str, Any]:
         "switched": True,
         "current_after": previous,
         "saved_launchers": [{"path": item["path"], "saved": item["saved"]} for item in saved],
+        "pruned_backups": pruned,
         "backup": str(backup) if backup else None,
         "log": log,
     }
