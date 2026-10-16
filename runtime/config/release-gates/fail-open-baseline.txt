@@ -170,10 +170,10 @@ core/config/hookq.py|130|bare-except-pass
 core/config/hookq.py|136|bare-except-pass
 core/config/hookq.py|80|falsy-return
 core/config/hookq.py|97|falsy-return
-core/config/paths.py|294|falsy-return
-core/config/paths.py|359|bare-except-pass
-core/config/paths.py|397|bare-except-pass
-core/config/paths.py|399|bare-except-pass
+core/config/paths.py|313|falsy-return
+core/config/paths.py|378|bare-except-pass
+core/config/paths.py|416|bare-except-pass
+core/config/paths.py|418|bare-except-pass
 core/config/paths.py|90|bare-except-pass
 core/config/platform.py|145|bare-except-pass
 core/config/retention.py|206|falsy-return

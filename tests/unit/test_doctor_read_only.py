@@ -29,8 +29,10 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 def _env(tmp: Path) -> dict[str, str]:
-    env = {k: v for k, v in os.environ.items() if not k.startswith("DREAM_STUDIO")}
-    env.pop("DS_DREAM_STUDIO_HOME", None)
+    # Nothing inherited: DS_PLATFORM_PROFILE_PATH, DS_SPOOL_ROOT and friends redirect
+    # writes out of the home this test snapshots, and DREAM_STUDIO_APPLY_UNRELEASED hides
+    # the schema an operator's authority actually has (the shipped released version).
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("DREAM_STUDIO", "DS_"))}
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     env["PYTHONPATH"] = str(REPO)
     env["PYTHONIOENCODING"] = "utf-8"
@@ -38,7 +40,6 @@ def _env(tmp: Path) -> dict[str, str]:
     env["CLAUDE_CONFIG_DIR"] = str(tmp / "claude")
     env["HOME"] = str(tmp / "userhome")
     env["USERPROFILE"] = str(tmp / "userhome")
-    env["DREAM_STUDIO_APPLY_UNRELEASED"] = "1"
     return env
 
 
@@ -69,9 +70,12 @@ def populated(tmp_path_factory) -> Path:
     tmp = tmp_path_factory.mktemp("doctor")
     for sub in ("home", "claude", "userhome", "work", "project"):
         (tmp / sub).mkdir()
-    from core.config.sqlite_bootstrap import bootstrap_database
+    from core.config.sqlite_bootstrap import bootstrap_database, shipped_released_version
 
-    bootstrap_database(tmp / "home" / "state" / "studio.db")
+    # The schema a live authority has: up to the SHIPPED released version, not past it.
+    bootstrap_database(
+        tmp / "home" / "state" / "studio.db", target_version=shipped_released_version()
+    )
     proc = _ds(tmp, "project", "register", "--name", "Doctor Demo", "--path", str(tmp / "project"))
     assert proc.returncode == 0, proc.stderr[-2000:]
     return tmp
@@ -129,3 +133,18 @@ def test_doctor_names_the_code_root_it_runs_from(populated):
     app = report["checks"]["installed_app"]
     assert Path(app["code_root"]).resolve() == REPO
     assert app["running_from_checkout"] is True
+
+
+@pytest.mark.parametrize("marked", [False, True], ids=["fresh-home", "installed-home"])
+def test_doctor_writes_nothing_when_there_is_no_authority(tmp_path, marked):
+    for sub in ("home", "claude", "userhome", "work"):
+        (tmp_path / sub).mkdir()
+    if marked:
+        (tmp_path / "home" / "state").mkdir()
+        (tmp_path / "home" / "state" / "installed-version").write_text("0.1.0 abc\n")
+    roots = (tmp_path / "home", tmp_path / "claude", tmp_path / "userhome")
+    before = _snapshot(*roots)
+    _doctor(tmp_path)
+    after = _snapshot(*roots)
+    changed = sorted(k for k in before.keys() | after.keys() if before.get(k) != after.get(k))
+    assert not changed, f"ds doctor wrote: {changed}"

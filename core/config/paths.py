@@ -196,7 +196,7 @@ def claude_config_root() -> Path:
     try:
         from core.config.database import _default_db_path
 
-        if _default_db_path().is_file():
+        if _default_db_path().is_file() and _has_profile_table(_default_db_path()):
             from core.profiles.queries import active_profile
 
             profile = active_profile()
@@ -215,6 +215,25 @@ def claude_config_root() -> Path:
 
     override = os.environ.get("CLAUDE_CONFIG_DIR")
     return Path(override).expanduser() if override else Path.home() / ".claude"
+
+
+def _has_profile_table(db: Path) -> bool:
+    """Whether the authority has business_profiles (migration 159), asked read-only.
+
+    An authority at the shipped released version can predate the table. Querying it
+    anyway raised, and the raise was logged to state/diagnostics on every `ds doctor`
+    and every hook: a write from a path that must not write, about a normal state.
+    """
+    from core.config.database import connect_existing
+
+    conn = connect_existing(db, read_only=True)
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'business_profiles'"
+        ).fetchone()
+    finally:
+        conn.close()
+    return row is not None
 
 
 def project_root() -> Path:
