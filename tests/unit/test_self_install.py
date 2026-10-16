@@ -340,3 +340,56 @@ def test_self_install_refuses_over_a_drop_and_keeps_the_baseline(si, repo, home,
     assert "dropped" in result["error"]
     assert json.loads(baseline.read_text(encoding="utf-8"))["counts"]["projects"] == 5
     assert not (home / "app" / "current").exists()
+
+
+def _checkout_launcher(home: Path) -> Path:
+    """What `ds install-command` from a checkout leaves first on PATH (~/.local/bin)."""
+    local_bin = Path.home() / ".local" / "bin"
+    local_bin.mkdir(parents=True, exist_ok=True)
+    launcher = local_bin / ("ds.cmd" if os.name == "nt" else "ds")
+    launcher.write_text(
+        '@echo off\nset "DREAM_STUDIO_SOURCE_ROOT=C:\\src\\dream-studio"\n'
+        'py "C:\\src\\dream-studio\\interfaces\\cli\\ds.py" %*\n',
+        encoding="utf-8",
+    )
+    return launcher
+
+
+def test_self_install_repoints_a_checkout_launcher_on_path(
+    si, repo, home, fake_build, tmp_path, monkeypatch
+):
+    """Round-table S7: ~/.local/bin/ds.cmd stayed first on PATH and kept running the
+    checkout after self-install; the app's launcher was never reached."""
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "userhome"))
+    stale = _checkout_launcher(home)
+    plan = si.resolve_plan(home=home, repo=repo, ref="HEAD")
+
+    dry = si.self_install(plan, dry_run=True)
+    assert any(w["step"] == "repoint-launcher" and w["path"] == str(stale) for w in dry["writes"])
+    assert "DREAM_STUDIO_SOURCE_ROOT" in stale.read_text(encoding="utf-8")
+
+    result = si.self_install(plan, dry_run=False)
+    assert result["ok"], result
+    text = stale.read_text(encoding="utf-8")
+    assert str(si.launcher_path(plan.home)) in text
+    assert "DREAM_STUDIO_SOURCE_ROOT" not in text
+
+
+def test_install_command_from_an_app_delegates_to_the_home_launcher(tmp_path, monkeypatch):
+    """Run from an installed app, `ds install-command` pinned one concrete venv; it must
+    go through <home>/bin, which `current` keeps pointing at the live app."""
+    from core import installed_productization_setup as setup
+    from core.config import paths
+
+    monkeypatch.setattr(paths, "is_source_checkout", lambda root=None: False)
+    home = tmp_path / "home"
+    result = setup.install_global_command_surface(
+        source_root=paths.code_root(),
+        dream_studio_home=home,
+        command_dir=tmp_path / "bin",
+        execute=True,
+    )
+    for name in result["launchers"]:
+        text = (tmp_path / "bin" / name).read_text(encoding="utf-8")
+        assert str(home / "bin") in text, name
+        assert "interfaces" not in text and "venv" not in text, name

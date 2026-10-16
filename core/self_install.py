@@ -88,6 +88,52 @@ def launcher_content(home: Path) -> str:
     return f'#!/bin/sh\nexec "{ds}" --home "{home}" "$@"\n'
 
 
+def delegating_launchers(home: Path) -> dict[str, str]:
+    """Launchers that hand every call to <home>/bin/ds.cmd (or ds): a launcher elsewhere
+    on PATH must never pin a checkout or one app version."""
+    target = launcher_path(home)
+    if IS_WINDOWS:
+        return {
+            "ds.cmd": f'@echo off\r\ncall "{target}" %*\r\n',
+            "ds.ps1": f'& "{target}" @args\r\nexit $LASTEXITCODE\r\n',
+        }
+    return {"ds": f'#!/bin/sh\nexec "{target}" "$@"\n'}
+
+
+def stale_path_launchers(home: Path) -> list[Path]:
+    """Dream Studio launchers in ~/.local/bin (`ds install-command`) that do not delegate
+    to <home>/bin. That directory usually comes first on PATH, so such a launcher keeps
+    running a checkout after self-install."""
+    local_bin = Path.home() / ".local" / "bin"
+    target = str(launcher_path(home))
+    stale: list[Path] = []
+    for name in ("ds.cmd", "ds.ps1", "ds"):
+        path = local_bin / name
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        owned = (
+            "DREAM_STUDIO_SOURCE_ROOT" in text
+            or "ds_entry.py" in text
+            or ("interfaces" in text and "ds.py" in text)
+        )
+        if owned and target not in text:
+            stale.append(path)
+    return stale
+
+
+def _repoint_launchers(home: Path, log: list[str]) -> list[dict[str, str]]:
+    content = delegating_launchers(home)
+    repointed = []
+    for path in stale_path_launchers(home):
+        new = content.get(path.name) or next(iter(content.values()))
+        old = path.read_text(encoding="utf-8", errors="replace")
+        path.write_text(new, encoding="utf-8", newline="")
+        log.append(f"repointed {path} to {launcher_path(home)}")
+        repointed.append({"path": str(path), "previous": old})
+    return repointed
+
+
 def _assert_inside(path: Path, parent: Path) -> None:
     """Refuse to delete anything that is not strictly inside *parent*."""
     path = path.resolve()
@@ -348,6 +394,15 @@ class SelfInstallPlan:
                 "path": str(launcher_path(self.home)),
                 "content": launcher_content(self.home),
             },
+            *(
+                {
+                    "step": "repoint-launcher",
+                    "path": str(p),
+                    "detail": f"a Dream Studio launcher on PATH that bypasses {launcher_path(self.home)}",
+                    "content": delegating_launchers(self.home).get(p.name, ""),
+                }
+                for p in stale_path_launchers(self.home)
+            ),
             {
                 "step": "record-counts",
                 "path": str(self.home / "state" / "authority-counts.json"),
@@ -601,6 +656,8 @@ def self_install(plan: SelfInstallPlan, *, dry_run: bool) -> dict[str, Any]:
     if authority["readable"] and not drops(authority):
         authority["recorded"] = record_counts(plan.home, plan.db_path)
 
+    repointed = _repoint_launchers(plan.home, log)
+
     integrations = []
     for root in plan.config_roots:
         try:
@@ -636,6 +693,7 @@ def self_install(plan: SelfInstallPlan, *, dry_run: bool) -> dict[str, Any]:
         "backup": str(backup) if backup else None,
         "migration": migrated,
         "authority_data": authority,
+        "repointed_launchers": repointed,
         "integrations": integrations,
         "log": log,
     }
