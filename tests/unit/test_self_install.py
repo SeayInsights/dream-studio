@@ -416,6 +416,7 @@ def test_rollback_with_no_previous_says_why_and_what_to_do(si, home):
     result = si.rollback(home, dry_run=True)
     assert not result["ok"]
     assert "self-install" in result["error"] and "--execute" in result["error"]
+    assert "--repo" in result["error"], "the installed ds needs --repo to name a checkout"
 
 
 def test_checkout_install_command_into_an_app_home_writes_delegating_launchers(tmp_path):
@@ -593,6 +594,7 @@ def test_dry_run_refuses_a_live_app_with_no_record_like_the_real_run(si, repo, h
     assert dry["ok"] is False and real["ok"] is False
     assert "live app" in dry["error"] and "live app" in real["error"]
     assert "--ref" in dry["error"], "the advice must not dead-end on a rollback"
+    assert "--repo" in dry["error"]
 
 
 def test_dry_run_lists_the_activation_carry_over_and_the_integration_backups(

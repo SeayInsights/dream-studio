@@ -450,7 +450,7 @@ Returns `ready: true` when the DB is at the current schema version with no profi
 
 #### `ds doctor` — Claude Code integration plane
 Checks the Claude Code integration is wired correctly: dispatcher hooks present, skills installed and current, agents deployed, routing triggers covered, installed version current. Run after:
-- `ds self-install --config-root <root> --execute` (or `ds integrate install claude_code --config-root <root> --execute` from the installed app)
+- `ds self-install --repo <checkout> --config-root <root> --execute` (or `ds integrate install claude_code --config-root <root> --execute` from the installed app)
 - Manual edits to `~/.claude/settings.json` or `CLAUDE.md`
 - Upgrading Dream Studio or before starting a new session
 

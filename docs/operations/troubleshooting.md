@@ -38,7 +38,8 @@ deliberately, set `DREAM_STUDIO_CREATE_AUTHORITY=<path of that studio.db>` and r
 schema; with the variable naming that file, nothing reports the authority as lost.
 
 `Refusing to create ...: no migration files were found` means the install is
-incomplete; reinstall with `ds self-install --execute`.
+incomplete; reinstall with `ds self-install --repo <checkout> --execute` (`--repo` is needed
+when the installed `ds` runs it).
 
 ## Doctor Warns About Row Counts
 

@@ -802,7 +802,8 @@ def _live_app_refusal(plan: SelfInstallPlan) -> str | None:
     return (
         f"{plan.app_dir} is the live app (app/current points at it) but has no {APP_RECORD}; "
         "refusing to remove and rebuild it under running hooks. Move `current` off it first: "
-        f"install another commit (`ds --home {plan.home} self-install --ref <ref> --execute`)"
+        f"install another commit (`ds --home {plan.home} self-install --repo <checkout> --ref <ref> "
+        "--execute`)"
         f"{rollback}; then this commit can be installed again."
     )
 
@@ -1130,7 +1131,8 @@ def rollback(home: Path, *, dry_run: bool) -> dict[str, Any]:
             "error": (
                 f"no previous app recorded in {app_root / PREVIOUS}: this home has had one "
                 "installed app, so there is nothing to roll back to. To run another version, "
-                f"install it: `ds --home {home} self-install --ref <ref> --execute`."
+                f"install it from a checkout: `ds --home {home} self-install --repo <checkout> --ref <ref> "
+                "--execute`."
             ),
         }
     if not APP_ID.fullmatch(previous):
