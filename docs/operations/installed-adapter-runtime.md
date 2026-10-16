@@ -32,8 +32,8 @@ operator's live runtime state unless a live update scope has been approved.
 
 ## Installed App
 
-`ds self-install` installs Dream Studio into the home as a versioned app instead of
-running every surface from a git checkout:
+`ds self-install` installs Dream Studio into the home as a versioned app, as well as
+running from a git checkout:
 
 | Path | Meaning |
 | --- | --- |
@@ -45,9 +45,11 @@ running every surface from a git checkout:
 | `<home>/bin/ds.cmd` | The one launcher: the current app's `ds --home <home>` |
 
 Claude Code hooks installed from the app run the app's modules,
-`<home>/app/current/venv/Scripts/python.exe -I -m runtime.dispatch.hooks <event>`;
+`<home>/app/current/venv/Scripts/python.exe -I -X utf8 -m runtime.dispatch.hooks <event>`;
 nothing is copied into the config root's `hooks/` directory and no `.ds-source-root`
-sidecar is written. `ds integrate install claude_code --config-root <path>`
+sidecar is written. Copies an earlier files-mode install recorded are retired in two
+steps: the first module-mode install turns each entry script into a stub that exits 0
+and asks for a session restart, and the next one deletes them. `ds integrate install claude_code --config-root <path>`
 (repeatable) installs into each named Claude Code config root with its own manifest
 under `<home>/integrations/claude_code/roots/`. An app defaults to the home it was
 installed into.

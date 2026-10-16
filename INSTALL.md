@@ -48,7 +48,8 @@ network access or a warm pip cache. `--dry-run` in place of `--execute` prints e
 ### 3. Put ds on PATH
 
 Add `~/.dream-studio/bin` to PATH, ahead of any older `ds` launcher. `ds.cmd` (Windows) or
-`ds` there runs the current app with `--home` pinned.
+`ds` there runs the current app with `--home` pinned. An older `ds.cmd` in `~/.local/bin`
+that ran a checkout is rewritten by `self-install` to call it.
 
 ### 4. Verify installation
 

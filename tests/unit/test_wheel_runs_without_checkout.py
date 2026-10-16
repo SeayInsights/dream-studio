@@ -309,7 +309,7 @@ print(json.dumps({"code": code, "files": files, "sys_path": sys.path}))
 def test_installed_hook_modules_run_from_the_app_even_inside_a_checkout(
     installed, module, event, payload
 ):
-    """The hook command is `<app python> -I -m <module>`, and Claude Code runs it with the
+    """The hook command is `<app python> -I -X utf8 -m <module>`, and Claude Code runs it with the
     PROJECT as the working directory -- here, the Dream Studio checkout itself. Plain `-m`
     would put that directory first on sys.path and import the checkout's packages."""
     tmp = installed["tmp"]

@@ -51,6 +51,14 @@ argument shifting. Adapter apps such as Codex may invoke `UserPromptSubmit`
 from a workspace outside the Dream Studio repo, so launcher root resolution must
 not depend on the current working directory.
 
+### Where node prompts are written
+
+The Runner writes each node's prompt under a per-workflow context directory
+(`control/execution/workflow/runner.py::workflow_context_dir`). In a checkout that is
+`.planning/workflow/<wf_key>` under the checkout. An installed app's code root is its
+site-packages, which is never written, so there the directory is
+`<home>/planning/workflow/<wf_key>`.
+
 ### Which repository the gates measure
 
 `ds workflow run pre-push --non-interactive` runs the gates declared in a
@@ -383,3 +391,5 @@ know this side was examined and found unaffected, not merely unmentioned. -->
 <!-- Reviewed 2026-09-26 -- feat/enforce-native-full-port (C11): touched only because `runtime/hooks/enforce-native` and `runtime/hooks/enqueue-native` are `workflow_and_hooks` source patterns. No change to canonical/workflows/**, gate inventory, tier, execution model, node status vocabulary, or completion_check semantics -- this is `on-edit-enforce`'s native port going from scaffold to complete, not a workflow change. Full account in docs/HOOK_RUNTIME.md under the same date. -->
 <!-- Reviewed 2026-09-27 -- feat/skill-eval-coverage-census (E19): canonical/workflows/pre-push.yaml gains ONE new ADVISORY gate, `skill-eval-coverage-census` (py -m core.gates.skill_eval_coverage_census), placed after `test-suite`. Advisory tier: prints [WARN], never blocks push. It walks canonical/skills/**/SKILL.md and requires every file to have an entry in canonical/skill_eval_registry.json (status: no_output/covered/gap, enforce-or-declare); a skill with no entry at all, or a covered entry whose named test file was deleted, is what fails it -- existing gap entries are tracked debt, not blockers, same ratchet fail-open-census already uses. No tier change to any existing gate, no gate removed, no change to workflow execution model, node status vocabulary, or completion_check semantics. Full rationale in docs/HOOK_RUNTIME.md under the same date. -->
 <!-- Reviewed 2026-09-27 -- feat/merge-pr-security-scan-into-review: quality:pr-security-scan moved into security:review as a fourth sub-mode (panel); it is no longer a top-level pack mode, so the pack:mode specifier system (mode must be a literal entry in packs.yaml's modes: list) has no way to address it directly -- the same limitation review's existing diff/audit/build sub-modes already live with. control/execution/workflow/runner.py's _BARE_TO_PACK loses its `pr-security-scan` entry (nothing maps to it any more); the three workflow nodes that named it (comprehensive-review.yaml's review-security, idea-to-pr.yaml's review-security and triage-security, project-audit.yaml's secure) are repointed at the fully-qualified `security:review` specifier instead of an invented bare alias that would resolve to the wrong pack. resolve_specifier's qualified-specifier passthrough (unchanged) and fallback-to-ds-core lookup are untouched -- only which specifier those four nodes carry. No workflow YAML schema, node type, gate, pause/resume path, retry policy, or state-persistence behaviour changed. -->
+
+<!-- Reviewed 2026-10-16 -- feat/installable-runtime: added "Where node prompts are written" (workflow_context_dir: the checkout's .planning/workflow, or <home>/planning/workflow in an installed app). No workflow YAML, engine, state, gate or retry contract change. -->

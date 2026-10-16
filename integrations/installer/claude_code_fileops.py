@@ -38,7 +38,7 @@ def _interpolate_hooks_dir(hooks: list[dict[str, Any]], hooks_dir: Path) -> list
 
 
 #: Hook script (as hooks_template.json names it under {hooks_dir}) -> the module that IS
-#: that script inside the installed packages. Module mode runs `<python> -I -m <module>`.
+#: that script inside the installed packages. Module mode runs `<python> -I -X utf8 -m <module>`.
 MODULE_FOR_HOOK_FILE: dict[str, str] = {
     "run.py": "emitters.claude_code.run",
     "dispatch/hooks.py": "runtime.dispatch.hooks",

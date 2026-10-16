@@ -140,7 +140,7 @@ class ClaudeCodeInstaller(InstallerBase):
         meant "the round table's reviewers", never the whole bench.
 
         *hook_mode* picks how hooks run. "module": settings.json runs the app's own
-        interpreter on the installed modules (`<python> -I -m runtime.dispatch.hooks`),
+        interpreter on the installed modules (`<python> -I -X utf8 -m runtime.dispatch.hooks`),
         nothing is copied into <config_root>/hooks, and copies a previous install recorded
         in this root's manifest are removed. "files": the projection this installer has
         always written (hook files copied under <config_root>/hooks, with the

@@ -250,6 +250,9 @@ $env:PATH = "$env:USERPROFILE\.dream-studio\bin;" + $env:PATH
 > --execute` from a checkout installs the older files-mode hooks that import the checkout.
 > It refuses a home that `self-install` manages; use `self-install --config-root <root> --execute` there.
 
+An older `ds.cmd` in `~/.local/bin` that ran a checkout is rewritten by `self-install` to
+call this launcher, so either spelling on PATH runs the current app.
+
 After adding to PATH, run `ds` from any directory.
 
 ### 5. Run health checks
@@ -446,7 +449,7 @@ Returns `ready: true` when the DB is at the current schema version with no profi
 
 #### `ds doctor` — Claude Code integration plane
 Checks the Claude Code integration is wired correctly: dispatcher hooks present, skills installed and current, agents deployed, routing triggers covered, installed version current. Run after:
-- `ds self-install --config-root <root>` (or `ds integrate install claude_code --config-root <root> --execute` from the installed app)
+- `ds self-install --config-root <root> --execute` (or `ds integrate install claude_code --config-root <root> --execute` from the installed app)
 - Manual edits to `~/.claude/settings.json` or `CLAUDE.md`
 - Upgrading Dream Studio or before starting a new session
 
