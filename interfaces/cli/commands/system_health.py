@@ -111,6 +111,13 @@ def register_health(subcommands: argparse._SubParsersAction) -> None:  # type: i
     )
     migrate_sub = migrate_cmd.add_subparsers(dest="migrate_subcommand", required=True)
     migrate_sub.add_parser("status", help="Show merged-but-not-activated migrations")
+    migrate_sub.add_parser(
+        "init",
+        help=(
+            "Create a new, empty authority at the released schema. In a home that has had "
+            "an install, only when DREAM_STUDIO_CREATE_AUTHORITY names its path."
+        ),
+    )
     migrate_activate_cmd = migrate_sub.add_parser(
         "activate",
         help="Apply pending-activation migrations (operator-invoked; creates backup first)",
@@ -756,6 +763,23 @@ def _migrate_command(args: argparse.Namespace) -> int:
                 "pending_migrations": pending,
             }
         )
+
+    if args.migrate_subcommand == "init":
+        # The deliberate way to start over. bootstrap_database's guard decides: a home that
+        # never had an authority creates one, a home that had an install only with
+        # DREAM_STUDIO_CREATE_AUTHORITY naming this file. Released migrations only.
+        from core.config.database import _default_db_path
+        from core.config.sqlite_bootstrap import bootstrap_database, has_authority_schema
+
+        target = db_path or _default_db_path()
+        if target.is_file() and has_authority_schema(target):
+            _print(
+                {"ok": False, "error": f"{target} already holds an authority; nothing to create."}
+            )
+            return 1
+        target.parent.mkdir(parents=True, exist_ok=True)
+        version = bootstrap_database(target)
+        return _print({"ok": True, "created": str(target), "schema_version": version})
 
     if args.migrate_subcommand == "activate":
         pending = pending_migrations_info(db_path)

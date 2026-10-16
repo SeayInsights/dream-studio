@@ -299,6 +299,14 @@ _BAK_NAME = re.compile(r"^studio\.db\.bak(\.\d{8}T\d{6}Z)?$")
 _DESCRIBED_TABLES = (("projects", "business_projects"), ("work orders", "business_work_orders"))
 
 
+def _start_over(home: Path, db_path: Path) -> str:
+    """How to start a new, empty authority on purpose: the override and the command."""
+    return (
+        f"start a new, empty authority deliberately: set {CREATE_AUTHORITY_ENV}={db_path} "
+        f"and run `ds --home {home} migrate init`."
+    )
+
+
 def describe_backup(backup: Path) -> str:
     """What *backup* holds: its schema and business rows, or why it holds nothing.
 
@@ -343,10 +351,7 @@ def restore_guidance(home: Path, db_path: Path) -> str:
             f"No backup was found under {home / 'state' / 'backups'}, {home / 'backups'} or "
             f"{home / 'state'}."
         )
-        override = (
-            " With no backup to restore, start a new, empty authority deliberately by "
-            f"setting {CREATE_AUTHORITY_ENV}={db_path}."
-        )
+        override = " With no backup to restore, " + _start_over(home, db_path)
     return (
         f"{where} A directory holding studio.db restores with "
         f"`ds --home {home} restore <dir> --execute`; a .db or .bak file is copied to "
@@ -363,6 +368,10 @@ def lost_authority_message(db_path: str | Path) -> str | None:
     if home is None or not _install_markers(home):
         return None
     if db_path.is_file() and has_authority_schema(db_path):
+        return None
+    wanted = os.environ.get(CREATE_AUTHORITY_ENV)
+    if wanted and _norm(Path(wanted).expanduser()) == _norm(db_path):
+        # The deliberate way out: the guard creates this file, so nothing may refuse it.
         return None
     state = "is missing" if not db_path.exists() else "is empty or not a Dream Studio database"
     return (
@@ -384,6 +393,13 @@ def missing_authority_message(db_path: str | Path, fresh: str) -> str:
     home = _owning_home(db_path)
     if home is None or not _install_markers(home):
         return fresh
+    wanted = os.environ.get(CREATE_AUTHORITY_ENV)
+    if wanted and _norm(Path(wanted).expanduser()) == _norm(db_path):
+        return (
+            f"Dream Studio SQLite authority is missing at {db_path}; "
+            f"{CREATE_AUTHORITY_ENV} names it, so create it with "
+            f"`ds --home {home} migrate init`."
+        )
     return (
         f"Dream Studio SQLite authority is missing at {db_path}, in a home that has had an "
         f"install. Restore it; do not re-create it. {restore_guidance(home, db_path)}"
@@ -451,10 +467,7 @@ def assert_may_create_database(db_path: str | Path) -> None:
         state = "holds no Dream Studio schema or is not a SQLite database"
     guidance = restore_guidance(home, db_path)
     if CREATE_AUTHORITY_ENV not in guidance:
-        guidance += (
-            f" To start a new, empty authority deliberately, set "
-            f"{CREATE_AUTHORITY_ENV}={db_path}."
-        )
+        guidance += " To " + _start_over(home, db_path)
     raise AuthorityRefusedError(
         f"Refusing to create a new, empty authority at {db_path}: this home has an "
         f"installed Dream Studio ({', '.join(str(m) for m in markers[:3])}) but its "

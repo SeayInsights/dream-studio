@@ -33,7 +33,9 @@ studio.db and a connection quietly created an empty one. Restore it:
 (`ds self-install` writes these under `state/backups/self-install-*`), or copy a
 `state/backups/studio-pre-*.db` or `state/studio.db.bak` file to the authority path.
 The refusal lists the backups present and what each holds. Only to start over
-deliberately, set `DREAM_STUDIO_CREATE_AUTHORITY=<path of that studio.db>`.
+deliberately, set `DREAM_STUDIO_CREATE_AUTHORITY=<path of that studio.db>` and run
+`ds --home <home> migrate init`, which creates a new, empty authority at the released
+schema; with the variable naming that file, nothing reports the authority as lost.
 
 `Refusing to create ...: no migration files were found` means the install is
 incomplete; reinstall with `ds self-install --execute`.
