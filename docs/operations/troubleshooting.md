@@ -33,7 +33,7 @@ copy a `state/backups/studio-pre-*.db` file to the authority path. Only to start
 over deliberately, set `DREAM_STUDIO_CREATE_AUTHORITY=<path of that studio.db>`.
 
 `Refusing to create ...: no migration files were found` means the install is
-incomplete; reinstall with `ds self-install`.
+incomplete; reinstall with `ds self-install --execute`.
 
 ## Doctor Warns About Row Counts
 

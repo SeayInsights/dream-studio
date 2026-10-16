@@ -40,7 +40,7 @@ running every surface from a git checkout:
 | `<home>/app/<version>-<sha>/venv` | Non-editable install of the wheel built from `git archive <sha>` |
 | `<home>/app/<version>-<sha>/app.json` | What was built: version, sha, ref, source repo |
 | `<home>/app/current` | Junction (Windows) or symlink to the live app |
-| `<home>/app/previous` | App id `current` replaced; `ds self-install --rollback` returns to it |
+| `<home>/app/previous` | App id `current` replaced; `ds self-install --rollback --execute` returns to it |
 | `<home>/state/installed-version` | `<version> <full sha>` |
 | `<home>/bin/ds.cmd` | The one launcher: the current app's `ds --home <home>` |
 

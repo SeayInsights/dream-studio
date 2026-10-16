@@ -188,7 +188,7 @@ class ClaudeCodeInstaller(InstallerBase):
                 f"{get_ds_home(self.ds_home)} is managed by `ds self-install` "
                 f"({current} exists), and this ds runs from a source checkout. Install the "
                 "integration from the app instead: `ds self-install --config-root "
-                f"{self.config_root}` (or `<home>/bin/ds integrate install claude_code "
+                f"{self.config_root} --execute` (or `<home>/bin/ds integrate install claude_code "
                 f"--config-root {self.config_root} --execute`)."
             )
 

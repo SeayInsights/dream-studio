@@ -219,7 +219,7 @@ py -m pip install -r requirements.txt
 
 ### 3. Install Dream Studio into its home
 ```powershell
-py -m interfaces.cli.ds self-install --config-root "$env:USERPROFILE\.claude"
+py -m interfaces.cli.ds self-install --config-root "$env:USERPROFILE\.claude" --execute
 ```
 
 `self-install` builds the committed state of this checkout (`git archive`; it refuses a
@@ -229,9 +229,9 @@ needs network access or a warm pip cache. On a new home it creates the authority
 existing one it backs it up and migrates it with the new app before anything switches.
 Each `--config-root` gets the Claude Code integration from the new app: hooks run as
 `<home>/app/current/venv/Scripts/python.exe -I -X utf8 -m <module>`, with nothing copied
-into the config root's `hooks/`. Add `--dry-run` to see every write first.
+into the config root's `hooks/`. Run it with `--dry-run` instead of `--execute` to see every write first.
 
-Upgrade the same way after `git pull`; `ds self-install --rollback` returns to the
+Upgrade the same way after `git pull`; `ds self-install --rollback --execute` returns to the
 previous app.
 
 ### 4. Put ds on PATH (Windows)
@@ -248,7 +248,7 @@ $env:PATH = "$env:USERPROFILE\.dream-studio\bin;" + $env:PATH
 
 > Working on Dream Studio itself: `py -m interfaces.cli.ds integrate install claude_code
 > --execute` from a checkout installs the older files-mode hooks that import the checkout.
-> It refuses a home that `self-install` manages; use `self-install --config-root` there.
+> It refuses a home that `self-install` manages; use `self-install --config-root <root> --execute` there.
 
 After adding to PATH, run `ds` from any directory.
 

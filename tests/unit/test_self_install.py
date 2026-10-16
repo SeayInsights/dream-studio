@@ -73,6 +73,9 @@ def _authority(home: Path, rows: int = 3) -> Path:
     db = home / "state" / "studio.db"
     conn = sqlite3.connect(db)
     conn.execute("PRAGMA journal_mode=WAL")
+    # An authority the migrations have run on: the guard refuses a schema-less one.
+    conn.execute("CREATE TABLE _schema_version (version INTEGER PRIMARY KEY, applied_at TEXT)")
+    conn.execute("INSERT INTO _schema_version VALUES (1, '2026-10-01')")
     conn.execute("CREATE TABLE demo_rows (id INTEGER PRIMARY KEY, name TEXT)")
     conn.executemany("INSERT INTO demo_rows(name) VALUES (?)", [(f"p{i}",) for i in range(rows)])
     conn.commit()
@@ -112,6 +115,7 @@ def fake_build(si, monkeypatch):
             return json.dumps({"schema_version": 159, "latest": 159, "code_root": "x"})
         return "ok"
 
+    monkeypatch.setattr(si, "_build_app_real", si._build_app, raising=False)
     monkeypatch.setattr(si, "_build_app", build)
     monkeypatch.setattr(si, "_run", run)
     return calls
@@ -393,3 +397,121 @@ def test_install_command_from_an_app_delegates_to_the_home_launcher(tmp_path, mo
         text = (tmp_path / "bin" / name).read_text(encoding="utf-8")
         assert str(home / "bin") in text, name
         assert "interfaces" not in text and "venv" not in text, name
+
+
+# --- S8: activation carried over -----------------------------------------------------
+
+
+def test_an_authority_activated_in_the_old_tree_keeps_its_activation(tmp_path, monkeypatch):
+    """Round-table S8: the operator activated 159 by bumping the in-tree .released_version
+    (the old mechanism). After self-install the shipped sentinel says 158 and no
+    migrations-activated-version exists, so `ds migrate status` reported 159 pending on an
+    authority that already had it."""
+    from core.config import sqlite_bootstrap as sb
+
+    monkeypatch.setenv("DREAM_STUDIO_APPLY_UNRELEASED", "1")
+    db = tmp_path / "home" / "state" / "studio.db"
+    sb.bootstrap_database(db)
+    applied = sb.latest_migration_version()
+    monkeypatch.setattr(sb, "shipped_released_version", lambda: applied - 1)
+
+    assert sb.pending_migrations_info(db)
+    assert sb.carry_over_activation(db) == applied
+    assert sb.pending_migrations_info(db) == []
+    assert sb.carry_over_activation(db) is None, "an existing record is never rewritten"
+
+
+def test_self_install_runs_the_carry_over_with_the_new_app(si):
+    assert "carry_over_activation" in si._MIGRATE_PROBE
+
+
+# --- S9: a dry run that matches the real run ------------------------------------------
+
+
+def test_dry_run_reports_the_guard_refusal_the_real_run_would_hit(si, repo, home):
+    (home / "state" / "installed-version").write_text("0.1.0 abc\n", encoding="utf-8")
+    plan = si.resolve_plan(home=home, repo=repo, ref="HEAD")
+    result = si.self_install(plan, dry_run=True)
+    assert result["ok"] is False
+    assert "Refusing" in result["error"]
+    assert "never creates" in result["error"]
+    assert not any(w["step"] == "migrate-authority" for w in result.get("writes", []))
+
+
+def test_first_install_dry_run_has_no_previous_and_says_it_creates_the_authority(si, repo, home):
+    plan = si.resolve_plan(home=home, repo=repo, ref="HEAD")
+    steps = {w["step"]: w for w in si.self_install(plan, dry_run=True)["writes"]}
+    assert "record-previous" not in steps
+    assert "creates it" in steps["migrate-authority"]["detail"]
+
+
+def test_dry_run_lists_each_roots_integration_plan(si, repo, home, tmp_path):
+    root = tmp_path / "claude-root"
+    root.mkdir()
+    plan = si.resolve_plan(home=home, repo=repo, ref="HEAD", config_roots=[root])
+    integrate = [
+        w for w in si.self_install(plan, dry_run=True)["writes"] if w["step"] == "integrate"
+    ]
+    assert len(integrate) == 1
+    detail = integrate[0]
+    assert detail["settings"] == str(root / "settings.json")
+    assert detail["manifest"].endswith("manifest.json")
+    assert set(detail["operations"]) >= {"create", "merge_json"}
+    assert all(" -I -X utf8 -m " in c for c in detail["hook_commands"])
+
+
+def test_dry_run_lists_the_pre_migration_backup(si, repo, home):
+    mig = repo / "core" / "event_store" / "migrations"
+    mig.mkdir(parents=True)
+    (mig / "001_a.sql").write_text("CREATE TABLE a (x);\n", encoding="utf-8")
+    (mig / "002_b.sql").write_text("CREATE TABLE b (x);\n", encoding="utf-8")
+    (mig / ".released_version").write_text("2", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "migrations")
+    db = home / "state" / "studio.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE _schema_version (version INTEGER PRIMARY KEY, applied_at TEXT)")
+    conn.execute("INSERT INTO _schema_version VALUES (1, 'x')")
+    conn.commit()
+    conn.close()
+    plan = si.resolve_plan(home=home, repo=repo, ref="HEAD")
+    steps = [
+        w
+        for w in si.self_install(plan, dry_run=True)["writes"]
+        if w["step"] == "pre-migration-backup"
+    ]
+    assert len(steps) == 1 and "studio-pre-2-" in steps[0]["path"]
+
+
+def test_the_app_environment_keeps_a_scoped_create_authority(si, home, monkeypatch):
+    db = home / "state" / "studio.db"
+    monkeypatch.setenv("DREAM_STUDIO_CREATE_AUTHORITY", str(db))
+    assert si._app_env(home)["DREAM_STUDIO_CREATE_AUTHORITY"] == str(db)
+    monkeypatch.setenv("DREAM_STUDIO_CREATE_AUTHORITY", "1")
+    assert "DREAM_STUDIO_CREATE_AUTHORITY" not in si._app_env(home)
+
+
+# --- nits ------------------------------------------------------------------------------
+
+
+def test_cli_requires_execute_or_dry_run(repo, home):
+    proc = _cli(home, "--repo", str(repo))
+    assert proc.returncode == 1
+    assert "--execute" in json.loads(proc.stdout)["error"]
+
+
+def test_rollback_refuses_a_previous_that_is_not_a_bare_app_id(si, home):
+    (home / "app").mkdir()
+    (home / "app" / "previous").write_text("..\\..\\elsewhere\n", encoding="utf-8")
+    result = si.rollback(home, dry_run=True)
+    assert result["ok"] is False and "app id" in result["error"]
+
+
+def test_an_incomplete_live_app_is_never_removed(si, repo, home, fake_build, monkeypatch):
+    plan = si.resolve_plan(home=home, repo=repo, ref="HEAD")
+    assert si.self_install(plan, dry_run=False)["ok"]
+    (plan.app_dir / si.APP_RECORD).unlink()  # the live app now looks incomplete
+    monkeypatch.setattr(si, "_build_app", si.__dict__["_build_app_real"])
+    result = si.self_install(plan, dry_run=False)
+    assert result["ok"] is False and "live" in result["error"]
+    assert si.venv_python(plan.app_dir / "venv").is_file()

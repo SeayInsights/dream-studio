@@ -39,8 +39,12 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
             "Claude Code config root (repeatable). No git pre-push hook is ever written."
         ),
     )
-    cmd.add_argument(
+    mode = cmd.add_mutually_exclusive_group()
+    mode.add_argument(
         "--dry-run", action="store_true", help="Print every write it would make; write nothing"
+    )
+    mode.add_argument(
+        "--execute", action="store_true", help="Install (or, with --rollback, roll back)"
     )
     cmd.add_argument(
         "--rollback",
@@ -60,6 +64,10 @@ def dispatch(args: argparse.Namespace, *, dream_studio_home: Path | None) -> int
     )
 
     home = (dream_studio_home or home_dir()).resolve()
+    if not (args.dry_run or args.execute):
+        # The same rule as `ds integrate install`: nothing runs without saying which.
+        _print({"ok": False, "error": "self-install requires --dry-run or --execute"})
+        return 1
     if args.rollback:
         result = rollback(home, dry_run=bool(args.dry_run))
         _print(result)

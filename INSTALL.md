@@ -37,13 +37,13 @@ py -m pip install -r requirements.lock
 ### 2. Install Dream Studio into its home
 
 ```bash
-py -m interfaces.cli.ds self-install --config-root ~/.claude
+py -m interfaces.cli.ds self-install --config-root ~/.claude --execute
 ```
 
 This builds the committed state of the checkout (it refuses a dirty tree) into
 `~/.dream-studio/app/<version>-<sha>/venv` and installs the Claude Code integration from
 that app into each `--config-root`. pip fetches the pinned dependencies: the first run needs
-network access or a warm pip cache. `--dry-run` prints every write first.
+network access or a warm pip cache. `--dry-run` in place of `--execute` prints every write first.
 
 ### 3. Put ds on PATH
 
@@ -73,15 +73,15 @@ or `what's next:` routes you there.
 
 ```bash
 git pull
-py -m interfaces.cli.ds self-install --config-root ~/.claude
+py -m interfaces.cli.ds self-install --config-root ~/.claude --execute
 ds doctor
 ```
 
-`ds self-install --rollback` returns to the previous app.
+`ds self-install --rollback --execute` returns to the previous app.
 
 ## Troubleshooting
 
-- `ds doctor` reports stale skills → run `ds integrate install claude_code --config-root ~/.claude --execute` (the installed app), or `py -m interfaces.cli.ds self-install --config-root ~/.claude`
+- `ds doctor` reports stale skills → run `ds integrate install claude_code --config-root ~/.claude --execute` (the installed app), or `py -m interfaces.cli.ds self-install --config-root ~/.claude --execute`
 - `ds validate` reports no authority in an installed home → restore it from a backup (`ds --home ~/.dream-studio restore <dir> --execute`); see docs/operations/troubleshooting.md. Never re-create it.
 - Module not found errors from a checkout → run from the repo root directory, or use the installed `ds`
 

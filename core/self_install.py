@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -45,6 +46,8 @@ APP_DIRNAME = "app"
 CURRENT = "current"
 PREVIOUS = "previous"
 APP_RECORD = "app.json"
+#: <version>-<sha10>: what app/previous may name. Anything else (a path, "..") is refused.
+APP_ID = re.compile(r"[0-9A-Za-z][0-9A-Za-z.+_]*-[0-9a-f]{10}")
 
 
 class SelfInstallError(RuntimeError):
@@ -249,8 +252,14 @@ def _app_env(home: Path) -> dict[str, str]:
         if not k.startswith(("PYTHON", "DREAM_STUDIO")) and k != "DS_DREAM_STUDIO_HOME"
     }
     env["DREAM_STUDIO_HOME"] = str(home)
-    env["DREAM_STUDIO_DB_PATH"] = str(home / "state" / "studio.db")
+    db = home / "state" / "studio.db"
+    env["DREAM_STUDIO_DB_PATH"] = str(db)
     env["PYTHONIOENCODING"] = "utf-8"
+    # The one DREAM_STUDIO_* variable passed through: a deliberate, scoped opt-in to
+    # create this home's authority (core.config.sqlite_bootstrap.CREATE_AUTHORITY_ENV).
+    wanted = os.environ.get("DREAM_STUDIO_CREATE_AUTHORITY")
+    if wanted and Path(wanted).expanduser().resolve() == db.resolve():
+        env["DREAM_STUDIO_CREATE_AUTHORITY"] = str(db)
     return env
 
 
@@ -258,11 +267,13 @@ _MIGRATE_PROBE = (
     "import json, sys\n"
     "from pathlib import Path\n"
     "from core.config.paths import code_root\n"
-    "from core.config.sqlite_bootstrap import bootstrap_database, latest_migration_version\n"
+    "from core.config.sqlite_bootstrap import (bootstrap_database, carry_over_activation,"
+    " latest_migration_version)\n"
     "db = Path(sys.argv[1])\n"
     "v = bootstrap_database(db)\n"
+    "carried = carry_over_activation(db)\n"
     "print(json.dumps({'schema_version': v, 'latest': latest_migration_version(),"
-    " 'code_root': str(code_root())}))\n"
+    " 'activation_carried_over': carried, 'code_root': str(code_root())}))\n"
 )
 
 _SCHEMA_PROBE = (
@@ -316,6 +327,7 @@ class SelfInstallPlan:
     def writes(self, *, reuse: bool, db_exists: bool, current: str | None) -> list[dict]:
         """Every write the install makes, in order -- what --dry-run prints."""
         steps: list[dict] = []
+        pre_migration = self._pre_migration_backup() if db_exists else None
         if not reuse:
             steps += [
                 {
@@ -365,20 +377,29 @@ class SelfInstallPlan:
                     "detail": f"VACUUM INTO from {self.db_path}",
                 }
             )
+        if pre_migration:
+            steps.append(pre_migration)
         steps.append(
             {
                 "step": "migrate-authority",
                 "path": str(self.db_path),
                 "detail": "bootstrap_database() run by the NEW app"
-                + ("" if db_exists else " (creates it: no authority yet)"),
+                + (
+                    "; records the activation an older install made in its tree, if any"
+                    if db_exists
+                    else " (creates it: a new home with no authority yet)"
+                ),
             }
         )
+        if current and current != self.app_id:
+            steps.append(
+                {
+                    "step": "record-previous",
+                    "path": str(self.app_root / PREVIOUS),
+                    "content": current,
+                }
+            )
         steps += [
-            {
-                "step": "record-previous",
-                "path": str(self.app_root / PREVIOUS),
-                "content": current or "",
-            },
             {
                 "step": "switch-current",
                 "path": str(self.app_root / CURRENT),
@@ -410,15 +431,108 @@ class SelfInstallPlan:
             },
         ]
         for root in self.config_roots:
-            steps.append(
-                {
-                    "step": "integrate",
-                    "path": str(root),
-                    "detail": "ds integrate install claude_code --config-root "
-                    f"{root} --execute, run by the new app (module-mode hooks)",
-                }
-            )
+            steps.append(self._integration_preview(root))
         return steps
+
+    def _git_show(self, rel: str) -> str | None:
+        proc = subprocess.run(
+            ["git", "-C", str(self.repo), "show", f"{self.sha}:{rel}"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        return proc.stdout if proc.returncode == 0 else None
+
+    def _pre_migration_backup(self) -> dict | None:
+        """The studio-pre-N backup run_migrations itself takes before applying anything
+        to a live authority, when the commit being installed ships migrations it lacks."""
+        listing = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(self.repo),
+                "ls-tree",
+                "--name-only",
+                self.sha,
+                "core/event_store/migrations/",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        ).stdout.split()
+        versions = [
+            int(Path(n).name.split("_", 1)[0])
+            for n in listing
+            if Path(n).name[:1].isdigit() and n.endswith(".sql")
+        ]
+        if not versions:
+            return None
+        released_text = self._git_show("core/event_store/migrations/.released_version") or ""
+        released = int(released_text.strip()) if released_text.strip().isdigit() else max(versions)
+        activated = self.db_path.parent / "migrations-activated-version"
+        if activated.is_file() and activated.read_text(encoding="utf-8").strip().isdigit():
+            released = max(released, int(activated.read_text(encoding="utf-8").strip()))
+        conn = sqlite3.connect(f"{self.db_path.resolve().as_uri()}?mode=ro", uri=True)
+        try:
+            has = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='_schema_version'"
+            ).fetchone()
+            applied = (
+                conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] or 0
+                if has
+                else 0
+            )
+        finally:
+            conn.close()
+        target = min(released, max(versions))
+        if applied >= target:
+            return None
+        stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        return {
+            "step": "pre-migration-backup",
+            "path": str(self.home / "state" / "backups" / f"studio-pre-{applied + 1}-{stamp}.db"),
+            "detail": f"taken by run_migrations before applying {applied + 1}..{target}",
+        }
+
+    def _integration_preview(self, root: Path) -> dict:
+        """What the new app's `integrate install --config-root <root>` will write.
+
+        Planned here with this ds's installer in module mode, so file lists come from
+        this code's canonical tree; the new app plans its own, from its tree, when it runs.
+        """
+        from collections import Counter
+
+        from integrations.installer.claude_code import ClaudeCodeInstaller
+        from integrations.installer.claude_code_fileops import _interpolate_hook_modules
+        from integrations.compiler.claude_code import _load_hooks_template
+        from integrations.manifest import get_manifest_path
+
+        installer = ClaudeCodeInstaller(root, "user", ds_home=self.home, hook_mode="module")
+        plan = installer.plan()
+        python = str(venv_python(self.app_root / CURRENT / "venv")).replace("\\", "/")
+        commands = [
+            h["command"]
+            for e in _interpolate_hook_modules(_load_hooks_template(), f'"{python}"')
+            for h in e.get("hooks", [])
+        ]
+        return {
+            "step": "integrate",
+            "path": str(root),
+            "detail": f"ds integrate install claude_code --config-root {root} --execute, run "
+            "by the new app (module-mode hooks)",
+            "operations": dict(Counter(op.op for op in plan.ops)),
+            "deletes": [str(op.target) for op in plan.ops if op.op == "delete"],
+            "retires": [
+                str(op.target)
+                for op in plan.ops
+                if op.op == "create" and "Retire" in (op.reason or "")
+            ],
+            "settings": str(root / "settings.json"),
+            "hook_commands": commands,
+            "manifest": str(get_manifest_path("claude_code", self.home, root)),
+        }
 
 
 def resolve_plan(
@@ -465,6 +579,17 @@ def export_commit(repo: Path, sha: str, dest: Path, archive: Path) -> None:
 
 def _build_app(plan: SelfInstallPlan, log: list[str]) -> None:
     plan.app_root.mkdir(parents=True, exist_ok=True)
+    live = plan.app_root / CURRENT
+    if plan.app_dir.exists() and (live.exists() or live.is_junction() or live.is_symlink()):
+        if live.resolve() == plan.app_dir.resolve():
+            # Never rmtree the app every hook and the launcher are running from: an
+            # incomplete record on the live app is repaired by hand, not by deleting it.
+            raise SelfInstallError(
+                f"{plan.app_dir} is the live app (app/current points at it) but has no "
+                f"{APP_RECORD}; refusing to remove and rebuild it under running hooks. "
+                "Roll back (`ds self-install --rollback --execute`) or install another "
+                "commit first."
+            )
     # The venv is built where it will live: a venv is not relocatable (its console
     # scripts embed the interpreter's absolute path), so building it elsewhere and
     # renaming it into place leaves every ds.exe pointing at a directory that is gone.
@@ -567,7 +692,6 @@ def self_install(plan: SelfInstallPlan, *, dry_run: bool) -> dict[str, Any]:
     current = _read_link(plan.app_root / CURRENT)
     reuse = app_record(plan.app_dir) is not None
     db_exists = plan.db_path.exists()
-    writes = plan.writes(reuse=reuse, db_exists=db_exists, current=current)
     base = {
         "model_name": "dream_studio_self_install",
         "home": str(plan.home),
@@ -578,6 +702,25 @@ def self_install(plan: SelfInstallPlan, *, dry_run: bool) -> dict[str, Any]:
         "app_id": plan.app_id,
         "current_before": current,
     }
+    # THE GUARD RUNS FIRST, dry run included: a dry run that promised to create an
+    # authority the real run then refused to create was a plan nobody could follow.
+    from core.config.sqlite_bootstrap import AuthorityRefusedError, assert_may_create_database
+
+    try:
+        assert_may_create_database(plan.db_path)
+    except AuthorityRefusedError as exc:
+        return {
+            **base,
+            "ok": False,
+            "dry_run": dry_run,
+            "switched": False,
+            "current_after": current,
+            "error": (
+                f"{exc} self-install never creates an authority in a home that has had one; "
+                "it migrates the one that is there."
+            ),
+        }
+    writes = plan.writes(reuse=reuse, db_exists=db_exists, current=current)
     if dry_run:
         return {**base, "ok": True, "dry_run": True, "writes": writes}
 
@@ -716,6 +859,12 @@ def rollback(home: Path, *, dry_run: bool) -> dict[str, Any]:
     }
     if not previous:
         return {**base, "ok": False, "error": f"no previous app recorded in {app_root / PREVIOUS}"}
+    if not APP_ID.fullmatch(previous):
+        return {
+            **base,
+            "ok": False,
+            "error": f"{app_root / PREVIOUS} does not hold a bare app id: {previous!r}",
+        }
     record = app_record(app_root / previous)
     if record is None:
         return {**base, "ok": False, "error": f"{app_root / previous} is missing or incomplete"}

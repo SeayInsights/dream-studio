@@ -113,6 +113,31 @@ def activated_migration_version(db_file: str | Path | None = None) -> int:
     return int(text) if text.isdigit() else 0
 
 
+def carry_over_activation(db_path: str | Path) -> int | None:
+    """Record an activation that only the old in-tree mechanism knew about.
+
+    Before activation state moved beside the authority, `ds migrate activate` recorded it
+    by bumping migrations/.released_version in the checkout. An authority activated that
+    way is past the shipped sentinel with no ACTIVATED_VERSION_FILE, so every migration
+    it already has reads as pending. This writes MAX(_schema_version) as its activation
+    when -- and only when -- the authority is past the shipped sentinel and no record
+    exists. Returns the version written, or None.
+    """
+    db_path = Path(db_path)
+    state = _activation_state_path(db_path)
+    if state.is_file() or not db_path.is_file():
+        return None
+    conn = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True, timeout=30.0)
+    try:
+        applied = applied_schema_version(conn)
+    finally:
+        conn.close()
+    if applied <= shipped_released_version():
+        return None
+    state.write_text(str(applied), encoding="utf-8")
+    return applied
+
+
 def released_migration_version(db_file: str | Path | None = None) -> int:
     """Return the max migration version considered released for this authority.
 
@@ -272,7 +297,7 @@ def assert_may_create_database(db_path: str | Path) -> None:
         raise AuthorityRefusedError(
             f"Refusing to create {db_path}: no migration files were found under "
             f"{migrations_dir()}, so the database would have no schema. This Dream Studio "
-            "install is incomplete; reinstall it (`ds self-install`) before running commands."
+            "install is incomplete; reinstall it (`ds self-install --execute`) before running commands."
         )
     wanted = os.environ.get(CREATE_AUTHORITY_ENV)
     if wanted and Path(wanted).expanduser().resolve() == db_path.resolve():
