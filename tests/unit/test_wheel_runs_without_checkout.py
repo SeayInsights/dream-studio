@@ -299,11 +299,11 @@ print(json.dumps({"code": code, "files": files, "sys_path": sys.path}))
     "module,event,payload",
     [
         ("runtime.dispatch.hooks", "UserPromptSubmit", {"session_id": "t", "prompt": "hi"}),
-        ("emitters.claude_code.run", "UserPromptSubmit", {"session_id": "t", "prompt": "hi"}),
+        ("emitters.claude_code.run", "UserPromptSubmit", {"session_id": "t-emit", "prompt": "hi"}),
         (
             "runtime.hooks.meta.on-edit-enforce",
             "",
-            {"session_id": "t", "tool_name": "Edit", "tool_input": {"file_path": "x.py"}},
+            {"session_id": "t-enforce", "tool_name": "Edit", "tool_input": {"file_path": "x.py"}},
         ),
     ],
 )
@@ -348,6 +348,14 @@ def test_installed_hook_modules_run_from_the_app_even_inside_a_checkout(
         timing = tmp / "home" / "state" / "hook-timing.jsonl"
         handlers = [json.loads(line)["handler"] for line in timing.read_text("utf-8").splitlines()]
         assert "on-prompt-dispatch" in handlers, handlers
+    elif module == "emitters.claude_code.run":
+        # The emitter's own UserPromptSubmit work: the once-per-session work-order nudge.
+        assert (tmp / "home" / "state" / ".nagged-t-emit").is_file()
+    else:
+        # The enforce hook decided and queued its own execution record for this session.
+        queued = (tmp / "home" / "state" / "hookq.jsonl").read_text("utf-8")
+        assert '\\"hook_name\\": \\"on_edit_enforce\\"' in queued, queued[-1500:]
+        assert '\\"session_id\\": \\"t-enforce\\"' in queued, queued[-1500:]
 
 
 INSTALL_PROBE = r"""

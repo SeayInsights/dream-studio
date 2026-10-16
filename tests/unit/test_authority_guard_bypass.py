@@ -155,6 +155,25 @@ def test_rehearsal_install_refuses_an_installed_home(marked_home):
     assert not (marked_home / "state" / "studio.db").exists()
 
 
+def test_rehearsal_install_refuses_an_installed_home_that_still_has_its_authority(
+    marked_home, monkeypatch
+):
+    """With the authority missing, the creation guard refuses whatever rehearsal-install
+    does; only an installed home that STILL HAS its authority shows the rehearsal
+    refusal itself, which keeps rehearsal-install from re-seeding the real authority."""
+    from core.installed_runtime import bootstrap_rehearsal_runtime
+
+    db = marked_home / "state" / "studio.db"
+    monkeypatch.setenv("DREAM_STUDIO_APPLY_UNRELEASED", "1")
+    monkeypatch.setenv("DREAM_STUDIO_CREATE_AUTHORITY", str(db))
+    _real_authority(db, projects=2)
+    monkeypatch.delenv("DREAM_STUDIO_CREATE_AUTHORITY")
+    before = hashlib.sha256(db.read_bytes()).hexdigest()
+    with pytest.raises(REFUSED, match="Refusing rehearsal-install"):
+        bootstrap_rehearsal_runtime(source_root=REPO, dream_studio_home=marked_home)
+    assert hashlib.sha256(db.read_bytes()).hexdigest() == before
+
+
 def test_rehearsal_install_reports_the_schema_it_reached(tmp_path, monkeypatch):
     from core.config.sqlite_bootstrap import applied_schema_version
     from core.installed_runtime import bootstrap_rehearsal_runtime
