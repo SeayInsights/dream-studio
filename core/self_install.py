@@ -287,6 +287,7 @@ def backup_authority(db_path: Path, backup_dir: Path) -> Path:
     """VACUUM INTO a consistent copy; `ds restore <dir> --execute` restores it."""
     backup_dir.mkdir(parents=True, exist_ok=True)
     dest = backup_dir / "studio.db"
+    # A locking read, not an immutable one: hooks may be writing while the backup runs.
     conn = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True, timeout=30.0)
     try:
         conn.execute("VACUUM INTO ?", (str(dest),))
@@ -459,6 +460,9 @@ class SelfInstallPlan:
                 ),
             }
         )
+        carry = self._activation_carry_over() if db_exists else None
+        if carry:
+            steps.append(carry)
         if current and current != self.app_id:
             steps.append(
                 {
@@ -546,7 +550,9 @@ class SelfInstallPlan:
         activated = self.db_path.parent / "migrations-activated-version"
         if activated.is_file() and activated.read_text(encoding="utf-8").strip().isdigit():
             released = max(released, int(activated.read_text(encoding="utf-8").strip()))
-        conn = sqlite3.connect(f"{self.db_path.resolve().as_uri()}?mode=ro", uri=True)
+        from core.config.sqlite_readonly import connect_read_only
+
+        conn = connect_read_only(self.db_path)
         try:
             has = conn.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='_schema_version'"
@@ -566,6 +572,44 @@ class SelfInstallPlan:
             "step": "pre-migration-backup",
             "path": str(self.home / "state" / "backups" / f"studio-pre-{applied + 1}-{stamp}.db"),
             "detail": f"taken by run_migrations before applying {applied + 1}..{target}",
+        }
+
+    def _activation_carry_over(self) -> dict | None:
+        """The migrations-activated-version write carry_over_activation() makes, if any:
+        an authority past the new app's shipped sentinel with no activation record."""
+        activated = self.db_path.parent / "migrations-activated-version"
+        if activated.is_file():
+            return None
+        released_text = (
+            self._git_show("core/event_store/migrations/.released_version") or ""
+        ).strip()
+        if not released_text.isdigit():
+            return None
+        from core.config.sqlite_readonly import connect_read_only
+
+        conn = connect_read_only(self.db_path)
+        try:
+            has = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='_schema_version'"
+            ).fetchone()
+            applied = (
+                conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] or 0
+                if has
+                else 0
+            )
+        finally:
+            conn.close()
+        if applied <= int(released_text):
+            return None
+        return {
+            "step": "carry-over-activation",
+            "path": str(activated),
+            "content": str(applied),
+            "detail": (
+                f"the authority is at schema {applied}, past the app's released "
+                f"{released_text}, with no activation record: an older install activated it "
+                "in its own tree"
+            ),
         }
 
     def _integration_preview(self, root: Path) -> dict:
@@ -602,9 +646,25 @@ class SelfInstallPlan:
                 if op.op == "create" and "Retire" in (op.reason or "")
             ],
             "settings": str(root / "settings.json"),
+            # backup_before_write copies each file it overwrites or deletes, first.
+            "backups": [
+                str(
+                    self.home / "backups" / "claude_code" / _relative_or_name(Path(op.target), root)
+                )
+                + ".<UTC timestamp>.bak"
+                for op in plan.ops
+                if op.op not in ("skip", "keep") and op.backup_required and Path(op.target).exists()
+            ],
             "hook_commands": commands,
             "manifest": str(get_manifest_path("claude_code", self.home, root)),
         }
+
+
+def _relative_or_name(target: Path, root: Path) -> str:
+    try:
+        return target.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return target.name
 
 
 def resolve_plan(
@@ -649,19 +709,39 @@ def export_commit(repo: Path, sha: str, dest: Path, archive: Path) -> None:
         zf.extractall(dest)
 
 
+def _live_app_refusal(plan: SelfInstallPlan) -> str | None:
+    """Why the app directory cannot be rebuilt, when it is the live app with no record.
+
+    Never rmtree the app every hook and the launcher are running from: an incomplete
+    record on the live app is repaired by moving `current` elsewhere first.
+    """
+    live = plan.app_root / CURRENT
+    if not plan.app_dir.exists():
+        return None
+    if not (live.exists() or live.is_junction() or live.is_symlink()):
+        return None
+    if live.resolve() != plan.app_dir.resolve():
+        return None
+    previous_file = plan.app_root / PREVIOUS
+    previous = previous_file.read_text(encoding="utf-8").strip() if previous_file.is_file() else ""
+    rollback = (
+        f" or roll back to {previous} (`ds --home {plan.home} self-install --rollback --execute`)"
+        if previous
+        else ""
+    )
+    return (
+        f"{plan.app_dir} is the live app (app/current points at it) but has no {APP_RECORD}; "
+        "refusing to remove and rebuild it under running hooks. Move `current` off it first: "
+        f"install another commit (`ds --home {plan.home} self-install --ref <ref> --execute`)"
+        f"{rollback}; then this commit can be installed again."
+    )
+
+
 def _build_app(plan: SelfInstallPlan, log: list[str]) -> None:
     plan.app_root.mkdir(parents=True, exist_ok=True)
-    live = plan.app_root / CURRENT
-    if plan.app_dir.exists() and (live.exists() or live.is_junction() or live.is_symlink()):
-        if live.resolve() == plan.app_dir.resolve():
-            # Never rmtree the app every hook and the launcher are running from: an
-            # incomplete record on the live app is repaired by hand, not by deleting it.
-            raise SelfInstallError(
-                f"{plan.app_dir} is the live app (app/current points at it) but has no "
-                f"{APP_RECORD}; refusing to remove and rebuild it under running hooks. "
-                "Roll back (`ds self-install --rollback --execute`) or install another "
-                "commit first."
-            )
+    refusal = _live_app_refusal(plan)
+    if refusal:
+        raise SelfInstallError(refusal)
     # The venv is built where it will live: a venv is not relocatable (its console
     # scripts embed the interpreter's absolute path), so building it elsewhere and
     # renaming it into place leaves every ds.exe pointing at a directory that is gone.
@@ -792,30 +872,50 @@ def self_install(plan: SelfInstallPlan, *, dry_run: bool) -> dict[str, Any]:
                 "it migrates the one that is there."
             ),
         }
-    writes = plan.writes(reuse=reuse, db_exists=db_exists, current=current)
-    if dry_run:
-        return {**base, "ok": True, "dry_run": True, "writes": writes}
-
+    # EVERY REFUSAL THE REAL RUN MAKES, THE DRY RUN MAKES TOO. A dry run that said ok:true
+    # over a drop, or planned a fresh venv where the real run refused to touch the live app,
+    # was a plan nobody could follow.
+    #
     # A DROP STOPS THE INSTALL. Counts below the recorded baseline mean business data went
     # missing since the last check; installing over that, then recording the smaller
-    # numbers as the new baseline, would bury the loss (round-table S4).
+    # numbers as the new baseline, would bury the loss.
     from core.health.authority_data import authority_data_check, drops
 
     before = authority_data_check(plan.home, plan.db_path)
+    refusal = None
     if drops(before):
+        refusal = (
+            "refusing to install: the authority's business counts dropped since the last "
+            f"baseline ({'; '.join(drops(before))}). Restore from a backup, or record the "
+            "new counts deliberately with `ds doctor --record-counts --accept-drop`, then "
+            "run self-install again."
+        )
+    elif not reuse:
+        refusal = _live_app_refusal(plan)
+    if refusal:
         return {
             **base,
             "ok": False,
-            "dry_run": False,
+            "dry_run": dry_run,
             "switched": False,
             "current_after": current,
-            "error": (
-                "refusing to install: the authority's business counts dropped since the last "
-                f"baseline ({'; '.join(drops(before))}). Restore from a backup, or record the "
-                "new counts deliberately with `ds doctor --record-counts --accept-drop`, then "
-                "run self-install again."
-            ),
+            "error": refusal,
         }
+    try:
+        writes = plan.writes(reuse=reuse, db_exists=db_exists, current=current)
+    except sqlite3.DatabaseError as exc:
+        from core.config.sqlite_bootstrap import unreadable_authority_message
+
+        return {
+            **base,
+            "ok": False,
+            "dry_run": dry_run,
+            "switched": False,
+            "current_after": current,
+            "error": unreadable_authority_message(plan.db_path, exc),
+        }
+    if dry_run:
+        return {**base, "ok": True, "dry_run": True, "writes": writes}
 
     log: list[str] = []
     try:

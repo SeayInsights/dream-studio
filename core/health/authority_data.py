@@ -34,7 +34,9 @@ def counts_path(home: Path) -> Path:
 
 def read_counts(db_path: Path) -> dict[str, int | None]:
     """Row counts per KEY_TABLES label through a read-only connection (None: no table)."""
-    conn = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True, timeout=5.0)
+    from core.config.sqlite_readonly import connect_read_only
+
+    conn = connect_read_only(db_path, timeout=5.0)
     try:
         present = {
             row[0]
@@ -87,7 +89,10 @@ def authority_data_check(home: Path, db_path: Path) -> dict[str, Any]:
     try:
         counts = read_counts(db_path)
     except sqlite3.Error as exc:
+        from core.config.sqlite_bootstrap import unreadable_authority_message
+
         result["warnings"].append(f"authority unreadable: {type(exc).__name__}: {exc}")
+        result["restore"] = unreadable_authority_message(db_path, exc)
         return result
     result["readable"] = True
     result["counts"] = counts
@@ -98,6 +103,15 @@ def authority_data_check(home: Path, db_path: Path) -> dict[str, Any]:
             result["warnings"].append(f"{label}: table {KEY_TABLES[label]} is missing")
         elif count == 0:
             result["notes"].append(f"{label}: zero rows")
+    if not previous and _install_markers(home) and counts and not any(counts.values()):
+        # What a REPLACED authority looks like: schema-complete, empty, and no baseline to
+        # compare against because the baseline was never recorded or was lost with it.
+        result["warnings"].append(
+            "this installed home's authority holds no projects, work orders, tasks or events "
+            "and no counts were ever recorded: if it had data, it was replaced, so restore it "
+            "(`ds --home <home> restore <dir> --execute`); if it is new, record the empty "
+            "baseline with `ds doctor --record-counts`"
+        )
     if previous:
         before = previous["counts"]
         for label, count in counts.items():

@@ -127,7 +127,9 @@ def carry_over_activation(db_path: str | Path) -> int | None:
     state = _activation_state_path(db_path)
     if state.is_file() or not db_path.is_file():
         return None
-    conn = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True, timeout=30.0)
+    from core.config.sqlite_readonly import connect_read_only
+
+    conn = connect_read_only(db_path, timeout=30.0)
     try:
         applied = applied_schema_version(conn)
     finally:
@@ -237,14 +239,35 @@ def has_authority_schema(db_path: Path) -> bool:
 
     if db_path.stat().st_size == 0:
         return False
-    conn = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True, timeout=30.0)
+    from core.config.sqlite_readonly import connect_read_only
+
+    row = None
     try:
-        row = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_schema_version'"
-        ).fetchone()
-    finally:
-        conn.close()
+        conn = connect_read_only(db_path, timeout=30.0)
+        try:
+            row = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_schema_version'"
+            ).fetchone()
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError as exc:
+        # Not a SQLite database at all ("file is not a database"): no authority either,
+        # and row stays None. A locked database is a different fact and is raised.
+        if isinstance(exc, sqlite3.OperationalError) and "locked" in str(exc):
+            raise
     return row is not None
+
+
+def unreadable_authority_message(db_path: str | Path, exc: Exception) -> str:
+    """What to say when the authority file exists but is not a readable database."""
+    db_path = Path(db_path)
+    home = _owning_home(db_path)
+    guidance = restore_guidance(home, db_path) if home is not None else ""
+    return (
+        f"The Dream Studio authority at {db_path} is not a readable SQLite database "
+        f"({type(exc).__name__}: {exc}). Restore it from a backup; do not delete it, "
+        f"it may be the only copy. {guidance}"
+    ).strip()
 
 
 def present_backups(home: Path) -> list[Path]:
@@ -284,7 +307,9 @@ def describe_backup(backup: Path) -> str:
     try:
         if target.stat().st_size == 0:
             return "empty, 0 bytes"
-        conn = sqlite3.connect(f"{target.resolve().as_uri()}?mode=ro", uri=True, timeout=5.0)
+        from core.config.sqlite_readonly import connect_read_only
+
+        conn = connect_read_only(target, timeout=5.0)
         try:
             tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master")}
             if "_schema_version" not in tables:
@@ -398,7 +423,12 @@ def assert_may_create_database(db_path: str | Path) -> None:
     markers = _install_markers(home)
     if not markers:
         return
-    state = "is an empty file with no schema" if exists else "is missing"
+    if not exists:
+        state = "is missing"
+    elif db_path.stat().st_size == 0:
+        state = "is an empty file"
+    else:
+        state = "holds no Dream Studio schema or is not a SQLite database"
     raise AuthorityRefusedError(
         f"Refusing to create a new, empty authority at {db_path}: this home has an "
         f"installed Dream Studio ({', '.join(str(m) for m in markers[:3])}) but its "

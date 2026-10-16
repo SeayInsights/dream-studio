@@ -38,13 +38,21 @@ def atomic_copy(source: Path, target: Path) -> None:
         raise
 
 
-def backup_before_write(target: Path, backup_dir: Path) -> Path:
+def backup_before_write(target: Path, backup_dir: Path, *, relative_to: Path | None = None) -> Path:
     """Copy target to backup_dir with a timestamp suffix before modifying it.
 
-    Returns the backup path (whether or not the source existed).
+    With *relative_to*, the backup keeps the target's path relative to it, so seven
+    `__init__.py` files under one root are seven backups, not one overwritten seven
+    times. Returns the backup path (whether or not the source existed).
     """
     ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    backup_path = backup_dir / f"{target.name}.{ts}.bak"
+    rel_parent = Path()
+    if relative_to is not None:
+        try:
+            rel_parent = target.resolve().relative_to(relative_to.resolve()).parent
+        except ValueError:
+            rel_parent = Path()
+    backup_path = backup_dir / rel_parent / f"{target.name}.{ts}.bak"
     backup_path.parent.mkdir(parents=True, exist_ok=True)
     if target.exists():
         shutil.copy2(target, backup_path)

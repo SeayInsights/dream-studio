@@ -821,7 +821,9 @@ class ClaudeCodeInstaller(InstallerBase):
                 backup_path: Path | None = None
                 if op.target.exists():
                     if op.backup_required:
-                        backup_path = backup_before_write(op.target, backup_dir)
+                        backup_path = backup_before_write(
+                            op.target, backup_dir, relative_to=self.config_root
+                        )
                     op.target.unlink()
                     hooks_root = self.config_root / "hooks"
                     if hooks_root in op.target.parents:
@@ -890,7 +892,9 @@ class ClaudeCodeInstaller(InstallerBase):
 
             backup_path: Path | None = None
             if op.backup_required and op.target.exists():
-                backup_path = backup_before_write(op.target, backup_dir)
+                backup_path = backup_before_write(
+                    op.target, backup_dir, relative_to=self.config_root
+                )
 
             if op.source_content is not None:
                 atomic_write(op.target, op.source_content)

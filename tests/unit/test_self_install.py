@@ -559,6 +559,69 @@ def test_dry_run_lists_the_pre_migration_backup(si, repo, home):
     assert len(steps) == 1 and "studio-pre-2-" in steps[0]["path"]
 
 
+def test_dry_run_refuses_over_a_drop_like_the_real_run(si, repo, home):
+    """A dry run said ok:true over a recorded drop the real run then refused."""
+    db = _authority(home, rows=3)
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE business_projects (project_id TEXT, name TEXT)")
+    conn.execute("INSERT INTO business_projects VALUES ('p1', 'a')")
+    conn.commit()
+    conn.close()
+    (home / "state" / "authority-counts.json").write_text(
+        json.dumps({"recorded_at": "2026-10-15T00:00:00+00:00", "counts": {"projects": 5}}),
+        encoding="utf-8",
+    )
+    plan = si.resolve_plan(home=home, repo=repo, ref="HEAD")
+    dry = si.self_install(plan, dry_run=True)
+    assert dry["ok"] is False and "dropped" in dry["error"]
+
+
+def test_dry_run_refuses_a_live_app_with_no_record_like_the_real_run(si, repo, home, fake_build):
+    """With app/current pointing at the app being installed and its app.json missing,
+    the dry run planned create-venv while the real run refused."""
+    _authority(home)
+    plan = si.resolve_plan(home=home, repo=repo, ref="HEAD")
+    assert si.self_install(plan, dry_run=False)["ok"]
+    (plan.app_dir / si.APP_RECORD).unlink()
+
+    dry = si.self_install(plan, dry_run=True)
+    real = si.self_install(plan, dry_run=False)
+    assert dry["ok"] is False and real["ok"] is False
+    assert "live app" in dry["error"] and "live app" in real["error"]
+    assert "--ref" in dry["error"], "the advice must not dead-end on a rollback"
+
+
+def test_dry_run_lists_the_activation_carry_over_and_the_integration_backups(
+    si, repo, home, tmp_path
+):
+    mig = repo / "core" / "event_store" / "migrations"
+    mig.mkdir(parents=True)
+    for n in (1, 2, 3):
+        (mig / f"00{n}_m.sql").write_text(f"CREATE TABLE t{n} (x);\n", encoding="utf-8")
+    (mig / ".released_version").write_text("2", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "migrations")
+    db = home / "state" / "studio.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE _schema_version (version INTEGER PRIMARY KEY, applied_at TEXT)")
+    conn.executemany("INSERT INTO _schema_version VALUES (?, 'x')", [(1,), (2,), (3,)])
+    conn.commit()
+    conn.close()
+    root = tmp_path / "claude-root"
+    root.mkdir()
+    (root / "settings.json").write_text("{}", encoding="utf-8")
+
+    plan = si.resolve_plan(home=home, repo=repo, ref="HEAD", config_roots=[root])
+    writes = si.self_install(plan, dry_run=True)["writes"]
+    carry = [w for w in writes if w["step"] == "carry-over-activation"]
+    assert carry and carry[0]["path"] == str(home / "state" / "migrations-activated-version")
+    assert carry[0]["content"] == "3"
+    integrate = [w for w in writes if w["step"] == "integrate"][0]
+    backups = integrate["backups"]
+    assert any(b.startswith(str(home / "backups" / "claude_code")) for b in backups), backups
+    assert any("settings.json" in b for b in backups)
+
+
 def test_the_app_environment_keeps_a_scoped_create_authority(si, home, monkeypatch):
     db = home / "state" / "studio.db"
     monkeypatch.setenv("DREAM_STUDIO_CREATE_AUTHORITY", str(db))

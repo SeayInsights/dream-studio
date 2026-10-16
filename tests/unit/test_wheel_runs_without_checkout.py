@@ -22,6 +22,7 @@ from the wheel.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -555,3 +556,56 @@ def test_the_installed_app_serves_what_the_checkout_serves(installed):
     assert not differs, f"routes answer differently from the installed app: {differs}"
     assert app["claude_md"] == checkout["claude_md"]
     assert app["plugin_root_is_code_root"] is True
+
+
+def test_the_installed_doctor_writes_nothing_in_an_installed_home(installed):
+    """Plain `ds doctor` run by the installed app, against an installed home whose closed
+    WAL authority has no -wal/-shm, leaves the home byte-identical."""
+    tmp = installed["tmp"]
+    home = tmp / "doctor-home"
+    db = home / "state" / "studio.db"
+    env = {**_isolated_env(tmp), "DREAM_STUDIO_HOME": str(home), "DREAM_STUDIO_DB_PATH": str(db)}
+    env["CLAUDE_CONFIG_DIR"] = str(tmp / "doctor-claude")
+    boot = subprocess.run(
+        [
+            str(installed["py"]),
+            "-I",
+            "-c",
+            "import sys; from core.config.sqlite_bootstrap import bootstrap_database, "
+            "shipped_released_version; bootstrap_database(sys.argv[1], "
+            "target_version=shipped_released_version())",
+            str(db),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=tmp,
+        env=env,
+        timeout=600,
+    )
+    assert boot.returncode == 0, boot.stderr[-1500:]
+    (home / "state" / "installed-version").write_text("0.1.0 " + "a" * 40 + "\n", encoding="utf-8")
+    assert not [p for p in (home / "state").iterdir() if p.name.startswith("studio.db-")]
+
+    def snap():
+        return {
+            str(p): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in home.rglob("*")
+            if p.is_file()
+        }
+
+    before = snap()
+    proc = subprocess.run(
+        [str(installed["py"]), "-I", "-m", "interfaces.cli.ds", "--home", str(home), "doctor"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=tmp,
+        env=env,
+        timeout=900,
+    )
+    after = snap()
+    changed = sorted(k for k in before.keys() | after.keys() if before.get(k) != after.get(k))
+    assert not changed, f"the installed doctor wrote: {changed}\n{proc.stderr[-1500:]}"

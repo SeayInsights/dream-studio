@@ -343,7 +343,17 @@ def _run(parser, args, source_root: Path, home: Path | None) -> int:
             return eval_cmd.dispatch(args, source_root=source_root)
 
     except (RuntimeError, sqlite3.Error, ValueError) as exc:
-        print(json.dumps({"ok": False, "error": str(exc)}, indent=2), file=sys.stderr)
+        message = str(exc)
+        if isinstance(exc, sqlite3.DatabaseError) and (
+            "not a database" in message or "malformed" in message
+        ):
+            # A corrupt authority: say which file and how to restore it, not just
+            # "file is not a database".
+            from core.config.database import _default_db_path
+            from core.config.sqlite_bootstrap import unreadable_authority_message
+
+            message = unreadable_authority_message(_default_db_path(), exc)
+        print(json.dumps({"ok": False, "error": message}, indent=2), file=sys.stderr)
         return 1
     return 1
 

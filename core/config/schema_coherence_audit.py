@@ -262,7 +262,11 @@ def check_schema_coherence(
         live_drift_probe_status = f"skipped: no DB at {live_db_path}"
     else:
         try:
-            conn = sqlite3.connect(str(live_db_path), timeout=5.0)
+            from core.config.sqlite_readonly import connect_read_only
+
+            # Read-only and sidecar-free: a plain connect is a write (it creates the file
+            # if it vanished, and a WAL authority's -wal/-shm) under a read-only doctor.
+            conn = connect_read_only(live_db_path, timeout=5.0)
             conn.row_factory = sqlite3.Row
             try:
                 row = conn.execute(

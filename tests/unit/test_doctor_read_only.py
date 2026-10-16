@@ -180,3 +180,44 @@ def test_doctor_writes_nothing_when_there_is_no_authority(tmp_path, marked):
     after = _snapshot(*roots)
     changed = sorted(k for k in before.keys() | after.keys() if before.get(k) != after.get(k))
     assert not changed, f"ds doctor wrote: {changed}"
+
+
+@pytest.fixture(scope="module")
+def installed_pending(tmp_path_factory) -> Path:
+    """An INSTALLED home (installed-version and an integration manifest) whose closed
+    authority has no -wal/-shm and is one RELEASED migration behind: the state of an
+    operator's home right after a self-install brought a new migration, before any
+    command migrated it."""
+    tmp = tmp_path_factory.mktemp("doctor-installed")
+    for sub in ("home", "claude", "userhome", "work"):
+        (tmp / sub).mkdir()
+    from core.config.sqlite_bootstrap import bootstrap_database, shipped_released_version
+
+    db = tmp / "home" / "state" / "studio.db"
+    released = shipped_released_version()
+    bootstrap_database(db, target_version=released - 1)
+    conn = sqlite3.connect(str(db))
+    assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal", "a live authority is WAL"
+    conn.close()  # the last connection closing cleanly removes the sidecars
+    for suffix in ("-wal", "-shm"):
+        assert not Path(str(db) + suffix).exists()
+    (tmp / "home" / "state" / "installed-version").write_text(
+        "0.1.0 " + "a" * 40 + "\n", encoding="utf-8"
+    )
+    manifest = tmp / "home" / "integrations" / "claude_code" / "roots" / "x" / "manifest.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text("{}", encoding="utf-8")
+    return tmp
+
+
+def test_an_installed_homes_doctor_writes_nothing_with_a_migration_pending(installed_pending):
+    roots = (
+        installed_pending / "home",
+        installed_pending / "claude",
+        installed_pending / "userhome",
+    )
+    before = _snapshot(*roots)
+    proc = _ds(installed_pending, "doctor")
+    after = _snapshot(*roots)
+    changed = sorted(k for k in before.keys() | after.keys() if before.get(k) != after.get(k))
+    assert not changed, f"ds doctor wrote: {changed}\n{proc.stdout[-1500:]}{proc.stderr[-1500:]}"
