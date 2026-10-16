@@ -77,8 +77,9 @@ _MUTUALLY_EXCLUSIVE = ("review:dispatch", "review:record")
 class Identity:
     """Who authenticated. `capabilities=None` is the root-token sentinel: the
     operator's own token, equivalent to "operator at a terminal", always satisfies
-    every capability check. A named client always carries a concrete (non-empty)
-    frozenset -- see `add_client`'s refusal of an empty one."""
+    every capability check. A named client carries a concrete frozenset, which is empty
+    for a read-only client (`ds mcp client add <name> --read-only`): it reaches the
+    tools that declare no capability and nothing else."""
 
     name: str
     capabilities: frozenset[str] | None

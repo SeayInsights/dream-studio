@@ -145,10 +145,9 @@ def handle_message(
 ) -> dict[str, Any] | None:
     """Handle one parsed JSON-RPC message. Returns None for a notification (no id).
 
-    `identity` is None for a direct/internal call (every test in this repo that calls
-    `handle_message` without going through `app.py`'s HTTP auth) -- harmless today
-    since no tool declares `required_capability`, and fails a future capability-gated
-    tool closed rather than defaulting it open.
+    `identity` is None for a direct/internal call (a test that calls `handle_message`
+    without going through `app.py`'s HTTP auth): a capability-gated tool then fails
+    closed rather than defaulting open.
     """
     if not isinstance(message, dict) or message.get("jsonrpc") != "2.0":
         return _error(
