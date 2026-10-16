@@ -182,8 +182,8 @@ core/config/retention.py|316|falsy-return
 core/config/retention.py|327|falsy-return
 core/config/retention.py|382|falsy-return
 core/config/schema_coherence_scan.py|178|bare-except-pass
-core/config/sqlite_bootstrap.py|645|bare-except-pass
-core/config/sqlite_bootstrap.py|836|falsy-return
+core/config/sqlite_bootstrap.py|663|bare-except-pass
+core/config/sqlite_bootstrap.py|854|falsy-return
 core/config/state.py|120|bare-except-pass
 core/config/state.py|160|bare-except-pass
 core/config/state.py|175|falsy-return
@@ -691,8 +691,8 @@ interfaces/cli/spec_risk_check.py|127|falsy-return
 interfaces/cli/spec_risk_check.py|26|bare-except-pass
 interfaces/cli/studio_backup.py|286|bare-except-pass
 runtime/dispatch/hooks.py|108|falsy-return
-runtime/dispatch/hooks.py|174|bare-except-pass
-runtime/dispatch/hooks.py|178|bare-except-pass
+runtime/dispatch/hooks.py|189|bare-except-pass
+runtime/dispatch/hooks.py|193|bare-except-pass
 runtime/dispatch/hooks.py|32|bare-except-pass
 runtime/dispatch/hooks.py|50|bare-except-pass
 runtime/dispatch/hooks.py|99|bare-except-pass

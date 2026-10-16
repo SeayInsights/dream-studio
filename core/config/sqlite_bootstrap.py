@@ -352,6 +352,24 @@ def restore_guidance(home: Path, db_path: Path) -> str:
     )
 
 
+def lost_authority_message(db_path: str | Path) -> str | None:
+    """The restore guidance when *db_path* is the authority of a home that has had an
+    install and it is gone, empty or not a database; None when it is fine (or the home
+    never had one). Asks read-only; creates nothing."""
+    db_path = Path(db_path)
+    home = _owning_home(db_path)
+    if home is None or not _install_markers(home):
+        return None
+    if db_path.is_file() and has_authority_schema(db_path):
+        return None
+    state = "is missing" if not db_path.exists() else "is empty or not a Dream Studio database"
+    return (
+        f"Dream Studio's authority at {db_path} {state}, in a home that has had an install. "
+        "Nothing here is healthy until it is restored; do not re-create it. "
+        f"{restore_guidance(home, db_path)}"
+    )
+
+
 def missing_authority_message(db_path: str | Path, fresh: str) -> str:
     """What to tell the operator when a command needs an authority that is not there.
 

@@ -91,6 +91,13 @@ root's `hooks/`) and replaced; any other hook in settings.json is left alone.
 same hook, so a merge never registers both. A files-mode install from a checkout into a
 home that has an installed app is refused.
 
+When the home has had an install and its authority is missing, empty or not a SQLite
+database, the dispatcher runs no handler for `UserPromptSubmit` or `SessionStart`: it
+prints the restore guidance (inside `<dream-studio-authority-lost>`) instead, so a
+session is never told the onboarding banner or a HEALTHY pulse over a lost authority.
+The authority-centred `ds` commands (`project`, `work-order`, `escalation`, `pulse`,
+`validate`, `migrate` and the rest) refuse the same way and exit 1.
+
 On Windows, `hooks/run.cmd` must capture its own script directory before
 shifting arguments. Codex app and other adapter surfaces may invoke
 `UserPromptSubmit` from a workspace outside the Dream Studio repo; the launcher

@@ -149,6 +149,21 @@ def main() -> int:
 
         state_dir = _paths.state_dir()
 
+        # A LOST AUTHORITY IS SAID, NOT HIDDEN. With studio.db gone from an installed home
+        # the prompt hooks printed the onboarding banner and "Pulse check complete ...
+        # HEALTHY". The prompt now carries the restore guidance instead, and no handler
+        # runs: each would only report on, or try to write, an authority that is not there.
+        if event_name in ("UserPromptSubmit", "SessionStart"):
+            from core.config.database import _default_db_path  # noqa: PLC0415
+            from core.config.sqlite_bootstrap import lost_authority_message  # noqa: PLC0415
+
+            lost = lost_authority_message(_default_db_path())
+            if lost:
+                print(f"<dream-studio-authority-lost>\n{lost}\n</dream-studio-authority-lost>")
+                return 0
+            for marker in state_dir.glob(".authority-refused-*"):
+                marker.unlink(missing_ok=True)
+
         def _run(name: str, payload: str) -> None:
             # The blocking enforce hooks queue a finished telemetry row rather than
             # writing it inline -- writing it cost them 259 ms of imports while the

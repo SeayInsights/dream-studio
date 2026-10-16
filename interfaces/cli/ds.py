@@ -213,6 +213,29 @@ def _home_environment(home: Path | None):
                 os.environ[key] = value
 
 
+#: Commands whose answer comes from the authority; they refuse in a home that lost it.
+_AUTHORITY_COMMANDS = frozenset(
+    {
+        "client",
+        "design-brief",
+        "escalation",
+        "learn",
+        "memory",
+        "migrate",
+        "milestone",
+        "prd",
+        "profile",
+        "project",
+        "pulse",
+        "review",
+        "status",
+        "task",
+        "validate",
+        "work-order",
+    }
+)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -250,6 +273,17 @@ def _run(parser, args, source_root: Path, home: Path | None) -> int:
     # -----------------------------------------------------------------------
     # Dispatch
     # -----------------------------------------------------------------------
+    # A command that reads or writes the authority refuses, loudly and with the way back,
+    # in a home that has had an install and lost it: these used to answer "No open
+    # escalations.", HEALTHY, or ready:false with exit 0, over an authority that was gone.
+    if args.command in _AUTHORITY_COMMANDS:
+        from core.config.database import _default_db_path
+        from core.config.sqlite_bootstrap import lost_authority_message
+
+        lost = lost_authority_message(_default_db_path())
+        if lost:
+            print(json.dumps({"ok": False, "error": lost}, indent=2), file=sys.stderr)
+            return 1
     try:
         # System-level flat commands
         if args.command in system.SYSTEM_COMMANDS:
