@@ -124,9 +124,11 @@ gets its own named, scoped credential, never the root token:
 ds mcp client add <name> --capabilities <only what it calls>
 ```
 
-The token is printed once. Read-only tools need no capability; grant a client the
-smallest capability set its calls require, and never `review:dispatch` together with
-`review:record` (`auth.add_client` refuses that pair). `ds mcp client revoke <name>`
+The token is printed once. Read-only tools need no capability: a client that only
+reads is added with `ds mcp client add <name> --read-only`. Otherwise grant the smallest
+capability set its calls require, and never `review:dispatch` together with
+`review:record` (`auth.add_client` refuses that pair). A refused `client add`, `revoke`
+or `rotate` exits 1. `ds mcp client revoke <name>`
 ends one client's access without touching any other.
 
 ## Network exposure

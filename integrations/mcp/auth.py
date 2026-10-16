@@ -190,13 +190,10 @@ def rotate_token(dream_studio_home: Path | None = None) -> str:
 
 
 def _validate_capabilities(capabilities: Iterable[str]) -> frozenset[str]:
+    # An empty set is a READ-ONLY client: it reaches the tools that need no capability
+    # and nothing else. It is still a named, revocable identity, which is the point -- a
+    # client that only reads must not be pushed onto the root token instead.
     caps = frozenset(capabilities)
-    if not caps:
-        raise ValueError(
-            "capabilities must be non-empty -- a client that can call nothing "
-            "capability-gated gets nothing a plain authenticated caller doesn't "
-            "already get for free; that's a mistake, not a client"
-        )
     unknown = caps - KNOWN_CAPABILITIES
     if unknown:
         raise ValueError(

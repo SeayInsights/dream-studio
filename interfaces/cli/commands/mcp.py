@@ -42,10 +42,15 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
 
     client_add = client_sub.add_parser("add", help="Issue a new client's token")
     client_add.add_argument("name")
-    client_add.add_argument(
+    grant = client_add.add_mutually_exclusive_group(required=True)
+    grant.add_argument(
         "--capabilities",
-        required=True,
         help="Comma-separated capabilities, e.g. work_order:task_mutate,review:dispatch",
+    )
+    grant.add_argument(
+        "--read-only",
+        action="store_true",
+        help="No capability: the client can call the read-only tools and nothing else",
     )
 
     client_sub.add_parser("list", help="List clients (never their tokens)")
@@ -81,13 +86,26 @@ def dispatch(
         from integrations.mcp import auth
 
         if args.mcp_client_command == "add":
-            capabilities = [c.strip() for c in args.capabilities.split(",") if c.strip()]
+            if getattr(args, "read_only", False):
+                capabilities: list[str] = []
+            else:
+                capabilities = [c.strip() for c in args.capabilities.split(",") if c.strip()]
+                if not capabilities:
+                    _print(
+                        {
+                            "ok": False,
+                            "error": "--capabilities names no capability; for a client that "
+                            "only reads, pass --read-only",
+                        }
+                    )
+                    return 1
             try:
                 token = auth.add_client(
                     args.name, capabilities=capabilities, dream_studio_home=dream_studio_home
                 )
             except ValueError as exc:
-                return _print({"ok": False, "error": str(exc)})
+                _print({"ok": False, "error": str(exc)})
+                return 1
             return _print(
                 {
                     "ok": True,
@@ -106,14 +124,16 @@ def dispatch(
             try:
                 auth.revoke_client(args.name, dream_studio_home=dream_studio_home)
             except ValueError as exc:
-                return _print({"ok": False, "error": str(exc)})
+                _print({"ok": False, "error": str(exc)})
+                return 1
             return _print({"ok": True, "revoked": args.name})
 
         if args.mcp_client_command == "rotate":
             try:
                 token = auth.rotate_client(args.name, dream_studio_home=dream_studio_home)
             except ValueError as exc:
-                return _print({"ok": False, "error": str(exc)})
+                _print({"ok": False, "error": str(exc)})
+                return 1
             return _print({"ok": True, "name": args.name, "token": token})
 
         return 1
