@@ -9,7 +9,8 @@ models, shell tools, and future tools are adapters over Dream Studio authority.
 Canonical records live in:
 
 - repo source for product code, schemas, skills, workflows, hooks, docs, and
-  tests;
+  tests; an installed app (`ds self-install`, `<home>/app/current`) is a
+  non-editable build of one commit of that source and is never written at runtime;
 - operator-local SQLite for Work Orders, route decisions, telemetry facts,
   learning events, adapter profiles, model/provider profiles, context packets,
   normalized adapter results, hardening candidates, project authority, PRD

@@ -41,6 +41,8 @@ Valid `ds_files.category` values: `handoff`, `evidence`, `release`, `rollback`, 
 | `core/analytics/duckdb_store.py` | DuckDB analytics store schema and connection factory | Tracked |
 | `core/files/store.py` | Files store connection factory, schema (`ds_files`), and CRUD API | Tracked |
 | `~/.dream-studio/state/studio.db` | Operator-local live SQLite authority DB | Ignored/private |
+| `~/.dream-studio/state/migrations-activated-version` | Migrations `ds migrate activate` activated for that authority | Ignored/private |
+| `~/.dream-studio/state/authority-counts.json` | Business row-count baseline `ds doctor` warns against | Ignored/private |
 | `~/.dream-studio/state/aggregate_metrics.db` | Operator-local DuckDB analytics store | Ignored/private |
 | `~/.dream-studio/state/files.db` | Operator-local artifact store (files.db) | Ignored/private |
 | `*.db`, `*.sqlite*`, `*.db-wal`, `*.db-shm` | Runtime DB files | Ignored/private |
@@ -193,6 +195,18 @@ replacing validation, Work Order, security, analytics, or adapter authority.
 ## Runtime Rules
 
 - Normal runtime uses the canonical path resolver.
+- A missing authority is restored, never silently re-created: the connection
+  functions refuse to create `<home>/state/studio.db` in a home that shows an
+  install (`state/installed-version` or an integration manifest), and refuse to
+  create any database when no migration file exists
+  (`core.config.sqlite_bootstrap.assert_may_create_database`). Set
+  `DREAM_STUDIO_CREATE_AUTHORITY=1` to start a fresh, empty authority on purpose.
+- Migration activation state is per authority (`<home>/state/migrations-activated-version`);
+  the shipped `core/event_store/migrations/.released_version` is never written at runtime.
+- `ds doctor` and `ds validate` read the authority through read-only connections.
+  `ds doctor` reports row counts of projects, work orders, tasks and events and warns
+  on an empty table or a drop against `<home>/state/authority-counts.json`
+  (written only by `ds doctor --record-counts` and `ds self-install`).
 - Tests that write must use temp or injected DB paths.
 - Live DB migration requires explicit approval, fresh backup, backup verification, and rollback instructions.
 - Destructive migration, DB record deletion, retention cleanup, compaction, and archive execution are separate approval boundaries.

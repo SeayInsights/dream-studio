@@ -21,6 +21,14 @@ The installer and acceptance commands take `--source-root` and `--home` so
 rehearsal installs, CI gates, and adapter launchers do not depend on the
 current working directory.
 
+`ds self-install [--ref <ref>] [--repo <checkout>] [--config-root <path>]...` installs
+the product from a clean commit into `<home>/app/<version>-<sha>/venv` (see
+installed-adapter-runtime.md, "Installed App"). It refuses a dirty tree, backs the
+authority up with `VACUUM INTO` under `<home>/state/backups/self-install-*` and migrates
+it with the NEW app before `<home>/app/current` moves; a failure before that switches
+nothing. `--dry-run` prints every write. `--rollback` returns to `<home>/app/previous`
+after checking that app can open the authority. It never writes a git pre-push hook.
+
 ## First-Run Setup
 
 From any directory:

@@ -19,6 +19,35 @@ Check:
 Do not copy files from another runtime home unless a restore plan has been
 approved.
 
+## Refusing To Create A New, Empty Authority
+
+Symptom: a command fails with `Refusing to create a new, empty authority at
+<home>/state/studio.db`.
+
+The home has had an install (`state/installed-version` or an integration manifest)
+but its authority file is gone. Creating it would replace the projects, work orders
+and history with an empty database, which is how the authority was lost on
+2026-09-23. Restore it: `ds restore <dir> --execute` for a backup directory holding
+`studio.db` (`ds self-install` writes these under `state/backups/self-install-*`), or
+copy a `state/backups/studio-pre-*.db` file to the authority path. Only to start
+over deliberately, set `DREAM_STUDIO_CREATE_AUTHORITY=1`.
+
+`Refusing to create ...: no migration files were found` means the install is
+incomplete; reinstall with `ds self-install`.
+
+## Doctor Warns About Row Counts
+
+`ds doctor` reports `checks.authority_data`: row counts of projects, work orders,
+tasks and events. A table with zero rows, or a count below the baseline in
+`state/authority-counts.json`, is a warning. Compare against the newest backup before
+doing anything else. `ds doctor --record-counts` (and every `ds self-install`)
+records a new baseline; a plain `ds doctor` writes nothing.
+
+## MCP Server Will Not Start
+
+`ds mcp serve` defaults to `127.0.0.1:8788`; it used 8765, which other local MCP
+tooling also uses. Pass `--port` to choose another.
+
 ## Current Directory Assumptions
 
 Symptom: a command only works from the Dream Studio repo.

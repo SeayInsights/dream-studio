@@ -10,7 +10,7 @@ The installed runtime keeps source and state separate:
 
 | Area | Location | Authority |
 | --- | --- | --- |
-| Source/build | Dream Studio checkout or installed source root | repo source |
+| Source/build | Dream Studio checkout, or the installed app `~/.dream-studio/app/current` | repo source |
 | User-local state | `~/.dream-studio` or explicit `DREAM_STUDIO_HOME` | local runtime state |
 | SQLite authority | `~/.dream-studio/state/studio.db` | canonical local SQLite |
 | Adapter runtime | `~/.dream-studio/adapters` | user-local adapter state |
@@ -29,6 +29,28 @@ Runtime helpers that need the user-local Dream Studio home must honor
 `DREAM_STUDIO_HOME` before falling back to `~/.dream-studio`. This keeps
 rehearsals, CI gates, and installed adapter launches from touching the
 operator's live runtime state unless a live update scope has been approved.
+
+## Installed App
+
+`ds self-install` installs Dream Studio into the home as a versioned app instead of
+running every surface from a git checkout:
+
+| Path | Meaning |
+| --- | --- |
+| `<home>/app/<version>-<sha>/venv` | Non-editable install of the wheel built from `git archive <sha>` |
+| `<home>/app/<version>-<sha>/app.json` | What was built: version, sha, ref, source repo |
+| `<home>/app/current` | Junction (Windows) or symlink to the live app |
+| `<home>/app/previous` | App id `current` replaced; `ds self-install --rollback` returns to it |
+| `<home>/state/installed-version` | `<version> <full sha>` |
+| `<home>/bin/ds.cmd` | The one launcher: the current app's `ds --home <home>` |
+
+Claude Code hooks installed from the app run the app's modules,
+`<home>/app/current/venv/Scripts/python.exe -I -m runtime.dispatch.hooks <event>`;
+nothing is copied into the config root's `hooks/` directory and no `.ds-source-root`
+sidecar is written. `ds integrate install claude_code --config-root <path>`
+(repeatable) installs into each named Claude Code config root with its own manifest
+under `<home>/integrations/claude_code/roots/`. An app defaults to the home it was
+installed into.
 
 ## Global Command Surface
 
