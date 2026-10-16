@@ -643,8 +643,14 @@ class SelfInstallPlan:
         from integrations.compiler.claude_code import _load_hooks_template
         from integrations.manifest import get_manifest_path
 
+        from integrations.installer.claude_code_installer import will_change
+
         installer = ClaudeCodeInstaller(root, "user", ds_home=self.home, hook_mode="module")
         plan = installer.plan()
+        # Only what the install will change, by the executor's own comparison: counting
+        # every managed file planned 652 backups where an install over the same root
+        # wrote 5.
+        changes = [op for op in plan.ops if will_change(op)]
         python = str(venv_python(self.app_root / CURRENT / "venv")).replace("\\", "/")
         commands = [
             h["command"]
@@ -656,11 +662,12 @@ class SelfInstallPlan:
             "path": str(root),
             "detail": f"ds integrate install claude_code --config-root {root} --execute, run "
             "by the new app (module-mode hooks)",
-            "operations": dict(Counter(op.op for op in plan.ops)),
-            "deletes": [str(op.target) for op in plan.ops if op.op == "delete"],
+            "operations": dict(Counter(op.op for op in changes)),
+            "unchanged": len(plan.ops) - len(changes),
+            "deletes": [str(op.target) for op in changes if op.op == "delete"],
             "retires": [
                 str(op.target)
-                for op in plan.ops
+                for op in changes
                 if op.op == "create" and "Retire" in (op.reason or "")
             ],
             "settings": str(root / "settings.json"),
@@ -670,8 +677,8 @@ class SelfInstallPlan:
                     self.home / "backups" / "claude_code" / _relative_or_name(Path(op.target), root)
                 )
                 + ".<UTC timestamp>.bak"
-                for op in plan.ops
-                if op.op not in ("skip", "keep") and op.backup_required and Path(op.target).exists()
+                for op in changes
+                if op.backup_required and Path(op.target).exists()
             ],
             "hook_commands": commands,
             "manifest": str(get_manifest_path("claude_code", self.home, root)),

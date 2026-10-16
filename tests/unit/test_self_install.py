@@ -691,3 +691,26 @@ def test_a_first_install_that_creates_the_authority_records_it_silently(si, repo
     plan = si.resolve_plan(home=home, repo=repo, ref="HEAD")
     result = si.self_install(plan, dry_run=False)
     assert result["ok"], result
+
+
+def test_the_integration_preview_lists_only_what_will_change(si, repo, home, tmp_path):
+    """Over an installed root the dry run planned 652 backups and 650 writes; the real
+    install wrote 5 and 0. It now counts only the files whose content will change."""
+    from unittest.mock import patch
+
+    from integrations.installer.claude_code import ClaudeCodeInstaller
+
+    _authority(home)
+    root = tmp_path / "claude-root"
+    root.mkdir()
+    with patch("integrations.installer.claude_code_launcher._write_path_to_profile") as prof:
+        prof.return_value = {"profile": "x", "action": "skipped"}
+        ClaudeCodeInstaller(root, "user", ds_home=home, hook_mode="module").install("execute")
+    plan = si.resolve_plan(home=home, repo=repo, ref="HEAD", config_roots=[root])
+    result = si.self_install(plan, dry_run=True)
+    assert result["ok"], result
+    preview = [w for w in result["writes"] if w["step"] == "integrate"][0]
+    # The installed hook interpreter differs (the new app's), so settings.json may change.
+    assert sum(preview["operations"].values()) <= 3, preview["operations"]
+    assert len(preview["backups"]) <= 3, preview["backups"][:5]
+    assert preview["unchanged"] > 100

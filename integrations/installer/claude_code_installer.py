@@ -150,6 +150,15 @@ def already_on_disk(op: FileOp) -> bool:
     return False
 
 
+def will_change(op: FileOp) -> bool:
+    """Whether executing *op* changes anything: the executor's own comparison."""
+    if op.op in ("skip", "keep"):
+        return False
+    if op.op == "delete":
+        return op.target.exists()
+    return not already_on_disk(op)
+
+
 def _post_install_validate(config_root: Path, settings_path: Path) -> dict[str, Any]:
     """Lightweight post-install validation — checks installed artifacts directly."""
     skills_dir = config_root / "skills"
@@ -802,6 +811,7 @@ class ClaudeCodeInstaller(InstallerBase):
         self._refuse_writes_outside_the_root(file_plan)
 
         if mode == "dry_run":
+            changes = [op for op in file_plan.ops if will_change(op)]
             return {
                 "mode": "dry_run",
                 "tool": "claude_code",
@@ -809,6 +819,10 @@ class ClaudeCodeInstaller(InstallerBase):
                 "config_root": str(self.config_root),
                 "files_written": [],
                 "plan": plan_summary,
+                # What an --execute would actually change, by the executor's comparison;
+                # "plan" lists every file the install manages, changed or not.
+                "changes": FileOpPlan(ops=changes, tool="claude_code", scope=self.scope).summary(),
+                "unchanged_count": len(file_plan.ops) - len(changes),
                 "ok": True,
             }
 
