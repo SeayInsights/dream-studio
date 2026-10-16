@@ -165,7 +165,7 @@ core/analytics/duckdb_store.py|427|bare-except-pass
 core/clients/mutations.py|33|bare-except-pass
 core/config/authority.py|26|falsy-return
 core/config/authority.py|50|falsy-return
-core/config/database.py|258|bare-except-pass
+core/config/database.py|263|bare-except-pass
 core/config/hookq.py|130|bare-except-pass
 core/config/hookq.py|136|bare-except-pass
 core/config/hookq.py|80|falsy-return

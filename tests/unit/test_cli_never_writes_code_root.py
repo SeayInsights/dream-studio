@@ -82,7 +82,12 @@ def test_cli_commands_leave_the_code_root_untouched(tmp_path):
         shipped_released_version,
     )
 
-    if latest_migration_version() > shipped_released_version():
-        # There was something to activate: its record is beside the authority.
-        state = home / "state" / ACTIVATED_VERSION_FILE
-        assert state.read_text(encoding="utf-8").strip() == str(latest_migration_version())
+    # The activation above only exercises the old write if a migration is pending. When
+    # .released_version catches up with the newest migration this assertion fails loudly
+    # rather than letting the test pass without testing anything: give it a pending
+    # migration again (round-table S14).
+    assert (
+        latest_migration_version() > shipped_released_version()
+    ), "no migration is pending, so `ds migrate activate` had nothing to record"
+    state = home / "state" / ACTIVATED_VERSION_FILE
+    assert state.read_text(encoding="utf-8").strip() == str(latest_migration_version())

@@ -132,3 +132,41 @@ def test_a_database_outside_any_home_layout_is_not_guarded(tmp_path):
     db = tmp_path / "scratch.db"
     bootstrap_database(db)
     assert sqlite3.connect(str(db)).execute("SELECT 1").fetchone() == (1,)
+
+
+def _vanish_under_a_live_runtime(home: Path) -> Path:
+    from core.config.database import DatabaseRuntime
+
+    db = home / "state" / "studio.db"
+    bootstrap_database(db)
+    DatabaseRuntime.get_instance()  # initialised against the real authority
+    _installed(home)
+    for suffix in ("", "-wal", "-shm"):
+        part = Path(str(db) + suffix)
+        if part.exists():
+            part.unlink()
+    return db
+
+
+def test_get_connection_refuses_after_the_authority_vanishes_under_a_live_runtime(home):
+    """The DatabaseRuntime singleton is initialised once per process. A long-running
+    process (``ds mcp serve``) whose authority is deleted afterwards must still be
+    refused by get_connection itself, not only by the runtime's first initialisation."""
+    from core.config.database import get_connection
+
+    db = _vanish_under_a_live_runtime(home)
+    with pytest.raises(REFUSED, match="Refusing"):
+        get_connection().close()
+    assert not db.exists()
+
+
+@pytest.mark.parametrize("opener", ["get_connection_context", "transaction_context"])
+def test_the_live_runtime_s_own_openers_refuse_too(home, opener):
+    """DatabaseRuntime's context managers opened with a plain, creating connect."""
+    from core.config.database import DatabaseRuntime
+
+    db = _vanish_under_a_live_runtime(home)
+    with pytest.raises(REFUSED, match="Refusing"):
+        with getattr(DatabaseRuntime.get_instance(), opener)():
+            pass
+    assert not db.exists()

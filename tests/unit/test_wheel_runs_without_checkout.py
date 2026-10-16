@@ -327,6 +327,7 @@ def test_installed_hook_modules_run_from_the_app_even_inside_a_checkout(
         capture_output=True,
         text=True,
         encoding="utf-8",
+        errors="replace",
         cwd=REPO,
         env=_isolated_env(tmp),
         timeout=600,
@@ -339,6 +340,13 @@ def test_installed_hook_modules_run_from_the_app_even_inside_a_checkout(
     venv = str(installed["venv"].resolve()).lower()
     leaked = [f for f in report["files"] if f and not f.lower().startswith(venv)]
     assert not leaked, f"hook imported Dream Studio code from outside the app: {leaked[:10]}"
+    if module == "runtime.dispatch.hooks":
+        # A HANDLER ran, not just the entry point. The assertions above hold for a
+        # dispatcher that exits 0 having run nothing; dispatch_tracking writes a timing
+        # line only for a handler it actually executed (round-table S14).
+        timing = tmp / "home" / "state" / "hook-timing.jsonl"
+        handlers = [json.loads(line)["handler"] for line in timing.read_text("utf-8").splitlines()]
+        assert "on-prompt-dispatch" in handlers, handlers
 
 
 ROUTES_PROBE = r"""

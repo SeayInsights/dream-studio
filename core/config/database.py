@@ -170,6 +170,11 @@ class DatabaseRuntime:
             conn = sqlite3.connect(uri, uri=True, timeout=30.0, check_same_thread=False)
             conn.execute("PRAGMA query_only = ON")
         else:
+            # The singleton lives for the whole process: an authority deleted after it was
+            # initialised must be refused here as well, not re-created as an empty file.
+            from core.config.sqlite_bootstrap import assert_may_create_database
+
+            assert_may_create_database(self.db_path)
             conn = sqlite3.connect(str(self.db_path), timeout=30.0, check_same_thread=False)
 
         conn.row_factory = sqlite3.Row
