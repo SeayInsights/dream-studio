@@ -57,7 +57,9 @@ def plugin_root() -> Path:
     Last resort: the plugin cache location inferred from this file's path,
     so hooks degrade gracefully instead of crashing with RuntimeError.
     """
-    env = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    # An installed app's plugin root is the app: CLAUDE_PLUGIN_ROOT, set by Claude Code for
+    # plugin hooks, may name a checkout whose files must not be loaded into it.
+    env = os.environ.get("CLAUDE_PLUGIN_ROOT") if is_source_checkout() else None
     if env:
         return Path(env).resolve()
 

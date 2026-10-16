@@ -16,6 +16,7 @@ before calling this dispatcher. This module contains no tool-specific logic.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -148,6 +149,12 @@ def main() -> int:
         from core.config import paths as _paths  # noqa: PLC0415
 
         state_dir = _paths.state_dir()
+
+        # An installed app's handlers come from the app. Claude Code sets
+        # CLAUDE_PLUGIN_ROOT for plugin hooks, and the handlers that read it put that
+        # directory -- a checkout, say -- on sys.path; drop it before any of them loads.
+        if not _paths.is_source_checkout():
+            os.environ.pop("CLAUDE_PLUGIN_ROOT", None)
 
         # A LOST AUTHORITY IS SAID, NOT HIDDEN. With studio.db gone from an installed home
         # the prompt hooks printed the onboarding banner and "Pulse check complete ...

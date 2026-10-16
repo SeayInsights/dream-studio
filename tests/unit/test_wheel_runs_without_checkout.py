@@ -330,7 +330,9 @@ def test_installed_hook_modules_run_from_the_app_even_inside_a_checkout(
         encoding="utf-8",
         errors="replace",
         cwd=REPO,
-        env=_isolated_env(tmp),
+        # Claude Code sets CLAUDE_PLUGIN_ROOT for plugin hooks; pointed at a checkout it
+        # must not pull that checkout's files into an installed app's hook.
+        env={**_isolated_env(tmp), "CLAUDE_PLUGIN_ROOT": str(REPO)},
         timeout=600,
     )
     assert proc.returncode == 0, proc.stderr[-3000:]

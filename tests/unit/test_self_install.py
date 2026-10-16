@@ -654,3 +654,8 @@ def test_an_incomplete_live_app_is_never_removed(si, repo, home, fake_build, mon
     result = si.self_install(plan, dry_run=False)
     assert result["ok"] is False and "live" in result["error"]
     assert si.venv_python(plan.app_dir / "venv").is_file()
+
+
+def test_a_failed_command_shows_its_arguments_not_its_program(si):
+    shown = si._shown(["C:/py.exe", "-I", "-c", "import x\nprint(1)", "C:/home/state/studio.db"])
+    assert shown == "C:/py.exe -I -c <inline program> C:/home/state/studio.db"

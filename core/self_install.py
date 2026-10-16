@@ -308,8 +308,20 @@ def _run(cmd: list[str], *, env: dict[str, str] | None = None, cwd: Path | None 
     )
     if proc.returncode != 0:
         tail = (proc.stderr or proc.stdout).strip()[-3000:]
-        raise SelfInstallError(f"{' '.join(cmd[:4])} ... failed (exit {proc.returncode}):\n{tail}")
+        raise SelfInstallError(f"{_shown(cmd)} failed (exit {proc.returncode}):\n{tail}")
     return proc.stdout
+
+
+def _shown(cmd: list[str]) -> str:
+    """The command as an operator can read it: a `-c` program is named, not pasted,
+    and every argument after it is kept."""
+    shown = []
+    for i, part in enumerate(cmd):
+        if i > 0 and cmd[i - 1] == "-c":
+            shown.append("<inline program>")
+        else:
+            shown.append(f'"{part}"' if " " in part else part)
+    return " ".join(shown)
 
 
 def _app_env(home: Path) -> dict[str, str]:
@@ -941,6 +953,12 @@ def self_install(plan: SelfInstallPlan, *, dry_run: bool) -> dict[str, Any]:
         )
         log.append(
             f"authority at schema {migrated['schema_version']} (app ships {migrated['latest']})"
+            + (
+                "; the newer migrations are unreleased: apply them when ready with "
+                f"`ds --home {plan.home} migrate activate --confirm`"
+                if migrated["schema_version"] < migrated["latest"]
+                else ""
+            )
         )
     except Exception as exc:
         return {
