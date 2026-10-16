@@ -57,6 +57,10 @@ class EventStore:
         self._init_tables()
 
     def _connect(self) -> sqlite3.Connection:
+        from core.config.sqlite_bootstrap import assert_may_create_database
+
+        # _init_tables() creates tables: never in a lost or emptied installed authority.
+        assert_may_create_database(self.db_path)
         conn = sqlite3.connect(str(self.db_path), timeout=30.0)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")

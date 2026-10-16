@@ -132,6 +132,7 @@ class TestDailyBackup:
     def test_backup_creates_bak_file(self, tmp_path, monkeypatch):
         db_path = tmp_path / "studio.db"
         conn = sqlite3.connect(str(db_path))
+        conn.execute("CREATE TABLE _schema_version (version INTEGER)")  # an authority
         conn.execute("CREATE TABLE test (id INTEGER)")
         conn.execute("INSERT INTO test VALUES (1)")
         conn.commit()
@@ -166,6 +167,7 @@ class TestDailyBackup:
 
         db_path = tmp_path / "studio.db"
         conn = sqlite3.connect(str(db_path))
+        conn.execute("CREATE TABLE _schema_version (version INTEGER)")  # an authority
         conn.execute("CREATE TABLE t (id INTEGER)")
         conn.commit()
         conn.close()
@@ -188,6 +190,7 @@ class TestDailyBackup:
 
         db_path = tmp_path / "studio.db"
         conn = sqlite3.connect(str(db_path))
+        conn.execute("CREATE TABLE _schema_version (version INTEGER)")  # an authority
         conn.execute("CREATE TABLE t (id INTEGER)")
         conn.commit()
         conn.close()

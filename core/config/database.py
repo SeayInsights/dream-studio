@@ -31,6 +31,24 @@ def _default_db_path() -> Path:
     return home_dir() / "state" / "studio.db"
 
 
+def connect_existing(
+    db_path: str | Path, *, read_only: bool = False, timeout: float = 30.0
+) -> sqlite3.Connection:
+    """Open a database file that must already exist; NEVER create one.
+
+    sqlite3.connect() on a missing path creates a 0-byte file, and around the codebase
+    that is how an installed home's lost authority came back as an empty one: a config
+    read, a runtime-state lookup or a rubric check made the file, and the next migrating
+    open turned it into an authority with no projects. This opens with mode=rw (or ro),
+    so a missing file raises sqlite3.OperationalError ("unable to open database file")
+    for the caller's existing sqlite3.Error handling instead.
+    """
+    mode = "ro" if read_only else "rw"
+    return sqlite3.connect(
+        f"{Path(db_path).resolve().as_uri()}?mode={mode}", uri=True, timeout=timeout
+    )
+
+
 def _read_only_db_path() -> Path:
     """Resolve the DB path for read-only callers without initializing runtime."""
     if DatabaseRuntime._instance is not None:

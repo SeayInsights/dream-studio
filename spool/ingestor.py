@@ -485,6 +485,11 @@ def _write_to_raw_sqlite(envelope: dict[str, Any], db_path: Path) -> None:
     source_payload = json.dumps(envelope)
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
+    from core.config.sqlite_bootstrap import assert_may_create_database
+
+    # The ingest may create a fresh home's database, never a lost or emptied authority in
+    # an installed one; a refusal raises and the event returns to the inbox for retry.
+    assert_may_create_database(db_path)
     conn = sqlite3.connect(str(db_path), timeout=5.0)
     try:
         conn.execute("PRAGMA journal_mode = WAL")

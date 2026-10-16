@@ -48,6 +48,16 @@ def db_path(tmp_path: Path) -> Path:
     return target
 
 
+def _table_less_db(path: Path) -> Path:
+    """A database that exists but holds no artifact table: the disk-fallback case.
+
+    The artifact writer opens an existing database and never creates one (a mistyped
+    db_path must not bring a new empty database into being), so the file is made here.
+    """
+    sqlite3.connect(str(path)).close()
+    return path
+
+
 @pytest.fixture
 def patched_paths(db_path: Path, tmp_path: Path):
     fake = MagicMock()
@@ -125,7 +135,7 @@ def test_write_work_order_context_creates_file_with_enforcement_block(
     # WO-FILESDB-C2: these are rendering-content tests. Force the disk fallback with a
     # table-less db_path so the rendered string is inspectable on disk; the DB-storage
     # path is covered by test_project_start_extraction / test_wo_artifact_cli.
-    no_table_db = tmp_path / "no-artifact-table.db"
+    no_table_db = _table_less_db(tmp_path / "no-artifact-table.db")
     context_path = write_work_order_context(
         brief, planning_root=planning_root, now=NOW, db_path=no_table_db
     )
@@ -149,7 +159,10 @@ def test_write_work_order_context_renders_brief_warning_for_ui_no_brief(
         dream_studio_home=tmp_path,
     )
     context_path = write_work_order_context(
-        brief, planning_root=tmp_path / ".planning", now=NOW, db_path=tmp_path / "no-table.db"
+        brief,
+        planning_root=tmp_path / ".planning",
+        now=NOW,
+        db_path=_table_less_db(tmp_path / "no-table.db"),
     )
     content = context_path.read_text(encoding="utf-8")
     assert "WARNING" in content
@@ -169,7 +182,10 @@ def test_write_work_order_context_enforcement_block_contains_no_cli_commands(
         dream_studio_home=tmp_path,
     )
     context_path = write_work_order_context(
-        brief, planning_root=tmp_path / ".planning", now=NOW, db_path=tmp_path / "no-table.db"
+        brief,
+        planning_root=tmp_path / ".planning",
+        now=NOW,
+        db_path=_table_less_db(tmp_path / "no-table.db"),
     )
     content = context_path.read_text(encoding="utf-8")
     assert not re.search(

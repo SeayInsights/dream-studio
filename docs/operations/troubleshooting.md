@@ -30,7 +30,7 @@ and history with an empty database, which is how the authority was lost on
 2026-09-23. Restore it: `ds restore <dir> --execute` for a backup directory holding
 `studio.db` (`ds self-install` writes these under `state/backups/self-install-*`), or
 copy a `state/backups/studio-pre-*.db` file to the authority path. Only to start
-over deliberately, set `DREAM_STUDIO_CREATE_AUTHORITY=1`.
+over deliberately, set `DREAM_STUDIO_CREATE_AUTHORITY=<path of that studio.db>`.
 
 `Refusing to create ...: no migration files were found` means the install is
 incomplete; reinstall with `ds self-install`.

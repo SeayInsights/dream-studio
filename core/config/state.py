@@ -241,7 +241,9 @@ def _maybe_vacuum(db_path: Path) -> None:
             return
     except OSError:
         pass
-    conn = sqlite3.connect(str(db_path))
+    from core.config.database import connect_existing
+
+    conn = connect_existing(db_path)
     try:
         conn.execute("VACUUM")
     finally:
@@ -250,6 +252,31 @@ def _maybe_vacuum(db_path: Path) -> None:
         stamp.write_text(this_month, encoding="utf-8")
     except OSError:
         pass
+
+
+def _business_rows(db: Path) -> int:
+    """Projects + work orders + tasks + events in *db* (0 when it is not an authority)."""
+    from core.config.sqlite_bootstrap import has_authority_schema
+    from core.health.authority_data import read_counts
+
+    if not db.is_file() or not has_authority_schema(db):
+        return 0
+    return sum(n for n in read_counts(db).values() if isinstance(n, int))
+
+
+def _keep_richer_backup(db_path: Path, bak_path: Path) -> None:
+    """Never overwrite a backup that holds more business rows than the source.
+
+    The existing studio.db.bak is renamed to studio.db.bak.<UTC timestamp> and kept;
+    the new backup is still written, so backups keep running after a legitimate
+    deletion while the larger copy survives an empty or truncated authority.
+    """
+    if not bak_path.is_file():
+        return
+    if _business_rows(db_path) >= _business_rows(bak_path):
+        return
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    bak_path.rename(bak_path.with_name(f"{bak_path.name}.{stamp}"))
 
 
 def backup_db(force: bool = False) -> Path | None:
@@ -261,11 +288,21 @@ def backup_db(force: bool = False) -> Path | None:
     db_path = paths.state_dir() / "studio.db"
     if not db_path.is_file():
         return None
+    from core.config.sqlite_bootstrap import has_authority_schema
+
+    # AN EMPTY FILE IS NOT BACKED UP OVER A REAL ONE. A raw open elsewhere can leave a
+    # 0-byte or schema-less studio.db where the authority was; copying that over
+    # studio.db.bak destroyed the last copy of the real data (round-table B1).
+    if not has_authority_schema(db_path):
+        return None
     bak_path = db_path.with_suffix(".db.bak")
     if not force and _backup_is_fresh(bak_path):
         return bak_path
+    _keep_richer_backup(db_path, bak_path)
     try:
-        src = sqlite3.connect(str(db_path))
+        from core.config.database import connect_existing
+
+        src = connect_existing(db_path)
         # The passive autocheckpoint loses to the hook processes that hold this
         # database open, so the WAL only grows. This daily, rate-limited path is
         # the one place with a good chance of a quiet moment; TRUNCATE resets the

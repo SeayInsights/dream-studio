@@ -146,8 +146,12 @@ class AuthorityRefusedError(RuntimeError):
     """Creating this database would silently replace or fake an authority."""
 
 
-#: Set to 1 to create a fresh, empty authority on purpose in a home that has had one.
+#: Set to the authority's own path to create a fresh, empty authority on purpose in a home
+#: that has had one (scoped to that one file: a value of "1" or another path does nothing).
 CREATE_AUTHORITY_ENV = "DREAM_STUDIO_CREATE_AUTHORITY"
+
+#: Authorities already seen to carry a schema in this process (they cannot lose it).
+_VERIFIED_AUTHORITIES: set[str] = set()
 
 
 def _owning_home(db_path: Path) -> Path | None:
@@ -172,6 +176,63 @@ def _install_markers(home: Path) -> list[Path]:
     return [m for m in markers if m.is_file()]
 
 
+def has_authority_schema(db_path: Path) -> bool:
+    """True when *db_path* is a database the migrations have run on (has _schema_version).
+
+    A 0-byte file, or one holding only a table some raw open created, is not an
+    authority: it is what sqlite3.connect() leaves behind when it is pointed at a
+    missing file. Read through a read-only connection, so asking creates nothing.
+    """
+
+    if db_path.stat().st_size == 0:
+        return False
+    conn = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True, timeout=30.0)
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_schema_version'"
+        ).fetchone()
+    finally:
+        conn.close()
+    return row is not None
+
+
+def present_backups(home: Path) -> list[Path]:
+    """Every backup of the authority this home holds, newest first.
+
+    state/backups (pre-migration studio-pre-*.db files and self-install directories),
+    <home>/backups (`ds backup`), and state/studio.db.bak* (the pulse's rolling copy).
+    """
+
+    found: list[Path] = []
+    for root in (home / "state" / "backups", home / "backups"):
+        if root.is_dir():
+            found.extend(p for p in root.glob("studio-pre-*.db") if p.is_file())
+            found.extend(p.parent for p in root.glob("*/studio.db") if p.is_file())
+    state = home / "state"
+    if state.is_dir():
+        found.extend(p for p in state.glob("studio.db.bak*") if p.is_file())
+    return sorted(set(found), key=lambda p: p.stat().st_mtime, reverse=True)
+
+
+def restore_guidance(home: Path, db_path: Path) -> str:
+    """How to restore the authority of *home*, naming the backups actually present."""
+
+    backups = present_backups(home)
+    if backups:
+        listed = "; ".join(str(p) for p in backups[:8])
+        more = f" (and {len(backups) - 8} more)" if len(backups) > 8 else ""
+        where = f"Backups present, newest first: {listed}{more}."
+    else:
+        where = (
+            f"No backup was found under {home / 'state' / 'backups'}, {home / 'backups'} or "
+            f"{home / 'state'}."
+        )
+    return (
+        f"{where} A directory holding studio.db restores with "
+        f"`ds --home {home} restore <dir> --execute`; a .db or .bak file is copied to {db_path}."
+    )
+
+
 def assert_may_create_database(db_path: str | Path) -> None:
     """Refuse to CREATE a database file whose absence means something went wrong.
 
@@ -179,27 +240,42 @@ def assert_may_create_database(db_path: str | Path) -> None:
     authority was replaced: a path resolved to a missing studio.db, a connection quietly
     created an empty one, the migrations ran on it, and every command from then on read
     and wrote a database with no projects in it. Nothing looked at the evidence that a
-    real authority had existed. Two refusals, checked only when the file is missing:
+    real authority had existed. Two refusals:
 
     - no migration files at all: the database would be created with no schema (a broken
       or partial install), and run_migrations() returns early without saying so;
     - the owning home shows an installed Dream Studio (state/installed-version, or an
-      integration manifest) yet its authority file is gone: restore it, do not replace it.
+      integration manifest) yet its authority is gone: restore it, do not replace it.
 
-    A brand-new home (no markers) creates normally. CREATE_AUTHORITY_ENV=1 creates on
-    purpose.
+    GONE INCLUDES EMPTY. Any of the ~120 raw sqlite3.connect() sites creates a 0-byte
+    studio.db on first touch, and a guard that only asked "does the file exist" then let
+    the next guarded open migrate that empty file into an authority. In a marked home a
+    0-byte or schema-less studio.db is treated exactly like a missing one.
+
+    A brand-new home (no markers) creates normally. CREATE_AUTHORITY_ENV set to this
+    authority's path creates on purpose.
     """
 
     db_path = Path(db_path)
-    if db_path.exists():
-        return
+    exists = db_path.exists()
+    if exists:
+        key = str(db_path.resolve())
+        if key in _VERIFIED_AUTHORITIES:
+            return
+        home = _owning_home(db_path)
+        if home is None or not _install_markers(home):
+            return
+        if has_authority_schema(db_path):
+            _VERIFIED_AUTHORITIES.add(key)
+            return
     if not migration_files():
         raise AuthorityRefusedError(
             f"Refusing to create {db_path}: no migration files were found under "
             f"{migrations_dir()}, so the database would have no schema. This Dream Studio "
             "install is incomplete; reinstall it (`ds self-install`) before running commands."
         )
-    if os.environ.get(CREATE_AUTHORITY_ENV) == "1":
+    wanted = os.environ.get(CREATE_AUTHORITY_ENV)
+    if wanted and Path(wanted).expanduser().resolve() == db_path.resolve():
         return
     home = _owning_home(db_path)
     if home is None:
@@ -207,15 +283,14 @@ def assert_may_create_database(db_path: str | Path) -> None:
     markers = _install_markers(home)
     if not markers:
         return
-    backups = home / "state" / "backups"
+    state = "is an empty file with no schema" if exists else "is missing"
     raise AuthorityRefusedError(
         f"Refusing to create a new, empty authority at {db_path}: this home has an "
         f"installed Dream Studio ({', '.join(str(m) for m in markers[:3])}) but its "
-        "authority database is missing. Creating it would silently replace the operator's "
-        f"projects, work orders and history with an empty database. Restore it instead: "
-        f"backups are under {backups} (a directory holding studio.db restores with "
-        f"`ds restore <dir> --execute`; a studio-pre-*.db file is copied to {db_path}). "
-        f"To start a new, empty authority deliberately, set {CREATE_AUTHORITY_ENV}=1."
+        f"authority database {state}. Creating it would silently replace the operator's "
+        "projects, work orders and history with an empty database. Restore it instead. "
+        f"{restore_guidance(home, db_path)} To start a new, empty authority deliberately, "
+        f"set {CREATE_AUTHORITY_ENV}={db_path}."
     )
 
 

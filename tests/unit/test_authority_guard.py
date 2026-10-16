@@ -70,7 +70,7 @@ def test_refuses_to_recreate_a_missing_authority_in_an_installed_home(home, crea
     message = str(excinfo.value)
     assert "installed-version" in message
     assert str(home / "state" / "backups") in message
-    assert "ds restore" in message
+    assert f"ds --home {home} restore <dir> --execute" in message
     assert not db.exists(), "the refusal must not leave an empty database behind"
 
 
@@ -116,10 +116,15 @@ def test_an_existing_authority_opens_even_in_an_installed_home(home):
         conn.close()
 
 
-def test_explicit_opt_in_creates_a_fresh_authority(home, monkeypatch):
+def test_explicit_opt_in_creates_a_fresh_authority(home, monkeypatch, tmp_path):
     _installed(home)
-    monkeypatch.setenv(CREATE_AUTHORITY_ENV, "1")
     db = home / "state" / "studio.db"
+    # Scoped to the one authority: "1", or some other path, opts nothing in.
+    for value in ("1", str(tmp_path / "elsewhere" / "studio.db")):
+        monkeypatch.setenv(CREATE_AUTHORITY_ENV, value)
+        with pytest.raises(REFUSED, match="Refusing"):
+            bootstrap_database(db)
+    monkeypatch.setenv(CREATE_AUTHORITY_ENV, str(db))
     assert bootstrap_database(db) == latest_migration_version()
 
 

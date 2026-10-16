@@ -200,7 +200,7 @@ replacing validation, Work Order, security, analytics, or adapter authority.
   install (`state/installed-version` or an integration manifest), and refuse to
   create any database when no migration file exists
   (`core.config.sqlite_bootstrap.assert_may_create_database`). Set
-  `DREAM_STUDIO_CREATE_AUTHORITY=1` to start a fresh, empty authority on purpose.
+  `DREAM_STUDIO_CREATE_AUTHORITY=<path of that studio.db>` to start a fresh, empty authority on purpose.
 - Migration activation state is per authority (`<home>/state/migrations-activated-version`);
   the shipped `core/event_store/migrations/.released_version` is never written at runtime.
 - `ds doctor` and `ds validate` read the authority through read-only connections.
