@@ -296,7 +296,7 @@ def run_gate_check(
             "all_tests_pass: UNVERIFIED — no TEST-CHECK acceptance criteria are"
             " registered across this WO's tasks (or no db context to execute them)."
             " Register a TEST-CHECK AC (bare pytest node-id or 'cmd: ...') on a task,"
-            " or attest a design-only WO via: py -m interfaces.cli.ds work-order attest."
+            " or attest a design-only WO via: ds work-order attest."
             " The test-results.md string fallback is retired."
         )
 
@@ -422,7 +422,7 @@ def run_gate_check(
         if verdict_raw is None:
             return False, (
                 f"independent_review: review-verdict.json not found. "
-                f"Run: py -m interfaces.cli.ds work-order verify {work_order_id}"
+                f"Run: ds work-order verify {work_order_id}"
             )
         # WO-VERIFY-PROVENANCE: a verdict without a provenance envelope is
         # hand-written or pre-provenance — either way it is not a certified
@@ -434,7 +434,7 @@ def run_gate_check(
             return False, (
                 f"independent_review: verdict lacks a provenance envelope "
                 f"(hand-written or pre-provenance) — re-run: "
-                f"py -m interfaces.cli.ds work-order verify {work_order_id}"
+                f"ds work-order verify {work_order_id}"
             )
         _stale = _provenance_staleness(
             verdict_envelope, work_order_id=work_order_id, conn=conn, db_path=db_path
@@ -442,7 +442,7 @@ def run_gate_check(
         if _stale:
             return False, (
                 f"independent_review: verdict is stale — {_stale}. Re-run: "
-                f"py -m interfaces.cli.ds work-order verify {work_order_id}"
+                f"ds work-order verify {work_order_id}"
             )
         try:
             verdict = _json.loads(verdict_raw)
@@ -474,7 +474,7 @@ def run_gate_check(
                 return False, (
                     "independent_review: the review convened no lane — "
                     f"{_why}. A verdict with no lens is a score with no provenance."
-                    " Re-run: py -m interfaces.cli.ds work-order verify "
+                    " Re-run: ds work-order verify "
                     f"{work_order_id}"
                 )
 
@@ -517,7 +517,7 @@ def run_gate_check(
                     "independent_review: UNREVIEWABLE — the stored verdict says passed=False"
                     " but carries no summary and no failure reasons, which is an incomplete"
                     " record rather than a review that failed (a verify killed mid-write"
-                    " leaves exactly this). Re-run: py -m interfaces.cli.ds work-order"
+                    " leaves exactly this). Re-run: ds work-order"
                     f" verify {work_order_id}"
                 )
             _score_msg = f" [{_scores}]" if _scores else ""

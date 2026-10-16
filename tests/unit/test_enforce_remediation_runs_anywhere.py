@@ -15,6 +15,13 @@ SOURCES = (
     "runtime/hooks/meta/on-edit-enforce.py",
     "runtime/hooks/meta/on-stop-enforce.py",
     "runtime/hooks/enforce-native/src/enforce.rs",
+    # The close gates, close continuation, merge readiness and memory store tell the
+    # operator what to run next in the same way.
+    "core/work_orders/close_gates.py",
+    "core/work_orders/close_main.py",
+    "core/work_orders/close_continuation.py",
+    "core/gates/merge_readiness.py",
+    "core/memory/store_main.py",
 )
 
 

@@ -366,7 +366,7 @@ core/memory/ingestion.py|328|falsy-return
 core/memory/retrieval.py|227|falsy-return
 core/memory/retrieval.py|275|bare-except-pass
 core/memory/retrieval.py|283|falsy-return
-core/memory/store_main.py|508|falsy-return
+core/memory/store_main.py|507|falsy-return
 core/milestones/close.py|254|bare-except-pass
 core/milestones/close.py|275|bare-except-pass
 core/milestones/close.py|285|bare-except-pass
@@ -543,7 +543,7 @@ core/work_orders/close_gates.py|687|falsy-return
 core/work_orders/close_main.py|1005|bare-except-pass
 core/work_orders/close_main.py|1098|bare-except-pass
 core/work_orders/close_main.py|1117|bare-except-pass
-core/work_orders/close_main.py|1213|bare-except-pass
+core/work_orders/close_main.py|1211|bare-except-pass
 core/work_orders/close_main.py|175|falsy-return
 core/work_orders/close_main.py|281|falsy-return
 core/work_orders/close_main.py|288|falsy-return

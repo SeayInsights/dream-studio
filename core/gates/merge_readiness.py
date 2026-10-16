@@ -331,7 +331,7 @@ def merge_readiness(
         ),
         "absent": (
             "Verify has never produced a provenance-bound verdict for this work"
-            " order. Run: py -m interfaces.cli.ds work-order verify <id>"
+            " order. Run: ds work-order verify <id>"
         ),
         "unreadable": "The stored verdict cannot be parsed. Re-run verify.",
     }.get(state, "Unknown verdict state — treat as not ready.")

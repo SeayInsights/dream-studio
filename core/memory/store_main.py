@@ -44,8 +44,7 @@ class MemoryStore:
             ).fetchone()
         if not row:
             raise RuntimeError(
-                "memory_entries table not found. "
-                "Run the migration sequence: py -m interfaces.cli.ds install"
+                "memory_entries table not found. " "Run the migration sequence: ds install"
             )
 
     # ── Core CRUD ────────────────────────────────────────────────────────────

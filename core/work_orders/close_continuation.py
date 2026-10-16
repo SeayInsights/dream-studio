@@ -56,7 +56,7 @@ def _apply_report_only_continuation(
                     f"Added as {added} task(s) ON THIS WORK ORDER -- this is its own\n"
                     f"unfinished work, not a sibling to start.\n"
                     f"Tasks:\n{tasks_str}\n"
-                    f"Run: py -m interfaces.cli.ds work-order tasks {work_order_id}\n"
+                    f"Run: ds work-order tasks {work_order_id}\n"
                     f"{_sep}\n"
                 )
                 result["attached_gap_tasks"] = attached
@@ -73,7 +73,7 @@ def _apply_report_only_continuation(
                     f"=== GAPS FOUND IN {title} ===\n"
                     f"Registered: REMEDIATION WO {gap_wo_id} with {len(gaps_list)} tasks\n"
                     f"Tasks:\n{tasks_str}\n"
-                    f"Run: py -m interfaces.cli.ds work-order start {gap_wo_id} to begin remediation.\n"
+                    f"Run: ds work-order start {gap_wo_id} to begin remediation.\n"
                     f"Main session: review "
                     f".planning/work-orders/{work_order_id}/review-verdict.json for full detail.\n"
                     f"{_sep}\n"
@@ -83,7 +83,7 @@ def _apply_report_only_continuation(
                 result["next_block"] = (
                     f"NEXT WORK ORDER (remediation): {gap_wo_title}"
                     f" / ID: {gap_wo_id}"
-                    f" / Run: py -m interfaces.cli.ds work-order start {gap_wo_id}"
+                    f" / Run: ds work-order start {gap_wo_id}"
                 )
         else:
             # Verify passed — advertise the authoritative project-wide ready-set pick
@@ -112,7 +112,7 @@ def _apply_report_only_continuation(
                 result["next_block"] = (
                     f"NEXT WORK ORDER: {_next_title}"
                     f" / ID: {_next_id}"
-                    f" / Run: py -m interfaces.cli.ds work-order start {_next_id}"
+                    f" / Run: ds work-order start {_next_id}"
                 )
             else:
                 result["next_block"] = "NO NEXT WORK ORDER FOUND / MILESTONE COMPLETE"
