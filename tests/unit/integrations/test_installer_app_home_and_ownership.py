@@ -1,14 +1,14 @@
 """The installer never rewires an app home, owns hooks by exact shape, retires copied
 hooks safely, and runs them in UTF-8 mode.
 
-B3  A checkout's files-mode install aimed at a self-installed home rewrote the app's
-    launcher back to the checkout, stripped the sha from installed-version and
-    registered every hook twice (module and file).
-S1  purge_superseded_ds_hooks decided DS ownership by substring and removed foreign
-    hooks that merely contained "hooks/run.py"; dedup compared only hooks[0].
-S2  Running sessions keep the old commands; deleting the copied files in the same
-    install made every old hook exit non-zero (blocking Edit/Write and Stop).
-S6  Module hooks ran with -I, which ignores PYTHONIOENCODING: cp1252 stdio.
+- A checkout's files-mode install aimed at a self-installed home rewrote the app's
+  launcher back to the checkout, stripped the sha from installed-version and
+  registered every hook twice (module and file).
+- purge_superseded_ds_hooks decided DS ownership by substring and removed foreign
+  hooks that merely contained "hooks/run.py"; dedup compared only hooks[0].
+- Running sessions keep the old commands; deleting the copied files in the same
+  install made every old hook exit non-zero (blocking Edit/Write and Stop).
+- Module hooks ran with -I, which ignores PYTHONIOENCODING: cp1252 stdio.
 """
 
 from __future__ import annotations
@@ -72,7 +72,7 @@ def _commands(config_root: Path) -> list[str]:
     ]
 
 
-# --- B3 ---------------------------------------------------------------------------
+# --- files mode into an app home ---------------------------------------------------
 
 
 def test_files_mode_refuses_a_self_installed_home(tmp_path, canonical_root, ds_home):
@@ -100,7 +100,7 @@ def test_files_mode_drops_module_commands_so_nothing_runs_twice(tmp_path, canoni
     assert not [c for c in commands if " -m " in c], commands
 
 
-# --- S1 ---------------------------------------------------------------------------
+# --- exact-shape ownership ---------------------------------------------------------
 
 FOREIGN = [
     'node "C:/tools/x/hooks/run.py.js" UserPromptSubmit',
@@ -163,7 +163,7 @@ def test_dedup_compares_whole_entries_and_only_drops_dream_studio_duplicates():
     assert sum(1 for e in entries if e["hooks"] == [foreign]) == 2
 
 
-# --- S2 ---------------------------------------------------------------------------
+# --- retiring copied hooks ---------------------------------------------------------
 
 
 def test_copied_hooks_become_stubs_first_and_go_on_the_next_install(
@@ -249,7 +249,7 @@ def test_doctor_counts_retired_stubs_as_expected_not_stale(tmp_path, canonical_r
     assert set(info.get("retired", [])) >= {"dispatch/hooks.py", "run.py"}
 
 
-# --- S6 ---------------------------------------------------------------------------
+# --- UTF-8 mode --------------------------------------------------------------------
 
 
 def test_module_hooks_run_in_utf8_mode(tmp_path, canonical_root, ds_home):

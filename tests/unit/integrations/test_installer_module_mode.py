@@ -138,7 +138,7 @@ def test_switching_to_module_mode_removes_the_copies_and_the_old_commands(
     result = _install(config_root, canonical_root, ds_home, "module")
     assert result["hook_mode"] == "module"
     # Installs only retire the copies (a running session still calls them); an explicit
-    # purge removes them: see test_installer_round_two.py.
+    # purge removes them: see test_installer_app_home_and_ownership.py.
     result = _install(config_root, canonical_root, ds_home, "module")
     assert result["hook_files_removed"] == 0
     assert (hooks_dir / "dispatch" / "hooks.py").is_file()

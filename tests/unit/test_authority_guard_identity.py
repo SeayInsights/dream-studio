@@ -214,3 +214,19 @@ def test_an_authority_truncated_then_rewritten_in_place_is_refused(tmp_path, mon
     assert os.stat(db).st_ino == ino and os.stat(db).st_size > 0
     with pytest.raises(AuthorityRefusedError):
         _connect(db).close()
+
+
+def test_a_case_variant_authority_path_is_guarded_with_no_home_configured(tmp_path, monkeypatch):
+    """The name-shape rule alone, case-folded: no DREAM_STUDIO_DB_PATH or
+    DREAM_STUDIO_HOME names this home."""
+    from core.event_store.connection import _connect
+
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / "some-other-home"))
+    monkeypatch.delenv("DREAM_STUDIO_DB_PATH", raising=False)
+    monkeypatch.delenv(CREATE_AUTHORITY_ENV, raising=False)
+    monkeypatch.setenv("DREAM_STUDIO_APPLY_UNRELEASED", "1")
+    home = _marked(tmp_path / "home")
+    variant = home / "STATE" / "Studio.DB"
+    with pytest.raises(AuthorityRefusedError):
+        _connect(variant).close()
+    assert not (home / "state" / "studio.db").exists()

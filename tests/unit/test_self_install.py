@@ -480,7 +480,7 @@ def test_install_command_from_an_app_delegates_to_the_home_launcher(tmp_path, mo
         assert "interfaces" not in text and "venv" not in text, name
 
 
-# --- S8: activation carried over -----------------------------------------------------
+# --- activation carried over --------------------------------------------------------
 
 
 def test_an_authority_activated_in_the_old_tree_keeps_its_activation(tmp_path, monkeypatch):
@@ -506,7 +506,7 @@ def test_self_install_runs_the_carry_over_with_the_new_app(si):
     assert "carry_over_activation" in si._MIGRATE_PROBE
 
 
-# --- S9: a dry run that matches the real run ------------------------------------------
+# --- a dry run that matches the real run ---------------------------------------------
 
 
 def test_dry_run_reports_the_guard_refusal_the_real_run_would_hit(si, repo, home):
