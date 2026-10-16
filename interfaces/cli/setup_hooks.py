@@ -197,6 +197,17 @@ _EVENT_RE = re.compile(
 )
 
 
+def _module_key(module: str) -> str:
+    """The identity key of a module run with `-m`: a Dream Studio hook module is keyed
+    like the file it replaced (its last component, `hooks.py`); any other module by its
+    whole dotted name, so `foreignpkg.hooks` is never read as Dream Studio's dispatcher."""
+    from integrations.targets.claude_code.settings_merge import DS_HOOK_MODULES
+
+    if module in DS_HOOK_MODULES:
+        return f"{module.rsplit('.', 1)[-1]}.py"
+    return f"{module}.module.py"
+
+
 def hook_identity(command: str) -> str:
     """What a hook DOES, independent of how the command is spelled.
 
@@ -226,7 +237,7 @@ def hook_identity(command: str) -> str:
     # that the copied file (`.../dispatch/hooks.py`) used to run: the same hook, keyed by
     # the module's last component as the file is keyed by its basename. Interpreter flags
     # (`-I`, `-X utf8`) are spelling, not identity.
-    tail = _MODULE_RE.sub(lambda m: f" {m.group(1).rsplit('.', 1)[-1]}.py", tail)
+    tail = _MODULE_RE.sub(lambda m: f" {_module_key(m.group(1))}", tail)
     scripts = _SCRIPT_RE.findall(tail)
     if scripts:
         event = _EVENT_RE.search(tail)

@@ -64,7 +64,7 @@ def _deregister_claude_hooks(path: Path) -> dict[str, Any]:
     if not path.is_file():
         return {"path": str(path), "exists": False, "hooks_removed": 0}
     settings = load_settings(path)
-    updated, removed = deregister_ds_hooks(settings)
+    updated, removed = deregister_ds_hooks(settings, hooks_dir=path.parent / "hooks")
     if removed:
         path.write_text(settings_to_json(updated) + "\n", encoding="utf-8")
     return {"path": str(path), "exists": True, "hooks_removed": removed}

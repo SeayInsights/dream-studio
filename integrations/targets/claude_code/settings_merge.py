@@ -37,6 +37,16 @@ DS_HOOK_FILES = frozenset(
     }
 )
 
+#: Text every Dream Studio entry script carries near its top: how a copy under ANOTHER
+#: config root's hooks/ directory is recognised as ours rather than by its name alone.
+_DS_ENTRY_SIGNATURES = {
+    "run.py": "Spool emitter for Claude Code hooks",
+    "dispatch/hooks.py": "Tool-agnostic hook event dispatcher",
+    "runtime/hooks/meta/on-edit-enforce.py": "Hook: on-edit-enforce",
+    "runtime/hooks/meta/on-stop-enforce.py": "Hook: on-stop-enforce",
+}
+_RETIRED_STUB_MARKER = "# dream-studio retired hook stub"
+
 _TOKEN = re.compile(r'"([^"]*)"|(\S+)')
 _PYTHON = re.compile(r"^(python(\d+(\.\d+)?)?w?|py)(\.exe)?$", re.IGNORECASE)
 
@@ -50,10 +60,15 @@ def is_ds_hook_command(command: str, hooks_dir: Path | None = None) -> bool:
 
     - module form: a Python interpreter, its flags, then `-m <one of DS_HOOK_MODULES>`;
     - files form: a Python interpreter running one of DS_HOOK_FILES under *hooks_dir*
-      (or, with no hooks_dir, under a directory named `hooks`).
+      (or, with no hooks_dir, under a directory named `hooks`);
+    - a Dream Studio entry script copied under ANOTHER config root's hooks/ directory
+      (`.claude-work` settings running `.claude/hooks/dispatch/hooks.py`), when the
+      file itself carries the Dream Studio signature: left in place it ran beside the
+      module hook and every hook fired twice.
 
     `node .../hooks/run.py.js`, `python .../other-tool/hooks/run.py` with another
-    hooks_dir, a `python -c` one-liner or `node -m runtime.dispatch.hooks` are not ours.
+    hooks_dir and no signature, a `python -c` one-liner or `node -m
+    runtime.dispatch.hooks` are not ours.
     """
     tokens = _tokens(command)
     if len(tokens) < 2 or not _PYTHON.match(Path(tokens[0].replace("\\", "/")).name):
@@ -70,12 +85,29 @@ def is_ds_hook_command(command: str, hooks_dir: Path | None = None) -> bool:
         return False
     script = rest[i].replace("\\", "/")
     if hooks_dir is not None:
+        if not (Path(script).is_absolute() or script.startswith("/")):
+            # A relative script runs from the directory that holds the config root.
+            script = (Path(hooks_dir).parent.parent / script).as_posix()
         root = str(hooks_dir).replace("\\", "/").rstrip("/") + "/"
-        if not script.lower().startswith(root.lower()):
-            return False
         prefix = len(root)
-        return script[prefix:] in DS_HOOK_FILES
+        if script.lower().startswith(root.lower()):
+            return script[prefix:] in DS_HOOK_FILES
+        return any(
+            script.endswith("/hooks/" + rel) and _carries_ds_signature(Path(script), rel)
+            for rel in DS_HOOK_FILES
+        )
     return any(script.endswith("/hooks/" + rel) for rel in DS_HOOK_FILES)
+
+
+def _carries_ds_signature(path: Path, rel: str) -> bool:
+    """Whether the file at *path* is a copy of Dream Studio's entry script *rel* (or the
+    stub a module-mode install left in its place). Reads only the first few KB."""
+    try:
+        with path.open("r", encoding="utf-8", errors="replace") as handle:
+            head = handle.read(4096)
+    except OSError:
+        return False
+    return head.startswith(_RETIRED_STUB_MARKER) or _DS_ENTRY_SIGNATURES[rel] in head
 
 
 _DS_EMITTER_MARKERS = (
@@ -371,17 +403,26 @@ def _entry_is_ds_owned(entry: Any) -> bool:
     return False
 
 
-def deregister_ds_hooks(settings: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """Remove every Dream-Studio-owned hook entry from a settings dict.
+def deregister_ds_hooks(
+    settings: dict[str, Any], hooks_dir: Path | None = None
+) -> tuple[dict[str, Any], int]:
+    """Remove every Dream-Studio-owned hook command from a settings dict.
 
-    Inverse of the additive install merge. Foreign (non-DS) hook entries are
-    preserved. Events left empty are dropped; an emptied ``hooks`` section is
-    removed entirely so reinstall starts clean. Never touches settings.local.json
+    Inverse of the additive install merge. Ownership is the exact shape
+    is_ds_hook_command() accepts (with *hooks_dir*, this config root's hooks/), or a
+    legacy Dream Studio one-liner, never a substring: an operator's
+    `python .../other-tool/hooks/run.py` is not ours. Removal is per command, so a
+    foreign hook sharing an entry with a Dream Studio one survives; an entry left with
+    no hooks is dropped, an event left empty is dropped, and an emptied ``hooks``
+    section is removed so reinstall starts clean. Never touches settings.local.json
     (the caller selects the path) or any non-``hooks`` key.
 
-    Returns ``(new_settings, removed_count)``.
+    Returns ``(new_settings, removed_count)``, counting removed commands.
     """
     import copy as _copy
+
+    def _ours(command: str) -> bool:
+        return is_ds_hook_command(command, hooks_dir) or _command_is_legacy_ds_hook(command)
 
     result = _copy.deepcopy(settings)
     hooks_section = result.get("hooks")
@@ -392,8 +433,19 @@ def deregister_ds_hooks(settings: dict[str, Any]) -> tuple[dict[str, Any], int]:
         entries = hooks_section.get(event)
         if not isinstance(entries, list):
             continue
-        kept = [entry for entry in entries if not _entry_is_ds_owned(entry)]
-        removed += len(entries) - len(kept)
+        kept = []
+        for entry in entries:
+            if not isinstance(entry, dict) or not isinstance(entry.get("hooks"), list):
+                kept.append(entry)
+                continue
+            hooks = [
+                h
+                for h in entry["hooks"]
+                if not (isinstance(h, dict) and _ours(str(h.get("command", ""))))
+            ]
+            removed += len(entry["hooks"]) - len(hooks)
+            if hooks:
+                kept.append({**entry, "hooks": hooks})
         if kept:
             hooks_section[event] = kept
         else:
