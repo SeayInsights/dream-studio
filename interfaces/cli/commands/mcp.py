@@ -9,7 +9,9 @@ from pathlib import Path
 from interfaces.cli.cli_utils import _print
 
 SAFE_DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 8765
+#: 8788, not 8765: other local MCP tooling commonly binds 8765, so the old default
+#: collided on any machine running both (docs/contracts/mcp-server-contract.md).
+DEFAULT_PORT = 8788
 
 
 def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]

@@ -102,11 +102,38 @@ other client. Neither the root token nor a client's token is ever returned by an
 call or logged; only `ds mcp token` and `ds mcp client add|rotate`'s own stdout carry a
 plaintext token, on the operator's own terminal, once, at issuance.
 
+## Starting it
+
+```
+ds mcp serve                      # http://127.0.0.1:8788/mcp
+ds mcp serve --port 9000          # any other free port
+```
+
+The default port is 8788. It was 8765 until 2026-10, a port other local MCP tooling
+commonly uses, so on a machine running both whichever started second failed to bind.
+The server runs in the foreground until stopped; run it from the installed app's
+launcher (`<home>/bin/ds.cmd mcp serve`, written by `ds self-install`) so it serves the
+installed code, not a checkout.
+
+## Connecting a client
+
+A client that is not the operator's own terminal (a gateway, an agent, another tool)
+gets its own named, scoped credential, never the root token:
+
+```
+ds mcp client add <name> --capabilities <only what it calls>
+```
+
+The token is printed once. Read-only tools need no capability; grant a client the
+smallest capability set its calls require, and never `review:dispatch` together with
+`review:record` (`auth.add_client` refuses that pair). `ds mcp client revoke <name>`
+ends one client's access without touching any other.
+
 ## Network exposure
 
-`ds mcp serve` binds `127.0.0.1` by default. Passing `--host 0.0.0.0` exposes the
-server to the network (required for Fulcrum or a gateway running as a separate
-process to reach it) and prints an explicit warning on start. Binding beyond
+`ds mcp serve` binds `127.0.0.1` by default, which every process on the same machine
+can reach. Passing `--host 0.0.0.0` is needed only for a client on another machine; it
+exposes the server to the network and prints an explicit warning on start. Binding beyond
 localhost does not relax auth — every `/mcp` call still requires the bearer token
 regardless of bind address.
 
