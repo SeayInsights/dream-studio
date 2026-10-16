@@ -259,7 +259,10 @@ def test_rollback_refuses_when_the_previous_app_cannot_open_the_authority(
         lambda cmd, *, env=None, cwd=None: json.dumps({"schema_version": 160, "latest": 159}),
     )
     result = si.rollback(home, dry_run=False)
-    assert result["ok"] is False and "ds restore" in result["error"]
+    assert (
+        result["ok"] is False
+        and f"ds --home {home.resolve()} restore <dir> --execute" in result["error"]
+    )
     assert (home / "app" / "current").resolve() == current
 
 
@@ -347,16 +350,89 @@ def test_self_install_refuses_over_a_drop_and_keeps_the_baseline(si, repo, home,
 
 
 def _checkout_launcher(home: Path) -> Path:
-    """What `ds install-command` from a checkout leaves first on PATH (~/.local/bin)."""
+    """What `ds install-command` from a checkout leaves first on PATH (~/.local/bin):
+    pinned to *home* with DREAM_STUDIO_HOME, as the real launcher template does."""
     local_bin = Path.home() / ".local" / "bin"
     local_bin.mkdir(parents=True, exist_ok=True)
     launcher = local_bin / ("ds.cmd" if os.name == "nt" else "ds")
     launcher.write_text(
         '@echo off\nset "DREAM_STUDIO_SOURCE_ROOT=C:\\src\\dream-studio"\n'
+        f'set "DREAM_STUDIO_HOME={home}"\n'
         'py "C:\\src\\dream-studio\\interfaces\\cli\\ds.py" %*\n',
         encoding="utf-8",
     )
     return launcher
+
+
+def test_a_launcher_pinned_to_another_home_is_reported_and_left(
+    si, repo, home, fake_build, tmp_path, monkeypatch
+):
+    """Repointing a ~/.local/bin launcher pinned to a DIFFERENT home sent that home's
+    operator to this home's app and authority."""
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "userhome"))
+    other = _checkout_launcher(tmp_path / "other-home")
+    before = other.read_text(encoding="utf-8")
+    plan = si.resolve_plan(home=home, repo=repo, ref="HEAD")
+
+    dry = si.self_install(plan, dry_run=True)
+    assert not any(w["step"] == "repoint-launcher" for w in dry["writes"])
+    result = si.self_install(plan, dry_run=False)
+    assert result["ok"], result
+    assert other.read_text(encoding="utf-8") == before
+    assert [item["path"] for item in result["left_launchers"]] == [str(other)]
+
+
+def test_a_repointed_launcher_is_saved_and_restored_on_rollback(
+    si, repo, home, fake_build, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "userhome"))
+    _authority(home)
+    first = si.resolve_plan(home=home, repo=repo, ref="HEAD")
+    assert si.self_install(first, dry_run=False)["ok"]
+
+    stale = _checkout_launcher(home)
+    before = stale.read_text(encoding="utf-8")
+    (repo / "module.py").write_text("COMMITTED = 2\n", encoding="utf-8")
+    _git(repo, "commit", "-q", "-am", "two")
+    second = si.resolve_plan(home=home, repo=repo, ref="HEAD")
+    result = si.self_install(second, dry_run=False)
+    assert result["ok"], result
+    saved = Path(result["repointed_launchers"][0]["saved"])
+    assert saved.is_file() and saved.read_text(encoding="utf-8") == before
+    assert str(si.launcher_path(home)) in stale.read_text(encoding="utf-8")
+
+    dry = si.rollback(home, dry_run=True)
+    assert any(w["step"] == "restore-launcher" and w["path"] == str(stale) for w in dry["writes"])
+    back = si.rollback(home, dry_run=False)
+    assert back["ok"], back
+    assert stale.read_text(encoding="utf-8") == before
+
+
+def test_rollback_with_no_previous_says_why_and_what_to_do(si, home):
+    result = si.rollback(home, dry_run=True)
+    assert not result["ok"]
+    assert "self-install" in result["error"] and "--execute" in result["error"]
+
+
+def test_checkout_install_command_into_an_app_home_writes_delegating_launchers(tmp_path):
+    """From a checkout, `ds install-command --execute` against a home with an installed
+    app rewrote ~/.local/bin back to the checkout."""
+    from core import installed_productization_setup as setup
+    from core.config import paths
+
+    home = tmp_path / "home"
+    (home / "app" / "current").mkdir(parents=True)
+    result = setup.install_global_command_surface(
+        source_root=paths.code_root(),
+        dream_studio_home=home,
+        command_dir=tmp_path / "bin",
+        execute=True,
+    )
+    assert result["written"]
+    for name in result["launchers"]:
+        text = (tmp_path / "bin" / name).read_text(encoding="utf-8")
+        assert str(home / "bin") in text, name
+        assert "DREAM_STUDIO_SOURCE_ROOT" not in text and "interfaces" not in text, name
 
 
 def test_self_install_repoints_a_checkout_launcher_on_path(

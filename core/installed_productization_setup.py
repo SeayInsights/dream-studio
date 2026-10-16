@@ -142,15 +142,17 @@ def install_global_command_surface(
     target_dir = Path(command_dir or DEFAULT_GLOBAL_COMMAND_DIR).resolve()
     from core.config.paths import is_source_checkout
 
-    if is_source_checkout():
+    app_home = (paths.dream_studio_home / "app" / "current").exists()
+    if is_source_checkout() and not app_home:
         launchers = {
             "ds.cmd": _windows_cmd_launcher(paths.source_root, paths.dream_studio_home),
             "ds.ps1": _windows_powershell_launcher(paths.source_root, paths.dream_studio_home),
         }
     else:
-        # From an installed app: delegate to <home>/bin, which `ds self-install` keeps
-        # pointing at the current app. Pinning this app's venv would outlive a rollback
-        # or upgrade.
+        # From an installed app, or into a home that has one: delegate to <home>/bin,
+        # which `ds self-install` keeps pointing at the current app. Pinning this app's
+        # venv would outlive a rollback or upgrade, and a checkout launcher into an app
+        # home would take PATH back to the checkout.
         from core.self_install import delegating_launchers
 
         launchers = delegating_launchers(paths.dream_studio_home)

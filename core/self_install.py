@@ -103,13 +103,41 @@ def delegating_launchers(home: Path) -> dict[str, str]:
     return {"ds": f'#!/bin/sh\nexec "{target}" "$@"\n'}
 
 
-def stale_path_launchers(home: Path) -> list[Path]:
+_PINNED_HOME = re.compile(
+    r"""DREAM_STUDIO_HOME\s*=\s*["']?([^"'\r\n]+?)["']?\s*$|--home\s+["']([^"']+)["']""",
+    re.MULTILINE,
+)
+
+#: Where self-install records the launchers it repointed, for rollback to restore.
+REPOINTED_RECORD = "repointed-launchers.json"
+
+
+def _same_path(a: Path, b: Path) -> bool:
+    return os.path.normcase(os.path.realpath(a)) == os.path.normcase(os.path.realpath(b))
+
+
+def _launcher_home(text: str) -> Path:
+    """The home a launcher runs against: the one it pins, else the default home."""
+    match = _PINNED_HOME.search(text)
+    if match:
+        return Path((match.group(1) or match.group(2)).strip()).expanduser()
+    from core.config.paths import default_home
+
+    return default_home()
+
+
+def _path_launchers(home: Path) -> tuple[list[Path], list[dict[str, str]]]:
     """Dream Studio launchers in ~/.local/bin (`ds install-command`) that do not delegate
-    to <home>/bin. That directory usually comes first on PATH, so such a launcher keeps
-    running a checkout after self-install."""
+    to <home>/bin: (those running THIS home, to repoint; those pinned elsewhere, left).
+
+    That directory usually comes first on PATH, so such a launcher keeps running a
+    checkout after self-install. One pinned to ANOTHER home belongs to that home: sending
+    it to this home's app would point its operator at a different authority.
+    """
     local_bin = Path.home() / ".local" / "bin"
     target = str(launcher_path(home))
     stale: list[Path] = []
+    left: list[dict[str, str]] = []
     for name in ("ds.cmd", "ds.ps1", "ds"):
         path = local_bin / name
         if not path.is_file():
@@ -120,21 +148,61 @@ def stale_path_launchers(home: Path) -> list[Path]:
             or "ds_entry.py" in text
             or ("interfaces" in text and "ds.py" in text)
         )
-        if owned and target not in text:
+        if not owned or target in text:
+            continue
+        pinned = _launcher_home(text)
+        if _same_path(pinned, home):
             stale.append(path)
-    return stale
+        else:
+            left.append({"path": str(path), "home": str(pinned)})
+    return stale, left
 
 
-def _repoint_launchers(home: Path, log: list[str]) -> list[dict[str, str]]:
+def stale_path_launchers(home: Path) -> list[Path]:
+    """The ~/.local/bin launchers for THIS home that bypass <home>/bin."""
+    return _path_launchers(home)[0]
+
+
+def _repoint_launchers(home: Path, backup_dir: Path, app_id: str, log: list[str]) -> list[dict]:
+    """Repoint this home's PATH launchers to <home>/bin, saving each previous file in the
+    install's backup directory and recording it so `--rollback` can put it back."""
     content = delegating_launchers(home)
     repointed = []
     for path in stale_path_launchers(home):
         new = content.get(path.name) or next(iter(content.values()))
-        old = path.read_text(encoding="utf-8", errors="replace")
+        saved = backup_dir / "launchers" / path.name
+        saved.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, saved)
         path.write_text(new, encoding="utf-8", newline="")
-        log.append(f"repointed {path} to {launcher_path(home)}")
-        repointed.append({"path": str(path), "previous": old})
+        log.append(f"repointed {path} to {launcher_path(home)} (previous saved at {saved})")
+        repointed.append({"path": str(path), "saved": str(saved), "written": new})
+    if repointed:
+        record = home / "state" / REPOINTED_RECORD
+        record.write_text(
+            json.dumps({"app_id": app_id, "launchers": repointed}, indent=2), encoding="utf-8"
+        )
     return repointed
+
+
+def _launchers_to_restore(home: Path, leaving: str | None) -> list[dict]:
+    """The launchers the install of *leaving* repointed, still as it wrote them."""
+    record = home / "state" / REPOINTED_RECORD
+    if not record.is_file():
+        return []
+    doc = json.loads(record.read_text(encoding="utf-8"))
+    if not leaving or doc.get("app_id") != leaving:
+        return []
+    restore = []
+    for item in doc.get("launchers", []):
+        path, saved = Path(item["path"]), Path(item["saved"])
+        try:
+            with path.open(encoding="utf-8", newline="") as handle:
+                unchanged = handle.read() == item["written"]
+        except OSError:
+            unchanged = False
+        if unchanged and saved.is_file():
+            restore.append(item)
+    return restore
 
 
 def _assert_inside(path: Path, parent: Path) -> None:
@@ -419,7 +487,11 @@ class SelfInstallPlan:
                 {
                     "step": "repoint-launcher",
                     "path": str(p),
-                    "detail": f"a Dream Studio launcher on PATH that bypasses {launcher_path(self.home)}",
+                    "detail": (
+                        f"a Dream Studio launcher on PATH for this home that bypasses "
+                        f"{launcher_path(self.home)}; the previous file is saved at "
+                        f"{self.backup_dir / 'launchers' / p.name}"
+                    ),
                     "content": delegating_launchers(self.home).get(p.name, ""),
                 }
                 for p in stale_path_launchers(self.home)
@@ -799,7 +871,8 @@ def self_install(plan: SelfInstallPlan, *, dry_run: bool) -> dict[str, Any]:
     if authority["readable"] and not drops(authority):
         authority["recorded"] = record_counts(plan.home, plan.db_path)
 
-    repointed = _repoint_launchers(plan.home, log)
+    repointed = _repoint_launchers(plan.home, plan.backup_dir, plan.app_id, log)
+    left = _path_launchers(plan.home)[1]
 
     integrations = []
     for root in plan.config_roots:
@@ -837,6 +910,7 @@ def self_install(plan: SelfInstallPlan, *, dry_run: bool) -> dict[str, Any]:
         "migration": migrated,
         "authority_data": authority,
         "repointed_launchers": repointed,
+        "left_launchers": left,
         "integrations": integrations,
         "log": log,
     }
@@ -858,7 +932,15 @@ def rollback(home: Path, *, dry_run: bool) -> dict[str, Any]:
         "rollback_to": previous or None,
     }
     if not previous:
-        return {**base, "ok": False, "error": f"no previous app recorded in {app_root / PREVIOUS}"}
+        return {
+            **base,
+            "ok": False,
+            "error": (
+                f"no previous app recorded in {app_root / PREVIOUS}: this home has had one "
+                "installed app, so there is nothing to roll back to. To run another version, "
+                f"install it: `ds --home {home} self-install --ref <ref> --execute`."
+            ),
+        }
     if not APP_ID.fullmatch(previous):
         return {
             **base,
@@ -887,6 +969,15 @@ def rollback(home: Path, *, dry_run: bool) -> dict[str, Any]:
         },
         {"step": "launcher", "path": str(launcher_path(home)), "content": launcher_content(home)},
     ]
+    restore = _launchers_to_restore(home, current)
+    writes += [
+        {
+            "step": "restore-launcher",
+            "path": item["path"],
+            "detail": f"the launcher the install of {current} repointed, from {item['saved']}",
+        }
+        for item in restore
+    ]
     if dry_run:
         return {**base, "ok": True, "dry_run": True, "writes": writes}
     log: list[str] = []
@@ -911,7 +1002,8 @@ def rollback(home: Path, *, dry_run: bool) -> dict[str, Any]:
                     f"the authority is at schema {probe['schema_version']} but {previous} ships "
                     f"migrations only to {probe['latest']}; it cannot open it. Restore the backup "
                     f"taken before the upgrade (under {home / 'state' / 'backups'}, "
-                    "self-install-*) with `ds restore <dir> --execute`, then roll back."
+                    f"self-install-*) with `ds --home {home} restore <dir> --execute`, then "
+                    "roll back."
                 ),
             }
         backup = backup_authority(db_path, backup_dir)
@@ -925,12 +1017,20 @@ def rollback(home: Path, *, dry_run: bool) -> dict[str, Any]:
         current=current,
         log=log,
     )
+    restored = []
+    for item in restore:
+        shutil.copy2(item["saved"], item["path"])
+        restored.append(item["path"])
+        log.append(f"restored {item['path']} from {item['saved']}")
+    if restore:
+        (home / "state" / REPOINTED_RECORD).unlink(missing_ok=True)
     return {
         **base,
         "ok": True,
         "dry_run": False,
         "switched": True,
         "current_after": previous,
+        "restored_launchers": restored,
         "backup": str(backup) if backup else None,
         "log": log,
     }

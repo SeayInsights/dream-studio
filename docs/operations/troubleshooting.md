@@ -58,7 +58,10 @@ Check:
 - Use `--home <dream-studio-home>` explicitly for installed or rehearsal state.
 - On Windows, prefer the plain-command launcher `ds.cmd`, or run
   `ds install-command --execute` to create user-local `ds.cmd` and `ds.ps1`
-  launchers in a PATH directory such as `%USERPROFILE%\.local\bin`.
+  launchers in a PATH directory such as `%USERPROFILE%\.local\bin`. In a home
+  with an installed app (`ds self-install`), those launchers call
+  `<home>\bin\ds.cmd`, which runs the current app; they never point back at a
+  checkout.
 - For packaged installs, verify `DREAM_STUDIO_SOURCE_ROOT` and
   `DREAM_STUDIO_HOME`.
 

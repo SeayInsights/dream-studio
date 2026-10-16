@@ -250,8 +250,9 @@ $env:PATH = "$env:USERPROFILE\.dream-studio\bin;" + $env:PATH
 > --execute` from a checkout installs the older files-mode hooks that import the checkout.
 > It refuses a home that `self-install` manages; use `self-install --config-root <root> --execute` there.
 
-An older `ds.cmd` in `~/.local/bin` that ran a checkout is rewritten by `self-install` to
-call this launcher, so either spelling on PATH runs the current app.
+An older `ds.cmd` in `~/.local/bin` that ran a checkout against this home is rewritten by
+`self-install` to call this launcher (the previous file is kept for `--rollback`), so
+either spelling on PATH runs the current app. One pinned to another home is left alone.
 
 After adding to PATH, run `ds` from any directory.
 
