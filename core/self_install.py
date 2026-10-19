@@ -302,6 +302,21 @@ def _prune_steps(home: Path, *, adding: bool) -> list[dict]:
     ]
 
 
+def _stamp() -> str:
+    """A UTC timestamp for a backup or build name, to the microsecond."""
+    return datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
+
+
+def _unused(path: Path) -> Path:
+    """*path*, or *path*-2, -3, ... when it is taken: two runs at the same instant (or a
+    clock that does not move) each get their own directory."""
+    candidate, n = path, 1
+    while candidate.exists():
+        n += 1
+        candidate = path.with_name(f"{path.name}-{n}")
+    return candidate
+
+
 def _assert_inside(path: Path, parent: Path) -> None:
     """Refuse to delete anything that is not strictly inside *parent*."""
     path = path.resolve()
@@ -484,7 +499,7 @@ class SelfInstallPlan:
     sha: str
     version: str
     config_roots: list[Path] = field(default_factory=list)
-    stamp: str = field(default_factory=lambda: datetime.now(UTC).strftime("%Y%m%d-%H%M%S"))
+    stamp: str = field(default_factory=lambda: _stamp())
 
     @property
     def app_id(self) -> str:
@@ -1220,8 +1235,9 @@ def rollback(home: Path, *, dry_run: bool) -> dict[str, Any]:
     if record is None:
         return {**base, "ok": False, "error": f"{app_root / previous} is missing or incomplete"}
     db_path = home / "state" / "studio.db"
-    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    backup_dir = home / "state" / "backups" / f"self-install-rollback-{previous}-{stamp}"
+    backup_dir = _unused(
+        home / "state" / "backups" / f"self-install-rollback-{previous}-{_stamp()}"
+    )
     writes = [
         {
             "step": "check-schema",

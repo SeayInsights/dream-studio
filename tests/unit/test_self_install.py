@@ -833,6 +833,31 @@ def test_rollback_dry_run_lists_the_backups_the_rollback_prunes(si, repo, home, 
     assert listed == sorted(back["pruned_backups"])
 
 
+def test_rollbacks_in_one_second_each_take_their_own_backup(
+    si, repo, home, fake_build, monkeypatch
+):
+    """Two rollbacks in one second named the same backup directory, and VACUUM INTO
+    refused the second: "output file already exists"."""
+
+    class Frozen(si.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return si.datetime(2026, 10, 19, 12, 0, 0, 123456, tzinfo=tz)
+
+    _authority(home)
+    assert si.self_install(si.resolve_plan(home=home, repo=repo, ref="HEAD"), dry_run=False)["ok"]
+    _commit(repo, 2)
+    assert si.self_install(si.resolve_plan(home=home, repo=repo, ref="HEAD"), dry_run=False)["ok"]
+    monkeypatch.setattr(si, "datetime", Frozen)
+    backups = []
+    for _ in range(3):
+        back = si.rollback(home, dry_run=False)
+        assert back["ok"], back
+        backups.append(back["backup"])
+    assert len(set(backups)) == 3, backups
+    assert all(Path(b).is_file() for b in backups)
+
+
 def test_dry_run_lists_the_repointed_launchers_record(
     si, repo, home, fake_build, tmp_path, monkeypatch
 ):
