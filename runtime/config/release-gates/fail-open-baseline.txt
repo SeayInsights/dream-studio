@@ -182,8 +182,8 @@ core/config/retention.py|316|falsy-return
 core/config/retention.py|327|falsy-return
 core/config/retention.py|382|falsy-return
 core/config/schema_coherence_scan.py|178|bare-except-pass
-core/config/sqlite_bootstrap.py|717|bare-except-pass
-core/config/sqlite_bootstrap.py|908|falsy-return
+core/config/sqlite_bootstrap.py|718|bare-except-pass
+core/config/sqlite_bootstrap.py|909|falsy-return
 core/config/state.py|120|bare-except-pass
 core/config/state.py|160|bare-except-pass
 core/config/state.py|175|falsy-return
@@ -334,10 +334,10 @@ core/health/doctor_skill_sync.py|165|falsy-return
 core/health/doctor_skill_sync.py|169|falsy-return
 core/health/doctor_skill_sync.py|230|falsy-return
 core/health/doctor_skill_sync.py|260|falsy-return
-core/health/main_ci.py|109|falsy-return
-core/health/main_ci.py|121|falsy-return
-core/health/main_ci.py|151|bare-except-pass
-core/health/main_ci.py|162|falsy-return
+core/health/main_ci.py|110|falsy-return
+core/health/main_ci.py|122|falsy-return
+core/health/main_ci.py|152|bare-except-pass
+core/health/main_ci.py|163|falsy-return
 core/health/main_ci_watch.py|210|falsy-return
 core/health/main_ci_watch.py|217|falsy-return
 core/health/main_ci_watch.py|58|falsy-return
