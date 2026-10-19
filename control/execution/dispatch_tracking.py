@@ -10,6 +10,8 @@ import sys
 import time
 from pathlib import Path
 
+from control.execution.dispatch_helpers import inflight
+
 
 def load_module(name: str, path: Path):
     """Load a Python module from file path."""
@@ -171,7 +173,8 @@ def run_handlers(
             else:
                 ran = True
                 sys.stdin = io.StringIO(raw_payload)
-                mod.main()
+                with inflight(state_dir, event_name, name):
+                    mod.main()
         except SystemExit as exc:
             # A handler that sys.exit()s is not a dispatch failure — record its code.
             code = exc.code
