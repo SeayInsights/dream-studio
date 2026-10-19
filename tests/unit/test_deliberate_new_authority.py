@@ -101,3 +101,29 @@ def test_without_the_override_migrate_init_refuses_and_names_the_way_out(lost):
     assert proc.returncode != 0
     assert "DREAM_STUDIO_CREATE_AUTHORITY=" in out and "migrate init" in out, out[-1500:]
     assert not (lost / "home" / "state" / "studio.db").exists()
+
+
+def test_migrate_init_over_a_corrupt_authority_says_to_move_it_aside(lost):
+    """With the override set, `migrate init` on a file that is not a database failed
+    inside SQLite, and the way out it was given led back to the same command."""
+    db = lost / "home" / "state" / "studio.db"
+    junk = b"this is not a sqlite database\n" * 200
+    db.write_bytes(junk)
+    proc = _ds(lost, "migrate", "init", override=True)
+    out = proc.stdout + proc.stderr
+    assert proc.returncode == 1, out[-1500:]
+    assert "Traceback" not in out, out[-1500:]
+    start = out.index("{")
+    error = json.loads(out[start:])["error"]
+    assert f"move {db} aside first" in error, error
+    assert db.read_bytes() == junk
+
+
+def test_migrate_init_says_what_to_do_next(lost):
+    proc = _ds(lost, "migrate", "init", override=True)
+    assert proc.returncode == 0, proc.stdout[-1500:] + proc.stderr[-1500:]
+    start = proc.stdout.index("{")
+    payload = json.loads(proc.stdout[start:])
+    following = payload.get("next", "")
+    assert "unset DREAM_STUDIO_CREATE_AUTHORITY" in following, payload
+    assert f"ds --home {lost / 'home'} doctor --record-counts" in following, payload

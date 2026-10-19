@@ -182,8 +182,8 @@ core/config/retention.py|316|falsy-return
 core/config/retention.py|327|falsy-return
 core/config/retention.py|382|falsy-return
 core/config/schema_coherence_scan.py|178|bare-except-pass
-core/config/sqlite_bootstrap.py|691|bare-except-pass
-core/config/sqlite_bootstrap.py|882|falsy-return
+core/config/sqlite_bootstrap.py|717|bare-except-pass
+core/config/sqlite_bootstrap.py|908|falsy-return
 core/config/state.py|120|bare-except-pass
 core/config/state.py|160|bare-except-pass
 core/config/state.py|175|falsy-return

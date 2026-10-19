@@ -299,12 +299,38 @@ _BAK_NAME = re.compile(r"^studio\.db\.bak(\.\d{8}T\d{6}Z)?$")
 _DESCRIBED_TABLES = (("projects", "business_projects"), ("work orders", "business_work_orders"))
 
 
+def move_aside_first(db_path: Path) -> str:
+    """The step before `migrate init` when *db_path* holds something: init creates an
+    authority only where there is none, and the file may be the only copy."""
+    return f"move {db_path} aside first (rename it, do not delete it: it may be the only copy)"
+
+
 def _start_over(home: Path, db_path: Path) -> str:
     """How to start a new, empty authority on purpose: the override and the command."""
+    holds_something = db_path.is_file() and db_path.stat().st_size > 0
+    first = f"{move_aside_first(db_path)}, then " if holds_something else ""
     return (
-        f"start a new, empty authority deliberately: set {CREATE_AUTHORITY_ENV}={db_path} "
-        f"and run `ds --home {home} migrate init`."
+        f"start a new, empty authority deliberately: {first}set "
+        f"{CREATE_AUTHORITY_ENV}={db_path} and run `ds --home {home} migrate init`."
     )
+
+
+def is_unreadable_database(db_path: Path) -> bool:
+    """True when *db_path* is a non-empty file SQLite cannot read ("file is not a
+    database", "malformed"). Asks read-only; creates nothing."""
+    if not db_path.is_file() or db_path.stat().st_size == 0:
+        return False
+    from core.config.sqlite_readonly import connect_read_only
+
+    try:
+        conn = connect_read_only(db_path, timeout=5.0)
+        try:
+            conn.execute("SELECT name FROM sqlite_master").fetchall()
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError as exc:
+        return not (isinstance(exc, sqlite3.OperationalError) and "locked" in str(exc))
+    return False
 
 
 def describe_backup(backup: Path) -> str:

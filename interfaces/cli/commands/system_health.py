@@ -769,9 +769,28 @@ def _migrate_command(args: argparse.Namespace) -> int:
         # never had an authority creates one, a home that had an install only with
         # DREAM_STUDIO_CREATE_AUTHORITY naming this file. Released migrations only.
         from core.config.database import _default_db_path
-        from core.config.sqlite_bootstrap import bootstrap_database, has_authority_schema
+        from core.config.paths import home_dir
+        from core.config.sqlite_bootstrap import (
+            CREATE_AUTHORITY_ENV,
+            bootstrap_database,
+            has_authority_schema,
+            is_unreadable_database,
+            move_aside_first,
+        )
 
         target = db_path or _default_db_path()
+        if target.is_file() and is_unreadable_database(target):
+            _print(
+                {
+                    "ok": False,
+                    "error": (
+                        f"{target} is not a readable SQLite database, and `migrate init` "
+                        "creates an authority only where there is none: "
+                        f"{move_aside_first(target)}, then run `migrate init` again."
+                    ),
+                }
+            )
+            return 1
         if target.is_file() and has_authority_schema(target):
             _print(
                 {"ok": False, "error": f"{target} already holds an authority; nothing to create."}
@@ -779,7 +798,19 @@ def _migrate_command(args: argparse.Namespace) -> int:
             return 1
         target.parent.mkdir(parents=True, exist_ok=True)
         version = bootstrap_database(target)
-        return _print({"ok": True, "created": str(target), "schema_version": version})
+        home = home_dir()
+        return _print(
+            {
+                "ok": True,
+                "created": str(target),
+                "schema_version": version,
+                "next": (
+                    f"unset {CREATE_AUTHORITY_ENV} now, so nothing else creates an authority "
+                    f"by mistake, and record this authority's counts as the baseline with "
+                    f"`ds --home {home} doctor --record-counts`."
+                ),
+            }
+        )
 
     if args.migrate_subcommand == "activate":
         pending = pending_migrations_info(db_path)

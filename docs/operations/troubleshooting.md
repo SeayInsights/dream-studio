@@ -36,6 +36,9 @@ The refusal lists the backups present and what each holds. Only to start over
 deliberately, set `DREAM_STUDIO_CREATE_AUTHORITY=<path of that studio.db>` and run
 `ds --home <home> migrate init`, which creates a new, empty authority at the released
 schema; with the variable naming that file, nothing reports the authority as lost.
+If the file is there but SQLite cannot read it, `migrate init` refuses it: move it aside
+first (rename it; it may be the only copy). Afterwards unset the variable and record
+the new authority's baseline with `ds --home <home> doctor --record-counts`.
 
 `Refusing to create ...: no migration files were found` means the install is
 incomplete; reinstall with `ds self-install --repo <checkout> --execute` (`--repo` is needed
