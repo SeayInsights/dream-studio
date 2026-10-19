@@ -247,7 +247,7 @@ def test_the_backup_is_recorded_in_the_manifest(config_root, canonical_root, ds_
 
     _install(config_root, canonical_root, ds_home)
 
-    manifest_path = get_manifest_path("claude_code", ds_home)
+    manifest_path = get_manifest_path("claude_code", ds_home, config_root)  # one per root
     assert manifest_path.is_file(), f"no manifest was written to {manifest_path}"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 

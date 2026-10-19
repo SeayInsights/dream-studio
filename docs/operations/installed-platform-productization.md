@@ -9,7 +9,7 @@ inside the source checkout.
 
 | Area | Purpose |
 | --- | --- |
-| Source root | Installed Dream Studio source/build files and product code. |
+| Source root | Installed Dream Studio source/build files and product code: a checkout, or an installed wheel that carries the runtime data at the same relative paths (`core.config.paths.code_root()`). |
 | Dream Studio home | User-local runtime state, normally `~/.dream-studio`. |
 | SQLite authority | `state/studio.db` inside the selected Dream Studio home. |
 | Runtime config | `config/runtime.json` inside the selected Dream Studio home. |
@@ -20,6 +20,14 @@ inside the source checkout.
 The installer and acceptance commands take `--source-root` and `--home` so
 rehearsal installs, CI gates, and adapter launchers do not depend on the
 current working directory.
+
+`ds self-install --execute [--ref <ref>] [--repo <checkout>] [--config-root <path>]...` installs
+the product from a clean commit into `<home>/app/<version>-<sha>/venv` (see
+installed-adapter-runtime.md, "Installed App"). It refuses a dirty tree, backs the
+authority up with `VACUUM INTO` under `<home>/state/backups/self-install-*` and migrates
+it with the NEW app before `<home>/app/current` moves; a failure before that switches
+nothing. `--dry-run` prints every write. `--rollback` returns to `<home>/app/previous`
+after checking that app can open the authority. It never writes a git pre-push hook.
 
 ## First-Run Setup
 

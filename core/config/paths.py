@@ -8,9 +8,42 @@ hook was invoked (shim, direct python, test harness).
 from __future__ import annotations
 
 import os
+import sys
+from functools import lru_cache
 from pathlib import Path
 
 USER_DATA_DIRNAME = ".dream-studio"
+
+#: Written by `ds self-install` into an app venv's prefix: the Dream Studio home that app
+#: was installed into. See home_dir().
+APP_HOME_MARKER = "dream-studio-home"
+
+
+@lru_cache(maxsize=1)
+def code_root() -> Path:
+    """The directory that holds Dream Studio's packages AND its shipped runtime data.
+
+    THE ONE PLACE THE CODE LOCATION IS RESOLVED. In a checkout this is the repository
+    root. In an installed wheel it is the site-packages directory the packages were
+    installed into, and the build (setup.py, pyproject's shipped-root-data) puts the
+    root-level data files -- VERSION, packs.yaml, docs/canonical/*.json, ... -- at the
+    same relative paths there, so `code_root() / "docs" / "canonical"` names the same
+    thing in both. Resolved through importlib.resources rather than a `parents[N]` walk
+    from some module's __file__, which silently meant "the checkout" wherever the module
+    happened to sit.
+
+    Read-only by contract: nothing in the runtime writes under this directory
+    (tests/unit/test_cli_never_writes_code_root.py).
+    """
+    from importlib.resources import files
+
+    return Path(str(files("core"))).resolve().parent
+
+
+def is_source_checkout(root: Path | None = None) -> bool:
+    """True when *root* (default code_root()) is a source tree, not an installed app."""
+    root = code_root() if root is None else root
+    return (root / "pyproject.toml").is_file()
 
 
 def plugin_root() -> Path:
@@ -24,7 +57,9 @@ def plugin_root() -> Path:
     Last resort: the plugin cache location inferred from this file's path,
     so hooks degrade gracefully instead of crashing with RuntimeError.
     """
-    env = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    # An installed app's plugin root is the app: CLAUDE_PLUGIN_ROOT, set by Claude Code for
+    # plugin hooks, may name a checkout whose files must not be loaded into it.
+    env = os.environ.get("CLAUDE_PLUGIN_ROOT") if is_source_checkout() else None
     if env:
         return Path(env).resolve()
 
@@ -33,10 +68,11 @@ def plugin_root() -> Path:
         if (candidate / ".claude-plugin" / "plugin.json").is_file():
             return candidate
 
-    # Fallback: infer from this file's location. Check for repo-root-specific
-    # markers (canonical/skills only exists at repo root, not in subdirectories
-    # like core/ which also has a skills/ dir).
-    inferred = Path(__file__).resolve().parents[1]
+    # Fallback: the code root (a checkout, or an installed app's site-packages, which
+    # ships canonical/ and packs.yaml at the same relative paths). It used to be inferred
+    # from this file's location -- core/, which never holds those markers -- so an
+    # installed app raised here and every progressive skill mode stayed locked.
+    inferred = code_root()
     if (inferred / "canonical" / "skills").is_dir() or (inferred / "packs.yaml").is_file():
         return inferred
 
@@ -69,9 +105,53 @@ def home_dir() -> Path:
     on a new spelling in core/ or interfaces/.
 
     Resolving a path does not create it; user_data_dir() is the one that does.
+
+    AN INSTALLED APP DEFAULTS TO THE HOME IT WAS INSTALLED INTO. `ds self-install --home
+    H` writes H into the app venv (APP_HOME_MARKER under sys.prefix). Hooks run that
+    venv's python with no `--home` and no environment of their own, so without this an
+    app installed into a second home would read and write the default home's authority
+    from every hook. The environment variable still wins.
     """
     override = os.environ.get("DREAM_STUDIO_HOME")
-    return Path(override).expanduser() if override else Path.home() / USER_DATA_DIRNAME
+    if override:
+        return Path(override).expanduser()
+    installed = installed_app_home()
+    return installed if installed is not None else default_home()
+
+
+def default_home() -> Path:
+    """The home when nothing chooses another (~/.dream-studio). NOT created.
+
+    For the few checks that must recognise the operator's real home whatever the
+    environment says (core.config.sqlite_bootstrap._is_live_authority_db); everything
+    else resolves the home through home_dir().
+    """
+    return Path.home() / USER_DATA_DIRNAME
+
+
+def installed_version(home: Path | None = None) -> tuple[str | None, str | None]:
+    """(version, sha) from <home>/state/installed-version.
+
+    `ds self-install` writes "<version> <full sha>"; the older integration installer wrote
+    the bare version, which reads back with sha None. Compare versions through this, never
+    the raw file text, or every self-installed home looks out of date.
+    """
+    marker = (home if home is not None else home_dir()) / "state" / "installed-version"
+    if not marker.is_file():
+        return None, None
+    parts = marker.read_text(encoding="utf-8").split()
+    if not parts:
+        return None, None
+    return parts[0], (parts[1] if len(parts) > 1 else None)
+
+
+def installed_app_home() -> Path | None:
+    """The home recorded by `ds self-install` in the running venv, or None outside one."""
+    marker = Path(sys.prefix) / APP_HOME_MARKER
+    if not marker.is_file():
+        return None
+    text = marker.read_text(encoding="utf-8").strip()
+    return Path(text) if text else None
 
 
 def user_data_dir() -> Path:
@@ -82,11 +162,16 @@ def user_data_dir() -> Path:
 
 
 def claude_config_root() -> Path:
-    """Claude Code's OWN config root -- NOT created. Resolution order:
+    """Claude Code's OWN config root -- NOT created. See claude_config_root_with_reason."""
+    return claude_config_root_with_reason()[0]
 
-      1. The active Dream Studio profile's claude_config_dir, if a profile is active
+
+def claude_config_root_with_reason() -> tuple[Path, str]:
+    """Claude Code's OWN config root and why it was chosen -- NOT created. Order:
+
+      1. CLAUDE_CONFIG_DIR env var, if set: the root this shell's `claude` uses.
+      2. The active Dream Studio profile's claude_config_dir, if a profile is active
          AND that field is set on it.
-      2. CLAUDE_CONFIG_DIR env var, if set.
       3. ~/.claude (default).
 
     THE ONE PLACE CLAUDE CODE'S CONFIG ROOT IS SPELLED. This is a different thing from
@@ -99,34 +184,44 @@ def claude_config_root() -> Path:
     hooks install. tests/unit/test_claude_config_root.py fails on a new spelling in core/,
     interfaces/, integrations/, or control/.
 
-    Step 1 (migration 159, core/profiles/) lets an operator with several profiles --
-    SeayInsights, Fulcrum, more to come -- point each at its own Claude Code identity
-    without an env var per shell. Looking it up is wrapped in one broad try/except: this
-    function is called from very early/low-level contexts (the Claude Code detector,
-    doctor health checks, hook setup) that must keep working with no Dream Studio
-    authority DB at all (fresh checkout), a DB that predates migration 159 (no
-    business_profiles table), or a locked/unreadable DB file -- every one of those must
-    fall through to step 2/3, never raise. A caught failure is not swallowed silently
-    (that would trip core.gates.fail_open_census): it goes through
-    core.telemetry.diagnostics.log_diagnostic, which is documented to never raise itself.
-    The DB-file existence check before the lookup is a cheap short-circuit for the
-    overwhelmingly common "Dream Studio isn't installed here" case -- it avoids both the
-    connect/query/close round trip and sqlite3.connect() silently creating an empty
-    database file at a path nothing has initialized yet.
+    THE ENVIRONMENT WINS OVER THE PROFILE. The profile used to come first, so a shell
+    whose CLAUDE_CONFIG_DIR named one root had `ds doctor --fix` and `ds integrate
+    install` write into whatever root the authority's active profile named instead -- and
+    for an authority copied from somewhere else, that was another identity's real
+    settings.json. An explicit environment is the operator's statement about THIS shell;
+    the profile (migration 159, core/profiles/) is the default for shells that say
+    nothing, so an operator with several profiles needs no env var per shell.
+
+    The profile lookup is wrapped in one broad try/except: this function is called from
+    very early/low-level contexts (the Claude Code detector, doctor health checks, hook
+    setup) that must keep working with no Dream Studio authority DB at all (fresh
+    checkout), a DB that predates migration 159 (no business_profiles table), or a
+    locked/unreadable DB file -- every one of those must fall through to the default,
+    never raise. A caught failure is not swallowed silently (that would trip
+    core.gates.fail_open_census): it goes through core.telemetry.diagnostics.log_diagnostic,
+    which is documented to never raise itself. The DB-file existence check before the
+    lookup avoids both the round trip and creating an empty database file.
 
     Resolving a path does not create it.
     """
+    override = os.environ.get("CLAUDE_CONFIG_DIR")
+    if override:
+        return Path(override).expanduser(), "CLAUDE_CONFIG_DIR is set"
     try:
         from core.config.database import _default_db_path
 
-        if _default_db_path().is_file():
+        if _default_db_path().is_file() and _has_profile_table(_default_db_path()):
             from core.profiles.queries import active_profile
 
             profile = active_profile()
             if profile:
                 profile_dir = profile.get("claude_config_dir")
                 if profile_dir:
-                    return Path(profile_dir).expanduser()
+                    return (
+                        Path(profile_dir).expanduser(),
+                        f"the active Dream Studio profile {profile.get('name')!r} names it"
+                        " (CLAUDE_CONFIG_DIR is not set)",
+                    )
     except Exception as exc:
         from core.telemetry.diagnostics import log_diagnostic
 
@@ -135,9 +230,26 @@ def claude_config_root() -> Path:
             source="core.config.paths.claude_config_root",
             details={"error_type": type(exc).__name__, "error_message": str(exc)},
         )
+    return Path.home() / ".claude", "the default (no CLAUDE_CONFIG_DIR, no profile root)"
 
-    override = os.environ.get("CLAUDE_CONFIG_DIR")
-    return Path(override).expanduser() if override else Path.home() / ".claude"
+
+def _has_profile_table(db: Path) -> bool:
+    """Whether the authority has business_profiles (migration 159), asked read-only.
+
+    An authority at the shipped released version can predate the table. Querying it
+    anyway raised, and the raise was logged to state/diagnostics on every `ds doctor`
+    and every hook: a write from a path that must not write, about a normal state.
+    """
+    from core.config.database import connect_existing
+
+    conn = connect_existing(db, read_only=True)
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'business_profiles'"
+        ).fetchone()
+    finally:
+        conn.close()
+    return row is not None
 
 
 def project_root() -> Path:

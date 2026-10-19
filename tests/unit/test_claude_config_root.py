@@ -64,15 +64,20 @@ def _seed_active_profile(db_path: Path, *, claude_config_dir: str | None) -> Non
         conn.close()
 
 
-def test_claude_config_root_prefers_the_active_profiles_config_dir(monkeypatch, tmp_path):
-    """The active profile's claude_config_dir wins even when CLAUDE_CONFIG_DIR is also set."""
+def test_an_explicit_claude_config_dir_wins_over_the_active_profile(monkeypatch, tmp_path):
+    """CLAUDE_CONFIG_DIR, when set, wins over the active profile's claude_config_dir.
+
+    The profile used to win, so a shell naming one Claude Code root had installs and
+    `doctor --fix` write into whatever root the authority's profile named instead."""
     db_path = tmp_path / "studio.db"
     bootstrap_database(db_path)
     profile_dir = tmp_path / "claude-fulcrum-profile"
     _seed_active_profile(db_path, claude_config_dir=str(profile_dir))
     monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db_path))
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-env-var"))
+    assert claude_config_root() == tmp_path / "claude-env-var"
 
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR")
     assert claude_config_root() == profile_dir
 
 
@@ -138,9 +143,16 @@ def test_claude_config_root_falls_back_when_no_db_exists_at_all(monkeypatch, tmp
 def test_claude_config_root_logs_but_does_not_raise_on_a_broken_profiles_table(
     monkeypatch, tmp_path
 ):
-    """A caught lookup failure is reported via log_diagnostic, not silently swallowed."""
+    """A caught lookup failure is reported via log_diagnostic, not silently swallowed.
+
+    The table exists but cannot answer the query (a column is missing). An authority
+    that simply predates business_profiles is a normal state, not a failure: see
+    test_claude_config_root_is_silent_when_the_profiles_table_is_absent."""
     db_path = tmp_path / "studio.db"
-    sqlite3.connect(str(db_path)).close()
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("CREATE TABLE business_profiles (profile_id TEXT)")
+    conn.commit()
+    conn.close()
     monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db_path))
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -155,6 +167,26 @@ def test_claude_config_root_logs_but_does_not_raise_on_a_broken_profiles_table(
     assert len(calls) == 1
     assert calls[0]["source"] == "core.config.paths.claude_config_root"
     assert calls[0]["details"]["error_type"] == "OperationalError"
+
+
+def test_claude_config_root_is_silent_when_the_profiles_table_is_absent(monkeypatch, tmp_path):
+    """At the shipped released schema the authority can predate business_profiles; that
+    is no failure, and logging it wrote state/diagnostics from `ds doctor` and hooks."""
+    db_path = tmp_path / "studio.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("CREATE TABLE ds_config (key TEXT)")
+    conn.commit()
+    conn.close()
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db_path))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        "core.telemetry.diagnostics.log_diagnostic",
+        lambda **kwargs: calls.append(kwargs),
+    )
+    assert claude_config_root() == tmp_path / ".claude"
+    assert calls == []
 
 
 #: Trees the rule reaches, matching the bug report's own scope exactly.

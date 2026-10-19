@@ -73,10 +73,9 @@ def resolve_installed_runtime_paths(
 ) -> InstalledRuntimePaths:
     """Resolve source/state paths without depending on the caller's cwd."""
 
-    source = Path(
-        source_root or os.environ.get(SOURCE_ENV) or Path(__file__).resolve().parents[1]
-    ).resolve()
-    from core.config.paths import home_dir
+    from core.config.paths import code_root, home_dir
+
+    source = Path(source_root or os.environ.get(SOURCE_ENV) or code_root()).resolve()
 
     home = Path(dream_studio_home or os.environ.get(HOME_ENV) or home_dir()).resolve()
     return InstalledRuntimePaths(source_root=source, dream_studio_home=home)
@@ -311,12 +310,26 @@ def bootstrap_rehearsal_runtime(
     source_root: str | Path,
     dream_studio_home: str | Path,
 ) -> dict[str, Any]:
-    """Create a rehearsal runtime home and bootstrap SQLite authority there."""
+    """Create a rehearsal runtime home and bootstrap SQLite authority there.
+
+    A rehearsal home is a NEW home. Pointed at a home that has held an install it used
+    to migrate (or, with the file gone, re-create) that home's authority and overwrite
+    its runtime config with live_state false; it now refuses before touching anything.
+    """
 
     paths = resolve_installed_runtime_paths(
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
+    from core.config.sqlite_bootstrap import AuthorityRefusedError, _install_markers
+
+    markers = _install_markers(paths.dream_studio_home)
+    if markers:
+        raise AuthorityRefusedError(
+            f"Refusing rehearsal-install into {paths.dream_studio_home}: it is an installed "
+            f"Dream Studio home ({', '.join(str(m) for m in markers[:3])}). A rehearsal "
+            "needs a new, empty home: pass --rehearsal-home <new directory>."
+        )
     for path in (
         paths.dream_studio_home,
         paths.adapter_runtime_path,
@@ -329,7 +342,7 @@ def bootstrap_rehearsal_runtime(
     from core.config.platform import ensure_platform_recorded
 
     ensure_platform_recorded()
-    bootstrap_database(paths.sqlite_path)
+    reached = bootstrap_database(paths.sqlite_path)
     with _connect(paths.sqlite_path) as conn:
         register_default_adapter_authority_profiles(conn)
         register_default_adapter_accounting_profiles(conn)
@@ -357,7 +370,10 @@ def bootstrap_rehearsal_runtime(
         "source_root": str(paths.source_root),
         "dream_studio_home": str(paths.dream_studio_home),
         "sqlite_path": str(paths.sqlite_path),
-        "schema_version": latest_migration_version(),
+        # The schema the rehearsal authority actually reached: the newest shipped
+        # migration can be held back by the unreleased gate.
+        "schema_version": reached,
+        "latest_migration_version": latest_migration_version(),
         "fresh_state_created": True,
         "sqlite_bootstrap": True,
         "module_profiles_installed": config_payload["module_profiles"],

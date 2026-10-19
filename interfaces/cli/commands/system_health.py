@@ -57,6 +57,20 @@ def register_health(subcommands: argparse._SubParsersAction) -> None:  # type: i
     )
     _doctor_cmd.add_argument("--fix", action="store_true", help="Attempt to fix failing checks")
     _doctor_cmd.add_argument(
+        "--record-counts",
+        action="store_true",
+        help=(
+            "Record the authority's business row counts as the baseline later runs warn "
+            "against (the one write a doctor run makes, and only with this flag). Refused "
+            "when the counts dropped since the last baseline, unless --accept-drop"
+        ),
+    )
+    _doctor_cmd.add_argument(
+        "--accept-drop",
+        action="store_true",
+        help="With --record-counts: record counts that are lower than the last baseline",
+    )
+    _doctor_cmd.add_argument(
         "mode",
         nargs="?",
         default=None,
@@ -97,6 +111,13 @@ def register_health(subcommands: argparse._SubParsersAction) -> None:  # type: i
     )
     migrate_sub = migrate_cmd.add_subparsers(dest="migrate_subcommand", required=True)
     migrate_sub.add_parser("status", help="Show merged-but-not-activated migrations")
+    migrate_sub.add_parser(
+        "init",
+        help=(
+            "Create a new, empty authority at the released schema. In a home that has had "
+            "an install, only when DREAM_STUDIO_CREATE_AUTHORITY names its path."
+        ),
+    )
     migrate_activate_cmd = migrate_sub.add_parser(
         "activate",
         help="Apply pending-activation migrations (operator-invoked; creates backup first)",
@@ -161,13 +182,18 @@ def dispatch_health(
                 return 1
             print("[dashboard-truth] OVERALL: PASS")
             return 0
-        return _print(
-            _doctor_status(
-                source_root=source_root,
-                dream_studio_home=dream_studio_home,
-                fix=getattr(args, "fix", False),
-            )
+        report = _doctor_status(
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+            fix=getattr(args, "fix", False),
+            record_counts=getattr(args, "record_counts", False),
+            accept_drop=getattr(args, "accept_drop", False),
         )
+        _print(report)
+        # Exit 1 when business data may be at risk (core.health.authority_data warnings,
+        # an installed-app mismatch, or a refused --record-counts); other findings keep
+        # the status field as their signal.
+        return 1 if report.get("authority_attention") else 0
 
     if args.command == "update":
         return _update_command(
@@ -222,29 +248,14 @@ def _version_status(*, source_root: Path, dream_studio_home: Path | None) -> dic
     return get_version(source_root=source_root, dream_studio_home=dream_studio_home)
 
 
-def _check_dispatcher_hooks(claude_dir: Path) -> bool:
-    """Return True if the DS dispatcher hook is registered for UserPromptSubmit."""
-    _DISPATCHER_MARKERS = (
-        "hooks\\dispatch\\hooks.py",  # installed path (Windows)
-        "hooks/dispatch/hooks.py",  # installed path (Unix)
-        "runtime/dispatch/hooks",  # legacy repo-relative path
-        "'dispatch'/'hooks.py'",  # legacy pathlib expression
-    )
-    try:
-        settings_path = claude_dir / "settings.json"
-        if not settings_path.is_file():
-            return False
-        data = json.loads(settings_path.read_text(encoding="utf-8"))
-        hooks_section = data.get("hooks", {})
-        event_entries = hooks_section.get("UserPromptSubmit", [])
-        for entry in event_entries:
-            for h in entry.get("hooks", []):
-                cmd = h.get("command", "")
-                if any(m in cmd for m in _DISPATCHER_MARKERS):
-                    return True
-        return False
-    except Exception:
-        return False
+# One copy of each doctor check: these live in core.health.doctor_checks and are
+# re-exported here for the names callers and tests already import from this module.
+from core.health.doctor_checks import (  # noqa: E402, F401
+    _check_agents_installed,
+    _check_dispatcher_hooks,
+    _check_failed_events,
+    _check_version_current,
+)
 
 
 def _get_expected_skill_ids(source_root: Path) -> list[str]:
@@ -272,61 +283,27 @@ def _check_skills_installed(claude_dir: Path, source_root: Path | None = None) -
         return {"total_expected": len(expected), "installed": 0, "missing": expected}
 
 
-def _check_agents_installed(claude_dir: Path, source_root: Path) -> dict[str, Any]:
-    """Return agents install status — checks canonical/agents/ vs ~/.claude/agents/."""
-    try:
-        agents_src = source_root / "canonical" / "agents"
-        expected = (
-            [p.stem for p in agents_src.glob("*.md") if p.name != "README.md"]
-            if agents_src.is_dir()
-            else []
-        )
-        agents_dir = claude_dir / "agents"
-        installed = [name for name in expected if (agents_dir / f"{name}.md").is_file()]
-        missing = [name for name in expected if name not in installed]
-        return {"total_expected": len(expected), "installed": len(installed), "missing": missing}
-    except Exception:
-        return {"total_expected": 0, "installed": 0, "missing": []}
-
-
-def _check_failed_events(dream_studio_home: Path) -> dict[str, int]:
-    """Return count of *.json files in ~/.dream-studio/events/failed/ root only."""
-    try:
-        failed_dir = dream_studio_home / "events" / "failed"
-        if not failed_dir.is_dir():
-            return {"count": 0}
-        count = sum(1 for p in failed_dir.iterdir() if p.is_file() and p.suffix == ".json")
-        return {"count": count}
-    except Exception:
-        return {"count": 0}
-
-
-def _check_version_current(source_root: Path, dream_studio_home: Path) -> dict[str, Any]:
-    """Compare repo VERSION vs installed-version. Fail-open."""
-    try:
-        repo_file = source_root / "VERSION"
-        installed_file = dream_studio_home / "state" / "installed-version"
-        repo_ver = repo_file.read_text(encoding="utf-8").strip() if repo_file.is_file() else None
-        installed_ver = (
-            installed_file.read_text(encoding="utf-8").strip() if installed_file.is_file() else None
-        )
-        current = repo_ver is not None and repo_ver == installed_ver
-        return {"repo": repo_ver, "installed": installed_ver, "current": current}
-    except Exception:
-        return {"repo": None, "installed": None, "current": False}
-
-
 def _doctor_status(
-    *, source_root: Path, dream_studio_home: Path | None, fix: bool = False
+    *,
+    source_root: Path,
+    dream_studio_home: Path | None,
+    fix: bool = False,
+    record_counts: bool = False,
+    accept_drop: bool = False,
 ) -> dict[str, Any]:
-    from core.config.platform import ensure_platform_recorded
     from core.health.doctor import run_doctor_checks
 
-    ensure_platform_recorded()
+    if fix:
+        # Refreshing the platform profile is a write; a plain `ds doctor` is read-only.
+        from core.config.platform import ensure_platform_recorded
+
+        ensure_platform_recorded()
     return run_doctor_checks(
         source_root=source_root,
         dream_studio_home=dream_studio_home,
         fix=fix,
+        record_counts=record_counts,
+        accept_drop=accept_drop,
     )
 
 
@@ -544,9 +521,9 @@ def _update_command(
         _print({"ok": False, "error": "VERSION file not found in source root"})
         return 1
 
-    installed_version = (
-        installed_file.read_text(encoding="utf-8").strip() if installed_file.is_file() else None
-    )
+    from core.config.paths import installed_version as _installed_version
+
+    installed_version = _installed_version(paths.dream_studio_home)[0]
 
     drifted: list[str] = []
     if installed_version == repo_version:
@@ -556,7 +533,11 @@ def _update_command(
         # checking hooks alone is why an install could be missing the files a mode needs.
         from integrations.manifest import read_manifest
 
-        manifest = read_manifest("claude_code", ds_home=paths.dream_studio_home)
+        from core.config.paths import claude_config_root
+
+        manifest = read_manifest(
+            "claude_code", ds_home=paths.dream_studio_home, config_root=claude_config_root()
+        )
         if not manifest:
             # AN UNREADABLE MANIFEST IS NOT A CLEAN ONE. read_manifest swallows
             # JSONDecodeError and OSError into None, so a deleted, truncated or corrupt
@@ -713,7 +694,10 @@ def _update_command(
 
     install_output = json.dumps(install_result, indent=2, sort_keys=True)
 
-    if install_ok:
+    from core.config.paths import is_source_checkout
+
+    # Run from an installed app, the marker ("<version> <sha>") belongs to `ds self-install`.
+    if install_ok and is_source_checkout():
         installed_file.parent.mkdir(parents=True, exist_ok=True)
         installed_file.write_text(repo_version + "\n", encoding="utf-8")
 
@@ -758,8 +742,12 @@ def _validate_status(*, source_root: Path, dream_studio_home: Path | None) -> di
 def _migrate_command(args: argparse.Namespace) -> int:
     from core.config.sqlite_bootstrap import activate_pending_migrations, pending_migrations_info
 
+    # Activation state belongs to an authority, so "pending" is asked of the one this
+    # command acts on: --db-path when given, else the default authority.
+    db_path = Path(args.db_path).resolve() if getattr(args, "db_path", None) else None
+
     if args.migrate_subcommand == "status":
-        pending = pending_migrations_info()
+        pending = pending_migrations_info(db_path)
         if not pending:
             return _print(
                 {"ok": True, "pending_count": 0, "message": "All merged migrations are activated."}
@@ -776,8 +764,56 @@ def _migrate_command(args: argparse.Namespace) -> int:
             }
         )
 
+    if args.migrate_subcommand == "init":
+        # The deliberate way to start over. bootstrap_database's guard decides: a home that
+        # never had an authority creates one, a home that had an install only with
+        # DREAM_STUDIO_CREATE_AUTHORITY naming this file. Released migrations only.
+        from core.config.database import _default_db_path
+        from core.config.paths import home_dir
+        from core.config.sqlite_bootstrap import (
+            CREATE_AUTHORITY_ENV,
+            bootstrap_database,
+            has_authority_schema,
+            is_unreadable_database,
+            move_aside_first,
+        )
+
+        target = db_path or _default_db_path()
+        if target.is_file() and is_unreadable_database(target):
+            _print(
+                {
+                    "ok": False,
+                    "error": (
+                        f"{target} is not a readable SQLite database, and `migrate init` "
+                        "creates an authority only where there is none: "
+                        f"{move_aside_first(target)}, then run `migrate init` again."
+                    ),
+                }
+            )
+            return 1
+        if target.is_file() and has_authority_schema(target):
+            _print(
+                {"ok": False, "error": f"{target} already holds an authority; nothing to create."}
+            )
+            return 1
+        target.parent.mkdir(parents=True, exist_ok=True)
+        version = bootstrap_database(target)
+        home = home_dir()
+        return _print(
+            {
+                "ok": True,
+                "created": str(target),
+                "schema_version": version,
+                "next": (
+                    f"unset {CREATE_AUTHORITY_ENV} now, so nothing else creates an authority "
+                    f"by mistake, and record this authority's counts as the baseline with "
+                    f"`ds --home {home} doctor --record-counts`."
+                ),
+            }
+        )
+
     if args.migrate_subcommand == "activate":
-        pending = pending_migrations_info()
+        pending = pending_migrations_info(db_path)
         if not pending:
             return _print(
                 {"ok": True, "applied": [], "message": "No pending migrations to activate."}
@@ -791,7 +827,6 @@ def _migrate_command(args: argparse.Namespace) -> int:
             print("  Re-run with --confirm to proceed.\n")
             return 0
 
-        db_path = Path(args.db_path).resolve() if getattr(args, "db_path", None) else None
         result = activate_pending_migrations(db_path)
         return _print(result)
 

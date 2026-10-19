@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -123,6 +124,44 @@ def _load_trigger_map(plugin_root: Path) -> list[tuple[str, str, str]]:
     return entries
 
 
+#: Blocks the harness relays into a prompt that the user did not write: task and agent
+#: notifications, system reminders, earlier hook output, Dream Studio's own blocks.
+_RELAYED_TAGS = (
+    r"task-notification|system-reminder|agent-message|teammate-message|channel|"
+    r"user-prompt-submit-hook|local-command-stdout|local-command-stderr|"
+    r"local-command-caveat|bash-stdout|bash-stderr|bash-input|command-message|"
+    r"command-name|command-args|dream-studio-[\w-]+"
+)
+#: The innermost relayed block: no further opening tag of the same name inside it, so
+#: removing these until none is left takes nested blocks apart from the inside out.
+_RELAYED_BLOCK = re.compile(
+    rf"<({_RELAYED_TAGS})\b[^>]*>(?:(?!<\1\b).)*?</\1\s*>",
+    re.IGNORECASE | re.DOTALL,
+)
+#: A relayed block that never closes: everything from its opening tag on is relayed.
+_UNTERMINATED_BLOCK = re.compile(rf"<(?:{_RELAYED_TAGS})\b[^>]*>.*\Z", re.IGNORECASE | re.DOTALL)
+#: Dream Studio's own onboarding banner (on-first-run), which tells the operator to run
+#: `workflow: run studio-onboard` and so read as that trigger when it came back.
+_OWN_BANNER = re.compile(
+    r"\[dream-studio\] (?:Welcome! Setup is not complete yet\..*?This message will not "
+    r"appear again once setup is complete\.|First-run setup detected.*?workflow: studio-onboard)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _user_text(prompt: str) -> str:
+    """The part of *prompt* the user wrote: relayed blocks and Dream Studio's own
+    banner removed, so a trigger inside an agent report or a reminder never routes."""
+    text = prompt
+    while True:
+        stripped = _RELAYED_BLOCK.sub(" ", text)
+        if stripped == text:
+            break
+        text = stripped
+    text = _UNTERMINATED_BLOCK.sub(" ", text)
+    return _OWN_BANNER.sub(" ", text)
+
+
 def _match(
     prompt: str, entries: list[tuple[str, str, str, str]]
 ) -> tuple[str, str, str, str] | None:
@@ -165,7 +204,7 @@ def _route(payload: dict) -> None:
     can exercise the matching logic directly without going through stdin."""
     if os.environ.get("DS_ROUTING") == "0":
         return
-    prompt = (payload.get("prompt") or "").strip()
+    prompt = _user_text(payload.get("prompt") or "").strip()
     if not prompt:
         return
     entries = _load_trigger_map(_PLUGIN_ROOT)

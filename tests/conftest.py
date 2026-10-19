@@ -41,6 +41,14 @@ if "DREAM_STUDIO_DB_PATH" not in _os.environ:
     _os.environ["DREAM_STUDIO_HOME"] = str(_session_tmp)
     _os.environ["DREAM_STUDIO_DB_PATH"] = str(_session_tmp / "state" / "studio.db")
     _os.environ["DS_SPOOL_ROOT"] = str(_session_tmp / "events")
+    # The one home this conftest made: the only one any suite fixture may clean up.
+    _os.environ["DREAM_STUDIO_TEST_SESSION_HOME"] = str(_session_tmp)
+
+# The session's Dream Studio home is a test home, and every database inside a home is a
+# "live" authority to the unreleased-migration gate (core.config.sqlite_bootstrap.
+# _is_live_authority_db follows DREAM_STUDIO_HOME). Apply every shipped migration to it,
+# as the gate always did for test databases; tests of the gate itself delenv this.
+_os.environ.setdefault("DREAM_STUDIO_APPLY_UNRELEASED", "1")
 
 # Same isolation guard, for git instead of the DB.
 #
@@ -399,6 +407,39 @@ import warnings  # noqa: E402
 def reset_warnings():
     warnings.resetwarnings()
     yield
+
+
+#: The session home conftest created with mkdtemp above, and nothing else: a home that
+#: came in through the environment (an operator's, a CI runner's) is never touched.
+_SESSION_HOME = (
+    _pathlib.Path(_os.environ["DREAM_STUDIO_TEST_SESSION_HOME"])
+    if _os.environ.get("DREAM_STUDIO_TEST_SESSION_HOME")
+    else None
+)
+
+
+@pytest.fixture(autouse=True)
+def install_markers_do_not_leak():
+    """An install marker one test leaves in the session's shared home marks it for all
+    the rest.
+
+    `state/installed-version` or an integration manifest makes a home "installed", and
+    the authority guard then refuses to create the configured authority there -- for
+    every later test that points DREAM_STUDIO_DB_PATH at a fresh temporary database.
+    Markers a test creates in the session home conftest made are removed after it. A
+    home that came in through the environment is never touched, and neither is a marker
+    that was there before the test.
+    """
+    home = _SESSION_HOME
+    if home is None or _os.environ.get("DREAM_STUDIO_HOME") != str(home):
+        yield
+        return
+    from core.config.sqlite_bootstrap import _install_markers
+
+    before = set(_install_markers(home))
+    yield
+    for marker in set(_install_markers(home)) - before:
+        marker.unlink(missing_ok=True)
 
 
 @pytest.fixture(autouse=True)

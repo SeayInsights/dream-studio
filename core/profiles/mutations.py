@@ -27,7 +27,14 @@ def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
         dream_studio_home=dream_studio_home,
     )
     if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
+        from core.config.sqlite_bootstrap import missing_authority_message
+
+        raise RuntimeError(
+            missing_authority_message(
+                paths.sqlite_path,
+                "Dream Studio SQLite authority is missing. Run rehearsal-install first.",
+            )
+        )
     return paths.sqlite_path
 
 

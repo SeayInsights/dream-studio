@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
@@ -27,12 +28,33 @@ def get_ds_home(override: Path | None = None) -> Path:
     return home_dir()
 
 
-def get_manifest_path(tool_id: str, ds_home: Path | None = None) -> Path:
-    return get_ds_home(ds_home) / "integrations" / tool_id / "manifest.json"
+def config_root_key(config_root: Path) -> str:
+    """A stable directory name for one config root: readable tail + a hash of the full path."""
+    resolved = str(Path(config_root).expanduser().resolve())
+    normalized = resolved.lower() if os.name == "nt" else resolved
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12]
+    tail = re.sub(r"[^A-Za-z0-9]+", "-", resolved).strip("-")[-48:]
+    return f"{tail}-{digest}"
 
 
-def read_manifest(tool_id: str, ds_home: Path | None = None) -> dict[str, Any] | None:
-    path = get_manifest_path(tool_id, ds_home)
+def get_manifest_path(
+    tool_id: str, ds_home: Path | None = None, config_root: Path | None = None
+) -> Path:
+    """The manifest for *tool_id*; with *config_root*, the manifest for that root alone.
+
+    ONE MANIFEST PER CONFIG ROOT. The single integrations/<tool>/manifest.json was shared
+    by every config root installed from the home -- an operator with two Claude Code
+    identities (~/.claude and a CLAUDE_CONFIG_DIR one) had each install overwrite the
+    other's record, so neither knew what it had written. Without *config_root* this still
+    names the legacy path, which read_manifest() falls back to for a root it describes.
+    """
+    base = get_ds_home(ds_home) / "integrations" / tool_id
+    if config_root is None:
+        return base / "manifest.json"
+    return base / "roots" / config_root_key(config_root) / "manifest.json"
+
+
+def _read_json(path: Path) -> dict[str, Any] | None:
     if not path.exists():
         return None
     try:
@@ -44,8 +66,46 @@ def read_manifest(tool_id: str, ds_home: Path | None = None) -> dict[str, Any] |
         return None
 
 
-def write_manifest(tool_id: str, manifest: dict[str, Any], ds_home: Path | None = None) -> None:
-    path = get_manifest_path(tool_id, ds_home)
+def _describes_root(manifest: dict[str, Any], config_root: Path) -> bool:
+    """True when a manifest records files written under *config_root*."""
+    recorded = manifest.get("config_root")
+    root = Path(config_root).expanduser().resolve()
+    if recorded:
+        return Path(recorded).expanduser().resolve() == root
+    if not manifest.get("files"):
+        # A legacy manifest that records no files cannot say whose it is. Reading it
+        # changes no file (there is nothing to prune) and keeps its state visible.
+        return True
+    for entry in manifest.get("files", []):
+        path = entry.get("path", "")
+        if path and root in Path(path).resolve().parents:
+            return True
+    return False
+
+
+def read_manifest(
+    tool_id: str, ds_home: Path | None = None, config_root: Path | None = None
+) -> dict[str, Any] | None:
+    """Read the manifest. With *config_root*, the per-root one, else a legacy manifest that
+    describes that root (the migration path from the single shared manifest)."""
+    if config_root is None:
+        return _read_json(get_manifest_path(tool_id, ds_home))
+    per_root = _read_json(get_manifest_path(tool_id, ds_home, config_root))
+    if per_root is not None:
+        return per_root
+    legacy = _read_json(get_manifest_path(tool_id, ds_home))
+    if legacy is not None and _describes_root(legacy, config_root):
+        return legacy
+    return None
+
+
+def write_manifest(
+    tool_id: str,
+    manifest: dict[str, Any],
+    ds_home: Path | None = None,
+    config_root: Path | None = None,
+) -> None:
+    path = get_manifest_path(tool_id, ds_home, config_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
@@ -63,11 +123,13 @@ def build_manifest(
     scope: str,
     ds_version: str,
     files: list[dict[str, Any]],
+    config_root: Path | None = None,
 ) -> dict[str, Any]:
     return {
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "tool": tool,
         "scope": scope,
+        "config_root": str(Path(config_root).expanduser().resolve()) if config_root else None,
         "ds_version": ds_version,
         "installed_at": datetime.now(UTC).isoformat(),
         "files": files,

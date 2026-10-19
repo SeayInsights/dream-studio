@@ -33,13 +33,47 @@ dependencies = [
 ds = "interfaces.cli.ds:main"
 
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# compat.py is a top-level module, not a package; eight runtime modules import it.
+py-modules = ["compat"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["core*", "runtime*", "interfaces*", "spool*", "projections*", "emitters*", "canonical*", "control*", "shared*", "guardrails*", "integrations*"]
-exclude = ["tests*", "docs*", ".planning*", ".audit*"]
+include = ["core*", "runtime*", "interfaces*", "spool*", "projections*", "emitters*", "canonical*", "control*", "shared*", "guardrails*", "integrations*", "config", "config.*"]
+exclude = ["tests*", "docs*", ".planning*", ".audit*", "*.__pycache__", "*.tests", "*.tests.*"]
+
+# Runtime data that lives INSIDE a package directory ships as package data. "*" covers
+# every package (namespace packages included, so canonical/skills/**, the migrations and
+# the CLI templates are all reached); the second entry names the one dotfile the runtime
+# reads, which "*" does not match.
+[tool.setuptools.package-data]
+"*" = ["*", ".released_version"]
+
+# Build output and sources the runtime never reads stay out of the wheel.
+[tool.setuptools.exclude-package-data]
+"*" = ["*.pyc", "*.pyo", "*.rs", "Cargo.toml", "Cargo.lock"]
+
+[tool.dream-studio]
+# Runtime data that lives OUTSIDE every package, at the repository root. setup.py's
+# build_py copies each match into the wheel at the same relative path, so an installed
+# code_root() (core.config.paths) has the layout a checkout has and a
+# `code_root() / "packs.yaml"` read works unchanged in both. The wheel is meant for a
+# dedicated virtual environment (`ds self-install` creates one per app version): its
+# top-level packages already have generic names (core, config, runtime, shared).
+shipped-root-data = [
+    "VERSION",
+    "packs.yaml",
+    "config.yml",
+    "docs/canonical/*.json",
+    "docs/contracts/**/*",
+    "adapter-projections/**/*",
+    "schemas/*.json",
+    "templates/**/*",
+    "hooks/git/pre-push",
+]
 
 [tool.black]
 line-length = 100

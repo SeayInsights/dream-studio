@@ -111,7 +111,7 @@ def doctor(
             _maybe_emit_transition(tool_id, ds_home, state.value)
             return result
 
-        manifest = read_manifest(tool_id, ds_home)
+        manifest = read_manifest(tool_id, ds_home, config_root)
 
         if manifest is None:
             if _canonical_readable(canonical_root):

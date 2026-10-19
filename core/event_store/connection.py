@@ -116,8 +116,7 @@ def _get_event_store(
     # For testing: create new instance with override
     if override_db_path is not None or override_conn is not None:
         try:
-            repo_root = Path(__file__).resolve().parents[2]
-            docs_dir = repo_root / "docs" / "canonical"
+            docs_dir = paths.code_root() / "docs" / "canonical"
 
             if not docs_dir.exists():
                 return None
@@ -143,8 +142,7 @@ def _get_event_store(
     if _event_store is None:
         try:
             # Initialize validator with taxonomy and schema from docs/canonical/
-            repo_root = Path(__file__).resolve().parents[2]
-            docs_dir = repo_root / "docs" / "canonical"
+            docs_dir = paths.code_root() / "docs" / "canonical"
 
             if not docs_dir.exists():
                 # Canonical schema not found - skip event emission
@@ -175,7 +173,10 @@ WAL_SIZE_LIMIT_BYTES = int(os.environ.get("DS_WAL_SIZE_LIMIT_BYTES", str(64 * 10
 
 def _connect(db_path: Path | None = None) -> sqlite3.Connection:
     if db_path is not None:
+        from core.config.sqlite_bootstrap import assert_may_create_database
+
         db_path = Path(db_path)
+        assert_may_create_database(db_path)
         db_path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(str(db_path), timeout=30.0)
         conn.row_factory = sqlite3.Row

@@ -16,6 +16,7 @@ before calling this dispatcher. This module contains no tool-specific logic.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -31,7 +32,14 @@ def _get_plugin_root() -> Path:
             return Path(sidecar.read_text(encoding="utf-8").strip()).resolve()
         except Exception:
             pass
-    return Path(__file__).parent.parent.resolve()
+    copied_tree = Path(__file__).parent.parent.resolve()
+    if (copied_tree / "runtime" / "hooks").is_dir():
+        return copied_tree
+    # Run as a module (`python -I -m runtime.dispatch.hooks`) from an installed app or a
+    # checkout: the handlers belong to the same code root this module was imported from.
+    from core.config.paths import code_root
+
+    return code_root()
 
 
 def _get_source_root() -> Path | None:
@@ -141,6 +149,27 @@ def main() -> int:
         from core.config import paths as _paths  # noqa: PLC0415
 
         state_dir = _paths.state_dir()
+
+        # An installed app's handlers come from the app. Claude Code sets
+        # CLAUDE_PLUGIN_ROOT for plugin hooks, and the handlers that read it put that
+        # directory -- a checkout, say -- on sys.path; drop it before any of them loads.
+        if not _paths.is_source_checkout():
+            os.environ.pop("CLAUDE_PLUGIN_ROOT", None)
+
+        # A LOST AUTHORITY IS SAID, NOT HIDDEN. With studio.db gone from an installed home
+        # the prompt hooks printed the onboarding banner and "Pulse check complete ...
+        # HEALTHY". The prompt now carries the restore guidance instead, and no handler
+        # runs: each would only report on, or try to write, an authority that is not there.
+        if event_name in ("UserPromptSubmit", "SessionStart"):
+            from core.config.database import _default_db_path  # noqa: PLC0415
+            from core.config.sqlite_bootstrap import lost_authority_message  # noqa: PLC0415
+
+            lost = lost_authority_message(_default_db_path())
+            if lost:
+                print(f"<dream-studio-authority-lost>\n{lost}\n</dream-studio-authority-lost>")
+                return 0
+            for marker in state_dir.glob(".authority-refused-*"):
+                marker.unlink(missing_ok=True)
 
         def _run(name: str, payload: str) -> None:
             # The blocking enforce hooks queue a finished telemetry row rather than

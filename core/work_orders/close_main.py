@@ -1129,7 +1129,7 @@ def close_work_order(
             # A ledger that exists but cannot be read is NOT zero residual risk.
             result["unverified_risks_note"] = (
                 f"residual-risk ledger could not be read — {_ledger['unreadable']}."
-                " Re-run: py -m interfaces.cli.ds work-order verify " + work_order_id
+                " Re-run: ds work-order verify " + work_order_id
             )
         elif _ledger and _ledger.get("unverified"):
             result["unverified_risks"] = _ledger["unverified"]
@@ -1174,15 +1174,13 @@ def close_work_order(
         result["next_block"] = (
             f"NEXT WORK ORDER: {next_title}{seq_str}"
             f" / ID: {next_id}"
-            f" / Run: py -m interfaces.cli.ds work-order start {next_id}"
+            f" / Run: ds work-order start {next_id}"
         )
     elif milestone_complete and wo_milestone_id:
         result["milestone_complete"] = True
         result["milestone_id"] = wo_milestone_id
         result["next_command"] = f"ds milestone close {wo_milestone_id}"
-        result["next_block"] = (
-            f"MILESTONE COMPLETE / Run: py -m interfaces.cli.ds milestone close {wo_milestone_id}"
-        )
+        result["next_block"] = f"MILESTONE COMPLETE / Run: ds milestone close {wo_milestone_id}"
     else:
         result["next_block"] = "NO NEXT WORK ORDER FOUND"
 

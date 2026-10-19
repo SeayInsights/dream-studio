@@ -19,7 +19,11 @@ bash install.sh
 .\install.ps1
 ```
 
-The script installs Python dependencies, bootstraps the runtime database, and installs the Claude Code integration.
+The script installs the Python dependencies, then runs
+`ds self-install --config-root <root> --execute`: it builds Dream Studio from the
+committed checkout into `~/.dream-studio` as a versioned app, creates or migrates the
+authority, and installs the Claude Code integration into `CLAUDE_CONFIG_DIR` (or
+`~/.claude`). pip needs network access or a warm cache. Running it again upgrades.
 
 ## Manual Install
 
@@ -34,28 +38,29 @@ For reproducible installs with exact version pinning:
 py -m pip install -r requirements.lock
 ```
 
-### 2. Bootstrap the runtime database
+### 2. Install Dream Studio into its home
 
 ```bash
-py -m interfaces.cli.ds rehearsal-install --rehearsal-home ~/.dream-studio
+py -m interfaces.cli.ds self-install --config-root ~/.claude --execute
 ```
 
-Windows:
-```powershell
-py -m interfaces.cli.ds rehearsal-install --rehearsal-home "$env:USERPROFILE\.dream-studio"
-```
+This builds the committed state of the checkout (it refuses a dirty tree) into
+`~/.dream-studio/app/<version>-<sha>/venv` and installs the Claude Code integration from
+that app into each `--config-root`. pip fetches the pinned dependencies: the first run needs
+network access or a warm pip cache. `--dry-run` in place of `--execute` prints every write first.
 
-### 3. Install the Claude Code integration
+### 3. Put ds on PATH
 
-```bash
-py -m interfaces.cli.ds integrate install claude_code --execute
-```
+Add `~/.dream-studio/bin` to PATH, ahead of any older `ds` launcher. `ds.cmd` (Windows) or
+`ds` there runs the current app with `--home` pinned. An older `ds.cmd` in `~/.local/bin`
+that ran a checkout against this home is rewritten by `self-install` to call it (the
+previous file is kept in the install's backup directory); one pinned to another home is left alone.
 
 ### 4. Verify installation
 
 ```bash
-py -m interfaces.cli.ds validate   # DB health check
-py -m interfaces.cli.ds doctor     # Claude Code integration check
+ds validate   # DB health check
+ds doctor     # Claude Code integration check
 ```
 
 Both should return status `pass` / `ready: true`.
@@ -64,7 +69,7 @@ Both should return status `pass` / `ready: true`.
 
 Register your first project:
 ```bash
-py -m interfaces.cli.ds project register --name "My Project"
+py -m interfaces.cli.ds project register --name "My Project" --path /path/to/your/project
 ```
 
 Then run `ds project state` to see where the work stands. In Claude Code, `resume:`
@@ -74,14 +79,16 @@ or `what's next:` routes you there.
 
 ```bash
 git pull
-py -m interfaces.cli.ds integrate install claude_code --execute
-py -m interfaces.cli.ds doctor
+py -m interfaces.cli.ds self-install --config-root ~/.claude --execute
+ds doctor
 ```
+
+`ds self-install --rollback --execute` returns to the previous app.
 
 ## Troubleshooting
 
-- `ds doctor` reports stale skills → run `py -m interfaces.cli.ds integrate install claude_code --execute`
-- `ds validate` fails → check `~/.dream-studio/state/studio.db` exists; re-run rehearsal-install
-- Module not found errors → ensure you're running from the repo root directory
+- `ds doctor` reports stale skills → run `ds integrate install claude_code --config-root ~/.claude --execute` (the installed app), or `py -m interfaces.cli.ds self-install --config-root ~/.claude --execute`
+- `ds validate` reports no authority in an installed home → restore it from a backup (`ds --home ~/.dream-studio restore <dir> --execute`); see docs/operations/troubleshooting.md. Never re-create it.
+- Module not found errors from a checkout → run from the repo root directory, or use the installed `ds`
 
 See `docs/setup/` for detailed configuration and hook setup.

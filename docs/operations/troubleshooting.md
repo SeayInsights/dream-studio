@@ -19,6 +19,46 @@ Check:
 Do not copy files from another runtime home unless a restore plan has been
 approved.
 
+## Refusing To Create A New, Empty Authority
+
+Symptom: a command fails with `Refusing to create a new, empty authority at
+<home>/state/studio.db`.
+
+The home has had an install (`state/installed-version` or an integration manifest)
+but its authority file is gone, empty or not a SQLite database. Creating it would
+replace the projects, work orders and history with an empty database: on 2026-09-23
+an operator's authority was lost exactly that way, when a path resolved to a missing
+studio.db and a connection quietly created an empty one. Restore it:
+`ds --home <home> restore <dir> --execute` for a backup directory holding `studio.db`
+(`ds self-install` writes these under `state/backups/self-install-*`), or copy a
+`state/backups/studio-pre-*.db` or `state/studio.db.bak` file to the authority path.
+The refusal lists the backups present and what each holds. Only to start over
+deliberately, set `DREAM_STUDIO_CREATE_AUTHORITY=<path of that studio.db>` and run
+`ds --home <home> migrate init`, which creates a new, empty authority at the released
+schema; with the variable naming that file, nothing reports the authority as lost.
+If the file is there but SQLite cannot read it, `migrate init` refuses it: move it aside
+first (rename it; it may be the only copy). Afterwards unset the variable and record
+the new authority's baseline with `ds --home <home> doctor --record-counts`.
+
+`Refusing to create ...: no migration files were found` means the install is
+incomplete; reinstall with `ds self-install --repo <checkout> --execute` (`--repo` is needed
+when the installed `ds` runs it).
+
+## Doctor Warns About Row Counts
+
+`ds doctor` reports `checks.authority_data`: row counts of projects, work orders,
+tasks and events. A table with zero rows is a note. A warning (status
+`attention_required`, exit 1) is a count below the baseline in
+`state/authority-counts.json`, an unreadable or missing authority in an installed home,
+or an installed home whose authority is empty with no counts ever recorded. Compare
+against the newest backup before doing anything else. `ds doctor --record-counts` (and every `ds self-install`)
+records a new baseline; a plain `ds doctor` writes nothing.
+
+## MCP Server Will Not Start
+
+`ds mcp serve` defaults to `127.0.0.1:8788`; it used 8765, which other local MCP
+tooling also uses. Pass `--port` to choose another.
+
 ## Current Directory Assumptions
 
 Symptom: a command only works from the Dream Studio repo.
@@ -29,7 +69,10 @@ Check:
 - Use `--home <dream-studio-home>` explicitly for installed or rehearsal state.
 - On Windows, prefer the plain-command launcher `ds.cmd`, or run
   `ds install-command --execute` to create user-local `ds.cmd` and `ds.ps1`
-  launchers in a PATH directory such as `%USERPROFILE%\.local\bin`.
+  launchers in a PATH directory such as `%USERPROFILE%\.local\bin`. In a home
+  with an installed app (`ds self-install`), those launchers call
+  `<home>\bin\ds.cmd`, which runs the current app; they never point back at a
+  checkout.
 - For packaged installs, verify `DREAM_STUDIO_SOURCE_ROOT` and
   `DREAM_STUDIO_HOME`.
 
@@ -59,6 +102,16 @@ run once before it is used.
 Use `ds version` to confirm the source/runtime resolver, `ds doctor` for
 read-only health checks, and `ds repair` for a non-mutating repair plan. These
 commands do not perform cleanup, live SQLite writes, or destructive repair.
+
+## Installed ds Fails With ModuleNotFoundError: No module named 'compat'
+
+Symptom: `ds` from a `pip install`ed wheel exits on `import compat`, or runs but
+never validates an event.
+
+Wheels built before 2026-10 left out the top-level `compat` module, the `config`
+package and every runtime data file. Rebuild from a current commit; the wheel now
+ships them (`pyproject.toml` package data and `[tool.dream-studio]
+shipped-root-data`, copied by `setup.py`).
 
 ## Legacy Install Detected
 

@@ -31,6 +31,24 @@ def _default_db_path() -> Path:
     return home_dir() / "state" / "studio.db"
 
 
+def connect_existing(
+    db_path: str | Path, *, read_only: bool = False, timeout: float = 30.0
+) -> sqlite3.Connection:
+    """Open a database file that must already exist; NEVER create one.
+
+    sqlite3.connect() on a missing path creates a 0-byte file, and around the codebase
+    that is how an installed home's lost authority came back as an empty one: a config
+    read, a runtime-state lookup or a rubric check made the file, and the next migrating
+    open turned it into an authority with no projects. This opens with mode=rw (or ro),
+    so a missing file raises sqlite3.OperationalError ("unable to open database file")
+    for the caller's existing sqlite3.Error handling instead.
+    """
+    mode = "ro" if read_only else "rw"
+    return sqlite3.connect(
+        f"{Path(db_path).resolve().as_uri()}?mode={mode}", uri=True, timeout=timeout
+    )
+
+
 def _read_only_db_path() -> Path:
     """Resolve the DB path for read-only callers without initializing runtime."""
     if DatabaseRuntime._instance is not None:
@@ -88,8 +106,9 @@ class DatabaseRuntime:
 
     def _initialize_database(self):
         """Initialize database with proper settings."""
-        from core.config.sqlite_bootstrap import run_migrations
+        from core.config.sqlite_bootstrap import assert_may_create_database, run_migrations
 
+        assert_may_create_database(self.db_path)
         conn = sqlite3.connect(str(self.db_path), timeout=30.0)
         try:
             # Enable WAL mode
@@ -151,6 +170,11 @@ class DatabaseRuntime:
             conn = sqlite3.connect(uri, uri=True, timeout=30.0, check_same_thread=False)
             conn.execute("PRAGMA query_only = ON")
         else:
+            # The singleton lives for the whole process: an authority deleted after it was
+            # initialised must be refused here as well, not re-created as an empty file.
+            from core.config.sqlite_bootstrap import assert_may_create_database
+
+            assert_may_create_database(self.db_path)
             conn = sqlite3.connect(str(self.db_path), timeout=30.0, check_same_thread=False)
 
         conn.row_factory = sqlite3.Row
@@ -207,8 +231,12 @@ def get_connection(read_only: bool = False) -> sqlite3.Connection:
     else:
         db_path = get_db_path()
 
-    # Ensure directory exists (unless read-only)
+    # Ensure directory exists (unless read-only), and never quietly create an authority
+    # that should already exist (core.config.sqlite_bootstrap.assert_may_create_database).
     if not read_only:
+        from core.config.sqlite_bootstrap import assert_may_create_database
+
+        assert_may_create_database(db_path)
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Use URI for read-only mode

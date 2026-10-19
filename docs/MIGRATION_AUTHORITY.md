@@ -10,13 +10,15 @@
 
 **Guard mechanism (WO-MS):**
 
-1. **Released version sentinel** — `core/event_store/migrations/.released_version` contains the highest migration number that has landed on `main`. Any migration with a higher number is considered unreleased.
+1. **Released version sentinel**: `core/event_store/migrations/.released_version` contains the highest migration number that has landed on `main`. It is a shipped, read-only default: nothing at runtime writes it. `ds migrate activate` records its own activation beside the authority it activated, in `<home>/state/migrations-activated-version`, and an authority's released version is the larger of the two (`sqlite_bootstrap.released_migration_version(db_file)`). Any migration with a higher number is considered unreleased.
 
 2. **Auto-skip on live DB** — The migration runner (`sqlite_bootstrap.run_migrations()`) compares each pending migration's version against the released version. If the migration is unreleased AND the DB is the live authority AND `DREAM_STUDIO_APPLY_UNRELEASED` is not set, the migration is skipped with a `RuntimeWarning`.
 
-3. **Auto-backup before first live apply** — When any migration is about to apply to the live authority DB, a timestamped snapshot is written to `~/.dream-studio/state/backups/studio-pre-N-TIMESTAMP.db` first. This is a no-op cost for released-only migrations; it is the safety net for the rare `DREAM_STUDIO_APPLY_UNRELEASED=1` path.
+3. **Auto-backup before first live apply**: When any migration is about to apply to the live authority DB, a timestamped snapshot is written beside it, to `<home>/state/backups/studio-pre-N-TIMESTAMP.db`, first. This is a no-op cost for released-only migrations; it is the safety net for the rare `DREAM_STUDIO_APPLY_UNRELEASED=1` path.
 
-**Live authority = `~/.dream-studio/state/studio.db` (and any path under `~/.dream-studio/`). Temp DBs, test DBs, and CI DBs in other paths are never gated.**
+4. **No silent re-creation**: `bootstrap_database`, `_connect`, `get_connection` and the database runtime refuse to CREATE `<home>/state/studio.db` when that home shows an install (`state/installed-version`, or a manifest under `integrations/`) and the file is missing, 0 bytes, or has no `_schema_version` (what a raw `sqlite3.connect` leaves behind), and refuse to create any database when no migration file exists. The hot raw opens (config, runtime state, artifacts, the rubric check, the pulse) open with `mode=rw`/`ro` through `core.config.database.connect_existing` and never create the file; `backup_db` never copies an empty or schema-less database and keeps an existing `studio.db.bak` that holds more business rows as `studio.db.bak.<timestamp>`; `rehearsal-install` refuses an installed home. The error names `<home>/state/backups` and `ds restore`. `DREAM_STUDIO_CREATE_AUTHORITY=<path of that studio.db>` creates a fresh, empty authority on purpose.
+
+**Live authority = any database inside the Dream Studio home in use (`DREAM_STUDIO_HOME` / `--home`, `core.config.paths.home_dir()`) or inside the default `~/.dream-studio`. Temp DBs, test DBs, and CI DBs in other paths are never gated.** (The test suite's own home is opted in with `DREAM_STUDIO_APPLY_UNRELEASED=1` by `tests/conftest.py`.)
 
 ### Developer workflow
 
@@ -45,6 +47,10 @@ echo "156" > core/event_store/migrations/.released_version
 ```
 
 This file is tracked by git and reviewed as part of the migration PR. After merge, `main` carries the updated sentinel and the guard gate advances. **The sentinel bump is not optional and not automatic:** shipping a migration `.sql` file without bumping `.released_version` in the same change set leaves every end-user install reading the old ceiling, so the new migration reports as *pending* even though its SQL is present. The current released sentinel is **156** (AI-event project attribution — `ai_canonical_events.project_id`).
+
+### Activating on an operator machine
+
+`ds migrate activate --confirm` applies the pending migrations to the authority and writes `<home>/state/migrations-activated-version`. It never edits the checkout or the installed app: before 2026-10 it rewrote `.released_version` in the source tree, which left the operator's checkout permanently dirty and would have written into an installed app's site-packages (`tests/unit/test_cli_never_writes_code_root.py`).
 
 ### Migration-risk gate integration
 
@@ -119,7 +125,9 @@ All new migrations MUST be added here. Migrations 001-141 were collapsed into
 `142_lean_baseline.sql` by the 2026-07-04 squash above; new migrations start
 at 143. The migration runner in `core/config/sqlite_bootstrap.py` (delegated
 to by the thin wrappers in `core/event_store/studio_db.py`) reads from this
-directory exclusively.
+directory exclusively, through `core.config.paths.code_root()`: the checkout, or
+an installed wheel, which ships the directory (`*.sql` and `.released_version`)
+as package data.
 
 ## Schema Version Authority
 

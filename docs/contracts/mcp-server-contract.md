@@ -7,7 +7,8 @@ transport, `tools.py` tool registry, `auth.py` root token + named clients)
 
 ## Purpose
 
-Exposes a curated, read-only slice of Dream Studio's SQLite authority as an MCP
+Exposes a curated slice of Dream Studio's SQLite authority (reads, plus the writes in
+"Capability-gated tools" below) as an MCP
 (Model Context Protocol) server, so a network client — Fulcrum, an MCP gateway, or
 any other MCP-speaking tool — can read project, work-order, review, skill, memory,
 and health state without shelling out to the `ds` CLI or touching SQLite directly.
@@ -50,12 +51,30 @@ Two distinct kinds of caller authenticate against this server:
   exactly once" shape `core.work_orders.review_answers.record_dispatch` already uses
   for a review lane's per-reviewer credentials.
 
-Today every tool declares `required_capability=None` (read-only), so a named client's
-capabilities currently gate nothing real — issuing one now is provisioning ahead of
-the tools that will consume it, not a functional access grant yet. A tool with
-`required_capability=None` is reachable by the root token **or any authenticated
-named client**, regardless of that client's own granted capabilities: capabilities
-only ever gate a tool that declares one, they never narrow what's already open.
+A tool with `required_capability=None` (the read-only tools) is reachable by the root
+token **or any authenticated named client**, including a read-only client with no
+capability at all: capabilities only ever gate a tool that declares one, they never
+narrow what is already open. The root token satisfies every capability.
+
+### Capability-gated tools
+
+Each of these writes to the authority and is refused to a named client that does not
+hold its capability:
+
+| Tool | Capability |
+| --- | --- |
+| `ds_project_create` | `project:create` |
+| `ds_milestone_create` | `milestone:create` |
+| `ds_work_order_create` | `work_order:create` |
+| `ds_work_order_add_task` | `work_order:add_task` |
+| `ds_work_order_start` | `work_order:start` |
+| `ds_work_order_task_start` | `work_order:task_mutate` |
+| `ds_work_order_task_done` | `work_order:task_mutate` |
+| `ds_work_order_advance` | `work_order:advance` |
+| `ds_work_order_close` | `work_order:close` |
+| `ds_review_dispatch` | `review:dispatch` |
+| `ds_review_run` | `review:run` |
+| `ds_review_record` | `review:record` |
 
 **`review:dispatch` and `review:record` can never be granted to the same client.**
 `record_dispatch()` mints every reviewer's credential in one call and returns all of
@@ -102,11 +121,40 @@ other client. Neither the root token nor a client's token is ever returned by an
 call or logged; only `ds mcp token` and `ds mcp client add|rotate`'s own stdout carry a
 plaintext token, on the operator's own terminal, once, at issuance.
 
+## Starting it
+
+```
+ds mcp serve                      # http://127.0.0.1:8788/mcp
+ds mcp serve --port 9000          # any other free port
+```
+
+The default port is 8788. It was 8765 until 2026-10, a port other local MCP tooling
+commonly uses, so on a machine running both whichever started second failed to bind.
+The server runs in the foreground until stopped; run it from the installed app's
+launcher (`<home>/bin/ds.cmd mcp serve`, written by `ds self-install`) so it serves the
+installed code, not a checkout.
+
+## Connecting a client
+
+A client that is not the operator's own terminal (a gateway, an agent, another tool)
+gets its own named, scoped credential, never the root token:
+
+```
+ds mcp client add <name> --capabilities <only what it calls>
+```
+
+The token is printed once. Read-only tools need no capability: a client that only
+reads is added with `ds mcp client add <name> --read-only`. Otherwise grant the smallest
+capability set its calls require, and never `review:dispatch` together with
+`review:record` (`auth.add_client` refuses that pair). A refused `client add`, `revoke`
+or `rotate` exits 1. `ds mcp client revoke <name>`
+ends one client's access without touching any other.
+
 ## Network exposure
 
-`ds mcp serve` binds `127.0.0.1` by default. Passing `--host 0.0.0.0` exposes the
-server to the network (required for Fulcrum or a gateway running as a separate
-process to reach it) and prints an explicit warning on start. Binding beyond
+`ds mcp serve` binds `127.0.0.1` by default, which every process on the same machine
+can reach. Passing `--host 0.0.0.0` is needed only for a client on another machine; it
+exposes the server to the network and prints an explicit warning on start. Binding beyond
 localhost does not relax auth — every `/mcp` call still requires the bearer token
 regardless of bind address.
 

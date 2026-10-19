@@ -24,6 +24,8 @@ def test_plugin_root_raises_when_no_markers(monkeypatch):
     def no_plugin_json(self):
         if ".claude-plugin" in str(self) and self.name == "plugin.json":
             return False
+        if self.name == "packs.yaml":  # the code-root fallback's other marker
+            return False
         return orig_is_file(self)
 
     def no_skills_or_rules(self):

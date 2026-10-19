@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from core.config import paths
+from core.config.database import connect_existing
 
 _TABLE = "business_work_order_artifacts"
 
@@ -211,7 +212,7 @@ def set_wo_artifact(
         # instead of failing instantly. It is not the whole fix -- a caller holding an
         # open transaction for the length of a verify outlasts any timeout, which is
         # what `conn` is for.
-        conn = sqlite3.connect(str(target), timeout=2.0)
+        conn = connect_existing(target, timeout=2.0)
     try:
         for attempt in range(_LOCK_ATTEMPTS):
             try:
@@ -293,7 +294,7 @@ def get_wo_artifact_envelope(
     from core.work_orders.artifact_envelope import unwrap
 
     try:
-        conn = sqlite3.connect(str(_resolve_db(db_path)))
+        conn = connect_existing(_resolve_db(db_path))
     except sqlite3.Error:
         return None, None
     try:
@@ -322,7 +323,7 @@ def list_wo_artifacts(
     """Return ``[(instance_key, content), ...]`` for all rows of a kind (e.g. every
     eval stage for a WO), ordered by instance_key. Empty when absent / table missing."""
     try:
-        conn = sqlite3.connect(str(_resolve_db(db_path)))
+        conn = connect_existing(_resolve_db(db_path))
     except sqlite3.Error:
         return []
     try:
@@ -352,7 +353,7 @@ def list_artifacts_by_kind(
     table is absent (unreleased migration on the live authority DB).
     """
     try:
-        conn = sqlite3.connect(str(_resolve_db(db_path)))
+        conn = connect_existing(_resolve_db(db_path))
     except sqlite3.Error:
         return []
     try:

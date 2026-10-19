@@ -21,6 +21,7 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
     report_cmd = enforce_sub.add_parser(
         "report", help="What would have been blocked (observe/warn tier), by rule"
     )
+    report_cmd.set_defaults(reads_authority=True)
     report_cmd.add_argument(
         "--since",
         default=None,

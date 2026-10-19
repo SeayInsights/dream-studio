@@ -63,3 +63,17 @@ def test_backup_path_contains_timestamp(tmp_path):
     backup_path = backup_before_write(target, backup_dir)
     assert "T" in backup_path.name
     assert ".bak" in backup_path.name
+
+
+def test_integration_backups_keep_their_relative_paths(tmp_path):
+    """Seven __init__.py files backed up by basename left one."""
+    root = tmp_path / "root"
+    a, b = root / "x" / "__init__.py", root / "y" / "__init__.py"
+    for f, text in ((a, "a"), (b, "b")):
+        f.parent.mkdir(parents=True)
+        f.write_text(text, encoding="utf-8")
+    backups = tmp_path / "backups"
+    first = backup_before_write(a, backups, relative_to=root)
+    second = backup_before_write(b, backups, relative_to=root)
+    assert first != second
+    assert first.read_text(encoding="utf-8") == "a" and second.read_text(encoding="utf-8") == "b"

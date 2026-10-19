@@ -29,10 +29,42 @@ from .doctor_checks import (
     _check_failed_events,
     _check_handoff_spawner,
     _check_hook_freshness,
+    _check_installed_app,
     _check_stale_dbs,
     _check_version_current,
 )
 from .doctor_skill_sync import _check_skills_installed
+
+#: Runs the ds entry point from an explicit code root (argv[1]); the rest is ds's argv.
+_DS_BOOTSTRAP = (
+    "import sys; sys.path.insert(0, sys.argv.pop(1)); "
+    "from interfaces.cli.ds import main; sys.exit(main(sys.argv[1:]))"
+)
+
+
+def _ds_command(home: Path, *args: str) -> list[str]:
+    """The command that re-runs THIS ds (this interpreter, this code root) on *home*.
+
+    `sys.executable -m interfaces.cli.ds` put the working directory first on sys.path,
+    so an installed app's repair run inside a checkout executed the checkout; and with
+    no --home it repaired the default home rather than the one doctor examined.
+    -I drops the working directory and PYTHON* variables, -X utf8 keeps output decodable,
+    and the code root is passed explicitly.
+    """
+    from core.config.paths import code_root
+
+    return [
+        sys.executable,
+        "-I",
+        "-X",
+        "utf8",
+        "-c",
+        _DS_BOOTSTRAP,
+        str(code_root()),
+        "--home",
+        str(home),
+        *args,
+    ]
 
 
 def run_doctor_checks(
@@ -40,8 +72,17 @@ def run_doctor_checks(
     source_root: Path,
     dream_studio_home: Path | None = None,
     fix: bool = False,
+    record_counts: bool = False,
+    accept_drop: bool = False,
 ) -> dict[str, Any]:
-    """Composite doctor status. fix=True triggers self-healing side effects."""
+    """Composite doctor status. fix=True triggers self-healing side effects.
+
+    Without fix or record_counts this writes nothing: every authority read goes through
+    a read-only connection and the main-CI cache is read but not written back
+    (tests/unit/test_doctor_read_only.py snapshots the home around a run).
+    record_counts=True writes the business row counts as the baseline later runs
+    compare against (core.health.authority_data).
+    """
 
     validation = run_validation(source_root=source_root, dream_studio_home=dream_studio_home)
     paths = resolve_installed_runtime_paths(
@@ -58,6 +99,7 @@ def run_doctor_checks(
     handoff_spawner_info = _check_handoff_spawner(source_root)
     stale_dbs_info = _check_stale_dbs(paths.dream_studio_home)
     hook_freshness_info = _check_hook_freshness(source_root, claude_dir)
+    installed_app_info = _check_installed_app(paths.dream_studio_home)
 
     from core.config.schema_coherence import check_schema_coherence
 
@@ -73,6 +115,29 @@ def run_doctor_checks(
     from core.health.doctor_bypass import bypass_audit
 
     bypass_audit_info = bypass_audit(live_db)
+
+    from core.health.authority_data import authority_data_check
+    from core.health.authority_data import record_counts as _record_counts
+
+    from core.health.authority_data import drops
+
+    authority_data_info = authority_data_check(paths.dream_studio_home, live_db)
+    record_refused = None
+    if record_counts and authority_data_info["readable"]:
+        if drops(authority_data_info) and not accept_drop:
+            record_refused = (
+                "not recorded: the counts dropped since the last baseline "
+                f"({'; '.join(drops(authority_data_info))}). Find out why first; to record "
+                "the smaller numbers as the new baseline anyway, add --accept-drop."
+            )
+        else:
+            authority_data_info["recorded"] = _record_counts(paths.dream_studio_home, live_db)
+            authority_data_info = {
+                **authority_data_check(paths.dream_studio_home, live_db),
+                "recorded": authority_data_info["recorded"],
+            }
+    if record_refused:
+        authority_data_info["record_refused"] = record_refused
 
     # WO-MAINRED-VISIBILITY: the post-merge full-ci verdict for main. pr-smoke
     # green is merge authorization, not proof main is green — and main sat red
@@ -92,8 +157,19 @@ def run_doctor_checks(
     # a traceback instead of a doctor payload. The reader is built not to raise, but
     # "built not to" is what was believed before a TypeError from it took main red
     # for a day. An advisory check earns no right to abort the report around it.
+    from core.config.paths import is_source_checkout
+
     try:
-        main_ci_info = main_ci_status(repo_root=source_root, max_age_seconds=CACHE_MAX_AGE_SECONDS)
+        if not is_source_checkout(source_root):
+            # An installed app has no repository to ask about; main's CI is a
+            # development signal for a checkout.
+            raise LookupError(f"{source_root} is an installed app, not a source checkout")
+        main_ci_info = main_ci_status(
+            repo_root=source_root,
+            max_age_seconds=CACHE_MAX_AGE_SECONDS,
+            db_path=live_db,
+            write_cache=False,
+        )
         _main_ci_warning = main_ci_warning(main_ci_info)
         if _main_ci_warning:
             main_ci_info["warning"] = _main_ci_warning
@@ -109,12 +185,21 @@ def run_doctor_checks(
         not dispatcher_ok
         or skills_info["missing"]
         or failed_info["count"] >= 6
-        or not version_info["current"]
+        or version_info["current"] is False
     )
     has_warnings = 0 < failed_info["count"] < 6
 
+    # Data at risk: an authority_data or installed_app warning (a drop, a missing table, a
+    # lost authority, a ds that is not the installed app) is never a pass.
+    authority_attention = bool(
+        authority_data_info["warnings"]
+        or installed_app_info["warnings"]
+        or authority_data_info.get("record_refused")
+    )
     if critical_fail:
         overall = "fail"
+    elif authority_attention:
+        overall = "attention_required"
     elif not core_pass:
         overall = "attention_required"
     elif has_warnings:
@@ -131,19 +216,25 @@ def run_doctor_checks(
             or hook_freshness_info["stale"]
         ):
             try:
+                # The root this doctor examined, named explicitly: integrate would
+                # otherwise resolve one itself, and from a working directory inside some
+                # repository it would also write that repository's git pre-push hook.
                 subprocess.run(
-                    [
-                        sys.executable,
-                        "-m",
-                        "interfaces.cli.ds",
+                    _ds_command(
+                        paths.dream_studio_home,
                         "integrate",
                         "install",
                         "claude_code",
-                        "--execute",
-                    ],
+                        "--config-root",
+                        str(claude_dir),
+                    )
+                    + ["--execute"],
                     check=False,
                 )
-                fix_actions.append("install: ran integrate install claude_code --execute")
+                fix_actions.append(
+                    f"install: ran integrate install claude_code --config-root {claude_dir} "
+                    "--execute"
+                )
             except Exception as exc:
                 fix_actions.append(f"install: failed — {exc}")
         if failed_info["count"] > 0:
@@ -164,16 +255,16 @@ def run_doctor_checks(
                 fix_actions.append(f"requeue: failed — {exc}")
             try:
                 subprocess.run(
-                    [sys.executable, "-m", "interfaces.cli.ds", "spool", "ingest"],
+                    _ds_command(paths.dream_studio_home, "spool", "ingest"),
                     check=False,
                 )
                 fix_actions.append("spool ingest: ran spool ingest to process requeued events")
             except Exception as exc:
                 fix_actions.append(f"spool ingest: failed — {exc}")
-        if not version_info["current"]:
+        if version_info["current"] is False:
             try:
                 subprocess.run(
-                    [sys.executable, "-m", "interfaces.cli.ds", "update"],
+                    _ds_command(paths.dream_studio_home, "update"),
                     check=False,
                 )
                 fix_actions.append("update: ran ds update")
@@ -185,11 +276,12 @@ def run_doctor_checks(
         "derived_view": True,
         "primary_authority": False,
         "status": overall,
+        "authority_attention": authority_attention,
         "checks": {
             "sqlite_exists": validation["sqlite_exists"],
             "schema_version_known": validation["schema_version"] is not None,
             "module_profiles_valid": not validation["module_profile_errors"],
-            "doctor_runs_read_only": True,
+            "doctor_runs_read_only": not (fix or record_counts),
             "dispatcher_hooks_installed": dispatcher_ok,
             "skills_installed": skills_info,
             "agents_installed": agents_info,
@@ -201,6 +293,8 @@ def run_doctor_checks(
             "stale_dbs": stale_dbs_info,
             "hook_freshness": hook_freshness_info,
             "bypass_audit": bypass_audit_info,
+            "installed_app": installed_app_info,
+            "authority_data": authority_data_info,
             "main_ci": main_ci_info,
         },
         "validation": validation,

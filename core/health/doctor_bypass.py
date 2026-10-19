@@ -34,7 +34,9 @@ def bypass_audit(db_path: Path, *, since_days: int = 7) -> dict[str, Any]:
         "gate_bypasses": {},
     }
     try:
-        conn = sqlite3.connect(f"file:{Path(db_path).as_posix()}?mode=ro", uri=True, timeout=2.0)
+        from core.config.sqlite_readonly import connect_read_only
+
+        conn = connect_read_only(db_path, timeout=2.0)
         conn.row_factory = sqlite3.Row
     except sqlite3.Error:
         result["note"] = "authority DB unavailable"

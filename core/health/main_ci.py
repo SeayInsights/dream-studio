@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -59,6 +60,14 @@ _TIMEOUT = 25
 # remove — caching it silently would be a regression dressed as an optimisation.
 CACHE_MAX_AGE_SECONDS = 300
 _CACHE_KEY_PREFIX = "main_ci."
+
+
+def _clip(text: str, limit: int) -> str:
+    """*text* cut to at most *limit* characters at a word boundary, marked when cut."""
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 3].rsplit(" ", 1)[0] or text[: limit - 3]
+    return cut.rstrip() + "..."
 
 
 def _cache_key(repo_root: Path | None) -> str:
@@ -161,6 +170,9 @@ def _gh_json(args: list[str], cwd: Path | None) -> tuple[Any, str | None]:
         result = subprocess.run(
             ["gh", *args],
             cwd=str(cwd) if cwd else None,
+            # A read must leave nothing behind: with telemetry on, gh writes a
+            # device-id into the user's state directory (and reports the call).
+            env={**os.environ, "GH_TELEMETRY": "0", "GH_NO_UPDATE_NOTIFIER": "1"},
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -191,7 +203,7 @@ def _gh_json(args: list[str], cwd: Path | None) -> tuple[Any, str | None]:
         return None, "gh returned no usable exit status"
     if result.returncode != 0:
         detail = (_text(result.stderr) or _text(result.stdout)).strip().splitlines()
-        reason = detail[0][:200] if detail else f"gh exited {result.returncode}"
+        reason = _clip(detail[0], 200) if detail else f"gh exited {result.returncode}"
         return None, reason
     raw = _text(result.stdout)
     if not raw.strip():
@@ -247,7 +259,7 @@ def _local_head_includes(
     # Any other exit is git declining to answer (unknown object in a shallow
     # clone, not a repository, bad sha) — not evidence either way.
     detail = (probe.stderr if isinstance(probe.stderr, str) else "").strip().splitlines()
-    return None, (detail[0][:160] if detail else f"git merge-base exited {code}")
+    return None, (_clip(detail[0], 160) if detail else f"git merge-base exited {code}")
 
 
 def main_ci_status(
@@ -256,6 +268,7 @@ def main_ci_status(
     limit: int = 5,
     max_age_seconds: int = 0,
     db_path: Path | None = None,
+    write_cache: bool = True,
 ) -> dict[str, Any]:
     """Latest ``full-ci`` conclusion for ``main``.
 
@@ -281,7 +294,8 @@ def main_ci_status(
     answer — ``ds doctor`` and ``ds project state`` do, because they run
     constantly; ``close`` does not, because declaring work done must not be told
     about main by a cache. Any cached return carries a non-zero ``age_seconds`` so
-    no caller can mistake it for live.
+    no caller can mistake it for live. ``write_cache=False`` reads the cache but never
+    writes it back -- ``ds doctor`` is read-only.
     """
     cached = _read_cache(repo_root, max_age_seconds, db_path)
     if cached is not None:
@@ -318,7 +332,7 @@ def main_ci_status(
             includes, why = None, None if not payload.get("head_sha") else "not applicable"
         payload["local_head_includes_run"] = includes
         payload["local_head_reason"] = why
-        if max_age_seconds > 0:
+        if max_age_seconds > 0 and write_cache:
             _write_cache(payload, repo_root, db_path)
         return payload
 

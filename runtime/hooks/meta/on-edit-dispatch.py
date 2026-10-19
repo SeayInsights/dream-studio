@@ -95,12 +95,12 @@ def _check_rubric_guardrail(
 ) -> None:
     """Call check_rubric_write_guardrail for Write/Edit events. Non-fatal."""
     try:
-        import sqlite3
-
+        from core.config.database import connect_existing
         from guardrails.evaluator import check_rubric_write_guardrail
 
         db_path = STATE_DIR / "studio.db"
-        conn = sqlite3.connect(str(db_path))
+        # Never create the authority: a missing one is the guard's to refuse, not ours.
+        conn = connect_existing(db_path)
         decision = check_rubric_write_guardrail(
             file_path, conn=conn, event_id=event_id, is_operator=is_operator
         )

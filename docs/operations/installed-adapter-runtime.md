@@ -10,7 +10,7 @@ The installed runtime keeps source and state separate:
 
 | Area | Location | Authority |
 | --- | --- | --- |
-| Source/build | Dream Studio checkout or installed source root | repo source |
+| Source/build | Dream Studio checkout, or the installed app `~/.dream-studio/app/current` | repo source |
 | User-local state | `~/.dream-studio` or explicit `DREAM_STUDIO_HOME` | local runtime state |
 | SQLite authority | `~/.dream-studio/state/studio.db` | canonical local SQLite |
 | Adapter runtime | `~/.dream-studio/adapters` | user-local adapter state |
@@ -19,7 +19,9 @@ The installed runtime keeps source and state separate:
 | Evidence | `~/.dream-studio/meta` | file-backed private evidence |
 
 The source root can be supplied with `--source-root` or
-`DREAM_STUDIO_SOURCE_ROOT`. The runtime home can be supplied with `--home` or
+`DREAM_STUDIO_SOURCE_ROOT`; otherwise it is the code root `ds` runs from
+(`core.config.paths.code_root()`: the checkout, or the installed app's
+site-packages, which carries the same runtime data at the same relative paths). The runtime home can be supplied with `--home` or
 `DREAM_STUDIO_HOME`. Commands must not assume the current working directory is
 the Dream Studio repo.
 
@@ -27,6 +29,48 @@ Runtime helpers that need the user-local Dream Studio home must honor
 `DREAM_STUDIO_HOME` before falling back to `~/.dream-studio`. This keeps
 rehearsals, CI gates, and installed adapter launches from touching the
 operator's live runtime state unless a live update scope has been approved.
+
+## Installed App
+
+`ds self-install` installs Dream Studio into the home as a versioned app, as well as
+running from a git checkout:
+
+| Path | Meaning |
+| --- | --- |
+| `<home>/app/<version>-<sha>/venv` | Non-editable install of the wheel built from `git archive <sha>` |
+| `<home>/app/<version>-<sha>/app.json` | What was built: version, sha, ref, source repo |
+| `<home>/app/current` | Junction (Windows) or symlink to the live app |
+| `<home>/app/previous` | App id `current` replaced; `ds self-install --rollback --execute` returns to it |
+| `<home>/state/installed-version` | `<version> <full sha>` |
+| `<home>/bin/ds.cmd` | The one launcher: the current app's `ds --home <home>` |
+| `<home>/state/backups/self-install-*` | The authority copy each install and rollback takes; the newest 5 are kept |
+| `<home>/state/backups/launchers/<stamp>/` | The previous file of each PATH launcher an install repointed; never pruned |
+| `<home>/state/repointed-launchers.json` | Which launchers the last repointing install rewrote and where each previous file is |
+
+Claude Code hooks installed from the app run the app's modules,
+`<home>/app/current/venv/Scripts/python.exe -I -X utf8 -m runtime.dispatch.hooks <event>`;
+nothing is copied into the config root's `hooks/` directory and no `.ds-source-root`
+sidecar is written. Copies an earlier files-mode install recorded are retired, not
+deleted: each entry script becomes a stub. `run.py` and `dispatch/hooks.py` exit 0 and
+ask for a session restart; the two enforcement entry points hand the call to the
+installed module, so enforcement stays on in a session that started before the install.
+Only `--purge-retired-hooks` removes them. `ds integrate install claude_code --config-root <path>`
+(repeatable) installs into each named Claude Code config root with its own manifest
+under `<home>/integrations/claude_code/roots/`. An app defaults to the home it was
+installed into.
+
+Without `--config-root`, the Claude Code root is resolved in this order, and
+`ds integrate install` prints the root it chose and why before writing:
+
+1. `./.claude` in the working directory (project scope), or `--scope project`;
+2. `CLAUDE_CONFIG_DIR`, when set;
+3. the active Dream Studio profile's `claude_config_dir`;
+4. `~/.claude`.
+
+An install writes only into that root, the Dream Studio home and (from a checkout,
+without `--config-root`) the working directory's `.git/hooks`; a plan that writes
+anywhere else is refused. `ds doctor --fix` repairs the root it examined and passes it
+as `--config-root`, so it never writes a git hook.
 
 ## Global Command Surface
 

@@ -49,8 +49,13 @@ def active_profile(*, db_path: Path | None = None) -> dict[str, Any] | None:
     status='active' (the same tolerance business_projects has for its own active
     singleton -- see core.profiles.mutations.create_profile's docstring): the
     most-recently-updated one wins.
+
+    Read-only, and never creates the database: claude_config_root() calls this from
+    `ds doctor` and from hooks, which must not write.
     """
-    conn = sqlite3.connect(str(_resolve_db(db_path)))
+    from core.config.database import connect_existing
+
+    conn = connect_existing(_resolve_db(db_path), read_only=True)
     conn.row_factory = sqlite3.Row
     try:
         row = conn.execute(

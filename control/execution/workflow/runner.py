@@ -542,6 +542,22 @@ def check_argv(
     return tokens, None
 
 
+def workflow_context_dir(wf_key: str) -> Path:
+    """Where a workflow's node prompts are written.
+
+    A checkout keeps them in its .planning/workflow/<wf_key>. An installed app's code root
+    is its site-packages, which is never written; there they go to
+    <home>/planning/workflow/<wf_key>.
+    """
+    if paths.is_source_checkout():
+        try:
+            base = paths.plugin_root()
+        except RuntimeError:
+            base = paths.code_root()
+        return base / ".planning" / "workflow" / wf_key
+    return paths.planning_dir() / "workflow" / wf_key
+
+
 class WorkflowRunner:
     """Execute a workflow by iterating dependency waves until completion or failure.
 
@@ -1216,11 +1232,7 @@ class WorkflowRunner:
         invocation (ds-core:build / think / plan) provides the execution
         framework; this file provides the task payload.
         """
-        try:
-            base = paths.plugin_root()
-        except (RuntimeError, Exception):
-            base = Path(__file__).resolve().parents[3]
-        context_dir = base / ".planning" / "workflow" / self.wf_key
+        context_dir = workflow_context_dir(self.wf_key)
         context_dir.mkdir(parents=True, exist_ok=True)
         wf_name = str(yaml_data.get("name", "") or "unknown")
         context_file = context_dir / f"{node_id}-prompt.md"

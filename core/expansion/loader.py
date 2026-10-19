@@ -228,12 +228,11 @@ class ExtensionLoader:
         return results
 
     def _connect(self) -> sqlite3.Connection:
-        if self._db_path:
-            conn = sqlite3.connect(str(self._db_path))
-        else:
-            from core.config.database import _default_db_path
+        from core.config.database import _default_db_path, connect_existing
 
-            conn = sqlite3.connect(str(_default_db_path()))
+        # Read-only and never creating: compile_pack runs this from `integrate install`
+        # and from a self-install dry run, neither of which may bring an authority about.
+        conn = connect_existing(self._db_path or _default_db_path(), read_only=True)
         conn.row_factory = sqlite3.Row
         return conn
 

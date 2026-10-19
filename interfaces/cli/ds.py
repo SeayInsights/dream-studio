@@ -18,9 +18,18 @@ import os
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+if not __package__:
+    # Run as a script (`py interfaces/cli/ds.py`) from a checkout: make its packages
+    # importable. Imported as a package -- the installed console script, `-m` -- this
+    # never runs, so an installed app never puts a checkout on sys.path.
+    _script_root = str(Path(__file__).resolve().parents[2])
+    if _script_root not in sys.path:
+        sys.path.insert(0, _script_root)
+
+from core.config.paths import code_root  # noqa: E402
+
+#: The code root: the checkout, or the installed app (core.config.paths.code_root).
+REPO_ROOT = code_root()
 
 # Core imports used in main(). installed_runtime_model is re-exported here (not
 # called in this module) because core.health.status and test patches resolve it
@@ -47,6 +56,7 @@ from interfaces.cli.commands import grader  # noqa: E402
 from interfaces.cli.commands import prove as prove_cmd  # noqa: E402
 from interfaces.cli.commands import enforce as enforce_cmd  # noqa: E402
 from interfaces.cli.commands import review as review_cmd  # noqa: E402
+from interfaces.cli.commands import self_install as self_install_cmd  # noqa: E402
 from interfaces.cli.commands import skill  # noqa: E402
 from interfaces.cli.commands import system  # noqa: E402
 from interfaces.cli.commands import task  # noqa: E402
@@ -144,6 +154,7 @@ def build_parser() -> argparse.ArgumentParser:
     config.register(subcommands)
     diagnostics.register(subcommands)
     mcp_cmd.register(subcommands)
+    self_install_cmd.register(subcommands)
 
     # -----------------------------------------------------------------------
     # Parse & resolve globals
@@ -202,10 +213,36 @@ def _home_environment(home: Path | None):
                 os.environ[key] = value
 
 
+#: Commands whose answer comes from the authority; they refuse in a home that lost it.
+_AUTHORITY_COMMANDS = frozenset(
+    {
+        "client",
+        "design-brief",
+        "escalation",
+        "learn",
+        "memory",
+        "migrate",
+        "milestone",
+        "prd",
+        "profile",
+        "project",
+        "pulse",
+        "review",
+        "status",
+        "task",
+        "validate",
+        "work-order",
+    }
+)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    source_root = Path(args.source_root).resolve() if args.source_root else REPO_ROOT
+    # --source-root, then DREAM_STUDIO_SOURCE_ROOT (which core.installed_runtime documents
+    # and this used to ignore), then the code root this `ds` is running from.
+    _source = args.source_root or os.environ.get("DREAM_STUDIO_SOURCE_ROOT")
+    source_root = Path(_source).resolve() if _source else REPO_ROOT
     home = Path(args.home).resolve() if args.home else None
     with _home_environment(home):
         return _run(parser, args, source_root, home)
@@ -236,6 +273,19 @@ def _run(parser, args, source_root: Path, home: Path | None) -> int:
     # -----------------------------------------------------------------------
     # Dispatch
     # -----------------------------------------------------------------------
+    # A command that reads or writes the authority refuses, loudly and with the way back,
+    # in a home that has had an install and lost it: these used to answer "No open
+    # escalations.", HEALTHY, or ready:false with exit 0, over an authority that was gone.
+    # A whole command in _AUTHORITY_COMMANDS, or one subcommand that declares it reads the
+    # authority with set_defaults(reads_authority=True).
+    if args.command in _AUTHORITY_COMMANDS or getattr(args, "reads_authority", False):
+        from core.config.database import _default_db_path
+        from core.config.sqlite_bootstrap import lost_authority_message
+
+        lost = lost_authority_message(_default_db_path())
+        if lost:
+            print(json.dumps({"ok": False, "error": lost}, indent=2), file=sys.stderr)
+            return 1
     try:
         # System-level flat commands
         if args.command in system.SYSTEM_COMMANDS:
@@ -311,6 +361,8 @@ def _run(parser, args, source_root: Path, home: Path | None) -> int:
             return config.dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "mcp":
             return mcp_cmd.dispatch(args, source_root=source_root, dream_studio_home=home)
+        if args.command == "self-install":
+            return self_install_cmd.dispatch(args, dream_studio_home=home)
         if args.command == "grader":
             return grader.dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "prove":
@@ -327,7 +379,17 @@ def _run(parser, args, source_root: Path, home: Path | None) -> int:
             return eval_cmd.dispatch(args, source_root=source_root)
 
     except (RuntimeError, sqlite3.Error, ValueError) as exc:
-        print(json.dumps({"ok": False, "error": str(exc)}, indent=2), file=sys.stderr)
+        message = str(exc)
+        if isinstance(exc, sqlite3.DatabaseError) and (
+            "not a database" in message or "malformed" in message
+        ):
+            # A corrupt authority: say which file and how to restore it, not just
+            # "file is not a database".
+            from core.config.database import _default_db_path
+            from core.config.sqlite_bootstrap import unreadable_authority_message
+
+            message = unreadable_authority_message(_default_db_path(), exc)
+        print(json.dumps({"ok": False, "error": message}, indent=2), file=sys.stderr)
         return 1
     return 1
 

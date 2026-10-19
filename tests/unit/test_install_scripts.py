@@ -35,11 +35,13 @@ def test_install_sh_contains_auto_install_logic():
     ), "install.sh must contain auto-install logic (brew/apt-get/dnf)"
 
 
-def test_install_sh_calls_integrate_install():
+def test_install_sh_self_installs_with_a_config_root():
+    """The checkout's files-mode integration refuses a home with an installed app, and
+    rehearsal-install refuses an installed home: the script installs the app instead."""
     content = _INSTALL_SH.read_text(encoding="utf-8")
-    assert (
-        "integrate install claude_code" in content
-    ), "install.sh must call 'integrate install claude_code'"
+    assert "self-install --config-root" in content and "--execute" in content
+    assert "rehearsal-install" not in content
+    assert "integrate install claude_code --execute" not in content
 
 
 def test_install_sh_calls_doctor():
@@ -65,11 +67,13 @@ def test_install_ps1_contains_auto_install_logic():
     assert "winget" in content, "install.ps1 must contain auto-install logic (winget)"
 
 
-def test_install_ps1_calls_integrate_install():
+def test_install_ps1_self_installs_with_a_config_root():
+    """The checkout's files-mode integration refuses a home with an installed app, and
+    rehearsal-install refuses an installed home: the script installs the app instead."""
     content = _INSTALL_PS1.read_text(encoding="utf-8")
-    assert (
-        "integrate install claude_code" in content
-    ), "install.ps1 must call 'integrate install claude_code'"
+    assert "self-install --config-root" in content and "--execute" in content
+    assert "rehearsal-install" not in content
+    assert "integrate install claude_code --execute" not in content
 
 
 def test_install_ps1_calls_doctor():
@@ -107,3 +111,10 @@ def test_ds_entry_preflight_is_at_module_level():
     assert (
         version_check_pos < main_def_pos
     ), "Version check must appear before def main() (module-level, not inside main)"
+
+
+def test_both_install_scripts_follow_dream_studio_home():
+    """They installed into ~/.dream-studio whatever DREAM_STUDIO_HOME said."""
+    for script in (_INSTALL_SH, _INSTALL_PS1):
+        content = script.read_text(encoding="utf-8")
+        assert "DREAM_STUDIO_HOME" in content and "--home" in content, script.name

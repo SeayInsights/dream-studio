@@ -6,27 +6,37 @@ anything under `core` there pulls pydantic, jsonschema and the event store -- 25
 measured on the operator's machine, paid inside hooks that block Edit/Write/Stop.
 
 This module exists so that constraint does not also mean duplicating the home rule by
-hand. It mirrors core.config.paths.home_dir() exactly -- DREAM_STUDIO_HOME wins, else
-~/.dream-studio, not created -- and MUST be kept that way:
+hand. It mirrors core.config.paths.home_dir() exactly -- DREAM_STUDIO_HOME wins, then
+the home a self-installed app records in its venv (APP_HOME_MARKER under sys.prefix),
+else ~/.dream-studio, not created -- and MUST be kept that way:
 tests/unit/test_home_means_home.py::test_runtime_lib_home_matches_core_config_paths
 drives both with the same environment and asserts they agree.
 
-Do not add anything here beyond os and pathlib. The whole point of this file is that
+Do not add anything here beyond os, sys and pathlib. The whole point of this file is that
 importing it costs nothing.
 """
 
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 USER_DATA_DIRNAME = ".dream-studio"
+APP_HOME_MARKER = "dream-studio-home"  # core.config.paths.APP_HOME_MARKER
 
 
 def home_dir() -> Path:
-    """The Dream Studio home -- DREAM_STUDIO_HOME, else ~/.dream-studio -- NOT created."""
+    """DREAM_STUDIO_HOME, else the installed app's recorded home, else ~/.dream-studio."""
     override = os.environ.get("DREAM_STUDIO_HOME")
-    return Path(override).expanduser() if override else Path.home() / USER_DATA_DIRNAME
+    if override:
+        return Path(override).expanduser()
+    marker = Path(sys.prefix) / APP_HOME_MARKER
+    if marker.is_file():
+        recorded = marker.read_text(encoding="utf-8").strip()
+        if recorded:
+            return Path(recorded)
+    return Path.home() / USER_DATA_DIRNAME
 
 
 def state_dir() -> Path:

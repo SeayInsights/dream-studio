@@ -1355,9 +1355,10 @@ def test_add_client_rejects_an_unknown_capability(mcp_home):
         auth.add_client("x", capabilities=["not:a:real:capability"], dream_studio_home=mcp_home)
 
 
-def test_add_client_rejects_empty_capabilities(mcp_home):
-    with pytest.raises(ValueError, match="non-empty"):
-        auth.add_client("x", capabilities=[], dream_studio_home=mcp_home)
+def test_add_client_with_no_capabilities_is_a_read_only_client(mcp_home):
+    token = auth.add_client("x", capabilities=[], dream_studio_home=mcp_home)
+    identity = auth.authenticate(f"Bearer {token}", dream_studio_home=mcp_home)
+    assert identity is not None and identity.capabilities == frozenset()
 
 
 def test_add_client_rejects_dispatch_and_record_together(mcp_home):

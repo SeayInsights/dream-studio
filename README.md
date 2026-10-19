@@ -217,31 +217,46 @@ py -m pip install -r requirements.txt
 > verified at release time. For strict reproducibility, use `pip install -r requirements.lock`.
 > For patch-version flexibility, use `pip install -r requirements.txt`.
 
-### 3. Bootstrap the runtime database
+### 3. Install Dream Studio into its home
 ```powershell
-py -m interfaces.cli.ds rehearsal-install --rehearsal-home "$env:USERPROFILE\.dream-studio"
+py -m interfaces.cli.ds self-install --config-root "$env:USERPROFILE\.claude" --execute
 ```
 
-### 4. Install the integration
-```powershell
-py -m interfaces.cli.ds integrate install claude_code --execute
-```
+`self-install` builds the committed state of this checkout (`git archive`; it refuses a
+dirty tree) into `~/.dream-studio/app/<version>-<sha>/venv`, a non-editable install that
+no longer depends on the checkout. pip fetches the pinned dependencies, so the first run
+needs network access or a warm pip cache. On a new home it creates the authority; on an
+existing one it backs it up and migrates it with the new app before anything switches.
+Each `--config-root` gets the Claude Code integration from the new app: hooks run as
+`<home>/app/current/venv/Scripts/python.exe -I -X utf8 -m <module>`, with nothing copied
+into the config root's `hooks/`. Run it with `--dry-run` instead of `--execute` to see every write first.
 
-This writes `~/.claude/CLAUDE.md`, `~/.claude/canonical/skills/ds-bootstrap/SKILL.md`, and hook entries to `~/.claude/settings.json`. It also writes a global `ds` launcher to `~/.dream-studio/bin/`.
+Upgrade the same way after `git pull`; `ds self-install --rollback --execute` returns to the
+previous app.
 
-### 5. Add ds to PATH (Windows)
+### 4. Put ds on PATH (Windows)
+`self-install` writes the one launcher, `~/.dream-studio/bin/ds.cmd`, which runs the current
+app with `--home` pinned:
 ```powershell
-$env:PATH += ";$env:USERPROFILE\.dream-studio\bin"
+$env:PATH = "$env:USERPROFILE\.dream-studio\bin;" + $env:PATH
 ```
 
 To make permanent, add to your PowerShell profile (`notepad $PROFILE`):
 ```
-$env:PATH += ";$env:USERPROFILE\.dream-studio\bin"
+$env:PATH = "$env:USERPROFILE\.dream-studio\bin;" + $env:PATH
 ```
+
+> Working on Dream Studio itself: `py -m interfaces.cli.ds integrate install claude_code
+> --execute` from a checkout installs the older files-mode hooks that import the checkout.
+> It refuses a home that `self-install` manages; use `self-install --config-root <root> --execute` there.
+
+An older `ds.cmd` in `~/.local/bin` that ran a checkout against this home is rewritten by
+`self-install` to call this launcher (the previous file is kept in the install's backup directory), so
+either spelling on PATH runs the current app. One pinned to another home is left alone.
 
 After adding to PATH, run `ds` from any directory.
 
-### 6. Run health checks
+### 5. Run health checks
 
 ```powershell
 ds validate   # DB health: schema version, migrations, module profiles
@@ -250,7 +265,7 @@ ds doctor     # Integration health: skills, agents, hooks, routing
 
 Both must pass before first use. See [Health checks](#health-checks) for when to run each.
 
-### 7. Register your first project
+### 6. Register your first project
 
 The `--path` flag writes a `.dream-studio-project` marker for token attribution:
 
@@ -261,7 +276,7 @@ ds project next <project_id>
 ds work-order start <work_order_id>
 ```
 
-### 8. Token attribution setup (optional but recommended)
+### 7. Token attribution setup (optional but recommended)
 
 Token attribution tracks which Claude Code tool calls belong to which project, work order,
 and task. After registering a project, install the PostToolUse hook to start capturing data:
@@ -435,7 +450,7 @@ Returns `ready: true` when the DB is at the current schema version with no profi
 
 #### `ds doctor` — Claude Code integration plane
 Checks the Claude Code integration is wired correctly: dispatcher hooks present, skills installed and current, agents deployed, routing triggers covered, installed version current. Run after:
-- `ds integrate install claude_code --execute`
+- `ds self-install --repo <checkout> --config-root <root> --execute` (or `ds integrate install claude_code --config-root <root> --execute` from the installed app)
 - Manual edits to `~/.claude/settings.json` or `CLAUDE.md`
 - Upgrading Dream Studio or before starting a new session
 

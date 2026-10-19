@@ -160,7 +160,10 @@ def count_degraded_skills(db_path: Path | None = None) -> int:
 
         db_path = _default_db_path()
     try:
-        conn = sqlite3.connect(str(db_path))
+        from core.config.database import connect_existing
+
+        # A pulse read must never create the authority.
+        conn = connect_existing(db_path)
         row = conn.execute("""
             SELECT COUNT(*) FROM eval_registry er
             LEFT JOIN (

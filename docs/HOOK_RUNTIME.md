@@ -57,6 +57,47 @@ Claude Code event (e.g., UserPromptSubmit)
 fresh `UserPromptSubmit` from failing before Dream Studio's own launcher can
 resolve the plugin root.
 
+### From an installed app (module mode)
+
+The flow above is the checkout's. A Claude Code config root installed from the app
+`ds self-install` builds (`docs/operations/installed-adapter-runtime.md`) runs no
+launcher and no copied file. settings.json holds
+
+```
+"<home>/app/current/venv/Scripts/python.exe" -I -X utf8 -m runtime.dispatch.hooks <Event>
+```
+
+and the two blocking hooks run as `-m runtime.hooks.meta.on-edit-enforce` and
+`-m runtime.hooks.meta.on-stop-enforce`. `-I` keeps the project's working directory
+(often a Dream Studio checkout) off `sys.path`, so the app's packages are the ones
+imported; `-X utf8` keeps a non-ASCII payload from failing on the console code page.
+The dispatcher finds its handlers inside the installed packages, and each handler that
+runs writes its line to `<home>/state/hook-timing.jsonl` as in a checkout. Nothing is
+copied into `<config_root>/hooks` and no `.ds-source-root` is written.
+
+Moving a root from files mode to module mode retires the old copies without deleting
+them, because a session started before the install still calls the old paths. Each
+recorded entry script becomes a stub: `run.py` and `dispatch/hooks.py` exit 0 and ask
+for a session restart; `on-edit-enforce.py` and `on-stop-enforce.py` hand the call to
+the installed module with the same stdin and arguments and return its output and exit
+code, so enforcement stays on in those sessions. No later install deletes them (none
+can know that every such session has ended);
+`ds integrate install claude_code --config-root <root> --purge-retired-hooks --execute`
+removes the whole recorded tree. `ds doctor` counts the stubs as retired, not stale.
+Old Dream Studio commands are recognised by exact shape (a Python
+interpreter running a Dream Studio hook module, or a Dream Studio hook file under this
+root's `hooks/`) and replaced; any other hook in settings.json is left alone.
+`setup_hooks.hook_identity` treats the module and file spellings of one hook as the
+same hook, so a merge never registers both. A files-mode install from a checkout into a
+home that has an installed app is refused.
+
+When the home has had an install and its authority is missing, empty or not a SQLite
+database, the dispatcher runs no handler for `UserPromptSubmit` or `SessionStart`: it
+prints the restore guidance (inside `<dream-studio-authority-lost>`) instead, so a
+session is never told the onboarding banner or a HEALTHY pulse over a lost authority.
+The authority-centred `ds` commands (`project`, `work-order`, `escalation`, `pulse`,
+`validate`, `migrate` and the rest) refuse the same way and exit 1.
+
 On Windows, `hooks/run.cmd` must capture its own script directory before
 shifting arguments. Codex app and other adapter surfaces may invoke
 `UserPromptSubmit` from a workspace outside the Dream Studio repo; the launcher
@@ -483,3 +524,5 @@ hook registration, dispatcher wiring, ordering, or the fail-open guarantee. -->
 <!-- Reviewed 2026-09-26 -- feat/fail-open-census (H30): ONE new BLOCKING pre-push gate, `fail-open-census`, broadening the fail-open defect class `fail-open-probe` (2026-09-07, above) already guards. That gate catches ONE shape: a function-level permissive handler with an unguarded probe inside it. Two broader, more common shapes carry the same risk and were unguarded by anything: a bare `except: pass` (the error is caught and discarded -- nothing logged, nothing re-raised, nothing tells the caller), and an except handler whose last statement returns a falsy sentinel (None, bare return, False, 0, "", [], {}, ()) -- the caller cannot tell "legitimately found nothing" from "broke and nobody noticed", because both render identically. Measured 2026-09-21: 484 bare-except-pass + 258 falsy-return sites in product code (742 total); re-measured today at 831 combined sites once the AST walk's own precise definition was applied to the current tree. Neither count is realistically zero-able in one pass -- most existing sites are legitimate on inspection (a missing optional config file IS legitimately "return None") -- so this is a RATCHET exactly like lint_baseline.py's flake8 baseline: every site present when the baseline was written is tracked debt, not a release blocker, and the gate fails only on growth. Regenerate the baseline after fixing (or deliberately accepting) a new site: `py -m core.gates.fail_open_census --write-baseline`. No hook registration, dispatch order, PROTECTED_PATHS, handler-chain, tier semantics, or fail-open POLICY change -- this is a new detector for an old policy, not a new policy. -->
 <!-- Reviewed 2026-09-26 -- feat/enforce-native-full-port (C11): `runtime/hooks/enforce-native` (scaffolded, undeployed, in #752) is now a complete drop-in port of `on-edit-enforce.py` -- candidate extraction (file_path/notebook_path/path, or Bash/PowerShell write-target regexes ported verbatim, five patterns not the bare `>`/`>>` a scaffold-era draft of decision.rs had), classify_path's fourth `exempt` kind (missing from that draft too), the authority reads (match_registered_project/in_progress_work_order/next_created_work_order) via `rusqlite` against the SAME tables and predicates, session-file recording, and the tier ladder including the `authority_source_edit` observe-only downgrade. `interfaces/cli/setup_hooks.py` gains `_native_enforce_command`/`_native_enforce_path`/`NATIVE_ENFORCE_BIN`, mirroring the existing `_native_enqueue_*` trio exactly (optional binary, Python fallback, `hook_identity` treats both spellings as one hook). `runtime/hooks/enqueue-native` gained a `lib.rs` (queue_path/escape_json/append_line) so the enforce crate links the tested queue-writer instead of a fourth hand-copy of it -- `ds-enqueue`'s own CLI behavior and its existing tests are unchanged, verified by running them before and after the split. No hook registration, dispatch order, tier semantics, or fail-open POLICY change -- same decision, same fallback contract, a second language. -->
 <!-- Reviewed 2026-09-27 -- feat/skill-eval-coverage-census (E19): canonical/workflows/pre-push.yaml gains ONE new ADVISORY (not blocking) gate, `skill-eval-coverage-census` (py -m core.gates.skill_eval_coverage_census), placed after `test-suite`. It enforces enforce-or-declare (same convention as agent_coverage/rule_enforcement) over canonical/skill_eval_registry.json: every canonical/skills/**/SKILL.md file must have a status entry (no_output/covered/gap), and the gate fails only when a skill has NO entry at all or a `covered` entry names a test file that no longer exists -- it does not re-verify a covered claim is still behaviorally accurate, and does not classify a skill's real output itself (that judgment was a human reading all 104 files by hand). Advisory because a documentation/coverage gap is hygiene, not a correctness or fail-open-policy defect. No hook registration, dispatch order, PROTECTED_PATHS, handler-chain, tier semantics for any OTHER gate, or fail-open policy change. -->
+
+<!-- Reviewed 2026-10-16 -- feat/installable-runtime: added "From an installed app (module mode)": hook commands `<app python> -I -X utf8 -m <module>`, two-step retirement of copied hook files (exit-0 stub, then delete), exact-shape ownership for replacing old Dream Studio commands, hook_identity's module spelling, and the refusal of a files-mode install into an app home. The checkout flow, dispatcher wiring, handler set and fail-open policy are unchanged. -->

@@ -178,9 +178,15 @@ def _analytics_ingest(
         dream_studio_home=dream_studio_home,
     )
     if not paths.sqlite_path.exists():
+        from core.config.sqlite_bootstrap import missing_authority_message
+
         raise RuntimeError(
-            "Dream Studio SQLite authority is missing. Run rehearsal-install for a rehearsal "
-            "home, or install/bootstrap the real runtime through an approved update plan."
+            missing_authority_message(
+                paths.sqlite_path,
+                "Dream Studio SQLite authority is missing. Run rehearsal-install for a "
+                "rehearsal home, or install/bootstrap the real runtime through an approved "
+                "update plan.",
+            )
         )
     from core.analytics_ingestion import ingest_analytics_payload
 

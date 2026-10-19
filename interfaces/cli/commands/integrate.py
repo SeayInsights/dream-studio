@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,15 @@ from interfaces.cli.cli_utils import _print
 # ---------------------------------------------------------------------------
 # Parser registration
 # ---------------------------------------------------------------------------
+
+_CONFIG_ROOT_HELP = (
+    "Claude Code config root to install into (repeatable). Each root is installed as a "
+    "user-scope root with its own manifest, and no git pre-push hook is written. Without "
+    "it the root is resolved in this order: ./.claude in the working directory (project "
+    "scope), CLAUDE_CONFIG_DIR, the active Dream Studio profile's claude_config_dir, "
+    "~/.claude; the chosen root and the reason are printed first, and a pre-push hook "
+    "goes into the working directory's repository."
+)
 
 
 def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
@@ -35,12 +45,28 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
     )
     integrate_plan.add_argument("tool", choices=list(_SUPPORTED_TOOLS))
     integrate_plan.add_argument("--scope", choices=["user", "project"], default=None)
+    integrate_plan.add_argument(
+        "--config-root", action="append", default=None, help=_CONFIG_ROOT_HELP
+    )
 
     integrate_install = integrate_sub.add_parser(
         "install", help="Install integration for a tool (requires --dry-run or --execute)"
     )
     integrate_install.add_argument("tool", choices=list(_SUPPORTED_TOOLS))
     integrate_install.add_argument("--scope", choices=["user", "project"], default=None)
+    integrate_install.add_argument(
+        "--config-root", action="append", default=None, help=_CONFIG_ROOT_HELP
+    )
+    integrate_install.add_argument(
+        "--purge-retired-hooks",
+        action="store_true",
+        help=(
+            "Delete the hook files an earlier files-mode install copied under the root's "
+            "hooks/ directory, including the stubs left in their place. Only once every "
+            "Claude Code session started before the move to the installed app has ended: "
+            "such a session still calls those paths."
+        ),
+    )
     integrate_install.add_argument(
         "--agents",
         default=None,
@@ -146,6 +172,32 @@ def dispatch(
 
     if args.integrate_command == "plan":
         scope = getattr(args, "scope", None)
+        config_roots = getattr(args, "config_root", None)
+        if config_roots:
+            plans = []
+            for root in config_roots:
+                installer = ClaudeCodeInstaller(
+                    Path(root).expanduser().resolve(),
+                    "user",
+                    canonical_root=canonical_root,
+                    ds_home=ds_home,
+                )
+                plans.append(
+                    {
+                        "config_root": str(installer.config_root),
+                        "hook_mode": installer.hook_mode,
+                        "plan": installer.plan().summary(),
+                    }
+                )
+            return _print(
+                {
+                    "model_name": "dream_studio_integrate_plan",
+                    "derived_view": True,
+                    "primary_authority": False,
+                    "tool": "claude_code",
+                    "plans": plans,
+                }
+            )
         detected = detect_claude_code(scope_override=scope)
         installer = ClaudeCodeInstaller(
             detected.config_root,
@@ -233,7 +285,41 @@ def dispatch(
                 }
             )
 
+        config_roots = getattr(args, "config_root", None)
+        if config_roots:
+            # Explicit roots: nothing is guessed from the working directory, and no git
+            # pre-push hook is written (that is a Dream Studio repository's own dev gate,
+            # not part of installing Dream Studio into a Claude Code identity).
+            installs = []
+            for root in config_roots:
+                installer = ClaudeCodeInstaller(
+                    Path(root).expanduser().resolve(),
+                    "user",
+                    canonical_root=canonical_root,
+                    ds_home=ds_home,
+                    git_repo_root=None,
+                    agents=agents,
+                    purge_retired_hooks=getattr(args, "purge_retired_hooks", False),
+                )
+                installs.append(installer.install(mode))
+            return _print(
+                {
+                    "model_name": "dream_studio_integrate_install",
+                    "derived_view": True,
+                    "primary_authority": False,
+                    "tool": "claude_code",
+                    "ok": all(r.get("ok") for r in installs),
+                    "installs": installs,
+                }
+            )
+
         detected = detect_claude_code(scope_override=scope)
+        # Say which root and why, before writing: the root is resolved, not given.
+        print(
+            f"[dream-studio] Claude Code root: {detected.config_root} ({detected.reason}). "
+            "Pass --config-root <path> to install into a specific root.",
+            file=sys.stderr,
+        )
         # B.3: install the git pre-push hook into the cwd's repo (if any).
         # Tests do NOT pass cwd, so the operator's real .git/hooks/ is untouched.
         cwd = Path.cwd()
@@ -262,6 +348,7 @@ def dispatch(
             git_repo_root=git_repo_root,
             skip_hook_install=_skip_hook,
             agents=agents,
+            purge_retired_hooks=getattr(args, "purge_retired_hooks", False),
         )
         result = installer.install(mode)
         return _print(
@@ -270,6 +357,8 @@ def dispatch(
                 "derived_view": True,
                 "primary_authority": False,
                 **result,
+                "config_root": str(detected.config_root),
+                "config_root_reason": detected.reason,
             }
         )
 

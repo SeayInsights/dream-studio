@@ -36,7 +36,14 @@ def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
         dream_studio_home=dream_studio_home,
     )
     if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
+        from core.config.sqlite_bootstrap import missing_authority_message
+
+        raise RuntimeError(
+            missing_authority_message(
+                paths.sqlite_path,
+                "Dream Studio SQLite authority is missing. Run rehearsal-install first.",
+            )
+        )
     return paths.sqlite_path
 
 
@@ -1333,8 +1340,6 @@ def add_task(
     ``actor``, when given, is an MCP client's name -- see ``start_task``'s docstring for
     why it is not ``session_id``; passed straight through to `create_task()`.
     """
-    import sqlite3 as _sqlite3
-
     from core.work_orders.admission import admit_task, paths_named
 
     # ADMISSION RUNS FIRST, before requiring the authority to even exist. The Warden's
@@ -1355,7 +1360,11 @@ def add_task(
         _context_db_path = _resolve_paths(
             source_root=source_root, dream_studio_home=dream_studio_home
         ).sqlite_path
-        conn = _sqlite3.connect(str(_context_db_path))
+        from core.config.database import connect_existing
+
+        # Read-only and non-creating: a vanished authority is not brought back by a read
+        # of a work order's context under a long-running MCP server.
+        conn = connect_existing(_context_db_path, read_only=True)
         try:
             row = conn.execute(
                 "SELECT description FROM business_work_orders WHERE work_order_id = ?",

@@ -7,7 +7,8 @@ JSON singletons — structurally identical to the pre-existing ``ds_config`` tab
 namespace rather than in a dedicated ``raw_runtime_state`` table (dropped in
 migration 150 as a ds_config duplicate). Callers pass a bare key
 (``active_skill``); this module namespaces it. Degrades to None/False when
-``ds_config`` is absent so callers fall back to the legacy JSON files.
+``ds_config`` is absent so callers fall back to the legacy JSON files, and when the
+authority file is missing: these opens never create it (connect_existing).
 """
 
 from __future__ import annotations
@@ -16,6 +17,8 @@ import json
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
+
+from core.config.database import connect_existing
 
 _TABLE = "ds_config"
 _KEY_PREFIX = "runtime."
@@ -45,7 +48,7 @@ def db_write_runtime_state(key: str, value: dict, *, db_path: Path | None = None
     """
     now = datetime.now(UTC).isoformat()
     try:
-        conn = sqlite3.connect(str(_resolve_db(db_path)))
+        conn = connect_existing(_resolve_db(db_path))
     except sqlite3.Error:
         return False
     try:
@@ -67,7 +70,7 @@ def db_read_runtime_state(key: str, *, db_path: Path | None = None) -> dict | No
     """Return the JSON value dict for a runtime-state key, or None if absent
     (table missing, no row, or unparseable)."""
     try:
-        conn = sqlite3.connect(str(_resolve_db(db_path)))
+        conn = connect_existing(_resolve_db(db_path))
     except sqlite3.Error:
         return None
     try:
@@ -89,7 +92,7 @@ def db_clear_runtime_state(key: str, *, db_path: Path | None = None) -> bool:
     """Delete a runtime-state row. Returns True if the row existed and was
     removed, False otherwise (table absent, no row, or DB unavailable)."""
     try:
-        conn = sqlite3.connect(str(_resolve_db(db_path)))
+        conn = connect_existing(_resolve_db(db_path))
     except sqlite3.Error:
         return False
     try:
