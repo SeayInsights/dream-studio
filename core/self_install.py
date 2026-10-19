@@ -514,9 +514,38 @@ class SelfInstallPlan:
     def launcher_backup_dir(self) -> Path:
         return launcher_backups_root(self.home) / self.stamp
 
+    def _repoint_steps(self) -> list[dict]:
+        """The PATH launchers the install rewrites, and the record of where each is saved.
+        A launcher name this platform does not write is left (and logged) by the run."""
+        content = delegating_launchers(self.home)
+        steps = [
+            {
+                "step": "repoint-launcher",
+                "path": str(p),
+                "detail": (
+                    f"a Dream Studio launcher on PATH for this home that bypasses "
+                    f"{launcher_path(self.home)}; the previous file is saved at "
+                    f"{self.launcher_backup_dir / p.name}"
+                ),
+                "content": content[p.name],
+            }
+            for p in stale_path_launchers(self.home)
+            if p.name in content
+        ]
+        if steps:
+            steps.append(
+                {
+                    "step": "record-repointed-launchers",
+                    "path": str(self.home / "state" / REPOINTED_RECORD),
+                    "detail": "which launchers were repointed and where each previous file is",
+                }
+            )
+        return steps
+
     def writes(self, *, reuse: bool, db_exists: bool, current: str | None) -> list[dict]:
         """Every write the install makes, in order -- what --dry-run prints."""
         steps: list[dict] = []
+        repoint = self._repoint_steps()
         pre_migration = self._pre_migration_backup() if db_exists else None
         if not reuse:
             steps += [
@@ -608,19 +637,7 @@ class SelfInstallPlan:
                 "path": str(launcher_path(self.home)),
                 "content": launcher_content(self.home),
             },
-            *(
-                {
-                    "step": "repoint-launcher",
-                    "path": str(p),
-                    "detail": (
-                        f"a Dream Studio launcher on PATH for this home that bypasses "
-                        f"{launcher_path(self.home)}; the previous file is saved at "
-                        f"{self.launcher_backup_dir / p.name}"
-                    ),
-                    "content": delegating_launchers(self.home).get(p.name, ""),
-                }
-                for p in stale_path_launchers(self.home)
-            ),
+            *repoint,
             {
                 "step": "record-counts",
                 "path": str(self.home / "state" / "authority-counts.json"),

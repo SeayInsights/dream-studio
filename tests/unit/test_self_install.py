@@ -814,3 +814,23 @@ def test_retention_never_prunes_a_backup_the_launcher_record_cites(si, home):
     assert str(cited) not in removed
     assert (cited / "launchers" / "ds.cmd").is_file()
     assert [Path(p).name for p in removed] == ["self-install-9.9.9-aaaaaaaaaa-01"]
+
+
+def test_dry_run_lists_the_repointed_launchers_record(
+    si, repo, home, fake_build, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "userhome"))
+    _authority(home)
+    assert si.self_install(si.resolve_plan(home=home, repo=repo, ref="HEAD"), dry_run=False)["ok"]
+    _checkout_launcher(home)
+    _commit(repo, 2)
+    plan = si.resolve_plan(home=home, repo=repo, ref="HEAD")
+    dry = si.self_install(plan, dry_run=True)
+    record = str(home / "state" / si.REPOINTED_RECORD)
+    assert record in [w["path"] for w in dry["writes"]], [w["path"] for w in dry["writes"]]
+    saved = [w for w in dry["writes"] if w["step"] == "repoint-launcher"]
+    assert saved and all("state" in w["detail"] for w in saved)
+    result = si.self_install(plan, dry_run=False)
+    assert result["ok"], result
+    assert Path(record).is_file()
+    assert all(item["saved"] in saved[0]["detail"] for item in result["repointed_launchers"])
