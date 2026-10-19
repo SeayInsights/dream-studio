@@ -816,6 +816,23 @@ def test_retention_never_prunes_a_backup_the_launcher_record_cites(si, home):
     assert [Path(p).name for p in removed] == ["self-install-9.9.9-aaaaaaaaaa-01"]
 
 
+def test_rollback_dry_run_lists_the_backups_the_rollback_prunes(si, repo, home, fake_build):
+    _authority(home)
+    assert si.self_install(si.resolve_plan(home=home, repo=repo, ref="HEAD"), dry_run=False)["ok"]
+    _commit(repo, 2)
+    assert si.self_install(si.resolve_plan(home=home, repo=repo, ref="HEAD"), dry_run=False)["ok"]
+    backups = home / "state" / "backups"
+    for i in range(6):
+        _backup_dir(backups, f"self-install-0.0.1-cccccccccc-{i:02d}", i)
+
+    dry = si.rollback(home, dry_run=True)
+    listed = sorted(w["path"] for w in dry["writes"] if w["step"] == "prune-backup")
+    assert listed, dry["writes"]
+    back = si.rollback(home, dry_run=False)
+    assert back["ok"], back
+    assert listed == sorted(back["pruned_backups"])
+
+
 def test_dry_run_lists_the_repointed_launchers_record(
     si, repo, home, fake_build, tmp_path, monkeypatch
 ):

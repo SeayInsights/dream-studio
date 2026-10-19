@@ -1237,6 +1237,7 @@ def rollback(home: Path, *, dry_run: bool) -> dict[str, Any]:
             "content": f"{record['version']} {record['sha']}",
         },
         {"step": "launcher", "path": str(launcher_path(home)), "content": launcher_content(home)},
+        *_prune_steps(home, adding=db_path.exists()),
     ]
     saved = _saved_launchers(home)
     if dry_run:
