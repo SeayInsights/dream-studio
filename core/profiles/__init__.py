@@ -16,10 +16,8 @@ attribution layer this sits on top of; a client may have zero, one, or several p
   - queries.py — list_profiles / active_profile / get_profile, read directly off
     business_profiles.
 
-claude_config_dir and mcp_client_name are stored, inert columns in this change set. Two
-follow-ups are deliberately NOT done here (see migration 159's own comment and the
-module docstrings below):
-  1. Wiring core.config.paths.claude_config_root() to prefer the active profile's
-     claude_config_dir over the CLAUDE_CONFIG_DIR env var / default ~/.claude.
-  2. An MCP client identity registry keyed by mcp_client_name.
+claude_config_dir is read: core.config.paths.claude_config_root() uses the active
+profile's claude_config_dir when CLAUDE_CONFIG_DIR is not set, and ~/.claude when
+neither is. mcp_client_name is a stored, inert column; an MCP client identity registry
+keyed by it is not built (see migration 159's own comment).
 """

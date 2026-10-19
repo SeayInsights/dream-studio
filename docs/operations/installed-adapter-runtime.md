@@ -44,6 +44,8 @@ running from a git checkout:
 | `<home>/state/installed-version` | `<version> <full sha>` |
 | `<home>/bin/ds.cmd` | The one launcher: the current app's `ds --home <home>` |
 | `<home>/state/backups/self-install-*` | The authority copy each install and rollback takes; the newest 5 are kept |
+| `<home>/state/backups/launchers/<stamp>/` | The previous file of each PATH launcher an install repointed; never pruned |
+| `<home>/state/repointed-launchers.json` | Which launchers the last repointing install rewrote and where each previous file is |
 
 Claude Code hooks installed from the app run the app's modules,
 `<home>/app/current/venv/Scripts/python.exe -I -X utf8 -m runtime.dispatch.hooks <event>`;

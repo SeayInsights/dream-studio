@@ -28,7 +28,10 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         "--claude-config-dir",
         default=None,
         dest="claude_config_dir",
-        help="This profile's Claude Code config directory (stored only; not yet wired)",
+        help=(
+            "This profile's Claude Code config directory. While the profile is active it is "
+            "the root Dream Studio installs into and checks, unless CLAUDE_CONFIG_DIR is set"
+        ),
     )
     p_create.add_argument(
         "--mcp-client-name",
