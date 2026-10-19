@@ -761,3 +761,56 @@ def test_a_self_install_reports_the_backups_it_pruned(si, repo, home, fake_build
     assert result["ok"], result
     assert result["pruned_backups"], result
     assert len([p for p in backups.iterdir() if p.name.startswith("self-install-")]) == 5
+
+
+def _commit(repo: Path, n: int) -> None:
+    (repo / "module.py").write_text(f"COMMITTED = {n}\n", encoding="utf-8")
+    _git(repo, "commit", "-q", "-am", f"commit {n}")
+
+
+def test_a_saved_checkout_launcher_outlives_backup_retention(
+    si, repo, home, fake_build, tmp_path, monkeypatch
+):
+    """The copy of a repointed checkout launcher was written inside that install's
+    self-install-* backup, which retention removes five installs later, while rollback
+    went on reporting it at the deleted path."""
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "userhome"))
+    _authority(home)
+    assert si.self_install(si.resolve_plan(home=home, repo=repo, ref="HEAD"), dry_run=False)["ok"]
+    stale = _checkout_launcher(home)
+    before = stale.read_text(encoding="utf-8")
+    _commit(repo, 2)
+    result = si.self_install(si.resolve_plan(home=home, repo=repo, ref="HEAD"), dry_run=False)
+    assert result["ok"], result
+    saved = Path(result["repointed_launchers"][0]["saved"])
+    for n in range(3, 8):
+        _commit(repo, n)
+        more = si.self_install(si.resolve_plan(home=home, repo=repo, ref="HEAD"), dry_run=False)
+        assert more["ok"], more
+    assert more["pruned_backups"], "five more installs must have pruned something"
+
+    back = si.rollback(home, dry_run=False)
+    assert back["ok"], back
+    reported = [Path(item["saved"]) for item in back["saved_launchers"]]
+    assert reported == [saved]
+    assert saved.is_file(), f"rollback reports {saved}, which retention deleted"
+    assert saved.read_text(encoding="utf-8") == before
+
+
+def test_retention_never_prunes_a_backup_the_launcher_record_cites(si, home):
+    """A home installed before the launcher copies moved out keeps them inside a
+    self-install-* backup; that backup is kept while the record points into it."""
+    backups = home / "state" / "backups"
+    cited = _backup_dir(backups, "self-install-9.9.9-aaaaaaaaaa-old", 0)
+    (cited / "launchers").mkdir()
+    (cited / "launchers" / "ds.cmd").write_text("old launcher", encoding="utf-8")
+    for i in range(1, 7):
+        _backup_dir(backups, f"self-install-9.9.9-aaaaaaaaaa-{i:02d}", i)
+    (home / "state" / si.REPOINTED_RECORD).write_text(
+        json.dumps({"launchers": [{"path": "x", "saved": str(cited / "launchers" / "ds.cmd")}]}),
+        encoding="utf-8",
+    )
+    removed = si.prune_self_install_backups(home, keep=5)
+    assert str(cited) not in removed
+    assert (cited / "launchers" / "ds.cmd").is_file()
+    assert [Path(p).name for p in removed] == ["self-install-9.9.9-aaaaaaaaaa-01"]

@@ -108,8 +108,11 @@ _PINNED_HOME = re.compile(
     re.MULTILINE,
 )
 
-#: Where self-install records the launchers it repointed, for rollback to restore.
+#: Where self-install records the launchers it repointed and where it saved each one.
 REPOINTED_RECORD = "repointed-launchers.json"
+
+#: The directory under state/backups that holds the saved launchers (never pruned).
+LAUNCHER_BACKUPS = "launchers"
 
 
 def _same_path(a: Path, b: Path) -> bool:
@@ -176,9 +179,18 @@ def stale_path_launchers(home: Path) -> list[Path]:
     return _path_launchers(home)[0]
 
 
-def _repoint_launchers(home: Path, backup_dir: Path, app_id: str, log: list[str]) -> list[dict]:
-    """Repoint this home's PATH launchers to <home>/bin, saving each previous file in the
-    install's backup directory and recording it so `--rollback` can put it back."""
+def launcher_backups_root(home: Path) -> Path:
+    """Where self-install saves the PATH launchers it repoints: state/backups/launchers/.
+
+    Not inside a self-install-* authority backup, which retention removes: the saved copy
+    is the only way back to a checkout launcher, and the record cites it by path.
+    """
+    return home / "state" / "backups" / LAUNCHER_BACKUPS
+
+
+def _repoint_launchers(home: Path, saved_dir: Path, app_id: str, log: list[str]) -> list[dict]:
+    """Repoint this home's PATH launchers to <home>/bin, saving each previous file in
+    *saved_dir* and recording where in state/repointed-launchers.json."""
     content = delegating_launchers(home)
     repointed = []
     for path in stale_path_launchers(home):
@@ -188,7 +200,7 @@ def _repoint_launchers(home: Path, backup_dir: Path, app_id: str, log: list[str]
             # Windows): batch content in it would not run. Reported, not rewritten.
             log.append(f"left {path}: no delegating launcher of that kind on this platform")
             continue
-        saved = backup_dir / "launchers" / path.name
+        saved = saved_dir / path.name
         saved.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, saved)
         path.write_text(new, encoding="utf-8", newline="")
@@ -234,21 +246,60 @@ def _self_install_backups(home: Path) -> list[Path]:
     return sorted(found, key=lambda p: (p / "studio.db").stat().st_mtime, reverse=True)
 
 
+def _cited_backups(home: Path) -> set[Path]:
+    """The self-install-* backups state/repointed-launchers.json points into.
+
+    Installs before the launcher copies moved to state/backups/launchers/ saved them
+    inside the install's authority backup; that backup is kept while the record cites it.
+    """
+    root = (home / "state" / "backups").resolve()
+    cited = set()
+    for item in _saved_launchers(home):
+        saved = Path(item.get("saved", "")).resolve()
+        if root in saved.parents:
+            cited.add(root / saved.relative_to(root).parts[0])
+    return cited
+
+
+def _backups_to_prune(home: Path, keep: int = BACKUPS_KEPT, *, adding: bool = False) -> list[Path]:
+    """The self-install and rollback backups retention removes, oldest last.
+
+    *adding*: the caller is about to take one more backup, which then counts as the
+    newest of the *keep* (what a dry run asks before the copy exists).
+    """
+    kept = max(keep - 1 if adding else keep, 1)
+    cited = _cited_backups(home)
+    candidates = [p for p in _self_install_backups(home) if p.resolve() not in cited]
+    return candidates[kept:]
+
+
 def prune_self_install_backups(home: Path, keep: int = BACKUPS_KEPT) -> list[str]:
     """Remove all but the newest *keep* self-install and rollback backups; return them.
 
     Each is a full copy of the authority (about 1.5 GB at real size), and nothing ever
-    removed one. Only those directories are candidates, the newest is always kept, and
-    every other backup -- pre-restore copies, the pre-migration studio-pre-* files,
-    `ds backup` output -- is never touched.
+    removed one. Only those directories are candidates, the newest is always kept, one
+    the repointed-launchers record cites is kept, and every other backup -- pre-restore
+    copies, the pre-migration studio-pre-* files, the saved launchers, `ds backup`
+    output -- is never touched.
     """
     root = home / "state" / "backups"
     removed = []
-    kept = max(keep, 1)
-    for old in _self_install_backups(home)[kept:]:
+    for old in _backups_to_prune(home, keep):
         _remove_tree(old, root)
         removed.append(str(old))
     return removed
+
+
+def _prune_steps(home: Path, *, adding: bool) -> list[dict]:
+    """The dry-run lines for what retention removes after this run."""
+    return [
+        {
+            "step": "prune-backup",
+            "path": str(old),
+            "detail": f"keeps the newest {BACKUPS_KEPT} self-install and rollback backups",
+        }
+        for old in _backups_to_prune(home, adding=adding)
+    ]
 
 
 def _assert_inside(path: Path, parent: Path) -> None:
@@ -459,6 +510,10 @@ class SelfInstallPlan:
     def backup_dir(self) -> Path:
         return self.home / "state" / "backups" / f"self-install-{self.app_id}-{self.stamp}"
 
+    @property
+    def launcher_backup_dir(self) -> Path:
+        return launcher_backups_root(self.home) / self.stamp
+
     def writes(self, *, reuse: bool, db_exists: bool, current: str | None) -> list[dict]:
         """Every write the install makes, in order -- what --dry-run prints."""
         steps: list[dict] = []
@@ -560,7 +615,7 @@ class SelfInstallPlan:
                     "detail": (
                         f"a Dream Studio launcher on PATH for this home that bypasses "
                         f"{launcher_path(self.home)}; the previous file is saved at "
-                        f"{self.backup_dir / 'launchers' / p.name}"
+                        f"{self.launcher_backup_dir / p.name}"
                     ),
                     "content": delegating_launchers(self.home).get(p.name, ""),
                 }
@@ -574,16 +629,7 @@ class SelfInstallPlan:
         ]
         # Retention: the install adds one backup (when there is an authority to back up),
         # then keeps the newest BACKUPS_KEPT.
-        kept_existing = BACKUPS_KEPT - 1 if db_exists else BACKUPS_KEPT
-        kept_existing = max(kept_existing, 1)
-        for old in _self_install_backups(self.home)[kept_existing:]:
-            steps.append(
-                {
-                    "step": "prune-backup",
-                    "path": str(old),
-                    "detail": f"keeps the newest {BACKUPS_KEPT} self-install and rollback backups",
-                }
-            )
+        steps += _prune_steps(self.home, adding=db_exists)
         for root in self.config_roots:
             steps.append(self._integration_preview(root))
         return steps
@@ -1075,7 +1121,7 @@ def self_install(plan: SelfInstallPlan, *, dry_run: bool) -> dict[str, Any]:
     pruned = prune_self_install_backups(plan.home)
     for path in pruned:
         log.append(f"removed old backup {path} (keeping the newest {BACKUPS_KEPT})")
-    repointed = _repoint_launchers(plan.home, plan.backup_dir, plan.app_id, log)
+    repointed = _repoint_launchers(plan.home, plan.launcher_backup_dir, plan.app_id, log)
     left = _path_launchers(plan.home)[1]
 
     integrations = []
