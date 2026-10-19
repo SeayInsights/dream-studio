@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -169,6 +170,9 @@ def _gh_json(args: list[str], cwd: Path | None) -> tuple[Any, str | None]:
         result = subprocess.run(
             ["gh", *args],
             cwd=str(cwd) if cwd else None,
+            # A read must leave nothing behind: with telemetry on, gh writes a
+            # device-id into the user's state directory (and reports the call).
+            env={**os.environ, "GH_TELEMETRY": "0", "GH_NO_UPDATE_NOTIFIER": "1"},
             capture_output=True,
             text=True,
             encoding="utf-8",

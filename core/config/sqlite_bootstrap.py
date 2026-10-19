@@ -206,9 +206,10 @@ def _owning_home(db_path: Path) -> Path | None:
     """
 
     real = Path(os.path.realpath(os.path.abspath(str(db_path))))
-    if os.path.normcase(real.name) == os.path.normcase("studio.db") and os.path.normcase(
-        real.parent.name
-    ) == os.path.normcase("state"):
+    # Case-folded on every OS: os.path.normcase folds only on Windows, but macOS
+    # volumes are case-insensitive too, so `STATE/Studio.db` there IS the authority.
+    # On a case-sensitive volume it is a look-alike no one should create in a home.
+    if real.name.casefold() == "studio.db" and real.parent.name.casefold() == "state":
         return real.parent.parent
     from core.config.paths import home_dir
 

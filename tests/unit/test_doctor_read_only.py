@@ -40,6 +40,18 @@ def _env(tmp: Path) -> dict[str, str]:
     env["CLAUDE_CONFIG_DIR"] = str(tmp / "claude")
     env["HOME"] = str(tmp / "userhome")
     env["USERPROFILE"] = str(tmp / "userhome")
+    # Every per-user data location a child tool writes to, inside the snapshotted user
+    # home: gh wrote its device-id to ~/.local/state on Linux and macOS and to
+    # %LOCALAPPDATA% on Windows, which this test did not watch, so it passed there.
+    for var, sub in (
+        ("APPDATA", "AppData/Roaming"),
+        ("LOCALAPPDATA", "AppData/Local"),
+        ("XDG_CONFIG_HOME", ".config"),
+        ("XDG_STATE_HOME", ".local/state"),
+        ("XDG_DATA_HOME", ".local/share"),
+        ("XDG_CACHE_HOME", ".cache"),
+    ):
+        env[var] = str(tmp / "userhome" / sub)
     return env
 
 
