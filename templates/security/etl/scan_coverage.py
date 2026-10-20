@@ -140,7 +140,9 @@ def overall(assessments: list[dict]) -> str:
     return COMPLETE
 
 
-def stamp(findings: list[dict], assessment: dict, extra_limitations: list[str] | None = None) -> None:
+def stamp(
+    findings: list[dict], assessment: dict, extra_limitations: list[str] | None = None
+) -> None:
     """Carry coverage and limitations on every finding (flat dicts; no schema to migrate)."""
     limitations = list(assessment["limitations"]) + list(extra_limitations or [])
     for f in findings:

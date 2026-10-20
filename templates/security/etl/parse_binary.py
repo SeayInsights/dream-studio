@@ -63,6 +63,7 @@ def assess_scan(meta: dict | None) -> tuple[dict, list[str]]:
     extra = [HEADER_LIMITATION] if "header_analysis" in ran else []
     return assessment, extra
 
+
 SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 
 CHECKSEC_CHECK_META = {

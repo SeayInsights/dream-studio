@@ -96,7 +96,9 @@ ENTRY_POINTS = (
 def test_domain_request_with_domains_unloadable_fails_and_reports_nothing(
     entry: str, broken: Path, subject: Path, workdir: Path
 ):
-    proc = _run(broken / entry, str(subject), "--domain", "finance", "--format", "json", cwd=workdir)
+    proc = _run(
+        broken / entry, str(subject), "--domain", "finance", "--format", "json", cwd=workdir
+    )
 
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert "--domain finance" in proc.stderr
@@ -112,7 +114,9 @@ def test_domain_request_with_domains_unloadable_fails_and_reports_nothing(
 def test_domain_request_succeeds_when_domains_load(
     entry: str, healthy: Path, subject: Path, workdir: Path
 ):
-    proc = _run(healthy / entry, str(subject), "--domain", "finance", "--format", "json", cwd=workdir)
+    proc = _run(
+        healthy / entry, str(subject), "--domain", "finance", "--format", "json", cwd=workdir
+    )
 
     assert proc.returncode == 0, proc.stdout + proc.stderr
     report = json.loads(proc.stdout[proc.stdout.index("{") :])
@@ -169,7 +173,13 @@ def test_domain_general_is_the_general_analysis_and_needs_no_domain_package(
 ):
     """`--domain general` names the general analysis; it is not a domain request."""
     proc = _run(
-        broken / "repo-analyzer.py", str(subject), "--domain", "general", "--format", "json", cwd=workdir
+        broken / "repo-analyzer.py",
+        str(subject),
+        "--domain",
+        "general",
+        "--format",
+        "json",
+        cwd=workdir,
     )
 
     assert proc.returncode == 0, proc.stdout + proc.stderr
