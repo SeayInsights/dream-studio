@@ -38,6 +38,10 @@ ARTIFACT_CLASSES: frozenset[str] = frozenset({CODE, CONFIG, DOCUMENT, DATA})
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
+#: A type name is stored in a TEXT column and printed in refusals and CLI choices; a bound
+#: keeps a loader from registering a paragraph.
+MAX_NAME_LENGTH = 64
+
 
 @dataclass(frozen=True)
 class WorkOrderType:
@@ -63,8 +67,9 @@ def register_work_order_type(
     stales_design_brief: bool | None = None,
     exempt_from_verification: bool = False,
 ) -> WorkOrderType:
-    """Declare a work-order type. Refuses a duplicate, a malformed name, an unknown
-    artifact class, and a UI-bearing type that does not stale the design brief.
+    """Declare a work-order type. Refuses, always with ValueError, a duplicate, a malformed
+    or overlong name, a non-bool flag, an unknown artifact class, and a UI-bearing type that
+    does not stale the design brief.
 
     ``stales_design_brief`` defaults to ``ui_bearing``: a type that ships a surface moves
     the design surface. Pass it explicitly to declare a type that moves the surface
@@ -75,9 +80,23 @@ def register_work_order_type(
             f"work-order type name {name!r} must be lowercase letters, digits and underscores,"
             " starting with a letter"
         )
+    if len(name) > MAX_NAME_LENGTH:
+        raise ValueError(
+            f"work-order type name {name[:20]!r}... is {len(name)} characters;"
+            f" it must be at most {MAX_NAME_LENGTH}"
+        )
+    for flag, value in (
+        ("ui_bearing", ui_bearing),
+        ("stales_design_brief", stales_design_brief),
+        ("exempt_from_verification", exempt_from_verification),
+    ):
+        # `type is bool`, not isinstance or truthiness: "no" is truthy and 1 is not a flag.
+        # stales_design_brief alone may be None, meaning "follow ui_bearing".
+        if type(value) is not bool and not (flag == "stales_design_brief" and value is None):
+            raise ValueError(f"work-order type {name!r}: {flag} must be a bool, got {value!r}")
     if name in _REGISTRY:
         raise ValueError(f"work-order type {name!r} is already registered")
-    if artifact_class not in ARTIFACT_CLASSES:
+    if not isinstance(artifact_class, str) or artifact_class not in ARTIFACT_CLASSES:
         raise ValueError(
             f"work-order type {name!r} names unknown artifact class {artifact_class!r}."
             f" Known: {', '.join(sorted(ARTIFACT_CLASSES))}."

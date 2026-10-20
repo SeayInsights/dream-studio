@@ -145,23 +145,43 @@ def test_create_does_not_refuse_an_absent_type():
     assert "is not one the platform declares" not in error
 
 
-def test_no_module_carries_a_second_full_list():
-    """A second copy of all ten anywhere in core/ or interfaces/ is the thing this file
-    exists to end. Only the registry may name them."""
+#: The one remaining copy, named rather than waved through. The generated AGENTS.md lists
+#: every type with a sentence on when to use it, in a presentation order the registry does
+#: not hold. Making it read the registry means giving the registry descriptions and an
+#: order and regenerating AGENTS.md, which is its own change. The second test below fails
+#: the moment this stops being a copy, so the entry cannot outlive the thing it excuses.
+_KNOWN_COPIES = frozenset({"integrations/compiler/agents_md.py"})
+
+
+def _modules_naming_every_declared_type() -> set[str]:
     from pathlib import Path
 
     repo = Path(__file__).resolve().parents[2]
     full = set(WORK_ORDER_TYPES)
-    offenders = []
-    for py in list((repo / "core").rglob("*.py")) + list((repo / "interfaces").rglob("*.py")):
-        if py.name == "type_registry.py" and py.parent.name == "work_orders":
-            continue
-        text = py.read_text(encoding="utf-8", errors="replace")
-        # Only a literal list of ALL ten counts. type_registry.py, skipped above, is the one
-        # definition and the only module that may name each one.
-        if all(f'"{t}"' in text for t in full):
-            offenders.append(str(py.relative_to(repo)))
-    assert offenders == [], f"a second full copy of the type list: {offenders}"
+    found = set()
+    for root in ("core", "interfaces", "integrations"):
+        for py in (repo / root).rglob("*.py"):
+            if py.name == "type_registry.py" and py.parent.name == "work_orders":
+                continue
+            text = py.read_text(encoding="utf-8", errors="replace")
+            # Only a literal list of ALL ten counts. type_registry.py, skipped above, is
+            # the one definition and the only module that may name each one.
+            if all(f'"{t}"' in text for t in full):
+                found.add(py.relative_to(repo).as_posix())
+    return found
+
+
+def test_no_module_carries_a_second_full_list():
+    """A second copy of all ten anywhere in core/, interfaces/ or integrations/ is the
+    thing this file exists to end. Only the registry may name them; the one known
+    exception is listed above and checked below."""
+    offenders = _modules_naming_every_declared_type() - _KNOWN_COPIES
+    assert offenders == set(), f"a second full copy of the type list: {sorted(offenders)}"
+
+
+def test_a_known_copy_is_still_a_copy():
+    """An allowlist entry for a file that no longer holds the list is a hole left open."""
+    assert _modules_naming_every_declared_type() >= _KNOWN_COPIES
 
 
 def test_the_declared_types_are_what_the_help_text_promises():

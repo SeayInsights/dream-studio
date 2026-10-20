@@ -140,6 +140,36 @@ def test_a_malformed_name_is_refused(clean_registry, bad):
         register_work_order_type(bad, artifact_class=CODE)
 
 
+@pytest.mark.parametrize("bad_class", [["code"], {"code"}, None, 3])
+def test_a_non_string_artifact_class_is_a_value_error_not_a_type_error(clean_registry, bad_class):
+    """An unhashable class (a list) used to escape as TypeError from the set membership
+    test; every refusal this API makes is a ValueError, so a caller catches one thing."""
+    with pytest.raises(ValueError, match="unknown artifact class"):
+        register_work_order_type("ledger", artifact_class=bad_class)
+    assert get_work_order_type("ledger") is None
+
+
+@pytest.mark.parametrize("flag", ["ui_bearing", "stales_design_brief", "exempt_from_verification"])
+@pytest.mark.parametrize("bad", ["no", "", 1, 0, [], None])
+def test_a_flag_that_is_not_a_real_bool_is_refused(clean_registry, flag, bad):
+    """ "no" is truthy: it used to register and read as UI-bearing. None is the one
+    non-bool a flag may carry, and only stales_design_brief, where it means "follow
+    ui_bearing"."""
+    if flag == "stales_design_brief" and bad is None:
+        pytest.skip("None is the documented default for stales_design_brief")
+    with pytest.raises(ValueError, match=f"{flag} must be a bool"):
+        register_work_order_type("poster", artifact_class=CODE, **{flag: bad})
+    assert get_work_order_type("poster") is None
+
+
+def test_an_overlong_name_is_refused_and_the_limit_itself_is_accepted(clean_registry):
+    limit = type_registry.MAX_NAME_LENGTH
+    register_work_order_type("a" * limit, artifact_class=CODE)
+    with pytest.raises(ValueError, match="at most"):
+        register_work_order_type("a" * (limit + 1), artifact_class=CODE)
+    assert get_work_order_type("a" * (limit + 1)) is None
+
+
 def test_a_ui_bearing_type_must_stale_the_design_brief(clean_registry):
     with pytest.raises(ValueError, match="does not stale the design brief"):
         register_work_order_type(
