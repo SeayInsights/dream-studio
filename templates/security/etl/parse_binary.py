@@ -529,7 +529,9 @@ def detect_and_parse(
     return []
 
 
-def read_result_file(path: Path, target_name: str, binary_hash: str) -> tuple[str | None, list[dict]]:
+def read_result_file(
+    path: Path, target_name: str, binary_hash: str
+) -> tuple[str | None, list[dict]]:
     """Parse one result file: (the planned step it is the output of or None, findings).
 
     Raises on a file that cannot be read or parsed; the caller reports it and the step

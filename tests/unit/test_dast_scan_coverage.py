@@ -176,7 +176,9 @@ def test_zap_recorded_ran_but_report_absent_is_partial(tmp_path: Path):
 
     assert {f["coverage"] for f in findings} == {"partial"}
     assert coverage["scans"][0]["unread_steps"] == ["zap"]
-    assert any("recorded as ran but no zap result" in lim for lim in coverage["scans"][0]["limitations"])
+    assert any(
+        "recorded as ran but no zap result" in lim for lim in coverage["scans"][0]["limitations"]
+    )
 
 
 def test_nuclei_recorded_ran_but_output_absent_is_partial(tmp_path: Path):

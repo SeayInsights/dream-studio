@@ -218,8 +218,10 @@ def test_step_recorded_ran_but_its_result_file_is_absent_is_partial(tmp_path: Pa
     scan = coverage["scans"][0]
     assert scan["unread_steps"] == ["checksec"]
     assert scan["skipped_steps"] == []
-    assert any("checksec" in lim and "recorded as ran but no checksec result" in lim
-               for lim in scan["limitations"])
+    assert any(
+        "checksec" in lim and "recorded as ran but no checksec result" in lim
+        for lim in scan["limitations"]
+    )
 
 
 def test_empty_result_file_the_parser_cannot_parse_is_unread_and_partial(tmp_path: Path):
@@ -237,7 +239,9 @@ def test_empty_result_file_the_parser_cannot_parse_is_unread_and_partial(tmp_pat
 def test_result_of_a_kind_the_parser_does_not_read_is_unread_and_partial(tmp_path: Path):
     scans = tmp_path / "scans"
     d = _scan(scans, "app", {"steps": _steps()})
-    (d / "checksec.json").write_text(json.dumps({"error": "checksec: not an ELF"}), encoding="utf-8")
+    (d / "checksec.json").write_text(
+        json.dumps({"error": "checksec: not an ELF"}), encoding="utf-8"
+    )
 
     _, coverage, _ = _run(scans, tmp_path)
 
@@ -297,7 +301,9 @@ def test_header_analysis_is_parsed_into_findings_and_unread_when_malformed(tmp_p
 
     findings, _, _ = _run(scans, tmp_path)
     headers = [f for f in findings if f["scanner"] == "header_analysis"]
-    assert {f["rule_id"] for f in headers} == {"BIN-hdr-signed"}  # signed=False fails; the True one does not
+    assert {f["rule_id"] for f in headers} == {
+        "BIN-hdr-signed"
+    }  # signed=False fails; the True one does not
 
     (d / "header-analysis.json").write_text(json.dumps({"format": "pe"}), encoding="utf-8")
     _, coverage, _ = _run(scans, tmp_path)
@@ -318,7 +324,9 @@ def test_ran_without_a_tool_is_not_a_usable_record(tmp_path: Path):
 
 def test_a_step_recorded_twice_is_ambiguous_and_unknown(tmp_path: Path):
     scans = tmp_path / "scans"
-    _scan(scans, "app", {"steps": [*_steps(), {"step": "yara", "status": "skipped", "tool": "yara"}]})
+    _scan(
+        scans, "app", {"steps": [*_steps(), {"step": "yara", "status": "skipped", "tool": "yara"}]}
+    )
 
     _, coverage, _ = _run(scans, tmp_path)
 
@@ -383,7 +391,15 @@ def test_malformed_run_record_loses_no_findings(steps, tmp_path: Path):
 
 @pytest.mark.parametrize(
     "raw_meta",
-    ["[]", "5", '"steps"', "null", "not json at all", "{", '{"steps": ' + "[" * 500 + "]" * 500 + "}"],
+    [
+        "[]",
+        "5",
+        '"steps"',
+        "null",
+        "not json at all",
+        "{",
+        '{"steps": ' + "[" * 500 + "]" * 500 + "}",
+    ],
 )
 def test_malformed_scan_meta_file_loses_no_findings_and_reads_unknown(raw_meta, tmp_path: Path):
     scans = tmp_path / "scans"
@@ -397,7 +413,13 @@ def test_malformed_scan_meta_file_loses_no_findings_and_reads_unknown(raw_meta, 
 
 
 def test_load_meta_rejects_anything_but_a_json_object(tmp_path: Path):
-    for text, expected in (("[]", None), ("5", None), ("null", None), ("{", None), ('{"a": 1}', {"a": 1})):
+    for text, expected in (
+        ("[]", None),
+        ("5", None),
+        ("null", None),
+        ("{", None),
+        ('{"a": 1}', {"a": 1}),
+    ):
         p = tmp_path / "scan-meta.json"
         p.write_text(text, encoding="utf-8")
         assert scan_coverage.load_meta(p) == expected
@@ -410,7 +432,16 @@ def test_load_meta_rejects_anything_but_a_json_object(tmp_path: Path):
 
 def test_every_step_skipped_and_no_result_files_still_writes_the_sidecar(tmp_path: Path):
     scans = tmp_path / "scans"
-    _scan(scans, "app", {"steps": _steps(checksec="skipped", yara="skipped", strings="skipped", header_analysis="skipped")}, outputs=())
+    _scan(
+        scans,
+        "app",
+        {
+            "steps": _steps(
+                checksec="skipped", yara="skipped", strings="skipped", header_analysis="skipped"
+            )
+        },
+        outputs=(),
+    )
 
     findings, coverage, stderr = _run(scans, tmp_path, rc=1)
 
@@ -438,7 +469,9 @@ def test_missing_scans_directory_writes_an_unknown_sidecar(tmp_path: Path):
     assert any("not found" in lim for lim in coverage["scans"][0]["limitations"])
 
 
-def test_a_scan_directory_with_no_result_files_is_reported_beside_ones_that_have_them(tmp_path: Path):
+def test_a_scan_directory_with_no_result_files_is_reported_beside_ones_that_have_them(
+    tmp_path: Path,
+):
     scans = tmp_path / "scans"
     _scan(scans, "alpha", {"steps": _steps()})
     _scan(scans, "beta", {"steps": _steps(checksec="skipped")}, outputs=())
@@ -485,7 +518,12 @@ def test_failed_step_is_partial_too(tmp_path: Path):
 def test_each_scan_directory_is_assessed_once_not_once_per_file(tmp_path: Path):
     scans = tmp_path / "scans"
     _scan(scans, "alpha", {"steps": _steps()})
-    d = _scan(scans, "beta", {"steps": _steps(header_analysis="skipped")}, outputs=("checksec", "yara", "strings"))
+    d = _scan(
+        scans,
+        "beta",
+        {"steps": _steps(header_analysis="skipped")},
+        outputs=("checksec", "yara", "strings"),
+    )
     sub = d / "raw"
     sub.mkdir()
     (sub / "yara-extra.json").write_text(json.dumps([]), encoding="utf-8")
@@ -552,7 +590,11 @@ def test_a_scan_meta_above_the_scans_dir_does_not_vouch_for_the_scan(tmp_path: P
         ({"steps": "not-a-list"}, ALL_STEPS, "unknown"),
         ({"steps": []}, ALL_STEPS, "unknown"),
         ({"steps": _steps()[:-1]}, ALL_STEPS, "unknown"),
-        ({"steps": [*_steps()[:-1], {"step": "header_analysis", "status": "maybe"}]}, ALL_STEPS, "unknown"),
+        (
+            {"steps": [*_steps()[:-1], {"step": "header_analysis", "status": "maybe"}]},
+            ALL_STEPS,
+            "unknown",
+        ),
         ({"steps": [*_steps()[:-1], "garbage"]}, ALL_STEPS, "unknown"),
         ({"steps": _steps()}, ALL_STEPS, "complete"),
         ({"steps": _steps()}, ALL_STEPS[:-1], "partial"),
