@@ -464,7 +464,15 @@ def test_an_unexpected_failure_in_discovery_still_writes_the_sidecar(tmp_path: P
     monkeypatch.setattr(
         sys,
         "argv",
-        ["parse_dast.py", "--client", "c", "--scans-dir", str(scans), "--coverage-output", str(cov)],
+        [
+            "parse_dast.py",
+            "--client",
+            "c",
+            "--scans-dir",
+            str(scans),
+            "--coverage-output",
+            str(cov),
+        ],
     )
     with pytest.raises(SystemExit) as exit_info:
         parse_dast.main()
@@ -511,7 +519,9 @@ def test_a_report_that_is_not_text_is_unread(tmp_path: Path):
     _, coverage, _ = _run(scans, tmp_path)
 
     assert coverage["scans"][0]["unread_steps"] == ["zap"]
-    assert any("zap-report.json could not be read" in lim for lim in coverage["scans"][0]["limitations"])
+    assert any(
+        "zap-report.json could not be read" in lim for lim in coverage["scans"][0]["limitations"]
+    )
 
 
 # -- nuclei lines must look like nuclei results -----------------------------------------------------------

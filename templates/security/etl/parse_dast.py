@@ -312,9 +312,7 @@ def parse_nuclei_jsonl(path: Path, target_name: str, text: str | None = None) ->
         try:
             obj = json.loads(line)
         except json.JSONDecodeError:
-            print(
-                f"  [warn] Skipping malformed line {line_num} in {path.name}", file=sys.stderr
-            )
+            print(f"  [warn] Skipping malformed line {line_num} in {path.name}", file=sys.stderr)
             continue
         if _nuclei_shape_problem(obj):
             print(

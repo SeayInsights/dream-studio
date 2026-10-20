@@ -1149,7 +1149,15 @@ def test_an_unexpected_failure_in_discovery_still_writes_the_sidecar(tmp_path: P
     monkeypatch.setattr(
         sys,
         "argv",
-        ["parse_binary.py", "--client", "c", "--scans-dir", str(scans), "--coverage-output", str(cov)],
+        [
+            "parse_binary.py",
+            "--client",
+            "c",
+            "--scans-dir",
+            str(scans),
+            "--coverage-output",
+            str(cov),
+        ],
     )
     with pytest.raises(SystemExit) as exit_info:
         parse_binary.main()
@@ -1241,7 +1249,10 @@ def test_a_strings_result_whose_findings_is_not_a_list_is_not_a_strings_result(
     _, coverage, _ = _run(scans, tmp_path)
 
     assert coverage["scans"][0]["unread_steps"] == ["strings"]
-    assert any("strings-findings.json could not be read" in lim for lim in coverage["scans"][0]["limitations"])
+    assert any(
+        "strings-findings.json could not be read" in lim
+        for lim in coverage["scans"][0]["limitations"]
+    )
 
 
 def test_directory_comparison_ignores_trailing_separators_and_dot_segments():
