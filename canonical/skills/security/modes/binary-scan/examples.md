@@ -110,13 +110,24 @@ sha256sum {binary_path}
 
 Store the hash for inclusion in findings.
 
+### Run record (applies to A4-A7)
+
+The analysis has four steps: `checksec` (A4), `yara` (A5), `strings` (A6) and
+`header_analysis` (A7). Keep a run record as you go: for each one, `ran`, `skipped` (its
+tool is not available, or A7 has no Python library for the format) or `failed` (it ran
+and errored), with the `tool` actually used and, when it did not run, the `reason`. A
+step never leaves the record, because Step A8 writes it to `scan-meta.json` and the
+ingest step reads it back to mark the scan `complete`, `partial` or `unknown`.
+
 ### Step A4: Run checksec
 
 Detect platform and run appropriate tool:
 - Linux: `checksec --output=json --file={binary_path}`
 - Windows: `winchecksec {binary_path}` or via WSL: `wsl checksec --output=json --file={wsl_path}`
 
-Store output as `checksec.json`.
+Store output as `checksec.json`. If no checksec variant is available for the platform,
+record `checksec` as `skipped` with the reason (for example "winchecksec not installed")
+and continue.
 
 ### Step A5: Run YARA
 
@@ -124,7 +135,8 @@ Store output as `checksec.json`.
 yara -j ~/.dream-studio/security/binary/{client}/{target}/yara-rules.yar {binary_path} > yara-matches.json
 ```
 
-Store output as `yara-matches.json`.
+Store output as `yara-matches.json`. If `yara` is not installed, record `yara` as `skipped`
+with the reason and continue.
 
 ### Step A6: Run Strings Analysis
 
@@ -132,9 +144,16 @@ Store output as `yara-matches.json`.
 strings {binary_path} | grep -E '(https?://|[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+|password|secret|api.key|token)' > strings-findings.txt
 ```
 
-Apply PII patterns from `data.pii_patterns` against strings output.
+Apply PII patterns from `data.pii_patterns` against strings output. If `strings` is not
+available (for example on Windows without binutils), record `strings` as `skipped` with
+the reason and continue.
 
-### Step A7: PE/ELF Header Analysis (if Python tools available)
+### Step A7: PE/ELF Header Analysis (needs `pefile` for PE, `pyelftools` for ELF)
+
+Try the import first. If the library for the binary's format is not installed, record
+`header_analysis` as `skipped` with the reason (for example "pefile is not installed") --
+do not just move on, because nothing downstream can tell a skipped header analysis from
+one that found nothing.
 
 ```python
 # For PE (Windows):
@@ -163,13 +182,25 @@ from elftools.elf.elffile import ELFFile
      "binary_hash": "{sha256}",
      "platform": "{platform}",
      "scanners": ["checksec", "yara", "strings"],
+     "steps": [
+       {"step": "checksec", "status": "ran", "tool": "checksec"},
+       {"step": "yara", "status": "ran", "tool": "yara"},
+       {"step": "strings", "status": "ran", "tool": "strings"},
+       {"step": "header_analysis", "status": "skipped", "tool": "pefile",
+        "reason": "pefile is not installed"}
+     ],
      "ingested_at": "{ISO-8601}"
    }
    ```
+   `steps` is the run record: one entry for each of `checksec`, `yara`, `strings` and
+   `header_analysis`, with `status` `ran`, `skipped` or `failed`, the `tool` used, and a
+   `reason` when the status is not `ran`. `scanners` lists only the scanners that
+   actually ran (it is no longer the planned list). A scan directory written before
+   `steps` existed stays readable: ingest reports its coverage as `unknown`.
 
 ### Step A9: Present Summary
 
-Show: binary analyzed, hash, checksec pass/fail summary, YARA matches count, strings findings count.
+Show: binary analyzed, hash, checksec pass/fail summary, YARA matches count, strings findings count, and every step recorded `skipped` or `failed` with its reason.
 
 ---
 
@@ -189,12 +220,18 @@ Find checksec.json, yara-matches.json, strings-findings.json in the scan directo
 
 Run parse_binary.py:
 ```bash
-py -3.12 templates/security/etl/parse_binary.py --client {client} --scans-dir {scan_dir}
+py -3.12 templates/security/etl/parse_binary.py --client {client} --scans-dir {scan_dir} --coverage-output {scan_dir}/coverage.json
 ```
+
+Each finding carries `coverage` (`complete` | `partial` | `unknown`) and `limitations`,
+read from the `steps` run record in `scan-meta.json`: `complete` only when all four steps
+ran, `partial` naming each skipped or failed step, `unknown` when `scan-meta.json` has no
+run record (an older scan directory). `coverage.json` holds the same per scan directory,
+which is the only place coverage shows when a scan produced no findings.
 
 ### Step I3: Present Summary
 
-Show: findings by category (hardening failures, YARA matches, strings findings), severity breakdown.
+Show: findings by category (hardening failures, YARA matches, strings findings), severity breakdown, and the coverage. When coverage is not `complete`, say so first and name the skipped steps: "no findings" from a partial scan is not a clean result.
 
 ---
 
