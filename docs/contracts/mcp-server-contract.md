@@ -42,7 +42,9 @@ mutating tool to exist at all; it is never sufficient on its own for one to be a
 `ds_gate_check` is a read tool (no capability). It calls
 `core.work_orders.close_main.check_close_gates(run_checks=False)` and nothing else; a test
 parses `integrations/mcp/` and fails if any `check_close_gates` call there does not pass
-`run_checks=False` literally, or if `closability` is called.
+`run_checks=False` literally, or if any module there names a function that executes
+(`run_gate_check`, `_run_ac_gate`, `run_executable_checks`, `closability`, and the rest of
+the list in the test), however it is imported, aliased or looked up by string.
 
 The executing form is not exposed, and not behind a capability either: it stays CLI-only.
 `check_close_gates` is documented as non-mutating, which means only that it leaves the work
@@ -55,25 +57,51 @@ writes a `validation.result_recorded` event to the spool for every check it exec
 `SQL-CHECK` included. A tool with no `required_capability` is open to a read-only client,
 so exposing that would let the client run commands and write events.
 
-The non-executing form starts no subprocess, makes no request and writes no event. A test
-asserts each of the three, plus that nothing is written to the authority, with every way out
-of the process patched to raise, and a mutation check reintroduces one execution at a time.
-It evaluates everything that can be read: the artifact-backed gates' presence, envelope and
-content checks, the pure gates (`spec_approved`, `design_brief_locked`, `game_validate`, and
-so on), `change_impact_affirmed`, the structural invariants, the phase, and every `SQL-CHECK`
-(a read, opened `mode=ro`). Each gate comes back as one of three states:
+The non-executing form starts no subprocess, makes no request and writes no event, and it
+opens the authority read-only: the connection it holds is `mode=ro`, and the readers it calls
+(artifact, runtime-state, carry-over; they open `mode=rw` by default and only SELECT) run
+under `core.config.database.read_only_authority()`, which forces every `connect_existing`
+read-only, so a write through any of them fails with "readonly database". A test asserts each
+of these, with every way out of the process patched to raise and a spy on every `sqlite3`
+open of the authority, and a mutation check reintroduces one at a time.
+
+It evaluates what can be read: the artifact-backed gates' presence, envelope and content
+checks (from the authority), the pure gates (`design_brief_locked`,
+`api_contract_and_security_review`), `change_impact_affirmed`, the structural invariants and
+the phase. Each gate comes back as one of three states:
 
 - `pass`: every part of the gate was evaluated and none objected.
-- `fail`: something that needed no execution objected (a failing `SQL-CHECK`, a missing
-  artifact, an unrecognised check kind, no check registered at all).
-- `not_run`: a part of the gate could not be evaluated without executing something, and the
-  record says which. This covers `TEST-CHECK` and `API-CHECK` criteria, and the
-  stored-commit comparison behind the artifact gates. A definite `fail` outranks `not_run`
-  within a gate; `not_run` is never reported as `pass`.
+- `fail`: something that needed no execution objected (a missing artifact in the
+  authority, an unrecognised check kind, no `TEST-CHECK` registered for `all_tests_pass`).
+- `not_run`: a part of the gate was not evaluated, and the record says which. A definite
+  `fail` outranks `not_run` within a gate; `not_run` is never reported as `pass`.
+
+What is `not_run`, and why:
+
+- Every acceptance criterion that is a check: `TEST-CHECK` (a subprocess), `API-CHECK` (a
+  request), and also `SQL-CHECK`. A `SQL-CHECK` starts nothing, but its query is written by
+  whoever held `work_order:add_task`, and this tool is open to clients holding no
+  capability. Evaluating it, even `mode=ro`, would let any client learn one bit per call
+  about any table in the authority, past the curated read tools, using a query it did not
+  write and could not otherwise run. So the preview never hands authored SQL to sqlite.
+- The stored-commit comparison behind the artifact gates (`git log`).
+- Every gate that reads a file from `.planning` on disk: `spec_approved`,
+  `design_critique`, `game_validate`, `anti_slop_passed`, `independent_review_passed`, and
+  the on-disk fallback of the artifact gates (an artifact the authority does not hold).
+  The `ds` CLI reads its working directory's `.planning`. This server has no project
+  directory, and reading the code root's `.planning` or the server's working directory would
+  report "not found", a `fail`, for work orders that pass with the right directory. The
+  project's recorded path is not used either: `project:create` lets a client record any path,
+  so reading it would make the preview a file-existence oracle for the server's disk. An
+  artifact that the authority does hold is judged as usual.
 
 The result adds `checks_run: false`, `gates` (per gate: `status`, `failures`, `not_run`),
 `gates_not_run`, `overall` (`fail`, else `not_run`, else `pass`), and keeps `gate_failures`
 (definite failures only) and `gates_pass`, which is true only when `overall` is `pass`.
+
+A `not_run` that matters is visible, not buried: `gates_not_run` lists the gates, each
+gate's `not_run` carries the reason, and a client that wants the result with the checks and
+the disk gates evaluated runs the CLI from the project.
 
 It is not a closability verdict, in either form. `close_work_order` also enforces gates the
 preview does not evaluate: `tasks_done`, the originating-symptom re-run, the default-on

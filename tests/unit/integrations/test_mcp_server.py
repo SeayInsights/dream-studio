@@ -1227,34 +1227,283 @@ def test_gate_check_calls_only_the_non_executing_form(bootstrapped_home, monkeyp
     monkeypatch.setattr(close_main_mod, "check_close_gates", _fake)
     _call_gate_check(bootstrapped_home)
     assert captured["run_checks"] is False
+    # The server has no project directory, and says so rather than guessing one.
+    assert captured["read_planning_dir"] is False
+    assert "planning_root" not in captured
+
+
+#: The disk-only gates, one work order each plus one carrying all five. Each has the file that
+#: satisfies it, planted where the CLI -- run from the project -- would find it.
+_DISK_GATE_CASES = {
+    "w_spec_approved_ok": (("t_spec", "spec_approved", None), {"spec.md": "# spec\n"}),
+    "w_design_critique_ok": (
+        ("t_critique", None, "design_critique"),
+        {"design-critique.md": "Score: 4/5\n"},
+    ),
+    "w_game_validate_ok": (("t_game", None, "game_validate"), {"game-validate.md": "ok\n"}),
+    "w_anti_slop_passed_ok": (
+        ("t_slop", None, "anti_slop_passed"),
+        {"lint-results.md": "PASSED\n"},
+    ),
+    "w_independent_review_passed_ok": (
+        ("t_irp", None, "independent_review_passed"),
+        {"independent-review.md": "VERDICT: PASS\n"},
+    ),
+    "w_ALL_ok": (
+        (
+            "t_all",
+            "spec_approved|game_validate",
+            "design_critique|anti_slop_passed|independent_review_passed",
+        ),
+        {
+            "spec.md": "# spec\n",
+            "game-validate.md": "ok\n",
+            "design-critique.md": "Score: 4/5\n",
+            "lint-results.md": "PASSED\n",
+            "independent-review.md": "VERDICT: PASS\n",
+        },
+    ),
+}
+_DISK_GATE_NAMES = {
+    "spec_approved",
+    "game_validate",
+    "design_critique",
+    "anti_slop_passed",
+    "independent_review_passed",
+}
+
+
+@pytest.fixture
+def disk_gate_home(bootstrapped_home, tmp_path, monkeypatch):
+    """The six work orders, with their files under `<cwd>/.planning`, and cwd set there: the
+    directory a CLI run from the project would read, and the one the old handler did not."""
+    import sqlite3
+
+    from core.installed_runtime import resolve_installed_runtime_paths
+
+    db_path = resolve_installed_runtime_paths(dream_studio_home=bootstrapped_home).sqlite_path
+    conn = sqlite3.connect(str(db_path))
+    for wo_id, ((type_id, pre, post), files) in _DISK_GATE_CASES.items():
+        conn.execute(
+            "INSERT INTO business_work_order_types (type_id, label, pre_build_gate,"
+            " build_executor, post_build_gate) VALUES (?, ?, ?, 'x', ?)",
+            (type_id, type_id, pre, post),
+        )
+        conn.execute(
+            "INSERT INTO business_work_orders (work_order_id, project_id, milestone_id, title,"
+            " description, status, work_order_type, created_at, updated_at)"
+            " VALUES (?, 'proj-1', NULL, 't', 'd', 'pushed', ?, '2020-01-01', '2020-01-01')",
+            (wo_id, type_id),
+        )
+        wo_dir = tmp_path / "project" / ".planning" / "work-orders" / wo_id
+        wo_dir.mkdir(parents=True)
+        for name, text in files.items():
+            (wo_dir / name).write_text(text, encoding="utf-8")
+    conn.commit()
+    conn.close()
+    monkeypatch.chdir(tmp_path / "project")
+    return bootstrapped_home
+
+
+@pytest.mark.parametrize("wo_id", sorted(_DISK_GATE_CASES))
+def test_gate_check_never_fails_a_disk_gate_it_could_not_look_for(disk_gate_home, wo_id):
+    """The work order PASSES with the right planning directory (its files are in cwd's
+    `.planning`, which is what the CLI reads). Over MCP the server has no such directory, so
+    each of its disk gates is not_run. FAIL would be a false answer, as wrong as a false pass."""
+    payload = json.loads(
+        _call_gate_check(disk_gate_home, work_order_id=wo_id)["result"]["content"][0]["text"]
+    )
+    disk = [g for g in payload["gates"] if g["gate"] in _DISK_GATE_NAMES]
+    assert disk
+    for gate in disk:
+        assert gate["status"] == "not_run", gate
+        assert gate["failures"] == []
+        assert "project directory" in " ".join(gate["not_run"])
+    assert not [f for f in payload["gate_failures"] if f.split(":")[0] in _DISK_GATE_NAMES]
+
+
+def test_the_same_work_orders_pass_through_the_cli_form(disk_gate_home):
+    """The other half of the claim: with the directory readable (the CLI's cwd), these are
+    passes -- so a FAIL over MCP would have been wrong, not merely different."""
+    from core.work_orders.close_main import check_close_gates
+
+    for wo_id in _DISK_GATE_CASES:
+        result = check_close_gates(
+            work_order_id=wo_id,
+            source_root=disk_gate_home,
+            dream_studio_home=disk_gate_home,
+            run_checks=False,
+        )
+        disk = [g for g in result["gates"] if g["gate"] in _DISK_GATE_NAMES]
+        assert disk and all(g["status"] == "pass" for g in disk), (wo_id, disk)
+
+
+def test_gate_check_evaluates_no_authored_query(bootstrapped_home_with_task, monkeypatch):
+    """A SQL-CHECK is text written by whoever held work_order:add_task. The preview is open to
+    every client, so it must not be a way for a read-only one to run it."""
+    import core.work_orders.verify_executor as vx
+
+    called = []
+    monkeypatch.setattr(vx, "_run_one_sql_check", lambda *a, **k: called.append(a) or {})
+    _set_task_criteria(
+        bootstrapped_home_with_task,
+        "SQL-CHECK: SELECT 1 WHERE substr((SELECT name FROM business_projects), 1, 1) = 'p'\n",
+    )
+    payload = json.loads(
+        _call_gate_check(bootstrapped_home_with_task)["result"]["content"][0]["text"]
+    )
+    assert called == []
+    ac = next(g for g in payload["gates"] if g["gate"] == "executable_ac")
+    assert ac["status"] == "not_run" and "SQL-CHECK" in ac["not_run"][0]
+
+
+def test_gate_check_opens_the_authority_read_only(bootstrapped_home_with_task, monkeypatch):
+    import sqlite3
+
+    opens = []
+    real = sqlite3.connect
+
+    def spy(database, *a, **k):
+        opens.append(str(database))
+        return real(database, *a, **k)
+
+    monkeypatch.setattr(sqlite3, "connect", spy)
+    resp = _call_gate_check(bootstrapped_home_with_task)
+    monkeypatch.setattr(sqlite3, "connect", real)
+    assert resp["result"]["isError"] is False, resp
+    authority = [o for o in opens if "studio.db" in o]
+    assert authority and all("mode=ro" in o for o in authority), authority
+
+
+# ── the guard: nothing under integrations/mcp reaches an executing function ──
+
+#: Every function that runs a check, evaluates an authored query, starts a subprocess for a
+#: gate, or writes a validation event. `check_close_gates` is handled separately: it is allowed
+#: only as a call that passes run_checks=False literally.
+_EXECUTING_NAMES = frozenset(
+    {
+        "run_gate_check",
+        "_run_ac_gate",
+        "_evaluate_gates",
+        "run_executable_checks",
+        "_run_one_test_check",
+        "_run_one_api_check",
+        "_run_one_sql_check",
+        "_emit_validation_result_event",
+        "_check_originating_symptom",
+        "symptom_check_detail",
+        "closability",
+    }
+)
+
+
+def _executing_reaches(source: str) -> tuple[list[str], int]:
+    """``(problems, checked_calls)`` for one module's source.
+
+    Resolves what a rename could hide: ``from m import f as g`` is flagged at the import (the
+    name is on the import line whatever it is called afterwards), ``m.f`` and
+    ``import m as x; x.f`` are flagged by attribute name, ``getattr(m, "f")`` by the string,
+    and ``cg = check_close_gates`` or ``partial(check_close_gates)`` because a reference to it
+    anywhere but as the callee of a checked call is not a call this guard has looked at.
+    """
+    import ast
+
+    tree = ast.parse(source)
+    problems: list[str] = []
+    aliases: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name in _EXECUTING_NAMES:
+                    problems.append(f"line {node.lineno}: imports {alias.name}")
+                if alias.name == "check_close_gates" and alias.asname:
+                    aliases[alias.asname] = "check_close_gates"
+
+    def real(node: ast.AST) -> str | None:
+        if isinstance(node, ast.Name):
+            return aliases.get(node.id, node.id)
+        if isinstance(node, ast.Attribute):
+            return node.attr
+        return None
+
+    checked_callees: set[int] = set()
+    checked = 0
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and real(node.func) == "check_close_gates":
+            checked += 1
+            kw = {k.arg: k.value for k in node.keywords}
+            literal_false = isinstance(kw.get("run_checks"), ast.Constant) and (
+                kw["run_checks"].value is False
+            )
+            if literal_false:
+                checked_callees.add(id(node.func))
+            else:
+                problems.append(f"line {node.lineno}: check_close_gates without run_checks=False")
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Name, ast.Attribute)):
+            name = real(node)
+            if name in _EXECUTING_NAMES:
+                problems.append(f"line {node.lineno}: references {name}")
+            elif name == "check_close_gates" and id(node) not in checked_callees:
+                problems.append(
+                    f"line {node.lineno}: check_close_gates used outside a checked call"
+                )
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if node.value in _EXECUTING_NAMES or node.value == "check_close_gates":
+                problems.append(f"line {node.lineno}: names {node.value!r} as a string")
+    return problems, checked
 
 
 def test_no_mcp_module_reaches_the_executing_preview():
-    """Standing guard: every `check_close_gates` call under integrations/mcp passes
-    run_checks=False literally, and nothing there calls `closability` (which is the
-    executing preview). The executing form stays CLI-only until a capability is designed
-    for it, and adding one is a deliberate edit that has to change this test."""
-    import ast
+    """Standing guard over every module under integrations/mcp. The executing form stays
+    CLI-only until a capability is designed for it, and adding one is a deliberate edit that
+    has to change this test."""
     from pathlib import Path
 
     mcp_dir = Path(__file__).resolve().parents[3] / "integrations" / "mcp"
-    found = 0
+    total = 0
     for path in sorted(mcp_dir.glob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
-            assert name != "closability", f"{path.name} calls closability (executes)"
-            if name != "check_close_gates":
-                continue
-            found += 1
-            kw = {k.arg: k.value for k in node.keywords}
-            assert "run_checks" in kw, f"{path.name}: check_close_gates without run_checks"
-            assert (
-                isinstance(kw["run_checks"], ast.Constant) and kw["run_checks"].value is False
-            ), f"{path.name}: check_close_gates must pass run_checks=False"
-    assert found >= 1, "ds_gate_check no longer calls check_close_gates at all"
+        problems, checked = _executing_reaches(path.read_text(encoding="utf-8"))
+        assert problems == [], f"{path.name}: {problems}"
+        total += checked
+    assert total >= 1, "ds_gate_check no longer calls check_close_gates at all"
+
+
+_GOOD = "from m import check_close_gates\ncheck_close_gates(work_order_id='x', run_checks=False)\n"
+
+
+def test_the_guard_accepts_the_one_call_it_allows():
+    assert _executing_reaches(_GOOD) == ([], 1)
+    aliased = "from m import check_close_gates as cg\ncg(run_checks=False)\n"
+    assert _executing_reaches(aliased) == ([], 1)
+
+
+@pytest.mark.parametrize(
+    "mutant",
+    [
+        # the call itself, however it is spelled
+        "from m import check_close_gates\ncheck_close_gates(work_order_id='x')\n",
+        "from m import check_close_gates\ncheck_close_gates(run_checks=True)\n",
+        "from m import check_close_gates\nflag = False\ncheck_close_gates(run_checks=flag)\n",
+        "from m import check_close_gates as cg\ncg(work_order_id='x')\n",
+        "import m\nm.check_close_gates(work_order_id='x')\n",
+        "from m import check_close_gates\ncg = check_close_gates\ncg(run_checks=False)\n",
+        "from m import check_close_gates\nimport functools\nfunctools.partial(check_close_gates)\n",
+        # the functions that execute, reached directly, under an alias, or by name
+        "from m import run_gate_check\n",
+        "from m import run_gate_check as rgc\nrgc()\n",
+        "from m import _run_ac_gate as quiet\n",
+        "import m as x\nx._run_ac_gate()\n",
+        "import m\nm.run_executable_checks([], None)\n",
+        "import m\ngetattr(m, '_run_one_test_check')\n",
+        "import importlib\nimportlib.import_module('m')._run_one_api_check\n",
+        "from m import closability\nclosability()\n",
+        "import m\nm.symptom_check_detail('s', None)\n",
+    ],
+)
+def test_the_guard_catches_a_mutant(mutant):
+    problems, _ = _executing_reaches(mutant)
+    assert problems, f"the guard missed:\n{mutant}"
 
 
 # ── ds_work_order_close (capability-gated) ──────────────────────────────────

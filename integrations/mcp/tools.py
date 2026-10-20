@@ -153,11 +153,16 @@ def _gate_check(*, work_order_id: str, dream_studio_home: Path | None = None) ->
     tool here that runs it. A gate part that needed execution comes back as ``not_run``,
     distinct from ``pass`` and ``fail``.
 
-    ``planning_root`` is pinned to the code root rather than left to the server's working
-    directory: the preview reads ``.planning/work-orders/<id>/`` for the gates whose artifact
-    lives on disk, and which directory that meant would otherwise depend on where
-    ``ds mcp serve`` was launched from. An id that names no work order is refused (by the
-    database lookup, before any path is built from it).
+    ``read_planning_dir=False``: seven gates read ``.planning/work-orders/<id>/`` on disk
+    (``spec_approved``, ``design_critique``, ``game_validate``, ``anti_slop_passed``,
+    ``independent_review_passed``, and the on-disk fallback of the artifact gates). The CLI
+    reads its working directory's ``.planning``; this server has no project directory, and
+    pointing it at the code root or at wherever ``ds mcp serve`` was launched would report
+    "not found" -- a FAIL -- for work orders that pass with the right directory. So those
+    gates report ``not_run`` instead. The project's recorded path is deliberately not used:
+    ``project:create`` lets a client record any path, and reading one chosen by a client
+    would make the preview a file-existence oracle for the server's disk. An id that names
+    no work order is refused (by the database lookup, before any path is built from it).
     """
     from core.work_orders.close_main import check_close_gates
 
@@ -165,8 +170,8 @@ def _gate_check(*, work_order_id: str, dream_studio_home: Path | None = None) ->
         work_order_id=work_order_id,
         source_root=REPO_ROOT,
         dream_studio_home=dream_studio_home,
-        planning_root=REPO_ROOT / ".planning",
         run_checks=False,
+        read_planning_dir=False,
     )
     if not result.get("ok"):
         raise ValueError(str(result.get("error") or f"no work order {work_order_id!r}"))
@@ -633,10 +638,16 @@ TOOLS: list[Tool] = [
         name="ds_gate_check",
         description=(
             "Preview a work order's close gates WITHOUT running anything. Read-only: starts "
-            "no subprocess, sends no request, writes no event. Each gate comes back as pass, "
-            "fail or not_run; a gate part that needed execution (a TEST-CHECK or API-CHECK "
-            "acceptance criterion, or the git comparison behind a stale-artifact check) is "
-            "not_run with the reason, and is never reported as passed. overall is fail if "
+            "no subprocess, sends no request, writes no event, opens the authority read-only "
+            "and evaluates no authored query. Each gate comes back as pass, fail or not_run. "
+            "not_run, with the reason, is a gate part that was not evaluated: any "
+            "SQL-CHECK, TEST-CHECK or API-CHECK acceptance criterion, the git comparison "
+            "behind a stale-artifact check, and every gate that reads a .planning file from "
+            "disk (spec_approved, design_critique, game_validate, anti_slop_passed, "
+            "independent_review_passed, or an artifact absent from the authority) because "
+            "this server has no project directory to read it from. It is never reported "
+            "as passed, and never as failed for a file that could not be looked for. "
+            "overall is fail if "
             "anything objects, else not_run if anything went unevaluated, else pass; "
             "gates_pass is true only for pass. This is NOT a closability verdict: closing "
             "also enforces tasks_done, the originating-symptom re-run, the default-on "

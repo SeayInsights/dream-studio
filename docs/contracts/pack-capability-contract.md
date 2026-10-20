@@ -69,10 +69,11 @@ to what the skill text and scripts actually call.
 
 `gate:check` previews a work order's close gates without running them
 (`check_close_gates(run_checks=False)`). It evaluates every gate that can be read and
-reports each gate as `pass`, `fail`, or `not_run`; a `TEST-CHECK` or `API-CHECK` criterion,
-and the stored-commit comparison behind the artifact gates, come back `not_run` with the
-reason, never `pass`. It starts no subprocess, makes no request and writes no event, which
-is what lets a client with no capability call it. The executing form (the default of
+reports each gate as `pass`, `fail`, or `not_run`. Every `SQL-CHECK`, `TEST-CHECK` and
+`API-CHECK` criterion, the stored-commit comparison behind the artifact gates, and every gate
+that reads `.planning` from disk (the server has no project directory) come back `not_run`
+with the reason, never `pass` and never `fail`. It starts no subprocess, makes no request, writes no event, opens the
+authority read-only and evaluates no authored query, which is what lets a client with no capability call it. The executing form (the default of
 `check_close_gates`, run by the `ds` CLI) stays CLI-only: there is no MCP tool and no
 capability that runs a work order's checks. The preview is not a closability verdict;
 `close_work_order` enforces gates it does not evaluate (see the MCP server contract). A pack
