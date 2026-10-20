@@ -1395,3 +1395,26 @@ rules:
       blocks with the reason, where an empty string would silently turn a work-order-scoped
       query into a repo-global one that passes for anything. Orchestrator coverage went
       0/14 to 3/14 to 9/14 on that change alone.
+  - id: a-read-only-gate-preview-executes-nothing
+    statement: >
+      The close-gate preview reachable without a capability starts no subprocess, makes no
+      request and writes no event, and a gate part it could not evaluate is reported
+      not_run, never pass.
+    source: core/work_orders/close_main.py
+    enforced_by:
+      - tests/unit/test_close_gate_preview_no_exec.py::test_the_non_executing_preview_starts_no_subprocess_makes_no_request_writes_nothing
+      - tests/unit/test_close_gate_preview_no_exec.py::test_not_run_never_reads_as_a_pass
+      - tests/unit/test_close_gate_preview_no_exec.py::test_a_non_executing_evaluation_without_a_not_run_sink_is_refused
+      - tests/unit/integrations/test_mcp_server.py::test_no_mcp_module_reaches_the_executing_preview
+    note: >
+      check_close_gates is documented as non-mutating, which meant only that it leaves the
+      work order's status alone: called by default it runs each TEST-CHECK as a subprocess,
+      sends each API-CHECK through a TestClient, runs git log to compare a stored artifact's
+      commit, and writes a validation.result_recorded event per executed check, SQL-CHECK
+      included (the issue that asked for this change assumed SQL-CHECK was side-effect free,
+      and it is not: the event is written for every check). A tool with no capability is open
+      to a read-only client, so the executing form cannot be offered there. The preview mode
+      is guarded by a test that makes every way out of the process raise and watches the
+      authority for a write, and each of those detectors was shown to fire by reintroducing
+      one execution at a time. not_run is its own state because the bare pass/fail pair of
+      run_gate_check would otherwise let a skipped gate read as a passed one.

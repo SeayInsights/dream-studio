@@ -75,7 +75,7 @@ GATE_NOT_RUN = "not_run"
 
 
 def _require_not_run_sink(run_checks: bool, not_run: list[str] | None) -> None:
-    """A non-executing evaluation MUST have somewhere to say what it did not do.
+    """A non-executing evaluation needs somewhere to say what it did not do.
 
     ``run_gate_check`` and ``_run_ac_gate`` return a bare pass/fail. Without a sink, a gate
     that skipped its execution would return the same ``(True, "")`` as one that ran and
