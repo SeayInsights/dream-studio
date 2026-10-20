@@ -2,14 +2,16 @@
 """
 Repository Analysis Integration for Analyze Pack
 
-Uses the repo_analysis package vendored alongside this file (previously
-shared/repo_analysis at the dream-studio repo root -- moved here 2026-09-27
-so this skill ships self-contained: dist/plugin publishes canonical/skills/**
-verbatim but never shared/, so the general-analysis capability silently
-could not work in an installed Dream Studio even after its import paths were
-fixed. repo_analysis has no internal dream-studio dependency beyond PyYAML,
+Uses the repo_analysis package vendored alongside this file (previously a
+package at the dream-studio repo root -- moved here 2026-09-27 so this skill
+ships self-contained: the installed plugin carries the skill directory
+verbatim but nothing from the repo root, so the general-analysis capability
+silently could not work in an installed Dream Studio even after its import
+paths were fixed. repo_analysis has no internal dream-studio dependency beyond PyYAML,
 matching this same skill's domains/ analyzers, which already vendor their
-own local core/base_analyzer.py for the identical reason).
+own local analyze_core/base_analyzer.py for the identical reason; that
+package is named analyze_core, not core, so it cannot shadow or be shadowed
+by dream-studio's own top-level core package).
 Enables multi-perspective analysis of repository patterns and organizational structures.
 
 Supports domain-specific analysis (design, career, finance, real estate) and
@@ -36,23 +38,19 @@ Usage:
 import sys
 from pathlib import Path
 
-# repo_analysis is vendored as a sibling of this file (canonical/skills/analyze/
-# repo_analysis/) -- add this file's own directory to sys.path to import it as
-# a plain top-level package, the same convention domains/registry.py already
-# uses for canonical/skills/analyze/core/.
+# repo_analysis, domains and analyze_core are vendored as siblings of this file
+# -- add this file's own directory to sys.path to import them as plain
+# top-level packages. Nothing here may reach above this directory: the pack is
+# installed as a directory of its own, where there is no repository root and no
+# source-checkout layout to climb to.
 sys.path.insert(0, str(Path(__file__).parent))
-
-# The dream-studio repo root is ALSO needed, separately, for the domain
-# registry import below (canonical.skills.analyze.domains) -- this file lives
-# at <repo_root>/canonical/skills/analyze/repo-analyzer.py, four levels down.
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from repo_analysis.analyzer import RepoAnalyzer
 from repo_analysis.formatters import json_formatter, markdown_formatter
 
 # Import domain registry
 try:
-    from canonical.skills.analyze.domains import DomainAnalyzerRegistry
+    from domains import DomainAnalyzerRegistry
 
     DOMAIN_SUPPORT = True
 except ImportError:

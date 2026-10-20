@@ -189,17 +189,21 @@ Examples:
         # Auto-detect domain if requested
         domain = args.domain
         if args.auto_detect and len(repo_paths) == 1:
-            # Not `from domains.registry import ...` -- that bare name only
-            # resolves as a side effect of registry.py's OWN sys.path insert
-            # (canonical/skills/analyze/ landing on sys.path once
-            # repo-analyzer.py above has already been loaded), and it creates
-            # a SEPARATE module identity from canonical.skills.analyze.domains
-            # -- a different DomainAnalyzerRegistry class object than the one
-            # repo-analyzer.py's own domain-specific analysis path uses.
-            from canonical.skills.analyze.domains import DomainAnalyzerRegistry
+            # Take the registry from the already-loaded repo-analyzer module
+            # rather than importing it a second time: one import route means
+            # one DomainAnalyzerRegistry class object, so auto-detection
+            # sees the same _analyzers the domain-specific analysis path
+            # uses. (Importing it again under another dotted path created a
+            # SEPARATE module identity -- see gotchas.yml.)
+            if not _repo_analyzer.DOMAIN_SUPPORT:
+                print(
+                    "[ERROR] --auto-detect needs the domain analyzers, which did not load",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
             from pathlib import Path
 
-            detected = DomainAnalyzerRegistry.auto_detect_domain(
+            detected = _repo_analyzer.DomainAnalyzerRegistry.auto_detect_domain(
                 Path(repo_paths[0]), verbose=args.verbose
             )
             if args.verbose:

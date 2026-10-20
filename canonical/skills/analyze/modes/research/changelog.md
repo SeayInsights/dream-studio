@@ -4,7 +4,7 @@
 
 **Promoted from agent to skill (WO 18.9 Tier 1)**
 
-Content transferred verbatim from `canonical/agents/research-analyst.md` (91 lines).
+Content transferred verbatim from the `research-analyst` agent (91 lines).
 No content changes — relocation only, per JIT policy: enrich after first real usage.
 
 Files created:
