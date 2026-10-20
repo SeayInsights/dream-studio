@@ -66,13 +66,26 @@ to what the skill text and scripts actually call.
 `review:dispatch` and `review:record` can never be held by one client (enforced in
 `auth.add_client`).
 
+### Present today (read model, not yet a capability)
+
+| Item | What exists |
+| --- | --- |
+| Finding honesty fields | The unified `Finding` read model (`core/findings/model.py`) carries `confidence` (`high` \| `medium` \| `low` \| `unknown`), `coverage` (`complete` \| `partial` \| `unknown`) and `limitations` (list, or null when not recorded). They appear in `Finding.to_dict`, `ds render findings --json`, and the HTML page. There is no `finding:record` / `finding:list` capability yet. |
+
+The defaults are `unknown`, `unknown`, and null: a finding whose producer recorded nothing
+never reads as high-confidence or complete. Today no producer records them. The
+`security_events` table has no column for any of the three (adding one is a schema
+migration, not done), so those rows are always unknown. The guard log passes through the
+three keys when a log line carries them, and the audit-markdown reader attaches one
+limitation to a blocker it had to recover from prose. Every other value is unknown.
+
 ### Proposed
 
 | Capability | Purpose | Standalone fallback |
 | --- | --- | --- |
-| `finding:record`, `finding:list` | Record and read findings in one typed shape: severity, location, `confidence`, `limitations`, `coverage` (`complete` \| `partial` \| `unknown`), evidence refs. The unified `Finding` read model (`core/findings/model.py`) has none of the last three today. | Append to a JSONL file beside the work; `list` reads it back. |
+| `finding:record`, `finding:list` | Record and read findings in one typed shape: severity, location, `confidence`, `limitations`, `coverage` (`complete` \| `partial` \| `unknown`), evidence refs. The read model carries the three honesty fields (see "Present today"); recording them through a capability, and storing them in `security_events`, are not built. | Append to a JSONL file beside the work; `list` reads it back. |
 | `evidence:attach` | Attach a content-hashed artifact (scan output, reproduction log) to a finding or work order. | Write the file next to the work; record its SHA256 in the finding. |
-| `gate:check` | Preview close gates for a work order. Exists in the `ds` CLI (`check_close_gates`), not in MCP. | Run each contributed gate's check command locally and print the results. |
+| `gate:check` | Preview close gates for a work order. Exists in the `ds` CLI (`check_close_gates`), not in MCP, and cannot be exposed as a read tool as it stands: the preview runs the work order's `TEST-CHECK` and `API-CHECK` criteria and emits events (see the MCP server contract). It needs a mode that evaluates gates without running checks first. | Run each contributed gate's check command locally and print the results. |
 | `registry:work_order_type`, `gate:register` | Let a pack supply work-order types and gates. Replaces the closed `WORK_ORDER_TYPES` tuple (`core/work_orders/models.py`) and the per-type tables in `review_rules`, `brief_currency`, and `milestones/close`. | Types and gates are read from the manifest and applied by the pack's own checklist. |
 | `artifact:write`, `artifact:read` | Named working artifacts (plans, audit reports). Replaces `ds files write` calls in skill text. | A project-local directory. |
 | `memory:record` | Record a lesson. | Append to a local lessons file. |
@@ -85,7 +98,8 @@ backend its output is labelled **unverified**, never passed.
 
 A finding recorded through `finding:record` carries:
 
-- `confidence`: `high` \| `medium` \| `low`.
+- `confidence`: `high` \| `medium` \| `low`. A reader that finds none recorded reports
+  `unknown`; it never defaults to `high`.
 - `coverage`: whether the check examined everything it claims to. A scan that skipped a
   step because a tool was missing records `partial` and names the step.
 - `limitations`: what the check cannot establish. Strings are explanatory and do not

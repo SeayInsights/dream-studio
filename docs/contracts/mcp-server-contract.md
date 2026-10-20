@@ -32,6 +32,16 @@ its capability is refused (`tests/unit/integrations/test_mcp_server.py`,
 is the standing guard against a write path slipping in unreviewed, and it is not a
 substitute for reading the registry before adding to it.
 
+The close-gate preview (`core.work_orders.close_main.check_close_gates`) is deliberately
+**not** a read tool, although it is documented as non-mutating. "Does not mutate" there
+means it does not change the work order's status; the preview still executes the work
+order's `TEST-CHECK` commands as subprocesses in the project's repository, issues the
+network request for any `API-CHECK`, and emits a `validation.result_recorded` event to
+the spool for each check it ran. A tool with no `required_capability` is open to a
+read-only client, so exposing it would let that client run commands and write events.
+It becomes a read tool only once it has a mode that evaluates the gates without running
+checks (and states, per gate, that it did not run).
+
 A tool is *allowed* to mutate authority state, but only by declaring a
 `required_capability` from `auth.KNOWN_CAPABILITIES` and passing the same deliberate
 review every tool here already gets. Declaring a capability is necessary for a

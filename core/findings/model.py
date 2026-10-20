@@ -63,6 +63,44 @@ def normalize_severity(raw: Any) -> str:
     return _SEVERITY_ALIASES.get(text, "info")
 
 
+#: The honesty vocabulary. "unknown" is the first-class answer for a value nobody
+#: recorded; it is never rewritten to a certain-looking value.
+CONFIDENCE_VALUES: tuple[str, ...] = ("high", "medium", "low", "unknown")
+COVERAGE_VALUES: tuple[str, ...] = ("complete", "partial", "unknown")
+UNKNOWN = "unknown"
+
+
+def normalize_confidence(raw: Any) -> str:
+    """Map a recorded confidence onto CONFIDENCE_VALUES; anything else is unknown.
+
+    The fallback is "unknown", never "high": a producer that wrote a value this
+    vocabulary does not recognise did not say it was certain.
+    """
+    text = str(raw).strip().lower() if raw is not None else ""
+    return text if text in CONFIDENCE_VALUES else UNKNOWN
+
+
+def normalize_coverage(raw: Any) -> str:
+    """Map a recorded coverage onto COVERAGE_VALUES; anything else is unknown."""
+    text = str(raw).strip().lower() if raw is not None else ""
+    return text if text in COVERAGE_VALUES else UNKNOWN
+
+
+def normalize_limitations(raw: Any) -> tuple[str, ...] | None:
+    """Coerce a recorded limitations value; None means "nothing was recorded".
+
+    An empty tuple means the producer recorded that there are none, which is a
+    different statement from not recording at all. A bare string is one limitation.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, (list, tuple)):
+        return None
+    return tuple(str(item).strip() for item in raw if str(item).strip())
+
+
 def severity_rank(severity: str) -> int:
     """Sort key — lower is more severe."""
     try:
@@ -94,7 +132,28 @@ class Finding:
     blocking: bool = False
     """True when this finding would fail a close gate."""
 
+    confidence: str = UNKNOWN
+    """high | medium | low | unknown. Unknown unless the producer recorded one."""
+
+    coverage: str = UNKNOWN
+    """complete | partial | unknown: whether the check examined everything it claims to.
+
+    The default is unknown, not complete. A scan that silently skipped a step looks
+    identical to a complete one in every record that carries no coverage, so an
+    unrecorded value must not be read as a clean one.
+    """
+
+    limitations: tuple[str, ...] | None = None
+    """What the check cannot establish. None = not recorded; () = recorded as none."""
+
     extra: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        # Frozen dataclass: coerce through object.__setattr__ so a caller passing
+        # "High", a list, or junk cannot smuggle an off-vocabulary value past readers.
+        object.__setattr__(self, "confidence", normalize_confidence(self.confidence))
+        object.__setattr__(self, "coverage", normalize_coverage(self.coverage))
+        object.__setattr__(self, "limitations", normalize_limitations(self.limitations))
 
     @property
     def location(self) -> str:
@@ -119,5 +178,8 @@ class Finding:
             "project_id": self.project_id,
             "created_at": self.created_at,
             "blocking": self.blocking,
+            "confidence": self.confidence,
+            "coverage": self.coverage,
+            "limitations": None if self.limitations is None else list(self.limitations),
             "extra": dict(self.extra),
         }

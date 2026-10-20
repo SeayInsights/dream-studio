@@ -179,6 +179,12 @@ def from_audit_markdown(files_db: Path, project_id: str | None = None) -> list[F
                     project_id=r["project_id"],
                     created_at=r["created_at"],
                     blocking=True,
+                    # This fallback only fires when no BLOCKED finding line parsed, so
+                    # the verdict rests on the prose marker alone and the artifact's
+                    # own detail for it was not seen.
+                    limitations=(
+                        "Blocking verdict recovered from prose; no BLOCKED finding line parsed.",
+                    ),
                     extra={"artifact": r["name"], "unparsed": not matched},
                 )
             )
@@ -220,6 +226,11 @@ def from_guard_log(jsonl_path: Path, project_id: str | None = None) -> list[Find
                     project_id=d.get("project_id"),
                     created_at=d.get("created_at") or d.get("timestamp"),
                     blocking=sev in ("critical", "high"),
+                    # Read only what the log line itself recorded; absent keys stay
+                    # unknown. Nothing is inferred from the guard rule's identity.
+                    confidence=d.get("confidence"),
+                    coverage=d.get("coverage"),
+                    limitations=d.get("limitations"),
                     extra={
                         k: d[k]
                         for k in ("rule_id", "risk_weight", "detection", "source", "status")
