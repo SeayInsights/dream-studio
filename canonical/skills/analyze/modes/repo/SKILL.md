@@ -85,7 +85,7 @@ Each capability scores 0-10 with quality labels (excellent/good/adequate/weak) a
 
 Extract repository paths from user message. Paths can be:
 - Absolute paths: `/path/to/repo`
-- Relative paths: `../terraform-skill`
+- Relative paths: `./my-repo`
 - Current directory: `.`
 
 Validate that each path exists and is a directory.
