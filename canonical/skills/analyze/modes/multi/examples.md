@@ -2,6 +2,8 @@
 
 Extracted from SKILL.md to reduce context injection size.
 
+Paths in this file (`modes.yml`, `analysts/`) are relative to the analyze skill directory -- the one holding the analyze `SKILL.md` -- wherever Dream Studio installed it.
+
 ## Signal Scale
 
 All analysts return signals on this 5-point scale:
@@ -45,9 +47,9 @@ If mode is missing or not found in `modes.yml`, stop: "Unknown mode `{mode}`. Av
 
 Before spawning any subagents, validate the full configuration:
 
-1. Read `skills/analyze/modes.yml`. Confirm the requested mode exists.
+1. Read `modes.yml`. Confirm the requested mode exists.
 2. Get the analyst list for this mode (or `quick_analysts` if `--quick`).
-3. For each analyst in the list, confirm `skills/analyze/analysts/{name}.yml` exists.
+3. For each analyst in the list, confirm `analysts/{name}.yml` exists.
 4. Read each analyst YAML. Verify required fields: `name`, `perspective`, `weight`, `model`, `prompt_template`.
 5. If ANY file is missing or ANY required field is absent: **stop immediately** with a specific error.
    Example: "Validation failed: analysts/growth.yml missing field `prompt_template`."
@@ -411,7 +413,7 @@ Quick mode is for low-stakes decisions where speed matters more than thoroughnes
 
 ### Adding a custom analyst
 
-1. Create a new YAML file at `skills/analyze/analysts/{name}.yml`
+1. Create a new YAML file at `analysts/{name}.yml`
 2. Follow this schema:
    ```yaml
    name: my-custom-analyst

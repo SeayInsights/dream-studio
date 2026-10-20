@@ -8,6 +8,7 @@ RetroactiveValidator) are wired in and fail-open.
 
 from __future__ import annotations
 import json
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
@@ -117,8 +118,36 @@ def end_session(
                 session_id=session_id,
             )
 
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def run_session_end_analyzers(session_ids: Sequence[str], *, pattern_analysis: bool = True) -> None:
+    """The learning-loop analyzers that follow a session close (Phases 19.2-19.5).
+
+    NOT PART OF ``end_session``, AND NOT SAFE TO CALL FROM A HOOK. They used to run
+    inline at the end of ``end_session``, which the Stop hook calls, under a comment
+    that said "non-blocking". The comment described the failure handling (each block
+    is fail-open) and was read as a promise about latency. It is not one:
+    The workflow-pattern analyzer runs a ``json_extract`` over every row of the events
+    table (525k rows, a 1.5 GB database) and was measured past three minutes. Claude
+    Code waits for the Stop hook, so every turn ended with a hang, and because the
+    session sentinel is written only after ``end_session`` returns, a killed run left
+    no marker and the next turn started the same scan again.
+
+    Callers run this off the hook path -- ``on-session-end`` hands it to a detached
+    worker (``--analyze``). Order is part of the contract and is pinned by a test: the
+    harvester feeds the classifier, the classifier feeds the pattern analyzer, and the
+    validator reads what the session produced.
+
+    Every block stays fail-open, so one analyzer failing never stops the next.
+    ``pattern_analysis=False`` skips the global scan; it is not per-session, so a
+    worker draining several sessions runs it once, not once each.
+    """
+    for session_id in session_ids:
         # Session-end friction signal harvest (Phase 19.2).
-        # Non-blocking: session close completes regardless of harvester outcome.
         try:
             from projections.core.analyzers.friction_signals import FrictionSignalHarvester
 
@@ -133,7 +162,6 @@ def end_session(
 
         # Session-end gap classification (Phase 19.3).
         # Runs after harvester; classifies newly-captured signals.
-        # Non-blocking: session close completes regardless of classifier outcome.
         try:
             from projections.core.analyzers.gap_classifier import GapClassifier
 
@@ -146,11 +174,11 @@ def end_session(
         except Exception:
             pass
 
-        # Session-end workflow pattern analysis (Phase 19.4).
-        # Detects skill co-occurrence patterns across sessions and upserts to
-        # ds_workflow_pattern_signals. Runs after gap classification so the
-        # current session's friction signals are already captured.
-        # Non-blocking: session close completes regardless of analyzer outcome.
+    # Session-end workflow pattern analysis (Phase 19.4).
+    # Detects skill co-occurrence patterns across ALL sessions and upserts to
+    # ds_workflow_pattern_signals. Runs after gap classification so the current
+    # sessions' friction signals are already captured.
+    if pattern_analysis:
         try:
             from projections.core.analyzers.workflow_patterns import WorkflowPatternAnalyzer
 
@@ -163,10 +191,10 @@ def end_session(
         except Exception:
             pass
 
+    for session_id in session_ids:
         # Session-end retroactive validation (Phase 19.5).
         # Increments past_wo_count for experimental extensions whose skills ran
         # this session; triggers full validation when count crosses 5.
-        # Non-blocking: session close completes regardless of validation outcome.
         try:
             from core.expansion.validation import RetroactiveValidator
 
@@ -178,11 +206,6 @@ def end_session(
                 _vconn.close()
         except Exception:
             pass
-
-        return True
-    except Exception as e:
-        _reraise_if_busy(e)
-        return False
 
 
 @_with_retry

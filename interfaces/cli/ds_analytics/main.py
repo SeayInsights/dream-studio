@@ -75,6 +75,11 @@ def main() -> None:
         )
     else:
         print("  hook timing:     no data")
+    if hook_timing["unfinished"]:
+        stuck = ", ".join(
+            f"{h['handler']} ({h['event']}, {h['age_s']}s)" for h in hook_timing["unfinished"]
+        )
+        print(f"  hook hangs:      {len(hook_timing['unfinished'])} never finished: {stuck}")
 
     print("DSAE: analyzing...")
 

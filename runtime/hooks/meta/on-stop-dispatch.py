@@ -39,7 +39,7 @@ try:
 except ImportError:
     _spawn_new_session = None
 
-from control.execution.dispatch_helpers import load_module, write_timing  # noqa: E402
+from control.execution.dispatch_helpers import inflight, load_module, write_timing  # noqa: E402
 from core.config import paths  # noqa: E402
 
 HANDLERS: list[tuple[str, Path]] = [
@@ -125,7 +125,8 @@ def main() -> None:
                 continue
             sys.stdin = io.StringIO(raw_payload)
             t0 = time.perf_counter()
-            mod.main()
+            with inflight(STATE_DIR, "Stop", name):
+                mod.main()
             write_timing(STATE_DIR, "Stop", name, (time.perf_counter() - t0) * 1000)
         except Exception:
             pass

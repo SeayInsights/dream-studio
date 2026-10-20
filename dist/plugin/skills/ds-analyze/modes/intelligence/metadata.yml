@@ -30,12 +30,27 @@ quality_metrics:
 common_failures: []
 
 # Dependencies
+# This mode is a thin front for the control.analysis engine, which lives in the Dream
+# Studio platform, not in this pack -- so it needs an installed Dream Studio with that
+# engine. core_modules lists the engine entry point and the stages it runs; the engine in
+# turn imports core.config, core.storage, core.telemetry, core.gates and core.projects
+# (recorded as a follow-up: the engine moves into the pack, or behind a CLI door).
+# `ds dashboard --open` is how the output template points at the dashboard.
 dependencies:
-  core_modules: [control.analysis.engine, control.analysis.discovery, control.analysis.audit, control.analysis.bugs, control.analysis.synthesis]
-  tools_required: [python, git]
+  core_modules:
+    - control.analysis.engine
+    - control.analysis.discovery
+    - control.analysis.audit
+    - control.analysis.bugs
+    - control.analysis.synthesis
+    - control.analysis.stacks
+  tools_required: [python, git, ds]
   env_vars_required: []
-  files_required: [~/.dream-studio/state/studio.db]
-  calls_skills: []
+  files_required:
+    - ~/.dream-studio/state/studio.db
+    - ~/.dream-studio/logs/analysis-errors.log
+    - .planning/specs/<project-name>/prd.md   # written into the analyzed project
+  calls_skills: [ds-code-health:debug, ds-core:plan, ds-security:review]
 
 # Compatibility
 compatibility:

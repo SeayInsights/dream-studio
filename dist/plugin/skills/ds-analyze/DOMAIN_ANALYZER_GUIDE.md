@@ -8,7 +8,7 @@ The domain-extensible analyzer evaluates repositories across different skill dom
 
 ### Core Components
 
-1. **BaseAnalyzer** (`core/base_analyzer.py`)
+1. **BaseAnalyzer** (`analyze_core/base_analyzer.py`)
    - Abstract base class for all domain analyzers
    - Provides utility methods: `find_files()`, `search_content()`, `has_directory()`, etc.
    - Enforces standard result format for all capabilities
@@ -89,7 +89,7 @@ result = analyze_repositories(
 ### Using Registry Directly
 
 ```python
-from canonical.skills.analyze.domains.registry import DomainAnalyzerRegistry
+from domains.registry import DomainAnalyzerRegistry
 from pathlib import Path
 
 # Auto-detect domain
@@ -306,7 +306,7 @@ Human-readable markdown report:
 ```python
 # domains/new_domain.py
 
-from core.base_analyzer import BaseAnalyzer
+from analyze_core.base_analyzer import BaseAnalyzer
 from typing import Dict, List, Any
 
 class NewDomainAnalyzer(BaseAnalyzer):
@@ -382,7 +382,7 @@ def _register_builtin_analyzers():
 ### Step 3: Test
 
 ```python
-from canonical.skills.analyze.domains.registry import DomainAnalyzerRegistry
+from domains.registry import DomainAnalyzerRegistry
 
 analyzer = DomainAnalyzerRegistry.get_analyzer(
     'new_domain',
@@ -427,7 +427,7 @@ spec = importlib.util.spec_from_file_location("repo_analyzer", "repo-analyzer.py
 repo_analyzer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(repo_analyzer)
 analyze_repositories = repo_analyzer.analyze_repositories
-from canonical.skills.analyze.domains.registry import DomainAnalyzerRegistry
+from domains.registry import DomainAnalyzerRegistry
 
 repo_path = Path('~/repos/mystery-repo')
 
@@ -466,14 +466,14 @@ if repo_name in result['unique_features']:
 Run the integration test suite:
 
 ```bash
-cd skills/analyze
+cd <analyze-skill-dir>   # the directory containing this guide
 py test_analyzer.py
 ```
 
 Run domain registration test:
 
 ```bash
-cd skills/analyze
+cd <analyze-skill-dir>   # the directory containing this guide
 py test_domains.py
 ```
 
@@ -484,7 +484,7 @@ py test_domains.py
 Make sure the domain is registered:
 
 ```python
-from canonical.skills.analyze.domains.registry import DomainAnalyzerRegistry
+from domains.registry import DomainAnalyzerRegistry
 print(DomainAnalyzerRegistry.list_domains())
 ```
 
@@ -496,7 +496,7 @@ Check the module path and imports:
 
 ```python
 # Verify import works
-from canonical.skills.analyze.domains.design import DesignSkillAnalyzer
+from domains.design import DesignSkillAnalyzer
 ```
 
 ### Low scores on expected capabilities

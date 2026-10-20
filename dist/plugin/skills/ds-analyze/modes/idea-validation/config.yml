@@ -1,7 +1,6 @@
 invocation:
   type: subagent-target
   wrapper_agent: idea-validator
-  dispatch_path: ~/.claude/agents/idea-validator.md
 
 behavior:
   graceful_degradation: true

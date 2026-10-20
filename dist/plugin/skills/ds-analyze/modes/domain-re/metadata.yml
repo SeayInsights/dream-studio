@@ -30,11 +30,17 @@ quality_metrics:
 common_failures: []
 
 # Dependencies
+# Pack-relative paths are inside the analyze skill directory. Entries starting with ~/ are
+# Dream Studio state this mode writes outside the pack (checkpoint, report, dashboard feed).
 dependencies:
   core_modules: []
   tools_required: []
   env_vars_required: []
-  files_required: []
+  files_required:
+    - modes/domain-re/modes.yml
+    - modes/domain-re/analysts/
+    - ~/.dream-studio/domain-re/
+    - ~/.dream-studio/feeds/domain-re.json
   calls_skills: []
 
 # Compatibility
