@@ -31,20 +31,24 @@ To install, run the project-intelligence build workflow.
 ```
 [ERROR] Analysis failed: {error_message}
 
-Partial results may be available in the database.
-Check the failed run: see Recovery Steps below.
+The error is re-raised to the caller.
 ```
 
-## Database Errors
+What a failed run leaves behind is its events, nothing else: `analysis.started`, one
+`analysis.*_completed` event for each phase that finished, and `analysis.failed` carrying
+`run_id`, `project_id` and `error_message`. The engine writes them to the event spool
+(`~/.dream-studio/events/spool/`); they reach the database when `ds spool ingest` runs.
+Findings are not stored in tables, and the PRD is written during synthesis, so a run that
+failed in an earlier phase has none.
 
-**Invalid run_type:**
-```
-CHECK constraint failed: chk_run_type
-```
-Valid values: 'full', 'targeted', 'incremental'
+## Run type
+
+`run_type` ("full", "targeted" or "incremental") is recorded in the `analysis.started` event.
+The engine does not validate it, so a misspelt value is not an error; it is only recorded.
 
 ## Recovery Steps
 
 1. Check path exists: `test -d <path>`
 2. Verify engine installed: `py -c "from control.analysis.engine import analyze_project"`
-3. Check database: `sqlite3 ~/.dream-studio/state/studio.db "SELECT * FROM pi_analysis_runs ORDER BY started_at DESC LIMIT 5"` (a failed run is recorded there; no error log file is written)
+3. Ingest the spool so the events reach the database: `ds spool ingest`
+4. Find the failure: `sqlite3 ~/.dream-studio/state/studio.db "SELECT event_timestamp, payload FROM ai_canonical_events WHERE event_type = 'analysis.failed' ORDER BY event_timestamp DESC LIMIT 5"` (the payload is JSON with `run_id`, `project_id` and `error_message`; no error log file is written)

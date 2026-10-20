@@ -53,7 +53,7 @@ edge_cases:
     limitation: Adapter rules only apply to primary stack
 
   - case: Analysis interrupted mid-run
-    handling: pi_analysis_runs record marked as failed, partial data in DB
+    handling: an analysis.failed event is emitted and the error is re-raised; the events of the finished phases remain
     recovery: Re-run analysis to complete
 
   - case: PRD file already exists

@@ -156,7 +156,8 @@ dependencies:
   tools_required: []      # external command-line tools it runs (git, sqlite3, ...)
   tools_optional: []
   python_packages: []     # third-party Python packages it imports, by distribution name
-                          # (PyYAML, not yaml); a version specifier is allowed
+                          # (PyYAML, not yaml: the guard rejects the import name); a version
+                          # specifier is allowed
   env_vars_required: []
   files_required: []      # pack-relative paths, ~/.dream-studio/ state, .planning/ state
   calls_skills: []        # other skills (ds-<pack>:<mode>) and `agent:<subagent_type>`

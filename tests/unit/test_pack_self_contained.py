@@ -74,6 +74,14 @@ WHAT IT CHECKS, for every pack in ENROLLED_PACKS:
      inside the pack, and a third-party import is covered by a `python_packages` entry that
      names the distribution providing it (`yaml` is satisfied by `PyYAML`, asked of the
      installed environment, with a small fallback map for a host where it is not installed).
+     The IMPORT name does not satisfy it when it differs (`yaml`, `PIL`): the failure says
+     which distribution to declare, because `pip install yaml` is not PyYAML.
+  8. No file names a database table that the baseline schema lacks. The baseline is computed,
+     not listed: the migrations applied to an empty studio.db plus the two files.db schemas;
+     a dead table is one a migration drops that this baseline does not have (`pi_analysis_runs`,
+     `reg_projects`: a doc told the reader to query one, and the query could not succeed).
+     Enrolled packs only: over all of canonical/ it would flag 19 more references in other
+     packs (listed in the commit that added it), which are theirs to fix as each is enrolled.
 
 WHAT A STATIC CHECK CANNOT CATCH, and this guard does not pretend to (each is documented,
 none is covered): a path or command assembled from runtime data (`sys.argv[1]`, a config
@@ -226,22 +234,23 @@ _KNOWN_TOOLS = frozenset(
     "pandoc playwright pytest black flake8 ruff mypy bash sh zsh cmd powershell pwsh".split()
 )
 
-#: Import names whose distribution has a different name, for a host where the package is
-#: not installed to ask (`importlib.metadata.packages_distributions` answers when it is).
+#: Import names whose distribution has a different name, spelled as the distribution spells it.
+#: Used to say which name to declare, and to accept it on a host where the package is not
+#: installed to ask (`importlib.metadata.packages_distributions` answers when it is).
 _PACKAGE_MAP = {
-    "yaml": "pyyaml",
-    "PIL": "pillow",
+    "yaml": "PyYAML",
+    "PIL": "Pillow",
     "cv2": "opencv-python",
     "bs4": "beautifulsoup4",
     "sklearn": "scikit-learn",
     "dateutil": "python-dateutil",
     "dotenv": "python-dotenv",
     "attr": "attrs",
-    "jwt": "pyjwt",
-    "git": "gitpython",
+    "jwt": "PyJWT",
+    "git": "GitPython",
     "docx": "python-docx",
     "pptx": "python-pptx",
-    "markdown": "markdown",
+    "Markdown": "Markdown",
     "magic": "python-magic",
     "serial": "pyserial",
 }
@@ -371,6 +380,57 @@ def _pack_names() -> frozenset:
     except (OSError, KeyError, TypeError, yaml.YAMLError):
         return frozenset()
     return frozenset(str(n).lower() for n in packs)
+
+
+def _dropped_table_names(migrations: Path) -> set[str]:
+    """Every table name a migration drops."""
+    names: set[str] = set()
+    for sql in sorted(migrations.glob("*.sql")):
+        text = sql.read_text(encoding="utf-8", errors="replace")
+        names |= set(re.findall(r"DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?[\"`\[]?(\w+)", text, re.I))
+    return names
+
+
+@lru_cache(maxsize=None)
+def _live_tables() -> frozenset:
+    """The tables a fresh install has: the migrations applied to an empty studio.db, plus the
+    two files.db schemas (document store and file store) that are created on first use."""
+    import sqlite3
+
+    from core.event_store.migration_runner import _run_migrations
+    from core.files.store import ensure_files_schema
+    from core.storage.document_store_schema import ensure_documents_schema
+
+    live: set[str] = set()
+    for ensure in (_run_migrations, ensure_files_schema, ensure_documents_schema):
+        conn = sqlite3.connect(":memory:")
+        try:
+            ensure(conn)
+            live |= {
+                row[0]
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type IN ('table', 'view')"
+                )
+            }
+        finally:
+            conn.close()
+    return frozenset(live)
+
+
+@lru_cache(maxsize=None)
+def _dead_tables() -> frozenset:
+    """Tables a migration drops and the baseline schema does not have. A name with an
+    underscore only: `findings` and `runs` are words before they are tables, `pi_bugs` is not."""
+    from core.event_store.migration_runner import _migrations_dir
+
+    dropped = _dropped_table_names(_migrations_dir())
+    return frozenset(name for name in dropped - _live_tables() if "_" in name)
+
+
+@lru_cache(maxsize=None)
+def _dead_table_pattern():
+    names = sorted(_dead_tables(), key=len, reverse=True)
+    return re.compile(r"\b(" + "|".join(map(re.escape, names)) + r")\b") if names else None
 
 
 @dataclass(frozen=True)
@@ -1278,6 +1338,13 @@ def pack_violations(pack_dir: Path, modes: list[str], root: Path) -> list[str]:
 
         reaches: list[tuple[int, str, str]] = []
         lines = text.splitlines()
+        pattern = _dead_table_pattern()
+        for number, line in enumerate(lines, start=1):
+            for match in pattern.finditer(line) if pattern else ():
+                out.append(
+                    f"{where}:{number}: names the table `{match.group(1)}`, which the baseline "
+                    "schema does not have (a migration drops it and none recreates it)"
+                )
         shell = [] if (python or notebook) else _shell_flags(path, lines)
         continued = False  # the previous shell line ended in a line continuation
         for number, line in enumerate(lines, start=1):
@@ -1324,7 +1391,11 @@ def pack_violations(pack_dir: Path, modes: list[str], root: Path) -> list[str]:
                 label = {"env": "env var", "agent": "agent", "package": "python package"}.get(
                     kind, kind
                 )
-                out.append(f"{where}:{number}: undeclared {label} reach `{token}` ({owner})")
+                hint = _package_hint(token, declared["package"]) if kind == "package" else None
+                suffix = f" -- {hint}" if hint else ""
+                out.append(
+                    f"{where}:{number}: undeclared {label} reach `{token}` ({owner}){suffix}"
+                )
     return list(dict.fromkeys(out))
 
 
@@ -1371,18 +1442,44 @@ def _dist_name(name: str) -> str:
     return re.sub(r"[-_.]+", "-", re.split(r"[<>=!~;\[\s(]", str(name).strip(), 1)[0]).lower()
 
 
-def _package_declared(top: str, declared: list[str]) -> bool:
-    """An import of `top` is declared when `python_packages` names the distribution that
-    provides it (asked of the installed environment) or the import name itself."""
+@lru_cache(maxsize=None)
+def _installed_distributions() -> dict:
+    """import name -> distributions, as the installed environment says (a slow scan: once)."""
     try:
         from importlib.metadata import packages_distributions
 
-        providers = packages_distributions().get(top, [])
+        return {k: list(v) for k, v in packages_distributions().items()}
     except Exception:  # noqa: BLE001 - metadata trouble must not hide a finding
-        providers = []
-    wanted = {_dist_name(top), _dist_name(_PACKAGE_MAP.get(top, top))}
-    wanted |= {_dist_name(p) for p in providers}
-    return any(_dist_name(d) in wanted for d in declared)
+        return {}
+
+
+def _package_dists(top: str) -> list[str]:
+    """The distribution(s) that provide the import `top`: the map's spelling first, then what
+    the installed environment says, else the import name itself (`requests` is both)."""
+    names = [_PACKAGE_MAP[top]] if top in _PACKAGE_MAP else []
+    names += [p for p in _installed_distributions().get(top, []) if p not in names]
+    return names or [top]
+
+
+def _package_declared(top: str, declared: list[str]) -> bool:
+    """An import of `top` is declared when `python_packages` names the DISTRIBUTION that
+    provides it. The import name does not count when it differs: `pip install yaml` is not
+    PyYAML, and STRUCTURE.md says to declare what pip installs."""
+    wanted = {_dist_name(name) for name in _package_dists(top)}
+    return any(_dist_name(entry) in wanted for entry in declared)
+
+
+def _package_hint(top: str, declared: list[str]):
+    """Why a declaration that looks right was refused: it names the import, not the
+    distribution. None when that is not the problem."""
+    if _package_declared(top, declared):
+        return None
+    dists = _package_dists(top)
+    if any(_dist_name(entry) == _dist_name(top) for entry in declared) and not any(
+        _dist_name(name) == _dist_name(top) for name in dists
+    ):
+        return f"declare the distribution name `{dists[0]}`, not the import name `{top}`"
+    return None
 
 
 def _enrolled_pack(name: str):
@@ -2492,7 +2589,7 @@ REINTRODUCTIONS = {
     "the made-up error log is declared nowhere but named again": (
         (
             "modes/intelligence/reference/error-handling.md",
-            "(a failed run is recorded there; no error log file is written)",
+            "; no error log file is written)",
             "then `cat ~/.dream-studio/logs/analysis-errors.log`",
         ),
         "undeclared state reach `~/.dream-studio/logs/analysis-errors.log`",
@@ -2619,3 +2716,191 @@ KNOWN_GAPS = {
 )
 def test_a_documented_gap_is_still_a_gap(case, tmp_path):
     assert _run(_pack(tmp_path, **KNOWN_GAPS[case]), tmp_path), f"the guard now catches: {case}"
+
+
+# ------------------------------------------------------------ verifier round: tables and import names
+#
+# D1. error-handling.md told the reader to `SELECT * FROM pi_analysis_runs` and SKILL.md listed four
+# more `pi_*`/`reg_*` tables. Migration 142 drops every one of them and nothing recreates them, so
+# the recovery command could not succeed and the sqlite3 declaration existed for a query that
+# fails. A doc that names a table the schema does not have is the same defect as a doc that names
+# a script that is not there.
+#
+# D3. STRUCTURE.md says python_packages takes the DISTRIBUTION name (PyYAML), but the check also
+# accepted the import name (yaml), so `[yaml]` and `[PIL]` passed. They are different strings, and
+# `pip install yaml` installs something else.
+
+DEAD_TABLE_CASES = {
+    "a dropped table in a prose span": (
+        {"mode_text": 'Check `sqlite3 x.db "SELECT * FROM pi_analysis_runs"`.\n'},
+        "names the table `pi_analysis_runs`",
+    ),
+    "a dropped table in a list": (
+        {"mode_text": "- `reg_projects` - project metadata, health scores\n"},
+        "names the table `reg_projects`",
+    ),
+    "a dropped table in a yaml file": (
+        {"extra": {"gotchas.yml": "handling: pi_violations record marked as failed\n"}},
+        "names the table `pi_violations`",
+    ),
+    "a dropped table in python": (
+        {"extra": {"x.py": "Q = 'SELECT 1 FROM pi_bugs'\n"}},
+        "names the table `pi_bugs`",
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(DEAD_TABLE_CASES))
+def test_a_doc_naming_a_table_the_schema_lacks_is_a_violation(case, tmp_path):
+    kwargs, expected = DEAD_TABLE_CASES[case]
+    found = _run(_pack(tmp_path, **kwargs), tmp_path)
+    assert any(expected in line for line in found), f"{case}: wanted `{expected}`, got {found}"
+
+
+def test_a_table_the_schema_has_is_not_flagged(tmp_path):
+    pack = _pack(
+        tmp_path,
+        mode_text="Rows land in `business_projects` and `ai_canonical_events`; the PRD in "
+        "`ds_documents`. A `registry` idea, `runs` and `pi analysis` are just words.\n",
+    )
+    assert _run(pack, tmp_path) == []
+
+
+def test_the_table_lists_come_from_the_migrations_not_from_this_file():
+    live = _live_tables()
+    dead = _dead_tables()
+    assert {"business_projects", "ai_canonical_events", "ds_files"} <= live
+    assert "ds_documents" in live, "files.db's document table is part of the baseline"
+    assert {"pi_analysis_runs", "pi_violations", "pi_bugs", "pi_improvements"} <= dead
+    assert "reg_projects" in dead
+    assert not live & dead
+
+
+def test_the_dead_table_rule_reads_the_migrations(tmp_path, monkeypatch):
+    """A table dropped by a migration is dead; one the baseline schema has is not. Proven by
+    pointing the rule at a migrations directory of its own rather than the repository's."""
+    migrations = tmp_path / "migrations"
+    migrations.mkdir()
+    (migrations / "001.sql").write_text(
+        "CREATE TABLE keep_me (a INTEGER);\nDROP TABLE IF EXISTS gone_table;\n", encoding="utf-8"
+    )
+    assert _dropped_table_names(migrations) == {"gone_table"}
+
+
+REAL_PACK_TABLE_REINTRODUCTIONS = {
+    "the recovery query comes back": (
+        (
+            "modes/intelligence/reference/error-handling.md",
+            "WHERE event_type = 'analysis.failed'",
+            "FROM pi_analysis_runs",
+        ),
+        "names the table `pi_analysis_runs`",
+    ),
+    "the table list in SKILL.md comes back": (
+        (
+            "modes/intelligence/SKILL.md",
+            "`business_projects`",
+            "`reg_projects`",
+        ),
+        "names the table `reg_projects`",
+    ),
+    "the gotcha about a failed-run record comes back": (
+        (
+            "modes/intelligence/gotchas.yml",
+            "an analysis.failed event is emitted",
+            "pi_analysis_runs record marked as failed",
+        ),
+        "names the table `pi_analysis_runs`",
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(REAL_PACK_TABLE_REINTRODUCTIONS))
+def test_a_dead_table_put_back_in_the_real_pack_is_caught(case, tmp_path):
+    pack, modes = _real_pack_copy(tmp_path)
+    (rel, old, new), expected = REAL_PACK_TABLE_REINTRODUCTIONS[case]
+    _edit(pack, rel, old, new)
+    found = pack_violations(pack, modes, tmp_path)
+    assert any(expected in line for line in found), f"{case}: wanted `{expected}`, got {found}"
+
+
+def test_the_failed_run_command_in_the_doc_really_works(tmp_path):
+    """The recovery step is executed, not just read: an analysis.failed event goes through the
+    spool and the ingestor exactly as engine.py emits it, and the doc's own SELECT finds it."""
+    import re
+    import sqlite3
+
+    from canonical.events.envelope import CanonicalEventEnvelope
+    from canonical.events.types import EventType
+    from emitters.shared.spool_writer import write_envelopes
+    from spool.ingestor import ingest
+
+    doc = (
+        REPO_ROOT / "canonical/skills/analyze/modes/intelligence/reference/error-handling.md"
+    ).read_text(encoding="utf-8")
+    query = re.search(r'sqlite3 \S+ "(SELECT [^"]+)"', doc).group(1)
+
+    root, db = tmp_path / "events", tmp_path / "state" / "studio.db"
+    write_envelopes(
+        [
+            CanonicalEventEnvelope(
+                event_type=EventType.ANALYSIS_FAILED.value,
+                session_id=None,
+                payload={"run_id": "r1", "project_id": "p1", "error_message": "boom"},
+                severity="error",
+                confidence="unavailable",
+                project_id=None,
+            )
+        ],
+        root=root,
+    )
+    assert ingest(root=root, db_path=db).processed == 1
+    conn = sqlite3.connect(db)
+    try:
+        rows = conn.execute(query).fetchall()
+    finally:
+        conn.close()
+    assert rows and "boom" in rows[0][1], rows
+
+
+IMPORT_NAME_DECLARATIONS = {
+    "yaml declared as yaml": (
+        {"extra": {"modes/m/x.py": "import yaml\n"}, "deps": {"python_packages": ["yaml"]}},
+        "declare the distribution name `PyYAML`",
+    ),
+    "PIL declared as PIL": (
+        {"extra": {"modes/m/x.py": "import PIL\n"}, "deps": {"python_packages": ["PIL"]}},
+        "declare the distribution name `Pillow`",
+    ),
+    "yaml declared in lower case": (
+        {"extra": {"modes/m/x.py": "import yaml\n"}, "deps": {"python_packages": ["Yaml>=6"]}},
+        "declare the distribution name `PyYAML`",
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(IMPORT_NAME_DECLARATIONS))
+def test_a_python_package_declared_by_import_name_is_rejected(case, tmp_path):
+    kwargs, expected = IMPORT_NAME_DECLARATIONS[case]
+    found = _run(_pack(tmp_path, **kwargs), tmp_path)
+    assert any(expected in line for line in found), f"{case}: wanted `{expected}`, got {found}"
+
+
+@pytest.mark.parametrize("declared", ["PyYAML", "pyyaml", "PyYAML>=6,<7", "pyyaml[extra]"])
+def test_the_distribution_name_is_accepted(declared, tmp_path):
+    kwargs = {"extra": {"modes/m/x.py": "import yaml\n"}, "deps": {"python_packages": [declared]}}
+    assert _run(_pack(tmp_path, **kwargs), tmp_path) == []
+
+
+def test_a_package_whose_import_and_distribution_names_agree_is_accepted(tmp_path):
+    kwargs = {
+        "extra": {"modes/m/x.py": "import requests\n"},
+        "deps": {"python_packages": ["requests"]},
+    }
+    assert _run(_pack(tmp_path, **kwargs), tmp_path) == []
+
+
+def test_the_failure_message_names_the_distribution_to_use():
+    assert _package_hint("yaml", ["yaml"]).startswith("declare the distribution name `PyYAML`")
+    assert _package_hint("requests", ["requests"]) is None
+    assert _package_hint("yaml", ["PyYAML"]) is None
