@@ -148,31 +148,33 @@ Validate that each path exists and is a directory.
 
 ### 3. Invoke repo analysis
 
-**All commands below assume cwd = the dream-studio repo root** (the directory
-containing `canonical/`). Both entry points resolve their own imports by file
-path regardless of cwd, but the paths shown here are repo-root-relative so
-the two forms below never disagree about where to run from — verified by
-running both directly from the repo root:
-`py canonical/skills/analyze/modes/repo/analyze-repos.py canonical/skills/analyze --format json`
-and `py canonical/skills/analyze/repo-analyzer.py canonical/skills/analyze --format json`.
+**`<skill-dir>` below is this skill's own directory** — the one holding the
+analyze `SKILL.md`, `modes/`, `repo-analyzer.py` and `domains/` (this mode's
+files sit in `<skill-dir>/modes/repo/`). Claude Code reports it when the skill
+loads. It is wherever Dream Studio was installed, not a path in a source
+checkout, so never substitute a repository-relative path. Both entry points
+put their own directory on the import path and resolve everything from there,
+so they run from any working directory; pass the repositories to analyze as
+absolute paths or paths relative to your working directory. Verified by
+running both from a copy of the skill directory with no repository around it.
 
 **Recommended: Use the automated wrapper** (handles GitHub URLs and local paths):
 
 ```bash
 # Single repo (GitHub URL or local path)
-py canonical/skills/analyze/modes/repo/analyze-repos.py <repo-url-or-path> --format markdown --verbose
+py <skill-dir>/modes/repo/analyze-repos.py <repo-url-or-path> --format markdown --verbose
 
 # Compare multiple repos (mix of URLs and local paths)
-py canonical/skills/analyze/modes/repo/analyze-repos.py <repo1> <repo2> <repo3> --compare --verbose
+py <skill-dir>/modes/repo/analyze-repos.py <repo1> <repo2> <repo3> --compare --verbose
 
 # Examples - General Analysis
-py canonical/skills/analyze/modes/repo/analyze-repos.py https://github.com/user/repo --verbose
-py canonical/skills/analyze/modes/repo/analyze-repos.py /path/to/repo1 /path/to/repo2 --compare
+py <skill-dir>/modes/repo/analyze-repos.py https://github.com/user/repo --verbose
+py <skill-dir>/modes/repo/analyze-repos.py /path/to/repo1 /path/to/repo2 --compare
 
 # Examples - Domain-Specific Analysis
-py canonical/skills/analyze/modes/repo/analyze-repos.py https://github.com/user/design-repo --domain design --verbose
-py canonical/skills/analyze/modes/repo/analyze-repos.py repo1/ repo2/ repo3/ --domain career --compare
-py canonical/skills/analyze/modes/repo/analyze-repos.py /path/to/repo --auto-detect --verbose
+py <skill-dir>/modes/repo/analyze-repos.py https://github.com/user/design-repo --domain design --verbose
+py <skill-dir>/modes/repo/analyze-repos.py repo1/ repo2/ repo3/ --domain career --compare
+py <skill-dir>/modes/repo/analyze-repos.py /path/to/repo --auto-detect --verbose
 ```
 
 The wrapper automatically:
@@ -181,18 +183,18 @@ The wrapper automatically:
 - Invokes the repo-analyzer
 - Cleans up temp files on completion
 
-**Alternative: Direct analyzer usage** (for local paths only, same cwd = repo root):
+**Alternative: Direct analyzer usage** (for local paths only):
 
 ```bash
-py canonical/skills/analyze/repo-analyzer.py <repo-path> --format markdown --verbose
-py canonical/skills/analyze/repo-analyzer.py <repo1> <repo2> --compare --verbose
+py <skill-dir>/repo-analyzer.py <repo-path> --format markdown --verbose
+py <skill-dir>/repo-analyzer.py <repo1> <repo2> --compare --verbose
 ```
 
-**Programmatic usage** (path also relative to the repo root):
+**Programmatic usage:**
 ```python
 import importlib.util
 spec = importlib.util.spec_from_file_location(
-    "repo_analyzer", "canonical/skills/analyze/repo-analyzer.py"
+    "repo_analyzer", "<skill-dir>/repo-analyzer.py"
 )
 repo_analyzer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(repo_analyzer)
@@ -346,5 +348,5 @@ analyze repo: terraform-skill open-design --target dream-studio
 
 **Self-analysis:**
 ```
-analyze repo: C:\Users\Example User\builds\dream-studio
+analyze repo: <path-to-a-local-dream-studio-clone>
 ```

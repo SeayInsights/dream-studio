@@ -20,7 +20,7 @@ Findings:
 PRD Generated: {prd_path}
 
 View in Dashboard:
-   Launch dashboard: py scripts/ds_dashboard.py
+   Launch dashboard: ds dashboard --open
    Navigate to Projects tab -> {project_name}
 
 Next Steps:

@@ -30,11 +30,22 @@ quality_metrics:
 common_failures: []
 
 # Dependencies
+# Pack-relative paths are inside the analyze skill directory. Entries starting with ~/ are
+# Dream Studio state this mode writes outside the pack (checkpoint, report, dashboard feed).
+# core_modules: the auto_learn step (evaluate-repo) records a lesson with insert_lesson()
+# against paths.state_dir() / "studio.db"; every other path through this mode imports nothing.
+# tools_optional: the closing notice names `ds` (the lesson-queue review command).
 dependencies:
-  core_modules: []
+  core_modules: [core.event_store, core.config.paths]
   tools_required: []
+  tools_optional: [ds]
   env_vars_required: []
-  files_required: []
+  files_required:
+    - modes.yml
+    - analysts/
+    - ~/.dream-studio/analyze/
+    - ~/.dream-studio/feeds/analyze.json
+    - ~/.dream-studio/state/studio.db
   calls_skills: []
 
 # Compatibility
