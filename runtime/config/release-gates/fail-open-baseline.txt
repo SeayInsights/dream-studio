@@ -759,12 +759,12 @@ runtime/hooks/meta/on-post-compact.py|19|bare-except-pass
 runtime/hooks/meta/on-post-compact.py|48|bare-except-pass
 runtime/hooks/meta/on-prompt-dispatch.py|31|bare-except-pass
 runtime/hooks/meta/on-prompt-dispatch.py|79|bare-except-pass
-runtime/hooks/meta/on-prompt-route.py|191|falsy-return
-runtime/hooks/meta/on-prompt-route.py|195|falsy-return
-runtime/hooks/meta/on-prompt-route.py|239|bare-except-pass
+runtime/hooks/meta/on-prompt-route.py|199|falsy-return
+runtime/hooks/meta/on-prompt-route.py|203|falsy-return
+runtime/hooks/meta/on-prompt-route.py|247|bare-except-pass
 runtime/hooks/meta/on-prompt-route.py|34|bare-except-pass
 runtime/hooks/meta/on-prompt-route.py|52|falsy-return
-runtime/hooks/meta/on-prompt-route.py|88|falsy-return
+runtime/hooks/meta/on-prompt-route.py|96|falsy-return
 runtime/hooks/meta/on-prompt-validate.py|108|falsy-return
 runtime/hooks/meta/on-prompt-validate.py|117|falsy-return
 runtime/hooks/meta/on-prompt-validate.py|141|bare-except-pass

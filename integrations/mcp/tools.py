@@ -1,13 +1,13 @@
-"""The curated MCP tool registry — projections over Dream Studio authority, read-only
-today, capability-gated where a future tool mutates it.
+"""The curated MCP tool registry — projections over Dream Studio authority: read tools
+open to any authenticated caller, mutating tools gated by a named capability.
 
 WHY CURATED, NOT THE WHOLE CLI. `ds` exposes commands with no confirmation step by
 design (an operator at a terminal is the confirmation) -- `uninstall --purge-state`,
 migration execution, `review --record`, anything that mutates SQLite authority or the
 filesystem. An MCP client calling this server over the network is not a terminal an
-operator is watching, so most tools below ship a read path only: project/work-order
-state, review status, skills, memory, and health. Grow it from real usage, not by
-mirroring the CLI surface wholesale.
+operator is watching, so the reads (project/work-order state, review status, skills,
+memory, health) are open to any authenticated caller and every write below declares a
+capability. Grow it from real usage, not by mirroring the CLI surface wholesale.
 
 A tool that mutates authority state does not get a free pass into this list just
 because it declares a `required_capability` -- see `Tool.required_capability` below
