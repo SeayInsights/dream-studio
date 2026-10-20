@@ -16,8 +16,6 @@ from core.event_store.studio_db import _connect
 
 from .models import TERMINAL_WO_STATUSES, terminal_wo_status_placeholders
 
-_UI_WO_TYPES: frozenset[str] = frozenset({"ui_component", "ui_page"})
-
 _BLOCKING_SEVERITIES: frozenset[str] = frozenset({"critical", "high"})
 _BLOCKING_STATUSES: frozenset[str] = frozenset({"open"})
 

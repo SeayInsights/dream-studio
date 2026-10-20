@@ -14,7 +14,8 @@
     "hooks": [
       {
         "type": "command",
-        "command": "{python_cmd} \"{hooks_dir}/runtime/hooks/meta/on-stop-enforce.py\""
+        "command": "{python_cmd} \"{hooks_dir}/runtime/hooks/meta/on-stop-enforce.py\"",
+        "timeout": 60
       }
     ]
   },
@@ -41,7 +42,8 @@
     "hooks": [
       {
         "type": "command",
-        "command": "{python_cmd} \"{hooks_dir}/run.py\" Stop"
+        "command": "{python_cmd} \"{hooks_dir}/run.py\" Stop",
+        "timeout": 60
       }
     ]
   },
@@ -50,7 +52,8 @@
     "hooks": [
       {
         "type": "command",
-        "command": "{python_cmd} \"{hooks_dir}/dispatch/hooks.py\" Stop"
+        "command": "{python_cmd} \"{hooks_dir}/dispatch/hooks.py\" Stop",
+        "timeout": 60
       }
     ]
   },

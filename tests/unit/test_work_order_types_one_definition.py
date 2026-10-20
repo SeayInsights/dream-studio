@@ -1,4 +1,4 @@
-"""Work-order types have one definition, and every site that spells one is a subset of it.
+"""Work-order types have one definition, the type registry, and every site that spells one reads it.
 
 WHY THIS FILE EXISTS. `ds work-order create --type` said "One of the declared work-order
 types" and accepted any string, filing it as `infrastructure` by default. Nothing declared
@@ -14,42 +14,30 @@ import json
 
 import pytest
 
-from core.gates.brief_currency import _UI_TYPES
-from core.milestones.close import _UI_WO_TYPES
-from core.work_orders.close_main import _VERIFY_EXEMPT_TYPES
-from core.work_orders.models import WORK_ORDER_TYPES
-from core.work_orders.review_rules import _TYPE_ARTIFACT
+from core.work_orders import type_registry
+from core.work_orders.type_registry import work_order_type_names
+
+# The declared set, read once. No test here registers a type; the ones that do (in
+# test_work_order_type_registry.py) restore the registry themselves.
+WORK_ORDER_TYPES = work_order_type_names()
 
 
-def test_the_review_map_covers_exactly_the_declared_types():
-    """review_rules decides how each type is reviewed. A declared type it does not know
-    would be created and then reviewed as nothing; a type it knows that is not declared
-    could never be created. Both directions are checked, so the two cannot drift apart."""
-    assert set(_TYPE_ARTIFACT) == set(WORK_ORDER_TYPES)
-
-
-@pytest.mark.parametrize(
-    "name, subset",
-    [
-        ("brief_currency._UI_TYPES", _UI_TYPES),
-        ("milestones.close._UI_WO_TYPES", _UI_WO_TYPES),
-        ("close_main._VERIFY_EXEMPT_TYPES", _VERIFY_EXEMPT_TYPES),
-    ],
-)
-def test_every_subset_is_drawn_from_the_one_definition(name, subset):
-    """The subsets are intersections with the canonical set by construction, so this holds
-    structurally -- but the construction could be undone by an edit, and then a typo in a
-    subset would silently invent a type again."""
-    assert set(subset) <= set(WORK_ORDER_TYPES), f"{name} names a type nothing declares"
-    assert subset, f"{name} intersected to nothing -- every member is misspelled"
+def test_every_declared_type_reviews_as_a_known_artifact_class():
+    """review_rules decides how each type is reviewed from the registry. A declared type
+    with no class would be created and then reviewed as nothing; registration refuses an
+    unknown class, and this pins that the built-ins all carry one."""
+    for declared in WORK_ORDER_TYPES:
+        assert type_registry.artifact_class_for(declared) in type_registry.ARTIFACT_CLASSES
 
 
 def test_the_ui_subsets_agree_on_what_ui_means():
-    """Two modules carve out the UI-bearing types for two different gates. brief_currency
-    counts saas_feature (a SaaS feature ships a surface); the milestone close does not
-    (it demands a CWV result, which a feature with no page cannot produce). The smaller
-    must sit inside the larger, or one gate would call UI what the other calls not."""
-    assert set(_UI_WO_TYPES) <= set(_UI_TYPES)
+    """Two gates carve out the UI-bearing types. brief_currency counts saas_feature (a SaaS
+    feature ships a surface); the milestone close does not (it demands a CWV result, which
+    a feature with no page cannot produce). The smaller must sit inside the larger, or one
+    gate would call UI what the other calls not."""
+    ui = {t for t in WORK_ORDER_TYPES if type_registry.is_ui_bearing(t)}
+    stales = set(type_registry.design_brief_staling_types())
+    assert ui and ui <= stales
 
 
 def test_the_door_refuses_an_undeclared_type(tmp_path, capsys):
@@ -157,25 +145,43 @@ def test_create_does_not_refuse_an_absent_type():
     assert "is not one the platform declares" not in error
 
 
-def test_no_module_carries_a_second_full_list():
-    """A second copy of all ten anywhere in core/ or interfaces/ is the thing this file
-    exists to end. The subsets are allowed; a full list is not."""
+#: The one remaining copy, named rather than waved through. The generated AGENTS.md lists
+#: every type with a sentence on when to use it, in a presentation order the registry does
+#: not hold. Making it read the registry means giving the registry descriptions and an
+#: order and regenerating AGENTS.md, which is its own change. The second test below fails
+#: the moment this stops being a copy, so the entry cannot outlive the thing it excuses.
+_KNOWN_COPIES = frozenset({"integrations/compiler/agents_md.py"})
+
+
+def _modules_naming_every_declared_type() -> set[str]:
     from pathlib import Path
 
     repo = Path(__file__).resolve().parents[2]
     full = set(WORK_ORDER_TYPES)
-    offenders = []
-    for py in list((repo / "core").rglob("*.py")) + list((repo / "interfaces").rglob("*.py")):
-        if py.name == "models.py" and py.parent.name == "work_orders":
-            continue
-        text = py.read_text(encoding="utf-8", errors="replace")
-        # Only a literal list of ALL ten counts; review_rules' map is keyed by them and is
-        # the legitimate consumer that must name each one.
-        if py.name == "review_rules.py":
-            continue
-        if all(f'"{t}"' in text for t in full):
-            offenders.append(str(py.relative_to(repo)))
-    assert offenders == [], f"a second full copy of the type list: {offenders}"
+    found = set()
+    for root in ("core", "interfaces", "integrations"):
+        for py in (repo / root).rglob("*.py"):
+            if py.name == "type_registry.py" and py.parent.name == "work_orders":
+                continue
+            text = py.read_text(encoding="utf-8", errors="replace")
+            # Only a literal list of ALL ten counts. type_registry.py, skipped above, is
+            # the one definition and the only module that may name each one.
+            if all(f'"{t}"' in text for t in full):
+                found.add(py.relative_to(repo).as_posix())
+    return found
+
+
+def test_no_module_carries_a_second_full_list():
+    """A second copy of all ten anywhere in core/, interfaces/ or integrations/ is the
+    thing this file exists to end. Only the registry may name them; the one known
+    exception is listed above and checked below."""
+    offenders = _modules_naming_every_declared_type() - _KNOWN_COPIES
+    assert offenders == set(), f"a second full copy of the type list: {sorted(offenders)}"
+
+
+def test_a_known_copy_is_still_a_copy():
+    """An allowlist entry for a file that no longer holds the list is a hole left open."""
+    assert _modules_naming_every_declared_type() >= _KNOWN_COPIES
 
 
 def test_the_declared_types_are_what_the_help_text_promises():

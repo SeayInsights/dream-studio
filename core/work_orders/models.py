@@ -42,24 +42,12 @@ WORK_ORDER_PRIORITIES: tuple[str, ...] = ("blocker", "defect", "normal", "backlo
 #: The default, named once so the CLI, the schema and the queue cannot disagree.
 DEFAULT_WORK_ORDER_PRIORITY = "normal"
 
-#: Every work-order type the platform knows. THE ONE DEFINITION: review_rules maps each
-#: to the artifact class it reviews as, brief_currency and milestones/close carve out
-#: the UI-bearing subset, close_main exempts documentation from verification, and the
-#: CLI's --type takes its choices here -- so a type can be added in one place and a
-#: subset cannot name one that does not exist. Before this, four modules spelled four
-#: different subsets and --type accepted any string, filing it as infrastructure.
-WORK_ORDER_TYPES: tuple[str, ...] = (
-    "api_endpoint",
-    "authentication",
-    "data_pipeline",
-    "deployment",
-    "documentation",
-    "game_mechanic",
-    "infrastructure",
-    "saas_feature",
-    "ui_component",
-    "ui_page",
-)
+#: The declared work-order types live in `core.work_orders.type_registry`, not here.
+#: This was a closed tuple, `WORK_ORDER_TYPES`, with four private subsets in four other
+#: modules; the registry holds each type's artifact class and its UI-bearing, brief-
+#: staling and verification-exempt facts, so a type is declared once and a pack can add
+#: one. Read it with `work_order_type_names()`; a snapshot constant would go stale the
+#: moment a type was registered.
 
 STATUSES = frozenset(
     {

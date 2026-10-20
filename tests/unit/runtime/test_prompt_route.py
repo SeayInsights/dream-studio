@@ -187,3 +187,52 @@ def test_the_users_own_trigger_still_routes_beside_relayed_text(capsys, monkeypa
 def test_more_relayed_shapes_never_route(relayed, capsys, monkeypatch):
     monkeypatch.delenv("DS_ROUTING", raising=False)
     assert _routed(relayed, capsys) == ""
+
+
+# --- a trigger is a `keyword:`, never a bare phrase ----------------------------------
+
+
+def test_every_trigger_in_the_map_is_a_colon_form():
+    """The guard for the unknown next case, not only the four phrases that surfaced it.
+
+    83 of 220 triggers were bare because only the unquoted-YAML branch of
+    `_read_triggers` appended the colon. A bare trigger is a substring test against
+    English, so each one is a standing false positive. Any metadata.yml that adds a
+    quoted trigger without a colon must still come out of the loader with one.
+    """
+    bare = [e[0] for e in route._load_trigger_map(REPO) if not e[0].endswith(":")]
+    assert bare == [], f"bare (colon-less) triggers would match ordinary prose: {bare}"
+
+
+@pytest.mark.parametrize(
+    "conversation",
+    [
+        # The prompt that was misrouted: a question about hooks, sent to the code-explainer.
+        "why is the routing wrong. why does it spend so much time waiting after response",
+        "how does this work",
+        "can you walk me through what happened",
+        "what is this doing to my startup time",
+        # Short bare triggers matched inside unrelated words.
+        "the studios and the curious radios",
+        "what is the cdc doing here",
+        "update the readme and the changelog",
+    ],
+)
+def test_ordinary_prose_never_routes(conversation, capsys, monkeypatch):
+    monkeypatch.delenv("DS_ROUTING", raising=False)
+    assert _routed(conversation, capsys) == ""
+
+
+@pytest.mark.parametrize(
+    ("prompt", "skill"),
+    [
+        ("explain: how the stop hook works", "ds-core"),
+        ("why does: the dispatcher hang", "ds-core"),
+        ("terraform: design a remote state layout", "ds-infra"),
+        ("iOS: build a settings screen", "ds-apps"),
+    ],
+)
+def test_the_colon_form_of_a_formerly_bare_trigger_still_routes(prompt, skill, capsys, monkeypatch):
+    monkeypatch.delenv("DS_ROUTING", raising=False)
+    out = _routed(prompt, capsys)
+    assert skill in out, out

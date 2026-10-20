@@ -18,7 +18,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
-from .model import SEVERITY_ORDER, Finding
+from .model import COVERAGE_VALUES, SEVERITY_ORDER, Finding
 
 _SEVERITY_COLOR = {
     "critical": ("#A32018", "#FBE9E7", "#F08B81", "#3A1A17"),
@@ -82,6 +82,12 @@ color:var(--ink2);word-break:break-all;}
 @media (prefers-color-scheme:dark){:root:not([data-theme='light']) .blocking{color:#F08B81;}}
 :root[data-theme='dark'] .blocking{color:#F08B81;}
 .detail{color:var(--ink2);font-size:.86rem;}
+.cov{font-size:.78rem;white-space:nowrap;}
+.cov-partial,.cov-unknown{font-weight:700;color:#8A5D00;}
+@media (prefers-color-scheme:dark){:root:not([data-theme='light']) .cov-partial,
+:root:not([data-theme='light']) .cov-unknown{color:#E0B45C;}}
+:root[data-theme='dark'] .cov-partial,:root[data-theme='dark'] .cov-unknown{color:#E0B45C;}
+.lim{display:block;color:var(--muted);font-size:.8rem;}
 .empty{padding:40px;text-align:center;color:var(--muted);}
 footer{margin-top:26px;color:var(--muted);font-size:.78rem;}
 """
@@ -149,6 +155,15 @@ def render_findings_html(
         src_bits.append(bit)
     src_line = " &middot; ".join(src_bits) or "no sources"
 
+    # How much of the list was checked end to end. Unrecorded coverage is shown as
+    # unknown, never folded into complete: that is the whole point of the field.
+    cov_counts = {v: 0 for v in COVERAGE_VALUES}
+    for f in findings:
+        cov_counts[f.coverage] += 1
+    cov_line = " &middot; ".join(
+        f'<span class="cov cov-{v}">{cov_counts[v]} {v}</span>' for v in COVERAGE_VALUES
+    )
+
     filters = ['<button data-filter="all" aria-pressed="true">All</button>']
     if blocking:
         filters.append('<button data-filter="blocking">Blocking</button>')
@@ -165,6 +180,8 @@ def render_findings_html(
             '<td><span class="pill sev-{sev}">{sev}</span></td>'
             "<td>{title}{detail}</td>"
             '<td class="mono">{loc}</td>'
+            '<td class="cov cov-{cov}">{cov}<br><span class="detail">confidence: {conf}</span>'
+            "{lim}</td>"
             '<td class="mono">{source}</td>'
             '<td class="mono">{ref}</td>'
             "</tr>".format(
@@ -181,6 +198,11 @@ def render_findings_html(
                     else ""
                 ),
                 loc=_esc(f.location) or "&mdash;",
+                cov=_esc(f.coverage),
+                conf=_esc(f.confidence),
+                lim="".join(
+                    f'<span class="lim">{_esc(item)}</span>' for item in f.limitations or ()
+                ),
                 source=_esc(f.source),
                 ref=_esc(f.ref[:70]),
             )
@@ -189,7 +211,7 @@ def render_findings_html(
     body = (
         "".join(rows)
         if rows
-        else '<tr><td colspan="5" class="empty">No findings recorded.</td></tr>'
+        else '<tr><td colspan="6" class="empty">No findings recorded.</td></tr>'
     )
 
     return f"""<!doctype html>
@@ -202,9 +224,10 @@ def render_findings_html(
 <p class="sub">Generated {_esc(stamp)} &middot; normalised across every findings producer</p>
 <div class="tiles">{''.join(tiles)}</div>
 <div class="src"><strong>Sources:</strong> {src_line}</div>
+<div class="src"><strong>Coverage recorded:</strong> {cov_line}</div>
 <div class="bar">{''.join(filters)}</div>
 <div class="tscroll"><table>
-<thead><tr><th>Severity</th><th>Finding</th><th>Location</th><th>Source</th><th>Ref</th></tr></thead>
+<thead><tr><th>Severity</th><th>Finding</th><th>Location</th><th>Coverage</th><th>Source</th><th>Ref</th></tr></thead>
 <tbody>{body}</tbody></table></div>
 <p class="empty" id="noresults" hidden>Nothing matches that filter.</p>
 <footer>security_event = authority DB rows &middot; audit_markdown = docstore audit/harden

@@ -47,6 +47,7 @@ from .event_writer_sessions import (
     insert_handoff,
     insert_session,
     mark_handoff_consumed,
+    run_session_end_analyzers,
 )
 
 __all__ = [
@@ -78,6 +79,7 @@ __all__ = [
     "promote_lesson",
     "reject_lesson",
     "rolling_window_prune",
+    "run_session_end_analyzers",
     "set_sentinel",
     "update_project_stats",
     "upsert_gotcha",

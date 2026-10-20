@@ -12,7 +12,7 @@ extracted verbatim from the original module.
 
 from __future__ import annotations
 
-from core.work_orders.models import WORK_ORDER_TYPES
+from core.work_orders.type_registry import is_verification_exempt
 
 import json
 from datetime import UTC, datetime
@@ -39,9 +39,9 @@ from core.work_orders.task_status import (
 )
 
 # WO-GRADER-ADVERSARIAL: independent review is default-on at close for every WO
-# type except these (no code to review — their deliverable is the document, and
-# the executable_ac / attestation path covers them).
-_VERIFY_EXEMPT_TYPES = frozenset({"documentation"}) & frozenset(WORK_ORDER_TYPES)
+# type except those the type registry marks exempt_from_verification (no code to
+# review — their deliverable is the document, and the executable_ac / attestation
+# path covers them).
 
 
 def check_close_gates(
@@ -470,7 +470,7 @@ def close_work_order(
     # type except documentation — previously it ran only for types whose post-gate
     # named independent_review, so most code WOs closed with zero review. Opting
     # out requires the explicit skip_verify flag and is recorded as a gate bypass.
-    _verify_default_on = (_pre_meta.get("type_id") or "") not in _VERIFY_EXEMPT_TYPES
+    _verify_default_on = not is_verification_exempt(_pre_meta.get("type_id"))
     if _ir_in_post or _verify_default_on:
         # WO-FILESDB-C2: a verdict may live in the authority (DB) or on the .planning
         # disk fallback — check both before triggering an inline re-verify.
