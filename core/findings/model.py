@@ -90,15 +90,21 @@ def normalize_limitations(raw: Any) -> tuple[str, ...] | None:
     """Coerce a recorded limitations value; None means "nothing was recorded".
 
     An empty tuple means the producer recorded that there are none, which is a
-    different statement from not recording at all. A bare string is one limitation.
+    different statement from not recording at all: only a genuinely empty list or
+    tuple says it. A bare string is one limitation, and a blank string or a list of
+    blanks is not recorded.
     """
     if raw is None:
         return None
+    asserted_none = isinstance(raw, (list, tuple)) and len(raw) == 0
     if isinstance(raw, str):
         raw = [raw]
     if not isinstance(raw, (list, tuple)):
         return None
-    return tuple(str(item).strip() for item in raw if str(item).strip())
+    items = tuple(str(item).strip() for item in raw if str(item).strip())
+    if not items and not asserted_none:
+        return None
+    return items
 
 
 def severity_rank(severity: str) -> int:

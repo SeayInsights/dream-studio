@@ -73,6 +73,10 @@ def test_limitations_coercion():
     assert normalize_limitations("one") == ("one",)
     assert normalize_limitations(["a", " ", "b"]) == ("a", "b")
     assert normalize_limitations(42) is None, "an unusable value is not recorded"
+    assert normalize_limitations([]) == (), "a genuinely empty list asserts 'none exist'"
+    assert normalize_limitations(()) == ()
+    for blank in ("", "   ", ["", " "], [" "]):
+        assert normalize_limitations(blank) is None, f"{blank!r} records nothing"
 
 
 def test_to_dict_carries_all_three_fields():

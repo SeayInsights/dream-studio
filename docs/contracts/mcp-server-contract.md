@@ -35,9 +35,10 @@ substitute for reading the registry before adding to it.
 The close-gate preview (`core.work_orders.close_main.check_close_gates`) is deliberately
 **not** a read tool, although it is documented as non-mutating. "Does not mutate" there
 means it does not change the work order's status; the preview still executes the work
-order's `TEST-CHECK` commands as subprocesses in the project's repository, issues the
-network request for any `API-CHECK`, and emits a `validation.result_recorded` event to
-the spool for each check it ran. A tool with no `required_capability` is open to a
+order's `TEST-CHECK` commands as subprocesses in the project's repository (it also runs
+`git rev-parse HEAD`), sends an in-process request, with any HTTP method, to the
+projections API app for each `API-CHECK`, and emits a `validation.result_recorded` event
+to the spool for each check it ran. A tool with no `required_capability` is open to a
 read-only client, so exposing it would let that client run commands and write events.
 It becomes a read tool only once it has a mode that evaluates the gates without running
 checks (and states, per gate, that it did not run).
