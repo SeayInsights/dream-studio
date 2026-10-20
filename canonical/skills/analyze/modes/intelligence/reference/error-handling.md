@@ -32,7 +32,7 @@ To install, run the project-intelligence build workflow.
 [ERROR] Analysis failed: {error_message}
 
 Partial results may be available in the database.
-Check logs for details: cat ~/.dream-studio/logs/analysis-errors.log
+Check the failed run: see Recovery Steps below.
 ```
 
 ## Database Errors
@@ -47,5 +47,4 @@ Valid values: 'full', 'targeted', 'incremental'
 
 1. Check path exists: `test -d <path>`
 2. Verify engine installed: `py -c "from control.analysis.engine import analyze_project"`
-3. Check database: `sqlite3 ~/.dream-studio/state/studio.db "SELECT * FROM pi_analysis_runs ORDER BY started_at DESC LIMIT 5"`
-4. Review logs: `cat ~/.dream-studio/logs/analysis-errors.log`
+3. Check database: `sqlite3 ~/.dream-studio/state/studio.db "SELECT * FROM pi_analysis_runs ORDER BY started_at DESC LIMIT 5"` (a failed run is recorded there; no error log file is written)

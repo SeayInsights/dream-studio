@@ -355,7 +355,7 @@ Check if mode config has `auto_learn: true`. If yes:
    - `confidence`: medium
    - `db_path`: paths.state_dir() / "studio.db"
 
-3. Notify user at end of Step 10: "Lesson draft recorded in raw_lessons DB — run `ds lesson-queue list` to review and promote."
+3. Notify user at end of Step 10: "Lesson draft recorded in raw_lessons DB — run `py -m interfaces.cli.lesson_queue list` to review and promote."
 
 If `auto_learn` is false or absent: skip this step entirely.
 

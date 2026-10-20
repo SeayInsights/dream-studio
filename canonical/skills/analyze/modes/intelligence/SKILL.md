@@ -75,7 +75,7 @@ analyze project: --incremental
 ```
 
 ## Output files
-- **PRD**: `.planning/specs/<project-name>/prd.md`
+- **PRD**: `~/.dream-studio/projects/<project-name>/planning/specs/prd.md` (also stored as a document; it is not written into the analyzed project)
 - **Database**: `~/.dream-studio/state/studio.db`
   - `reg_projects` - project metadata, health scores
   - `pi_analysis_runs` - run history, timing

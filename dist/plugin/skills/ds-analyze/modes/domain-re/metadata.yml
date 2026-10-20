@@ -32,9 +32,12 @@ common_failures: []
 # Dependencies
 # Pack-relative paths are inside the analyze skill directory. Entries starting with ~/ are
 # Dream Studio state this mode writes outside the pack (checkpoint, report, dashboard feed).
+# tools_optional: the Limitations section suggests `git clone`-ing an outside calculator repo.
 dependencies:
   core_modules: []
   tools_required: []
+  tools_optional: [git]
+  python_packages: []
   env_vars_required: []
   files_required:
     - modes/domain-re/modes.yml

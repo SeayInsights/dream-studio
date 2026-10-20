@@ -152,12 +152,14 @@ common_failures: []
 
 # Dependencies
 dependencies:
-  core_modules: []
-  tools_required: []
+  core_modules: []        # Dream Studio platform modules the mode imports or runs (dotted)
+  tools_required: []      # external command-line tools it runs (git, sqlite3, ...)
   tools_optional: []
+  python_packages: []     # third-party Python packages it imports, by distribution name
+                          # (PyYAML, not yaml); a version specifier is allowed
   env_vars_required: []
-  files_required: []
-  calls_skills: []
+  files_required: []      # pack-relative paths, ~/.dream-studio/ state, .planning/ state
+  calls_skills: []        # other skills (ds-<pack>:<mode>) and `agent:<subagent_type>`
 
 # Compatibility
 compatibility:
@@ -173,6 +175,13 @@ triggers: []
 description: >
   <multi-line description>
 ```
+
+### Dependency declarations are checked
+
+For every pack enrolled in `tests/unit/test_pack_self_contained.py` (run on every push), a
+mode's text and code are compared with its `dependencies` block: a reach the block does not
+declare fails, and every key above must be present as a list. A pack-level file (one outside
+`modes/<mode>/`) is judged against the modes that list it in `files_required`.
 
 ### JIT Policy
 

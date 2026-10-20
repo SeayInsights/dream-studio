@@ -217,12 +217,13 @@ gates:
   - id: instruction-commands
     tier: blocking
     description: |
-      Every script path and first-party module a canonical skill or workflow tells an
-      agent to RUN must exist. An agent does what an instruction says; a command that
+      Every script path, first-party module and `ds` subcommand a canonical skill or
+      workflow tells an agent to RUN must exist (`ds` subcommands are resolved against
+      the real argparse tree). An agent does what an instruction says; a command that
       cannot run is a step silently skipped, and the steps instructions name are
       disproportionately checks.
     command: [py, -m, core.gates.instruction_commands]
-    fail_hint: "A canonical instruction names a command that cannot run. Write the thing, correct the path, or remove the instruction."
+    fail_hint: "A canonical instruction names a command that cannot run. Write the thing, correct the path or the ds subcommand, or remove the instruction."
 
   - id: generated-artifacts
     tier: blocking

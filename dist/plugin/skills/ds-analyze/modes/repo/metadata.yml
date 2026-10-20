@@ -11,18 +11,21 @@ parent_skills: []
 generation: 0
 created_by: human
 
-# Quality & Health
-status: tested
+# Quality & Health. Nothing has run this card's mode under a model and recorded it: the
+# scripts have unit tests (test_analyzer.py, test_domains.py, test_remaining_domains.py), and
+# no model or host has been recorded using the mode, so it is jit-pending with nothing
+# claimed and every metric null until ds-core:learn records a real run (STRUCTURE.md, JIT Policy).
+status: jit-pending
 health: active
-tested_with_models: [sonnet]
-tested_with_hosts: [claude-code]
+tested_with_models: []
+tested_with_hosts: []
 
 # Performance metrics
 quality_metrics:
   times_used: 0
-  success_rate: 0.0
-  avg_token_usage: 0
-  avg_execution_time_seconds: 0
+  success_rate: null
+  avg_token_usage: null
+  avg_execution_time_seconds: null
   last_success: null
   last_failure: null
 
@@ -31,10 +34,11 @@ common_failures: []
 
 # Dependencies. Pack-relative paths are inside the analyze skill directory; this mode
 # reads nothing outside it and imports no Dream Studio module. It clones remote repositories
-# with git when given a URL.
+# with git when given a URL. python_packages: repo_analysis/analyzer.py imports PyYAML.
 dependencies:
   core_modules: []
   tools_required: [python, git]
+  python_packages: [PyYAML]
   env_vars_required: []
   files_required:
     - repo-analyzer.py

@@ -34,11 +34,16 @@ common_failures: []
 # Dream Studio state this mode writes outside the pack (checkpoint, report, dashboard feed).
 # core_modules: the auto_learn step (evaluate-repo) records a lesson with insert_lesson()
 # against paths.state_dir() / "studio.db"; every other path through this mode imports nothing.
-# tools_optional: the closing notice names `ds` (the lesson-queue review command).
+# interfaces.cli.lesson_queue: the closing notice names it (`py -m interfaces.cli.lesson_queue
+# list`) as the way to review the draft lesson. The notice used to name a lesson-queue
+# subcommand of ds, which does not exist and never ran.
+# The checkpoint, report and feed paths and the insert_lesson() call are what the contract in
+# docs/contracts/pack-capability-contract.md names artifact:write and memory:record; today
+# the mode reaches them directly, not through that capability layer.
 dependencies:
-  core_modules: [core.event_store, core.config.paths]
+  core_modules: [core.event_store, core.config.paths, interfaces.cli.lesson_queue]
   tools_required: []
-  tools_optional: [ds]
+  python_packages: []
   env_vars_required: []
   files_required:
     - modes.yml

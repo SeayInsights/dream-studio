@@ -68,7 +68,7 @@ Extract lessons from builds and promote them to studio knowledge.
 
 ## Draft lesson format
 Lessons are recorded in the authority DB (`studio.db` raw_lessons table), NOT as files.
-Call `insert_lesson()` or use `ds lesson-queue` CLI. Fields:
+Call `insert_lesson()`. (`py -m interfaces.cli.lesson_queue` triages lessons already recorded; it has no command that adds one.) Fields:
 - `source` — e.g. `daily-harvest`, `on-build`, `on-debug`
 - `title` — short descriptive title
 - `what_happened` — concrete description of what worked or broke
@@ -79,12 +79,12 @@ Call `insert_lesson()` or use `ds lesson-queue` CLI. Fields:
 ## Promotion flow
 1. **Capture** — Record via the DB interface: call `insert_lesson()` or invoke this skill.
 2. **Accumulate** — Draft rows in raw_lessons sit until Director reviews
-3. **Review** — Director runs `ds lesson-queue list` to see pending lessons
+3. **Review** — Director runs `py -m interfaces.cli.lesson_queue list` to see pending lessons
 4. **Promote** — Approved lessons become:
    - Memory entries (if long-term knowledge)
    - Skill updates (if pattern should change a skill's instructions)
    - Agent updates (if behavior should change an agent's config)
-5. **Archive** — Mark promoted via `ds lesson-queue promote <lesson_id> --target ...`
+5. **Archive** — Mark promoted via `py -m interfaces.cli.lesson_queue promote <lesson_id> --target ...`
 
 ## Harvest Mode
 
@@ -101,7 +101,7 @@ If missing or empty: stop and output — "Harvest not configured. Run `workflow:
 ### Scan protocol (run in this order)
 
 **Step 1 — Backlog first**
-Query pending lessons: `py -m interfaces.cli.ds lesson-queue list` (reads raw_lessons WHERE status='draft'). For each, present inline:
+Query pending lessons: `py -m interfaces.cli.lesson_queue list` (reads raw_lessons WHERE status='draft'). For each, present inline:
 ```
 Draft: [title]
 ID: [lesson_id]
@@ -110,7 +110,7 @@ Lesson: [one-line summary]
 Target: skills/[skill]/gotchas.yml → [avoid|best_practices|edge_cases]
 Action? [promote / reject / defer]
 ```
-Wait for Director response before writing anything. On "promote" → write entry to target gotchas.yml + `ds lesson-queue promote <lesson_id> --target ...`. On "reject" → `ds lesson-queue reject <lesson_id>`. On "defer" → leave as-is.
+Wait for Director response before writing anything. On "promote" → write entry to target gotchas.yml + `py -m interfaces.cli.lesson_queue promote <lesson_id> --target ...`. On "reject" → `py -m interfaces.cli.lesson_queue reject <lesson_id>`. On "defer" → leave as-is.
 
 **Step 2 — Session history**
 Determine scan scope from `config.yml`:

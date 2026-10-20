@@ -58,7 +58,7 @@ edge_cases:
 
   - case: PRD file already exists
     handling: Overwrites with new analysis, old version not backed up
-    recommendation: Use git to version .planning/ directory
+    recommendation: Copy the previous prd.md aside before re-running if the old version is needed
 
 # Known LIMITATIONS
 limitations:

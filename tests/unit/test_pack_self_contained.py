@@ -57,15 +57,23 @@ WHAT IT CHECKS, for every pack in ENROLLED_PACKS:
      `sys.argv[0]`, names assigned earlier, chains split over lines.
   5. No top-level name in the pack, or in a directory of scripts, shadows a platform package
      or a standard-library module (the `core` shadow, a `json.py`, a namespace `core/`).
-  6. What a mode DOES reach -- platform modules, `~/.dream-studio/` and `.planning/` state,
-     environment variables, the `ds` CLI and other external tools, other packs' skills,
-     subagent types -- is declared in that mode's metadata.yml `dependencies`; a reach
-     without the declaration is a contradiction, and the pack-level files shared by every
-     mode may reach nothing. Code is read for reaches too: `Path.home() / '.dream-studio'`,
-     `os.environ[...]`, `os.system`, `subprocess.run(..., shell=True)`, a command held in a
-     variable.
-  7. The declaration itself is true where it can be checked: every key present as a list,
-     every pack-relative `files_required` entry exists inside the pack.
+  6. What a mode DOES reach -- platform modules, third-party Python packages,
+     `~/.dream-studio/` and `.planning/` state, environment variables, the `ds` CLI and other
+     external tools, other packs' skills, subagent types -- is declared in that mode's
+     metadata.yml `dependencies`; a reach without the declaration is a contradiction. A
+     pack-level file is judged against the modes that claim it in `files_required`, and one
+     no mode claims may reach nothing. Code is read for reaches too: `Path.home() /
+     '.dream-studio'`, `os.environ[...]`, `os.system`, `subprocess.run(..., shell=True)`, a
+     command held in a variable. Tools run by shell scripts and fenced shell blocks are read
+     deny-by-default (anything not a shell builtin or a PowerShell cmdlet is a tool); in prose,
+     only a backtick span of two words or more that starts with a tool from a short list
+     (`_KNOWN_TOOLS`, the one hand-written list left, for the one place a rule cannot be derived).
+  7. The declaration itself is true where it can be checked: every key present as a list
+     (`core_modules`, `tools_required`, `python_packages`, `env_vars_required`,
+     `files_required`, `calls_skills`), every pack-relative `files_required` entry exists
+     inside the pack, and a third-party import is covered by a `python_packages` entry that
+     names the distribution providing it (`yaml` is satisfied by `PyYAML`, asked of the
+     installed environment, with a small fallback map for a host where it is not installed).
 
 WHAT A STATIC CHECK CANNOT CATCH, and this guard does not pretend to (each is documented,
 none is covered): a path or command assembled from runtime data (`sys.argv[1]`, a config
@@ -99,6 +107,7 @@ import os
 import posixpath
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import unicodedata
@@ -119,6 +128,7 @@ ENROLLED_PACKS = ("analyze",)
 DEPENDENCY_KEYS = (
     "core_modules",
     "tools_required",
+    "python_packages",
     "env_vars_required",
     "files_required",
     "calls_skills",
@@ -171,6 +181,65 @@ _PLUGIN_SKILL = re.compile(r"(?<![\w-])dream-studio:(?:ds-)?([a-z][a-z-]*)", re.
 _AGENT = re.compile(r"subagent_type\s*[=:]\s*[\"']?([\w.:-]+)")
 
 _PYTHON_SUFFIXES = {".py", ".pyi", ".pyw"}
+
+_SHELL_SUFFIXES = {".sh", ".bash", ".zsh", ".ksh", ".ps1", ".psm1", ".bat", ".cmd"}
+_SHELL_FENCE_LANGS = {
+    "sh",
+    "bash",
+    "shell",
+    "zsh",
+    "console",
+    "terminal",
+    "powershell",
+    "ps1",
+    "pwsh",
+    "cmd",
+    "bat",
+    "batch",
+    "shell-session",
+}
+
+#: What a shell snippet may run with no declaration: the shell's own words and the POSIX /
+#: cmd / PowerShell userland every host has. Anything else a snippet runs is an external tool
+#: and the mode names it. (`bash`, `cmd`, `powershell` are NOT here: needing one is a need.)
+_BUILTIN_COMMANDS = frozenset(
+    "cd echo cat ls dir mkdir rm cp mv pwd export set unset source . : test [ [[ if then else "
+    "elif fi for while do done case esac in exit return read printf true false sleep head tail "
+    "grep sed awk sort uniq wc tr cut find touch which basename dirname chmod ln diff tee date "
+    "type command alias local function copy del move ren rd md cls rem call start setlocal "
+    "endlocal pushd popd env time xargs sudo nohup nice".split()
+)
+
+#: External command-line tools, for the one place a deny-by-default rule cannot work: a
+#: backtick span in prose (`sqlite3 db "select 1"`), where most first words are not commands.
+#: A shell snippet and a script file do not use this list; they flag anything not builtin.
+_KNOWN_TOOLS = frozenset(
+    "git gh hg svn docker docker-compose podman kubectl helm terraform aws az gcloud sqlite3 "
+    "psql mysql mongosh redis-cli curl wget ssh scp rsync npm npx node yarn pnpm bun deno pip "
+    "pip3 pipx uv poetry cargo rustc go java javac mvn gradle dotnet make cmake ruby gem bundle "
+    "php composer jq yq rg ag fd tar zip unzip 7z brew apt apt-get choco winget ffmpeg magick "
+    "pandoc playwright pytest black flake8 ruff mypy bash sh zsh cmd powershell pwsh".split()
+)
+
+#: Import names whose distribution has a different name, for a host where the package is
+#: not installed to ask (`importlib.metadata.packages_distributions` answers when it is).
+_PACKAGE_MAP = {
+    "yaml": "pyyaml",
+    "PIL": "pillow",
+    "cv2": "opencv-python",
+    "bs4": "beautifulsoup4",
+    "sklearn": "scikit-learn",
+    "dateutil": "python-dateutil",
+    "dotenv": "python-dotenv",
+    "attr": "attrs",
+    "jwt": "pyjwt",
+    "git": "gitpython",
+    "docx": "python-docx",
+    "pptx": "python-pptx",
+    "markdown": "markdown",
+    "magic": "python-magic",
+    "serial": "pyserial",
+}
 
 #: Containers whose members the guard does not open (zip family, gzip, 7z, rar, bzip2, xz).
 _ARCHIVE_MAGIC = (
@@ -309,7 +378,9 @@ class _Ctx:
     layout_files: frozenset
     packs: frozenset
     local: frozenset
+    stdlib: frozenset
     rel_dir: tuple  # the file's directory, as segments below the pack root
+    test_file: bool = False
 
 
 def _listing(directory: Path) -> dict[str, Path]:
@@ -578,6 +649,67 @@ def _line_reaches(line: str, ctx: _Ctx, is_python: bool):
         yield "agent", match.group(1)
 
 
+# ------------------------------------------------------------------------ shell reaches
+
+
+def _shell_flags(path: Path, lines: list[str]) -> list[bool]:
+    """Which lines are shell: every line of a shell script, and the lines of a fenced block
+    labelled as shell. (A bare fence holds trees, output and prose; it is not read as shell.)"""
+    first = lines[0] if lines else ""
+    if path.suffix.lower() in _SHELL_SUFFIXES or (
+        first.startswith("#!") and re.search(r"\b(?:ba|z|k|da)?sh\b|pwsh", first)
+    ):
+        return [True] * len(lines)
+    flags: list[bool] = []
+    inside, lang = False, ""
+    for line in lines:
+        fence = re.match(r"\s*(?:```|~~~)\s*([\w+-]*)", line)
+        if fence:
+            inside, lang = not inside, fence.group(1).lower()
+            flags.append(False)
+        else:
+            flags.append(inside and lang in _SHELL_FENCE_LANGS)
+    return flags
+
+
+_PROMPT = re.compile(r"^\s*(?:\$|PS[^>\n]*>|>)\s+")
+_PLAIN_COMMAND = re.compile(r"[a-z][a-z0-9._+-]*")
+_NOT_A_COMMAND = re.compile(r".*\.(?:py|sh|ps1|md|ya?ml|json|txt|js|ts|html?)$")
+
+
+def _external(tools) -> list[str]:
+    return [
+        t
+        for t in tools
+        if t
+        and t != "python"
+        and t not in _BUILTIN_COMMANDS
+        and _PLAIN_COMMAND.fullmatch(t)
+        and not _NOT_A_COMMAND.match(t)
+    ]
+
+
+def _shell_line_tools(line: str) -> list[str]:
+    """External tools one line of a shell snippet runs."""
+    text = _PROMPT.sub("", line.strip())
+    if not text or text.startswith(("#", "//", "::")) or text.upper().startswith("REM "):
+        return []
+    text = re.sub(r"^(?:\w+=\S*\s+)+", "", text)  # FOO=bar cmd
+    return _external(_shell_tools(text))
+
+
+def _inline_tools(line: str) -> list[str]:
+    """Known tools a prose backtick span runs: `sqlite3 db "select 1"`. Two words or more, so
+    a mention (`git` history) is not read as a command; the guard's own list, see _KNOWN_TOOLS."""
+    found: list[str] = []
+    for span in re.findall(r"`([^`\n]+)`", line):
+        if len(span.split()) >= 2:
+            found += [
+                t for t in _external(_shell_tools(_PROMPT.sub("", span))) if t in _KNOWN_TOOLS
+            ]
+    return found
+
+
 # ---------------------------------------------------------------------- python reaches
 
 
@@ -762,6 +894,8 @@ class _Module:
 
 
 def _tool_name(token: str) -> str:
+    if re.fullmatch(r"[A-Z][A-Za-z]+-[A-Z][A-Za-z]+", token):
+        return "<cmdlet>"  # a PowerShell cmdlet: the host's own, like a shell builtin
     name = posixpath.basename(token.replace("\\", "/")).lower()
     if name.endswith(".exe"):
         name = name[:-4]
@@ -843,8 +977,14 @@ def _python_findings(path: Path, text: str, ctx: _Ctx, depth: int):
 
     def module_reach(line: int, name: str):
         top = name.split(".")[0]
-        if top in ctx.owned and top not in ctx.local:
+        if top in ctx.local:
+            return None
+        if top in ctx.owned:
             return (line, "module", name)
+        if top == "pytest" and ctx.test_file:
+            return None  # the runner a shipped test file needs is not a dependency of the mode
+        if top not in ctx.stdlib:
+            return (line, "package", top)  # third party: a pip install the mode must name
         return None
 
     for node in ast.walk(tree):
@@ -1092,15 +1232,29 @@ def pack_violations(pack_dir: Path, modes: list[str], root: Path) -> list[str]:
             layout_files=layout_files,
             packs=_pack_names(),
             local=local,
+            stdlib=_stdlib(),
             rel_dir=tuple(parts[:-1]),
+            test_file=bool(re.fullmatch(r"(?:test_.*|.*_test|conftest)\.py", rel.name)),
         )
         python = _is_python(path, text)
         notebook = path.suffix.lower() == ".ipynb"
 
         reaches: list[tuple[int, str, str]] = []
-        for number, line in enumerate(text.splitlines(), start=1):
+        lines = text.splitlines()
+        shell = [] if (python or notebook) else _shell_flags(path, lines)
+        continued = False  # the previous shell line ended in a line continuation
+        for number, line in enumerate(lines, start=1):
             for kind, token in _line_reaches(line, ctx, python or notebook):
                 reaches.append((number, kind, token))
+            if not (python or notebook):
+                tools = _inline_tools(line)
+                if shell[number - 1]:
+                    if not continued:
+                        tools += _shell_line_tools(line)
+                    continued = line.rstrip().endswith(("\\", "`", "^"))
+                else:
+                    continued = False
+                reaches += [(number, "tool", tool) for tool in tools]
         if python:
             reaches += list(_python_findings(path, text, ctx, len(parts)))
         elif notebook:
@@ -1108,47 +1262,90 @@ def pack_violations(pack_dir: Path, modes: list[str], root: Path) -> list[str]:
             if source is not None:
                 reaches += list(_python_findings(path, source, ctx, 0))
 
-        deps = deps_by_mode.get(mode, {}) if mode else {}
-        declared = {
-            "state": [str(e) for e in deps.get("files_required") or []],
-            "module": [str(e) for e in deps.get("core_modules") or []],
-            "tool": [
-                _tool_name(str(e))
-                for e in (deps.get("tools_required") or []) + (deps.get("tools_optional") or [])
-            ],
-            "skill": [
-                ("" if str(e).startswith("ds-") else "ds-") + str(e).split(":")[0].lower()
-                for e in deps.get("calls_skills") or []
-                if not str(e).startswith("agent:")
-            ],
-            "agent": [
-                str(e).split(":", 1)[1]
-                for e in deps.get("calls_skills") or []
-                if str(e).startswith("agent:")
-            ],
-            "env": [str(e) for e in deps.get("env_vars_required") or []],
-        }
+        owners = [mode] if mode else _owning_modes(where, deps_by_mode)
+        declared = _declared([deps_by_mode[m] for m in owners])
         for number, kind, token in reaches:
             if kind == "violation":
                 out.append(f"{where}:{number}: {token}")
                 continue
             if kind == "tool" and token == "python":
                 continue  # the interpreter that is already running the pack
-            if mode is None:
+            if not owners:
                 ok = False
+            elif kind == "package":
+                ok = _package_declared(token, declared["package"])
             elif kind in ("tool", "skill", "agent", "env"):
                 ok = token in declared[kind]
             else:
                 ok = _covered(token, declared[kind])
             if not ok:
                 owner = (
-                    f"modes/{mode}/metadata.yml"
-                    if mode
+                    ", ".join(f"modes/{m}/metadata.yml" for m in owners)
+                    if owners
                     else "no declaration is possible in a pack-level file"
                 )
-                label = {"env": "env var", "agent": "agent"}.get(kind, kind)
+                label = {"env": "env var", "agent": "agent", "package": "python package"}.get(
+                    kind, kind
+                )
                 out.append(f"{where}:{number}: undeclared {label} reach `{token}` ({owner})")
     return list(dict.fromkeys(out))
+
+
+def _owning_modes(where: str, deps_by_mode: dict) -> list[str]:
+    """The modes that declare a pack-level file in `files_required`: the file is theirs, so
+    what it reaches is judged against what they declare. A file no mode claims may reach
+    nothing, as before."""
+    owners = []
+    for mode, deps in deps_by_mode.items():
+        for entry in deps.get("files_required") or []:
+            entry = str(entry).replace("\\", "/").strip("/")
+            if entry and not entry.startswith(("~", ".planning")):
+                if where == entry or where.startswith(entry + "/"):
+                    owners.append(mode)
+                    break
+    return owners
+
+
+def _declared(deps_list: list[dict]) -> dict[str, list[str]]:
+    """What the owning modes' metadata declares, by the kind of reach it covers."""
+
+    def listed(key: str) -> list:
+        return [e for deps in deps_list for e in deps.get(key) or []]
+
+    return {
+        "state": [str(e) for e in listed("files_required")],
+        "module": [str(e) for e in listed("core_modules")],
+        "tool": [_tool_name(str(e)) for e in listed("tools_required") + listed("tools_optional")],
+        "package": [str(e) for e in listed("python_packages")],
+        "skill": [
+            ("" if str(e).startswith("ds-") else "ds-") + str(e).split(":")[0].lower()
+            for e in listed("calls_skills")
+            if not str(e).startswith("agent:")
+        ],
+        "agent": [
+            str(e).split(":", 1)[1] for e in listed("calls_skills") if str(e).startswith("agent:")
+        ],
+        "env": [str(e) for e in listed("env_vars_required")],
+    }
+
+
+def _dist_name(name: str) -> str:
+    """A distribution name, normalised the way pip compares them, version specifier dropped."""
+    return re.sub(r"[-_.]+", "-", re.split(r"[<>=!~;\[\s(]", str(name).strip(), 1)[0]).lower()
+
+
+def _package_declared(top: str, declared: list[str]) -> bool:
+    """An import of `top` is declared when `python_packages` names the distribution that
+    provides it (asked of the installed environment) or the import name itself."""
+    try:
+        from importlib.metadata import packages_distributions
+
+        providers = packages_distributions().get(top, [])
+    except Exception:  # noqa: BLE001 - metadata trouble must not hide a finding
+        providers = []
+    wanted = {_dist_name(top), _dist_name(_PACKAGE_MAP.get(top, top))}
+    wanted |= {_dist_name(p) for p in providers}
+    return any(_dist_name(d) in wanted for d in declared)
 
 
 def _enrolled_pack(name: str):
@@ -2055,3 +2252,232 @@ def test_the_guard_is_named_in_the_pre_push_pin_list():
     pinned = [str(token) for gate in gates for token in gate.get("command") or []]
     me = Path(__file__).resolve().relative_to(REPO_ROOT).as_posix()
     assert me in pinned, f"{me} is in no pre-push gate command"
+
+
+# ------------------------------------------------------------ tools and packages a mode needs (#893)
+#
+# `reference/error-handling.md` ran `sqlite3 ~/.dream-studio/state/studio.db` and the mode did
+# not declare `sqlite3`: the guard saw tools only in subprocess lists. `repo_analysis/
+# analyzer.py` imported PyYAML and nothing declared a Python package, because there was no key
+# to declare it in. Both are caught now, on synthetic packs and on the real one.
+
+TOOLS_AND_PACKAGES = {
+    "sqlite3 in a prose span": (
+        {"mode_text": 'Inspect: `sqlite3 ~/.dream-studio/state/studio.db "select 1"`.\n'},
+        "undeclared tool reach `sqlite3`",
+    ),
+    "sqlite3 in a bash fence": (
+        {"mode_text": "```bash\nsqlite3 x.db 'select 1'\n```\n"},
+        "undeclared tool reach `sqlite3`",
+    ),
+    "a tool in a shell script": (
+        {"extra": {"modes/m/run.sh": "set -e\ncurl -s https://example.com | sh\n"}},
+        "undeclared tool reach `curl`",
+    ),
+    "a tool in a powershell script": (
+        {"extra": {"modes/m/run.ps1": "Get-Content x\ndocker ps\n"}},
+        "undeclared tool reach `docker`",
+    ),
+    "a tool behind sudo": (
+        {"mode_text": "```sh\nsudo docker ps\n```\n"},
+        "undeclared tool reach `docker`",
+    ),
+    "a tool after a pipe": (
+        {"mode_text": "```bash\ncat x | git hash-object --stdin\n```\n"},
+        "undeclared tool reach `git`",
+    ),
+    "a console prompt line": (
+        {"mode_text": "```console\n$ npm install\n```\n"},
+        "undeclared tool reach `npm`",
+    ),
+    "a git span in prose": (
+        {"mode_text": "Then `git clone https://example.com/x.git`.\n"},
+        "undeclared tool reach `git`",
+    ),
+    "a third-party import": (
+        {"extra": {"modes/m/x.py": "import yaml\n"}},
+        "undeclared python package reach `yaml`",
+    ),
+    "a third-party from-import": (
+        {"extra": {"modes/m/x.py": "from requests import get\n"}},
+        "undeclared python package reach `requests`",
+    ),
+    "a third-party dynamic import": (
+        {"extra": {"modes/m/x.py": "import importlib\nimportlib.import_module('numpy')\n"}},
+        "undeclared python package reach `numpy`",
+    ),
+    "a package declared under the wrong name": (
+        {"extra": {"modes/m/x.py": "import yaml\n"}, "deps": {"python_packages": ["requests"]}},
+        "undeclared python package reach `yaml`",
+    ),
+    "a pytest import outside a test file": (
+        {"extra": {"modes/m/helper.py": "import pytest\n"}},
+        "undeclared python package reach `pytest`",
+    ),
+    "a pack-level import no mode claims": (
+        {"extra": {"shared_code.py": "import yaml\n"}, "deps": {"python_packages": ["PyYAML"]}},
+        "no declaration is possible in a pack-level file",
+    ),
+    "a claimed pack-level import the owner did not declare": (
+        {
+            "extra": {"lib/a.py": "import yaml\n"},
+            "deps": {"files_required": ["lib/"], "python_packages": []},
+        },
+        "undeclared python package reach `yaml` (modes/m/metadata.yml)",
+    ),
+    "python_packages missing": ({"deps": {"python_packages": None}}, "must be a list"),
+}
+
+
+@pytest.mark.parametrize("case", sorted(TOOLS_AND_PACKAGES))
+def test_a_tool_or_package_a_mode_needs_must_be_declared(case, tmp_path):
+    kwargs, expected = TOOLS_AND_PACKAGES[case]
+    found = _run(_pack(tmp_path, **kwargs), tmp_path)
+    assert any(expected in line for line in found), f"{case}: wanted `{expected}`, got {found}"
+
+
+DECLARED_AND_FINE = {
+    "sqlite3 declared": {
+        "mode_text": "Inspect: `sqlite3 x.db 'select 1'`.\n```bash\nsqlite3 x.db .tables\n```\n",
+        "deps": {"tools_required": ["python", "sqlite3"]},
+    },
+    "a tool declared optional": {
+        "mode_text": "```bash\ngit status\n```\n",
+        "deps": {"tools_optional": ["git"]},
+    },
+    "PyYAML declared for import yaml": {
+        "extra": {"modes/m/x.py": "import yaml\n"},
+        "deps": {"python_packages": ["PyYAML"]},
+    },
+    "a version specifier and an extra on the declaration": {
+        "extra": {"modes/m/x.py": "import yaml\nimport requests\n"},
+        "deps": {"python_packages": ["pyyaml>=6,<7", "requests[socks]"]},
+    },
+    "the standard library": {
+        "extra": {"modes/m/x.py": "import json, re, subprocess, sys\nfrom pathlib import Path\n"},
+    },
+    "a sibling module of the pack": {
+        "extra": {
+            "modes/m/x.py": "import helper\nfrom helper import Y\n",
+            "modes/m/helper.py": "Y = 1\n",
+        },
+    },
+    "pytest in a test file": {"extra": {"test_thing.py": "import pytest\n"}},
+    "a claimed pack-level import the owner declared": {
+        "extra": {"lib/a.py": "import yaml\n"},
+        "deps": {"files_required": ["lib/"], "python_packages": ["PyYAML"]},
+    },
+    "line continuations are one command": {
+        "mode_text": "```bash\npy run.py \\\n    ~/repos/one \\\n    ~/repos/two\n```\n",
+    },
+    "a bare fence is prose, not shell": {
+        "mode_text": "```\nanalyze_repositories() returns a dict\nTenant: x\n```\n",
+    },
+    "builtins and cmdlets are not external tools": {
+        "mode_text": "```powershell\nGet-ChildItem . | Sort-Object Name\ncd x; ls; echo hi\n```\n",
+    },
+    "a mention of a tool is not a command": {"mode_text": "It needs `git` history to exist.\n"},
+}
+
+
+@pytest.mark.parametrize("case", sorted(DECLARED_AND_FINE))
+def test_a_declared_need_is_not_flagged(case, tmp_path):
+    found = _run(_pack(tmp_path, **DECLARED_AND_FINE[case]), tmp_path)
+    assert found == [], f"{case}: {found}"
+
+
+def test_python_packages_is_an_enforced_dependency_key():
+    assert "python_packages" in DEPENDENCY_KEYS
+
+
+def test_package_names_are_matched_the_way_pip_matches_them():
+    assert _dist_name("PyYAML") == "pyyaml"
+    assert _dist_name("python_dateutil>=2.8") == "python-dateutil"
+    assert _dist_name("Requests[socks] ; python_version>'3'") == "requests"
+    assert _package_declared("yaml", ["PyYAML"])
+    assert _package_declared("PIL", ["pillow"])
+    assert not _package_declared("yaml", ["requests"])
+    assert not _package_declared("yaml", [])
+
+
+# -------------------------------- the real analyze pack: reintroduce each defect, the guard says so
+
+
+def _real_pack_copy(tmp_path):
+    spec = _enrolled_pack("analyze")
+    destination = tmp_path / "canonical" / "skills" / "analyze"
+    shutil.copytree(
+        _pack_dir_for("analyze", spec, REPO_ROOT),
+        destination,
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    return destination, list(spec["modes"])
+
+
+def _edit(pack: Path, rel: str, old: str, new: str) -> None:
+    target = pack / rel
+    text = target.read_text(encoding="utf-8")
+    assert old in text, f"{rel} no longer contains {old!r}: the reintroduction would be a no-op"
+    target.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
+REINTRODUCTIONS = {
+    "sqlite3 dropped from intelligence tools_required": (
+        ("modes/intelligence/metadata.yml", "[python, git, ds, sqlite3]", "[python, git, ds]"),
+        "undeclared tool reach `sqlite3` (modes/intelligence/metadata.yml)",
+    ),
+    "PyYAML dropped from repo python_packages": (
+        ("modes/repo/metadata.yml", "python_packages: [PyYAML]", "python_packages: []"),
+        "undeclared python package reach `yaml` (modes/repo/metadata.yml)",
+    ),
+    "the repo_analysis files lose their owner": (
+        ("modes/repo/metadata.yml", "    - repo_analysis/\n", ""),
+        "repo_analysis/analyzer.py:8: undeclared python package reach `yaml` (no declaration",
+    ),
+    "git dropped from domain-re": (
+        ("modes/domain-re/metadata.yml", "tools_optional: [git]", "tools_optional: []"),
+        "undeclared tool reach `git` (modes/domain-re/metadata.yml)",
+    ),
+    "the nonexistent ds lesson-queue command comes back": (
+        (
+            "modes/multi/examples.md",
+            "`py -m interfaces.cli.lesson_queue list`",
+            "`ds lesson-queue list`",
+        ),
+        "undeclared tool reach `ds` (modes/multi/metadata.yml)",
+    ),
+    "the PRD is again said to be written into .planning": (
+        (
+            "modes/intelligence/SKILL.md",
+            "`~/.dream-studio/projects/<project-name>/planning/specs/prd.md`",
+            "`.planning/specs/<project-name>/prd.md`",
+        ),
+        "undeclared state reach `.planning/specs`",
+    ),
+    "the made-up error log is declared nowhere but named again": (
+        (
+            "modes/intelligence/reference/error-handling.md",
+            "(a failed run is recorded there; no error log file is written)",
+            "then `cat ~/.dream-studio/logs/analysis-errors.log`",
+        ),
+        "undeclared state reach `~/.dream-studio/logs/analysis-errors.log`",
+    ),
+    "the metadata drops the python_packages key": (
+        ("modes/repo/metadata.yml", "  python_packages: [PyYAML]\n", ""),
+        "modes/repo/metadata.yml: dependencies.python_packages must be a list",
+    ),
+}
+
+
+def test_the_real_pack_copy_is_clean(tmp_path):
+    pack, modes = _real_pack_copy(tmp_path)
+    assert pack_violations(pack, modes, tmp_path) == []
+
+
+@pytest.mark.parametrize("case", sorted(REINTRODUCTIONS))
+def test_a_reintroduced_defect_in_the_real_pack_is_caught(case, tmp_path):
+    pack, modes = _real_pack_copy(tmp_path)
+    (rel, old, new), expected = REINTRODUCTIONS[case]
+    _edit(pack, rel, old, new)
+    found = pack_violations(pack, modes, tmp_path)
+    assert any(expected in line for line in found), f"{case}: wanted `{expected}`, got {found}"
