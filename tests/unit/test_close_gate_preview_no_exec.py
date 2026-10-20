@@ -39,6 +39,49 @@ SHA = "a" * 40
 MIXED = ("preview_mixed", "all_tests_pass|spec_approved", "security_scan")
 CLEAN = ("preview_clean", "all_tests_pass", "security_scan")
 
+#: Work orders whose gates read ONLY from `<planning_root>/work-orders/<id>/`. Each carries the
+#: file that satisfies it, so with the right directory every gate passes.
+DISK_WOS = {
+    "w_spec_approved_ok": (("disk_spec", "spec_approved", None), {"spec.md": "# spec\n"}),
+    "w_design_critique_ok": (
+        ("disk_critique", None, "design_critique"),
+        {"design-critique.md": "Score: 4/5\n"},
+    ),
+    "w_game_validate_ok": (
+        ("disk_game", None, "game_validate"),
+        {"game-validate.md": "validated\n"},
+    ),
+    "w_anti_slop_passed_ok": (
+        ("disk_slop", None, "anti_slop_passed"),
+        {"lint-results.md": "PASSED\n"},
+    ),
+    "w_independent_review_passed_ok": (
+        ("disk_irp", None, "independent_review_passed"),
+        {"independent-review.md": "VERDICT: PASS\n"},
+    ),
+    "w_ALL_ok": (
+        (
+            "disk_all",
+            "spec_approved|game_validate",
+            "design_critique|anti_slop_passed|independent_review_passed",
+        ),
+        {
+            "spec.md": "# spec\n",
+            "game-validate.md": "validated\n",
+            "design-critique.md": "Score: 4/5\n",
+            "lint-results.md": "PASSED\n",
+            "independent-review.md": "VERDICT: PASS\n",
+        },
+    ),
+}
+DISK_GATES = {
+    "spec_approved",
+    "game_validate",
+    "design_critique",
+    "anti_slop_passed",
+    "independent_review_passed",
+}
+
 #: One of each kind of criterion: a read, a subprocess, a request.
 CRITERIA = (
     "SQL-CHECK: SELECT 1 WHERE 1\n"
@@ -94,7 +137,7 @@ def home(tmp_path, monkeypatch):
         " created_at, updated_at) VALUES (?, 'P', 'd', 'active', ?, ?, ?)",
         (PROJECT_ID, str(tmp_path), CREATED, CREATED),
     )
-    for type_id, pre, post in (MIXED, CLEAN):
+    for type_id, pre, post in (MIXED, CLEAN, *(t for t, _ in DISK_WOS.values())):
         conn.execute(
             "INSERT INTO business_work_order_types (type_id, label, pre_build_gate,"
             " build_executor, post_build_gate) VALUES (?, ?, ?, 'x', ?)",
@@ -104,6 +147,12 @@ def home(tmp_path, monkeypatch):
     conn.close()
     _seed_wo(db, "wo-mixed", MIXED[0])
     _seed_wo(db, "wo-clean", CLEAN[0])
+    for wo_id, ((type_id, _pre, _post), files) in DISK_WOS.items():
+        _seed_wo(db, wo_id, type_id)
+        wo_dir = tmp_path / "planning" / "work-orders" / wo_id
+        wo_dir.mkdir(parents=True)
+        for name, text in files.items():
+            (wo_dir / name).write_text(text, encoding="utf-8")
     monkeypatch.setenv("DREAM_STUDIO_HOME", str(home))
     monkeypatch.setenv("DS_SPOOL_ROOT", str(home / "events"))
     monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db))
@@ -284,26 +333,40 @@ def test_a_blocked_scan_is_a_failure_not_not_run(home):
     assert gate["status"] == "fail", gate
 
 
-def test_sql_checks_are_evaluated_and_the_rest_are_listed(home):
+def test_every_check_kind_is_listed_as_not_run_and_none_is_evaluated(home):
     ac = _by_gate(_preview(home, "wo-clean", run_checks=False))["executable_ac"]
     note = ac["not_run"][0]
-    assert (
-        "1 API-CHECK" in note and "1 TEST-CHECK" in note and "SQL" not in note.split("not run")[0]
-    )
+    assert "1 SQL-CHECK" in note and "1 API-CHECK" in note and "1 TEST-CHECK" in note
 
 
-def test_a_failing_sql_check_is_a_definite_failure(home):
+def test_a_sql_check_is_never_evaluated_so_it_cannot_be_a_read_oracle(home, monkeypatch):
+    """A client holding work_order:add_task can plant a SQL-CHECK, and the preview is open to
+    every client. Evaluating it would let a read-only caller learn one bit per call about any
+    table in the authority, past the curated read tools. So it is not evaluated: it is
+    not_run, whatever it would have returned, and its text is never handed to sqlite."""
+    import core.work_orders.verify_executor as vx
+
+    called = []
+    monkeypatch.setattr(vx, "_run_one_sql_check", lambda *a, **k: called.append(a) or {})
     conn = sqlite3.connect(str(_db(home)))
     conn.execute(
         "UPDATE business_tasks SET acceptance_criteria = ? WHERE work_order_id = 'wo-clean'",
-        ("SQL-CHECK: SELECT 1 WHERE 0\nTEST-CHECK: tests/unit/test_x.py::t\n",),
+        (
+            "SQL-CHECK: SELECT 1 WHERE 0\n"
+            "SQL-CHECK: SELECT 1 WHERE substr((SELECT name FROM business_projects), 1, 1) = 'P'\n",
+        ),
     )
     conn.commit()
     conn.close()
-    ac = _by_gate(_preview(home, "wo-clean", run_checks=False))["executable_ac"]
-    assert ac["status"] == "fail"
-    assert "SQL-CHECK" in ac["failures"][0] and "FAILED" in ac["failures"][0]
-    assert ac["not_run"], "the TEST-CHECK beside it is still reported as not run"
+
+    result = _preview(home, "wo-clean", run_checks=False)
+
+    assert called == [], "the preview handed a planted SQL-CHECK to sqlite"
+    ac = _by_gate(result)["executable_ac"]
+    assert ac["status"] == "not_run" and ac["failures"] == []
+    assert "2 SQL-CHECK" in ac["not_run"][0]
+    # No answer about the planted query, in either direction, leaves the preview.
+    assert "PASSED" not in str(result) and "returned" not in str(result)
 
 
 def test_an_unrecognised_check_kind_fails_closed_without_executing(home, monkeypatch):
@@ -330,8 +393,8 @@ def test_no_registered_test_check_is_a_definite_failure_of_all_tests_pass(home):
     result = _preview(home, "wo-clean", run_checks=False)
     gate = _by_gate(result)["all_tests_pass"]
     assert gate["status"] == "fail" and "UNVERIFIED" in gate["failures"][0]
-    # Only SQL-CHECKs were registered, and they were all evaluated: nothing was left unrun.
-    assert _by_gate(result)["executable_ac"]["status"] == "pass"
+    # Only SQL-CHECKs were registered, and a SQL-CHECK is not evaluated here either.
+    assert _by_gate(result)["executable_ac"]["status"] == "not_run"
 
 
 def test_an_unknown_work_order_is_refused(home):
@@ -401,6 +464,7 @@ def _spy_everything(monkeypatch) -> list[str]:
             "run_executable_checks",
             "_run_one_test_check",
             "_run_one_api_check",
+            "_run_one_sql_check",
             "_emit_validation_result_event",
         ):
             if hasattr(mod, fn):
@@ -499,3 +563,118 @@ def test_each_kind_of_check_trips_its_own_detector_when_executed(
     with pytest.raises(Forbidden):
         _preview(home, "wo-clean")
     assert any(c.startswith(expected) for c in calls), (criteria, calls)
+
+
+# ── disk-only gates: a server with no project directory must not report "not found" ──
+#
+# Seven gates read `.planning/work-orders/<id>/` on disk (the five below, plus the on-disk
+# fallback of the artifact gates). The CLI reads the working directory's `.planning`; a server
+# has no such directory. Reading the wrong one reports "not found", which is a FAIL for a work
+# order that passes with the right directory: a false fail is as wrong as a false pass.
+
+
+@pytest.mark.parametrize("wo_id", sorted(DISK_WOS))
+def test_the_disk_gates_pass_when_the_directory_is_readable(home, wo_id):
+    gates = _by_gate(_preview(home, wo_id, run_checks=False))
+    named = [g for g in gates.values() if g["gate"] in DISK_GATES]
+    assert named and all(g["status"] == "pass" for g in named), named
+
+
+@pytest.mark.parametrize("wo_id", sorted(DISK_WOS))
+def test_the_disk_gates_are_not_run_without_a_directory_never_failed(home, wo_id):
+    """The files EXIST under the planning root, and the preview is told it has no directory to
+    read: it does not look, and says so, rather than reporting not-found."""
+    result = _preview(home, wo_id, run_checks=False, read_planning_dir=False)
+    named = [g for g in result["gates"] if g["gate"] in DISK_GATES]
+    assert named
+    for gate in named:
+        assert gate["status"] == "not_run", gate
+        assert gate["failures"] == []
+        assert "project directory" in " ".join(gate["not_run"]), gate
+    assert not any(DISK_GATES & {g["gate"]} for g in result["gates"] if g["status"] == "fail")
+
+
+def test_the_artifact_gates_still_judge_what_the_authority_holds_without_a_directory(home):
+    """A blocked scan stored in the authority is a definite failure with or without a directory;
+    only the on-disk fallback is skipped."""
+    set_wo_artifact(
+        "wo-clean",
+        "security_scan",
+        wrap("# scan\nBLOCKED: SQL injection", generator="t", head_commit_sha=SHA),
+        db_path=_db(home),
+    )
+    gate = _by_gate(_preview(home, "wo-clean", run_checks=False, read_planning_dir=False))[
+        "security_scan"
+    ]
+    assert gate["status"] == "fail", gate
+
+
+def test_an_artifact_absent_from_the_authority_is_not_run_when_the_disk_cannot_be_read(home):
+    conn = sqlite3.connect(str(_db(home)))
+    conn.execute("DELETE FROM business_work_order_artifacts WHERE work_order_id = 'wo-clean'")
+    conn.commit()
+    conn.close()
+    with_dir = _by_gate(_preview(home, "wo-clean", run_checks=False))["security_scan"]
+    assert with_dir["status"] == "fail" and "not found" in with_dir["failures"][0]
+    without = _by_gate(_preview(home, "wo-clean", run_checks=False, read_planning_dir=False))[
+        "security_scan"
+    ]
+    assert without["status"] == "not_run" and without["failures"] == []
+    assert "authority" in without["not_run"][0]
+
+
+def test_read_planning_dir_false_is_refused_for_the_executing_preview(home):
+    with pytest.raises(ValueError, match="read_planning_dir"):
+        _preview(home, "wo-clean", read_planning_dir=False)
+
+
+# ── the preview holds no write-capable handle on the authority ───────────────
+
+
+def _authority_opens(monkeypatch, home, fn):
+    """Run `fn`, returning every sqlite3.connect target that names the authority."""
+    opens: list[str] = []
+    real = sqlite3.connect
+
+    def spy(database, *a, **k):
+        opens.append(str(database))
+        return real(database, *a, **k)
+
+    monkeypatch.setattr(sqlite3, "connect", spy)
+    fn()
+    monkeypatch.setattr(sqlite3, "connect", real)
+    return [o for o in opens if "studio.db" in o]
+
+
+def test_the_non_executing_preview_opens_the_authority_read_only(home, monkeypatch):
+    wos = ["wo-mixed", "wo-clean", *sorted(DISK_WOS)]
+    opens = _authority_opens(
+        monkeypatch, home, lambda: [_preview(home, w, run_checks=False) for w in wos]
+    )
+    assert opens, "the spy saw no authority open at all"
+    writable = [o for o in opens if "mode=ro" not in o]
+    assert (
+        writable == []
+    ), f"{len(writable)} of {len(opens)} opens were write-capable: {writable[:3]}"
+
+
+def test_the_write_capable_open_detector_fires_on_the_executing_preview(home, monkeypatch):
+    """Control: the default preview migrates and opens read-write, and the spy sees it."""
+    _fake_executor(monkeypatch)
+    opens = _authority_opens(monkeypatch, home, lambda: _preview(home, "wo-clean"))
+    assert [o for o in opens if "mode=ro" not in o]
+
+
+def test_under_the_read_only_scope_a_write_through_any_reader_is_refused(home):
+    from core.config.database import connect_existing, read_only_authority
+
+    with read_only_authority():
+        conn = connect_existing(_db(home))
+        with pytest.raises(sqlite3.OperationalError, match="readonly"):
+            conn.execute("UPDATE business_work_orders SET title = 'x'")
+        conn.close()
+    # And only inside the scope: outside it the same call still opens read-write.
+    conn = connect_existing(_db(home))
+    conn.execute("UPDATE business_work_orders SET title = 'x'")
+    conn.rollback()
+    conn.close()

@@ -589,24 +589,27 @@ def run_executable_checks(
     return results
 
 
-#: The check kinds whose execution leaves the process: a TEST-CHECK starts a subprocess and
-#: an API-CHECK sends a request. These are never run by the non-executing preview.
+#: The check kinds the non-executing preview does not run, and why. A TEST-CHECK starts a
+#: subprocess and an API-CHECK sends a request. A SQL-CHECK does neither, and is still not
+#: run: its text is authored by whoever added the task (work_order:add_task), and the preview
+#: is open to every client, so evaluating it would hand a read-only caller one bit per call
+#: about any table in the authority, past the curated read tools.
 _NOT_RUN_KINDS = {
     "TEST-CHECK": "it runs a command as a subprocess in the project's repository",
     "API-CHECK": "it sends a request to the projections API app",
+    "SQL-CHECK": "its query is authored by whoever added the task, and the preview does not"
+    " evaluate authored queries for a caller that may hold no capability",
 }
 
 
 def preview_executable_checks(
     tasks: list[dict[str, Any]], db_path: Path
 ) -> dict[str, list[dict[str, Any]]]:
-    """``run_executable_checks`` without running anything that leaves the process.
+    """``run_executable_checks`` without running any check.
 
     The same mapping, ``task_title -> [check, ...]``, built from the same parsed lines, but:
 
-    - SQL-CHECK is evaluated, because it is a read: ``_run_one_sql_check`` opens the
-      authority ``mode=ro``.
-    - TEST-CHECK and API-CHECK are NOT run. Each comes back as ``{"passed": None,
+    - SQL-CHECK, TEST-CHECK and API-CHECK are NOT run. Each comes back as ``{"passed": None,
       "executed": False, "not_run": True, "not_run_reason": ...}`` -- ``passed`` is None and
       not False because nothing was learned about the work, and not True because nothing
       was proved. A caller that reads only ``passed`` sees a falsy value, never a pass.
@@ -619,10 +622,7 @@ def preview_executable_checks(
     for task in tasks:
         checks: list[dict[str, Any]] = []
         for token, expr in check_lines(task):
-            if token == "SQL-CHECK":
-                check = _run_one_sql_check(expr, db_path)
-                check["executed"] = True
-            elif token in _NOT_RUN_KINDS:
+            if token in _NOT_RUN_KINDS:
                 check = {
                     "kind": token,
                     "expr": expr,

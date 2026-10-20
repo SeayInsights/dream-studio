@@ -57,6 +57,7 @@ def check_close_gates(
     dream_studio_home: Path | None = None,
     planning_root: Path | None = None,
     run_checks: bool = True,
+    read_planning_dir: bool = True,
 ) -> dict[str, Any]:
     """Preview gate evaluation for a work-order close. Does not change the work order.
 
@@ -69,6 +70,10 @@ def check_close_gates(
     ``run_checks=False`` is the non-executing preview (see ``_preview_without_running_checks``):
     it starts no subprocess, sends no request and writes no event, and reports every gate part
     it could not evaluate as ``not_run`` rather than passed or failed.
+
+    ``read_planning_dir=False`` (non-executing preview only) says the caller has no project
+    directory: the gates that read ``.planning`` on disk are reported ``not_run`` instead of
+    failing as "not found". A server is such a caller; the ``ds`` CLI is not.
 
     Default-mode result, shaped like:
 
@@ -91,10 +96,18 @@ def check_close_gates(
 
     p_root = planning_root or Path.cwd() / ".planning"
     db_path = _require_db(source_root, dream_studio_home)
+    if not read_planning_dir and run_checks:
+        raise ValueError("read_planning_dir=False is only meaningful with run_checks=False")
     if not run_checks:
-        return _preview_without_running_checks(
-            work_order_id=work_order_id, db_path=db_path, planning_root=p_root
-        )
+        from core.config.database import read_only_authority
+
+        with read_only_authority():
+            return _preview_without_running_checks(
+                work_order_id=work_order_id,
+                db_path=db_path,
+                planning_root=p_root,
+                read_planning_dir=read_planning_dir,
+            )
     with _connect(db_path) as conn:
         meta = _lookup_work_order_and_gates(conn, work_order_id)
         if not meta.get("ok"):
@@ -144,7 +157,7 @@ def check_close_gates(
 
 
 def _preview_without_running_checks(
-    *, work_order_id: str, db_path: Path, planning_root: Path
+    *, work_order_id: str, db_path: Path, planning_root: Path, read_planning_dir: bool = True
 ) -> dict[str, Any]:
     """``check_close_gates(run_checks=False)``: every gate that can be read, none executed.
 
@@ -156,8 +169,9 @@ def _preview_without_running_checks(
     - no subprocess is started (TEST-CHECKs, ``git log`` for provenance staleness),
     - no request is made (API-CHECKs),
     - no event is written (``validation.result_recorded``),
-    - the authority connection it holds is ``mode=ro``; the helpers it calls open the existing
-      file and only SELECT (the preview test watches ``PRAGMA data_version`` to prove it).
+    - every authority connection is ``mode=ro``: the one it holds, and, through
+      ``read_only_authority()``, the readers it calls (they open ``mode=rw`` by default),
+    - no authored query is evaluated: a SQL-CHECK is ``not_run`` like the other kinds.
 
     ``gates_pass`` is True only when every gate passed AND none went unevaluated; a result
     with anything ``not_run`` reads ``gates_pass: False`` and ``overall: "not_run"``. The
@@ -192,6 +206,7 @@ def _preview_without_running_checks(
             project_id=meta["project_id"],
             planning_root=planning_root,
             db_path=db_path,
+            read_planning_dir=read_planning_dir,
         )
         outcomes.append(_preview_ac_gate(conn, work_order_id=work_order_id, db_path=db_path))
         outcomes.append(
