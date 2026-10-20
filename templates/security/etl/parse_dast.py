@@ -6,11 +6,13 @@ Supports: OWASP ZAP JSON reports, Nuclei JSONL output
 Outputs: normalized flat findings list as JSON (stdout or file)
 
 Every finding carries `coverage` (complete | partial | unknown) and `limitations`,
-read from the run record in the scan's scan-meta.json (see scan_coverage.py): a run
-that continued with ZAP only because Nuclei is not installed is partial and names
-the skipped scanner; a scan directory with no run record is unknown, never complete.
+(see scan_coverage.py). `complete` needs the run record in the scan's scan-meta.json
+to say both scanners ran AND this parser to have read a result for each
+(zap-report.json, nuclei-output.jsonl): a run that continued with ZAP only because
+Nuclei is not installed, or whose output is missing or malformed, is partial and names
+the scanner; a scan directory with no usable run record is unknown, never complete.
 A scan with zero findings carries nothing on a finding, so `--coverage-output`
-writes the same facts per scan directory.
+writes the same facts per scan directory, and writes them before any non-zero exit.
 
 Usage:
     py -3.12 parse_dast.py --client <name> [--scans-dir <path>] [--output <path>]
@@ -344,6 +346,45 @@ def detect_and_parse(data: object, filepath: Path, target_name: str) -> list[dic
     return []
 
 
+def jsonl_is_clean(path: Path) -> bool:
+    """True when every non-empty line of a Nuclei -jsonl file is valid JSON.
+
+    An empty file is a real result (Nuclei ran and found nothing); a file with a
+    malformed line is only partly read, so it does not count as read. A line that is
+    valid JSON but not an object makes parse_nuclei_jsonl raise, which also leaves the
+    step unread.
+    """
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            text = line.strip()
+            if not text:
+                continue
+            try:
+                json.loads(text)
+            except ValueError:
+                return False
+    return True
+
+
+def read_result_file(path: Path, target_name: str) -> tuple[str | None, list[dict]]:
+    """Parse one result file: (the planned step it is the output of or None, findings).
+
+    Raises on a file that cannot be read or parsed; the caller reports it and the step
+    stays unread.
+    """
+    if path.suffix == ".jsonl":
+        findings = parse_nuclei_jsonl(path, target_name)
+        return ("nuclei" if jsonl_is_clean(path) else None), findings
+    with open(path, encoding="utf-8") as fh:
+        raw = json.load(fh)
+    findings = detect_and_parse(raw, path, target_name)
+    if isinstance(raw, dict) and "@version" in raw and "site" in raw:
+        return "zap", findings
+    if path.name.startswith("nuclei") and jsonl_is_clean(path):
+        return "nuclei", findings
+    return None, findings
+
+
 # ── Deduplication ────────────────────────────────────────────────────────────
 
 
@@ -505,14 +546,11 @@ def main() -> None:
 
     if args.sample:
         findings = generate_sample()
-        sample = {
-            "coverage": scan_coverage.UNKNOWN,
-            "skipped_steps": [],
-            "limitations": ["synthetic sample data; no scan was run"],
-        }
+        sample = scan_coverage.unknown_report(None, "synthetic sample data; no scan was run")
         scan_coverage.stamp(findings, sample)
-        scan_reports.append({"scan_dir": None, **sample})
+        scan_reports.append(sample)
         print(f"[parse_dast] Generated {len(findings)} sample DAST findings", file=sys.stderr)
+        scan_coverage.report("parse_dast", scan_reports, args.coverage_output)
     else:
         scans_dir = (
             Path(args.scans_dir)
@@ -520,7 +558,13 @@ def main() -> None:
             else home_dir() / "security" / "scans" / args.client
         )
         if not scans_dir.exists():
+            scan_reports.append(
+                scan_coverage.unknown_report(
+                    str(scans_dir), f"scans directory not found: {scans_dir}"
+                )
+            )
             print(f"[parse_dast] ERROR: scans directory not found: {scans_dir}", file=sys.stderr)
+            scan_coverage.report("parse_dast", scan_reports, args.coverage_output)
             sys.exit(1)
 
         scan_files = sorted(
@@ -530,59 +574,44 @@ def main() -> None:
             and f.is_file()
             and any(k in f.name.lower() for k in ("zap", "nuclei"))
         )
-        if not scan_files:
-            print(f"[parse_dast] No ZAP/Nuclei result files found in {scans_dir}", file=sys.stderr)
-            sys.exit(1)
+        dirs = scan_coverage.scan_dirs(scans_dir, scan_files)
 
-        all_findings: list[dict] = []
-        assessed: dict[str, dict] = {}
+        findings_by_key: dict[str, list[dict]] = {}
+        read_by_key: dict[str, set[str]] = {}
         for sf in scan_files:
             target_name = (
                 sf.parent.parent.name if sf.parent.name.count("-") == 2 else sf.parent.name
             )
+            key, _ = scan_coverage.scan_key(sf, scans_dir)
             print(f"[parse_dast] Parsing {sf.name} → target={target_name}", file=sys.stderr)
             try:
-                if sf.suffix == ".jsonl":
-                    parsed = parse_nuclei_jsonl(sf, target_name)
-                else:
-                    with open(sf, encoding="utf-8") as fh:
-                        raw = json.load(fh)
-                    parsed = detect_and_parse(raw, sf, target_name)
-                meta_path = scan_coverage.find_meta(sf, scans_dir)
-                key = str(meta_path.parent if meta_path else sf.parent)
-                if key not in assessed:
-                    assessed[key] = scan_coverage.assess(
-                        scan_coverage.load_meta(meta_path), PLANNED_STEPS
-                    )
-                    scan_reports.append({"scan_dir": key, **assessed[key]})
-                scan_coverage.stamp(parsed, assessed[key])
-                print(f"  → {len(parsed)} findings", file=sys.stderr)
-                all_findings.extend(parsed)
+                step, parsed = read_result_file(sf, target_name)
             except Exception as exc:
                 print(f"  [error] Failed to parse {sf.name}: {exc}", file=sys.stderr)
+                continue
+            if step is not None:
+                read_by_key.setdefault(key, set()).add(step)
+            findings_by_key.setdefault(key, []).extend(parsed)
+            print(f"  → {len(parsed)} findings", file=sys.stderr)
+
+        reports = scan_coverage.assess_all(dirs, PLANNED_STEPS, read_by_key)
+        scan_reports.extend(reports.values())
+        all_findings: list[dict] = []
+        for key, found in findings_by_key.items():
+            scan_coverage.stamp(found, reports[key])
+            all_findings.extend(found)
+
+        if not scan_files:
+            print(f"[parse_dast] No ZAP/Nuclei result files found in {scans_dir}", file=sys.stderr)
+            scan_coverage.report("parse_dast", scan_reports, args.coverage_output)
+            sys.exit(1)
 
         findings = deduplicate(all_findings)
         print(
             f"[parse_dast] Total: {len(all_findings)} raw → {len(findings)} after dedup",
             file=sys.stderr,
         )
-        for report in scan_reports:
-            detail = "; ".join(report["limitations"])
-            print(
-                f"[parse_dast] coverage {report['coverage']}: {report['scan_dir']}"
-                + (f" -- {detail}" if detail else ""),
-                file=sys.stderr,
-            )
-
-    if args.coverage_output:
-        Path(args.coverage_output).write_text(
-            json.dumps(
-                {"coverage": scan_coverage.overall(scan_reports), "scans": scan_reports},
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-        print(f"[parse_dast] Coverage written to {args.coverage_output}", file=sys.stderr)
+        scan_coverage.report("parse_dast", scan_reports, args.coverage_output)
 
     output_json = json.dumps(findings, indent=2)
     if args.output:

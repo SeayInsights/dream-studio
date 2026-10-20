@@ -2,16 +2,20 @@
 parse_binary.py — Binary analysis result parser and normalizer.
 
 Reads binary analysis results from ~/.dream-studio/security/scans/{client}/
-Supports: checksec JSON, YARA JSON, strings analysis output
+Supports: checksec JSON, YARA JSON, strings analysis output (strings-findings.txt as
+          examples.md A6 writes it, or a {"findings": [...]} JSON), and PE/ELF header
+          analysis (header-analysis.json, examples.md A7)
 Outputs: normalized flat findings list as JSON (stdout or file)
 
-Every finding carries `coverage` (complete | partial | unknown) and `limitations`,
-read from the run record in the scan's scan-meta.json (see scan_coverage.py): a scan
-that skipped a step because a tool was missing is partial and names the step; a scan
-directory with no run record is unknown, never complete. The findings are flat dicts
-with no schema behind them, so no migration is involved. A scan with zero findings
+Every finding carries `coverage` (complete | partial | unknown) and `limitations`
+(see scan_coverage.py). `complete` needs the run record in the scan's scan-meta.json to
+say every planned step ran AND this parser to have read a result for each of them: a
+step that was skipped, or recorded as ran but whose output is missing, empty,
+unparseable or of a kind not read here, makes the scan partial and is named; a scan
+directory with no usable run record is unknown, never complete. The findings are flat
+dicts with no schema behind them, so no migration is involved. A scan with zero findings
 carries nothing on a finding, so `--coverage-output` writes the same facts per scan
-directory.
+directory, and writes them before any non-zero exit.
 
 Usage:
     py -3.12 parse_binary.py --client <name> [--scans-dir <path>] [--output <path>]
@@ -41,27 +45,10 @@ import scan_coverage  # noqa: E402
 from core.config.paths import home_dir  # noqa: E402
 
 #: Every step `binary-scan analyze` runs when all its tooling is present
-#: (examples.md A4-A7). Coverage is complete only when each one is recorded as run.
+#: (examples.md A4-A7). Coverage is complete only when each one is recorded as run
+#: AND this parser read a result for it: checksec.json, yara-matches.json,
+#: strings-findings.txt (or .json) and header-analysis.json.
 PLANNED_STEPS = ("checksec", "yara", "strings", "header_analysis")
-
-#: header_analysis (A7) writes no file this parser reads, so even when it ran
-#: nothing from it reaches the findings.
-HEADER_LIMITATION = (
-    "header_analysis ran but its output is not parsed into findings by parse_binary.py"
-)
-
-
-def assess_scan(meta: dict | None) -> tuple[dict, list[str]]:
-    """Coverage of one binary scan plus the limitations that hold even when complete."""
-    assessment = scan_coverage.assess(meta, PLANNED_STEPS)
-    steps = (meta or {}).get("steps")
-    ran = {
-        e.get("step")
-        for e in (steps if isinstance(steps, list) else [])
-        if isinstance(e, dict) and e.get("status") == scan_coverage.STATUS_RAN
-    }
-    extra = [HEADER_LIMITATION] if "header_analysis" in ran else []
-    return assessment, extra
 
 
 SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
@@ -400,34 +387,171 @@ def parse_strings_findings(data: dict, target_name: str, binary_hash: str = "") 
 # ── Auto-detect format ───────────────────────────────────────────────────────
 
 
-def detect_and_parse(
-    data: object, filename: str, target_name: str, binary_hash: str = ""
-) -> list[dict]:
-    if isinstance(data, dict):
-        if "error" in data and len(data) == 1:
-            return []
+def parse_strings_text(text: str, target_name: str, binary_hash: str = "") -> list[dict]:
+    """strings-findings.txt as examples.md A6 writes it: one grep match per line.
 
+    An empty file is a real result (the grep matched nothing), not a missing one.
+    """
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    return parse_strings_findings(
+        {"findings": [{"value": ln} for ln in lines]}, target_name, binary_hash
+    )
+
+
+# ── Parser: PE/ELF header analysis (A7) ──────────────────────────────────────
+
+# header-analysis.json, written by examples.md A7:
+#   {"format": "pe" | "elf", "checks": {"<check>": true | false, ...}}
+# true = the property holds; false = it does not and becomes a finding.
+HEADER_CHECK_META = {
+    "signed": {
+        "severity": "high",
+        "cwe": "CWE-345",
+        "owasp": "A08:2021",
+        "message": "Binary is not signed — integrity and origin cannot be verified",
+    },
+    "debug_symbols_stripped": {
+        "severity": "low",
+        "cwe": "CWE-200",
+        "owasp": "A05:2021",
+        "message": "Debug symbols present in the shipped binary — internals are exposed",
+    },
+    "no_known_vulnerable_compiler": {
+        "severity": "medium",
+        "cwe": "CWE-1104",
+        "owasp": "A06:2021",
+        "message": "Built with a compiler or toolchain version with known defects",
+    },
+    "interpreter_trusted": {
+        "severity": "medium",
+        "cwe": "CWE-426",
+        "owasp": "A08:2021",
+        "message": "ELF interpreter is not a standard system loader",
+    },
+    "symbols_stripped": {
+        "severity": "low",
+        "cwe": "CWE-200",
+        "owasp": "A05:2021",
+        "message": "Symbol table present in the shipped binary — internals are exposed",
+    },
+    "no_writable_executable_sections": {
+        "severity": "high",
+        "cwe": "CWE-119",
+        "owasp": "A06:2021",
+        "message": "A section is both writable and executable",
+    },
+}
+
+
+def parse_header_json(data: dict, target_name: str, binary_hash: str = "") -> list[dict]:
+    findings = []
+    for check_name, value in data["checks"].items():
+        if value is not False:
+            continue
+        meta = HEADER_CHECK_META.get(str(check_name), {})
+        rule_id = f"BIN-hdr-{check_name}"
+        fp = _fingerprint(target_name, f"header{check_name}", rule_id)
+        severity = meta.get("severity", "medium")
+        findings.append(
+            {
+                "id": fp,
+                "repo": target_name,
+                "file": target_name,
+                "line": None,
+                "rule_id": rule_id,
+                "severity": severity,
+                "message": meta.get(
+                    "message", f"Header check '{check_name}' failed ({data.get('format', '?')})"
+                ),
+                "cwe": meta.get("cwe", ""),
+                "owasp": meta.get("owasp", ""),
+                "scanner": "header_analysis",
+                "raw_severity": severity,
+                "fingerprint": fp,
+                "target_type": "binary",
+                "target_name": target_name,
+                "url": "",
+                "http_method": "",
+                "binary_hash": binary_hash,
+                "hardening_check": "",
+                "binary_section": "",
+                "yara_rule": "",
+            }
+        )
+    return findings
+
+
+def detect_step(data: object, filename: str = "") -> str | None:
+    """Which planned step a parsed result file is the output of; None if it is none we read.
+
+    Decided by content, not file name: a file called checksec.json holding an error
+    object, or YARA output filed under the wrong name, must not count for the step.
+    """
+    if isinstance(data, dict):
+        if isinstance(data.get("checks"), dict) and "format" in data:
+            return "header_analysis"
+        if "error" in data and len(data) == 1:
+            return None
         for val in data.values():
             if isinstance(val, dict) and any(
                 k in val for k in ("nx", "pie", "relro", "canary", "dep", "aslr", "cfg")
             ):
-                return parse_checksec_json(data, target_name, binary_hash)
-
+                return "checksec"
         if "file" in data and isinstance(data.get("file"), dict):
-            return parse_checksec_json(data, target_name, binary_hash)
-
+            return "checksec"
         if "matches" in data or "rules" in data:
-            return parse_yara_json(data, target_name, binary_hash)
-
+            return "yara"
         if "findings" in data:
-            return parse_strings_findings(data, target_name, binary_hash)
-
+            return "strings"
     if isinstance(data, list):
         if data and isinstance(data[0], dict) and "rule" in data[0]:
-            return parse_yara_json(data, target_name, binary_hash)
+            return "yara"
+        if not data and "yara" in filename.lower():
+            return "yara"  # `yara -j` with no match prints an empty list
+    return None
 
+
+def detect_and_parse(
+    data: object, filename: str, target_name: str, binary_hash: str = ""
+) -> list[dict]:
+    step = detect_step(data, filename)
+    if step == "header_analysis":
+        return parse_header_json(data, target_name, binary_hash)
+    if step == "checksec":
+        return parse_checksec_json(data, target_name, binary_hash)
+    if step == "yara":
+        return parse_yara_json(data, target_name, binary_hash)
+    if step == "strings":
+        return parse_strings_findings(data, target_name, binary_hash)
+    if isinstance(data, dict) and "error" in data and len(data) == 1:
+        return []
     print(f"  [warn] Could not detect binary analysis format for {filename}", file=sys.stderr)
     return []
+
+
+def read_result_file(path: Path, target_name: str, binary_hash: str) -> tuple[str | None, list[dict]]:
+    """Parse one result file: (the planned step it is the output of or None, findings).
+
+    Raises on a file that cannot be read or parsed; the caller reports it and the step
+    stays unread.
+    """
+    if path.suffix == ".txt":
+        text = path.read_text(encoding="utf-8")
+        return "strings", parse_strings_text(text, target_name, binary_hash)
+    with open(path, encoding="utf-8") as fh:
+        raw = json.load(fh)
+    step = detect_step(raw, path.name)
+    return step, detect_and_parse(raw, path.name, target_name, binary_hash)
+
+
+def is_result_file(path: Path) -> bool:
+    """Result files this parser reads: checksec/yara/strings/header-analysis JSON, strings .txt."""
+    name = path.name.lower()
+    if not path.is_file():
+        return False
+    if path.suffix == ".json":
+        return any(k in name for k in ("checksec", "yara", "strings", "header-analysis"))
+    return path.suffix == ".txt" and "strings" in name
 
 
 # ── Deduplication ────────────────────────────────────────────────────────────
@@ -589,14 +713,11 @@ def main() -> None:
 
     if args.sample:
         findings = generate_sample()
-        sample = {
-            "coverage": scan_coverage.UNKNOWN,
-            "skipped_steps": [],
-            "limitations": ["synthetic sample data; no scan was run"],
-        }
+        sample = scan_coverage.unknown_report(None, "synthetic sample data; no scan was run")
         scan_coverage.stamp(findings, sample)
-        scan_reports.append({"scan_dir": None, **sample})
+        scan_reports.append(sample)
         print(f"[parse_binary] Generated {len(findings)} sample binary findings", file=sys.stderr)
+        scan_coverage.report("parse_binary", scan_reports, args.coverage_output)
     else:
         scans_dir = (
             Path(args.scans_dir)
@@ -604,7 +725,13 @@ def main() -> None:
             else home_dir() / "security" / "scans" / args.client
         )
         if not scans_dir.exists():
+            scan_reports.append(
+                scan_coverage.unknown_report(
+                    str(scans_dir), f"scans directory not found: {scans_dir}"
+                )
+            )
             print(f"[parse_binary] ERROR: scans directory not found: {scans_dir}", file=sys.stderr)
+            scan_coverage.report("parse_binary", scan_reports, args.coverage_output)
             sys.exit(1)
 
         hash_file = scans_dir / "hash.json"
@@ -616,64 +743,48 @@ def main() -> None:
             except Exception:
                 pass
 
-        scan_files = sorted(
-            f
-            for f in scans_dir.rglob("*")
-            if f.suffix == ".json"
-            and f.is_file()
-            and any(k in f.name.lower() for k in ("checksec", "yara", "strings"))
-        )
+        scan_files = sorted(f for f in scans_dir.rglob("*") if is_result_file(f))
+        dirs = scan_coverage.scan_dirs(scans_dir, scan_files)
+
+        findings_by_key: dict[str, list[dict]] = {}
+        read_by_key: dict[str, set[str]] = {}
+        for sf in scan_files:
+            target_name = (
+                sf.parent.parent.name if sf.parent.name.count("-") == 2 else sf.parent.name
+            )
+            key, _ = scan_coverage.scan_key(sf, scans_dir)
+            print(f"[parse_binary] Parsing {sf.name} → target={target_name}", file=sys.stderr)
+            try:
+                step, parsed = read_result_file(sf, target_name, binary_hash)
+            except Exception as exc:
+                print(f"  [error] Failed to parse {sf.name}: {exc}", file=sys.stderr)
+                continue
+            if step is not None:
+                read_by_key.setdefault(key, set()).add(step)
+            findings_by_key.setdefault(key, []).extend(parsed)
+            print(f"  → {len(parsed)} findings", file=sys.stderr)
+
+        reports = scan_coverage.assess_all(dirs, PLANNED_STEPS, read_by_key)
+        scan_reports.extend(reports.values())
+        all_findings: list[dict] = []
+        for key, found in findings_by_key.items():
+            scan_coverage.stamp(found, reports[key])
+            all_findings.extend(found)
+
         if not scan_files:
             print(
                 f"[parse_binary] No checksec/yara/strings files found in {scans_dir}",
                 file=sys.stderr,
             )
+            scan_coverage.report("parse_binary", scan_reports, args.coverage_output)
             sys.exit(1)
-
-        all_findings: list[dict] = []
-        assessed: dict[str, tuple[dict, list[str]]] = {}
-        for sf in scan_files:
-            target_name = (
-                sf.parent.parent.name if sf.parent.name.count("-") == 2 else sf.parent.name
-            )
-            print(f"[parse_binary] Parsing {sf.name} → target={target_name}", file=sys.stderr)
-            try:
-                with open(sf, encoding="utf-8") as fh:
-                    raw = json.load(fh)
-                parsed = detect_and_parse(raw, sf.name, target_name, binary_hash)
-                meta_path = scan_coverage.find_meta(sf, scans_dir)
-                key = str(meta_path.parent if meta_path else sf.parent)
-                if key not in assessed:
-                    assessed[key] = assess_scan(scan_coverage.load_meta(meta_path))
-                    scan_reports.append({"scan_dir": key, **assessed[key][0]})
-                scan_coverage.stamp(parsed, *assessed[key])
-                print(f"  → {len(parsed)} findings", file=sys.stderr)
-                all_findings.extend(parsed)
-            except Exception as exc:
-                print(f"  [error] Failed to parse {sf.name}: {exc}", file=sys.stderr)
 
         findings = deduplicate(all_findings)
         print(
             f"[parse_binary] Total: {len(all_findings)} raw → {len(findings)} after dedup",
             file=sys.stderr,
         )
-        for report in scan_reports:
-            detail = "; ".join(report["limitations"])
-            print(
-                f"[parse_binary] coverage {report['coverage']}: {report['scan_dir']}"
-                + (f" -- {detail}" if detail else ""),
-                file=sys.stderr,
-            )
-
-    if args.coverage_output:
-        Path(args.coverage_output).write_text(
-            json.dumps(
-                {"coverage": scan_coverage.overall(scan_reports), "scans": scan_reports},
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-        print(f"[parse_binary] Coverage written to {args.coverage_output}", file=sys.stderr)
+        scan_coverage.report("parse_binary", scan_reports, args.coverage_output)
 
     output_json = json.dumps(findings, indent=2)
     if args.output:

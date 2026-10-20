@@ -115,9 +115,17 @@ Store the hash for inclusion in findings.
 The analysis has four steps: `checksec` (A4), `yara` (A5), `strings` (A6) and
 `header_analysis` (A7). Keep a run record as you go: for each one, `ran`, `skipped` (its
 tool is not available, or A7 has no Python library for the format) or `failed` (it ran
-and errored), with the `tool` actually used and, when it did not run, the `reason`. A
-step never leaves the record, because Step A8 writes it to `scan-meta.json` and the
-ingest step reads it back to mark the scan `complete`, `partial` or `unknown`.
+and errored), with the `tool` actually used (required for `ran`) and, when it did not
+run, the `reason`. Record `failed`, not `ran`, when a tool is installed but errors or
+leaves no usable output. One entry per step. A step never leaves the record, because
+Step A8 writes it to `scan-meta.json` and the ingest step reads it back to mark the scan
+`complete`, `partial` or `unknown`.
+
+Every step that ran must also leave its result file in the scan directory (A4
+`checksec.json`, A5 `yara-matches.json`, A6 `strings-findings.txt`, A7
+`header-analysis.json`). Ingest marks a scan `complete` only when it read a result for
+each step; a step recorded `ran` whose file is missing, empty or unparseable reads
+`partial`.
 
 ### Step A4: Run checksec
 
@@ -146,7 +154,8 @@ strings {binary_path} | grep -E '(https?://|[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+|passw
 
 Apply PII patterns from `data.pii_patterns` against strings output. If `strings` is not
 available (for example on Windows without binutils), record `strings` as `skipped` with
-the reason and continue.
+the reason and continue. When the pattern matches nothing the file is empty; keep it
+(an empty `strings-findings.txt` is a result, a missing one is not).
 
 ### Step A7: PE/ELF Header Analysis (needs `pefile` for PE, `pyelftools` for ELF)
 
@@ -165,6 +174,18 @@ pe = pefile.PE(binary_path)
 from elftools.elf.elffile import ELFFile
 # Check: interpreter, sections, symbols
 ```
+
+Write the checks to `header-analysis.json`, one boolean per check, `true` when the
+property holds and `false` when it does not (each `false` becomes a finding):
+
+```json
+{"format": "pe", "checks": {"signed": false, "debug_symbols_stripped": true,
+                            "no_known_vulnerable_compiler": true}}
+```
+
+PE checks: `signed`, `debug_symbols_stripped`, `no_known_vulnerable_compiler`. ELF
+checks: `interpreter_trusted`, `symbols_stripped`, `no_writable_executable_sections`.
+A check named anything else is still read and reported as a medium finding.
 
 ### Step A8: Store Results
 
@@ -214,7 +235,7 @@ Show: binary analyzed, hash, checksec pass/fail summary, YARA matches count, str
 
 ### Step I1: Locate Results
 
-Find checksec.json, yara-matches.json, strings-findings.json in the scan directory.
+Find `checksec.json`, `yara-matches.json`, `strings-findings.txt` and `header-analysis.json` in the scan directory.
 
 ### Step I2: Parse Results
 
@@ -224,10 +245,14 @@ py -3.12 templates/security/etl/parse_binary.py --client {client} --scans-dir {s
 ```
 
 Each finding carries `coverage` (`complete` | `partial` | `unknown`) and `limitations`,
-read from the `steps` run record in `scan-meta.json`: `complete` only when all four steps
-ran, `partial` naming each skipped or failed step, `unknown` when `scan-meta.json` has no
-run record (an older scan directory). `coverage.json` holds the same per scan directory,
-which is the only place coverage shows when a scan produced no findings.
+read from the `steps` run record in `scan-meta.json` and from what the parser actually
+read: `complete` only when all four steps are recorded `ran` AND a result was read for
+each, `partial` naming each skipped, failed, or ran-but-unread step (missing, empty or
+unparseable result file), `unknown` when `scan-meta.json` has no usable run record (an
+older scan directory, a malformed entry, a step recorded twice). `coverage.json` holds
+the same per scan directory, with the limitations. It is the only place coverage shows
+when a scan produced no findings, and it is written even when ingest then exits 1
+because there was nothing to parse.
 
 ### Step I3: Present Summary
 

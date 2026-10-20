@@ -123,7 +123,9 @@ For each target:
    docker run --rm -v ~/.dream-studio/security/dast/{client}/{target}:/zap/config \
      owasp/zap2docker-stable zap.sh -cmd -autorun /zap/config/zap-config.yaml
    ```
-2. Collect `zap-report.json` from the output directory.
+2. Collect `zap-report.json` from the output directory. If ZAP is installed but errors, or
+   leaves no `zap-report.json`, record `zap` as `failed` with the reason (do not record
+   `ran`) and still write the run record in Step R5.
 
 ### Step R4: Execute Nuclei Scan
 
@@ -135,6 +137,9 @@ For each target:
      -rate-limit 10
    ```
 2. Rate limit is intentionally conservative — active scanning should not overwhelm targets.
+3. If Nuclei ran but wrote no `nuclei-output.jsonl` because it found nothing, create the
+   file empty: an empty file is a result, a missing one is not. If Nuclei errored, record
+   `nuclei` as `failed` with the reason (do not record `ran`).
 
 ### Step R5: Store Results
 
@@ -149,22 +154,24 @@ For each target:
      "target_type": "webapp",
      "date": "{YYYY-MM-DD}",
      "source": "local-run",
-     "scanners": ["zap", "nuclei"],
+     "scanners": ["{scanners whose status is ran}"],
      "steps": [
-       {"step": "zap", "status": "ran", "tool": "zap"},
-       {"step": "nuclei", "status": "ran", "tool": "nuclei"}
+       {"step": "zap", "status": "{ran|skipped|failed}", "tool": "zap"},
+       {"step": "nuclei", "status": "{ran|skipped|failed}", "tool": "nuclei"}
      ],
      "url": "{target.url}",
      "scan_profile": "{target.scan_profile}",
      "ingested_at": "{ISO-8601}"
    }
    ```
-   `steps` is the run record: one entry for each of `zap` and `nuclei`, with `status`
-   `ran`, `skipped` or `failed`, the `tool` used, and a `reason` when the status is not
-   `ran` (for example `{"step": "nuclei", "status": "skipped", "tool": "nuclei", "reason":
-   "nuclei is not installed"}`). `scanners` lists only the scanners that actually ran. A
-   scan directory written before `steps` existed stays readable: ingest reports its
-   coverage as `unknown`.
+   `steps` is the run record: exactly one entry for each of `zap` and `nuclei` (a step
+   recorded twice reads `unknown`), with `status` `ran`, `skipped` or `failed`, the `tool`
+   used (required for `ran`), and a `reason` when the status is not `ran` (for example
+   `{"step": "nuclei", "status": "skipped", "tool": "nuclei", "reason": "nuclei is not
+   installed"}`). Write `ran` only for a scanner that completed; one that is installed but
+   errored or produced no report is `failed`. `scanners` lists only the scanners that
+   actually ran. A scan directory written before `steps` existed stays readable: ingest
+   reports its coverage as `unknown`.
 
 ### Step R6: Present Summary
 
@@ -196,9 +203,12 @@ Extract from user input:
 2. This normalizes ZAP + Nuclei outputs to unified findings with `target_type: webapp`.
    Each finding carries `coverage` (`complete` | `partial` | `unknown`) and `limitations`,
    read from the `steps` run record in `scan-meta.json`: `complete` only when both scanners
-   ran, `partial` naming the skipped one, `unknown` when there is no run record (an older
-   scan directory). `coverage.json` holds the same per scan directory, the only place
-   coverage shows when a scan produced no findings.
+   ran and a result was read for each (`zap-report.json`, `nuclei-output.jsonl`),
+   `partial` naming each skipped, failed, or ran-but-unread scanner (missing, empty or
+   malformed output), `unknown` when there is no usable run record (an older scan
+   directory, a malformed or duplicated entry). `coverage.json` holds the same per scan
+   directory, the only place coverage shows when a scan produced no findings; it is
+   written even when ingest exits 1 because there was nothing to parse.
 
 ### Step I3: Store Parsed Findings
 
