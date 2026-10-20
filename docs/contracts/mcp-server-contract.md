@@ -66,13 +66,15 @@ of these, with every way out of the process patched to raise and a spy on every 
 open of the authority, and a mutation check reintroduces one at a time.
 
 It evaluates what can be read: the artifact-backed gates' presence, envelope and content
-checks (from the authority), the pure gates (`design_brief_locked`,
+checks (from the authority), the gates that read only authority rows (`design_brief_locked`,
 `api_contract_and_security_review`), `change_impact_affirmed`, the structural invariants and
 the phase. Each gate comes back as one of three states:
 
 - `pass`: every part of the gate was evaluated and none objected.
-- `fail`: something that needed no execution objected (a missing artifact in the
-  authority, an unrecognised check kind, no `TEST-CHECK` registered for `all_tests_pass`).
+- `fail`: something that needed no execution objected (an artifact the authority holds that
+  is blocked or failed, an unrecognised check kind, no `TEST-CHECK` registered for
+  `all_tests_pass`). An artifact the authority does not hold is `not_run`, not `fail`, because
+  the file may exist on disk where this process cannot look.
 - `not_run`: a part of the gate was not evaluated, and the record says which. A definite
   `fail` outranks `not_run` within a gate; `not_run` is never reported as `pass`.
 
