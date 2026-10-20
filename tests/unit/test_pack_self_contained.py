@@ -77,14 +77,19 @@ WHAT IT CHECKS, for every pack in ENROLLED_PACKS:
 
 WHAT A STATIC CHECK CANNOT CATCH, and this guard does not pretend to (each is documented,
 none is covered): a path or command assembled from runtime data (`sys.argv[1]`, a config
-file's contents, `input()`); `exec`/`eval`/`compile` of generated text; a reach spelled in
-an encoding (percent, base64, `\\u002e`); a path wrapped across two lines of prose;
-`getattr(importlib, name)`-style indirection; a value rebound in a loop or by tuple
-unpacking (assignments are tracked flat, last one wins); a command passed through a helper
-function (only the final `subprocess` call is judged, and an unresolvable command there IS
-a violation); a symlink created at install time rather than shipped; an UTF-16 file with no
-byte-order mark (its NUL bytes read as binary); prose that tells an agent to look "in the
-parent repository" without naming a path. It reads text and structure, not behavior.
+file's contents, `input()`); `exec`/`eval`/`compile` of text built at run time (a literal
+program IS read, and a non-literal one IS a violation); a reach spelled in an encoding the
+guard does not undo (it undoes entities, `%2e`, `\\u002e` and compatibility forms; not base64,
+homoglyphs such as a Cyrillic `е`, or 8.3 short names); a path wrapped across two lines of
+prose; `getattr(importlib, name)`-style indirection; a value rebound in a loop, by tuple
+unpacking or through a helper function's parameter (assignments are tracked flat, last one
+wins); `parents[len(x)]`; `inspect`-based file lookups; a path assembled by shell variables; a
+path anchored on an arbitrary variable (`$REPO/templates/x`, a user's own name for it); a
+command passed through a helper function (only the final `subprocess` call is judged, and an
+unresolvable command there IS a violation); a symlink created at install time rather than
+shipped; prose that tells an agent to look "in the parent repository" without naming a path.
+It reads text and structure, not behavior. KNOWN_GAPS below pins each of these as an expected
+failure, so the day the guard learns one the test says the list above is out of date.
 
 WHAT IT DELIBERATELY DOES NOT CHECK. A declared `core_modules` entry no text names is
 allowed (the intelligence mode declares the engine stages it runs but never spells out
@@ -481,11 +486,26 @@ def _decode(data: bytes):
     if data.startswith(b"\xef\xbb\xbf"):
         data = data[3:]
     if b"\x00" in data[:8192]:
-        return None
+        return _utf16_without_bom(data)
     text = data.decode("utf-8", errors="replace")
     if text and text.count("�") > max(8, len(text) // 10):
         return None
     return text
+
+
+def _utf16_without_bom(data: bytes):
+    """Text of a UTF-16 file that carries no byte-order mark, or None for a binary. ASCII text
+    in UTF-16 has a NUL in every other byte; a binary does not, and does not decode cleanly."""
+    sample = data[:400]
+    for encoding, zeros in (("utf-16-le", sample[1::2]), ("utf-16-be", sample[0::2])):
+        if zeros and zeros.count(0) >= 0.9 * len(zeros):
+            try:
+                text = data.decode(encoding)
+            except UnicodeDecodeError:
+                return None
+            printable = sum(1 for ch in text if ch.isprintable() or ch in "\r\n\t")
+            return text if text and printable >= 0.95 * len(text) else None
+    return None
 
 
 def _is_python(path: Path, text: str) -> bool:
@@ -495,14 +515,18 @@ def _is_python(path: Path, text: str) -> bool:
     return not path.suffix and first.startswith("#!") and "python" in first
 
 
-def _symlink_finding(path: Path, pack_dir: Path):
-    real_pack = pack_dir.resolve()
-    if not path.exists():
+def _link_verdict(exists: bool, target: Path, real_pack: Path):
+    """The rule for a link, apart from reading the filesystem so a host that cannot make a
+    link can still test it: it must resolve to something, and to something inside the pack."""
+    if not exists:
         return "symlink points at nothing"
-    target = path.resolve()
     if target != real_pack and real_pack not in target.parents:
         return f"symlink resolves outside the pack ({target})"
     return None
+
+
+def _symlink_finding(path: Path, pack_dir: Path):
+    return _link_verdict(path.exists(), path.resolve(), pack_dir.resolve())
 
 
 # ------------------------------------------------------------------------ text reaches
@@ -548,7 +572,8 @@ def _path_reaches(piece: str, ctx: _Ctx):
                 yield "env", name
             else:
                 anchor = "env-other"
-    segs_raw = rest.split("/")
+    # Windows drops trailing dots and spaces from a name: `templates./x` is `templates/x`.
+    segs_raw = [s if s in (".", "..") else s.rstrip(". ") for s in rest.split("/")]
     segs = [s for s in segs_raw if s not in ("", ".")]
     low = [s.lower() for s in segs]
     trailing = piece.endswith("/")
@@ -601,10 +626,16 @@ def _slash_command(packs: frozenset):
 def _clean(line: str) -> str:
     """The line as a reader sees it: entities, `%2e`/`%2f`/`%5c` and compatibility forms
     (full-width `／`, `∕`) decoded, invisible format characters (zero-width space) dropped."""
-    if "&" in line:
-        line = html.unescape(line)
-    if "%" in line:
-        line = re.sub(r"%(2[eEfF]|5[cC])", lambda m: chr(int(m.group(1), 16)), line)
+    for _ in range(3):  # `%252e` is `%2e` once decoded; stop when nothing changes
+        before = line
+        if "&" in line:
+            line = html.unescape(line)
+        if "%" in line:
+            line = re.sub(r"%(25|2[eEfF]|5[cC])", lambda m: chr(int(m.group(1), 16)), line)
+        if "\\u" in line:  # a JSON or JavaScript string: "../x"
+            line = re.sub(r"\\u([0-9a-fA-F]{4})", lambda m: chr(int(m.group(1), 16)), line)
+        if line == before:
+            break
     line = unicodedata.normalize("NFKC", line)
     for slash in ("∕", "⁄", "⧸"):
         line = line.replace(slash, "/")
@@ -825,7 +856,13 @@ class _Module:
         if not args:
             return None
         current = self.level(args[0], seen)
-        for arg in args[1:]:
+        rest = []
+        for arg in args[1:]:  # os.path.join(base, *['..', '..']) is two more arguments
+            if isinstance(arg, ast.Starred) and isinstance(arg.value, (ast.List, ast.Tuple)):
+                rest += arg.value.elts
+            else:
+                rest.append(arg)
+        for arg in rest:
             text = self._text(arg, seen)
             current = self._apply(current, text) if text is not None else self._bump(current)
         return current
@@ -2155,20 +2192,18 @@ def test_a_link_inside_the_pack_is_allowed(tmp_path):
     assert _run(pack, tmp_path) == []
 
 
-def test_the_link_rule_itself_without_a_link(tmp_path, monkeypatch):
-    """When a host cannot make a link the rule must still be exercised: drive
-    `_symlink_finding` against a path whose resolution is a known outside location."""
-    pack = _pack(tmp_path)
-    outside = tmp_path / "outside.md"
-    outside.write_text("x\n", encoding="utf-8")
-    inside = pack / "SKILL.md"
-    real_resolve = Path.resolve
-    monkeypatch.setattr(
-        Path, "resolve", lambda self, *a, **k: outside if self == inside else real_resolve(self)
-    )
-    assert "outside the pack" in (_symlink_finding(inside, pack) or "")
-    monkeypatch.undo()
-    assert _symlink_finding(inside, pack) is None
+def test_the_link_rule_itself_without_a_link(tmp_path):
+    """When a host cannot make a link (WinError 1314) the rule must still be exercised: the
+    verdict is a pure function of where a link points, so give it each case directly."""
+    pack = _pack(tmp_path).resolve()
+    outside = tmp_path.resolve() / "outside.md"
+    assert "outside the pack" in (_link_verdict(True, outside, pack) or "")
+    assert "outside the pack" in (_link_verdict(True, pack.parent, pack) or "")
+    assert "points at nothing" in (_link_verdict(False, pack / "x", pack) or "")
+    assert _link_verdict(True, pack / "modes" / "m", pack) is None
+    assert _link_verdict(True, pack, pack) is None
+    # and a path that is not a link at all passes through the real resolution unchanged
+    assert _symlink_finding(pack / "SKILL.md", pack) is None
 
 
 # ------------------------------------------- what the guard knows comes from the repository
@@ -2481,3 +2516,106 @@ def test_a_reintroduced_defect_in_the_real_pack_is_caught(case, tmp_path):
     _edit(pack, rel, old, new)
     found = pack_violations(pack, modes, tmp_path)
     assert any(expected in line for line in found), f"{case}: wanted `{expected}`, got {found}"
+
+
+# ------------------------------------------- forms found cheap to catch after a second look
+
+CHEAP_FIXES = {
+    "windows trailing dot on a directory name": (
+        {"mode_text": "Read templates./x.md.\n"},
+        "checkout path",
+    ),
+    "json unicode-escaped dots": (
+        {"extra": {"c.json": '{"p": "\\u002e\\u002e/\\u002e\\u002e/\\u002e\\u002e/x.md"}\n'}},
+        "leaves the pack",
+    ),
+    "double percent-encoded dots": (
+        {"mode_text": "Read %252e%252e/%252e%252e/%252e%252e/x.md.\n"},
+        "leaves the pack",
+    ),
+    "star-args join with ..": (
+        {
+            "extra": {
+                "x.py": "import os\nP = os.path.join(os.path.dirname(__file__), *['..', '..'])\n"
+            }
+        },
+        "climbs above",
+    ),
+    "utf-16 file without a byte-order mark": (
+        {"extra": {"u.md": "Read templates/x.md\n".encode("utf-16-le")}},
+        "checkout path",
+    ),
+    "utf-16 big-endian file without a byte-order mark": (
+        {"extra": {"u.md": "Read templates/x.md\n".encode("utf-16-be")}},
+        "checkout path",
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(CHEAP_FIXES))
+def test_a_cheap_to_catch_spelling_is_caught(case, tmp_path):
+    kwargs, expected = CHEAP_FIXES[case]
+    found = _run(_pack(tmp_path, **kwargs), tmp_path)
+    assert any(expected in line for line in found), f"{case}: wanted `{expected}`, got {found}"
+
+
+def test_a_utf16_binary_is_still_skipped(tmp_path):
+    noise = bytes(range(256)) * 4
+    assert _run(_pack(tmp_path, extra={"blob.bin": noise}), tmp_path) == []
+
+
+# --------------------------------------------------------------- what a static check cannot see
+#
+# Each of these reaches outside the pack and the guard does not say so. They are written down
+# as expected failures (strict: if the guard ever catches one, the test fails and the list in
+# the module docstring is out of date). A gap that is documented is a decision; a gap nobody
+# listed is a hole.
+
+KNOWN_GAPS = {
+    "a path from runtime data": {
+        "extra": {
+            "x.py": "import sys\nfrom pathlib import Path\nP = Path(sys.argv[1]).parent.parent\n"
+        }
+    },
+    "getattr indirection": {
+        "extra": {"x.py": "import importlib\nm = getattr(importlib, 'import_module')('core.x')\n"}
+    },
+    "a helper that climbs": {
+        "extra": {
+            "x.py": "from pathlib import Path\ndef up(p, n):\n    for _ in range(n):\n"
+            "        p = p.parent\n    return p\nR = up(Path(__file__), 3)\n"
+        }
+    },
+    "tuple-unpacked rebinding": {
+        "extra": {
+            "x.py": "from pathlib import Path\nhere, n = Path(__file__).parent, 1\nR = here.parent.parent\n"
+        }
+    },
+    "parents[len(x)]": {
+        "extra": {"x.py": "from pathlib import Path\nR = Path(__file__).parents[len('abcdef')]\n"}
+    },
+    "inspect.getfile": {
+        "extra": {
+            "x.py": "import inspect, os\n"
+            "R = os.path.dirname(os.path.dirname(inspect.getfile(inspect.currentframe())))\n"
+        }
+    },
+    "an arbitrary variable as the anchor": {"mode_text": "Read $REPO/templates/x.md.\n"},
+    "a homoglyph in the layout name": {"mode_text": "Read tеmplates/x.md.\n"},
+    "an 8.3 short name": {"mode_text": "Read TEMPLA~1/x.md.\n"},
+    "a path assembled by shell variables": {"extra": {"r.sh": "d=..\ncd $d/$d/$d\n"}},
+    "a path wrapped across two lines of prose": {
+        "mode_text": "Read templ\nates/report.md afterwards.\n"
+    },
+    "prose that names no path": {
+        "mode_text": "Look in the sibling repository for the shared templates.\n"
+    },
+}
+
+
+@pytest.mark.parametrize("case", sorted(KNOWN_GAPS))
+@pytest.mark.xfail(
+    strict=True, reason="a documented limit of reading text, see the module docstring"
+)
+def test_a_documented_gap_is_still_a_gap(case, tmp_path):
+    assert _run(_pack(tmp_path, **KNOWN_GAPS[case]), tmp_path), f"the guard now catches: {case}"
