@@ -165,10 +165,10 @@ class TestWorkflowPatternAnalyzerIsWired:
 
         from core.event_store import studio_db
 
-        source = inspect.getsource(studio_db.end_session)
+        source = inspect.getsource(studio_db.run_session_end_analyzers)
         assert (
             "WorkflowPatternAnalyzer" in source
-        ), "WorkflowPatternAnalyzer not wired into end_session() — Task 1 regression"
+        ), "WorkflowPatternAnalyzer not wired into run_session_end_analyzers() — Task 1 regression"
         assert "analyzer.analyze()" in source
 
     def test_analyzer_wired_after_gap_classifier(self):
@@ -177,7 +177,7 @@ class TestWorkflowPatternAnalyzerIsWired:
 
         from core.event_store import studio_db
 
-        source = inspect.getsource(studio_db.end_session)
+        source = inspect.getsource(studio_db.run_session_end_analyzers)
         gap_pos = source.find("GapClassifier")
         pattern_pos = source.find("WorkflowPatternAnalyzer")
         retroactive_pos = source.find("RetroactiveValidator")

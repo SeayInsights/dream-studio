@@ -574,3 +574,5 @@ Migration 067 (067_dual_canonical.sql): Adds business_canonical_events and ai_ca
 
 
 <!-- Last reviewed 2026-10-19 - FOREIGN-KEY INDEXES (migration 160, 160_index_foreign_key_columns.sql): 25 CREATE INDEX IF NOT EXISTS statements (24 partial, 3 ordinary where the column is NOT NULL) on foreign-key and reference columns, with a paired rollback that drops exactly those indexes. No table, column, row or constraint changes, so no data migration, no table rebuild and nothing destructive. Re-running it is a no-op (tested). Unreleased: .released_version stays 158 like 159, so a live database picks it up at the next release. See docs/DATABASE.md. -->
+
+<!-- Last reviewed 2026-10-19 — fix/session-end-analyzers-background: no migrations added or modified; no schema or path change. The session-end analyzers moved out of `end_session()` into `run_session_end_analyzers()` and run in a detached worker (see docs/DATABASE.md and docs/HOOK_RUNTIME.md). They read and write the same already-released tables. -->

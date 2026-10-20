@@ -291,12 +291,24 @@ def merge_settings(
         for h in new_hooks:
             cmd = h.get("command", "")
             # Dedup: skip if same command + same matcher already registered
-            if any(
-                hh.get("command") == cmd
+            installed = [
+                hh
                 for existing_entry in event_list
                 for hh in existing_entry.get("hooks", [])
-                if isinstance(hh, dict) and existing_entry.get("matcher") == entry_matcher
-            ):
+                if isinstance(hh, dict)
+                and existing_entry.get("matcher") == entry_matcher
+                and hh.get("command") == cmd
+            ]
+            if installed:
+                # A TIMEOUT THE TEMPLATE GAINED REACHES AN INSTALL THAT ALREADY HAS THE HOOK.
+                # The skip above is by command, so an entry registered before the template
+                # carried `timeout` kept running with none -- the Stop hooks of an existing
+                # install could block a turn for as long as the harness allows (stuck
+                # dispatchers were found 63 minutes old). Only a MISSING timeout is filled
+                # in: one the operator set is theirs and is never overwritten.
+                if "timeout" in h:
+                    for hh in installed:
+                        hh.setdefault("timeout", h["timeout"])
                 skip_reasons.append(f"{event}: hook already installed (same command, same matcher)")
                 continue
 
