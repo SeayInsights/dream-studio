@@ -1104,6 +1104,159 @@ def test_work_order_add_task_accepts_a_declared_reason_in_place_of_a_criterion(b
     assert payload["ok"] is True
 
 
+# ── ds_gate_check (read-only: the NON-EXECUTING close-gate preview) ─────────
+
+
+class _GateCheckForbidden(BaseException):
+    """A BaseException so the `except Exception` around a TEST-CHECK or the event emitter
+    cannot swallow the call and turn a start-a-subprocess into silence."""
+
+
+def _call_gate_check(home, work_order_id="wo-real", identity=None):
+    return handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ds_gate_check", "arguments": {"work_order_id": work_order_id}},
+        },
+        dream_studio_home=home,
+        identity=identity,
+    )
+
+
+def _set_task_criteria(home, criteria):
+    import sqlite3
+
+    from core.installed_runtime import resolve_installed_runtime_paths
+
+    db_path = resolve_installed_runtime_paths(dream_studio_home=home).sqlite_path
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("UPDATE business_tasks SET acceptance_criteria = ?", (criteria,))
+    conn.commit()
+    conn.close()
+
+
+def test_gate_check_is_registered_as_a_read_tool():
+    tool = TOOLS_BY_NAME["ds_gate_check"]
+    assert tool.required_capability is None
+    assert tool.input_schema["required"] == ["work_order_id"]
+
+
+def test_gate_check_is_open_to_a_read_only_client(bootstrapped_home_with_task):
+    """A client holding no capability at all can call it: that is what required_capability
+    =None means, and it is why the tool may not execute anything."""
+    reader = auth.Identity(name="gateway", capabilities=frozenset())
+    resp = _call_gate_check(bootstrapped_home_with_task, identity=reader)
+    assert resp["result"]["isError"] is False, resp
+    payload = json.loads(resp["result"]["content"][0]["text"])
+    assert payload["ok"] is True and payload["checks_run"] is False
+    assert {g["status"] for g in payload["gates"]} <= {"pass", "fail", "not_run"}
+
+
+def test_gate_check_reports_what_it_did_not_run_and_never_as_passed(bootstrapped_home_with_task):
+    _set_task_criteria(
+        bootstrapped_home_with_task,
+        "TEST-CHECK: tests/unit/test_x.py::test_y\nAPI-CHECK: GET /api/health\n",
+    )
+    payload = json.loads(
+        _call_gate_check(bootstrapped_home_with_task)["result"]["content"][0]["text"]
+    )
+    ac = next(g for g in payload["gates"] if g["gate"] == "executable_ac")
+    assert ac["status"] == "not_run" and ac["failures"] == []
+    assert "TEST-CHECK" in ac["not_run"][0] and "API-CHECK" in ac["not_run"][0]
+    assert "executable_ac" in payload["gates_not_run"]
+    # Not-run is not a pass: a caller reading only the boolean is not told it passed.
+    assert payload["gates_pass"] is False and payload["overall"] != "pass"
+
+
+def test_gate_check_starts_no_subprocess_makes_no_request_and_writes_no_event(
+    bootstrapped_home_with_task, monkeypatch
+):
+    """Through the MCP layer, with every way out of the process made to raise."""
+    import os
+    import subprocess
+
+    import emitters.shared.spool_writer as spool_writer_mod
+    import spool.writer as spool_mod
+    import starlette.testclient as testclient_mod
+
+    calls = []
+
+    def boom(name):
+        def spy(*args, **kwargs):
+            calls.append(name)
+            raise _GateCheckForbidden(name)
+
+        return spy
+
+    for attr in ("Popen", "run", "call", "check_call", "check_output"):
+        monkeypatch.setattr(subprocess, attr, boom(f"subprocess.{attr}"))
+    monkeypatch.setattr(os, "system", boom("os.system"))
+    monkeypatch.setattr(testclient_mod.TestClient, "__init__", boom("TestClient"))
+    monkeypatch.setattr(spool_writer_mod, "write_envelopes", boom("write_envelopes"))
+    monkeypatch.setattr(spool_mod, "write_event", boom("write_event"))
+
+    _set_task_criteria(
+        bootstrapped_home_with_task,
+        "SQL-CHECK: SELECT 1 WHERE 1\n"
+        "TEST-CHECK: tests/unit/test_x.py::test_y\n"
+        "API-CHECK: GET /api/health\n",
+    )
+    resp = _call_gate_check(bootstrapped_home_with_task)
+    assert resp["result"]["isError"] is False, resp
+    assert calls == []
+
+
+def test_gate_check_refuses_an_id_that_names_no_work_order(bootstrapped_home):
+    resp = _call_gate_check(bootstrapped_home, work_order_id="wo-does-not-exist")
+    assert resp["result"]["isError"] is True
+    assert "not found" in resp["result"]["content"][0]["text"]
+
+
+def test_gate_check_calls_only_the_non_executing_form(bootstrapped_home, monkeypatch):
+    """Spies on the call itself, so the proof is not an inference from what was observed."""
+    import core.work_orders.close_main as close_main_mod
+
+    captured = {}
+
+    def _fake(**kwargs):
+        captured.update(kwargs)
+        return {"ok": True, "gates": []}
+
+    monkeypatch.setattr(close_main_mod, "check_close_gates", _fake)
+    _call_gate_check(bootstrapped_home)
+    assert captured["run_checks"] is False
+
+
+def test_no_mcp_module_reaches_the_executing_preview():
+    """Standing guard: every `check_close_gates` call under integrations/mcp passes
+    run_checks=False literally, and nothing there calls `closability` (which is the
+    executing preview). The executing form stays CLI-only until a capability is designed
+    for it, and adding one is a deliberate edit that has to change this test."""
+    import ast
+    from pathlib import Path
+
+    mcp_dir = Path(__file__).resolve().parents[3] / "integrations" / "mcp"
+    found = 0
+    for path in sorted(mcp_dir.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
+            assert name != "closability", f"{path.name} calls closability (executes)"
+            if name != "check_close_gates":
+                continue
+            found += 1
+            kw = {k.arg: k.value for k in node.keywords}
+            assert "run_checks" in kw, f"{path.name}: check_close_gates without run_checks"
+            assert (
+                isinstance(kw["run_checks"], ast.Constant) and kw["run_checks"].value is False
+            ), f"{path.name}: check_close_gates must pass run_checks=False"
+    assert found >= 1, "ds_gate_check no longer calls check_close_gates at all"
+
+
 # ── ds_work_order_close (capability-gated) ──────────────────────────────────
 
 

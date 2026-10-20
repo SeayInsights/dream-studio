@@ -23,30 +23,62 @@ that, before this, had no runtime behind it.
 `uninstall --purge-state`, migration execution, `review --record`, anything that
 mutates SQLite authority or the filesystem. An MCP client calling this server over
 the network is not a watched terminal, so the registry (`integrations/mcp/tools.py`)
-is curated rather than a mirror of the CLI: ten read tools (project, work-order,
-review, skill, memory, and health state) and twelve mutating tools, each behind a
-named capability (see "Capability-gated tools" below). See that module's own
-docstring for the reasoning. Each mutating tool has a test that an identity without
+is curated rather than a mirror of the CLI: eleven read tools (project, work-order,
+review, skill, memory, and health state, and the non-executing close-gate preview) and
+twelve mutating tools, each behind a named capability (see "Capability-gated tools"
+below). See that module's own docstring for the reasoning. Each mutating tool has a test that an identity without
 its capability is refused (`tests/unit/integrations/test_mcp_server.py`,
 `test_*_denies_an_identity_without_the_capability`); that, not a read-only registry,
 is the standing guard against a write path slipping in unreviewed, and it is not a
 substitute for reading the registry before adding to it.
 
-The close-gate preview (`core.work_orders.close_main.check_close_gates`) is deliberately
-**not** a read tool, although it is documented as non-mutating. "Does not mutate" there
-means it does not change the work order's status; the preview still executes the work
-order's `TEST-CHECK` commands as subprocesses in the project's repository (it also runs
-`git rev-parse HEAD`), sends an in-process request, with any HTTP method, to the
-projections API app for each `API-CHECK`, and emits a `validation.result_recorded` event
-to the spool for each check it ran. A tool with no `required_capability` is open to a
-read-only client, so exposing it would let that client run commands and write events.
-It becomes a read tool only once it has a mode that evaluates the gates without running
-checks (and states, per gate, that it did not run).
-
 A tool is *allowed* to mutate authority state, but only by declaring a
 `required_capability` from `auth.KNOWN_CAPABILITIES` and passing the same deliberate
 review every tool here already gets. Declaring a capability is necessary for a
 mutating tool to exist at all; it is never sufficient on its own for one to be added.
+
+### `ds_gate_check`: the close-gate preview, without executing
+
+`ds_gate_check` is a read tool (no capability). It calls
+`core.work_orders.close_main.check_close_gates(run_checks=False)` and nothing else; a test
+parses `integrations/mcp/` and fails if any `check_close_gates` call there does not pass
+`run_checks=False` literally, or if `closability` is called.
+
+The executing form is not exposed, and not behind a capability either: it stays CLI-only.
+`check_close_gates` is documented as non-mutating, which means only that it leaves the work
+order's status alone. Called with its default (`run_checks=True`) it executes. It runs each
+`TEST-CHECK` as a subprocess in the project's repository, sends an in-process request, with
+any HTTP method, to the projections API app for each `API-CHECK`, runs `git log` in the
+project's repository to compare a stored artifact's commit for the four artifact-backed
+gates (`api_contract_exists`, `design_critique`, `security_scan`, `independent_review`), and
+writes a `validation.result_recorded` event to the spool for every check it executed,
+`SQL-CHECK` included. A tool with no `required_capability` is open to a read-only client,
+so exposing that would let the client run commands and write events.
+
+The non-executing form starts no subprocess, makes no request and writes no event. A test
+asserts each of the three, plus that nothing is written to the authority, with every way out
+of the process patched to raise, and a mutation check reintroduces one execution at a time.
+It evaluates everything that can be read: the artifact-backed gates' presence, envelope and
+content checks, the pure gates (`spec_approved`, `design_brief_locked`, `game_validate`, and
+so on), `change_impact_affirmed`, the structural invariants, the phase, and every `SQL-CHECK`
+(a read, opened `mode=ro`). Each gate comes back as one of three states:
+
+- `pass`: every part of the gate was evaluated and none objected.
+- `fail`: something that needed no execution objected (a failing `SQL-CHECK`, a missing
+  artifact, an unrecognised check kind, no check registered at all).
+- `not_run`: a part of the gate could not be evaluated without executing something, and the
+  record says which. This covers `TEST-CHECK` and `API-CHECK` criteria, and the
+  stored-commit comparison behind the artifact gates. A definite `fail` outranks `not_run`
+  within a gate; `not_run` is never reported as `pass`.
+
+The result adds `checks_run: false`, `gates` (per gate: `status`, `failures`, `not_run`),
+`gates_not_run`, `overall` (`fail`, else `not_run`, else `pass`), and keeps `gate_failures`
+(definite failures only) and `gates_pass`, which is true only when `overall` is `pass`.
+
+It is not a closability verdict, in either form. `close_work_order` also enforces gates the
+preview does not evaluate: `tasks_done`, the originating-symptom re-run, the default-on
+`independent_review` for work-order types whose post-gate does not name it, `lane_review`,
+`dashboard_truth`, and a green `main`. `overall: "pass"` means nothing previewed objects.
 
 ## Root token vs. named clients
 
