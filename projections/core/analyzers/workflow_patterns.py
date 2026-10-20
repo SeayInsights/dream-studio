@@ -78,31 +78,52 @@ def _pattern_id(
 # system.session.recorded / system.session.closed events.
 
 _SESSION_CTE = f"""
+    boundary_events AS MATERIALIZED (
+        -- Every session boundary, parsed ONCE. The previous form ran a correlated
+        -- subquery per session over the canonical_events UNION view, so each session
+        -- re-read and re-JSON-parsed every boundary event: about 24 million json_extract
+        -- calls on 3,365 sessions, and quadratic in sessions (a 102,000-event seed was
+        -- still running after 10 minutes). No index can serve that query: it filters on
+        -- json_extract(trace, ...) and datetime() expressions through a UNION view.
+        SELECT event_id, event_type, created_at,
+               COALESCE(json_extract(trace, '$.project_id'), 'unknown') AS project_id
+        FROM canonical_events
+        WHERE event_type IN ('{EVENT_SESSION_STARTED}', '{EVENT_SESSION_CLOSED}')
+    ),
+    boundary_next AS (
+        -- The next boundary time STRICTLY AFTER each one, per project: what
+        -- MIN(nx.created_at) WHERE nx.created_at > s.created_at computed per row. Over
+        -- DISTINCT times, so a tie on created_at is skipped exactly as the strict > did.
+        SELECT project_id, created_at,
+               LEAD(created_at) OVER (PARTITION BY project_id
+                                      ORDER BY created_at) AS next_at
+        FROM (SELECT DISTINCT project_id, created_at
+              FROM boundary_events
+              WHERE created_at IS NOT NULL)
+    ),
     session_boundaries AS (
-        -- Each system.session.recorded event starts a session.
-        -- The session ends at the next session event (recorded or closed)
-        -- for the same project, or stays open if none follows.
-        SELECT
-            s.event_id                                      AS session_id,
-            COALESCE(json_extract(s.trace, '$.project_id'),
-                     'unknown')                             AS project_id,
-            s.created_at                                    AS session_start,
-            COALESCE(
-                (
-                    SELECT MIN(nx.created_at)
-                    FROM canonical_events nx
-                    WHERE nx.event_type IN ('{EVENT_SESSION_STARTED}',
-                                            '{EVENT_SESSION_CLOSED}')
-                      AND COALESCE(json_extract(nx.trace, '$.project_id'),
-                                   'unknown') =
-                          COALESCE(json_extract(s.trace,  '$.project_id'),
-                                   'unknown')
-                      AND nx.created_at > s.created_at
-                ),
-                '9999-12-31T23:59:59'   -- open session: no later boundary
-            )                                               AS session_end
-        FROM canonical_events s
+        -- Each system.session.recorded event starts a session. It ends at the next
+        -- session event (recorded or closed) for the same project, or stays open if none
+        -- follows. LEFT JOIN: a session with no created_at has no next boundary, which
+        -- the old subquery also answered NULL -> open.
+        SELECT s.event_id    AS session_id,
+               s.project_id  AS project_id,
+               s.created_at  AS session_start,
+               COALESCE(n.next_at, '9999-12-31T23:59:59') AS session_end
+        FROM boundary_events s
+        LEFT JOIN boundary_next n
+          ON n.project_id = s.project_id AND n.created_at = s.created_at
         WHERE s.event_type = '{EVENT_SESSION_STARTED}'
+    ),
+    skill_events AS MATERIALIZED (
+        -- skill.invoked events with the JSON fields the detectors need, parsed once
+        -- rather than once per (close, skill) pair.
+        SELECT event_id, event_type, created_at,
+               json_extract(trace, '$.project_id')                       AS raw_project,
+               COALESCE(json_extract(trace, '$.project_id'), 'unknown')  AS project_id,
+               json_extract(trace, '$.skill_specifier')                  AS skill_id
+        FROM canonical_events
+        WHERE event_type = '{EVENT_SKILL_INVOKED}'
     )
 """
 
@@ -172,18 +193,16 @@ class WorkflowPatternAnalyzer:
                     e.event_id,
                     e.event_type,
                     e.created_at,
-                    json_extract(e.trace, '$.skill_specifier') AS skill_id,
-                    COALESCE(json_extract(e.trace, '$.project_id'),
-                             'unknown')                       AS project_id,
+                    e.skill_id,
+                    e.project_id,
                     sb.session_id
-                FROM canonical_events e
+                FROM skill_events e
                 JOIN session_boundaries sb
-                  ON COALESCE(json_extract(e.trace, '$.project_id'),
-                               'unknown') = sb.project_id
+                  ON e.project_id = sb.project_id
                   AND datetime(e.created_at) >= datetime(sb.session_start)
                   AND datetime(e.created_at) <  datetime(sb.session_end)
                 WHERE e.event_type = ?
-                  AND json_extract(e.trace, '$.skill_specifier') IS NOT NULL
+                  AND e.skill_id IS NOT NULL
             ),
             skill_sessions AS (
                 SELECT DISTINCT project_id, session_id, skill_id
@@ -261,7 +280,7 @@ class WorkflowPatternAnalyzer:
         self, project_id: str | None, min_occ: int, min_conf: float
     ) -> list[dict[str, Any]]:
         """Skill consistently invoked after work_order.closed, within WINDOW_MINUTES."""
-        proj_skill_filter = "AND json_extract(e.trace, '$.project_id') = ?" if project_id else ""
+        proj_skill_filter = "AND e.raw_project = ?" if project_id else ""
         proj_close_filter = (
             "AND json_extract(close_e.trace, '$.project_id') = ?" if project_id else ""
         )
@@ -297,17 +316,16 @@ class WorkflowPatternAnalyzer:
                 SELECT
                     ce.project_id,
                     ce.session_id,
-                    json_extract(e.trace, '$.skill_specifier') AS skill_id
+                    e.skill_id AS skill_id
                 FROM close_events ce
-                JOIN canonical_events e
-                  ON COALESCE(json_extract(e.trace, '$.project_id'),
-                               'unknown') = ce.project_id
+                JOIN skill_events e
+                  ON e.project_id = ce.project_id
                   AND e.event_type = ?
                   -- Use datetime() on both sides to normalize T vs space separator
                   AND datetime(e.created_at) > datetime(ce.close_at)
                   AND datetime(e.created_at) <=
                       datetime(ce.close_at, '+' || ? || ' minutes')
-                WHERE json_extract(e.trace, '$.skill_specifier') IS NOT NULL
+                WHERE e.skill_id IS NOT NULL
                 {proj_skill_filter}
             ),
             agg AS (
@@ -354,7 +372,7 @@ class WorkflowPatternAnalyzer:
         self, project_id: str | None, min_occ: int, min_conf: float
     ) -> list[dict[str, Any]]:
         """Skill consistently invoked just before work_order.closed."""
-        proj_skill_filter = "AND json_extract(e.trace, '$.project_id') = ?" if project_id else ""
+        proj_skill_filter = "AND e.raw_project = ?" if project_id else ""
         proj_close_filter = (
             "AND json_extract(close_e.trace, '$.project_id') = ?" if project_id else ""
         )
@@ -390,17 +408,16 @@ class WorkflowPatternAnalyzer:
                 SELECT
                     ce.project_id,
                     ce.session_id,
-                    json_extract(e.trace, '$.skill_specifier') AS skill_id
+                    e.skill_id AS skill_id
                 FROM close_events ce
-                JOIN canonical_events e
-                  ON COALESCE(json_extract(e.trace, '$.project_id'),
-                               'unknown') = ce.project_id
+                JOIN skill_events e
+                  ON e.project_id = ce.project_id
                   AND e.event_type = ?
                   -- Use datetime() on both sides to normalize T vs space separator
                   AND datetime(e.created_at) < datetime(ce.close_at)
                   AND datetime(e.created_at) >=
                       datetime(ce.close_at, '-' || ? || ' minutes')
-                WHERE json_extract(e.trace, '$.skill_specifier') IS NOT NULL
+                WHERE e.skill_id IS NOT NULL
                 {proj_skill_filter}
             ),
             agg AS (

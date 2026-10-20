@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from core.config.paths import code_root
-from core.work_orders.models import WORK_ORDER_TYPES
+from core.work_orders.type_registry import work_order_type_names
 
 from .auth import Identity
 
@@ -765,7 +765,9 @@ TOOLS: list[Tool] = [
                 "description": {"type": "string"},
                 "work_order_type": {
                     "type": "string",
-                    "enum": list(WORK_ORDER_TYPES),
+                    # Read from the type registry when this module is imported; a type
+                    # registered after that is accepted by create_work_order but not listed.
+                    "enum": list(work_order_type_names()),
                     "description": (
                         "Refused if not one of these -- checked here, not just later"
                         " when ds_work_order_start looks it up (the gap this enum"

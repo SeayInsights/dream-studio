@@ -59,10 +59,18 @@ def _read_triggers(path: Path) -> list[str]:
             # unquoted "keyword:" parses to {keyword: None}
             keys = list(item.keys())
             t = str(keys[0]).strip() if keys else ""
-            if t and not t.endswith(":"):
-                t += ":"
         else:
             continue
+        # EVERY TRIGGER IS A `keyword:` FORM, WHICHEVER WAY THE METADATA SPELLS IT.
+        # Only the dict branch used to append the colon, so a quoted string such as
+        # "why does" stayed bare and `_match` -- a substring test -- fired on any
+        # sentence containing it: "why does it spend so much time waiting" was routed
+        # to ds-core explain, a skill for tracing code, by a question about the
+        # tooling. 83 of the 220 triggers were bare, and the short ones ("ios", "hpa",
+        # "cdc") also fired inside ordinary words. The documented contract
+        # (AGENTS.md's routing table) already lists them as `why does:`, `iOS:`, `dbt:`.
+        if t and not t.endswith(":"):
+            t += ":"
         if t:
             out.append(t)
     return out

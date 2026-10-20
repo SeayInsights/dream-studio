@@ -16,7 +16,7 @@ from typing import Any
 from core.event_store.studio_db import _connect
 
 from .models import TERMINAL_WO_STATUSES, terminal_wo_status_placeholders
-from .start_shared import _UI_WO_TYPES
+from .type_registry import is_ui_bearing
 
 
 def read_work_order_brief(
@@ -135,7 +135,7 @@ def read_work_order_brief(
 
         brief_locked: dict[str, Any] | None = None
         brief_warning = False
-        if type_id in _UI_WO_TYPES and project_id:
+        if is_ui_bearing(type_id) and project_id:
             try:
                 b_row = conn.execute(
                     "SELECT brief_id, purpose, audience, tone, design_system,"

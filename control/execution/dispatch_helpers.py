@@ -32,3 +32,14 @@ def write_timing(state_dir: Path, event: str, handler: str, duration_ms: float) 
             f.write(json.dumps(record) + "\n")
     except Exception:
         pass
+
+
+# The in-flight marker lives in dispatch_tracking, not here. dispatch_tracking.py is the ONE
+# file a partial (files-mode) install copies, so it must not import a sibling that install
+# does not carry; this module is the one that may import it. Re-exported so the callers
+# that already import from here (on-stop-dispatch, the analytics harvester) are unchanged.
+from control.execution.dispatch_tracking import (  # noqa: E402,F401
+    INFLIGHT_MAX_AGE_S,
+    inflight,
+    inflight_dir,
+)

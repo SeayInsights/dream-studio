@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Integration tests for DesignSkillAnalyzer and domain auto-detection.
 
-Exercises the analyzer against the dream-studio repo itself (not a design
+Exercises the analyzer against this skill's own directory (not a design
 repo), so the useful assertion is that the general-purpose plumbing
 (instantiate, analyze one capability, score the whole repo) works end to end
 without crashing -- not that any particular score comes back high.
@@ -15,14 +15,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from domains.design import DesignSkillAnalyzer
 
-# dream-studio repo root: this file lives at canonical/skills/analyze/, three
-# directories under the root, so reaching it takes FOUR .parent hops, not
-# three. An earlier version of this file used three and silently pointed at
-# canonical/ instead of the repo root (see modes/repo/gotchas.yml's
-# repo-root-parent-hop-off-by-one entry for the same bug class in
-# repo-analyzer.py and analyze-repos.py).
-REPO_PATH = Path(__file__).parent.parent.parent.parent
-REPO_NAME = "dream-studio"
+# The subject is this skill's own directory: it is always present wherever the
+# skill is installed, and a source checkout's layout is not (an earlier version
+# climbed four .parent hops to a repository root, which only exists in a
+# checkout and was off by one once before -- see modes/repo/gotchas.yml).
+REPO_PATH = Path(__file__).parent
+REPO_NAME = "analyze-skill"
 
 
 def test_design_analyzer_instantiates_with_all_capabilities():

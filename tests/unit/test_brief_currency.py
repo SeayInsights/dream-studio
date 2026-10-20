@@ -304,10 +304,10 @@ def test_the_gate_verdict_documents_brief_currency():
     This asserted a SKILL.md documented the distinction -- first ds-project's brief mode,
     then ds-workorder's close mode. Both were narration over commands and both were
     dissolved. The verdict text is the durable home: an agent that never opened a file
-    still sees it, and it names the UI types from `_UI_TYPES`, the set the gate actually
-    tests, so the explanation cannot drift from the behaviour it explains.
+    still sees it, and it names the UI types from the type registry's staling set, the
+    set the gate actually tests, so the explanation cannot drift from the behaviour it explains.
     """
-    from core.gates.brief_currency import _UI_TYPES
+    from core.work_orders.type_registry import design_brief_staling_types
 
     source = pathlib.Path(core_brief_currency.__file__).read_text(encoding="utf-8")
     assert "existence but not currency" in source, "the verdict drops the distinction"
@@ -316,8 +316,10 @@ def test_the_gate_verdict_documents_brief_currency():
     assert "project-scoped" in source, "the verdict does not say a brief is project-scoped"
     # Named, not spelled: a hardcoded list here would be a sixth copy of the set that
     # #790 reduced to one.
-    assert "_UI_TYPES" in source, "the verdict spells the UI types instead of naming the set"
-    assert set(_UI_TYPES) <= {"ui_component", "ui_page", "saas_feature"}
+    assert (
+        "design_brief_staling_types" in source
+    ), "the verdict spells the UI types instead of naming the set"
+    assert set(design_brief_staling_types()) == {"ui_component", "ui_page", "saas_feature"}
 
 
 def test_the_declaration_is_not_offered_as_a_shortcut():

@@ -2,7 +2,6 @@
 invocation:
   type: subagent-target
   wrapper_agent: research-analyst
-  dispatch_path: ~/.claude/agents/research-analyst.md
 
 behavior:
   graceful_degradation: true

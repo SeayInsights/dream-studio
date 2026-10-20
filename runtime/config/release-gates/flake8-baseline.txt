@@ -110,7 +110,6 @@ runtime/hooks/meta/on-meta-review.py:32:1: E402 module level import not at top o
 runtime/hooks/meta/on-meta-review.py:33:1: E402 module level import not at top of file
 runtime/hooks/meta/on-meta-review.py:34:1: E402 module level import not at top of file
 runtime/hooks/meta/on-meta-review.py:41:1: E402 module level import not at top of file
-runtime/hooks/meta/on-session-end.py:32:1: E402 module level import not at top of file
 runtime/hooks/meta/on-session-start.py:40:1: E402 module level import not at top of file
 runtime/hooks/meta/on-skill-load.py:34:1: E402 module level import not at top of file
 runtime/hooks/meta/on-skill-load.py:35:1: E402 module level import not at top of file

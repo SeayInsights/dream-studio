@@ -57,7 +57,7 @@ domains/
 ├── real_estate.py        # RealEstateSkillAnalyzer
 └── README.md             # This file
 
-core/
+analyze_core/
 ├── __init__.py           # Exports BaseAnalyzer
 └── base_analyzer.py      # Abstract base class
 ```
@@ -69,7 +69,7 @@ core/
 ```python
 # domains/my_domain.py
 
-from core.base_analyzer import BaseAnalyzer
+from analyze_core.base_analyzer import BaseAnalyzer
 
 class MyDomainAnalyzer(BaseAnalyzer):
     WEIGHTS = {'cap1': 0.5, 'cap2': 0.5}  # Sum to 1.0
@@ -152,5 +152,5 @@ score, quality = self.calculate_quality_score(count, thresholds)
 ## See Also
 
 - [DOMAIN_ANALYZER_GUIDE.md](../DOMAIN_ANALYZER_GUIDE.md) - Full documentation
-- [base_analyzer.py](../core/base_analyzer.py) - BaseAnalyzer source
+- [base_analyzer.py](../analyze_core/base_analyzer.py) - BaseAnalyzer source
 - [registry.py](registry.py) - Registry source

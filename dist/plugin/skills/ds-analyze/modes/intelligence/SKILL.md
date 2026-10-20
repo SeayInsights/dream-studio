@@ -94,7 +94,7 @@ See `reference/error-handling.md` for full error scenarios and recovery steps.
 
 **Fix violations:**
 ```
-Skill(skill="ds-quality", args="debug")
+Skill(skill="ds-code-health", args="debug")
 # Context: Top 3 critical violations
 ```
 
@@ -106,7 +106,7 @@ Skill(skill="ds-core", args="plan")
 
 **Security review:**
 ```
-Skill(skill="ds-quality", args="secure")
+Skill(skill="ds-security", args="review")
 # Context: Security-related bugs
 ```
 

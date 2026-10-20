@@ -4,7 +4,7 @@
 
 **Promoted from agent to skill (WO 18.9 Tier 2-3)**
 
-Content transferred verbatim from `canonical/agents/idea-validator.md` (117 lines).
+Content transferred verbatim from the `idea-validator` agent (117 lines).
 No content changes — relocation only, per JIT policy: enrich after first real usage.
 
 Files created:

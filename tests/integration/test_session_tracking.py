@@ -85,6 +85,7 @@ def test_session_end_calls_end_session(isolated_home, monkeypatch, handler):
     mod = handler("on-session-end")
     calls: list[tuple] = []
     monkeypatch.setattr(mod, "end_session", lambda *a, **kw: calls.append((a, kw)) or True)
+    monkeypatch.setattr(mod, "_spawn_worker", lambda: None)  # no real worker in a unit test
     monkeypatch.setattr(mod, "has_sentinel", lambda k: False)
     monkeypatch.setattr(mod, "set_sentinel", lambda k, c: None)
 
@@ -104,6 +105,7 @@ def test_session_end_default_outcome_when_no_stop_reason(isolated_home, monkeypa
     mod = handler("on-session-end")
     calls: list[tuple] = []
     monkeypatch.setattr(mod, "end_session", lambda *a, **kw: calls.append((a, kw)) or True)
+    monkeypatch.setattr(mod, "_spawn_worker", lambda: None)  # no real worker in a unit test
     monkeypatch.setattr(mod, "has_sentinel", lambda k: False)
     monkeypatch.setattr(mod, "set_sentinel", lambda k, c: None)
 
@@ -122,6 +124,7 @@ def test_session_end_output_tokens_reads_completion_tokens(isolated_home, monkey
     mod = handler("on-session-end")
     calls: list[tuple] = []
     monkeypatch.setattr(mod, "end_session", lambda *a, **kw: calls.append((a, kw)) or True)
+    monkeypatch.setattr(mod, "_spawn_worker", lambda: None)  # no real worker in a unit test
     monkeypatch.setattr(mod, "has_sentinel", lambda k: False)
     monkeypatch.setattr(mod, "set_sentinel", lambda k, c: None)
 
@@ -153,6 +156,7 @@ def test_session_end_sentinel_prevents_double_fire(isolated_home, monkeypatch, h
         sentinel_store.add(k)
 
     monkeypatch.setattr(mod, "end_session", lambda *a, **kw: calls.append((a, kw)) or True)
+    monkeypatch.setattr(mod, "_spawn_worker", lambda: None)  # no real worker in a unit test
     monkeypatch.setattr(mod, "has_sentinel", _has)
     monkeypatch.setattr(mod, "set_sentinel", _set)
 
@@ -172,6 +176,7 @@ def test_session_end_graceful_without_session_id(isolated_home, monkeypatch, han
     mod = handler("on-session-end")
     calls: list[tuple] = []
     monkeypatch.setattr(mod, "end_session", lambda *a, **kw: calls.append((a, kw)) or True)
+    monkeypatch.setattr(mod, "_spawn_worker", lambda: None)  # no real worker in a unit test
     monkeypatch.setattr(mod, "has_sentinel", lambda k: False)
     monkeypatch.setattr(mod, "set_sentinel", lambda k, c: None)
 

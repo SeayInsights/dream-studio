@@ -133,11 +133,14 @@ rules:
     statement: >
       A work-order type the platform does not declare is refused when the work order is
       created, and the refusal names the types that exist.
-    source: core/work_orders/models.py
+    source: core/work_orders/type_registry.py
     enforced_by:
       - tests/unit/test_work_order_types_one_definition.py::test_the_door_refuses_an_undeclared_type
       - tests/unit/test_work_order_types_one_definition.py::test_the_baseline_migration_seeds_exactly_the_declared_types
-      - tests/unit/test_work_order_types_one_definition.py::test_the_review_map_covers_exactly_the_declared_types
+      - tests/unit/test_work_order_types_one_definition.py::test_every_declared_type_reviews_as_a_known_artifact_class
+      - tests/unit/test_work_order_types_one_definition.py::test_no_module_carries_a_second_full_list
+      - tests/unit/test_work_order_type_registry.py::test_each_built_in_yields_what_the_old_tables_yielded
+      - tests/unit/test_work_order_type_registry.py::test_create_work_order_accepts_a_registered_type_and_still_names_the_valid_ones
     note: >
       `--type` accepted any string and stored it, defaulting to infrastructure, while its
       help said "one of the declared work-order types" -- nothing declared them anywhere

@@ -27,7 +27,7 @@ would never age, and would quietly disable the gate forever.
 
 from __future__ import annotations
 
-from core.work_orders.models import WORK_ORDER_TYPES
+from core.work_orders.type_registry import design_brief_staling_types
 
 import json
 from pathlib import Path
@@ -37,9 +37,9 @@ from typing import Any
 # is included because it spans UI and API by definition; `api_endpoint`,
 # `data_pipeline`, `infrastructure`, `deployment` and `documentation` are not, so a
 # backend-only stretch of work does not stale a brief that still describes the UI.
-# A subset of the one definition, by construction: a member spelled wrong here drops out
-# rather than becoming a fifth type nothing else knows.
-_UI_TYPES = tuple(t for t in ("ui_component", "ui_page", "saas_feature") if t in WORK_ORDER_TYPES)
+# Read from the type registry (stales_design_brief) at the moment of the check, so a type
+# a pack registers is judged by the same flag and a misspelled name cannot become a type
+# nothing else knows.
 
 _RNC_KEY_PREFIX = "brief_reviewed_no_change."
 
@@ -135,7 +135,8 @@ def brief_currency(project_id: str, *, conn: Any, db_path: Path | None = None) -
         result["reviewed_no_change_note"] = rnc.get("note")
     result["effective_since"] = effective
 
-    placeholders = ",".join("?" for _ in _UI_TYPES)
+    staling_types = design_brief_staling_types()
+    placeholders = ",".join("?" for _ in staling_types)
     try:
         moved = conn.execute(
             f"SELECT work_order_id, title, closed_at FROM business_work_orders"
@@ -143,7 +144,7 @@ def brief_currency(project_id: str, *, conn: Any, db_path: Path | None = None) -
             f"   AND work_order_type IN ({placeholders})"
             f"   AND closed_at IS NOT NULL AND closed_at > ?"
             f" ORDER BY closed_at DESC LIMIT 10",
-            (project_id, *_UI_TYPES, effective),
+            (project_id, *staling_types, effective),
         ).fetchall()
     except Exception as exc:  # noqa: BLE001
         result["reason"] = f"design-surface movement undetermined: {type(exc).__name__}"
@@ -166,7 +167,7 @@ def brief_currency(project_id: str, *, conn: Any, db_path: Path | None = None) -
         # carry it and that pack was dissolved. Backend-only work does not stale a brief:
         # one that still describes the UI is still true, and crying wolf teaches operators
         # to re-lock reflexively.
-        f" Only {', '.join(sorted(_UI_TYPES))} work stales a brief; a brief is"
+        f" Only {', '.join(staling_types)} work stales a brief; a brief is"
         " project-scoped, so one current brief satisfies every UI work order in it."
     )
     return result

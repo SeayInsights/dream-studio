@@ -2,6 +2,8 @@
 
 Extracted from SKILL.md to reduce context injection size.
 
+Paths in this file (`modes/domain-re/modes.yml`, `modes/domain-re/analysts/`) are relative to the analyze skill directory -- the one holding the analyze `SKILL.md` -- wherever Dream Studio installed it.
+
 ## Signal Scale
 
 | Signal | Meaning in RE context |
@@ -62,7 +64,7 @@ Follow in order. Do not skip.
 ### Step 0: Parse Arguments
 
 Extract:
-- `mode` — one of the modes defined in `modes.yml`
+- `mode` — one of the modes defined in `modes/domain-re/modes.yml`
 - `--quick` flag — if present, use `quick_analysts`
 - `input` — lease document, credit report, financial statements, or portfolio data
 
@@ -70,8 +72,8 @@ If mode is missing: ask — "What are you analyzing? (lease-analysis, credit-che
 
 ### Step 1: Validation Gate (BP1)
 
-1. Read `skills/domain-re/modes.yml`. Confirm mode exists.
-2. Get analyst list. Confirm each `skills/domain-re/analysts/{name}.yml` exists.
+1. Read `modes/domain-re/modes.yml`. Confirm mode exists.
+2. Get analyst list. Confirm each `modes/domain-re/analysts/{name}.yml` exists.
 3. Verify required fields in each YAML.
 4. If experimental: warn without blocking.
 
