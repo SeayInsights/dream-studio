@@ -53,10 +53,32 @@ try:
     from domains import DomainAnalyzerRegistry
 
     DOMAIN_SUPPORT = True
-except ImportError:
+    DOMAIN_SUPPORT_ERROR = ""
+except ImportError as _domain_import_error:
     DOMAIN_SUPPORT = False
+    DOMAIN_SUPPORT_ERROR = f"{type(_domain_import_error).__name__}: {_domain_import_error}"
     print(
         "[WARN] Domain analyzers not available. Install domain analyzers or use general analysis only."
+    )
+
+
+class DomainSupportUnavailable(RuntimeError):
+    """A domain analysis was requested and the domain analyzers did not load.
+
+    The general analysis is a different report (SKILL.md patterns, not scored
+    capabilities). Returning it for an explicit domain request would read as the
+    domain analysis the caller asked for, so the request fails instead.
+    """
+
+
+def _require_domain_support(what: str) -> None:
+    """Raise DomainSupportUnavailable, naming the request and the import failure."""
+    if DOMAIN_SUPPORT:
+        return
+    raise DomainSupportUnavailable(
+        f"{what} needs the domain analyzers, which did not load ({DOMAIN_SUPPORT_ERROR}). "
+        "Nothing was analyzed. Restore the skill's domains/ and analyze_core/ directories, "
+        "or run without --domain for the general analysis."
     )
 
 
@@ -87,6 +109,9 @@ def analyze_repositories(
     Raises:
         ValueError: If repo_paths is empty or format is invalid
         FileNotFoundError: If any repository path doesn't exist
+        DomainSupportUnavailable: If a domain other than 'general' is requested and
+            the domain analyzers did not load. The general analysis is never
+            substituted for an explicit domain request.
     """
     if not repo_paths:
         raise ValueError("repo_paths cannot be empty")
@@ -110,7 +135,8 @@ def analyze_repositories(
         validated_repos.append((repo_path, repo_name))
 
     # Choose analysis method based on domain
-    if domain and domain != "general" and DOMAIN_SUPPORT:
+    if domain and domain != "general":
+        _require_domain_support(f"--domain {domain}")
         # Domain-specific analysis
         return _analyze_domain_specific(
             validated_repos, domain, output_format, patterns_filter, verbose
@@ -547,8 +573,13 @@ if __name__ == "__main__":
                 print(f"    Capabilities: {domain_info['capabilities_count']}")
                 print(f"    Markers: {', '.join(domain_info['markers'][:3])}...")
         else:
-            print("\nDomain support not available. Install domain analyzers.")
-        exit(0)
+            print(
+                f"Domain support not available ({DOMAIN_SUPPORT_ERROR}). "
+                "Install domain analyzers.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        sys.exit(0)
 
     # Auto-detect domain if requested
     domain = args.domain
@@ -559,7 +590,11 @@ if __name__ == "__main__":
             )
             print(f"[AUTO-DETECT] Domain: {domain}\n")
         else:
-            print("[WARN] Auto-detect not available without domain support")
+            try:
+                _require_domain_support("--auto-detect")
+            except DomainSupportUnavailable as exc:
+                print(f"[ERROR] {exc}", file=sys.stderr)
+                sys.exit(1)
 
     if args.compare:
         result = compare_repositories(
@@ -567,11 +602,15 @@ if __name__ == "__main__":
         )
         print(json_formatter.format_report(result))
     else:
-        result = analyze_repositories(
-            args.repos,
-            output_format=args.format,
-            patterns_filter=args.patterns,
-            domain=domain,
-            verbose=args.verbose,
-        )
+        try:
+            result = analyze_repositories(
+                args.repos,
+                output_format=args.format,
+                patterns_filter=args.patterns,
+                domain=domain,
+                verbose=args.verbose,
+            )
+        except DomainSupportUnavailable as exc:
+            print(f"[ERROR] {exc}", file=sys.stderr)
+            sys.exit(1)
         print(result)
