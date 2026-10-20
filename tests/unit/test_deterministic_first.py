@@ -360,10 +360,20 @@ def test_the_executor_reaches_the_predicate_only_through_the_applier():
 
     from core.work_orders import verify_executor
 
-    source = inspect.getsource(verify_executor.run_executable_checks)
-    assert "check_token(raw_line)" in source
-    assert "_CHECK_TOKEN" not in source, "the detection site reaches past its own applier"
-    assert "re.compile" not in source and "_re." not in source, "it compiles a copy"
+    # The detection site is `check_lines`, which both the executing runner and the
+    # non-executing preview read their lines through; neither may detect on its own.
+    detection = inspect.getsource(verify_executor.check_lines)
+    assert "check_token(raw_line)" in detection
+    for fn in (
+        verify_executor.check_lines,
+        verify_executor.run_executable_checks,
+        verify_executor.preview_executable_checks,
+    ):
+        source = inspect.getsource(fn)
+        assert "_CHECK_TOKEN" not in source, f"{fn.__name__} reaches past its own applier"
+        assert "re.compile" not in source and "_re." not in source, f"{fn.__name__} compiles a copy"
+    for fn in (verify_executor.run_executable_checks, verify_executor.preview_executable_checks):
+        assert "check_lines(task)" in inspect.getsource(fn), f"{fn.__name__} detects checks itself"
 
 
 def test_the_narrower_third_declaration_is_gone():
