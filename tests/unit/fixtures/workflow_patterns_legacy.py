@@ -1,4 +1,13 @@
-"""Workflow pattern analyzer — SQL heuristics over canonical_events.
+"""READ-ONLY ORACLE: the workflow-pattern analyzer exactly as it was before the session CTE was materialized.
+
+Kept verbatim so tests/unit/test_workflow_pattern_equivalence.py can prove the rewrite returns
+the same rows. Only the three detectors and the session CTE remain; analyze(), _upsert_signal(),
+suppress_pattern() and get_patterns() are removed because they write or read
+ds_workflow_pattern_signals, and the blast-radius gate rightly refuses a second writer of that
+table. Nothing outside the tests imports this.
+
+---- original module docstring follows ----
+Workflow pattern analyzer — SQL heuristics over canonical_events.
 
 Detects three types of skill co-occurrence patterns:
   post_completion  — skill consistently invoked after work_order.closed
@@ -113,45 +122,6 @@ class WorkflowPatternAnalyzer:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self.conn = conn
         self.conn.row_factory = sqlite3.Row
-
-    def analyze(
-        self,
-        project_id: str | None = None,
-        min_occurrences: int = MIN_OCCURRENCES,
-        min_confidence: float = 0.3,
-    ) -> list[dict[str, Any]]:
-        """Detect all three pattern types and upsert results.
-
-        Args:
-            project_id: Restrict to one project. None = all projects.
-            min_occurrences: Minimum co-occurrence count to surface a pattern.
-            min_confidence: Minimum confidence to store (default 0.3 — stores
-                even weak patterns; Phase 19 reads >= 0.8 only).
-
-        Returns:
-            List of signal dicts detected and upserted.
-        """
-        signals: list[dict[str, Any]] = []
-
-        for detector, name in [
-            (self._detect_always_paired, "always_paired"),
-            (self._detect_post_completion, "post_completion"),
-            (self._detect_pre_close, "pre_close"),
-        ]:
-            try:
-                signals.extend(detector(project_id, min_occurrences, min_confidence))
-            except Exception as exc:
-                logger.warning("%s detection failed: %s", name, exc)
-
-        for sig in signals:
-            self._upsert_signal(sig)
-
-        logger.info(
-            "WorkflowPatternAnalyzer: %d signals (project=%s)",
-            len(signals),
-            project_id or "all",
-        )
-        return signals
 
     # ── Detectors ──────────────────────────────────────────────────────────
 
@@ -444,71 +414,3 @@ class WorkflowPatternAnalyzer:
         ]
 
     # ── Storage & retrieval ────────────────────────────────────────────────
-
-    def _upsert_signal(self, signal: dict[str, Any]) -> None:
-        try:
-            self.conn.execute(
-                """
-                INSERT INTO ds_workflow_pattern_signals
-                    (pattern_id, project_id, pattern_type, skill_a, skill_b,
-                     co_occurrence_count, total_sessions, confidence_score,
-                     last_observed_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-                ON CONFLICT(pattern_id) DO UPDATE SET
-                    co_occurrence_count = excluded.co_occurrence_count,
-                    total_sessions      = excluded.total_sessions,
-                    confidence_score    = excluded.confidence_score,
-                    last_observed_at    = datetime('now')
-                WHERE suppressed = 0
-                """,
-                (
-                    signal["pattern_id"],
-                    signal.get("project_id"),
-                    signal["pattern_type"],
-                    signal["skill_a"],
-                    signal.get("skill_b"),
-                    signal["co_occurrence_count"],
-                    signal["total_sessions"],
-                    signal["confidence_score"],
-                ),
-            )
-            self.conn.commit()
-        except Exception as exc:
-            logger.warning("Failed to upsert signal %s: %s", signal["pattern_id"], exc)
-
-    def suppress_pattern(self, pattern_id: str) -> bool:
-        cursor = self.conn.execute(
-            "UPDATE ds_workflow_pattern_signals "
-            "SET suppressed = 1, suppressed_at = datetime('now') "
-            "WHERE pattern_id = ?",
-            (pattern_id,),
-        )
-        self.conn.commit()
-        return cursor.rowcount > 0
-
-    def get_patterns(
-        self,
-        project_id: str | None = None,
-        include_suppressed: bool = False,
-        min_confidence: float = 0.0,
-    ) -> list[dict[str, Any]]:
-        conditions: list[str] = []
-        params: list[Any] = []
-        if project_id:
-            conditions.append("project_id = ?")
-            params.append(project_id)
-        if not include_suppressed:
-            conditions.append("suppressed = 0")
-        if min_confidence > 0:
-            conditions.append("confidence_score >= ?")
-            params.append(min_confidence)
-        where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
-        try:
-            rows = self.conn.execute(
-                f"SELECT * FROM ds_workflow_pattern_signals {where} "
-                f"ORDER BY confidence_score DESC",
-                params,
-            ).fetchall()
-            return [dict(r) for r in rows]
-        except sqlite3.OperationalError:
-            return []
