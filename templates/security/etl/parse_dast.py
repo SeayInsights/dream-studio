@@ -5,8 +5,16 @@ Reads DAST scan results from ~/.dream-studio/security/scans/{client}/
 Supports: OWASP ZAP JSON reports, Nuclei JSONL output
 Outputs: normalized flat findings list as JSON (stdout or file)
 
+Every finding carries `coverage` (complete | partial | unknown) and `limitations`,
+read from the run record in the scan's scan-meta.json (see scan_coverage.py): a run
+that continued with ZAP only because Nuclei is not installed is partial and names
+the skipped scanner; a scan directory with no run record is unknown, never complete.
+A scan with zero findings carries nothing on a finding, so `--coverage-output`
+writes the same facts per scan directory.
+
 Usage:
     py -3.12 parse_dast.py --client <name> [--scans-dir <path>] [--output <path>]
+                           [--coverage-output <path>]
     py -3.12 parse_dast.py --sample --client <name>
 """
 
@@ -23,7 +31,17 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+# scan_coverage.py is a sibling of this script (shared with the other parse_* scripts).
+_ETL_DIR = Path(__file__).resolve().parent
+if str(_ETL_DIR) not in sys.path:
+    sys.path.insert(0, str(_ETL_DIR))
+
+import scan_coverage  # noqa: E402
 from core.config.paths import home_dir  # noqa: E402
+
+#: Every scanner `dast run` executes when all its tooling is present (examples.md R3-R4).
+#: Coverage is complete only when each one is recorded as run.
+PLANNED_STEPS = ("zap", "nuclei")
 
 SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 
@@ -475,11 +493,25 @@ def main() -> None:
     parser.add_argument("--client", required=True, help="Client name")
     parser.add_argument("--scans-dir", help="Directory containing DAST result files")
     parser.add_argument("--output", help="Output file path. Default: stdout")
+    parser.add_argument(
+        "--coverage-output",
+        help="Write per-scan coverage (complete|partial|unknown, skipped steps, limitations) "
+        "to this JSON file. Needed to see coverage on a scan that produced no findings.",
+    )
     parser.add_argument("--sample", action="store_true", help="Generate synthetic sample findings")
     args = parser.parse_args()
 
+    scan_reports: list[dict] = []
+
     if args.sample:
         findings = generate_sample()
+        sample = {
+            "coverage": scan_coverage.UNKNOWN,
+            "skipped_steps": [],
+            "limitations": ["synthetic sample data; no scan was run"],
+        }
+        scan_coverage.stamp(findings, sample)
+        scan_reports.append({"scan_dir": None, **sample})
         print(f"[parse_dast] Generated {len(findings)} sample DAST findings", file=sys.stderr)
     else:
         scans_dir = (
@@ -503,6 +535,7 @@ def main() -> None:
             sys.exit(1)
 
         all_findings: list[dict] = []
+        assessed: dict[str, dict] = {}
         for sf in scan_files:
             target_name = (
                 sf.parent.parent.name if sf.parent.name.count("-") == 2 else sf.parent.name
@@ -515,6 +548,14 @@ def main() -> None:
                     with open(sf, encoding="utf-8") as fh:
                         raw = json.load(fh)
                     parsed = detect_and_parse(raw, sf, target_name)
+                meta_path = scan_coverage.find_meta(sf, scans_dir)
+                key = str(meta_path.parent if meta_path else sf.parent)
+                if key not in assessed:
+                    assessed[key] = scan_coverage.assess(
+                        scan_coverage.load_meta(meta_path), PLANNED_STEPS
+                    )
+                    scan_reports.append({"scan_dir": key, **assessed[key]})
+                scan_coverage.stamp(parsed, assessed[key])
                 print(f"  → {len(parsed)} findings", file=sys.stderr)
                 all_findings.extend(parsed)
             except Exception as exc:
@@ -525,6 +566,23 @@ def main() -> None:
             f"[parse_dast] Total: {len(all_findings)} raw → {len(findings)} after dedup",
             file=sys.stderr,
         )
+        for report in scan_reports:
+            detail = "; ".join(report["limitations"])
+            print(
+                f"[parse_dast] coverage {report['coverage']}: {report['scan_dir']}"
+                + (f" -- {detail}" if detail else ""),
+                file=sys.stderr,
+            )
+
+    if args.coverage_output:
+        Path(args.coverage_output).write_text(
+            json.dumps(
+                {"coverage": scan_coverage.overall(scan_reports), "scans": scan_reports},
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        print(f"[parse_dast] Coverage written to {args.coverage_output}", file=sys.stderr)
 
     output_json = json.dumps(findings, indent=2)
     if args.output:

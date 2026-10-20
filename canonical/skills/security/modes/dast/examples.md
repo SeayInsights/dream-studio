@@ -110,7 +110,7 @@ Extract from user input:
 For each target:
 1. Confirm URL is reachable: `curl -s -o /dev/null -w "%{http_code}" {target.url}`. If not reachable: **warn** and skip.
 2. Confirm ZAP is installed: `which zap.sh || which zap-cli || docker images owasp/zap2docker-stable`. If missing: show install instructions and **stop**.
-3. Confirm Nuclei is installed: `which nuclei`. If missing: show install instructions and continue with ZAP only.
+3. Confirm Nuclei is installed: `which nuclei`. If missing: show install instructions and continue with ZAP only. Remember that `nuclei` was skipped (reason: "nuclei is not installed"): Step R5 records it, and it is what makes the ingested result `partial`.
 
 ### Step R3: Execute ZAP Scan
 
@@ -150,11 +150,21 @@ For each target:
      "date": "{YYYY-MM-DD}",
      "source": "local-run",
      "scanners": ["zap", "nuclei"],
+     "steps": [
+       {"step": "zap", "status": "ran", "tool": "zap"},
+       {"step": "nuclei", "status": "ran", "tool": "nuclei"}
+     ],
      "url": "{target.url}",
      "scan_profile": "{target.scan_profile}",
      "ingested_at": "{ISO-8601}"
    }
    ```
+   `steps` is the run record: one entry for each of `zap` and `nuclei`, with `status`
+   `ran`, `skipped` or `failed`, the `tool` used, and a `reason` when the status is not
+   `ran` (for example `{"step": "nuclei", "status": "skipped", "tool": "nuclei", "reason":
+   "nuclei is not installed"}`). `scanners` lists only the scanners that actually ran. A
+   scan directory written before `steps` existed stays readable: ingest reports its
+   coverage as `unknown`.
 
 ### Step R6: Present Summary
 
@@ -181,9 +191,14 @@ Extract from user input:
 
 1. Run parse_dast.py:
    ```bash
-   py -3.12 templates/security/etl/parse_dast.py --client {client} --scans-dir {scan_dir}
+   py -3.12 templates/security/etl/parse_dast.py --client {client} --scans-dir {scan_dir} --coverage-output {scan_dir}/coverage.json
    ```
 2. This normalizes ZAP + Nuclei outputs to unified findings with `target_type: webapp`.
+   Each finding carries `coverage` (`complete` | `partial` | `unknown`) and `limitations`,
+   read from the `steps` run record in `scan-meta.json`: `complete` only when both scanners
+   ran, `partial` naming the skipped one, `unknown` when there is no run record (an older
+   scan directory). `coverage.json` holds the same per scan directory, the only place
+   coverage shows when a scan produced no findings.
 
 ### Step I3: Store Parsed Findings
 
@@ -192,7 +207,7 @@ Extract from user input:
 
 ### Step I4: Present Summary
 
-Show: finding counts by severity, OWASP category breakdown, storage path, "Run `security-dashboard refresh --client {client}` to update the dashboard."
+Show: the coverage (when it is not `complete`, say so first and name the skipped scanners: "no findings" from a partial scan is not a clean result), finding counts by severity, OWASP category breakdown, storage path, "Run `security-dashboard refresh --client {client}` to update the dashboard."
 
 ---
 
