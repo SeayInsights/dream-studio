@@ -66,6 +66,11 @@ def _run(script: Path, *args: str, cwd: Path) -> subprocess.CompletedProcess:
     )
 
 
+def _report_from(stdout: str) -> dict:
+    """The JSON report on stdout, after the import-time warning line if there is one."""
+    return json.JSONDecoder().raw_decode(stdout, stdout.index("{"))[0]
+
+
 @pytest.fixture(scope="module")
 def workdir(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return tmp_path_factory.mktemp("analyze-degradation")
@@ -119,7 +124,7 @@ def test_domain_request_succeeds_when_domains_load(
     )
 
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    report = json.loads(proc.stdout[proc.stdout.index("{") :])
+    report = _report_from(proc.stdout)
     assert report["domain"] == "finance"
     assert "capability_matrix" in report
 
@@ -160,7 +165,7 @@ def test_no_domain_request_is_unchanged_when_domains_are_unloadable(
     assert "[WARN] Domain analyzers not available" not in ok.stdout
 
     def body(out: str) -> dict:
-        report = json.loads(out[out.index("{") :])
+        report = _report_from(out)
         # repository paths differ between copies only if the subject differs; it does not.
         return report
 
