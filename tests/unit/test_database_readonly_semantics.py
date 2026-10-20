@@ -19,6 +19,10 @@ def _fake_home(monkeypatch: pytest.MonkeyPatch, home: Path) -> Path:
     # Clear the env-var override so _default_db_path() falls back to Path.home().
     # conftest sets DREAM_STUDIO_DB_PATH to a guard path; these tests need it absent.
     monkeypatch.delenv("DREAM_STUDIO_DB_PATH", raising=False)
+    # And the home override: home_dir() reads DREAM_STUDIO_HOME before Path.home(), and
+    # conftest sets it whenever DREAM_STUDIO_DB_PATH is not already in the environment (CI
+    # presets the DB path, so there it is never set and these passed).
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     return home
 
 
