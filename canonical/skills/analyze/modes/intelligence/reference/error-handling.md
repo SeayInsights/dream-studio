@@ -38,8 +38,9 @@ What a failed run leaves behind is its events, nothing else: `analysis.started`,
 `analysis.*_completed` event for each phase that finished, and `analysis.failed` carrying
 `run_id`, `project_id` and `error_message`. The engine writes them to the event spool
 (`~/.dream-studio/events/spool/`); they reach the database when `ds spool ingest` runs.
-Findings are not stored in tables, and the PRD is written during synthesis, so a run that
-failed in an earlier phase has none.
+Bugs are emitted as security findings (they reach `security_events` after `ds spool ingest`);
+violations and improvements are not stored, and the PRD is written during synthesis, so a run
+that failed in an earlier phase has none.
 
 ## Run type
 

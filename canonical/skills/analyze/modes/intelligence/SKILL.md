@@ -83,8 +83,11 @@ analyze project: --incremental
 - **Documents**: `~/.dream-studio/state/files.db`, table `ds_documents` - a copy of the PRD,
   with an FTS5 index
 
-Findings (violations, bugs, improvements) and the health score are returned in the result, and
-the PRD lists the detected bugs; none of them is stored in a database table.
+Detected bugs are also written as security findings: each is emitted through
+`emit_security_finding` to the spool and, after `ds spool ingest`, lands in `security_events`
+(best-effort; a failure to emit never fails the run). Violations and improvements are not
+stored anywhere; they, the bugs and the health score are returned in the result, and the PRD
+lists the detected bugs.
 
 ## Error handling
 See `reference/error-handling.md` for full error scenarios and recovery steps.
