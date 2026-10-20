@@ -1093,7 +1093,11 @@ def test_scans_dir_reached_through_a_link_is_the_same_scan(tmp_path: Path):
         if sys.platform != "win32":
             pytest.skip("cannot create a symlink here")
         made = subprocess.run(
-            ["cmd", "/c", "mklink", "/J", str(link), str(real)], capture_output=True, text=True
+            ["cmd", "/c", "mklink", "/J", str(link), str(real)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         if made.returncode != 0:
             pytest.skip("cannot create a symlink or junction here")
