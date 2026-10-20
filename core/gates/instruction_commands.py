@@ -1,8 +1,8 @@
 """An instruction that names a command must name one that can run.
 
 WHAT THIS IS FOR. Canonical skills and workflows are instructions to an agent, and an
-agent does what they say. When one names a script or a module that is not there, the
-agent runs it, gets "no such file", and either improvises or silently skips a step it was
+agent does what they say. When one names a script, a module or a `ds` subcommand that is
+not there, the agent runs it, gets "no such file", and either improvises or skips a step it was
 told to take -- and the step that gets skipped is disproportionately a check, because
 checks are what instructions tell you to run.
 
