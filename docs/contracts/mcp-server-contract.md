@@ -22,18 +22,20 @@ that, before this, had no runtime behind it.
 `ds` commands assume an operator at a terminal as their own confirmation step —
 `uninstall --purge-state`, migration execution, `review --record`, anything that
 mutates SQLite authority or the filesystem. An MCP client calling this server over
-the network is not a watched terminal, so every tool in the registry
-(`integrations/mcp/tools.py`) is, as of this writing, a read path. See that module's
-own docstring for the reasoning; `tests/unit/integrations/test_mcp_server.py`'s
-`test_no_tool_name_suggests_a_write_or_destructive_action` is a cheap standing guard
-against a write-shaped tool slipping in unreviewed, not a substitute for reading the
-registry before adding to it.
+the network is not a watched terminal, so the registry (`integrations/mcp/tools.py`)
+is curated rather than a mirror of the CLI: ten read tools (project, work-order,
+review, skill, memory, and health state) and twelve mutating tools, each behind a
+named capability (see "Capability-gated tools" below). See that module's own
+docstring for the reasoning. Each mutating tool has a test that an identity without
+its capability is refused (`tests/unit/integrations/test_mcp_server.py`,
+`test_*_denies_an_identity_without_the_capability`); that, not a read-only registry,
+is the standing guard against a write path slipping in unreviewed, and it is not a
+substitute for reading the registry before adding to it.
 
-A tool is *allowed* to mutate authority state — the mechanism below exists precisely
-so one eventually can — but only by declaring a `required_capability` from
-`auth.KNOWN_CAPABILITIES` and passing the same deliberate review every tool here
-already gets. Declaring a capability is necessary for a mutating tool to exist at all;
-it is never sufficient on its own for one to be added.
+A tool is *allowed* to mutate authority state, but only by declaring a
+`required_capability` from `auth.KNOWN_CAPABILITIES` and passing the same deliberate
+review every tool here already gets. Declaring a capability is necessary for a
+mutating tool to exist at all; it is never sufficient on its own for one to be added.
 
 ## Root token vs. named clients
 
