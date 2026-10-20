@@ -509,6 +509,23 @@ def _runner_identity() -> dict[str, str]:
     }
 
 
+def check_lines(task: dict[str, Any]) -> list[tuple[str, str]]:
+    """``(KIND-CHECK, expression)`` for every executable-check line in a task's criteria.
+
+    Pure parsing: nothing is run. Applied through ``check_token`` rather than matched here,
+    so the coverage report in core/gates/deterministic_evidence.py cannot strip differently
+    than the module that runs the checks -- and so the non-executing preview below reads
+    exactly the lines the executing path would have run.
+    """
+    found: list[tuple[str, str]] = []
+    for raw_line in (task.get("acceptance_criteria", "") or "").splitlines():
+        token_match = check_token(raw_line)
+        if token_match is None:
+            continue
+        found.append((token_match.group(1).upper(), token_match.group(2).strip()))
+    return found
+
+
 def run_executable_checks(
     tasks: list[dict[str, Any]],
     db_path: Path,
@@ -534,21 +551,9 @@ def run_executable_checks(
     results: dict[str, list[dict[str, Any]]] = {}
 
     for task in tasks:
-        ac = task.get("acceptance_criteria", "") or ""
         checks: list[dict[str, Any]] = []
 
-        for raw_line in ac.splitlines():
-            # Detect any "*-CHECK:" token in this line. Applied through
-            # `check_token` rather than matched here, so the coverage report in
-            # core/gates/deterministic_evidence.py cannot strip differently than
-            # the module that runs the checks.
-            token_match = check_token(raw_line)
-            if token_match is None:
-                continue
-
-            token = token_match.group(1).upper()
-            expr = token_match.group(2).strip()
-
+        for token, expr in check_lines(task):
             if token == "SQL-CHECK":
                 check = _run_one_sql_check(expr, db_path)
             elif token == "TEST-CHECK":
@@ -581,6 +586,66 @@ def run_executable_checks(
         for check in task_checks:
             _emit_validation_result_event(check)
 
+    return results
+
+
+#: The check kinds whose execution leaves the process: a TEST-CHECK starts a subprocess and
+#: an API-CHECK sends a request. These are never run by the non-executing preview.
+_NOT_RUN_KINDS = {
+    "TEST-CHECK": "it runs a command as a subprocess in the project's repository",
+    "API-CHECK": "it sends a request to the projections API app",
+}
+
+
+def preview_executable_checks(
+    tasks: list[dict[str, Any]], db_path: Path
+) -> dict[str, list[dict[str, Any]]]:
+    """``run_executable_checks`` without running anything that leaves the process.
+
+    The same mapping, ``task_title -> [check, ...]``, built from the same parsed lines, but:
+
+    - SQL-CHECK is evaluated, because it is a read: ``_run_one_sql_check`` opens the
+      authority ``mode=ro``.
+    - TEST-CHECK and API-CHECK are NOT run. Each comes back as ``{"passed": None,
+      "executed": False, "not_run": True, "not_run_reason": ...}`` -- ``passed`` is None and
+      not False because nothing was learned about the work, and not True because nothing
+      was proved. A caller that reads only ``passed`` sees a falsy value, never a pass.
+    - An unrecognised ``*-CHECK:`` token fails closed exactly as it does when executing; no
+      execution is needed to refuse it.
+    - NO ``validation.result_recorded`` event is emitted. That event records an execution
+      outcome, and none happened.
+    """
+    results: dict[str, list[dict[str, Any]]] = {}
+    for task in tasks:
+        checks: list[dict[str, Any]] = []
+        for token, expr in check_lines(task):
+            if token == "SQL-CHECK":
+                check = _run_one_sql_check(expr, db_path)
+                check["executed"] = True
+            elif token in _NOT_RUN_KINDS:
+                check = {
+                    "kind": token,
+                    "expr": expr,
+                    "passed": None,
+                    "result": None,
+                    "error": None,
+                    "executed": False,
+                    "not_run": True,
+                    "not_run_reason": (
+                        f"{token} not run in a non-executing preview: {_NOT_RUN_KINDS[token]}"
+                    ),
+                }
+            else:
+                check = {
+                    "kind": token,
+                    "expr": expr,
+                    "passed": False,
+                    "result": None,
+                    "error": f"Unknown check kind: {token!r} — fail-closed",
+                }
+            checks.append(check)
+        if checks:
+            results[task["title"]] = checks
     return results
 
 

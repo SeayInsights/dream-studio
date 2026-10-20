@@ -23,11 +23,17 @@ from core.event_store.studio_db import _connect
 
 from .close_continuation import _apply_report_only_continuation
 from .close_gates import (
+    GATE_FAIL,
+    GATE_NOT_RUN,
+    GATE_PASS,
     _check_originating_symptom,
     symptom_has_executable_check,
     _check_tasks_done,
     _evaluate_gates,
+    _preview_ac_gate,
+    _preview_gates,
     _run_ac_gate,
+    gate_outcome,
 )
 from .close_shared import _lookup_work_order_and_gates, _require_db
 from .models import TERMINAL_WO_STATUSES, terminal_wo_status_placeholders
@@ -50,10 +56,21 @@ def check_close_gates(
     source_root: Path,
     dream_studio_home: Path | None = None,
     planning_root: Path | None = None,
+    run_checks: bool = True,
 ) -> dict[str, Any]:
-    """Preview gate evaluation for a work-order close. Does not mutate.
+    """Preview gate evaluation for a work-order close. Does not change the work order.
 
-    Returns a dict shaped like:
+    "Does not mutate" means the work order's status is untouched. With the default
+    ``run_checks=True`` the preview still EXECUTES: each TEST-CHECK runs as a subprocess in the
+    project's repository, each API-CHECK sends an in-process request to the projections API
+    app, provenance staleness runs ``git log``, and every executed check emits a
+    ``validation.result_recorded`` event to the spool.
+
+    ``run_checks=False`` is the non-executing preview (see ``_preview_without_running_checks``):
+    it starts no subprocess, sends no request and writes no event, and reports every gate part
+    it could not evaluate as ``not_run`` rather than passed or failed.
+
+    Default-mode result, shaped like:
 
         {
             "ok": True | False,
@@ -74,6 +91,10 @@ def check_close_gates(
 
     p_root = planning_root or Path.cwd() / ".planning"
     db_path = _require_db(source_root, dream_studio_home)
+    if not run_checks:
+        return _preview_without_running_checks(
+            work_order_id=work_order_id, db_path=db_path, planning_root=p_root
+        )
     with _connect(db_path) as conn:
         meta = _lookup_work_order_and_gates(conn, work_order_id)
         if not meta.get("ok"):
@@ -119,6 +140,104 @@ def check_close_gates(
 
     meta["gate_failures"] = failures
     meta["gates_pass"] = not failures
+    return meta
+
+
+def _preview_without_running_checks(
+    *, work_order_id: str, db_path: Path, planning_root: Path
+) -> dict[str, Any]:
+    """``check_close_gates(run_checks=False)``: every gate that can be read, none executed.
+
+    The same gates ``check_close_gates`` previews, in the same order -- the type's pre/post
+    gates, the always-on ``executable_ac``, ``change_impact_affirmed``, the structural
+    invariants, and the phase -- but each is a ``gate_outcome`` with a status of ``pass``,
+    ``fail`` or ``not_run``, and:
+
+    - no subprocess is started (TEST-CHECKs, ``git log`` for provenance staleness),
+    - no request is made (API-CHECKs),
+    - no event is written (``validation.result_recorded``),
+    - the authority connection it holds is ``mode=ro``; the helpers it calls open the existing
+      file and only SELECT (the preview test watches ``PRAGMA data_version`` to prove it).
+
+    ``gates_pass`` is True only when every gate passed AND none went unevaluated; a result
+    with anything ``not_run`` reads ``gates_pass: False`` and ``overall: "not_run"``. The
+    default-mode keys are all present, so a caller that reads ``gate_failures`` sees only
+    definite failures and never a not-run part dressed as one.
+
+    NOT A CLOSABILITY VERDICT, in either mode: ``close_work_order`` also enforces gates this
+    preview does not evaluate (``tasks_done``, the originating-symptom re-run, the
+    default-on ``independent_review`` for types whose post-gate does not name it,
+    ``lane_review``, ``dashboard_truth``, and a green ``main``). ``overall: "pass"`` here
+    means "nothing previewed objects", not "this will close".
+    """
+    from core.config.database import connect_existing
+    from core.gates.change_impact import check_change_impact_affirmed
+    from core.work_orders.structural_invariants import (
+        check_structure,
+        recorded_exception,
+    )
+    from core.work_orders.structural_invariants import render as _render_structure
+
+    conn = connect_existing(db_path, read_only=True)
+    try:
+        meta = _lookup_work_order_and_gates(conn, work_order_id)
+        if not meta.get("ok"):
+            return meta
+
+        outcomes = _preview_gates(
+            conn,
+            pre_gate=meta["pre_gate"],
+            post_gate=meta["post_gate"],
+            work_order_id=work_order_id,
+            project_id=meta["project_id"],
+            planning_root=planning_root,
+            db_path=db_path,
+        )
+        outcomes.append(_preview_ac_gate(conn, work_order_id=work_order_id, db_path=db_path))
+        outcomes.append(
+            gate_outcome(
+                "change_impact_affirmed",
+                check_change_impact_affirmed(conn, work_order_id, db_path),
+                [],
+            )
+        )
+        _structure = check_structure(work_order_id, db_path=db_path)
+        outcomes.append(
+            gate_outcome(
+                "structural_invariants",
+                (
+                    [_render_structure(_structure, work_order_id)]
+                    if _structure and not recorded_exception(work_order_id, db_path=db_path)
+                    else []
+                ),
+                [],
+            )
+        )
+    finally:
+        conn.close()
+
+    outcomes.append(
+        gate_outcome(
+            "phase",
+            [r for r in [transition_refusal(work_order_id, meta.get("wo_status"), "closed")] if r],
+            [],
+        )
+    )
+
+    failures = [f for o in outcomes if o["status"] == GATE_FAIL for f in o["failures"]]
+    any_not_run = any(o["status"] == GATE_NOT_RUN or o["not_run"] for o in outcomes)
+    if failures:
+        overall = GATE_FAIL
+    elif any_not_run:
+        overall = GATE_NOT_RUN
+    else:
+        overall = GATE_PASS
+    meta["checks_run"] = False
+    meta["gates"] = outcomes
+    meta["gate_failures"] = failures
+    meta["gates_not_run"] = [o["gate"] for o in outcomes if o["not_run"]]
+    meta["overall"] = overall
+    meta["gates_pass"] = overall == GATE_PASS
     return meta
 
 
