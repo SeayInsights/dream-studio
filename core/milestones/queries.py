@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from core.event_store.studio_db import _connect
+from core.work_orders.type_registry import is_ui_bearing
 
 
 def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
@@ -81,8 +82,7 @@ def get_milestone_status(
             (milestone_id,),
         ).fetchall()
 
-    ui_types = frozenset(["ui_component", "ui_page"])
-    has_ui = any(r[3] in ui_types for r in wo_rows)
+    has_ui = any(is_ui_bearing(r[3]) for r in wo_rows)
 
     from core.milestones.artifacts import read_milestone_artifact
 

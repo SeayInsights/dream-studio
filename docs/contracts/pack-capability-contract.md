@@ -66,6 +66,32 @@ to what the skill text and scripts actually call.
 `review:dispatch` and `review:record` can never be held by one client (enforced in
 `auth.add_client`).
 
+### Present today (Python API only, not yet reachable by a pack)
+
+| Capability | Surface |
+| --- | --- |
+| `registry:work_order_type` | `core.work_orders.type_registry.register_work_order_type(name, artifact_class=..., ui_bearing=..., stales_design_brief=..., exempt_from_verification=...)` and the read accessors beside it. |
+
+The registry holds, per work-order type, the artifact class it reviews as, whether it is
+UI-bearing, whether closing it stales the design brief, and whether it is exempt from
+default-on verification. The ten built-in types are registered at import, and
+`review_rules`, `brief_currency`, `milestones/close`, `milestones/queries`, `start_brief`,
+`close_main`, `create_work_order`, the CLI `--type` choices and the MCP
+`ds_work_order_create` enum all read it. The closed `WORK_ORDER_TYPES` tuple and the four
+private subsets are gone.
+
+This is a function call inside one process. Nothing reads `contributes.work_order_types`
+from a manifest, nothing persists a registration, and there is no MCP or CLI surface for
+it, so a pack cannot use it yet. Three gaps remain before a registered type is fully
+usable:
+
+- A type needs a `business_work_order_types` row (its gates, executor and workflow
+  template) before `ds work-order start` accepts it; the registry does not write one.
+- The MCP `ds_work_order_create` enum is built when `integrations.mcp.tools` is imported,
+  so a type must be registered before then to appear in it.
+- The `dashboard_truth` close gate still names its types in a literal set in
+  `close_main`; a pack cannot opt a type into it.
+
 ### Proposed
 
 | Capability | Purpose | Standalone fallback |
@@ -73,7 +99,7 @@ to what the skill text and scripts actually call.
 | `finding:record`, `finding:list` | Record and read findings in one typed shape: severity, location, `confidence`, `limitations`, `coverage` (`complete` \| `partial` \| `unknown`), evidence refs. The unified `Finding` read model (`core/findings/model.py`) has none of the last three today. | Append to a JSONL file beside the work; `list` reads it back. |
 | `evidence:attach` | Attach a content-hashed artifact (scan output, reproduction log) to a finding or work order. | Write the file next to the work; record its SHA256 in the finding. |
 | `gate:check` | Preview close gates for a work order. Exists in the `ds` CLI (`check_close_gates`), not in MCP. | Run each contributed gate's check command locally and print the results. |
-| `registry:work_order_type`, `gate:register` | Let a pack supply work-order types and gates. Replaces the closed `WORK_ORDER_TYPES` tuple (`core/work_orders/models.py`) and the per-type tables in `review_rules`, `brief_currency`, and `milestones/close`. | Types and gates are read from the manifest and applied by the pack's own checklist. |
+| `registry:work_order_type` (reach), `gate:register` | Let a pack supply work-order types (the registry exists, see above, but nothing loads a manifest into it) and gates (no registry yet; close gates are still bound to types by the `business_work_order_types` rows and literal sets in `close_main`). | Types and gates are read from the manifest and applied by the pack's own checklist. |
 | `artifact:write`, `artifact:read` | Named working artifacts (plans, audit reports). Replaces `ds files write` calls in skill text. | A project-local directory. |
 | `memory:record` | Record a lesson. | Append to a local lessons file. |
 | `telemetry:emit` | Emit a usage or cost event. | No-op, logged once. |
