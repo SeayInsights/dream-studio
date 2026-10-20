@@ -47,6 +47,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from core.work_orders.type_registry import CODE, CONFIG, DATA, DOCUMENT, artifact_class_for
+
 # The profile filename, looked for in a project root and in each folder/root.
 #
 # NOT under .dream-studio/: .gitignore excludes `**/.dream-studio/` as "local/private
@@ -109,9 +111,9 @@ SDLC_BASELINE: tuple[str, ...] = (
 # against Dream Studio's tables -- and telling a documentation work order its tests are
 # missing is how a reviewer earns the reputation of surfacing nonsense.
 #
-# THIS IS NOT WEAKER REVIEW, and the distinction matters. The existing handling was
-# `_VERIFY_EXEMPT_TYPES = {"documentation"}` in close_main -- documentation SKIPPED
-# independent review altogether. That is weaker. A document is still reviewed, against
+# THIS IS NOT WEAKER REVIEW, and the distinction matters. The existing handling was a
+# verification exemption for documentation (close_main; now `exempt_from_verification`
+# in the type registry) -- documentation SKIPPED independent review altogether. That is weaker. A document is still reviewed, against
 # standards that fit it: is it complete, is it accurate, does it describe behaviour that
 # still exists. A documentation work order that ships a false statement about the system
 # has failed, and nothing was checking.
@@ -119,24 +121,8 @@ SDLC_BASELINE: tuple[str, ...] = (
 # Rules carry the artifact kinds they can judge. A rule with no kinds applies to
 # everything, so adding a rule without thinking about kinds errs toward MORE checking.
 
-CODE = "code"
-CONFIG = "config"
-DOCUMENT = "document"
-DATA = "data"
-
-# The ten work-order types, mapped to what they actually deliver.
-_TYPE_ARTIFACT: dict[str, str] = {
-    "ui_component": CODE,
-    "ui_page": CODE,
-    "api_endpoint": CODE,
-    "authentication": CODE,
-    "saas_feature": CODE,
-    "game_mechanic": CODE,
-    "data_pipeline": DATA,
-    "deployment": CONFIG,
-    "infrastructure": CONFIG,
-    "documentation": DOCUMENT,
-}
+# The artifact kinds and each declared type's kind live in the type registry
+# (core.work_orders.type_registry), so a type a pack registers brings its own class.
 
 # Which baseline standards each artifact kind can be judged against. Absent from a
 # rule's set means the rule cannot fairly be applied -- not that the work is unreviewed.
@@ -186,7 +172,7 @@ def artifact_kind(work_order_type: str | None) -> str:
     """
     if not work_order_type:
         return CODE
-    return _TYPE_ARTIFACT.get(work_order_type.strip().lower(), CODE)
+    return artifact_class_for(work_order_type.strip().lower()) or CODE
 
 
 def rules_for_kind(kind: str) -> list[str]:

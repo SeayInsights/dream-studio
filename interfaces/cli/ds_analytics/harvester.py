@@ -105,17 +105,58 @@ def harvest_skill_velocity(db_path: Path | None = None) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
+def harvest_unfinished_handlers(min_age_s: float = 120.0, now: float | None = None) -> list[dict]:
+    """Hook handlers that STARTED and never finished, oldest first.
+
+    hook-timing.jsonl is written when a handler returns, so a hung or killed handler is
+    absent from it by construction. dispatch_helpers.inflight() leaves a marker for the
+    duration of each handler and removes it on exit; whatever is still there after
+    *min_age_s* did not exit. The age floor keeps a handler that is running right now
+    out of the list.
+    """
+    import json
+    import time
+
+    from control.execution.dispatch_helpers import inflight_dir
+
+    now = time.time() if now is None else now
+    found: list[dict] = []
+    for marker in inflight_dir(paths.state_dir()).glob("*.json"):
+        try:
+            record = json.loads(marker.read_text(encoding="utf-8"))
+            age_s = now - float(record["started_epoch"])
+        except (OSError, ValueError, KeyError, TypeError):
+            continue  # a marker caught mid-write, or not one of ours
+        if age_s >= min_age_s:
+            found.append(
+                {
+                    "handler": record.get("handler", ""),
+                    "event": record.get("event", ""),
+                    "pid": record.get("pid"),
+                    "started_at": record.get("started_at", ""),
+                    "age_s": round(age_s),
+                }
+            )
+    return sorted(found, key=lambda r: r["age_s"], reverse=True)
+
+
 def harvest_hook_timing() -> dict:
     """Read hook-timing.jsonl and compute per-handler averages.
 
     Returns dict with keys: handlers (list of {handler, event, avg_ms, count}),
-    total_overhead_ms, slowest_handler.
+    total_overhead_ms, slowest_handler, unfinished (see harvest_unfinished_handlers).
     """
     import json
 
+    unfinished = harvest_unfinished_handlers()
     timing_file = paths.state_dir() / "hook-timing.jsonl"
     if not timing_file.exists():
-        return {"handlers": [], "total_overhead_ms": 0, "slowest_handler": None}
+        return {
+            "handlers": [],
+            "total_overhead_ms": 0,
+            "slowest_handler": None,
+            "unfinished": unfinished,
+        }
 
     stats: dict[str, dict] = {}
     try:
@@ -134,7 +175,12 @@ def harvest_hook_timing() -> dict:
             stats[key]["total_ms"] += record.get("duration_ms", 0)
             stats[key]["count"] += 1
     except Exception:
-        return {"handlers": [], "total_overhead_ms": 0, "slowest_handler": None}
+        return {
+            "handlers": [],
+            "total_overhead_ms": 0,
+            "slowest_handler": None,
+            "unfinished": unfinished,
+        }
 
     handlers = []
     for s in stats.values():
@@ -156,4 +202,5 @@ def harvest_hook_timing() -> dict:
         "handlers": handlers,
         "total_overhead_ms": round(total, 2),
         "slowest_handler": slowest,
+        "unfinished": unfinished,
     }

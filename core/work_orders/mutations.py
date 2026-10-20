@@ -13,8 +13,8 @@ from core.event_store.studio_db import _connect
 from core.work_orders.models import (
     DEFAULT_WORK_ORDER_PRIORITY,
     WORK_ORDER_PRIORITIES,
-    WORK_ORDER_TYPES,
 )
+from core.work_orders.type_registry import work_order_type_names
 from core.work_orders.task_status import (
     BLOCKABLE_WORK_ORDER_STATUSES,
     TASK_ABANDONED_STATUSES,
@@ -1033,16 +1033,17 @@ def create_work_order(
     # against business_work_order_types and refuses "Unrecognized work order type" --
     # but only once the work order has already been created, carries tasks, and someone
     # tries to start it. A type nobody can start should never have been written, the
-    # same way a priority nobody sorts by never is. WORK_ORDER_TYPES (core.work_orders.
-    # models) is the one declared set both doors now read -- `work_order_type=None` is a
+    # same way a priority nobody sorts by never is. The type registry (core.work_orders.
+    # type_registry) is the one declared set both doors now read -- `work_order_type=None` is a
     # different, already-handled question (start_brief.py's own "has no type assigned"),
     # so only a NAMED, unrecognized type is refused here.
-    if work_order_type and work_order_type not in WORK_ORDER_TYPES:
+    declared_types = work_order_type_names()
+    if work_order_type and work_order_type not in declared_types:
         return {
             "ok": False,
             "error": (
                 f"work_order_type {work_order_type!r} is not one the platform declares."
-                f" Valid: {', '.join(WORK_ORDER_TYPES)}."
+                f" Valid: {', '.join(declared_types)}."
             ),
         }
 

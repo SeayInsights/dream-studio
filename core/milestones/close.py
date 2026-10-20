@@ -34,11 +34,10 @@ from typing import Any
 from core.event_store.studio_db import _connect
 
 from core.milestones.status import MILESTONE_COMPLETE
-from core.work_orders.models import TERMINAL_WO_STATUSES, WORK_ORDER_TYPES
+from core.work_orders.models import TERMINAL_WO_STATUSES
+from core.work_orders.type_registry import is_ui_bearing
 
 logger = logging.getLogger(__name__)
-
-_UI_WO_TYPES: frozenset[str] = frozenset({"ui_component", "ui_page"}) & frozenset(WORK_ORDER_TYPES)
 
 
 def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
@@ -217,7 +216,7 @@ def close_milestone(
                 ],
             }
 
-        has_ui = any(r[3] in _UI_WO_TYPES for r in wo_rows)
+        has_ui = any(is_ui_bearing(r[3]) for r in wo_rows)
         failures = _evaluate_milestone_artifacts(ms_dir, has_ui=has_ui, project_root=source_root)
 
         if failures and not force:

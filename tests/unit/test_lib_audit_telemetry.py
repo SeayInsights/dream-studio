@@ -6,12 +6,23 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from core.telemetry.audit import log_event  # noqa: E402
 from core.telemetry.telemetry import capture_exception, init_sentry  # noqa: E402
 
 # ── audit ──────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _home_comes_from_path_home(monkeypatch):
+    """These tests point Path.home() at a temp dir. home_dir() reads DREAM_STUDIO_HOME
+    first, and tests/conftest.py sets it whenever DREAM_STUDIO_DB_PATH is not already in
+    the environment; CI presets the DB path, so there it is unset and these passed, while a
+    local run wrote the audit log into the session home and failed."""
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
 
 
 def test_log_event_writes_jsonl(tmp_path, monkeypatch):

@@ -41,7 +41,6 @@ from .start_main import start_work_order
 from .start_shared import (
     _BLOCKING_SEVERITIES,
     _BLOCKING_STATUSES,
-    _UI_WO_TYPES,
     _check_sequence_order,
 )
 
@@ -77,7 +76,6 @@ def __getattr__(name: str):
 __all__ = [  # noqa: F822 -- _require_db/read_work_order_brief/write_work_order_context resolve via __getattr__ (flake8 reports F822 on this line, not the entries)
     "_BLOCKING_SEVERITIES",
     "_BLOCKING_STATUSES",
-    "_UI_WO_TYPES",
     "_check_sequence_order",
     "_require_db",  # noqa: F822 -- resolved dynamically via __getattr__ above
     "read_work_order_brief",  # noqa: F822 -- resolved dynamically via __getattr__ above
